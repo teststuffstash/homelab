@@ -17,6 +17,7 @@ Lenovo T61 | burger
 
 pfsense
 
-
+Netboot on physiucal machine, set rocky kickstart url:
+http://192.168.2.2:8000/r9.ks
 http://192.168.2.2:8000/Rocky-9-GenericCloud-Base.ks
                         Rocky-9-GenericCloud.ks
