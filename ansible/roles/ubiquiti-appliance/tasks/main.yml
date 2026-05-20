@@ -1,0 +1,82 @@
+- name: be sure config directory exists
+  ansible.builtin.file:
+    path: /home/rasmus/etc/mongodb/data
+    state: directory
+    mode: '0755'
+
+- name: be sure config directory exists
+  ansible.builtin.file:
+    path: /home/rasmus/etc/unifi-network-application/data
+    state: directory
+    mode: '0755'
+
+- name: be sure mongo init script exists
+  ansible.builtin.copy:
+    src: init-mongo.sh
+    dest: /home/rasmus/etc/mongodb/init-mongo.sh
+
+- name: Pull the mongo image
+  docker_image:
+    name: docker.io/mongo:4.4
+    source: pull
+
+- name: Pull the unifi image
+  docker_image:
+    name: docker.io/mongo:4.4
+    source: pull
+
+- name: Create a network
+  docker_network:
+    name: ubiquiti
+
+- name: Start unifi db container
+  docker_container:
+    image: docker.io/mongo:4.4
+    name: unifi-db
+    env:
+      MONGO_INITDB_ROOT_USERNAME: "root"
+      MONGO_INITDB_ROOT_PASSWORD: "root_password"
+      MONGO_USER: "unifi"
+      MONGO_PASS: "unifi_password"
+      MONGO_DBNAME: "unifi"
+      MONGO_AUTHSOURCE: "admin"
+    volumes:
+      - /home/rasmus/etc/mongodb/data:/data/db
+      - /home/rasmus/etc/mongodb/init-mongo.sh:/docker-entrypoint-initdb.d/init-mongo.sh:ro
+    networks:
+      - name: ubiquiti
+    restart_policy: unless-stopped
+
+- name: Start unifi db container
+  docker_container:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    name: unifi-network-application
+    env:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Etc/UTC"
+      MONGO_USER: "unifi"
+      MONGO_PASS: "unifi_password"
+      MONGO_HOST: "unifi-db"
+      MONGO_PORT: "27017"
+      MONGO_DBNAME: "unifi"
+      MONGO_AUTHSOURCE: "admin"
+      MEM_LIMIT: "1024" #optional
+      MEM_STARTUP: "1024" #optional
+      MONGO_TLS: "" #optional
+    volumes:
+      - /home/rasmus/etc/unifi-network-application/data:/config
+    published_ports:
+      - "8443:8443"
+      - "3478:3478/udp"
+      - "10001:10001/udp"
+      - "8080:8080"
+      - "1900:1900/udp" #optional
+      - "8843:8843" #optional
+      - "8880:8880" #optional
+      - "6789:6789" #optional
+      - "5514:5514/udp" #optional
+    networks:
+      - name: ubiquiti
+    restart_policy: unless-stopped
+    
