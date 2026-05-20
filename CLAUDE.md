@@ -57,7 +57,7 @@ docker compose up -d   # netboot.xyz, esphome, homeassistant
 - `esphome/` — ESPHome dashboard; device configs in `esphome/config/`
 - `homeassistant/` — Home Assistant
 
-**Note:** the `esphome/` and `homeassistant/` compose files have volume paths hardcoded to `/home/rasmus/IdeaProjects/homelab/...` — update these if the repo moves.
+The `esphome/` and `homeassistant/` compose files have absolute volume paths under `/home/rasmus/Projects/homelab/...` — update them if the repo moves.
 
 ## ESPHome devices
 

@@ -4,7 +4,7 @@ services:
     container_name: esphome
     image: esphome/esphome
     volumes:
-      - /home/rasmus/IdeaProjects/homelab/esphome/config:/config
+      - /home/rasmus/Projects/homelab/esphome/config:/config
       - /etc/localtime:/etc/localtime:ro
     restart: always
     privileged: true
