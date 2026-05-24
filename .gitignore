@@ -1,2 +1,5 @@
 /.idea/
 /netboot.xyz/config/
+
+# upload server inbox — move files out to commit them
+/uploads/
