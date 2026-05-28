@@ -226,6 +226,22 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 - [ ] GitOps (ArgoCD/Flux). Backups: Talos/etcd + Longhorn/PV snapshots + Proxmox (PBS/vzdump), stored off-box.
 - [ ] Monitoring: Prometheus + Grafana; alert to HA/push. Upgrade strategy: bump in sandbox first.
 
+## Edge tier (future — out of current scope)
+
+A *separate* deployment target from the homelab cluster, tied to the assistive-tech
+business (see `CONTEXT.md` purpose #2): **Home Assistant + large-button tablet appliances
+in customers' homes**, supported remotely as a fleet. Not part of Phases 0–5; captured here
+so it doesn't bleed into them.
+
+- **MVP may need no k8s at all** — HAOS or a Podman/Compose stack is far less to support for
+  a single-home box. Add orchestration only when the *fleet* justifies it.
+- **When a fleet justifies it:** likely **k3s + Rancher Fleet** (light, ARM-friendly, edge
+  GitOps; echoes the Rocky+Rancher direction work first scoped) — or **Talos + Omni** if
+  immutability / zero-drift / zero-touch in non-technical homes wins over footprint/cost.
+- **Synergy with the homelab:** the Talos homelab cluster is the **dev/test ground** for the
+  appliance workload — same k8s manifests, GitOps-deployed, then shipped to the edge distro.
+- Decision deferred until there's a real MVP + first customers.
+
 ## Risks & gotchas
 
 - ⚠️ **Reinstall-loop danger:** if PXE serves an installer unconditionally, a box reinstalls

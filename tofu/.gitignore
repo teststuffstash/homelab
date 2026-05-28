@@ -1,0 +1,15 @@
+# OpenTofu / Terraform
+# NB: .terraform.lock.hcl is intentionally NOT ignored — commit it for
+# reproducible, pinned provider versions (deterministic by design).
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Real secrets / rendered creds — never commit
+*.tfvars
+!*.tfvars.example
+kubeconfig
+talosconfig
+*.auto.tfvars

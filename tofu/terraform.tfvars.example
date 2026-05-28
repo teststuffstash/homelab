@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars (gitignored) and adjust. The API token is best passed
+# via env (export TF_VAR_proxmox_api_token=...) or SOPS rather than a plaintext file.
+
+proxmox_endpoint = "https://192.168.2.3:8006/"
+proxmox_node     = "pve"
+datastore_vms    = "local-lvm"
+datastore_images = "local"
+network_bridge   = "vmbr0"
+
+cluster_name       = "homelab"
+talos_version      = "v1.13.2"
+kubernetes_version = "v1.36.1"
+
+gateway     = "192.168.2.1"
+nameservers = ["192.168.2.1"]
+
+# IPs must be FREE addresses (outside the OPNsense DHCP pool, or reserved).
+nodes = {
+  cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
+  wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 12288, disk_gb = 80 }
+  wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80 }
+}
+
+# proxmox_api_token = "tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"

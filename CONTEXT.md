@@ -13,6 +13,21 @@ work and what I value. Edit freely; this is meant to evolve._
 - I speak publicly and build talks as runnable, reproducible demos — this homelab
   partly **feeds my talks**, so things should be teachable and demoable, not just working.
 
+## Why this homelab exists (purpose)
+
+Two motivations — decisions should serve at least one:
+
+1. **Skill-building for work.** Try things *before* I need them on the job. I knew a
+   cloud migration of Estonian on-prem services was coming, so I wanted hands-on k8s.
+   (That migration was first scoped as an on-prem Estonian cluster on **Rocky + Rancher
+   k8s**, but ultimately landed on **AWS EKS + Cloudflare** — the *concepts* transfer even
+   though the homelab stack differs.) ⇒ value transferable, current, mainstream skills.
+2. **R&D for a business: assistive tech for older people.** Many elderly struggle to
+   operate robot **vacuums / mowers**. The product idea: a **Home Assistant** setup with a
+   **large-button tablet UI**, possibly a fleet of such appliances in customers' homes that
+   I support remotely. ⇒ this introduces an **edge/appliance + non-technical-user**
+   dimension: reliability, zero-touch, remote fleet management, simplicity, accessibility.
+
 ## Public work (the talks)
 
 - **`local-k8s`** — "Running k8s locally" (2025-11-27). Toolchain: **kind** +
@@ -89,8 +104,10 @@ when a decision trades one of them away:
 
 - **No IPMI** on the cheap x86 boxes → remote control via vPro/AMT + WoL + Home Assistant
   smart plugs (see `ROADMAP.md`).
-- Mixed, non-uniform hardware (e.g. AliExpress **X99 / Xeon E5-2680 v4**, no iGPU →
-  needs a GPU to POST; can't be a GPU-less plug-in).
+- Mixed, non-uniform hardware. The Proxmox host is an AliExpress **X99 / Xeon E5-2680 v4**;
+  it has **no iGPU** but now has a **weak discrete GPU fitted so it POSTs/boots** — fine as a
+  fixed hypervisor, still not a GPU-less plug-in. The general fleet rule stands: GPU-less
+  plug-in nodes need iGPU or BMC video.
 - Single-operator lab: optimize for low day-2 toil and easy rebuild over high availability.
 
 ## How to use this file
