@@ -137,6 +137,10 @@ resource "kubernetes_service" "ha" {
 }
 
 output "home_assistant_url" {
-  description = "Home Assistant UI (reachable at any node IP)."
-  value       = "http://192.168.2.61:${local.ha_nodeport}"
+  # NOTE: use a node OTHER than the one running the pod (wk-01/.61). With Cilium
+  # alongside kube-proxy, NodePort on the backend pod's own node drops traffic
+  # (hairpin asymmetry); .51/.62 DNAT across fine. Real fix = Cilium LB (BGP) or
+  # kubeProxyReplacement — see ROADMAP service-exposure.
+  description = "Home Assistant UI (use cp-01/.51 — not the pod's node .61)."
+  value       = "http://192.168.2.51:${local.ha_nodeport}"
 }
