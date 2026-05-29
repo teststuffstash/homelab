@@ -266,6 +266,43 @@ so it doesn't bleed into them.
   appliance workload — same k8s manifests, GitOps-deployed, then shipped to the edge distro.
 - Decision deferred until there's a real MVP + first customers.
 
+## Caching tier (under consideration — not decided)
+
+Motivation: repeated downloads hurt (Talos image, Cilium/HA container pulls incl. the
+operator `ImagePullBackOff`, devbox/nix on every jail rebuild, apt). Want a local cache to
+speed rebuilds + survive upstream rate-limits/outages.
+
+**Placement (leaning):** a stable always-on box **near OPNsense / on the LAN — NOT in the
+cluster.** Rationale: a cluster-resident cache is wiped on `tofu destroy` and creates a
+chicken-and-egg (the cluster needs the cache to pull the images that run the cache).
+- ⚠️ Note: OPNsense is **FreeBSD** — can't host Docker/OCI tooling directly. "Near OPNsense"
+  in practice = a small dedicated **Linux box / Proxmox LXC / the T61**, not literally on the router.
+- **Explicitly NOT Squid** (per decision) — and a forward proxy can't cache HTTPS without
+  MITM CA distribution anyway.
+
+**Container images (biggest win) — options & tradeoffs (pick later):**
+
+| Option | Weight | Notes |
+|---|---|---|
+| **Harbor** | Heavy | Full registry + proxy-cache projects (dockerhub/ghcr/quay), web UI, RBAC, retention. Persistent. Powerful but Nexus-like config surface — maybe more than needed. |
+| **Zot** | Light | OCI-native registry with pull-through/sync. Far simpler than Harbor; good middle ground. |
+| **distribution/registry** (CNCF) | Trivial | Pull-through cache, but ~one upstream (Docker Hub) per instance. |
+| **Spegel** (in-cluster P2P) | Zero-infra | Stateless, no separate box — but in-cluster (user prefers out-of-cluster persistent). Survives wipes only in that it auto-repopulates; nothing cached on a fresh cluster until first pull. |
+
+Consumed declaratively via **Talos `machine.registries.mirrors`** (in git) → minimal/zero
+per-consumer config. Leaning **Zot or Harbor on the LAN box**; Spegel stays a fallback.
+
+**Nix / devbox:** nginx caching reverse-proxy in front of `cache.nixos.org` (or `attic`),
+on the same LAN box; consumed as an http **substituter** (nars are signed → safe over HTTP,
+~1 line config). Biggest ROI for the devbox-everywhere setup.
+
+**apt (Debian jail):** apt-cacher-ng on the same box (signed packages → HTTP-safe).
+
+**Still to decide:** Harbor vs Zot vs registry; which host (T61 vs new mini-PC vs LXC);
+whether to bother with the nix/apt caches or just the image mirror first. Revisit with fresh eyes.
+
+Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://oneuptime.com/blog/post/2026-03-03-set-up-a-pull-through-cache-registry-mirror-in-talos/view) · [nh2/nix-binary-cache-proxy](https://github.com/nh2/nix-binary-cache-proxy)
+
 ## Risks & gotchas
 
 - ⚠️ **Reinstall-loop danger:** if PXE serves an installer unconditionally, a box reinstalls

@@ -1,0 +1,75 @@
+# Home dashboard — Nord Pool electricity + droplet irrigation.
+# YAML-mode dashboard (configuration.yaml lovelace.dashboards). Source in git;
+# copied into the HA /config PV.
+title: Home
+views:
+  - title: Electricity
+    path: electricity
+    icon: mdi:transmission-tower
+    cards:
+      - type: entities
+        title: Nord Pool — Estonia (EUR/kWh)
+        entities:
+          - entity: sensor.nord_pool_ee_current_price
+            name: Current price
+          - entity: sensor.nord_pool_ee_next_price
+            name: Next hour
+          - entity: sensor.nord_pool_ee_lowest_price
+            name: Today low
+          - entity: sensor.nord_pool_ee_highest_price
+            name: Today high
+          - entity: sensor.nord_pool_ee_previous_price
+            name: Previous hour
+      - type: gauge
+        entity: sensor.nord_pool_ee_current_price
+        name: Current €/kWh
+        min: 0
+        max: 0.5
+        severity:
+          green: 0
+          yellow: 0.15
+          red: 0.3
+      - type: history-graph
+        title: Price (last 24h)
+        hours_to_show: 24
+        entities:
+          - entity: sensor.nord_pool_ee_current_price
+  - title: Irrigation
+    path: irrigation
+    icon: mdi:sprinkler-variant
+    cards:
+      - type: glance
+        title: Soil moisture (%)
+        entities:
+          - entity: sensor.droplettest_droplet_soilm_sens_1
+            name: Plant 1
+          - entity: sensor.droplettest_droplet_soilm_sens_2
+            name: Plant 2
+          - entity: sensor.droplettest_droplet_soilm_sens_3
+            name: Plant 3
+          - entity: sensor.droplettest_droplet_soilm_sens_4
+            name: Plant 4
+          - entity: sensor.droplettest_droplet_soilm_sens_5
+            name: Plant 5
+      - type: entities
+        title: Desired moisture thresholds
+        entities:
+          - input_number.moisture_level_for_pump1
+          - input_number.moisture_level_for_pump2
+          - input_number.moisture_level_for_pump3
+          - input_number.moisture_level_for_pump4
+          - input_number.moisture_level_for_pump5
+      - type: glance
+        title: Pumps
+        show_state: true
+        entities:
+          - entity: switch.droplettest_droplet_pump_1
+            name: Pump 1
+          - entity: switch.droplettest_droplet_pump_2
+            name: Pump 2
+          - entity: switch.droplettest_droplet_pump_3
+            name: Pump 3
+          - entity: switch.droplettest_droplet_pump_4
+            name: Pump 4
+          - entity: switch.droplettest_droplet_pump_5
+            name: Pump 5
