@@ -15,15 +15,16 @@ data "talos_machine_configuration" "node" {
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
   talos_version      = var.talos_version
 
-  config_patches = [
-    yamlencode({
-      machine = {
-        # hostname comes from the Proxmox nocloud datasource (the VM name);
-        # setting it here too makes Talos reject the config as a conflict.
-        install = { disk = "/dev/sda" }
-      }
-    }),
-  ]
+  # hostname comes from the Proxmox nocloud datasource (the VM name); setting it
+  # here too makes Talos reject the config as a conflict.
+  config_patches = concat(
+    [yamlencode({ machine = { install = { disk = "/dev/sda" } } })],
+    # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
+    # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
+    each.value.role == "controlplane" ? [
+      yamlencode({ cluster = { network = { cni = { name = "none" } } } })
+    ] : []
+  )
 }
 
 data "talos_client_configuration" "this" {
