@@ -66,6 +66,12 @@ variable "kubernetes_version" {
   default     = "v1.36.1"
 }
 
+variable "cilium_version" {
+  description = "Cilium chart/version (CNI)."
+  type        = string
+  default     = "1.19.1"
+}
+
 variable "gateway" {
   description = "Default gateway for the node static IPs."
   type        = string
