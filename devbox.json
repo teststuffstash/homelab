@@ -24,6 +24,12 @@
       "tf-plan": [
         "tofu -chdir=tofu init -input=false",
         "tofu -chdir=tofu plan"
+      ],
+      "k9s": [
+        "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
+      ],
+      "kubeconfig": [
+        "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
       ]
     }
   }
