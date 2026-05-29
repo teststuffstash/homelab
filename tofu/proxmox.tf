@@ -23,7 +23,7 @@ resource "proxmox_virtual_environment_vm" "node" {
 
   disk {
     datastore_id = var.datastore_vms
-    import_from  = proxmox_download_file.talos.id
+    file_id      = proxmox_download_file.talos.id # decompressed image → file_id, not import_from
     interface    = "scsi0"
     size         = each.value.disk_gb
     file_format  = "raw"

@@ -20,6 +20,10 @@ data "talos_image_factory_urls" "this" {
 }
 
 resource "proxmox_download_file" "talos" {
+  # Downloaded compressed (.raw.zst) and decompressed by Proxmox into the 'iso'
+  # datastore (decompression is NOT supported for the 'import' content type).
+  # The VM disk then references this via `file_id` (NOT import_from — bpg requires
+  # file_id for images fetched with decompression_algorithm).
   content_type            = "iso"
   datastore_id            = var.datastore_images
   node_name               = var.proxmox_node

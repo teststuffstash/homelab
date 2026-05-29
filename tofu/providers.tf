@@ -6,12 +6,15 @@ provider "proxmox" {
   api_token = var.proxmox_api_token # "user@realm!tokenid=uuid" — via TF_VAR_proxmox_api_token / SOPS
   insecure  = var.proxmox_insecure  # true for the default self-signed cert
 
-  # Some bpg operations (disk image import, snippets) require SSH to the node.
-  # Uncomment and run `ssh-add` for the pve root key if `tofu apply` asks for it.
-  # ssh {
-  #   agent    = true
-  #   username = "root"
-  # }
+  # bpg needs SSH to the node for disk-image import (runs qemu-img on the host).
+  # Key lives outside the repo at ~/.claude/homelab-pve-ssh/ (persisted); authorize
+  # its .pub in pve root's authorized_keys. No Proxmox API exists to inject this —
+  # it's the one-time root-of-trust seed.
+  ssh {
+    agent       = false
+    username    = "root"
+    private_key = file(var.proxmox_ssh_private_key_file)
+  }
 }
 
 provider "talos" {}

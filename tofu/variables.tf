@@ -17,6 +17,12 @@ variable "proxmox_insecure" {
   default     = true
 }
 
+variable "proxmox_ssh_private_key_file" {
+  description = "Path to the SSH private key bpg uses to reach the Proxmox node (disk import). Lives outside the repo."
+  type        = string
+  default     = "/home/node/.claude/homelab-pve-ssh/id_ed25519"
+}
+
 variable "proxmox_node" {
   description = "Proxmox node name."
   type        = string

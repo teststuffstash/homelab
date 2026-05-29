@@ -18,7 +18,8 @@ data "talos_machine_configuration" "node" {
   config_patches = [
     yamlencode({
       machine = {
-        network = { hostname = each.key }
+        # hostname comes from the Proxmox nocloud datasource (the VM name);
+        # setting it here too makes Talos reject the config as a conflict.
         install = { disk = "/dev/sda" }
       }
     }),
