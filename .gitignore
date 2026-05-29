@@ -3,3 +3,7 @@
 
 # upload server inbox — move files out to commit them
 /uploads/
+
+# Devbox per-project env (regenerated from devbox.json/devbox.lock; not committed).
+# devbox.lock IS committed — it's the deterministic version pin.
+/.devbox/

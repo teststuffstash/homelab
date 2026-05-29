@@ -54,6 +54,7 @@ export TF_VAR_proxmox_api_token='tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xx
 ## Use
 
 ```bash
+devbox shell                                   # toolchain (tofu/talosctl/...) from ../devbox.json
 cp terraform.tfvars.example terraform.tfvars   # edit IPs/specs (must be free IPs)
 tofu init
 tofu validate

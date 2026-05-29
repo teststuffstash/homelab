@@ -22,6 +22,7 @@ the ability to **centrally force any machine to wipe and reinstall**.
 | HA radio | **Network-attached Zigbee/Z-Wave coordinator** | Frees the HA pod from being pinned to the node with the USB stick |
 | Service tiers | **Public (Cloudflare + Civo failover) vs internal (LAN-only)** | Different exposure, redundancy, and uptime needs |
 | HA target | **3-node Proxmox HA + OPNsense CARP pair** (future) | Compute + router failover; rolling updates without downtime |
+| Service exposure | **Cilium BGP ↔ OPNsense FRR** (replaces MetalLB) | LAN/VPN-native service IPs, declarative both ends |
 
 ### Key facts that shaped this (research, May 2026)
 
@@ -111,6 +112,28 @@ Two classes of service with different exposure, redundancy, and uptime needs:
 - The local-control path must have **no cloud dependency**: local DNS (OPNsense Unbound),
   on-prem Home Assistant + local MQTT/ESPHome, local-API integrations over cloud ones.
 - Survives an ISP outage as long as the LAN + home cluster are up (which CARP / Proxmox-HA protect).
+
+## Service exposure / load balancing (internal)
+
+How cluster services become reachable from the LAN — **BGP peering, replacing MetalLB**:
+
+- **Cilium's BGP Control Plane peers with OPNsense (`os-frr`/FRR).** Cilium advertises
+  LoadBalancer IPs (optionally pod/service CIDRs); the router learns the routes, so service
+  IPs are natively routable from the LAN and over VPN — no ARP tricks, no speaker pods, and
+  the router actually knows the routes.
+- **LB IPs come from a dedicated *advertised* CIDR**, not carved from `192.168.2.0/24` — BGP
+  makes them reachable, so no LAN IP-scarcity. Talos defaults (pod `10.244.0.0/16`, service
+  `10.96.0.0/12`) already avoid the LAN; allocate a separate block for `CiliumLoadBalancerIPPool`.
+- **Both ends as code:** Cilium = `CiliumBGPClusterConfig` / `CiliumBGPPeerConfig` /
+  `CiliumBGPAdvertisement` + `CiliumLoadBalancerIPPool` (GitOps). OPNsense = O-X-L
+  `frr_bgp_*` Ansible modules — not the GUI.
+- **Dynamic BGP neighbors** on FRR (`bgp listen range <node-subnet>` + peer-group) so new
+  Talos nodes peer automatically as the fleet grows (the per-node-neighbor approach in most
+  guides doesn't scale with plug-and-join). Enable **BFD** for fast failover (HA model).
+- Private ASNs (e.g. router `64512`, cluster `64513`).
+- Complementary to the public tier: this is **LAN/VPN** reach; internet exposure stays on
+  the **Cloudflare Tunnel** path.
+- Reference writeup (Calico+OPNsense — translate Calico→Cilium): see Sources.
 
 ## HA model (target end-state)
 
@@ -202,7 +225,8 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 ### Phase 1 — Stable base cluster (Talos VMs on Proxmox)
 - [ ] Talos Image Factory schematic (qemu-guest-agent) → upload to Proxmox.
 - [ ] OpenTofu: 1 control-plane + 2 worker Talos VMs; generate machine config, bootstrap, fetch kubeconfig.
-- [ ] Install Cilium; smoke-test a workload + ingress; snapshot as known-good baseline.
+- [ ] Install Cilium (BGP Control Plane + LB IPAM); peer with OPNsense FRR; smoke-test a
+      LoadBalancer service reachable from the LAN; snapshot as known-good baseline.
 
 ### Phase 2 — Home Assistant on the cluster
 - [ ] Order/flash a **network Zigbee coordinator** (SLZB-06 or similar); plan Z-Wave-over-network if used.
@@ -268,3 +292,4 @@ so it doesn't bleed into them.
 - [Harvester requirements](https://docs.harvesterhci.io/v1.7/install/requirements/) · [Harvester vs Proxmox](https://www.xda-developers.com/proxmox-vs-harvester/)
 - [Sidero Omni pricing/hobby tier](https://www.siderolabs.com/pricing) · [Sidero Metal deprecation](https://www.sidero.dev/) · [Omni bare-metal PXE](https://docs.siderolabs.com/omni/omni-cluster-setup/registering-machines/register-a-bare-metal-machine-pxe-ipxe)
 - [MAAS + Wake-on-LAN](https://stgraber.org/2017/04/02/using-wake-on-lan-with-maas-2-x/) · [OPNsense WoL](https://forum.opnsense.org/index.php?topic=15667.0) · [awesome-baremetal](https://github.com/alexellis/awesome-baremetal)
+- Service exposure / BGP: [Calico + OPNsense BGP (tyzbit)](https://tyzbit.blog/configuring-bgp-with-calico-on-k8s-and-opnsense) · [kubernetes-pfsense-controller](https://github.com/travisghansen/kubernetes-pfsense-controller)

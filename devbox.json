@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
+  "packages": [
+    "opentofu@latest",
+    "kubectl@latest",
+    "talosctl@latest",
+    "kubernetes-helm@latest",
+    "cilium-cli@latest",
+    "k9s@latest",
+    "ansible@latest",
+    "sops@latest",
+    "age@latest",
+    "jq@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo \"homelab toolchain ready — $(tofu version | head -1)\""
+    ],
+    "scripts": {
+      "tf-validate": [
+        "tofu -chdir=tofu init -backend=false -input=false",
+        "tofu -chdir=tofu validate"
+      ],
+      "tf-plan": [
+        "tofu -chdir=tofu init -input=false",
+        "tofu -chdir=tofu plan"
+      ]
+    }
+  }
+}
