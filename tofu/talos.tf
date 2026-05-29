@@ -18,7 +18,21 @@ data "talos_machine_configuration" "node" {
   # hostname comes from the Proxmox nocloud datasource (the VM name); setting it
   # here too makes Talos reject the config as a conflict.
   config_patches = concat(
-    [yamlencode({ machine = { install = { disk = "/dev/sda" } } })],
+    [yamlencode({
+      machine = {
+        install = { disk = "/dev/sda" }
+        # Talos locks the rootfs read-only; expose a writable host dir to the kubelet
+        # so hostPath PVs (Home Assistant config) can be created/mounted.
+        kubelet = {
+          extraMounts = [{
+            destination = "/var/mnt/homeassistant"
+            type        = "bind"
+            source      = "/var/mnt/homeassistant"
+            options     = ["bind", "rshared", "rw"]
+          }]
+        }
+      }
+    })],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [
