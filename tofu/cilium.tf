@@ -23,6 +23,11 @@ resource "helm_release" "cilium" {
   # kube-proxy is left in place (no kubeProxyReplacement) for now.
   values = [yamlencode({
     ipam = { mode = "kubernetes" }
+    # kube-proxy disabled in Talos (cluster.proxy.disabled) → Cilium owns service
+    # routing via eBPF. Uses Talos KubePrism on localhost:7445 for the API server.
+    kubeProxyReplacement = true
+    k8sServiceHost       = "localhost"
+    k8sServicePort       = 7445
     # single operator is plenty for a homelab; default 2 (HA, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
     operator = { replicas = 1 }

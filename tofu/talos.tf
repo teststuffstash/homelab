@@ -36,7 +36,15 @@ data "talos_machine_configuration" "node" {
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [
-      yamlencode({ cluster = { network = { cni = { name = "none" } } } })
+      yamlencode({
+        cluster = {
+          network = { cni = { name = "none" } }
+          # kube-proxy disabled — Cilium does service routing via eBPF
+          # (kubeProxyReplacement). Fixes NodePort hairpin drop on the backend
+          # node and preps for Cilium LB. Cilium uses Talos KubePrism (:7445).
+          proxy = { disabled = true }
+        }
+      })
     ] : []
   )
 }
