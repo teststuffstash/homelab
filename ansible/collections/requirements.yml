@@ -1,0 +1,5 @@
+---
+collections:
+  - name: oxlorg.opnsense
+    # Manage OPNsense via its API as code (FRR/BGP, and more later).
+    # https://github.com/O-X-L/ansible-opnsense
