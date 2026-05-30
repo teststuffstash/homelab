@@ -15,7 +15,7 @@ provider "kubernetes" {
 locals {
   ha_node      = "wk-01" # node the PV + pod are pinned to
   ha_host_path = "/var/mnt/homeassistant"
-  ha_nodeport  = 30123
+  ha_lb_ip     = "192.168.40.10" # stable BGP-advertised LoadBalancer VIP
 }
 
 resource "kubernetes_namespace" "ha" {
@@ -124,23 +124,22 @@ resource "kubernetes_service" "ha" {
   metadata {
     name      = "home-assistant"
     namespace = kubernetes_namespace.ha.metadata[0].name
+    labels    = { bgp = "advertise" } # opt in to BGP advertisement (CiliumBGPAdvertisement selector)
+    annotations = {
+      "lbipam.cilium.io/ips" = local.ha_lb_ip # pin a stable VIP from the pool
+    }
   }
   spec {
-    type     = "NodePort"
+    type     = "LoadBalancer"
     selector = { app = "home-assistant" }
     port {
       port        = 8123
       target_port = 8123
-      node_port   = local.ha_nodeport
     }
   }
 }
 
 output "home_assistant_url" {
-  # NOTE: use a node OTHER than the one running the pod (wk-01/.61). With Cilium
-  # alongside kube-proxy, NodePort on the backend pod's own node drops traffic
-  # (hairpin asymmetry); .51/.62 DNAT across fine. Real fix = Cilium LB (BGP) or
-  # kubeProxyReplacement — see ROADMAP service-exposure.
-  description = "Home Assistant UI (use cp-01/.51 — not the pod's node .61)."
-  value       = "http://192.168.2.51:${local.ha_nodeport}"
+  description = "Home Assistant UI (BGP LoadBalancer VIP, reachable from the whole LAN)."
+  value       = "http://${local.ha_lb_ip}:8123"
 }
