@@ -41,7 +41,11 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `homeassistant.tf` — Phase 2 workload via the kubernetes provider: namespace, node-pinned
   hostPath PV/PVC (wk-01), Deployment, and a `LoadBalancer` Service pinned to VIP
   `192.168.40.10` (`lbipam.cilium.io/ips` + `bgp=advertise`).
-- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, `home_assistant_url`.
+- `unifi.tf` — UniFi Network Application + MongoDB (replaces the dead T61 controller);
+  node-pinned hostPath on wk-02, `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP).
+  Boot-tested; **not yet applied** — applying adds the `/var/mnt/unifi` Talos mount,
+  which triggers a rolling node reboot.
+- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, `home_assistant_url`, `unifi_url`.
 
 **Hardware-specific** — swap these for the DR target; the cluster layer stays put:
 
