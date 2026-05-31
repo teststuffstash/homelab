@@ -24,7 +24,11 @@
   connection: local
   gather_facts: false
   vars:
-    cert_domain: opnsense.teststuff.net
+    # Each cert + the action os-acme-client runs after issue/renewal (so the right
+    # service reloads to pick up the new cert).
+    cert_specs:
+      - { name: opnsense.teststuff.net, restart_action: "restart web gui" }      # OPNsense web UI
+      - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }  # HA via HAProxy
     opnsense_conn: &conn
       firewall: "192.168.2.1"
       api_key: "{{ lookup('env', 'OPN_API_KEY') }}"
@@ -53,11 +57,16 @@
         ca: letsencrypt
         register: true
 
-    # Run after issue/renewal so the web UI picks up the new cert.
-    - name: Restart-web-UI action
+    # Post-issue/renewal actions: reload the service that serves each cert.
+    - name: Restart-web-UI action (opnsense.teststuff.net)
       oxlorg.opnsense.acme_action:
         name: "restart web gui"
         type: configd_restart_gui
+
+    - name: Reload-HAProxy action (homeassistant.teststuff.net)
+      oxlorg.opnsense.acme_action:
+        name: "reload haproxy"
+        type: configd_restart_haproxy
 
     # DNS-01 via AWS Route 53. Creds from env (never committed).
     - name: AWS Route 53 DNS-01 validation
@@ -83,15 +92,17 @@
         command: search
       register: acme_certs
 
-    - name: "Certificate {{ cert_domain }} (create if absent)"
+    - name: "ACME certificate (create if absent)"
       oxlorg.opnsense.acme_certificate:
-        description: "{{ cert_domain }}"
-        name: "{{ cert_domain }}"
-        alt_names: ["{{ cert_domain }}"]
+        description: "{{ item.name }}"
+        name: "{{ item.name }}"
+        alt_names: ["{{ item.name }}"]
         account: "TestStuff OPNSense"
         validation: aws-acme
-        restart_actions: ["restart web gui"]
+        restart_actions: ["{{ item.restart_action }}"]
         key_length: key_ec384
         auto_renewal: true
         renew_interval: 60
-      when: cert_domain not in (acme_certs.response.rows | map(attribute='name') | list)
+      loop: "{{ cert_specs }}"
+      loop_control: { label: "{{ item.name }}" }
+      when: item.name not in (acme_certs.response.rows | map(attribute='name') | list)

@@ -1,0 +1,178 @@
+# OPNsense HAProxy — HTTPS reverse proxy for Home Assistant on the LAN.
+#
+# Exposes https://homeassistant.teststuff.net (valid Let's Encrypt cert, so browsers
+# trust it and Chrome offers to save the password) and proxies to the in-cluster
+# Home Assistant LoadBalancer VIP (Cilium BGP). Why a proxy at all: HA listens on
+# plain http:8123 on the cluster VIP; HAProxy terminates TLS with the os-acme-client
+# cert and forwards.
+#
+# Pieces:
+#   - a dedicated LAN IP-alias VIP (192.168.2.5) — OPNsense's own web UI already owns
+#     .1:443, so HAProxy needs its own address to bind :443.
+#   - HAProxy server → backend → frontend (the core objects have no oxlorg module yet,
+#     so they go through the generic `raw` module, create-if-absent keyed on name).
+#   - HTTP/2 DISABLED on the frontend: with h2 advertised, the Home Assistant
+#     WebSocket (the UI's realtime channel) fails to upgrade through the proxy.
+#   - an Unbound host override so homeassistant.teststuff.net resolves to the VIP on
+#     the LAN (local-first; no public DNS record, works WAN-down).
+#
+# The cert itself is managed in ansible/opnsense-acme.yml (issue it there first; this
+# playbook looks its certRefId up by name). HA needs no trusted_proxies change because
+# HAProxy does not inject X-Forwarded-For (it connects as the client).
+#
+# Run (same env/interpreter as the other OPNsense playbooks):
+#   export OPN_API_KEY=...  OPN_API_SECRET=...
+#   PYENV=$(nix build --no-link --print-out-paths path:./ansible/controller-env)
+#   ansible-playbook ansible/opnsense-haproxy.yml \
+#     -e ansible_python_interpreter="$PYENV/bin/python3"
+#
+# Prereq: the os-haproxy plugin must be INSTALLED on OPNsense.
+- name: OPNsense HAProxy reverse proxy (Home Assistant)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    cert_domain: homeassistant.teststuff.net
+    vip_cidr: 192.168.2.5/24
+    vip_ip: 192.168.2.5
+    backend_ip: 192.168.40.10   # Home Assistant LoadBalancer VIP (Cilium BGP)
+    backend_port: 8123
+    opnsense_conn: &conn
+      firewall: "192.168.2.1"
+      api_key: "{{ lookup('env', 'OPN_API_KEY') }}"
+      api_secret: "{{ lookup('env', 'OPN_API_SECRET') }}"
+      ssl_verify: false
+  module_defaults:
+    oxlorg.opnsense.interface_vip: *conn
+    oxlorg.opnsense.unbound_host: *conn
+    oxlorg.opnsense.raw: *conn
+
+  handlers:
+    - name: reconfigure haproxy
+      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: reconfigure }
+
+  tasks:
+    # --- bind address -------------------------------------------------------
+    - name: LAN IP-alias VIP for HAProxy
+      oxlorg.opnsense.interface_vip:
+        address: "{{ vip_cidr }}"
+        mode: ipalias
+        interface: lan
+        description: haproxy-ha
+
+    # --- find the issued cert's refid (set in opnsense-acme.yml) -------------
+    - name: Look up Home Assistant cert refid
+      oxlorg.opnsense.raw: { module: acmeclient, controller: certificates, command: search }
+      register: acme_certs
+    - name: Assert the cert exists (issue it via opnsense-acme.yml first)
+      ansible.builtin.assert:
+        that: acme_certs.response.rows | selectattr('name', 'eq', cert_domain) | list | length > 0
+        fail_msg: "No ACME cert named {{ cert_domain }} — run opnsense-acme.yml and sign it first."
+    - name: Set cert refid fact
+      ansible.builtin.set_fact:
+        ha_cert_refid: "{{ (acme_certs.response.rows | selectattr('name', 'eq', cert_domain) | first).certRefId }}"
+
+    # --- HAProxy backend server (real server = the HA cluster VIP) -----------
+    - name: Find HAProxy servers
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_servers
+    - name: Create HAProxy server ha-srv
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addServer
+        data:
+          server:
+            enabled: "1"
+            name: ha-srv
+            address: "{{ backend_ip }}"
+            port: "{{ backend_port }}"
+            mode: active
+            type: static
+            ssl: "0"
+      when: "'ha-srv' not in (hap_servers.response.rows | map(attribute='name') | list)"
+      notify: reconfigure haproxy
+    - name: Re-read servers (capture uuid)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+      register: hap_servers2
+    - ansible.builtin.set_fact:
+        ha_server_uuid: "{{ (hap_servers2.response.rows | selectattr('name', 'eq', 'ha-srv') | first).uuid }}"
+
+    # --- HAProxy backend (pool) ---------------------------------------------
+    - name: Find HAProxy backends
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_backends
+    - name: Create HAProxy backend ha-backend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addBackend
+        data:
+          backend:
+            enabled: "1"
+            name: ha-backend
+            mode: http
+            algorithm: source
+            linkedServers: "{{ ha_server_uuid }}"
+            healthCheckEnabled: "0"
+            tuning_timeoutServer: 60m   # keep long-lived WebSockets alive
+      when: "'ha-backend' not in (hap_backends.response.rows | map(attribute='name') | list)"
+      notify: reconfigure haproxy
+    - name: Re-read backends (capture uuid)
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+      register: hap_backends2
+    - ansible.builtin.set_fact:
+        ha_backend_uuid: "{{ (hap_backends2.response.rows | selectattr('name', 'eq', 'ha-backend') | first).uuid }}"
+
+    # --- HAProxy frontend (TLS :443 on the VIP) -----------------------------
+    - name: Find HAProxy frontends
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
+      register: hap_frontends
+    - name: Create HAProxy frontend ha-frontend
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: addFrontend
+        data:
+          frontend:
+            enabled: "1"
+            name: ha-frontend
+            bind: "{{ vip_ip }}:443"
+            mode: http
+            defaultBackend: "{{ ha_backend_uuid }}"
+            ssl_enabled: "1"
+            ssl_certificates: "{{ ha_cert_refid }}"
+            http2Enabled: "0"          # h2 breaks the HA WebSocket through the proxy
+            tuning_timeoutClient: 60m
+      when: "'ha-frontend' not in (hap_frontends.response.rows | map(attribute='name') | list)"
+      notify: reconfigure haproxy
+
+    # --- enable + start HAProxy (no enable flag on the general module) -------
+    - name: Read HAProxy general settings
+      oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: get }
+      register: hap_general
+    - name: Enable HAProxy
+      oxlorg.opnsense.raw:
+        module: haproxy
+        controller: settings
+        command: set
+        data: { haproxy: { general: { enabled: "1" } } }
+      when: hap_general.response.haproxy.general.enabled | default("0") != "1"
+      notify: reconfigure haproxy
+    - name: Ensure HAProxy service is running
+      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: start }
+      register: hap_start
+      changed_when: false
+
+    # --- local DNS: homeassistant.teststuff.net -> VIP ----------------------
+    - name: Unbound host override for {{ cert_domain }}
+      oxlorg.opnsense.unbound_host:
+        hostname: "{{ cert_domain.split('.')[0] }}"
+        domain: "{{ cert_domain.split('.')[1:] | join('.') }}"
+        record_type: A
+        value: "{{ vip_ip }}"
+        description: Home Assistant via HAProxy
+        # Default match_fields includes `prio` (=10), which OPNsense ignores for A
+        # records → the module never matches the stored record and appends a
+        # duplicate every run. Match on the fields that actually identify it.
+        match_fields: [hostname, domain, record_type, value]
