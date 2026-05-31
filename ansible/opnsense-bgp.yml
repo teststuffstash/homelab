@@ -1,13 +1,21 @@
 # OPNsense FRR/BGP — peer with the Cilium cluster so LoadBalancer service IPs
 # (192.168.40.0/24, advertised by Cilium) become routable on the LAN.
 #
-# Managed as code via the O-X-L collection (oxlorg.opnsense). This playbook is the
-# reviewable record of every BGP change made inside OPNsense.
+# Managed as code via the ansibleguy.opnsense collection (pinned to 1.2.13 to match
+# os-frr 1.42 on OPNsense 24.7 — see ansible/collections/requirements.yml). This
+# playbook is the reviewable record of every BGP change made inside OPNsense.
 #
 # Run:
 #   ansible-galaxy collection install -r ansible/collections/requirements.yml
 #   export OPN_API_KEY=...  OPN_API_SECRET=...      # OPNsense API creds (seed)
-#   ansible-playbook ansible/opnsense-bgp.yml
+#   # The O-X-L modules need the `httpx` python module. The devbox `ansible`
+#   # nix-store python is read-only and lacks it, so run under the pinned
+#   # controller-env flake (python 3.13 + httpx, ABI-matched to ansible-core).
+#   # NOTE: pass it as an extra-var, not ANSIBLE_PYTHON_INTERPRETER — the env var
+#   # is ignored for the implicit localhost this play targets.
+#   PYENV=$(nix build --no-link --print-out-paths path:./ansible/controller-env)
+#   ansible-playbook ansible/opnsense-bgp.yml \
+#     -e ansible_python_interpreter="$PYENV/bin/python3"
 #
 # Prereq: the os-frr plugin must be INSTALLED on OPNsense (reinstall fresh if you
 # want a clean slate). The frr_* modules configure it; they don't install it.
@@ -28,24 +36,40 @@
       - 192.168.2.61
       - 192.168.2.62
   module_defaults:
-    oxlorg.opnsense.frr_general: *conn
-    oxlorg.opnsense.frr_bgp_general: *conn
-    oxlorg.opnsense.frr_bgp_neighbor: *conn
+    ansibleguy.opnsense.frr_general: *conn
+    ansibleguy.opnsense.frr_bgp_general: *conn
+    ansibleguy.opnsense.frr_bgp_route_map: *conn
+    ansibleguy.opnsense.frr_bgp_neighbor: *conn
   tasks:
     - name: Enable FRR
-      oxlorg.opnsense.frr_general:
+      ansibleguy.opnsense.frr_general:
         enabled: true
 
     - name: Enable BGP (AS {{ opnsense_asn }})
-      oxlorg.opnsense.frr_bgp_general:
+      ansibleguy.opnsense.frr_bgp_general:
         enabled: true
         as_number: "{{ opnsense_asn }}"
         router_id: "192.168.2.1"
         # We only need to ACCEPT the cluster's advertised LB routes; nothing to originate.
 
+    # FRR defaults to `bgp ebgp-requires-policy`: an eBGP peer with no inbound
+    # route-map has ALL received routes filtered. A permit-all route-map (no match
+    # conditions) attached inbound lets us accept the cluster's 192.168.40.0/24 LB
+    # routes. We originate nothing, so no outbound policy is needed.
+    - name: Permit-all route-map (satisfies ebgp-requires-policy)
+      ansibleguy.opnsense.frr_bgp_route_map:
+        name: CILIUM-ALLOW-ALL
+        action: permit
+        id: 10
+
     - name: BGP neighbor per Talos node (remote AS {{ cluster_asn }})
-      oxlorg.opnsense.frr_bgp_neighbor:
+      ansibleguy.opnsense.frr_bgp_neighbor:
         peer_ip: "{{ item }}"
         remote_as: "{{ cluster_asn }}"
+        route_map_in: CILIUM-ALLOW-ALL
         enabled: true
+        # Match existing neighbors on peer IP alone. The default ['ip','description']
+        # never matches here (we set no description → desired None vs stored '') so
+        # the module would append a duplicate neighbor on every run.
+        match_fields: ['ip']
       loop: "{{ node_ips }}"

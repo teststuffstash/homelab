@@ -1,5 +1,15 @@
 ---
 collections:
-  - name: oxlorg.opnsense
-    # Manage OPNsense via its API as code (FRR/BGP, and more later).
-    # https://github.com/O-X-L/ansible-opnsense
+  # Manage OPNsense via its API as code (FRR/BGP, and more later).
+  #
+  # PINNED to 1.2.13 — the last release whose frr_bgp_neighbor schema matches the
+  # os-frr 1.42 plugin shipped with OPNsense 24.7. From 1.2.14 the module added a
+  # `remote_as_mode` field that only exists in the newer os-frr (OPNsense 25.x);
+  # against 24.7 it makes the module crash ("Failed to translate API entry").
+  #
+  # `ansibleguy.opnsense` is the original namespace; the project later moved to
+  # `oxlorg.opnsense` (https://github.com/O-X-L/ansible-opnsense), but oxlorg only
+  # publishes 25.x releases (os-frr 2.x). Revisit this pin if/when OPNsense is
+  # upgraded to 25.x — then switch to oxlorg.opnsense.
+  - name: ansibleguy.opnsense
+    version: "1.2.13"
