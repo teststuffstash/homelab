@@ -28,7 +28,7 @@
     # service reloads to pick up the new cert).
     cert_specs:
       - { name: opnsense.teststuff.net, restart_action: "restart web gui" }      # OPNsense web UI
-      - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }  # HA via HAProxy
+      - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }  # Home Assistant via HAProxy
     opnsense_conn: &conn
       firewall: "192.168.2.1"
       api_key: "{{ lookup('env', 'OPN_API_KEY') }}"

@@ -119,7 +119,7 @@ that must live in git).
 ## Not included yet (next steps)
 
 - Remote/encrypted state backend (currently local state).
-- A real storage provisioner (HA is on a single-node hostPath PV; Longhorn/local-path next).
-  HA `/config` → object-storage backup per ROADMAP.
+- A real storage provisioner (Home Assistant is on a single-node hostPath PV; Longhorn/local-path next).
+  Home Assistant `/config` → object-storage backup per ROADMAP.
 - Promotion of `nodes` IPs to OPNsense DHCP reservations as code (`oxlorg.opnsense`).
 - Bare-metal node group + Matchbox PXE (ROADMAP hybrid topology); more workloads via GitOps.

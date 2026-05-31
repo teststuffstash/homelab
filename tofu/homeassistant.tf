@@ -2,7 +2,7 @@
 # — explicit, reviewable manifests rather than an opaque chart.
 #
 # Storage: no dynamic provisioner yet, so a node-pinned hostPath PV under Talos's
-# writable /var. HA is pinned to the same node. Single-instance (no HA-redundancy
+# writable /var. Home Assistant is pinned to the same node. Single-instance (no High-Availability redundancy
 # yet); data backs up to object storage later per ROADMAP. Longhorn/local-path is
 # the future "real storage" step.
 provider "kubernetes" {
@@ -92,7 +92,7 @@ resource "kubernetes_deployment" "ha" {
             requests = { cpu = "250m", memory = "512Mi" }
             limits   = { cpu = "2", memory = "2Gi" }
           }
-          startup_probe { # HA's first boot is slow; allow up to 5 min
+          startup_probe { # Home Assistant's first boot is slow; allow up to 5 min
             http_get {
               path = "/"
               port = 8123

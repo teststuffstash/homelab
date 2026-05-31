@@ -2,7 +2,7 @@
 #
 # Exposes https://homeassistant.teststuff.net (valid Let's Encrypt cert, so browsers
 # trust it and Chrome offers to save the password) and proxies to the in-cluster
-# Home Assistant LoadBalancer VIP (Cilium BGP). Why a proxy at all: HA listens on
+# Home Assistant LoadBalancer VIP (Cilium BGP). Why a proxy at all: Home Assistant listens on
 # plain http:8123 on the cluster VIP; HAProxy terminates TLS with the os-acme-client
 # cert and forwards.
 #
@@ -17,7 +17,7 @@
 #     the LAN (local-first; no public DNS record, works WAN-down).
 #
 # The cert itself is managed in ansible/opnsense-acme.yml (issue it there first; this
-# playbook looks its certRefId up by name). HA needs no trusted_proxies change because
+# playbook looks its certRefId up by name). Home Assistant needs no trusted_proxies change because
 # HAProxy does not inject X-Forwarded-For (it connects as the client).
 #
 # Run (same env/interpreter as the other OPNsense playbooks):
@@ -72,7 +72,7 @@
       ansible.builtin.set_fact:
         ha_cert_refid: "{{ (acme_certs.response.rows | selectattr('name', 'eq', cert_domain) | first).certRefId }}"
 
-    # --- HAProxy backend server (real server = the HA cluster VIP) -----------
+    # --- HAProxy backend server (real server = the Home Assistant cluster VIP) -----------
     - name: Find HAProxy servers
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
       register: hap_servers
@@ -142,7 +142,7 @@
             defaultBackend: "{{ ha_backend_uuid }}"
             ssl_enabled: "1"
             ssl_certificates: "{{ ha_cert_refid }}"
-            http2Enabled: "0"          # h2 breaks the HA WebSocket through the proxy
+            http2Enabled: "0"          # h2 breaks the Home Assistant WebSocket through the proxy
             tuning_timeoutClient: 60m
       when: "'ha-frontend' not in (hap_frontends.response.rows | map(attribute='name') | list)"
       notify: reconfigure haproxy

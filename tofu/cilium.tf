@@ -30,7 +30,7 @@ resource "helm_release" "cilium" {
     k8sServicePort       = 7445
     # BGP control plane: advertise LoadBalancer service IPs to OPNsense (FRR).
     bgpControlPlane = { enabled = true }
-    # single operator is plenty for a homelab; default 2 (HA, anti-affinity) just
+    # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
     operator = { replicas = 1 }
     cgroup = {
