@@ -29,7 +29,7 @@ logger:
 
 ota:
   - platform: esphome
-#    password: "bfec11234xsfea57e1b5d3b985cfe06c"
+    password: !secret ota_password   # must match the device's current OTA password to upload
 
 wifi:
   ssid: !secret wifi_ssid
