@@ -21,15 +21,23 @@ data "talos_machine_configuration" "node" {
     [yamlencode({
       machine = {
         install = { disk = "/dev/sda" }
-        # Talos locks the rootfs read-only; expose a writable host dir to the kubelet
-        # so hostPath PVs (Home Assistant config) can be created/mounted.
+        # Talos locks the rootfs read-only; expose writable host dirs to the kubelet
+        # so hostPath PVs can be created/mounted (no dynamic provisioner yet).
         kubelet = {
-          extraMounts = [{
-            destination = "/var/mnt/homeassistant"
-            type        = "bind"
-            source      = "/var/mnt/homeassistant"
-            options     = ["bind", "rshared", "rw"]
-          }]
+          extraMounts = [
+            {
+              destination = "/var/mnt/homeassistant" # Home Assistant config (homeassistant.tf)
+              type        = "bind"
+              source      = "/var/mnt/homeassistant"
+              options     = ["bind", "rshared", "rw"]
+            },
+            {
+              destination = "/var/mnt/unifi" # UniFi controller + Mongo (unifi.tf)
+              type        = "bind"
+              source      = "/var/mnt/unifi"
+              options     = ["bind", "rshared", "rw"]
+            },
+          ]
         }
       }
     })],
