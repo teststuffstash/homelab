@@ -1,15 +1,16 @@
 ---
 collections:
   # Manage OPNsense via its API as code (FRR/BGP, and more later).
+  # https://github.com/O-X-L/ansible-opnsense
   #
-  # PINNED to 1.2.13 — the last release whose frr_bgp_neighbor schema matches the
-  # os-frr 1.42 plugin shipped with OPNsense 24.7. From 1.2.14 the module added a
-  # `remote_as_mode` field that only exists in the newer os-frr (OPNsense 25.x);
-  # against 24.7 it makes the module crash ("Failed to translate API entry").
+  # PINNED to 25.7.8 — matches the os-frr 1.52 plugin on OPNsense 26.1. This
+  # collection's frr_bgp_neighbor expects a `remote_as_mode` field (and bgp_general
+  # a `redistribute` field) that the os-frr 1.52 API emits.
   #
-  # `ansibleguy.opnsense` is the original namespace; the project later moved to
-  # `oxlorg.opnsense` (https://github.com/O-X-L/ansible-opnsense), but oxlorg only
-  # publishes 25.x releases (os-frr 2.x). Revisit this pin if/when OPNsense is
-  # upgraded to 25.x — then switch to oxlorg.opnsense.
-  - name: ansibleguy.opnsense
-    version: "1.2.13"
+  # History: while on OPNsense 24.7 (os-frr 1.42) we had to pin the predecessor
+  # ansibleguy.opnsense==1.2.13 because those fields did NOT exist yet and the
+  # newer modules crashed ("Failed to translate API entry"). After upgrading to
+  # 26.1 the schema gained those fields, so 1.2.13 broke the other way and we moved
+  # to oxlorg 25.7.8. Lesson: keep this pin aligned with the OPNsense/os-frr version.
+  - name: oxlorg.opnsense
+    version: "25.7.8"

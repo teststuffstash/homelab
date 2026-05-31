@@ -1,8 +1,8 @@
 # OPNsense FRR/BGP — peer with the Cilium cluster so LoadBalancer service IPs
 # (192.168.40.0/24, advertised by Cilium) become routable on the LAN.
 #
-# Managed as code via the ansibleguy.opnsense collection (pinned to 1.2.13 to match
-# os-frr 1.42 on OPNsense 24.7 — see ansible/collections/requirements.yml). This
+# Managed as code via the oxlorg.opnsense collection (pinned to 25.7.8 to match
+# os-frr 1.52 on OPNsense 26.1 — see ansible/collections/requirements.yml). This
 # playbook is the reviewable record of every BGP change made inside OPNsense.
 #
 # Run:
@@ -36,17 +36,17 @@
       - 192.168.2.61
       - 192.168.2.62
   module_defaults:
-    ansibleguy.opnsense.frr_general: *conn
-    ansibleguy.opnsense.frr_bgp_general: *conn
-    ansibleguy.opnsense.frr_bgp_route_map: *conn
-    ansibleguy.opnsense.frr_bgp_neighbor: *conn
+    oxlorg.opnsense.frr_general: *conn
+    oxlorg.opnsense.frr_bgp_general: *conn
+    oxlorg.opnsense.frr_bgp_route_map: *conn
+    oxlorg.opnsense.frr_bgp_neighbor: *conn
   tasks:
     - name: Enable FRR
-      ansibleguy.opnsense.frr_general:
+      oxlorg.opnsense.frr_general:
         enabled: true
 
     - name: Enable BGP (AS {{ opnsense_asn }})
-      ansibleguy.opnsense.frr_bgp_general:
+      oxlorg.opnsense.frr_bgp_general:
         enabled: true
         as_number: "{{ opnsense_asn }}"
         router_id: "192.168.2.1"
@@ -57,13 +57,13 @@
     # conditions) attached inbound lets us accept the cluster's 192.168.40.0/24 LB
     # routes. We originate nothing, so no outbound policy is needed.
     - name: Permit-all route-map (satisfies ebgp-requires-policy)
-      ansibleguy.opnsense.frr_bgp_route_map:
+      oxlorg.opnsense.frr_bgp_route_map:
         name: CILIUM-ALLOW-ALL
         action: permit
         id: 10
 
     - name: BGP neighbor per Talos node (remote AS {{ cluster_asn }})
-      ansibleguy.opnsense.frr_bgp_neighbor:
+      oxlorg.opnsense.frr_bgp_neighbor:
         peer_ip: "{{ item }}"
         remote_as: "{{ cluster_asn }}"
         route_map_in: CILIUM-ALLOW-ALL
