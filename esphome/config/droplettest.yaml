@@ -10,7 +10,7 @@ substitutions:
 esphome:
   name: droplettest
   friendly_name: droplettest
-  name_add_mac_suffix: true
+  name_add_mac_suffix: false   # single device; stable node name so HA reconnects to the same integration
   project:
     name: pricelesstoolkit.droplet
     version: "1.1"
