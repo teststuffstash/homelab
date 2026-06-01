@@ -116,7 +116,7 @@ sensor:
     attenuation: 12db
     filters:
       - calibrate_linear:
-          - 2.520 -> 0.00      # Calibrate Min in dry soil
+          - 2.300 -> 0.00      # Calibrate Min in dry soil
           - 0.99 -> 100.00     # Calibrate MAX in 100% wet soil
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
@@ -131,7 +131,7 @@ sensor:
     attenuation: 12db
     filters:
       - calibrate_linear:
-          - 2.520 -> 0.00
+          - 2.300 -> 0.00
           - 0.99 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
@@ -146,7 +146,7 @@ sensor:
     attenuation: 12db
     filters:
       - calibrate_linear:
-          - 2.520 -> 0.00
+          - 2.300 -> 0.00
           - 0.99 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
@@ -161,7 +161,7 @@ sensor:
     attenuation: 12db
     filters:
       - calibrate_linear:
-          - 2.520 -> 0.00
+          - 2.300 -> 0.00
           - 0.99 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
