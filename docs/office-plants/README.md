@@ -85,9 +85,16 @@ flowchart TB
 ```
 
 ### Physical setup
-The Droplet sits **on top of the water-reservoir box**, slightly elevated, so any pump or
-hose leak **drains back into the reservoir** rather than onto the floor. Pumps draw from this
-same box (short lift), feeding the 4 soaker hoses into the pots.
+The reservoir is a **clear plastic storage tub** of water. The Droplet controller sits
+**on top of / on the rim of the tub**, slightly elevated, so any pump or hose leak **drains
+back into the tub** rather than onto the floor. The 4 pots are arranged around the tub; pumps
+draw from it (short lift) and feed a **soaker hose** coiled into each pot. Soil sensors are
+capacitive, wired back to the controller with red/white twisted-pair cables; pump water lines
+attach to the controller on brass barbed fittings.
+
+![Overview — 4 pots around the reservoir tub with the Droplet on top](images/setup-overview.jpg)
+
+![Controller wiring — pump tubing on barbed fittings, red/white sensor cables](images/controller-wiring.jpg)
 
 ### What is deployed where
 
