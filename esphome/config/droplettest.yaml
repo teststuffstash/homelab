@@ -41,10 +41,17 @@ wifi:
 
 captive_portal:
 
-# Time source (used for the night guard). Comes from Home Assistant, so no internet needed.
+# Time source (for the daytime guard). SNTP from the OPNsense gateway (local-first,
+# works WAN-down) with public fallback. NOTE: the `homeassistant` time platform
+# returns UTC and ignores `timezone:`, which broke the daytime window — SNTP honours it.
 time:
-  - platform: homeassistant
+  - platform: sntp
     id: ha_time
+    timezone: "EET-2EEST,M3.5.0/3,M10.5.0/4"   # Europe/Tallinn (POSIX)
+    servers:
+      - 192.168.2.1        # OPNsense NTP (LAN)
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
 
 one_wire: # https://esphome.io/components/one_wire
   - platform: gpio
@@ -209,6 +216,16 @@ switch:
     icon: mdi:water-sync
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      # Evaluate immediately when switched on (don't wait for the next interval),
+      # still respecting the daytime window.
+      - if:
+          condition:
+            lambda: |-
+              auto t = id(ha_time).now();
+              return t.is_valid() && t.hour >= ${day_start} && t.hour < ${day_end};
+          then:
+            - script.execute: do_water_cycle
 
   # --- Pumps (1-4), also manually controllable from Home Assistant ---
   - platform: gpio
@@ -253,6 +270,14 @@ script:
   - id: do_water_cycle
     mode: single
     then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          ESP_LOGI("water", "cycle: time_valid=%d hour=%d | s1=%.0f/d%.0f s2=%.0f/d%.0f s3=%.0f/d%.0f s4=%.0f/d%.0f",
+                   t.is_valid(), t.is_valid() ? (int) t.hour : -1,
+                   id(Soil1).state, id(desired_mois_value_1).state,
+                   id(Soil2).state, id(desired_mois_value_2).state,
+                   id(Soil3).state, id(desired_mois_value_3).state,
+                   id(Soil4).state, id(desired_mois_value_4).state);
       - if:
           condition:
             lambda: 'return id(Soil1).state < id(desired_mois_value_1).state;'
@@ -305,6 +330,15 @@ interval:
                   return t.hour >= ${day_start} && t.hour < ${day_end};
           then:
             - script.execute: do_water_cycle
+
+button:
+  # Manual "water now" — runs one cycle regardless of auto/daytime (still only
+  # waters plants below their threshold). Handy for testing.
+  - platform: template
+    name: ${name} Water Now
+    icon: mdi:watering-can
+    on_press:
+      - script.execute: do_water_cycle
 
 binary_sensor:
   # Onboard button: short press wakes the OLED for 20s.
