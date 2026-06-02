@@ -105,9 +105,15 @@ api:
     key: "2PdhhSba8dsBSCZ2bYKxXmGoxpiOEVZ9S2LBzGD0tJ0="
 
 sensor:
+  # --- Raw ADC voltage per channel (calibration aid; disabled in HA by default) ---
+  - { platform: adc, pin: { number: 34, allow_other_uses: true }, id: soil1_raw, name: "${name} Soil1 raw", attenuation: 12db, unit_of_measurement: V, accuracy_decimals: 3, update_interval: 5s, entity_category: diagnostic, disabled_by_default: true }
+  - { platform: adc, pin: { number: 35, allow_other_uses: true }, id: soil2_raw, name: "${name} Soil2 raw", attenuation: 12db, unit_of_measurement: V, accuracy_decimals: 3, update_interval: 5s, entity_category: diagnostic, disabled_by_default: true }
+  - { platform: adc, pin: { number: 32, allow_other_uses: true }, id: soil3_raw, name: "${name} Soil3 raw", attenuation: 12db, unit_of_measurement: V, accuracy_decimals: 3, update_interval: 5s, entity_category: diagnostic, disabled_by_default: true }
+  - { platform: adc, pin: { number: 33, allow_other_uses: true }, id: soil4_raw, name: "${name} Soil4 raw", attenuation: 12db, unit_of_measurement: V, accuracy_decimals: 3, update_interval: 5s, entity_category: diagnostic, disabled_by_default: true }
+
   # --- Soil moisture, one ADC per plant (1-4) ---
   - platform: adc
-    pin: 34
+    pin: { number: 34, allow_other_uses: true }
     id: Soil1
     name: ${name} SoilM Sens 1
     icon: mdi:water-percent
@@ -117,12 +123,12 @@ sensor:
     filters:
       - calibrate_linear:
           - 2.300 -> 0.00      # Calibrate Min in dry soil
-          - 0.99 -> 100.00     # Calibrate MAX in 100% wet soil
+          - 0.89 -> 100.00     # Calibrate MAX in 100% wet soil
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
 
   - platform: adc
-    pin: 35
+    pin: { number: 35, allow_other_uses: true }
     id: Soil2
     name: ${name} SoilM Sens 2
     icon: mdi:water-percent
@@ -132,12 +138,12 @@ sensor:
     filters:
       - calibrate_linear:
           - 2.300 -> 0.00
-          - 0.99 -> 100.00
+          - 0.89 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
 
   - platform: adc
-    pin: 32
+    pin: { number: 32, allow_other_uses: true }
     id: Soil3
     name: ${name} SoilM Sens 3
     icon: mdi:water-percent
@@ -147,12 +153,12 @@ sensor:
     filters:
       - calibrate_linear:
           - 2.300 -> 0.00
-          - 0.99 -> 100.00
+          - 0.89 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
 
   - platform: adc
-    pin: 33
+    pin: { number: 33, allow_other_uses: true }
     id: Soil4
     name: ${name} SoilM Sens 4
     icon: mdi:water-percent
@@ -162,7 +168,7 @@ sensor:
     filters:
       - calibrate_linear:
           - 2.300 -> 0.00
-          - 0.99 -> 100.00
+          - 0.89 -> 100.00
       - clamp: { min_value: 0, max_value: 100 }
     accuracy_decimals: 0
 
