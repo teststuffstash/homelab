@@ -59,6 +59,15 @@ views:
           - input_number.moisture_level_for_pump3
           - input_number.moisture_level_for_pump4
           - input_number.moisture_level_for_pump5
+      - type: entities
+        title: Watering time per plant (seconds)
+        entities:
+          - input_number.watering_seconds_pump1
+          - input_number.watering_seconds_pump2
+          - input_number.watering_seconds_pump3
+          - input_number.watering_seconds_pump4
+          - switch.droplettest_droplet_auto_watering
+          - button.droplettest_droplet_water_now
       - type: glance
         title: Pumps
         show_state: true

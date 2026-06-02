@@ -1,7 +1,7 @@
 substitutions:
   name: droplet
   # --- watering behaviour (tune here) ---
-  watering_seconds: "60"   # run each pump at least this long when a plant is dry (>= 1 min)
+  watering_seconds: "60"   # FALLBACK only — per-plant run time is set in HA (input_number.watering_seconds_pumpN)
   soak_seconds: "10"       # pause between plants in a cycle
   check_interval: "15min"  # how often to evaluate whether to water
   day_start: "8"           # only water at/after 08:00 ...
@@ -198,6 +198,26 @@ sensor:
     internal: true
     entity_id: input_number.moisture_level_for_pump4
 
+  # --- Per-plant watering run time (seconds), driven by Home Assistant helpers ---
+  # Bigger pots / soaker-hose priming need longer. Falls back to ${watering_seconds}
+  # if the HA value is unavailable.
+  - platform: homeassistant
+    id: water_secs_1
+    internal: true
+    entity_id: input_number.watering_seconds_pump1
+  - platform: homeassistant
+    id: water_secs_2
+    internal: true
+    entity_id: input_number.watering_seconds_pump2
+  - platform: homeassistant
+    id: water_secs_3
+    internal: true
+    entity_id: input_number.watering_seconds_pump3
+  - platform: homeassistant
+    id: water_secs_4
+    internal: true
+    entity_id: input_number.watering_seconds_pump4
+
   - platform: wifi_signal
     name: ${name} WiFi Signal Sensor
     id: dbm
@@ -272,19 +292,22 @@ script:
     then:
       - lambda: |-
           auto t = id(ha_time).now();
-          ESP_LOGI("water", "cycle: time_valid=%d hour=%d | s1=%.0f/d%.0f s2=%.0f/d%.0f s3=%.0f/d%.0f s4=%.0f/d%.0f",
+          ESP_LOGI("water", "cycle: time_valid=%d hour=%d | s1=%.0f/d%.0f/%.0fs s2=%.0f/d%.0f/%.0fs s3=%.0f/d%.0f/%.0fs s4=%.0f/d%.0f/%.0fs",
                    t.is_valid(), t.is_valid() ? (int) t.hour : -1,
-                   id(Soil1).state, id(desired_mois_value_1).state,
-                   id(Soil2).state, id(desired_mois_value_2).state,
-                   id(Soil3).state, id(desired_mois_value_3).state,
-                   id(Soil4).state, id(desired_mois_value_4).state);
+                   id(Soil1).state, id(desired_mois_value_1).state, id(water_secs_1).state,
+                   id(Soil2).state, id(desired_mois_value_2).state, id(water_secs_2).state,
+                   id(Soil3).state, id(desired_mois_value_3).state, id(water_secs_3).state,
+                   id(Soil4).state, id(desired_mois_value_4).state, id(water_secs_4).state);
       - if:
           condition:
             lambda: 'return id(Soil1).state < id(desired_mois_value_1).state;'
           then:
             - logger.log: "Droplet: watering plant 1"
             - switch.turn_on: pump1
-            - delay: ${watering_seconds}s
+            - delay: !lambda |-
+                float s = id(water_secs_1).state;
+                if (isnan(s) || s < 1) s = ${watering_seconds};
+                return (uint32_t) (s * 1000.0);
             - switch.turn_off: pump1
             - delay: ${soak_seconds}s
       - if:
@@ -293,7 +316,10 @@ script:
           then:
             - logger.log: "Droplet: watering plant 2"
             - switch.turn_on: pump2
-            - delay: ${watering_seconds}s
+            - delay: !lambda |-
+                float s = id(water_secs_2).state;
+                if (isnan(s) || s < 1) s = ${watering_seconds};
+                return (uint32_t) (s * 1000.0);
             - switch.turn_off: pump2
             - delay: ${soak_seconds}s
       - if:
@@ -302,7 +328,10 @@ script:
           then:
             - logger.log: "Droplet: watering plant 3"
             - switch.turn_on: pump3
-            - delay: ${watering_seconds}s
+            - delay: !lambda |-
+                float s = id(water_secs_3).state;
+                if (isnan(s) || s < 1) s = ${watering_seconds};
+                return (uint32_t) (s * 1000.0);
             - switch.turn_off: pump3
             - delay: ${soak_seconds}s
       - if:
@@ -311,7 +340,10 @@ script:
           then:
             - logger.log: "Droplet: watering plant 4"
             - switch.turn_on: pump4
-            - delay: ${watering_seconds}s
+            - delay: !lambda |-
+                float s = id(water_secs_4).state;
+                if (isnan(s) || s < 1) s = ${watering_seconds};
+                return (uint32_t) (s * 1000.0);
             - switch.turn_off: pump4
             - delay: ${soak_seconds}s
 

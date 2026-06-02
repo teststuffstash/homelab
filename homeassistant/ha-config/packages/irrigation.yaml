@@ -1,17 +1,46 @@
 # Droplet irrigation — desired soil-moisture thresholds per pump.
 # The ESPHome droplet (192.168.2.245) reads these input_numbers from HA via its
 # `homeassistant` sensor platform and runs the pump comparison logic on-device:
-# if measured soil moisture < desired level, the pump runs.
+# if measured soil moisture < desired level, the pump runs for watering_seconds_pumpN.
 #
-# Loaded via HA packages (homeassistant.packages in configuration.yaml).
+# Per-plant run time is configurable here (bigger pots / soaker-hose priming need
+# longer). Loaded via HA packages (homeassistant.packages in configuration.yaml).
 # Source of truth lives here in git; copied into the HA /config PV.
 input_number:
+  watering_seconds_pump1:
+    name: Watering seconds pump 1
+    min: 5
+    max: 600
+    step: 5
+    unit_of_measurement: "s"
+    icon: mdi:timer-outline
+  watering_seconds_pump2:
+    name: Watering seconds pump 2
+    min: 5
+    max: 600
+    step: 5
+    unit_of_measurement: "s"
+    icon: mdi:timer-outline
+  watering_seconds_pump3:
+    name: Watering seconds pump 3
+    min: 5
+    max: 600
+    step: 5
+    unit_of_measurement: "s"
+    icon: mdi:timer-outline
+  watering_seconds_pump4:
+    name: Watering seconds pump 4
+    min: 5
+    max: 600
+    step: 5
+    unit_of_measurement: "s"
+    icon: mdi:timer-outline
+
   moisture_level_for_pump1:
     name: Desired moisture pump 1
     min: 0
     max: 100
     step: 1
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:water-percent
   moisture_level_for_pump2:
@@ -19,7 +48,6 @@ input_number:
     min: 0
     max: 100
     step: 1
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:water-percent
   moisture_level_for_pump3:
@@ -27,7 +55,6 @@ input_number:
     min: 0
     max: 100
     step: 1
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:water-percent
   moisture_level_for_pump4:
@@ -35,7 +62,6 @@ input_number:
     min: 0
     max: 100
     step: 1
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:water-percent
   moisture_level_for_pump5:
@@ -43,6 +69,5 @@ input_number:
     min: 0
     max: 100
     step: 1
-    initial: 30
     unit_of_measurement: "%"
     icon: mdi:water-percent
