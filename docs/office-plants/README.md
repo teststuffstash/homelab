@@ -84,6 +84,11 @@ flowchart TB
     haproxy --> ha
 ```
 
+### Physical setup
+The Droplet sits **on top of the water-reservoir box**, slightly elevated, so any pump or
+hose leak **drains back into the reservoir** rather than onto the floor. Pumps draw from this
+same box (short lift), feeding the 4 soaker hoses into the pots.
+
 ### What is deployed where
 
 | Component | Where | Address | Notes |
@@ -234,7 +239,7 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | R3 | **Pump fails** (weak/dead) — plant silently not watered | Medium | Medium | "soil not rising after watering" is the tell; **next:** auto-detect & alert |
 | R4 | **Sensor drift / failure** → over- or under-watering | Medium | Medium | Periodic recalibration; `soilN_raw` diagnostics; clamp 0–100 |
 | R5 | **Threshold set higher than soil can reach** → pump runs every cycle (over-water) | Medium | Medium | Pick reachable thresholds; **next:** per-run max + daily cap |
-| R6 | **Leak / hose pops off** while pumping | Low | High (water damage) | Daytime-only watering; short runs; **no leak/flow detection** → Next steps |
+| R6 | **Leak / hose pops off** while pumping | Low | Low–Med | **Droplet sits elevated on the reservoir box → leaks drain back into it**, limiting water damage; daytime-only, short runs. Still no leak/flow detection → Next steps |
 | R7 | **WiFi outage** → device offline | Low | Medium | APs run standalone; UniFi controller migration in progress |
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
 | R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds persist (no `initial:`) |
