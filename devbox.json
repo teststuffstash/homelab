@@ -32,6 +32,9 @@
       "kubeconfig": [
         "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
       ],
+      "talos-usb": [
+        "bash scripts/talos-usb.sh"
+      ],
       "flash-droplet": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",
         "test -x esphome/.flash-venv/bin/esphome || python3 -m venv esphome/.flash-venv",
