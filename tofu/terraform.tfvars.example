@@ -22,3 +22,8 @@ nodes = {
 }
 
 # proxmox_api_token = "tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Monitoring (kube-prometheus-stack). Pass these via env, not this file:
+#   export TF_VAR_ha_prometheus_token=...   # HA → Profile → Long-lived access tokens
+#   export TF_VAR_grafana_admin_password=...
+kube_prometheus_stack_version = "86.1.0"

@@ -10,6 +10,7 @@ with thresholds and per-plant run-times configured in **Home Assistant**.
   - Firmware/config: [`esphome/config/droplettest.yaml`](../../esphome/config/droplettest.yaml)
   - HA helpers: [`homeassistant/ha-config/packages/irrigation.yaml`](../../homeassistant/ha-config/packages/irrigation.yaml)
   - HA dashboard: [`homeassistant/ha-config/dashboards/home.yaml`](../../homeassistant/ha-config/dashboards/home.yaml)
+  - Monitoring: [`tofu/monitoring.tf`](../../tofu/monitoring.tf), HA export [`packages/prometheus.yaml`](../../homeassistant/ha-config/packages/prometheus.yaml), alert relay [`packages/alerting.yaml`](../../homeassistant/ha-config/packages/alerting.yaml) — see [§9 Monitoring](#9-monitoring-prometheus--grafana)
 
 ---
 
@@ -261,15 +262,117 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 - **Pump-health detection:** flag a plant whose soil doesn't rise after N waterings (R3).
 - **Flow/leak detection** or a hardware max-run fuse (R6).
 - **Notifications** (HA): watering events, stale/again-NaN sensors, reservoir low.
+  *(Started — Prometheus/Alertmanager → HA, see [§9](#9-monitoring-prometheus--grafana). Reservoir-low still needs R2's level sensor.)*
 - Make **`check_interval` configurable from HA** (like the per-plant seconds) for long-run setups.
 - **Per-sensor / multi-point calibration** for better mid-range accuracy.
 - **Home Assistant resilience:** real storage provisioner instead of single-node hostPath; HA across nodes.
 - **Move the API encryption key to `secrets.yaml`** (R11) ahead of making the repo public.
-- Optional: graph soil %, watering count, and run-time per plant for trend visibility.
+- ~~Graph soil %, watering count, and run-time per plant for trend visibility.~~ **Done** — Grafana dashboard ([§9](#9-monitoring-prometheus--grafana)).
+- **Per-plant water *volume*** (not just on-seconds): calibrate ml/s per pump, or add flow sensors (deferred — time proxy chosen for now).
 
 ---
 
-## 9. Quick reference
+## 9. Monitoring (Prometheus + Grafana)
+
+### Endpoints (HTTPS, valid Let's Encrypt certs)
+| Service | URL | Backend VIP | LAN VIP (HAProxy) |
+|---|---|---|---|
+| Grafana | **https://grafana.teststuff.net** | `192.168.40.11:80` | `192.168.2.6:443` |
+| Prometheus | **https://prometheus.teststuff.net** | `192.168.40.13:9090` | `192.168.2.7:443` |
+| Alertmanager | **https://alertmanager.teststuff.net** | `192.168.40.14:9093` | `192.168.2.8:443` |
+
+Same pattern as Home Assistant: OPNsense HAProxy terminates TLS (per-service LAN IP-alias
+VIP) and proxies to the in-cluster BGP LoadBalancer VIP; certs via os-acme-client (DNS-01 /
+Route 53); local DNS via Unbound host overrides. Managed in `ansible/opnsense-acme.yml` +
+`ansible/opnsense-haproxy.yml`; the LoadBalancer VIPs are in `tofu/monitoring.tf`. The raw
+`192.168.40.x` VIPs remain reachable directly (no TLS) for in-cluster/debug use.
+
+### Topology — one scrape source, zero added WiFi
+```mermaid
+flowchart LR
+    droplet["Droplet ESP32"] -- "push (native API, 60s)" --> ha["Home Assistant<br/>/api/prometheus"]
+    prom["Prometheus<br/>(cluster, ns monitoring)"] -- "scrape ONLY HA, 60s" --> ha
+    prom --> graf["Grafana<br/>VIP 192.168.40.11"]
+    prom --> am["Alertmanager"]
+    am -- "webhook" --> ha
+```
+Prometheus scrapes **only Home Assistant** — never the ESP devices. Devices already push
+their state into HA over the persistent native API, so monitoring adds **no WiFi traffic**
+and there's no double-scraping. Every future ESPHome device is picked up for free (it just
+needs to be an HA entity); Prometheus still scrapes a single target.
+
+### What "water usage" means here
+There is **no flow meter** (R2/R6), so usage is a **time proxy**: each pump accumulates a
+monotonic on-seconds counter on-device (`pumpN_seconds_total`, persisted to flash), exposed
+as `sensor.droplettest_droplet_pump_N_water_seconds` (`state_class: total_increasing`).
+`increase(...[24h])` = seconds pumped today ≈ relative water used. To convert to millilitres
+later, calibrate ml/s per pump (a slider-free constant) — deferred by choice.
+
+### Metrics (HA `prometheus:` export → Prometheus)
+| Signal | Entity | Prometheus metric (confirmed from live `/api/prometheus`) |
+|---|---|---|
+| Soil moisture % | `sensor.droplettest_droplet_soilm_sens_1..4` | `homeassistant_sensor_voltage_percent{entity=...}` |
+| Water used (on-seconds) | `sensor.droplettest_droplet_pump_1..4_water_seconds` | `homeassistant_sensor_duration_s{entity=...}` |
+| WiFi signal | `sensor.droplettest_droplet_wifi_signal_sensor` | `homeassistant_sensor_signal_strength_dbm{entity=...}` |
+| Controller online | `binary_sensor.droplettest_droplet_status` | `homeassistant_binary_sensor_state{entity=...}` |
+| HA reachable | — | `up{job="home-assistant"}` |
+
+> HA names the metric from the entity's **device_class** (then unit): the ESPHome ADC sensors
+> carry `device_class: voltage` → `…_voltage_percent`; the pump counters set
+> `device_class: duration` → `…_duration_s`; WiFi is `signal_strength` → `…_signal_strength_dbm`.
+> Filtering is by the stable `entity` label regardless. (Pump-seconds series only appear once
+> the firmware with the counters is flashed.)
+
+### Alerts (Alertmanager → HA)
+`PrometheusRule` `office-plants` in `monitoring.tf`: **HomeAssistantScrapeDown** (no plant
+metrics 10m → HA down / bad token), **DropletOffline** (controller disconnected 10m),
+**SoilSensorSuspectZero** (sensor stuck at 0% for 2h). Alertmanager POSTs to the HA webhook
+`prometheus-alerts`; the automation in `packages/alerting.yaml` raises a persistent
+notification. Reservoir-low and pump-health alerts still wait on hardware (R2/R3).
+
+### Reporting cadence & WiFi
+Soil + WiFi sensors report at **60s** (1-min resolution — ample for plants, and it cuts
+airtime vs. the old 10s). The on-device 15-min control loop is unaffected (it reads the
+in-RAM soil state inside `do_water_cycle`).
+
+### Deploy
+1. **Firmware** (counters + 60s reporting) — OTA from a machine with the repo + ESPHome:
+   ```bash
+   esphome run esphome/config/droplettest.yaml --device 192.168.2.245
+   ```
+2. **HA export** — copy the package into the HA `/config` PV and reload, then create the token:
+   ```bash
+   kubectl -n home-assistant cp homeassistant/ha-config/packages/prometheus.yaml \
+     "$(kubectl -n home-assistant get pod -l app=home-assistant -o name | cut -d/ -f2)":/config/packages/prometheus.yaml
+   kubectl -n home-assistant cp homeassistant/ha-config/packages/alerting.yaml \
+     "$(kubectl -n home-assistant get pod -l app=home-assistant -o name | cut -d/ -f2)":/config/packages/alerting.yaml
+   # then: HA → Developer Tools → YAML → Restart (packages load at startup)
+   ```
+   In HA: **Profile → Security → Long-lived access tokens** → create one named `prometheus`.
+3. **Stack** — from `tofu/` (devbox shell):
+   ```bash
+   export TF_VAR_ha_prometheus_token='<the long-lived token>'
+   export TF_VAR_grafana_admin_password='<pick one>'
+   tofu apply        # adds ns monitoring, kube-prometheus-stack, Grafana VIP, scrape job, dashboard, alerts
+   ```
+4. **Verify:** Grafana at `https://grafana.teststuff.net` (admin / your password) → *Office Plants — Irrigation*;
+   Prometheus *Targets* shows `home-assistant` UP.
+
+> **Storage:** Prometheus uses a node-pinned hostPath PV (`/var/mnt/prometheus` on `wk-02`,
+> 90-day retention), mirroring HA's pattern since there's still no dynamic provisioner — the
+> same SPOF caveat applies (R1). The "real storage provisioner" roadmap step would replace both.
+> Three Talos/cluster prerequisites are baked into the code: a Talos `kubelet.extraMounts`
+> bind for `/var/mnt/prometheus` (`talos.tf` — `/var/mnt` is otherwise read-only to the
+> kubelet), a no-provisioner `manual` `StorageClass` (the prometheus-operator validates the SC
+> exists, unlike core PV binding), and the `monitoring` namespace labelled
+> `pod-security.kubernetes.io/enforce=privileged` (Talos enforces `baseline`; node-exporter
+> needs host access). Credentials live outside the repo: HA scrape token at
+> `~/.claude/homelab-ha/prometheus_llat`, Grafana admin password at
+> `~/.claude/homelab-ha/grafana_admin_password`.
+
+---
+
+## 10. Quick reference
 
 | Item | Value |
 |---|---|

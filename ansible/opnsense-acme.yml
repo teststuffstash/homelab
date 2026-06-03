@@ -27,8 +27,11 @@
     # Each cert + the action os-acme-client runs after issue/renewal (so the right
     # service reloads to pick up the new cert).
     cert_specs:
-      - { name: opnsense.teststuff.net, restart_action: "restart web gui" }      # OPNsense web UI
-      - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }  # Home Assistant via HAProxy
+      - { name: opnsense.teststuff.net, restart_action: "restart web gui" }       # OPNsense web UI
+      - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }   # Home Assistant via HAProxy
+      - { name: grafana.teststuff.net, restart_action: "reload haproxy" }         # Grafana via HAProxy
+      - { name: prometheus.teststuff.net, restart_action: "reload haproxy" }      # Prometheus via HAProxy
+      - { name: alertmanager.teststuff.net, restart_action: "reload haproxy" }    # Alertmanager via HAProxy
     opnsense_conn: &conn
       firewall: "192.168.2.1"
       api_key: "{{ lookup('env', 'OPN_API_KEY') }}"
@@ -68,14 +71,20 @@
         name: "reload haproxy"
         type: configd_restart_haproxy
 
-    # DNS-01 via AWS Route 53. Creds from env (never committed).
-    - name: AWS Route 53 DNS-01 validation
+    # DNS-01 via AWS Route 53. Creds from env (never committed). Create-if-absent:
+    # once the validation exists on the box, its stored creds are reused, so adding
+    # further certs (below) needs only OPN_API_* — not the AWS creds — on re-runs.
+    - name: List existing ACME validations
+      oxlorg.opnsense.raw: { module: acmeclient, controller: validations, command: search }
+      register: acme_vals
+    - name: AWS Route 53 DNS-01 validation (create if absent)
       oxlorg.opnsense.acme_validation:
         name: aws-acme
         method: dns01
         dns_service: dns_aws
         dns_aws_id: "{{ lookup('env', 'ACME_AWS_KEY') }}"
         dns_aws_secret: "{{ lookup('env', 'ACME_AWS_SECRET') }}"
+      when: "'aws-acme' not in (acme_vals.response.rows | map(attribute='name') | list)"
 
     # Certificate: managed create-if-absent (keyed on name), NOT full reconcile.
     # Why: the acme_certificate module matches existing certs by `description`, but

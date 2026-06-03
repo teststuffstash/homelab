@@ -1,0 +1,22 @@
+# Prometheus export for Home Assistant.
+#
+# This is the SINGLE scrape source for the homelab: every device (the Droplet, etc.)
+# already pushes its state into HA over its native API, so Prometheus scrapes only HA
+# (`/api/prometheus`) — no per-device scraping, no extra WiFi traffic. See
+# docs/office-plants/README.md (Monitoring) and tofu/monitoring.tf for the scrape job.
+#
+# Loaded via HA packages (homeassistant.packages in configuration.yaml). Source of truth
+# lives here in git; copied into the HA /config PV.
+#
+# AUTH: /api/prometheus requires a bearer token. Create a Home Assistant
+# *Long-Lived Access Token* (Profile → Security → Long-lived access tokens, name it
+# "prometheus") and hand it to OpenTofu as TF_VAR_ha_prometheus_token — it is stored as a
+# k8s Secret and mounted into Prometheus (never committed). See tofu/monitoring.tf.
+prometheus:
+  # Default metric prefix is `homeassistant_` (e.g. homeassistant_sensor_unit_percent).
+  # Keep cardinality sane: only export the domains we actually graph/alert on.
+  filter:
+    include_domains:
+      - sensor
+      - switch
+      - binary_sensor

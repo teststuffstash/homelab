@@ -1,0 +1,115 @@
+{
+  "title": "Office Plants — Irrigation",
+  "uid": "office-plants",
+  "tags": ["homelab", "plants", "irrigation"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Soil moisture",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_voltage_percent{entity=~\"sensor.droplettest_droplet_soilm_sens_[1-4]\"}",
+          "legendFormat": "{{friendly_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Water used per plant — last 24h (pump on-seconds)",
+      "type": "bargauge",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "increase(homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}[24h])",
+          "legendFormat": "{{friendly_name}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Watering rate (pump on-seconds per minute)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "rate(homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}[30m]) * 60",
+          "legendFormat": "{{friendly_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Cumulative water used per plant (pump on-seconds)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}",
+          "legendFormat": "{{friendly_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Droplet WiFi signal",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "dBm" }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_signal_strength_dbm{entity=\"sensor.droplettest_droplet_wifi_signal_sensor\"}",
+          "legendFormat": "WiFi dBm"
+        }
+      ]
+    },
+    {
+      "title": "Home Assistant scrape up",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "up{job=\"home-assistant\"}",
+          "legendFormat": "HA /api/prometheus"
+        }
+      ]
+    }
+  ]
+}

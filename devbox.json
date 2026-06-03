@@ -10,7 +10,8 @@
     "ansible@latest",
     "sops@latest",
     "age@latest",
-    "jq@latest"
+    "jq@latest",
+    "python3@latest"
   ],
   "shell": {
     "init_hook": [
@@ -30,6 +31,16 @@
       ],
       "kubeconfig": [
         "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
+      ],
+      "flash-droplet": [
+        "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",
+        "test -x esphome/.flash-venv/bin/esphome || python3 -m venv esphome/.flash-venv",
+        "esphome/.flash-venv/bin/pip install -q --upgrade esphome",
+        "esphome/.flash-venv/bin/esphome run esphome/config/droplettest.yaml --device 192.168.2.245 --no-logs",
+        "chown -R $(stat -c %u:%g devbox.json) esphome/.flash-venv esphome/.platformio esphome/config/.esphome 2>/dev/null || true"
+      ],
+      "droplet-logs": [
+        "esphome/.flash-venv/bin/esphome logs esphome/config/droplettest.yaml --device 192.168.2.245"
       ]
     }
   }

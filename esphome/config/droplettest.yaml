@@ -111,6 +111,19 @@ api:
   encryption:
     key: "2PdhhSba8dsBSCZ2bYKxXmGoxpiOEVZ9S2LBzGD0tJ0="
 
+# Per-pump cumulative run-time (time proxy for water used; no flow meter on this rig).
+# pumpN_seconds_total is a monotonic counter persisted to flash (survives reboots);
+# pumpN_on_ms holds the start millis() while a pump is running (runtime only).
+globals:
+  - { id: pump1_on_ms, type: uint32_t, restore_value: no, initial_value: '0' }
+  - { id: pump2_on_ms, type: uint32_t, restore_value: no, initial_value: '0' }
+  - { id: pump3_on_ms, type: uint32_t, restore_value: no, initial_value: '0' }
+  - { id: pump4_on_ms, type: uint32_t, restore_value: no, initial_value: '0' }
+  - { id: pump1_seconds_total, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump2_seconds_total, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump3_seconds_total, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump4_seconds_total, type: double, restore_value: yes, initial_value: '0' }
+
 sensor:
   # --- Raw ADC voltage per channel (calibration aid; disabled in HA by default) ---
   - { platform: adc, pin: { number: 34, allow_other_uses: true }, id: soil1_raw, name: "${name} Soil1 raw", attenuation: 12db, unit_of_measurement: V, accuracy_decimals: 3, update_interval: 5s, entity_category: diagnostic, disabled_by_default: true }
@@ -124,7 +137,7 @@ sensor:
     id: Soil1
     name: ${name} SoilM Sens 1
     icon: mdi:water-percent
-    update_interval: 10s
+    update_interval: 60s   # 1-min reporting: plenty for soil + cuts WiFi airtime. Control loop reads .state inside do_water_cycle (every 15 min), so this resolution is ample.
     unit_of_measurement: '%'
     attenuation: 12db
     filters:
@@ -139,7 +152,7 @@ sensor:
     id: Soil2
     name: ${name} SoilM Sens 2
     icon: mdi:water-percent
-    update_interval: 10s
+    update_interval: 60s   # 1-min reporting: plenty for soil + cuts WiFi airtime. Control loop reads .state inside do_water_cycle (every 15 min), so this resolution is ample.
     unit_of_measurement: '%'
     attenuation: 12db
     filters:
@@ -154,7 +167,7 @@ sensor:
     id: Soil3
     name: ${name} SoilM Sens 3
     icon: mdi:water-percent
-    update_interval: 10s
+    update_interval: 60s   # 1-min reporting: plenty for soil + cuts WiFi airtime. Control loop reads .state inside do_water_cycle (every 15 min), so this resolution is ample.
     unit_of_measurement: '%'
     attenuation: 12db
     filters:
@@ -169,7 +182,7 @@ sensor:
     id: Soil4
     name: ${name} SoilM Sens 4
     icon: mdi:water-percent
-    update_interval: 10s
+    update_interval: 60s   # 1-min reporting: plenty for soil + cuts WiFi airtime. Control loop reads .state inside do_water_cycle (every 15 min), so this resolution is ample.
     unit_of_measurement: '%'
     attenuation: 12db
     filters:
@@ -221,11 +234,67 @@ sensor:
   - platform: wifi_signal
     name: ${name} WiFi Signal Sensor
     id: dbm
-    update_interval: 30s
+    update_interval: 60s
 
   - platform: uptime
     name: ${name} Uptime
     update_interval: 3600s
+
+  # --- Per-pump cumulative run-time (seconds) — the "water used" time proxy. ---
+  # total_increasing + 60s update → a clean Prometheus counter (use increase()/rate()).
+  # Includes the in-progress run so the value is live and stays monotonic.
+  - platform: template
+    name: ${name} Pump 1 Water Seconds
+    id: pump1_water_seconds
+    unit_of_measurement: s
+    device_class: duration   # → Prometheus metric homeassistant_sensor_duration_s
+    icon: mdi:water-pump
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: |-
+      double s = id(pump1_seconds_total);
+      if (id(pump1_on_ms) != 0) s += (millis() - id(pump1_on_ms)) / 1000.0;
+      return s;
+  - platform: template
+    name: ${name} Pump 2 Water Seconds
+    id: pump2_water_seconds
+    unit_of_measurement: s
+    device_class: duration   # → Prometheus metric homeassistant_sensor_duration_s
+    icon: mdi:water-pump
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: |-
+      double s = id(pump2_seconds_total);
+      if (id(pump2_on_ms) != 0) s += (millis() - id(pump2_on_ms)) / 1000.0;
+      return s;
+  - platform: template
+    name: ${name} Pump 3 Water Seconds
+    id: pump3_water_seconds
+    unit_of_measurement: s
+    device_class: duration   # → Prometheus metric homeassistant_sensor_duration_s
+    icon: mdi:water-pump
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: |-
+      double s = id(pump3_seconds_total);
+      if (id(pump3_on_ms) != 0) s += (millis() - id(pump3_on_ms)) / 1000.0;
+      return s;
+  - platform: template
+    name: ${name} Pump 4 Water Seconds
+    id: pump4_water_seconds
+    unit_of_measurement: s
+    device_class: duration   # → Prometheus metric homeassistant_sensor_duration_s
+    icon: mdi:water-pump
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: |-
+      double s = id(pump4_seconds_total);
+      if (id(pump4_on_ms) != 0) s += (millis() - id(pump4_on_ms)) / 1000.0;
+      return s;
 
 # Master enable. Defaults OFF so the device never waters until you turn it on
 # (e.g. after the sensors/hoses are wired). Also gives a single "stop everything" toggle.
@@ -254,24 +323,40 @@ switch:
     name: ${name} Pump 1
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: 'id(pump1_on_ms) = millis();'
+    on_turn_off:
+      - lambda: 'if (id(pump1_on_ms) != 0) { id(pump1_seconds_total) += (millis() - id(pump1_on_ms)) / 1000.0; id(pump1_on_ms) = 0; }'
   - platform: gpio
     pin: 4
     id: pump2
     name: ${name} Pump 2
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: 'id(pump2_on_ms) = millis();'
+    on_turn_off:
+      - lambda: 'if (id(pump2_on_ms) != 0) { id(pump2_seconds_total) += (millis() - id(pump2_on_ms)) / 1000.0; id(pump2_on_ms) = 0; }'
   - platform: gpio
     pin: 16
     id: pump3
     name: ${name} Pump 3
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: 'id(pump3_on_ms) = millis();'
+    on_turn_off:
+      - lambda: 'if (id(pump3_on_ms) != 0) { id(pump3_seconds_total) += (millis() - id(pump3_on_ms)) / 1000.0; id(pump3_on_ms) = 0; }'
   - platform: gpio
     pin: 17
     id: pump4
     name: ${name} Pump 4
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - lambda: 'id(pump4_on_ms) = millis();'
+    on_turn_off:
+      - lambda: 'if (id(pump4_on_ms) != 0) { id(pump4_seconds_total) += (millis() - id(pump4_on_ms)) / 1000.0; id(pump4_on_ms) = 0; }'
 
   - platform: restart
     name: ${name} Restart

@@ -1,24 +1,28 @@
-# OPNsense HAProxy — HTTPS reverse proxy for Home Assistant on the LAN.
+# OPNsense HAProxy — HTTPS reverse proxy for the LAN-exposed cluster services.
 #
-# Exposes https://homeassistant.teststuff.net (valid Let's Encrypt cert, so browsers
-# trust it and Chrome offers to save the password) and proxies to the in-cluster
-# Home Assistant LoadBalancer VIP (Cilium BGP). Why a proxy at all: Home Assistant listens on
-# plain http:8123 on the cluster VIP; HAProxy terminates TLS with the os-acme-client
-# cert and forwards.
+# Gives each backend a trusted https://<name>.teststuff.net URL (valid Let's Encrypt
+# cert) and proxies to its in-cluster LoadBalancer VIP (Cilium BGP). Why a proxy:
+# the services listen on plain HTTP on their cluster VIPs; HAProxy terminates TLS with
+# the os-acme-client cert and forwards.
 #
-# Pieces:
-#   - a dedicated LAN IP-alias VIP (192.168.2.5) — OPNsense's own web UI already owns
-#     .1:443, so HAProxy needs its own address to bind :443.
-#   - HAProxy server → backend → frontend (the core objects have no oxlorg module yet,
-#     so they go through the generic `raw` module, create-if-absent keyed on name).
-#   - HTTP/2 DISABLED on the frontend: with h2 advertised, the Home Assistant
-#     WebSocket (the UI's realtime channel) fails to upgrade through the proxy.
-#   - an Unbound host override so homeassistant.teststuff.net resolves to the VIP on
-#     the LAN (local-first; no public DNS record, works WAN-down).
+# Services (one dedicated LAN IP-alias VIP each, so every frontend can bind :443 —
+# OPNsense's own web UI owns .1:443):
+#   homeassistant.teststuff.net  .5  -> 192.168.40.10:8123  (Home Assistant)
+#   grafana.teststuff.net        .6  -> 192.168.40.11:80    (Grafana)
+#   prometheus.teststuff.net     .7  -> 192.168.40.13:9090  (Prometheus)
+#   alertmanager.teststuff.net   .8  -> 192.168.40.14:9093  (Alertmanager)
+# The monitoring VIPs (.13/.14, and grafana .11) are exposed as LoadBalancers in
+# tofu/monitoring.tf; apply that first.
 #
-# The cert itself is managed in ansible/opnsense-acme.yml (issue it there first; this
-# playbook looks its certRefId up by name). Home Assistant needs no trusted_proxies change because
-# HAProxy does not inject X-Forwarded-For (it connects as the client).
+# Pieces per service: HAProxy server -> backend -> frontend (via the generic `raw`
+# module, create-if-absent keyed on name), an IP-alias VIP, and an Unbound host
+# override so the name resolves to the VIP on the LAN (local-first; no public DNS,
+# works WAN-down). HTTP/2 is DISABLED on every frontend: with h2 advertised the
+# Home Assistant / Grafana live WebSocket fails to upgrade through the proxy.
+#
+# Certs are managed in ansible/opnsense-acme.yml (issue them there first; this playbook
+# looks each up by name and asserts it exists). HAProxy does not inject X-Forwarded-For
+# (it connects as the client), so no backend trusted_proxies change is needed.
 #
 # Run (same env/interpreter as the other OPNsense playbooks):
 #   export OPN_API_KEY=...  OPN_API_SECRET=...
@@ -27,16 +31,18 @@
 #     -e ansible_python_interpreter="$PYENV/bin/python3"
 #
 # Prereq: the os-haproxy plugin must be INSTALLED on OPNsense.
-- name: OPNsense HAProxy reverse proxy (Home Assistant)
+- name: OPNsense HAProxy reverse proxy (cluster services)
   hosts: localhost
   connection: local
   gather_facts: false
   vars:
-    cert_domain: homeassistant.teststuff.net
-    vip_cidr: 192.168.2.5/24
-    vip_ip: 192.168.2.5
-    backend_ip: 192.168.40.10   # Home Assistant LoadBalancer VIP (Cilium BGP)
-    backend_port: 8123
+    # Each LAN-exposed service. name → HAProxy object prefix (<name>-srv/-backend/-frontend)
+    # and the Unbound/cert hostname. Keep `ha` first/unchanged so the existing objects match.
+    proxied_services:
+      - { name: ha, cert_domain: homeassistant.teststuff.net, vip: 192.168.2.5, backend_ip: 192.168.40.10, backend_port: 8123 }
+      - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.2.6, backend_ip: 192.168.40.11, backend_port: 80 }
+      - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.2.7, backend_ip: 192.168.40.13, backend_port: 9090 }
+      - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
     opnsense_conn: &conn
       firewall: "192.168.2.1"
       api_key: "{{ lookup('env', 'OPN_API_KEY') }}"
@@ -49,102 +55,117 @@
 
   handlers:
     - name: reconfigure haproxy
-      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: reconfigure }
+      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: reconfigure, action: post }
 
   tasks:
-    # --- bind address -------------------------------------------------------
-    - name: LAN IP-alias VIP for HAProxy
+    # --- bind addresses: one IP-alias VIP per service ----------------------
+    - name: LAN IP-alias VIP per service
       oxlorg.opnsense.interface_vip:
-        address: "{{ vip_cidr }}"
+        address: "{{ item.vip }}/24"
         mode: ipalias
         interface: lan
-        description: haproxy-ha
+        description: "haproxy-{{ item.name }}"
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
 
-    # --- find the issued cert's refid (set in opnsense-acme.yml) -------------
-    - name: Look up Home Assistant cert refid
+    # --- find issued cert refids (set in opnsense-acme.yml) -----------------
+    - name: List ACME certificates
       oxlorg.opnsense.raw: { module: acmeclient, controller: certificates, command: search }
       register: acme_certs
-    - name: Assert the cert exists (issue it via opnsense-acme.yml first)
+    - name: Assert every cert exists (issue via opnsense-acme.yml first)
       ansible.builtin.assert:
-        that: acme_certs.response.rows | selectattr('name', 'eq', cert_domain) | list | length > 0
-        fail_msg: "No ACME cert named {{ cert_domain }} — run opnsense-acme.yml and sign it first."
-    - name: Set cert refid fact
+        that: acme_certs.response.rows | selectattr('name', 'eq', item.cert_domain) | list | length > 0
+        fail_msg: "No ACME cert named {{ item.cert_domain }} — run opnsense-acme.yml and sign it first."
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.cert_domain }}" }
+    - name: Map cert_domain -> certRefId
       ansible.builtin.set_fact:
-        ha_cert_refid: "{{ (acme_certs.response.rows | selectattr('name', 'eq', cert_domain) | first).certRefId }}"
+        cert_refid: "{{ dict(acme_certs.response.rows | map(attribute='name') | list | zip(acme_certs.response.rows | map(attribute='certRefId') | list)) }}"
 
-    # --- HAProxy backend server (real server = the Home Assistant cluster VIP) -----------
+    # --- HAProxy servers (real server = each cluster VIP) -------------------
     - name: Find HAProxy servers
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
       register: hap_servers
-    - name: Create HAProxy server ha-srv
+    - name: Create HAProxy server <name>-srv
       oxlorg.opnsense.raw:
         module: haproxy
         controller: settings
         command: addServer
+        action: post
         data:
           server:
             enabled: "1"
-            name: ha-srv
-            address: "{{ backend_ip }}"
-            port: "{{ backend_port }}"
+            name: "{{ item.name }}-srv"
+            address: "{{ item.backend_ip }}"
+            port: "{{ item.backend_port }}"
             mode: active
             type: static
             ssl: "0"
-      when: "'ha-srv' not in (hap_servers.response.rows | map(attribute='name') | list)"
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.name }}-srv" }
+      when: (item.name ~ '-srv') not in (hap_servers.response.rows | map(attribute='name') | list)
       notify: reconfigure haproxy
-    - name: Re-read servers (capture uuid)
+    - name: Re-read servers (capture uuids)
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
       register: hap_servers2
-    - ansible.builtin.set_fact:
-        ha_server_uuid: "{{ (hap_servers2.response.rows | selectattr('name', 'eq', 'ha-srv') | first).uuid }}"
+    - name: Map server name -> uuid
+      ansible.builtin.set_fact:
+        server_uuid: "{{ dict(hap_servers2.response.rows | map(attribute='name') | list | zip(hap_servers2.response.rows | map(attribute='uuid') | list)) }}"
 
-    # --- HAProxy backend (pool) ---------------------------------------------
+    # --- HAProxy backends (pools) ------------------------------------------
     - name: Find HAProxy backends
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
       register: hap_backends
-    - name: Create HAProxy backend ha-backend
+    - name: Create HAProxy backend <name>-backend
       oxlorg.opnsense.raw:
         module: haproxy
         controller: settings
         command: addBackend
+        action: post
         data:
           backend:
             enabled: "1"
-            name: ha-backend
+            name: "{{ item.name }}-backend"
             mode: http
             algorithm: source
-            linkedServers: "{{ ha_server_uuid }}"
+            linkedServers: "{{ server_uuid[item.name ~ '-srv'] }}"
             healthCheckEnabled: "0"
             tuning_timeoutServer: 60m   # keep long-lived WebSockets alive
-      when: "'ha-backend' not in (hap_backends.response.rows | map(attribute='name') | list)"
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.name }}-backend" }
+      when: (item.name ~ '-backend') not in (hap_backends.response.rows | map(attribute='name') | list)
       notify: reconfigure haproxy
-    - name: Re-read backends (capture uuid)
+    - name: Re-read backends (capture uuids)
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
       register: hap_backends2
-    - ansible.builtin.set_fact:
-        ha_backend_uuid: "{{ (hap_backends2.response.rows | selectattr('name', 'eq', 'ha-backend') | first).uuid }}"
+    - name: Map backend name -> uuid
+      ansible.builtin.set_fact:
+        backend_uuid: "{{ dict(hap_backends2.response.rows | map(attribute='name') | list | zip(hap_backends2.response.rows | map(attribute='uuid') | list)) }}"
 
-    # --- HAProxy frontend (TLS :443 on the VIP) -----------------------------
+    # --- HAProxy frontends (TLS :443, one per VIP) -------------------------
     - name: Find HAProxy frontends
       oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
       register: hap_frontends
-    - name: Create HAProxy frontend ha-frontend
+    - name: Create HAProxy frontend <name>-frontend
       oxlorg.opnsense.raw:
         module: haproxy
         controller: settings
         command: addFrontend
+        action: post
         data:
           frontend:
             enabled: "1"
-            name: ha-frontend
-            bind: "{{ vip_ip }}:443"
+            name: "{{ item.name }}-frontend"
+            bind: "{{ item.vip }}:443"
             mode: http
-            defaultBackend: "{{ ha_backend_uuid }}"
+            defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
             ssl_enabled: "1"
-            ssl_certificates: "{{ ha_cert_refid }}"
-            http2Enabled: "0"          # h2 breaks the Home Assistant WebSocket through the proxy
+            ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
+            http2Enabled: "0"          # h2 breaks HA/Grafana WebSockets through the proxy
             tuning_timeoutClient: 60m
-      when: "'ha-frontend' not in (hap_frontends.response.rows | map(attribute='name') | list)"
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:443)" }
+      when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
       notify: reconfigure haproxy
 
     # --- enable + start HAProxy (no enable flag on the general module) -------
@@ -156,23 +177,25 @@
         module: haproxy
         controller: settings
         command: set
+        action: post
         data: { haproxy: { general: { enabled: "1" } } }
       when: hap_general.response.haproxy.general.enabled | default("0") != "1"
       notify: reconfigure haproxy
     - name: Ensure HAProxy service is running
-      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: start }
+      oxlorg.opnsense.raw: { module: haproxy, controller: service, command: start, action: post }
       register: hap_start
       changed_when: false
 
-    # --- local DNS: homeassistant.teststuff.net -> VIP ----------------------
-    - name: Unbound host override for {{ cert_domain }}
+    # --- local DNS: <name>.teststuff.net -> its VIP ------------------------
+    - name: Unbound host override per service
       oxlorg.opnsense.unbound_host:
-        hostname: "{{ cert_domain.split('.')[0] }}"
-        domain: "{{ cert_domain.split('.')[1:] | join('.') }}"
+        hostname: "{{ item.cert_domain.split('.')[0] }}"
+        domain: "{{ item.cert_domain.split('.')[1:] | join('.') }}"
         record_type: A
-        value: "{{ vip_ip }}"
-        description: Home Assistant via HAProxy
-        # Default match_fields includes `prio` (=10), which OPNsense ignores for A
-        # records → the module never matches the stored record and appends a
-        # duplicate every run. Match on the fields that actually identify it.
+        value: "{{ item.vip }}"
+        description: "{{ item.name }} via HAProxy"
+        # match on identifying fields only (prio default=10 never matches an A record →
+        # would append a duplicate every run).
         match_fields: [hostname, domain, record_type, value]
+      loop: "{{ proxied_services }}"
+      loop_control: { label: "{{ item.cert_domain }} -> {{ item.vip }}" }

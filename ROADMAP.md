@@ -248,7 +248,13 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 
 ### Phase 5 — Day-2 operations
 - [ ] GitOps (ArgoCD/Flux). Backups: Talos/etcd + Longhorn/PV snapshots + Proxmox (PBS/vzdump), stored off-box.
-- [ ] Monitoring: Prometheus + Grafana; alert to HA/push. Upgrade strategy: bump in sandbox first.
+- [x] Monitoring: Prometheus + Grafana; alert to HA/push. Upgrade strategy: bump in sandbox first.
+  - kube-prometheus-stack in `tofu/monitoring.tf` (**applied 2026-06-02**); Prometheus scrapes
+    **only** HA `/api/prometheus` (single source — no per-device scraping, no added WiFi load).
+    Grafana VIP `192.168.40.11` (BGP), Prometheus on hostPath PV (wk-02, 90d), Alertmanager → HA
+    webhook. First service monitored: office-plants. Notes: needed a no-provisioner `manual`
+    StorageClass (operator validates SC existence) and the `monitoring` ns labelled
+    PodSecurity=privileged (Talos enforces `baseline`; node-exporter needs host access).
 
 ## Edge tier (future — out of current scope)
 

@@ -37,6 +37,12 @@ data "talos_machine_configuration" "node" {
               source      = "/var/mnt/unifi"
               options     = ["bind", "rshared", "rw"]
             },
+            {
+              destination = "/var/mnt/prometheus" # Prometheus TSDB (monitoring.tf, pinned to wk-02)
+              type        = "bind"
+              source      = "/var/mnt/prometheus"
+              options     = ["bind", "rshared", "rw"]
+            },
           ]
         }
       }

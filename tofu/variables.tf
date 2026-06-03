@@ -72,6 +72,24 @@ variable "cilium_version" {
   default     = "1.19.1"
 }
 
+variable "kube_prometheus_stack_version" {
+  description = "prometheus-community/kube-prometheus-stack chart version (Prometheus + Grafana + Alertmanager + operator)."
+  type        = string
+  default     = "86.1.0"
+}
+
+variable "ha_prometheus_token" {
+  description = "Home Assistant long-lived access token for /api/prometheus scraping. Set via TF_VAR_ha_prometheus_token — never commit. Create in HA: Profile → Security → Long-lived access tokens."
+  type        = string
+  sensitive   = true
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password. Set via TF_VAR_grafana_admin_password — never commit."
+  type        = string
+  sensitive   = true
+}
+
 variable "gateway" {
   description = "Default gateway for the node static IPs."
   type        = string

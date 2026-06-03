@@ -1,0 +1,31 @@
+# Receives Prometheus Alertmanager notifications and surfaces them in Home Assistant.
+#
+# Alertmanager (kube-prometheus-stack, see tofu/monitoring.tf) POSTs to this webhook;
+# HA closes the monitoring loop the other way around — Prometheus scrapes HA, HA shows
+# the alerts. Webhook ID must match the `webhook_configs.url` in monitoring.tf
+# (http://<ha-vip>:8123/api/webhook/prometheus-alerts).
+#
+# local_only: the request originates from the Alertmanager pod (cluster CIDR, RFC1918),
+# which HA treats as local. If alerts don't arrive, check HA logs and consider adding the
+# pod CIDR to internal networks (or set local_only: false on this trigger).
+automation:
+  - id: prometheus_alertmanager_notification
+    alias: Prometheus Alertmanager → notification
+    mode: queued
+    trigger:
+      - platform: webhook
+        webhook_id: prometheus-alerts
+        allowed_methods: [POST]
+        local_only: true
+    action:
+      - service: persistent_notification.create
+        data:
+          notification_id: "alertmanager-{{ trigger.json.groupKey | default('alerts') }}"
+          title: >-
+            {{ 'RESOLVED' if trigger.json.status == 'resolved' else 'FIRING' }}:
+            {{ trigger.json.commonLabels.alertname | default('Prometheus alert') }}
+          message: >-
+            {% for a in trigger.json.alerts %}
+            - [{{ a.status | upper }}] {{ a.annotations.summary | default(a.labels.alertname) }}
+              {{ a.annotations.description | default('') }}
+            {% endfor %}
