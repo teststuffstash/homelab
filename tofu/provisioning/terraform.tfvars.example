@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (gitignored) and fill in, or pass via TF_VAR_*.
+# proxmox_api_token is secret — prefer: export TF_VAR_proxmox_api_token=...
+
+ssh_public_keys = [
+  "ssh-ed25519 AAAA... homelab-tofu@jail", # root-of-trust seed key (also used by ../)
+]
+
+# proxmox_api_token = "root@pam!matchbox=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
