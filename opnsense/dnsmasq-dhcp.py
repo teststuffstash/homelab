@@ -38,6 +38,11 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "netboot", "hwaddr": "00:1e:37:8c:a2:8f", "ip": "192.168.2.2"},
     {"host": "pve", "hwaddr": "22:24:4d:07:03:76", "ip": "192.168.2.3"},
     {"host": "BRN_8D63B8", "hwaddr": "00:80:77:8d:63:b8", "ip": "192.168.2.4"},
+    # bare-metal Talos worker (ThinkPad X240) — pinned so the maintenance-mode IP
+    # == the ongoing node IP (clean tofu apply target).
+    {"host": "wk-metal-01", "hwaddr": "50:7b:9d:01:b3:54", "ip": "192.168.2.182"},
+    # ThinkCentre Edge — reserved for later (flaky PXE firmware; onboard via USB ISO).
+    {"host": "thinkcentre", "hwaddr": "8c:89:a5:23:49:da", "ip": "192.168.2.53"},
 ]
 
 
