@@ -13,6 +13,10 @@ variable "metal_nodes" {
   default = {
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
     wk-metal-01 = { ip = "192.168.2.182", install_disk = "/dev/sda" }
+    # ThinkCentre Edge — 120GB Kingston SV300 (NOT sda=USB-boot, NOT nvme=Optane scratch).
+    # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO; the
+    # USB it was flashed with was Talos v1.13.0 (cluster is v1.13.2 — upgrade to match).
+    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc" }
   }
 }
 
