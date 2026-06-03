@@ -43,6 +43,13 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "wk-metal-01", "hwaddr": "50:7b:9d:01:b3:54", "ip": "192.168.2.182"},
     # ThinkCentre Edge — reserved for later (flaky PXE firmware; onboard via USB ISO).
     {"host": "thinkcentre", "hwaddr": "8c:89:a5:23:49:da", "ip": "192.168.2.53"},
+    # HP desktop — bare-metal Talos worker (storage-tier candidate).
+    {"host": "hp-01", "hwaddr": "b4:b5:2f:df:01:bc", "ip": "192.168.2.54"},
+    # Droplet ESP32 plant-waterer — pin its canonical .245 (was a bare dynamic lease
+    # under ISC; drifted to .19 after the dnsmasq migration, which broke HA's ESPHome
+    # integration that's addressed at .245). Any HA/integration device referenced by a
+    # fixed IP needs a reservation here.
+    {"host": "droplettest", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
 ]
 
 

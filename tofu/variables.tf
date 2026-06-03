@@ -113,11 +113,12 @@ variable "nodes" {
     cores     = number
     memory_mb = number
     disk_gb   = number
+    longhorn  = optional(bool, false) # storage-tier VM -> boot the iscsi/util-linux image
   }))
   default = {
     cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
     wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 12288, disk_gb = 80 }
-    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80 }
+    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80, longhorn = true }
   }
 
   validation {

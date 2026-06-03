@@ -4,6 +4,15 @@
 # VM cluster — these resources reuse the shared cluster secrets + endpoint only.
 # Flow: box PXE-boots Talos (maintenance mode, DHCP-reserved IP) -> `tofu apply` pushes
 # this worker config -> Talos installs to disk, reboots, joins the cluster.
+# Install image with the Longhorn-required system extensions baked in
+# (qemu-guest-agent + iscsi-tools + util-linux-tools). MUST be set or the install goes
+# vanilla (no extensions) even when the PXE/USB boot image had them — keep in lockstep
+# with the schematic used for the Matchbox assets / talos-usb ISO.
+variable "talos_install_image" {
+  type    = string
+  default = "factory.talos.dev/installer/53513e54bb39202f35694412577a6bc53d484744d35a126e5d42ef34785c0d83:v1.13.2"
+}
+
 variable "metal_nodes" {
   description = "Bare-metal Talos worker nodes keyed by hostname."
   type = map(object({
@@ -17,6 +26,9 @@ variable "metal_nodes" {
     # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO; the
     # USB it was flashed with was Talos v1.13.0 (cluster is v1.13.2 — upgrade to match).
     thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc" }
+    # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
+    # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
+    hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
   }
 }
 
@@ -35,7 +47,10 @@ data "talos_machine_configuration" "metal" {
   config_patches = [
     yamlencode({
       machine = {
-        install = { disk = each.value.install_disk }
+        install = {
+          disk  = each.value.install_disk
+          image = var.talos_install_image
+        }
       }
     })
   ]

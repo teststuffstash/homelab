@@ -32,3 +32,39 @@ resource "proxmox_download_file" "talos" {
   decompression_algorithm = "zst"
   overwrite               = false
 }
+
+# Longhorn-ready image: + iscsi-tools + util-linux-tools. Used by storage-tier VMs
+# (nodes with longhorn=true) so the extensions are baked into the VM IMAGE. Do NOT add
+# extensions to a running Proxmox VM via `talosctl upgrade` — that reboot loses the
+# nocloud (cloud-init) static IP/hostname and the node rejoins as a DHCP/default-name
+# ghost (learned the hard way with wk-02). Bake them in the image + recreate the VM.
+resource "talos_image_factory_schematic" "longhorn" {
+  schematic = yamlencode({
+    customization = {
+      systemExtensions = {
+        officialExtensions = [
+          "siderolabs/qemu-guest-agent",
+          "siderolabs/iscsi-tools",
+          "siderolabs/util-linux-tools",
+        ]
+      }
+    }
+  })
+}
+
+data "talos_image_factory_urls" "longhorn" {
+  talos_version = var.talos_version
+  schematic_id  = talos_image_factory_schematic.longhorn.id
+  platform      = "nocloud"
+  architecture  = "amd64"
+}
+
+resource "proxmox_download_file" "talos_longhorn" {
+  content_type            = "iso"
+  datastore_id            = var.datastore_images
+  node_name               = var.proxmox_node
+  file_name               = "talos-${var.talos_version}-longhorn-nocloud-amd64.img"
+  url                     = data.talos_image_factory_urls.longhorn.urls.disk_image
+  decompression_algorithm = "zst"
+  overwrite               = false
+}
