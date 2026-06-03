@@ -1,10 +1,9 @@
 # Home Assistant on the cluster (Phase 2). Declarative via the kubernetes provider
 # — explicit, reviewable manifests rather than an opaque chart.
 #
-# Storage: no dynamic provisioner yet, so a node-pinned hostPath PV under Talos's
-# writable /var. Home Assistant is pinned to the same node. Single-instance (no High-Availability redundancy
-# yet); data backs up to object storage later per ROADMAP. Longhorn/local-path is
-# the future "real storage" step.
+# Storage: Longhorn (replicated, default StorageClass) — dynamically provisioned, so the
+# pod is NOT node-pinned and reschedules freely across the iscsi-capable nodes. Data
+# backs up to object storage later per ROADMAP.
 provider "kubernetes" {
   host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
   client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)
@@ -13,40 +12,11 @@ provider "kubernetes" {
 }
 
 locals {
-  ha_node      = "wk-01" # node the PV + pod are pinned to
-  ha_host_path = "/var/mnt/homeassistant"
-  ha_lb_ip     = "192.168.40.10" # stable BGP-advertised LoadBalancer VIP
+  ha_lb_ip = "192.168.40.10" # stable BGP-advertised LoadBalancer VIP
 }
 
 resource "kubernetes_namespace" "ha" {
   metadata { name = "home-assistant" }
-}
-
-resource "kubernetes_persistent_volume" "ha" {
-  metadata { name = "home-assistant-config" }
-  spec {
-    capacity                         = { storage = "10Gi" }
-    access_modes                     = ["ReadWriteOnce"]
-    persistent_volume_reclaim_policy = "Retain"
-    storage_class_name               = "manual"
-    persistent_volume_source {
-      host_path {
-        path = local.ha_host_path
-        type = "DirectoryOrCreate"
-      }
-    }
-    node_affinity {
-      required {
-        node_selector_term {
-          match_expressions {
-            key      = "kubernetes.io/hostname"
-            operator = "In"
-            values   = [local.ha_node]
-          }
-        }
-      }
-    }
-  }
 }
 
 resource "kubernetes_persistent_volume_claim" "ha" {
@@ -56,8 +26,7 @@ resource "kubernetes_persistent_volume_claim" "ha" {
   }
   spec {
     access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "manual"
-    volume_name        = kubernetes_persistent_volume.ha.metadata[0].name
+    storage_class_name = "longhorn"
     resources { requests = { storage = "10Gi" } }
   }
 }
@@ -75,7 +44,6 @@ resource "kubernetes_deployment" "ha" {
     template {
       metadata { labels = { app = "home-assistant" } }
       spec {
-        node_selector = { "kubernetes.io/hostname" = local.ha_node }
         container {
           name  = "home-assistant"
           image = "ghcr.io/home-assistant/home-assistant:stable"

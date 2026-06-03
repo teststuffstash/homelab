@@ -7,22 +7,16 @@
 # cgroups + systemd-as-PID1, which Talos (immutable) won't allow. The Network
 # Application is a plain container, so it runs fine here.
 #
-# Storage: node-pinned hostPath (no dynamic provisioner yet), same pattern as
-# homeassistant.tf. Requires the Talos kubelet extraMount /var/mnt/unifi (talos.tf) —
-# applying that the first time triggers a rolling node reboot to establish the mount.
+# Storage: Longhorn (replicated, default StorageClass) for both the Mongo data and the
+# UniFi config — dynamically provisioned, so neither pod is node-pinned.
 #
 # Secrets: Mongo root + the unifi DB password are generated (random_password, kept in
 # tofu state which is gitignored) — nothing sensitive in git.
-#
-# Boot-tested 2026-05-31 with an ephemeral emptyDir variant: image boots, connects to
-# Mongo 7.0 (AVX OK via cpu=host), UI served on the BGP VIP, mixed TCP/UDP LB works.
 
 locals {
-  unifi_node   = "wk-02"             # node the pods + hostPath PVs are pinned to
-  unifi_lb_ip  = "192.168.40.12"     # BGP-advertised LoadBalancer VIP (HA is .10)
-  unifi_image  = "lscr.io/linuxserver/unifi-network-application:latest" # TODO: pin after first run
-  mongo_image  = "mongo:7.0"         # UniFi 8.1+ supports mongo<=7.0; >4.4 needs AVX (cpu=host → ok)
-  unifi_host   = "/var/mnt/unifi"
+  unifi_lb_ip = "192.168.40.12"     # BGP-advertised LoadBalancer VIP (HA is .10)
+  unifi_image = "lscr.io/linuxserver/unifi-network-application:latest" # TODO: pin after first run
+  mongo_image = "mongo:7.0"         # UniFi 8.1+ supports mongo<=7.0; >4.4 needs AVX (cpu=host → ok)
 }
 
 resource "random_password" "mongo_root" {
@@ -66,61 +60,7 @@ resource "kubernetes_secret" "unifi_mongo" {
   }
 }
 
-# --- storage (node-pinned hostPath under the Talos /var/mnt/unifi mount) ---
-resource "kubernetes_persistent_volume" "mongo" {
-  metadata { name = "unifi-mongo" }
-  spec {
-    capacity                         = { storage = "5Gi" }
-    access_modes                     = ["ReadWriteOnce"]
-    persistent_volume_reclaim_policy = "Retain"
-    storage_class_name               = "manual"
-    persistent_volume_source {
-      host_path {
-        path = "${local.unifi_host}/mongo"
-        type = "DirectoryOrCreate"
-      }
-    }
-    node_affinity {
-      required {
-        node_selector_term {
-          match_expressions {
-            key      = "kubernetes.io/hostname"
-            operator = "In"
-            values   = [local.unifi_node]
-          }
-        }
-      }
-    }
-  }
-}
-
-resource "kubernetes_persistent_volume" "config" {
-  metadata { name = "unifi-config" }
-  spec {
-    capacity                         = { storage = "5Gi" }
-    access_modes                     = ["ReadWriteOnce"]
-    persistent_volume_reclaim_policy = "Retain"
-    storage_class_name               = "manual"
-    persistent_volume_source {
-      host_path {
-        path = "${local.unifi_host}/config"
-        type = "DirectoryOrCreate"
-      }
-    }
-    node_affinity {
-      required {
-        node_selector_term {
-          match_expressions {
-            key      = "kubernetes.io/hostname"
-            operator = "In"
-            values   = [local.unifi_node]
-          }
-        }
-      }
-    }
-  }
-}
-
+# --- storage (Longhorn, dynamically provisioned, replicated) ---
 resource "kubernetes_persistent_volume_claim" "mongo" {
   metadata {
     name      = "unifi-mongo"
@@ -128,8 +68,7 @@ resource "kubernetes_persistent_volume_claim" "mongo" {
   }
   spec {
     access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "manual"
-    volume_name        = kubernetes_persistent_volume.mongo.metadata[0].name
+    storage_class_name = "longhorn"
     resources { requests = { storage = "5Gi" } }
   }
 }
@@ -141,8 +80,7 @@ resource "kubernetes_persistent_volume_claim" "config" {
   }
   spec {
     access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "manual"
-    volume_name        = kubernetes_persistent_volume.config.metadata[0].name
+    storage_class_name = "longhorn"
     resources { requests = { storage = "5Gi" } }
   }
 }
@@ -161,7 +99,6 @@ resource "kubernetes_deployment" "mongo" {
     template {
       metadata { labels = { app = "unifi-mongo" } }
       spec {
-        node_selector = { "kubernetes.io/hostname" = local.unifi_node }
         container {
           name  = "mongo"
           image = local.mongo_image
@@ -248,7 +185,6 @@ resource "kubernetes_deployment" "unifi" {
     template {
       metadata { labels = { app = "unifi" } }
       spec {
-        node_selector = { "kubernetes.io/hostname" = local.unifi_node }
         container {
           name  = "unifi"
           image = local.unifi_image

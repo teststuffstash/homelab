@@ -7,12 +7,10 @@
 #
 # Storage: no dynamic provisioner yet (same constraint as Home Assistant), so Prometheus
 # uses a node-pinned hostPath PV under Talos's writable /var, mirroring homeassistant.tf.
-# Pinned to wk-02 to spread load (HA is on wk-01). Grafana keeps no state (dashboards +
-# datasource are provisioned as code), Alertmanager uses ephemeral storage.
+# Prometheus TSDB on Longhorn (replicated, not node-pinned). Grafana keeps no state
+# (dashboards + datasource provisioned as code), Alertmanager uses ephemeral storage.
 locals {
-  monitoring_node      = "wk-02"
-  prometheus_host_path = "/var/mnt/prometheus"
-  prometheus_pv_size   = "20Gi"
+  prometheus_pv_size = "20Gi"
   grafana_lb_ip        = "192.168.40.11" # BGP-advertised VIP, like ha_lb_ip (.10)
   prometheus_lb_ip     = "192.168.40.13" # (.12 is unifi) — fronted by HAProxy TLS
   alertmanager_lb_ip   = "192.168.40.14"
@@ -55,37 +53,6 @@ resource "kubernetes_secret" "ha_token" {
   type = "Opaque"
 }
 
-# Node-pinned hostPath PV for the Prometheus TSDB. The StatefulSet's auto-generated PVC
-# binds to this PV by name (volumeName in the chart's volumeClaimTemplate below), so we
-# don't have to predict the operator's PVC name.
-resource "kubernetes_persistent_volume" "prometheus" {
-  metadata { name = "prometheus-data" }
-  spec {
-    capacity                         = { storage = local.prometheus_pv_size }
-    access_modes                     = ["ReadWriteOnce"]
-    persistent_volume_reclaim_policy = "Retain"
-    storage_class_name               = "manual"
-    persistent_volume_source {
-      host_path {
-        path = local.prometheus_host_path
-        type = "DirectoryOrCreate"
-      }
-    }
-    node_affinity {
-      required {
-        node_selector_term {
-          match_expressions {
-            key      = "kubernetes.io/hostname"
-            operator = "In"
-            values   = [local.monitoring_node]
-          }
-        }
-      }
-    }
-  }
-  depends_on = [kubernetes_storage_class.manual]
-}
-
 resource "helm_release" "kube_prometheus_stack" {
   name       = "kube-prometheus-stack"
   namespace  = kubernetes_namespace.monitoring.metadata[0].name
@@ -107,13 +74,14 @@ resource "helm_release" "kube_prometheus_stack" {
         annotations = { "lbipam.cilium.io/ips" = local.prometheus_lb_ip }
       }
       prometheusSpec = {
+        replicas = 1
         # No point scraping faster than HA reports (devices report at 60s).
         scrapeInterval = "60s"
         retention      = "90d"
         retentionSize  = "18GB"
-        # hostPath PVs ignore fsGroup, and Prometheus runs non-root (uid 1000/gid 2000),
-        # so the root-owned mount is unwritable → chown it first. (HA avoids this by
-        # running as root.) Durable: re-runs on every pod/node rebuild.
+        # Defensive: ensure the data dir is owned by the Prometheus user (uid 1000/gid
+        # 2000). Longhorn respects fsGroup so this is usually redundant, but it's cheap
+        # insurance and re-runs on every pod/node rebuild.
         initContainers = [{
           name    = "chown-data"
           image   = "busybox:1.37"
@@ -127,8 +95,6 @@ resource "helm_release" "kube_prometheus_stack" {
             mountPath = "/prometheus"
           }]
         }]
-        # Pin to the node that holds the hostPath PV.
-        nodeSelector = { "kubernetes.io/hostname" = local.monitoring_node }
         # Mount the HA token secret at /etc/prometheus/secrets/ha-token/token.
         secrets = [kubernetes_secret.ha_token.metadata[0].name]
         # The ONE extra scrape job: Home Assistant's Prometheus endpoint.
@@ -146,9 +112,8 @@ resource "helm_release" "kube_prometheus_stack" {
         storageSpec = {
           volumeClaimTemplate = {
             spec = {
-              storageClassName = "manual"
+              storageClassName = "longhorn"
               accessModes      = ["ReadWriteOnce"]
-              volumeName       = kubernetes_persistent_volume.prometheus.metadata[0].name
               resources        = { requests = { storage = local.prometheus_pv_size } }
             }
           }
@@ -252,9 +217,8 @@ resource "helm_release" "kube_prometheus_stack" {
   })]
 
   depends_on = [
-    helm_release.cilium, # CNI + BGP must exist for the Grafana LoadBalancer VIP
-    kubernetes_storage_class.manual,
-    kubernetes_persistent_volume.prometheus,
+    helm_release.cilium,  # CNI + BGP must exist for the Grafana LoadBalancer VIP
+    helm_release.longhorn, # default StorageClass for the Prometheus TSDB PVC
     kubernetes_secret.ha_token,
   ]
 }
