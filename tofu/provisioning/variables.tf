@@ -64,6 +64,41 @@ variable "ssh_public_keys" {
   type        = list(string)
 }
 
+# ---- Matchbox content (gRPC provider + Talos profile) ---------------------
+variable "matchbox_grpc_endpoint" {
+  description = "Matchbox gRPC API (host:port) for the poseidon/matchbox provider."
+  type        = string
+  default     = "192.168.2.30:8081"
+}
+
+variable "matchbox_client_cert" {
+  description = "Path to the Matchbox gRPC client cert (fetched by ansible/matchbox.yml, kept outside the repo)."
+  type        = string
+  default     = "/home/node/.claude/homelab-matchbox/client.crt"
+}
+
+variable "matchbox_client_key" {
+  type    = string
+  default = "/home/node/.claude/homelab-matchbox/client.key"
+}
+
+variable "matchbox_ca" {
+  type    = string
+  default = "/home/node/.claude/homelab-matchbox/ca.crt"
+}
+
+variable "talos_version" {
+  description = "Talos version for the PXE assets. Keep in lockstep with ../ (cluster) and ansible/matchbox-talos-assets.yml."
+  type        = string
+  default     = "v1.13.2"
+}
+
+variable "thinkcentre_mac" {
+  description = "MAC of the first bare-metal onboarding target (Lenovo ThinkCentre Edge). Lowercase, colon-separated."
+  type        = string
+  default     = "8c:89:a5:23:49:da"
+}
+
 # ---- Matchbox container ---------------------------------------------------
 variable "matchbox_vmid" {
   description = "Proxmox CTID for the Matchbox container (cluster VMs use 81xx; keep clear of them)."

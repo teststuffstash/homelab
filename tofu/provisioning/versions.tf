@@ -6,5 +6,9 @@ terraform {
       source  = "bpg/proxmox"
       version = "~> 0.107"
     }
+    matchbox = {
+      source  = "poseidon/matchbox"
+      version = "~> 0.5"
+    }
   }
 }
