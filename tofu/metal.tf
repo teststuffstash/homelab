@@ -56,6 +56,18 @@ data "talos_machine_configuration" "metal" {
   ]
 }
 
+# The ThinkPad X240 is the ephemeral/compute tier — not always-on, vanilla install (no
+# Longhorn disk / iscsi). Taint it so stateful services (which tolerate nothing special)
+# never schedule there; explicitly-tolerating workloads (e.g. future CI runners) still can.
+resource "kubernetes_node_taint" "laptop" {
+  metadata { name = "wk-metal-01" }
+  taint {
+    key    = "homelab.io/ephemeral"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+}
+
 resource "talos_machine_configuration_apply" "metal" {
   for_each = var.metal_nodes
 
