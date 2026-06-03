@@ -1,0 +1,27 @@
+# Smart-plug power monitoring — corrected scaling.
+#
+# The Tuya cloud integration reports these plugs' power in 0.1 W units (deci-watts),
+# so the raw `sensor.<plug>_power` reads 10x too high (e.g. 177 -> 17.7 W). These
+# template sensors divide by 10 to give true watts. (If you later enable current/voltage:
+# Tuya current is usually mA -> /1000, voltage dV -> /10.)
+#
+# TODO: revisit once the local-API model for Tuya/Shelly/Xiaomi/Dreame is chosen — the
+# goal is to drop the Tuya CLOUD dependency, at which point these sources change but the
+# /10 correction can go away. Source of truth in git; copied into the HA /config PV.
+template:
+  - sensor:
+      - name: "Konditsioneer Power (corrected)"
+        unique_id: konditsioneer_power_corrected
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ states('sensor.konditsioneer_power') not in ['unknown', 'unavailable', 'none'] }}"
+        state: "{{ states('sensor.konditsioneer_power') | float(0) / 10 }}"
+
+      - name: "Aquarium Power (corrected)"
+        unique_id: aquarium_power_corrected
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: "{{ states('sensor.aquarium_power') not in ['unknown', 'unavailable', 'none'] }}"
+        state: "{{ states('sensor.aquarium_power') | float(0) / 10 }}"
