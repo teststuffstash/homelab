@@ -41,6 +41,8 @@ HOSTS = [  # static reservations preserved from ISC
     # bare-metal Talos worker (ThinkPad X240) — pinned so the maintenance-mode IP
     # == the ongoing node IP (clean tofu apply target).
     {"host": "wk-metal-01", "hwaddr": "50:7b:9d:01:b3:54", "ip": "192.168.2.182"},
+    # bare-metal Talos worker (ThinkPad X250) — same maintenance==node pinning, adjacent .183.
+    {"host": "wk-metal-02", "hwaddr": "68:f7:28:80:84:09", "ip": "192.168.2.183"},
     # ThinkCentre Edge — reserved for later (flaky PXE firmware; onboard via USB ISO).
     {"host": "thinkcentre", "hwaddr": "8c:89:a5:23:49:da", "ip": "192.168.2.53"},
     # HP desktop — bare-metal Talos worker (storage-tier candidate).

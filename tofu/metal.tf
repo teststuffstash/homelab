@@ -28,6 +28,9 @@ variable "metal_nodes" {
   default = {
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
     wk-metal-01 = { ip = "192.168.2.182", install_disk = "/dev/sda" }
+    # ThinkPad X250 — 128GB SanDisk SDSSDHP1 SATA SSD (confirmed via `talosctl get disks`).
+    # Laptop/compute tier like the X240: tainted ephemeral below, no Longhorn disk.
+    wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda" }
     # ThinkCentre Edge — 120GB Kingston SV300 (NOT sda=USB-boot, NOT nvme=Optane scratch).
     # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO; the
     # USB it was flashed with was Talos v1.13.0 (cluster is v1.13.2 — upgrade to match).
@@ -78,6 +81,16 @@ data "talos_machine_configuration" "metal" {
 # never schedule there; explicitly-tolerating workloads (e.g. future CI runners) still can.
 resource "kubernetes_node_taint" "laptop" {
   metadata { name = "wk-metal-01" }
+  taint {
+    key    = "homelab.io/ephemeral"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+}
+
+# ThinkPad X250 — same ephemeral/compute tier as the X240. Applied after the node joins.
+resource "kubernetes_node_taint" "laptop_x250" {
+  metadata { name = "wk-metal-02" }
   taint {
     key    = "homelab.io/ephemeral"
     value  = "true"

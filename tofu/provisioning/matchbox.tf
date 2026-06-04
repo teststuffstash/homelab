@@ -48,3 +48,8 @@ resource "matchbox_group" "thinkcentre_edge" {
     mac = var.thinkcentre_mac
   }
 }
+
+# To onboard a new metal node, add a matchbox_group here selecting its MAC (see git
+# history for the wk-metal-01 X240 / wk-metal-02 X250 onboardings), apply, PXE it into
+# maintenance, then REMOVE the group again post-install so it boots from disk (not a
+# reinstall loop). Groups are intentionally transient — only persistent flags stay.
