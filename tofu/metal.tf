@@ -32,9 +32,9 @@ variable "metal_nodes" {
     # Laptop/compute tier like the X240: tainted ephemeral below, no Longhorn disk.
     wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda" }
     # ThinkCentre Edge — 120GB Kingston SV300 (NOT sda=USB-boot, NOT nvme=Optane scratch).
-    # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO; the
-    # USB it was flashed with was Talos v1.13.0 (cluster is v1.13.2 — upgrade to match).
-    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
+    # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO at Talos
+    # v1.13.0; since upgraded in-place to v1.13.2 (matches cluster). Two Intel Optane M10 16GB
+    # (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
     thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc", optane_disks = ["/dev/nvme0n1", "/dev/nvme1n1"] }
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
