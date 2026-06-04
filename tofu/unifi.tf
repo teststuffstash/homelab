@@ -15,7 +15,11 @@
 
 locals {
   unifi_lb_ip = "192.168.40.12"     # BGP-advertised LoadBalancer VIP (HA is .10)
-  unifi_image = "lscr.io/linuxserver/unifi-network-application:latest" # TODO: pin after first run
+  # Pinned to the digest running after the controller migration (UniFi Network 10.3.58,
+  # 2026-06-04). Pinned by digest so a registry-side :latest move can't desync the app from
+  # the Mongo schema on a pod reschedule. To upgrade: bump to a newer linuxserver digest
+  # deliberately, then `tofu apply` (Recreate strategy → brief downtime, slow first boot).
+  unifi_image = "lscr.io/linuxserver/unifi-network-application@sha256:f87c4d57285f3118a0bad24f696f5aa088859d332b5bf865cdb8e515a1c819ab"
   mongo_image = "mongo:7.0"         # UniFi 8.1+ supports mongo<=7.0; >4.4 needs AVX (cpu=host → ok)
 }
 
