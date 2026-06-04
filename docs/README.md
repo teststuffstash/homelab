@@ -4,6 +4,15 @@ Service- and operations-level docs for the homelab. Infrastructure-as-code lives
 in the repo (`tofu/`, `ansible/`, `esphome/`, `homeassistant/`); these pages describe how the
 running services fit together, how to operate them, and their risks.
 
+## Operations & design
+
+| Doc | Summary |
+|---|---|
+| [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, HA, UniFi, ESPHome — and the gotchas behind them |
+| [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
+| [cloudflare.md](cloudflare.md) | Remote-access design (Cloudflare Tunnel + app-security mTLS) + scoped-token RBAC |
+| [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
+
 ## Services
 
 | Service | Doc | Summary |
