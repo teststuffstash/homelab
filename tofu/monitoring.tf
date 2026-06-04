@@ -5,9 +5,7 @@
 #     so this adds zero WiFi traffic and avoids double-scraping.
 #   * Declarative/boot-from-git, same as the rest of tofu/.
 #
-# Storage: no dynamic provisioner yet (same constraint as Home Assistant), so Prometheus
-# uses a node-pinned hostPath PV under Talos's writable /var, mirroring homeassistant.tf.
-# Prometheus TSDB on Longhorn (replicated, not node-pinned). Grafana keeps no state
+# Storage: Prometheus TSDB on Longhorn (replicated, not node-pinned). Grafana keeps no state
 # (dashboards + datasource provisioned as code), Alertmanager uses ephemeral storage.
 locals {
   prometheus_pv_size = "20Gi"
@@ -29,17 +27,6 @@ resource "kubernetes_namespace" "monitoring" {
       "pod-security.kubernetes.io/audit"   = "privileged"
     }
   }
-}
-
-# Static-binding StorageClass for hand-created hostPath PVs (Home Assistant + Prometheus).
-# No provisioner: PVs are pre-created and bound by name. Core PV binding doesn't require the
-# StorageClass object to exist, but the prometheus-operator validates that it does — so it
-# must be declared.
-resource "kubernetes_storage_class" "manual" {
-  metadata { name = "manual" }
-  storage_provisioner = "kubernetes.io/no-provisioner"
-  volume_binding_mode = "WaitForFirstConsumer"
-  reclaim_policy      = "Retain"
 }
 
 # HA long-lived access token for /api/prometheus. Value from TF_VAR_ha_prometheus_token

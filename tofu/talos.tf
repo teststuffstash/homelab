@@ -21,30 +21,8 @@ data "talos_machine_configuration" "node" {
     [yamlencode({
       machine = {
         install = { disk = "/dev/sda" }
-        # Talos locks the rootfs read-only; expose writable host dirs to the kubelet
-        # so hostPath PVs can be created/mounted (no dynamic provisioner yet).
-        kubelet = {
-          extraMounts = [
-            {
-              destination = "/var/mnt/homeassistant" # Home Assistant config (homeassistant.tf)
-              type        = "bind"
-              source      = "/var/mnt/homeassistant"
-              options     = ["bind", "rshared", "rw"]
-            },
-            {
-              destination = "/var/mnt/unifi" # UniFi controller + Mongo (unifi.tf)
-              type        = "bind"
-              source      = "/var/mnt/unifi"
-              options     = ["bind", "rshared", "rw"]
-            },
-            {
-              destination = "/var/mnt/prometheus" # Prometheus TSDB (monitoring.tf, pinned to wk-02)
-              type        = "bind"
-              source      = "/var/mnt/prometheus"
-              options     = ["bind", "rshared", "rw"]
-            },
-          ]
-        }
+        # (Stateful services moved to Longhorn — the old /var/mnt/* hostPath kubelet
+        # extraMounts were removed. Longhorn uses /var/lib/longhorn, not an extraMount.)
       }
     })],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
