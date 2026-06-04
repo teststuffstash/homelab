@@ -1,20 +1,33 @@
+# `ansible/` — OPNsense as code (+ Matchbox setup)
 
-```shell
-ansible-playbook -i homelab --limit 192.168.2.11 sudoers.yml -b -K
+OPNsense (router @ `192.168.2.1`) is managed with the `oxlorg.opnsense` collection. The Matchbox
+PXE host is set up by `matchbox*.yml`. There is no `site.yml`-style "apply everything" — each
+concern is its own playbook.
+
+## OPNsense playbooks
+
+| Playbook | Manages |
+|---|---|
+| `opnsense-bgp.yml` | FRR/BGP peering Cilium (AS 64512 ↔ 64513), LB VIPs `192.168.40.0/24` |
+| `opnsense-acme.yml` | Let's Encrypt certs (DNS-01 via Route53) for the `*.teststuff.net` names |
+| `opnsense-haproxy.yml` | HTTPS reverse proxy → in-cluster service VIPs |
+| `opnsense-unbound-hosts.yml` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
+
+Run them through the wrapper (handles the httpx interpreter + API creds — see `../docs/runbook.md`):
+
+```bash
+bash ../scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml
 ```
 
-```shell
-ansible-playbook -i homelab site.yml --become
-```
+LAN DHCP is **not** Ansible — it's `../opnsense/dnsmasq-dhcp.py` (dnsmasq via the OPNsense API).
 
+## Matchbox
 
-# Snap in docker limitations
-https://github.com/canonical/docker-snap
-Docker should function normally, with the following caveats:
+`matchbox.yml`, `matchbox-ipxe-tftp.yml`, `matchbox-proxydhcp.yml`, `matchbox-talos-assets.yml`
+set up the PXE provisioning LXC. See `../docs/provisioning.md`.
 
-All files that docker needs access to should live within your $HOME folder.
+## Legacy
 
-If you are using Ubuntu Core 16, you'll need to work within a subfolder of $HOME that is readable by root; see #8.
-Additional certificates used by the Docker daemon to authenticate with registries need to be located in /var/snap/docker/common/etc/certs.d instead of /etc/docker/certs.d.
-
-Specifying the option --security-opt="no-new-privileges=true" with the docker run command (or the equivalent in docker-compose) will result in a failure of the container to start. This is due to an an underlying external constraint on AppArmor; see LP#1908448 for details.
+`roles/ubiquiti-appliance/` and the old `homelab` inventory / `sudoers.yml` target the **retired**
+T61-based setup (Docker UniFi controller, netboot.xyz). The UniFi controller now runs in-cluster
+(`../tofu/unifi.tf`); these are kept for reference only.

@@ -74,7 +74,8 @@ flowchart LR
 _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled cluster._
 
 - ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources.
-- 🔜 OpenTofu provisioning (Phase 1 scaffold ready), ArgoCD/Flux GitOps, Talos control plane.
+- ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes control plane (v1.13.2 / v1.36.1).
+- 🔜 ArgoCD/Flux GitOps front.
 - ⬜ CI (GitHub Actions) not wired yet; no internal image registry (use upstream for now).
 
 ## 3 · Resource Plane
@@ -98,9 +99,10 @@ flowchart TB
 
 _Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IPMI)._
 
-- ✅ Proxmox host, OPNsense, ESPHome + the `droplet` node.
-- 🔜 Talos VMs + bare-metal nodes, Matchbox provisioning, Cilium+BGP, Cloudflare Tunnel,
-  Longhorn, S3 backups, greenfield Home Assistant, Civo burst.
+- ✅ Proxmox host, OPNsense (DHCP/DNS/FW/FRR as code), ESPHome + the `droplet` node.
+- ✅ Talos VMs **and** bare-metal nodes, Matchbox PXE provisioning, Cilium + BGP LoadBalancer,
+  Longhorn storage, Home Assistant + UniFi controller in-cluster.
+- 🔜 Cloudflare Tunnel (remote access, `docs/cloudflare.md`), S3 backups, Civo burst.
 - ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy).
 
 ## 4 · Observability Plane _(cross-cutting)_
@@ -114,8 +116,9 @@ flowchart LR
 
 _Fig. 4: Observability Plane — small agents collect, one central brain visualizes and alerts._
 
-- 🔜 Prometheus + Grafana, log aggregation, alerting routed to Home Assistant.
-- ⬜ Nothing running yet — Phase 5.
+- ✅ Prometheus + Grafana + Alertmanager in-cluster (`tofu/monitoring.tf`), exposed at
+  `grafana`/`prometheus`/`alertmanager.teststuff.net`.
+- 🔜 Log aggregation (Loki), alerting routed to Home Assistant, Civo cost/FinOps.
 
 ## 5 · Security Plane _(cross-cutting)_
 

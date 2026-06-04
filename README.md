@@ -1,34 +1,49 @@
 # homelab
 
-## Bare metal
+Infrastructure-as-code for a home network, built **boot-from-git**: every box is recreatable from
+this repo (data is the only exception → S3, bucket-id in git). A Talos Linux Kubernetes cluster
+(hybrid Proxmox VMs + bare-metal), with OPNsense managed as code, provisioned via DIY netboot.
 
-| Name                    | Primary use case                  |               CPU               | RAM |              Storage | Free RAM slots |
-|-------------------------|:----------------------------------|:-------------------------------:|----:|---------------------:|---------------:|
-| Lenovo T61 laptop       | Netboot.xyz, cloud-init, ubiquiti | 2 Cores, Intel Core™2 Duo T7300 | 4GB |                120GB |              0 |
-| Raspberry PI 3B         | octopi                            |                                 |     |             16GB USB |              0 |
-| Big Data, HP desktop    | opnsense                          |        4 cores,  i5-2500        | 8GB |                250GB |         2 DDR3 |
-| Lenove ThinkCentre Edge | ?                                 |                                 | 4GB | 120BG + 2x16B optane |         0 DDR3 |
+- **`CONTEXT.md`** — why / the principles behind decisions.
+- **`ARCHITECTURE.md`** — how it's shaped (planes).
+- **`ROADMAP.md`** — what / when.
+- **`docs/runbook.md`** — operational recipes (start here to *do* things).
+- **`docs/provisioning.md`** — onboard a bare-metal node. **`docs/cloudflare.md`** — remote-access design.
+- **`CLAUDE.md`** — orientation for the AI agent that does most of the work here.
 
-# Services
+## Topology
 
-| Tables            |         WAN         |                      LAN |                                   UI |
-|-------------------|:-------------------:|-------------------------:|-------------------------------------:|
-| Telia             |     192.168.1.1     |                          |                   http://192.168.1.1 |
-| octopi            |                     |                          |                  http://octopi.local |
-| OPNsense          | https://192.168.2.1 |      https://192.168.2.1 |       https://opnsense.teststuff.net |
-| rancher dashboard |      TODO: T61      |                TODO: T61 |                                   $1 |
-| netboot.xyz       |                     | http://192.168.2.2:3000/ |                                      |
-| Ubiquity          |                     |                          | https://ubiquiti.teststuff.net:8443/ |
+| Host | IP | Role |
+|---|---|---|
+| OPNsense ("Big Data") | 192.168.2.1 | Router/FW, DHCP (dnsmasq), DNS (Unbound), FRR/BGP, HAProxy, ACME |
+| Proxmox `pve` | 192.168.2.3 | Hypervisor (Talos VMs + Matchbox LXC) |
+| Matchbox LXC | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
+| `cp-01` / `wk-01` / `wk-02` | .51 / .61 / .62 | Talos cluster VMs (control plane + workers) |
+| `thinkcentre` / `hp-01` | .53 / .54 | bare-metal workers (+ Longhorn) |
+| `wk-metal-01` / `wk-metal-02` | .182 / .183 | bare-metal workers (ThinkPad X240/X250, ephemeral tier) |
+| Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 
-pfsense
+Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** (kube-proxy-free), **Longhorn**
+storage. In-cluster Services get LoadBalancer VIPs from `192.168.40.0/24` (Cilium BGP ↔ OPNsense
+FRR) and a trusted HTTPS name via OPNsense HAProxy:
 
-Netboot on physiucal machine, set rocky kickstart url:
-http://192.168.2.2:8000/r9.ks
-http://192.168.2.2:8000/Rocky-9-GenericCloud-Base.ks
-Rocky-9-GenericCloud.ks
+| Service | VIP | HTTPS |
+|---|---|---|
+| Home Assistant | 192.168.40.10 | `homeassistant.teststuff.net` |
+| Grafana / Prometheus / Alertmanager | .11 / .13 / .14 | `grafana` / `prometheus` / `alertmanager.teststuff.net` |
+| UniFi Network Application | 192.168.40.12 | `ubiquiti.teststuff.net` |
 
-Turn off display on laptops(console physically on machine):
-setterm -blank n
+> The Lenovo T61 (.2) that used to run netboot.xyz + the UniFi controller is **dead/retired** —
+> both have been migrated into the cluster.
 
-Permanent:
-setterm -blank 1 >> /etc/issue
+## Use
+
+```bash
+devbox shell                                   # toolchain from devbox.json (Nix)
+devbox run -- tofu -chdir=tofu plan            # review before apply — this hits live machines
+devbox run nodes                               # kubectl get nodes -o wide
+bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml   # OPNsense as code
+```
+
+State, `*.tfvars`, `kubeconfig`/`talosconfig`, and secrets are gitignored / kept out of the repo.
+This repo is **slated to go public** — see `PUBLISH-CHECKLIST.md` before pushing it anywhere public.

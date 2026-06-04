@@ -4,10 +4,14 @@ Provisions a Talos Linux Kubernetes cluster as VMs on the Proxmox host (`pve`,
 `192.168.2.3`), installs Cilium as the CNI, exposes services on the LAN via Cilium
 BGP, and runs Home Assistant on it. Implements ROADMAP.md Phases 1–2.
 
-> **Status: APPLIED & LIVE.** 3-node cluster up and `Ready` (cp-01 `.51`, wk-01 `.61`,
-> wk-02 `.62`), Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1` (kube-proxy-free).
-> Home Assistant reachable on the BGP VIP `http://192.168.40.10:8123`. State is local
+> **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
+> (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` **+ bare-metal**
+> thinkcentre `.53`, hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250) — all
+> `Ready`. **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
+> monitoring stack run in-cluster on BGP VIPs (`192.168.40.0/24`). State is local
 > (`terraform.tfstate`, gitignored). Always `tofu plan` and review before any `apply`.
+>
+> Bare-metal node onboarding is its own procedure — see `../docs/provisioning.md`.
 
 ## Pinned versions
 
@@ -38,14 +42,18 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   BGP cluster ASN `64513` peering OPNsense ASN `64512` (`192.168.2.1`); only Services
   labelled `bgp=advertise` are advertised. **OPNsense side is `../ansible/opnsense-bgp.yml`**
   (os-frr) — both ends are code.
-- `homeassistant.tf` — Phase 2 workload via the kubernetes provider: namespace, node-pinned
-  hostPath PV/PVC (wk-01), Deployment, and a `LoadBalancer` Service pinned to VIP
-  `192.168.40.10` (`lbipam.cilium.io/ips` + `bgp=advertise`).
-- `unifi.tf` — UniFi Network Application + MongoDB (replaces the dead T61 controller);
-  node-pinned hostPath on wk-02, `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP).
-  Boot-tested; **not yet applied** — applying adds the `/var/mnt/unifi` Talos mount,
-  which triggers a rolling node reboot.
-- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, `home_assistant_url`, `unifi_url`.
+- `homeassistant.tf` — Home Assistant via the kubernetes provider: namespace, **Longhorn** PVC,
+  Deployment, and a `LoadBalancer` Service pinned to VIP `192.168.40.10`
+  (`lbipam.cilium.io/ips` + `bgp=advertise`).
+- `unifi.tf` — UniFi Network Application + MongoDB on Longhorn (replaces the dead T61 controller);
+  `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP). **Applied & live**; image pinned by digest.
+- `longhorn.tf` — Longhorn storage (default StorageClass, replicated) + a `longhorn-fast`
+  node-local tier on the ThinkCentre's Optane.
+- `metal.tf` — bare-metal Talos workers (PXE/USB-installed, not Proxmox VMs); see
+  `../docs/provisioning.md`.
+- `monitoring.tf` — Prometheus + Grafana + Alertmanager (BGP VIPs `.13`/`.11`/`.14`).
+- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, `home_assistant_url`, `unifi_url`,
+  `grafana_url`, `monitoring_urls`.
 
 **Hardware-specific** — swap these for the DR target; the cluster layer stays put:
 
@@ -123,7 +131,7 @@ that must live in git).
 ## Not included yet (next steps)
 
 - Remote/encrypted state backend (currently local state).
-- A real storage provisioner (Home Assistant is on a single-node hostPath PV; Longhorn/local-path next).
-  Home Assistant `/config` → object-storage backup per ROADMAP.
-- Promotion of `nodes` IPs to OPNsense DHCP reservations as code (`oxlorg.opnsense`).
-- Bare-metal node group + Matchbox PXE (ROADMAP hybrid topology); more workloads via GitOps.
+- Home Assistant `/config` → object-storage (S3) backup per ROADMAP (Longhorn covers in-cluster
+  replication, not off-cluster DR).
+- Cloudflare Tunnel for remote access (`../docs/cloudflare.md`).
+- GitOps (ArgoCD/Flux) for workloads; Civo cloud-burst.
