@@ -11,6 +11,11 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 homeassistant:
+  # Core location/locale set declaratively (overrides the onboarding defaults in .storage).
+  time_zone: Europe/Tallinn
+  country: EE
+  currency: EUR
+  unit_system: metric
   packages: !include_dir_named packages
 
 lovelace:

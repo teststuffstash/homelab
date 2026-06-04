@@ -34,6 +34,13 @@ views:
         hours_to_show: 24
         entities:
           - entity: sensor.nord_pool_ee_current_price
+      - type: entities
+        title: Smart plugs (true watts)
+        entities:
+          - entity: sensor.konditsioneer_power_corrected
+            name: ThinkCentre (Konditsioneer)
+          - entity: sensor.aquarium_power_corrected
+            name: Aquarium
   - title: Irrigation
     path: irrigation
     icon: mdi:sprinkler-variant
@@ -49,8 +56,6 @@ views:
             name: Plant 3
           - entity: sensor.droplettest_droplet_soilm_sens_4
             name: Plant 4
-          - entity: sensor.droplettest_droplet_soilm_sens_5
-            name: Plant 5
       - type: entities
         title: Desired moisture thresholds
         entities:
@@ -58,7 +63,6 @@ views:
           - input_number.moisture_level_for_pump2
           - input_number.moisture_level_for_pump3
           - input_number.moisture_level_for_pump4
-          - input_number.moisture_level_for_pump5
       - type: entities
         title: Watering time per plant (seconds)
         entities:
@@ -80,5 +84,3 @@ views:
             name: Pump 3
           - entity: switch.droplettest_droplet_pump_4
             name: Pump 4
-          - entity: switch.droplettest_droplet_pump_5
-            name: Pump 5
