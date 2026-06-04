@@ -80,3 +80,29 @@ resource "helm_release" "longhorn" {
     longhornUI = { replicas = 1 }
   })]
 }
+
+# ---- Fast (Optane) tier --------------------------------------------------
+# The ThinkCentre's two Intel Optane M10 16GB drives are mounted (Talos machine.disks,
+# metal.tf) at /var/lib/longhorn/optane{0,1} and registered into Longhorn with the "fast"
+# tag (scripts/longhorn-register-optane.sh — disk registration on an existing Longhorn node
+# isn't cleanly tofu-managed, so it's an idempotent kubectl-patch script, not a resource).
+#
+# This StorageClass targets those disks. replica=1 + strict-local = lowest latency, no
+# redundancy: pure scratch/cache. Both Optane live on ONE node (thinkcentre), so a
+# longhorn-fast volume is bound to thinkcentre's availability and its consumer pod must be
+# schedulable there. NOT the default class — opt in by setting storageClassName: longhorn-fast.
+resource "kubernetes_storage_class" "longhorn_fast" {
+  metadata { name = "longhorn-fast" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "Immediate"
+  parameters = {
+    numberOfReplicas    = "1"
+    diskSelector        = "fast"
+    dataLocality        = "strict-local"
+    staleReplicaTimeout = "30"
+    fsType              = "ext4"
+  }
+  depends_on = [helm_release.longhorn]
+}

@@ -18,6 +18,12 @@ variable "metal_nodes" {
   type = map(object({
     ip           = string # DHCP-reserved IP (maintenance-mode + ongoing node address)
     install_disk = string # target disk for the Talos install (NOT the optane cache)
+    # Extra block devices to format+mount as Longhorn "fast" disks. Mounted UNDER
+    # /var/lib/longhorn/ on purpose: longhorn-manager only host-mounts that path (with
+    # Bidirectional propagation), so a disk anywhere else is invisible to it. Each becomes
+    # /var/lib/longhorn/optane<N>; registered into Longhorn with tag "fast" (see
+    # scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass in longhorn.tf).
+    optane_disks = optional(list(string), [])
   }))
   default = {
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
@@ -25,7 +31,8 @@ variable "metal_nodes" {
     # ThinkCentre Edge — 120GB Kingston SV300 (NOT sda=USB-boot, NOT nvme=Optane scratch).
     # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO; the
     # USB it was flashed with was Talos v1.13.0 (cluster is v1.13.2 — upgrade to match).
-    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc" }
+    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
+    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc", optane_disks = ["/dev/nvme0n1", "/dev/nvme1n1"] }
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
     hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
@@ -44,16 +51,26 @@ data "talos_machine_configuration" "metal" {
 
   # Hostname comes from the DHCP reservation (dnsmasq sends it), same as the VMs get
   # theirs from nocloud — setting it here too makes Talos reject the config as a conflict.
-  config_patches = [
-    yamlencode({
+  config_patches = concat(
+    [yamlencode({
       machine = {
         install = {
           disk  = each.value.install_disk
           image = var.talos_install_image
         }
       }
-    })
-  ]
+    })],
+    # Format + mount any extra disks (Optane) under /var/lib/longhorn so longhorn-manager
+    # can see them. Talos partitions (GPT, full disk) + makes a filesystem + mounts.
+    length(each.value.optane_disks) > 0 ? [yamlencode({
+      machine = {
+        disks = [for i, dev in each.value.optane_disks : {
+          device     = dev
+          partitions = [{ mountpoint = "/var/lib/longhorn/optane${i}" }]
+        }]
+      }
+    })] : []
+  )
 }
 
 # The ThinkPad X240 is the ephemeral/compute tier — not always-on, vanilla install (no
