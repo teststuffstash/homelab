@@ -11,7 +11,13 @@
     "sops@latest",
     "age@latest",
     "jq@latest",
-    "python3@latest"
+    "python3@latest",
+    "nmap@latest",
+    "curl@latest",
+    "cloudflared@latest",
+    "yq-go@latest",
+    "bind@latest",
+    "netcat-gnu@latest"
   ],
   "shell": {
     "init_hook": [
@@ -28,6 +34,12 @@
       ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
+      ],
+      "nodes": [
+        "KUBECONFIG=$PWD/tofu/kubeconfig kubectl get nodes -o wide"
+      ],
+      "opnsense": [
+        "echo 'Run an OPNsense playbook with creds+httpx interpreter:' && echo '  bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml'"
       ],
       "kubeconfig": [
         "tofu -chdir=tofu output -raw kubeconfig > tofu/kubeconfig && chmod 600 tofu/kubeconfig && echo wrote tofu/kubeconfig"
