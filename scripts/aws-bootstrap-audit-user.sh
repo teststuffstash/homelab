@@ -8,12 +8,16 @@
 # If no admin creds are configured, it PROMPTS for a temporary admin access key (create one for
 # your admin user in the console, paste the two values at the prompts, then DELETE it afterwards).
 #
+# Saves to ~/.claude/homelab-aws/ by default (the jail path). Running OUTSIDE the jail, point it at
+# the host's bind-mounted copy so the jail can read it, e.g.:
+#     HOMELAB_AWS_DIR=$HOME/Projects/.claude-data/homelab-aws bash scripts/aws-bootstrap-audit-user.sh
+#
 # (This is a one-off bootstrap — the audit user can later be declared in tofu/aws/.)
 set -euo pipefail
 
 USER=homelab-aws-audit
 POLICY=arn:aws:iam::aws:policy/ReadOnlyAccess
-DEST="$HOME/.claude/homelab-aws"
+DEST="${HOMELAB_AWS_DIR:-$HOME/.claude/homelab-aws}"
 
 AWS=aws; command -v aws >/dev/null 2>&1 || AWS="$(cd "$(dirname "$0")/.." && pwd)/.devbox/nix/profile/default/bin/aws"
 
