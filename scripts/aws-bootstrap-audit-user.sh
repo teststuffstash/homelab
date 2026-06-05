@@ -3,14 +3,14 @@
 # Route53/ACM cruft inventory. Saves the key to ~/.claude/homelab-aws/{audit-key,audit-secret}.
 # Idempotent. No secrets are committed — they only ever land in ~/.claude/.
 #
-# Run with ADMIN AWS creds available. Easiest, from the repo root:
-#     devbox run -- bash scripts/aws-bootstrap-audit-user.sh
-# If no admin creds are configured, it PROMPTS for a temporary admin access key (create one for
-# your admin user in the console, paste the two values at the prompts, then DELETE it afterwards).
+# Requires an already-AUTHENTICATED AWS session with admin rights (your SSO login). It does NOT
+# prompt for or accept static keys — log in first, then run with your profile:
+#     aws sso login --profile <p>
+#     AWS_PROFILE=<p> bash scripts/aws-bootstrap-audit-user.sh
 #
 # Saves to ~/.claude/homelab-aws/ by default (the jail path). Running OUTSIDE the jail, point it at
 # the host's bind-mounted copy so the jail can read it, e.g.:
-#     HOMELAB_AWS_DIR=$HOME/Projects/.claude-data/homelab-aws bash scripts/aws-bootstrap-audit-user.sh
+#     AWS_PROFILE=<p> HOMELAB_AWS_DIR=$HOME/Projects/.claude-data/homelab-aws bash scripts/aws-bootstrap-audit-user.sh
 #
 # (This is a one-off bootstrap — the audit user can later be declared in tofu/aws/.)
 set -euo pipefail
@@ -21,13 +21,12 @@ DEST="${HOMELAB_AWS_DIR:-$HOME/.claude/homelab-aws}"
 
 AWS=aws; command -v aws >/dev/null 2>&1 || AWS="$(cd "$(dirname "$0")/.." && pwd)/.devbox/nix/profile/default/bin/aws"
 
-# 1. ensure working admin creds (prompt for a temp key if none)
+# 1. require an authenticated session — fail with a login hint, never prompt for static keys
 if ! "$AWS" sts get-caller-identity >/dev/null 2>&1; then
-  echo "No working AWS creds found — paste a TEMPORARY admin access key (delete it after):"
-  read -rp  "  AWS_ACCESS_KEY_ID: " AWS_ACCESS_KEY_ID
-  read -rsp "  AWS_SECRET_ACCESS_KEY: " AWS_SECRET_ACCESS_KEY; echo
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-  "$AWS" sts get-caller-identity >/dev/null
+  echo "Not authenticated to AWS. Log in first, then re-run with your profile:" >&2
+  echo "    aws sso login --profile <your-sso-profile>" >&2
+  echo "    AWS_PROFILE=<your-sso-profile> bash $0" >&2
+  exit 1
 fi
 echo "Acting as: $("$AWS" sts get-caller-identity --query Arn --output text)"
 
