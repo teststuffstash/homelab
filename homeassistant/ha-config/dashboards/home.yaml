@@ -37,9 +37,17 @@ views:
       - type: entities
         title: Smart plugs (true watts)
         entities:
-          - entity: sensor.konditsioneer_power_corrected
+          - entity: sensor.plug_pve_power
+            name: pve (Xeon host)
+          - entity: sensor.plug_opnsense_power
+            name: OPNsense
+          - entity: sensor.plug_laptop3_power
+            name: Laptop (plug 3)
+          - entity: sensor.plug_laptop4_power
+            name: Laptop (plug 4)
+          - entity: sensor.plug_konditsioneer_power
             name: ThinkCentre (Konditsioneer)
-          - entity: sensor.aquarium_power_corrected
+          - entity: sensor.plug_aquarium_power
             name: Aquarium
   - title: Irrigation
     path: irrigation

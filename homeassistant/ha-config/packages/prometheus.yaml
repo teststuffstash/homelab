@@ -20,3 +20,11 @@ prometheus:
       - sensor
       - switch
       - binary_sensor
+    # The smart plugs' RAW Tuya sensors are replaced by uniform, query-friendly
+    # sensor.plug_<box>_power / _voltage templates (see power.yaml; old plugs are /10-corrected
+    # there). Exclude the raws so only the clean, consistently-named series are scraped — avoids
+    # both the deci-watt 10x values and duplicate/inconsistent names. (switch.* are kept.)
+    exclude_entity_globs:
+      - sensor.smart_plug*
+      - sensor.aquarium_*
+      - sensor.konditsioneer_*

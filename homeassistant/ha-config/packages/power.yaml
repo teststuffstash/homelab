@@ -1,47 +1,35 @@
-# Smart-plug power monitoring — corrected scaling.
+# Smart-plug power monitoring — uniform, query-friendly sensors.
 #
-# IMPORTANT: scaling differs by plug MODEL, do NOT blanket-correct.
-#   - OLD plugs (Konditsioneer, Aquarium): Tuya reports power in deci-watts and voltage in
-#     deci-volts, so raw reads 10x too high (power 186 -> 18.6 W, voltage 2330 -> 233 V).
-#     These need the /10 correction below. (Current is already in A — no correction.)
-#   - NEW plugs (smart_plug / smart_plug_2/3/4 = pve / OPNsense / X240 / X250): already report
-#     true W and V — use their raw sensors directly. Do NOT divide these by 10.
+# Every plug gets sensor.plug_<box>_power (W) and sensor.plug_<box>_voltage (V), so a single
+# Prometheus selector catches them all:
+#     homeassistant_sensor_power_w{entity=~"sensor.plug_.+_power"}
+#     homeassistant_sensor_voltage_v{entity=~"sensor.plug_.+_voltage"}
+# The raw Tuya integration entities are excluded from the scrape in prometheus.yaml.
 #
-# TODO: revisit once the local-API model for Tuya/Shelly/Xiaomi/Dreame is chosen — the
-# goal is to drop the Tuya CLOUD dependency, at which point these sources change and the
-# /10 correction can go away. Source of truth in git; copied into the HA /config PV.
+# SCALING differs by plug model (do NOT blanket-correct):
+#   - OLD plugs (aquarium, konditsioneer): Tuya reports deci-watts / deci-volts -> divide by 10.
+#   - NEW plugs (pve, opnsense, laptop3, laptop4 = K&M black1 / smart-plug-2/3/4): already true
+#     W and V -> pass through unchanged.
+#
+# Plug -> box map (2026-06-05): pve = "K&M black 1"; opnsense = "Smart plug 2";
+# laptop3/laptop4 = "Smart plug 3"/"Smart plug 4" = the two ThinkPads (X240/X250, which-is-which
+# TBD in the labeling project); aquarium / konditsioneer = the original two plugs.
+#
+# TODO: drop the Tuya CLOUD dependency for a local API; then the /10 correction can go away.
+# Source of truth in git; copied into the HA /config PV.
 template:
   - sensor:
-      # --- Konditsioneer (ThinkCentre AC plug) ---
-      - name: "Konditsioneer Power (corrected)"
-        unique_id: konditsioneer_power_corrected
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        availability: "{{ states('sensor.konditsioneer_power') not in ['unknown', 'unavailable', 'none'] }}"
-        state: "{{ states('sensor.konditsioneer_power') | float(0) / 10 }}"
-
-      - name: "Konditsioneer Voltage (corrected)"
-        unique_id: konditsioneer_voltage_corrected
-        unit_of_measurement: "V"
-        device_class: voltage
-        state_class: measurement
-        availability: "{{ states('sensor.konditsioneer_voltage') not in ['unknown', 'unavailable', 'none'] }}"
-        state: "{{ states('sensor.konditsioneer_voltage') | float(0) / 10 }}"
-
-      # --- Aquarium ---
-      - name: "Aquarium Power (corrected)"
-        unique_id: aquarium_power_corrected
-        unit_of_measurement: "W"
-        device_class: power
-        state_class: measurement
-        availability: "{{ states('sensor.aquarium_power') not in ['unknown', 'unavailable', 'none'] }}"
-        state: "{{ states('sensor.aquarium_power') | float(0) / 10 }}"
-
-      - name: "Aquarium Voltage (corrected)"
-        unique_id: aquarium_voltage_corrected
-        unit_of_measurement: "V"
-        device_class: voltage
-        state_class: measurement
-        availability: "{{ states('sensor.aquarium_voltage') not in ['unknown', 'unavailable', 'none'] }}"
-        state: "{{ states('sensor.aquarium_voltage') | float(0) / 10 }}"
+      # ---- NEW plugs (true units, pass-through) ----
+      - { name: "Plug pve power",          unique_id: plug_pve_power,          unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.smart_plug_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_power')   | float(0) }}" }
+      - { name: "Plug pve voltage",        unique_id: plug_pve_voltage,        unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.smart_plug_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_voltage') | float(0) }}" }
+      - { name: "Plug opnsense power",      unique_id: plug_opnsense_power,      unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.smart_plug_2_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_2_power')   | float(0) }}" }
+      - { name: "Plug opnsense voltage",    unique_id: plug_opnsense_voltage,    unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.smart_plug_2_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_2_voltage') | float(0) }}" }
+      - { name: "Plug laptop3 power",       unique_id: plug_laptop3_power,       unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.smart_plug_3_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_3_power')   | float(0) }}" }
+      - { name: "Plug laptop3 voltage",     unique_id: plug_laptop3_voltage,     unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.smart_plug_3_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_3_voltage') | float(0) }}" }
+      - { name: "Plug laptop4 power",       unique_id: plug_laptop4_power,       unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.smart_plug_4_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_4_power')   | float(0) }}" }
+      - { name: "Plug laptop4 voltage",     unique_id: plug_laptop4_voltage,     unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.smart_plug_4_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.smart_plug_4_voltage') | float(0) }}" }
+      # ---- OLD plugs (deci-units, /10) ----
+      - { name: "Plug aquarium power",      unique_id: plug_aquarium_power,      unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.aquarium_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.aquarium_power')   | float(0) / 10 }}" }
+      - { name: "Plug aquarium voltage",    unique_id: plug_aquarium_voltage,    unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.aquarium_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.aquarium_voltage') | float(0) / 10 }}" }
+      - { name: "Plug konditsioneer power",   unique_id: plug_konditsioneer_power,   unit_of_measurement: "W", device_class: power,   state_class: measurement, availability: "{{ states('sensor.konditsioneer_power')   not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.konditsioneer_power')   | float(0) / 10 }}" }
+      - { name: "Plug konditsioneer voltage", unique_id: plug_konditsioneer_voltage, unit_of_measurement: "V", device_class: voltage, state_class: measurement, availability: "{{ states('sensor.konditsioneer_voltage') not in ['unknown','unavailable','none'] }}", state: "{{ states('sensor.konditsioneer_voltage') | float(0) / 10 }}" }
