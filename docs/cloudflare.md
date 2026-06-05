@@ -67,6 +67,24 @@ TTL + IP filtering (pin agent/metrics tokens to the cluster egress IP):
 | `agent-read` | read-only (DNS/Analytics/Zero Trust Read) — for the MCP / a future in-cluster agent |
 | `metrics-read` | Analytics:Read — for `cloudflare-prometheus-exporter` (later, into the monitoring stack) |
 
+## Route53 → Cloudflare: record decisions (2026-06-05)
+
+Don't import the old Route53 zone — start clean on Cloudflare with only what's live:
+
+| Record | Decision |
+|---|---|
+| `*.local.teststuff.net` A → 127.0.0.1 | **KEEP** — used at work for local envs with self-signed TLS; recreate on CF. |
+| `ha.teststuff.net` (new) | **ADD** — CNAME → the Cloudflare Tunnel. |
+| `burger` / `rancher` (→ internal .2.3) | DELETE — dead, and internal-IP leak. |
+| `sdg-playwright-traces` + its `_*` validation CNAMEs | DELETE — old work project; its 1-yr paid cert can lapse. |
+| `folderit` (37.0.31.4) + ACM validation | DELETE — project retired. |
+| `vis-csp` ACM validation | DELETE. |
+| NS / SOA | N/A — Cloudflare provides its own once the registrar NS point at CF. |
+
+Cleanup of the Route53 zone + the associated **ACM/Sectigo certs** (the `_*` validation CNAMEs
+imply leftover ACM certificates) is the first job for the AWS-IaC track (`tofu/aws/`), done as a
+reviewable delete-diff after a read-only audit. See [[cloudflare-direction]] and the AWS auth notes.
+
 ## ⚠️ Migration side effect: ACME
 
 Certs are currently issued **DNS-01 via Route53** (`ansible/opnsense-acme.yml`,

@@ -17,7 +17,8 @@
     "cloudflared@latest",
     "yq-go@latest",
     "bind@latest",
-    "netcat-gnu@latest"
+    "netcat-gnu@latest",
+    "awscli2@latest"
   ],
   "shell": {
     "init_hook": [
