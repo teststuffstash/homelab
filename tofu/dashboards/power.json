@@ -1,0 +1,81 @@
+{
+  "title": "Power — smart plugs",
+  "uid": "homelab-power",
+  "tags": ["homelab", "power", "energy"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "Total lab power (now)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "watt", "decimals": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "value": null, "color": "green" }, { "value": 300, "color": "yellow" }, { "value": 600, "color": "red" } ] } }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "sum(homeassistant_sensor_power_w{entity=~\"sensor.plug_.+_power\"})",
+          "legendFormat": "Total"
+        }
+      ]
+    },
+    {
+      "title": "Power per plug (now)",
+      "type": "bargauge",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "watt", "decimals": 1 }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_power_w{entity=~\"sensor.plug_.+_power\"}",
+          "legendFormat": "{{friendly_name}}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Power per plug over time",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "watt", "min": 0, "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "calcs": ["mean", "max", "lastNotNull"], "placement": "right" } },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_power_w{entity=~\"sensor.plug_.+_power\"}",
+          "legendFormat": "{{friendly_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Voltage per plug (sanity — should all read ~230 V)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "volt", "min": 200, "max": 250 }, "overrides": [] },
+      "targets": [
+        {
+          "datasource": "${datasource}",
+          "expr": "homeassistant_sensor_voltage_v{entity=~\"sensor.plug_.+_voltage\"}",
+          "legendFormat": "{{friendly_name}}"
+        }
+      ]
+    }
+  ]
+}

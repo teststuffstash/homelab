@@ -221,6 +221,16 @@ resource "kubernetes_config_map" "plants_dashboard" {
   data = { "office-plants.json" = file("${path.module}/dashboards/office-plants.json") }
 }
 
+# Power / smart-plug Grafana dashboard, provisioned as code (same sidecar mechanism).
+resource "kubernetes_config_map" "power_dashboard" {
+  metadata {
+    name      = "grafana-dashboard-power"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "power.json" = file("${path.module}/dashboards/power.json") }
+}
+
 output "grafana_url" {
   description = "Grafana UI. HTTPS via OPNsense HAProxy (ansible/opnsense-haproxy.yml); raw VIP also works. Login: admin / TF_VAR_grafana_admin_password."
   value       = "https://grafana.teststuff.net  (direct: http://${local.grafana_lb_ip})"
