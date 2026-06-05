@@ -85,6 +85,16 @@ Cleanup of the Route53 zone + the associated **ACM/Sectigo certs** (the `_*` val
 imply leftover ACM certificates) is the first job for the AWS-IaC track (`tofu/aws/`), done as a
 reviewable delete-diff after a read-only audit. See [[cloudflare-direction]] and the AWS auth notes.
 
+## The nameserver cutover (one-time, manual)
+
+`teststuff.net` is **registered at AWS Route53 Domains** (as are `eid-demo.com` + `taranortaltest.net`).
+So the NS change is done there: **Route53 Domains → Registered domains → teststuff.net → Edit name
+servers** → replace the four `awsdns` NS with Cloudflare's two. `eid-demo.com` already shows the
+target state (`benedict`/`paris.ns.cloudflare.com`). Keep teststuff.net's **auto-renew ON** (expires
+2026-08-16, mid-migration). After cutover the Route53 hosted zone for teststuff.net is orphaned
+(like eid-demo.com's) and can be deleted. AWS cruft cleanup (S3/ACM/CloudMap/old zones) was done
+2026-06-05 via `scripts/aws-cleanup-legacy.sh`.
+
 ## ⚠️ Migration side effect: ACME
 
 Certs are currently issued **DNS-01 via Route53** (`ansible/opnsense-acme.yml`,
