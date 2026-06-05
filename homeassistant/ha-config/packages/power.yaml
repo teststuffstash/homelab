@@ -12,8 +12,9 @@
 #     W and V -> pass through unchanged.
 #
 # Plug -> box map (2026-06-05): pve = "K&M black 1"; opnsense = "Smart plug 2";
-# laptop3/laptop4 = "Smart plug 3"/"Smart plug 4" = the two ThinkPads (X240/X250, which-is-which
-# TBD in the labeling project); aquarium / konditsioneer = the original two plugs.
+# laptop3 = "Smart plug 3" = X240 (wk-metal-01); laptop4 = "Smart plug 4" = X250 (wk-metal-02)
+# — identified by the stress test in docs/power-measurements.md; aquarium / konditsioneer = the
+# original two plugs.
 #
 # TODO: drop the Tuya CLOUD dependency for a local API; then the /10 correction can go away.
 # Source of truth in git; copied into the HA /config PV.
