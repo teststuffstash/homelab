@@ -52,8 +52,15 @@ data "talos_machine_configuration" "metal" {
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
   talos_version      = var.talos_version
 
-  # Hostname comes from the DHCP reservation (dnsmasq sends it), same as the VMs get
-  # theirs from nocloud — setting it here too makes Talos reject the config as a conflict.
+  # Hostname comes from the DHCP reservation (dnsmasq sends it). It CANNOT be pinned via
+  # machine.network.hostname applied in-place: Talos treats the DHCP-acquired hostname as
+  # already-set in the running v1alpha1 config and rejects a static one
+  # (`static hostname is already set in v1alpha1 config`, confirmed 2026-06-05). A static
+  # hostname would only stick if baked in at INSTALL time (fresh maintenance-mode apply), not
+  # on a running node — not worth reinstalling the fleet for.
+  # ⚠️ Consequence: a simultaneous cold power-cycle can let a metal node DHCP-discover BEFORE
+  # OPNsense's dnsmasq is up, so Talos generates a `talos-xxx` name and rejoins as a GHOST.
+  # Recovery is the reclaim-reboot runbook (docs/runbook.md → "Power-loss / ghost nodes").
   config_patches = concat(
     [yamlencode({
       machine = {

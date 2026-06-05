@@ -97,6 +97,33 @@ formatted+mounted via `metal.tf` `optane_disks` and registered with
   hostNetwork pod on the same L2 segment (the jail is NAT'd and can't). Set BIOS boot order
   disk-first or wake→Ready takes ~5 min of PXE timeouts.
 
+## Power-loss / ghost-node recovery
+
+After a **simultaneous cold power-cycle** (whole lab loses power), metal Talos nodes can rejoin
+under generated `talos-xxx` hostnames — they DHCP-discover before OPNsense's dnsmasq is back up, so
+Talos can't get its reserved hostname and makes one up. Symptoms: `kubectl get nodes` shows
+`talos-xxx` ghosts next to (or instead of) the real metal names, volumes fail to attach
+(Multi-Attach / "driver.longhorn.io not found"). The hostname can't be pinned in config (see
+`tofu/metal.tf`), so recover with reboots:
+
+1. **Reboot each ghosted metal node** to reclaim its reserved hostname (dnsmasq is healthy now):
+   `devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> reboot`. Do storage nodes
+   (hp-01/thinkcentre) **one at a time** (talosctl reboot blocks until healthy). The node returns
+   as its real name; the `talos-xxx` object goes NotReady.
+2. **If a Longhorn volume is wedged:** force-delete the stuck `discover-proc-kubelet-cmdline` pod
+   (`kubectl -n longhorn-system delete pod discover-proc-kubelet-cmdline --force --grace-period=0`)
+   to unblock the CSI driver; force-delete any workload pods stranded on ghost nodes to clear a
+   Multi-Attach (`kubectl -n <ns> delete pod <p> --force --grace-period=0`), then delete+recreate
+   the live workload pod so the RWO volume attaches.
+3. **Delete the stale ghost k8s nodes:** `kubectl delete node talos-aaa talos-bbb ...` (only once
+   the real names are back Ready).
+4. **Clean stale Longhorn node CRs** (deletion is refused while schedulable): `kubectl -n
+   longhorn-system patch nodes.longhorn.io <ghost> --type=merge -p
+   '{"spec":{"allowScheduling":false,"evictionRequested":true}}'` — Longhorn then auto-GCs them.
+5. **Verify:** `devbox run nodes` (real names only, Ready), all Longhorn volumes `attached`+`healthy`.
+
+(VMs are unaffected — they get their identity from nocloud, not DHCP timing.)
+
 ## Home Assistant
 
 Deployed in-cluster (`tofu/homeassistant.tf`), VIP `192.168.40.10:8123`, HTTPS at
