@@ -1,15 +1,18 @@
 # Smart-plug power monitoring — corrected scaling.
 #
-# The Tuya cloud integration reports these plugs' power in 0.1 W units (deci-watts),
-# so the raw `sensor.<plug>_power` reads 10x too high (e.g. 177 -> 17.7 W). These
-# template sensors divide by 10 to give true watts. (If you later enable current/voltage:
-# Tuya current is usually mA -> /1000, voltage dV -> /10.)
+# IMPORTANT: scaling differs by plug MODEL, do NOT blanket-correct.
+#   - OLD plugs (Konditsioneer, Aquarium): Tuya reports power in deci-watts and voltage in
+#     deci-volts, so raw reads 10x too high (power 186 -> 18.6 W, voltage 2330 -> 233 V).
+#     These need the /10 correction below. (Current is already in A — no correction.)
+#   - NEW plugs (smart_plug / smart_plug_2/3/4 = pve / OPNsense / X240 / X250): already report
+#     true W and V — use their raw sensors directly. Do NOT divide these by 10.
 #
 # TODO: revisit once the local-API model for Tuya/Shelly/Xiaomi/Dreame is chosen — the
-# goal is to drop the Tuya CLOUD dependency, at which point these sources change but the
+# goal is to drop the Tuya CLOUD dependency, at which point these sources change and the
 # /10 correction can go away. Source of truth in git; copied into the HA /config PV.
 template:
   - sensor:
+      # --- Konditsioneer (ThinkCentre AC plug) ---
       - name: "Konditsioneer Power (corrected)"
         unique_id: konditsioneer_power_corrected
         unit_of_measurement: "W"
@@ -18,6 +21,15 @@ template:
         availability: "{{ states('sensor.konditsioneer_power') not in ['unknown', 'unavailable', 'none'] }}"
         state: "{{ states('sensor.konditsioneer_power') | float(0) / 10 }}"
 
+      - name: "Konditsioneer Voltage (corrected)"
+        unique_id: konditsioneer_voltage_corrected
+        unit_of_measurement: "V"
+        device_class: voltage
+        state_class: measurement
+        availability: "{{ states('sensor.konditsioneer_voltage') not in ['unknown', 'unavailable', 'none'] }}"
+        state: "{{ states('sensor.konditsioneer_voltage') | float(0) / 10 }}"
+
+      # --- Aquarium ---
       - name: "Aquarium Power (corrected)"
         unique_id: aquarium_power_corrected
         unit_of_measurement: "W"
@@ -25,3 +37,11 @@ template:
         state_class: measurement
         availability: "{{ states('sensor.aquarium_power') not in ['unknown', 'unavailable', 'none'] }}"
         state: "{{ states('sensor.aquarium_power') | float(0) / 10 }}"
+
+      - name: "Aquarium Voltage (corrected)"
+        unique_id: aquarium_voltage_corrected
+        unit_of_measurement: "V"
+        device_class: voltage
+        state_class: measurement
+        availability: "{{ states('sensor.aquarium_voltage') not in ['unknown', 'unavailable', 'none'] }}"
+        state: "{{ states('sensor.aquarium_voltage') | float(0) / 10 }}"
