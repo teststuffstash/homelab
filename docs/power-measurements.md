@@ -20,18 +20,25 @@ kubectl run powertest --restart=Never --image=colinianking/stress-ng \
 Poll the node's plug power for ~3 min (`homeassistant_sensor_power_w{entity="sensor.plug_<box>_power"}`
 or the HA `/api/states`), record the peak, then `delete pod` + `uncordon`.
 
-## Results — 2026-06-05
+## Results — 2026-06-05 (stress-ng `matrixprod`)
 
-| Node | Hardware | CPUs | Idle (W) | Full-load (W) | CPU delta |
-|---|---|---|---|---|---|
-| `thinkcentre` | Lenovo ThinkCentre Edge (desktop) | 2 | 27.9 | **52.5** (~50 steady) | ~+25 W |
-| `wk-metal-01` | ThinkPad **X240** (laptop) | 4 | 9.1 | **23.3** (flat) | ~+14 W |
+The full structured inventory + regenerated tables live in
+[`../machines/`](../machines/README.md) (source: `machines/machines.yaml`). Headline:
+
+| Node | Hardware | Cores | Idle (W) | Load (W) | 1-core (bogo/s) | Multi (bogo/s) | **Perf/W** |
+|---|---|---|---|---|---|---|---|
+| `thinkcentre` | ThinkCentre Edge (desktop) | 2 | 27.9 | 54.5 | 1200.4 | 2231.7 | **40.9** |
+| `wk-metal-01` | ThinkPad X240 (laptop) | 4 | 9.1 | 28.8 | 1182.1 | 1932.2 | **67.1** |
+
+**The laptop is ~64% more power-efficient** (67 vs 41 bogo-ops/s per watt) and idles ~3× lower
+(9 W vs 28 W). Per-core throughput is basically tied (1200 vs 1182), so the win is purely power:
+mobile silicon + a ~29 W power cap vs the desktop's ~54 W. The desktop has higher *absolute*
+throughput (2232 vs 1932) but pays far more watts for it.
 
 Notes:
-- The **X240's draw held a dead-flat 23.3 W** under sustained load — a laptop's AC draw is
-  battery-buffered and regulated, so this is the wall draw at full load with a charged battery
-  (a mobile low-TDP CPU → small delta). The desktop ThinkCentre scales more (~2× idle).
-- **Plug identification (bonus):** stressing the X240 made **`laptop3`** jump (9→23 W) while
-  `laptop4` stayed flat → **`laptop3` = X240 (wk-metal-01)**, **`laptop4` = X250 (wk-metal-02)**.
+- The X240's AC draw is battery-buffered + power-capped (held a flat ~29 W), so that's its wall
+  draw at full load with a charged battery.
+- **Plug identification (bonus):** stressing the X240 made `laptop3` jump while `laptop4` stayed
+  flat → `laptop3` = X240 (wk-metal-01), `laptop4` = X250 (wk-metal-02).
 - Not measured: `hp-01` (no smart plug); `pve` / `opnsense` (didn't want to stress the
-  hypervisor / router). Their idle draws (from the dashboard): pve ~127 W, opnsense ~57 W.
+  hypervisor / router) — idle draws from the dashboard are ~127 W / ~57 W.

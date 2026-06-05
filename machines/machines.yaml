@@ -1,0 +1,89 @@
+# Homelab machine inventory + benchmarks. Single source of truth — expand freely, then
+# regenerate the tables with:  python3 machines/generate.py   (writes machines/README.md + .html)
+#
+# Benchmark = stress-ng `--cpu N --cpu-method matrixprod` bogo-ops/s (synthetic; only comparable
+# across these runs, not a real-world score). See docs/power-measurements.md for the method.
+# Derived columns (perf/W, load delta) are computed by the generator — don't hand-edit them.
+#
+# Fields (leave null/omit what's not measured yet):
+#   name, role, hardware, cpu_cores (logical), memory_gb, ip, plug (HA entity),
+#   idle_w, load_w, singlecore_bogo_s, multicore_bogo_s, notes
+
+machines:
+  - name: pve
+    role: Proxmox hypervisor (hosts the Talos VMs + Matchbox LXC)
+    hardware: AliExpress X99 + Intel Xeon E5-2680 v4
+    cpu_cores: 28        # 14C / 28T
+    memory_gb: 64
+    ip: 192.168.2.3
+    plug: sensor.plug_pve_power
+    idle_w: 127
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Idle figure is from the dashboard; not stress-tested (don't want to stress the hypervisor).
+
+  - name: opnsense
+    role: Router / firewall / DHCP / DNS / FRR / HAProxy
+    hardware: HP desktop ("Big Data")
+    cpu_cores: 4         # i5-2500
+    memory_gb: 8
+    ip: 192.168.2.1
+    plug: sensor.plug_opnsense_power
+    idle_w: 57
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Not stress-tested (production router).
+
+  - name: thinkcentre
+    role: k8s worker (storage tier + Optane fast tier)
+    hardware: Lenovo ThinkCentre Edge
+    cpu_cores: 2
+    memory_gb: 4
+    ip: 192.168.2.53
+    plug: sensor.plug_konditsioneer_power
+    idle_w: 27.9
+    load_w: 54.5
+    singlecore_bogo_s: 1200.4
+    multicore_bogo_s: 2231.7
+    notes: Desktop — highest absolute throughput of the tested boxes, but thirsty.
+
+  - name: wk-metal-01
+    role: k8s worker (ephemeral / compute tier, tainted)
+    hardware: Lenovo ThinkPad X240
+    cpu_cores: 4         # 2C / 4T
+    memory_gb: 8
+    ip: 192.168.2.182
+    plug: sensor.plug_laptop3_power
+    idle_w: 9.1
+    load_w: 28.8
+    singlecore_bogo_s: 1182.1
+    multicore_bogo_s: 1932.2
+    notes: Most power-efficient tested. AC draw is battery-buffered + power-capped (~29 W flat).
+
+  - name: wk-metal-02
+    role: k8s worker (ephemeral / compute tier, tainted)
+    hardware: Lenovo ThinkPad X250
+    cpu_cores: 4
+    memory_gb: 8
+    ip: 192.168.2.183
+    plug: sensor.plug_laptop4_power
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Not yet stress-tested — matched-pair candidate vs the X240.
+
+  - name: hp-01
+    role: k8s worker (storage tier, WoL-capable)
+    hardware: HP desktop
+    cpu_cores: null
+    memory_gb: 8
+    ip: 192.168.2.54
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: No smart plug — power not measurable from here.
