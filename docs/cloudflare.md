@@ -1,8 +1,17 @@
 # Cloudflare — remote access design (in progress)
 
 Goal: reach **Home Assistant from the phone, anywhere**, and move `teststuff.net` DNS to
-Cloudflare. Status: **design agreed, not yet built.** This doc is the decision record; build it as
-a separate tofu root `tofu/cloudflare/` (own state, like `tofu/provisioning/`).
+Cloudflare. Status: **LIVE (applied + verified 2026-06-06).** NS cutover done; both tofu roots
+applied; tunnel healthy; `https://ha.teststuff.net` returns **403 without a client cert** (mTLS +
+WAF enforcing) and tunnels to HA with the cert. Phone `.p12` built at `~/.claude/cloudflare/
+ha-client.p12` (password in the sibling `.password` file). Remaining: install the `.p12` on the
+phone + swap OPNsense ACME Route53→Cloudflare (LAN cert renewals break until then). This doc is the decision record. Two separate roots (own state, like
+`tofu/provisioning/`): `tofu/cloudflare-token/` (mints the scoped write token, applied once with
+an admin token) and `tofu/cloudflare/` (the infra, applied with that scoped token). See each
+root's `README.md` for the apply runbook.
+
+Live IDs: account `07b08646b26bb43cd3073826f43b73da`, zone `teststuff.net` =
+`6b63f95592a9e036f8b8f6934511d321` (Free plan, **active**).
 
 ## Decisions
 
@@ -46,26 +55,44 @@ For a proxied hostname `ha.teststuff.net` served via Tunnel:
 mTLS lives at steps 2 (validate) + 3 (enforce). CNAME gotcha: enable mTLS on the **specific
 hostname**, not the CNAME target.
 
-## Planned `tofu/cloudflare/` contents
+## What `tofu/cloudflare/` actually contains (built 2026-06-06, v5)
 
-- Free zone for `teststuff.net`; `cf-terraforming` to import existing records after the NS cutover.
-- `cloudflare_zero_trust_tunnel_cloudflared` + config (ingress `ha.teststuff.net` → in-cluster HA),
-  DNS CNAME → tunnel, tunnel token → k8s secret → a `cloudflared` Deployment.
-- Client-cert mTLS: Cloudflare-managed CA client cert (BYO-CA is the Enterprise gate) + per-host
-  mTLS enable + the WAF custom rule (`cloudflare_ruleset`, phase `http_request_firewall_custom`).
-- Confirm exact resource/permission-group names against the **Docs MCP** at build time (don't trust
-  stale model memory — this initiative already produced one wrong call that the MCP caught).
+The zone imported **zero** records (clean slate) — so we build all records, no `cf-terraforming`.
+v5 resource names (verified against the provider's GitHub docs, then `tofu validate`d):
+
+- `cloudflare_zero_trust_tunnel_cloudflared` (`config_src = "cloudflare"`, remotely-managed) +
+  `cloudflare_zero_trust_tunnel_cloudflared_config` (config is an **object**: `config = { ingress
+  = [...] }`, not v4 `ingress_rule {}` blocks) + `data.…_cloudflared_token` (`.token`).
+- **The tunnel resource has no `.cname` in v5** — the DNS target is
+  `${tunnel.id}.cfargotunnel.com`. `cloudflare_dns_record` uses `content` (not `value`):
+  `ha` CNAME → tunnel (proxied), `*.local` A → 127.0.0.1 (DNS-only).
+- mTLS: `tls_private_key` + `tls_cert_request` → `cloudflare_client_certificate` (zone managed-CA
+  signs the CSR) + `cloudflare_certificate_authorities_hostname_associations` (no
+  `mtls_certificate_id` ⇒ managed CA; **per-zone singleton**) + `cloudflare_ruleset` (zone,
+  `http_request_firewall_custom`, **list** `rules = [{…}]`) enforcing
+  `(http.host eq "ha.teststuff.net" and not cf.tls_client_auth.cert_verified)` → block.
+- k8s: `cloudflared` namespace/secret/Deployment (2 replicas, image **digest-pinned** 2026.5.2,
+  `TUNNEL_TOKEN` from the secret).
+- `.p12` for the phone is produced from two sensitive outputs via the `make_p12_command` output.
+
+> Lesson confirmed: don't trust stale model memory for CF v5 — the GitHub provider docs + a
+> credential-free `tofu validate` caught every renamed resource/attribute before any apply.
 
 ## RBAC / scoped tokens
 
 Least-privilege, per-job, never one god-token; manage tokens as IaC (`cloudflare_api_token`) with
 TTL + IP filtering (pin agent/metrics tokens to the cluster egress IP):
 
-| Token | Scope |
-|---|---|
-| `tofu-apply` | DNS:Edit (zone), Tunnel:Edit, + for mTLS: `Access: Mutual TLS Certificates Write`, `Access: Apps and Policies Write` |
-| `agent-read` | read-only (DNS/Analytics/Zero Trust Read) — for the MCP / a future in-cluster agent |
-| `metrics-read` | Analytics:Read — for `cloudflare-prometheus-exporter` (later, into the monitoring stack) |
+| Token | Scope | Status |
+|---|---|---|
+| `homelab-tofu-apply` | zone policy: `DNS Write` + `SSL and Certificates Write` + `Zone WAF Write` (scoped to the teststuff.net zone); account policy: `Cloudflare Tunnel Write`. Minted by `tofu/cloudflare-token/`. | **built** |
+| `read-key` | account-wide read-only (created in dashboard) — used to inventory the zone during the build; lives at `~/.claude/cloudflare/read-key`. | live |
+| `agent-read` | read-only (DNS/Analytics/Zero Trust Read) — for the MCP / a future in-cluster agent | planned |
+| `metrics-read` | Analytics:Read — for `cloudflare-prometheus-exporter` (later, into the monitoring stack) | planned |
+
+Note: mTLS here is **API-Shield / SSL Client-Certificate** (managed CA), so the write token needs
+`SSL and Certificates Write` — **not** the `Access: Mutual TLS …` groups (those are the Enterprise
+Access path we deliberately avoided). The earlier draft of this table was wrong on that point.
 
 ## Route53 → Cloudflare: record decisions (2026-06-05)
 
@@ -85,8 +112,9 @@ Cleanup of the Route53 zone + the associated **ACM/Sectigo certs** (the `_*` val
 imply leftover ACM certificates) is the first job for the AWS-IaC track (`tofu/aws/`), done as a
 reviewable delete-diff after a read-only audit. See [[cloudflare-direction]] and the AWS auth notes.
 
-## The nameserver cutover (one-time, manual)
+## The nameserver cutover (one-time, manual) — ✅ DONE
 
+`teststuff.net` now resolves on Cloudflare (zone **active**, Free plan). Historical mechanics:
 `teststuff.net` is **registered at AWS Route53 Domains** (as are `eid-demo.com` + `taranortaltest.net`).
 So the NS change is done there: **Route53 Domains → Registered domains → teststuff.net → Edit name
 servers** → replace the four `awsdns` NS with Cloudflare's two. `eid-demo.com` already shows the
