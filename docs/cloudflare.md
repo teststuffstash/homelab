@@ -146,9 +146,28 @@ reviewable delete-diff after a read-only audit. See [[cloudflare-direction]] and
 So the NS change is done there: **Route53 Domains → Registered domains → teststuff.net → Edit name
 servers** → replace the four `awsdns` NS with Cloudflare's two. `eid-demo.com` already shows the
 target state (`benedict`/`paris.ns.cloudflare.com`). Keep teststuff.net's **auto-renew ON** (expires
-2026-08-16, mid-migration). After cutover the Route53 hosted zone for teststuff.net is orphaned
-(like eid-demo.com's) and can be deleted. AWS cruft cleanup (S3/ACM/CloudMap/old zones) was done
+2026-08-16, mid-migration). AWS cruft cleanup (S3/ACM/CloudMap/old zones) was done
 2026-06-05 via `scripts/aws-cleanup-legacy.sh`.
+
+### TODO: delete the orphaned Route53 hosted zone for teststuff.net
+
+After cutover the Route53 **hosted zone** `teststuff.net` (`ZCGRPARGVE3CW`) is orphaned — the
+registrar NS point at Cloudflare, so it serves nothing. As of 2026-06-06 it still holds the default
+`NS` + `SOA` and a stale `burger.teststuff.net A 192.168.2.3` (a dead internal record — also an
+internal-IP leak; it was on the delete list). Route53 only deletes a zone once it contains *just*
+the apex NS+SOA, so remove `burger` first. Needs your admin SSO (the jail key is read-only):
+
+```bash
+aws sso login --profile rasmus
+ZID=ZCGRPARGVE3CW
+# 1. delete the stale burger A record
+aws route53 change-resource-record-sets --hosted-zone-id $ZID --change-batch '{"Changes":[{"Action":"DELETE","ResourceRecordSet":{"Name":"burger.teststuff.net.","Type":"A","TTL":300,"ResourceRecords":[{"Value":"192.168.2.3"}]}}]}'
+# 2. delete the zone (apex NS+SOA go automatically)
+aws route53 delete-hosted-zone --id $ZID
+```
+
+NB: this is the **hosted zone** (DNS records), not the **registered domain** — leave the domain
+registration (Route53 Domains, auto-renew ON) alone; only its NS were repointed to Cloudflare.
 
 ## ⚠️ Migration side effect: ACME — swap coded, apply pending
 
