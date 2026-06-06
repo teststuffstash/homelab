@@ -21,8 +21,14 @@ variable "ha_hostname" {
 
 variable "ha_service" {
   type        = string
-  description = "In-cluster origin cloudflared forwards to (the HA ClusterIP service)."
-  default     = "http://home-assistant.home-assistant.svc.cluster.local:8123"
+  description = <<-EOT
+    In-cluster origin cloudflared forwards to (the HA ClusterIP service).
+    NOTE the TRAILING DOT — it forces an absolute FQDN so the Go resolver skips the pod's
+    search domains. Without it, ndots:5 makes cloudflared append `teststuff.net`, producing
+    `…svc.cluster.local.teststuff.net`, which matches the `*.local.teststuff.net -> 127.0.0.1`
+    wildcard and makes cloudflared dial its own loopback (502).
+  EOT
+  default     = "http://home-assistant.home-assistant.svc.cluster.local.:8123"
 }
 
 variable "cloudflared_image" {

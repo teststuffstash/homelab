@@ -78,6 +78,33 @@ v5 resource names (verified against the provider's GitHub docs, then `tofu valid
 > Lesson confirmed: don't trust stale model memory for CF v5 — the GitHub provider docs + a
 > credential-free `tofu validate` caught every renamed resource/attribute before any apply.
 
+## Rollout gotchas (hit + fixed 2026-06-06)
+
+Two stacked bugs after the first apply, worth remembering:
+
+1. **502, cloudflared dialing `127.0.0.1`.** The connector pod's `resolv.conf` has
+   `search … teststuff.net` + `ndots:5`, so the Go resolver appended search domains to the
+   origin FQDN `home-assistant.home-assistant.svc.cluster.local` → tried
+   `…svc.cluster.local.teststuff.net`, which **matches the `*.local.teststuff.net → 127.0.0.1`
+   wildcard** (the name ends in `.local.teststuff.net`). cloudflared took that first answer and
+   dialed loopback. Fix: a **trailing dot** on the origin host (`…svc.cluster.local.:8123`) →
+   absolute name, no search expansion. ⚠️ This is a cluster-wide landmine: any client using a
+   full `.cluster.local` name *without* a trailing dot can hit the wildcard.
+2. **400, "reverse proxy not configured".** HA rejects requests carrying `X-Forwarded-For`
+   unless trust is configured. cloudflared sends XFF; the LAN HAProxy path does **not**, which
+   is why HAProxy worked with no `http:` block. Fix: `http.use_x_forwarded_for: true` +
+   `trusted_proxies: [10.244.0.0/16]` (cluster pod CIDR) in `homeassistant/ha-config/
+   configuration.yaml`. `http` only loads at startup → needs a full HA restart, not a reload.
+3. **Client-side: `ERR_NAME_NOT_RESOLVED` on mobile after the record was created.** The phone
+   had cached the pre-existence NXDOMAIN for the mobile network; Chrome masked it (it uses DoH),
+   but the HA app's WebView uses the system resolver and kept failing. Force-stopping the app
+   doesn't clear the *system* DNS cache — **toggle airplane mode** (or reboot) to flush it. Not
+   an infra issue. (Persistent carrier-DNS failures: set Private DNS to `dns.google`.)
+4. **The HA companion app has two URLs.** Internal (used on the home WiFi SSID) should stay
+   `homeassistant.teststuff.net` (LAN HAProxy, no tunnel hop); External must be
+   `https://ha.teststuff.net` (the tunnel). `homeassistant.teststuff.net` is LAN-only (NXDOMAIN
+   off-LAN), so an External URL pointed at it works on WiFi and dies on mobile.
+
 ## RBAC / scoped tokens
 
 Least-privilege, per-job, never one god-token; manage tokens as IaC (`cloudflare_api_token`) with
@@ -123,11 +150,30 @@ target state (`benedict`/`paris.ns.cloudflare.com`). Keep teststuff.net's **auto
 (like eid-demo.com's) and can be deleted. AWS cruft cleanup (S3/ACM/CloudMap/old zones) was done
 2026-06-05 via `scripts/aws-cleanup-legacy.sh`.
 
-## ⚠️ Migration side effect: ACME
+## ⚠️ Migration side effect: ACME — swap coded, apply pending
 
-Certs are currently issued **DNS-01 via Route53** (`ansible/opnsense-acme.yml`,
-`ACME_AWS_KEY/SECRET`). Moving the zone to Cloudflare **breaks that** — swap the OPNsense
-os-acme-client to the Cloudflare DNS provider (scoped CF token) or renewals silently fail.
+Certs were issued **DNS-01 via Route53**; the NS move **breaks that** (LE queries the
+authoritative NS = now Cloudflare). The swap is now **in code**, pending apply:
+
+- **Token:** `tofu/cloudflare-token/acme-dns.tf` mints `homelab-acme-dns` (Zone:Read + DNS:Edit
+  on teststuff.net only) → output `acme_dns_token`.
+- **OPNsense:** `ansible/opnsense-acme.yml` now uses `dns_service: dns_cf` — it **repoints the
+  existing `aws-acme` validation in place** (backend `dns_aws → dns_cf`), so the 5 certs that
+  bind to that name need no change. Token via `ACME_CF_TOKEN` env; account/zone IDs are vars.
+
+Apply order:
+```bash
+# 1. (outside jail, admin token) mint + save the scoped ACME token
+export CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/admin-key)
+tofu -chdir=tofu/cloudflare-token apply
+tofu -chdir=tofu/cloudflare-token output -raw acme_dns_token \
+  > ~/Projects/.claude-data/cloudflare/acme-token && chmod 600 $_
+# 2. (jail) swap the validation backend
+export ACME_CF_TOKEN=$(cat ~/.claude/cloudflare/acme-token)
+bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml
+# 3. force one re-issue in the OPNsense GUI (or acmeclient) to confirm DNS-01 via Cloudflare,
+#    then the rest renew on schedule.
+```
 
 ## Cloudflare MCP
 

@@ -6,6 +6,15 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
+# Reverse-proxy trust: cloudflared (Cloudflare Tunnel, tofu/cloudflare/) forwards requests
+# from the cluster pod network with X-Forwarded-For; without this HA returns 400. The LAN
+# HAProxy path is unaffected — HAProxy doesn't send XFF. http config only loads at startup,
+# so changing this needs a full HA restart (not reload). See docs/cloudflare.md.
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 10.244.0.0/16 # cluster pod CIDR (cloudflared pods)
+
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
