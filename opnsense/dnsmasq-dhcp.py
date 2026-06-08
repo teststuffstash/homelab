@@ -35,7 +35,6 @@ OPTIONS = [  # explicit router + DNS so clients get the gateway / Unbound resolv
     {"type": "set", "option": "6", "interface": INTERFACE, "value": "192.168.2.1"},
 ]
 HOSTS = [  # static reservations preserved from ISC
-    {"host": "netboot", "hwaddr": "00:1e:37:8c:a2:8f", "ip": "192.168.2.2"},
     {"host": "pve", "hwaddr": "22:24:4d:07:03:76", "ip": "192.168.2.3"},
     {"host": "BRN_8D63B8", "hwaddr": "00:80:77:8d:63:b8", "ip": "192.168.2.4"},
     # bare-metal Talos worker (ThinkPad X240) — pinned so the maintenance-mode IP

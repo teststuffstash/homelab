@@ -45,7 +45,7 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `homeassistant.tf` — Home Assistant via the kubernetes provider: namespace, **Longhorn** PVC,
   Deployment, and a `LoadBalancer` Service pinned to VIP `192.168.40.10`
   (`lbipam.cilium.io/ips` + `bgp=advertise`).
-- `unifi.tf` — UniFi Network Application + MongoDB on Longhorn (replaces the dead T61 controller);
+- `unifi.tf` — UniFi Network Application + MongoDB on Longhorn (replaces the previous Docker controller);
   `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP). **Applied & live**; image pinned by digest.
 - `longhorn.tf` — Longhorn storage (default StorageClass, replicated) + a `longhorn-fast`
   node-local tier on the ThinkCentre's Optane.

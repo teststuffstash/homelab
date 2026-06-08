@@ -49,8 +49,6 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 
 Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
-The **Lenovo T61 (.2) is dead/retired** — it used to run netboot.xyz + the UniFi controller, both
-since migrated. Anything in old docs about the T61 serving things is stale.
 
 ### Service exposure
 
@@ -97,8 +95,6 @@ Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuf
 - `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
 - `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
   decision history in `docs/adr.md`.
-- `rocky/`, `ubuntu/`, `cloud-init.yml`, `netboot.xyz/`, `pfsense/` — legacy/full-OS provisioning,
-  mostly superseded by the Talos/Matchbox path.
 
 ## Secrets
 

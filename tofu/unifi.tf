@@ -1,5 +1,5 @@
-# UniFi Network Application on the cluster — replaces the controller that ran in
-# Docker on the (now-dead) Lenovo T61. Uses the same linuxserver image + an external
+# UniFi Network Application on the cluster — replaces the previous Docker-based
+# controller. Uses the same linuxserver image + an external
 # MongoDB, exposed on a Cilium BGP LoadBalancer VIP so access points can be pointed
 # at it with `set-inform http://192.168.40.12:8080/inform`.
 #

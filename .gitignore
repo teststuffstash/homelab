@@ -1,5 +1,4 @@
 /.idea/
-/netboot.xyz/config/
 
 # Claude Code: personal/local settings (permissions allowlist) stay out of git;
 # shared project skills under .claude/skills/ ARE committed.

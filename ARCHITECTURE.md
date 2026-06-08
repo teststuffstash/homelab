@@ -84,7 +84,7 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
 flowchart TB
     subgraph COMPUTE["Compute"]
         C1["Proxmox (X99) · bare-metal fleet · Talos VMs · Civo (cloud burst)"]
-        C2["Provisioning: netboot.xyz · Matchbox (MAC table) · WoL / AMT / smart-plug power"]
+        C2["Provisioning: Matchbox (MAC table) · WoL / AMT / smart-plug power"]
     end
     subgraph DATA["Data"]
         D1["local-lvm · Longhorn · S3 / MinIO (backups, bucket-in-git) · Postgres/MariaDB"]

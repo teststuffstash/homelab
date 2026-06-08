@@ -143,7 +143,7 @@ applied imperatively (`kubectl cp` + restart). Tokens at `~/.claude/homelab-ha/`
 
 ## UniFi
 
-Controller migrated off the dead T61 to the cluster (`tofu/unifi.tf`): linuxserver
+Controller runs in-cluster (`tofu/unifi.tf`): linuxserver
 unifi-network-application + Mongo 7.0 on Longhorn, VIP `192.168.40.12`. Image pinned by digest
 (UniFi Network 10.3.58). APs + the USW-Lite switch adopt via the inform host
 `ubiquiti.teststuff.net` (Unbound override → .40.12); reboot a device to force re-inform. **Do NOT

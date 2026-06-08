@@ -177,8 +177,9 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 5. **DHCP wiring** lives in **OPNsense**: two-stage chainload (hand `snponly`/`undionly`
    iPXE first, then iPXE re-requests the HTTP Matchbox script — gated by user-class to avoid a loop).
 
-> Keep **netboot.xyz** around for *ad-hoc/manual* installs (live distros, utilities);
-> Matchbox owns the *automated fleet* path. DHCP defaults to the Matchbox chain.
+> Matchbox owns the *automated fleet* path; DHCP defaults to the Matchbox chain. For
+> ad-hoc/manual installs (live distros, utilities) use a USB/ISO — the old **netboot.xyz**
+> is gone.
 
 ## Home Assistant on k8s (greenfield)
 
@@ -238,8 +239,8 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 - [ ] Re-onboard devices (greenfield); validate the existing ESPHome `droplet` against the new HA.
 - [ ] Decide recorder backend (SQLite-on-PV vs external Postgres).
 
-### Phase 3 — MAC-table provisioning pipeline (no IPMI) ✅ done (Matchbox on a Proxmox LXC, not the T61)
-- [ ] Stand up **Matchbox** (on the T61 or a VM); define groups/profiles: `talos-worker`, `proxmox`, `ubuntu`/`rocky`.
+### Phase 3 — MAC-table provisioning pipeline (no IPMI) ✅ done (Matchbox on a Proxmox LXC)
+- [ ] Stand up **Matchbox** (on an LXC/VM); define groups/profiles: `talos-worker`, `proxmox`, `ubuntu`/`rocky`.
 - [ ] Default behavior = **boot local disk**; install only when a MAC is in an install group.
 - [ ] Wire **OPNsense DHCP** two-stage iPXE chainload to Matchbox.
 - [ ] Enable **WoL** per box (BIOS + NIC + record MAC); add **HA smart-plug** power control; (AMT where available).
@@ -286,7 +287,7 @@ speed rebuilds + survive upstream rate-limits/outages.
 cluster.** Rationale: a cluster-resident cache is wiped on `tofu destroy` and creates a
 chicken-and-egg (the cluster needs the cache to pull the images that run the cache).
 - ⚠️ Note: OPNsense is **FreeBSD** — can't host Docker/OCI tooling directly. "Near OPNsense"
-  in practice = a small dedicated **Linux box / Proxmox LXC / the T61**, not literally on the router.
+  in practice = a small dedicated **Linux box / Proxmox LXC**, not literally on the router.
 - **Explicitly NOT Squid** (per decision) — and a forward proxy can't cache HTTPS without
   MITM CA distribution anyway.
 
@@ -308,7 +309,7 @@ on the same LAN box; consumed as an http **substituter** (nars are signed → sa
 
 **apt (Debian jail):** apt-cacher-ng on the same box (signed packages → HTTP-safe).
 
-**Still to decide:** Harbor vs Zot vs registry; which host (T61 vs new mini-PC vs LXC);
+**Still to decide:** Harbor vs Zot vs registry; which host (new mini-PC vs LXC);
 whether to bother with the nix/apt caches or just the image mirror first. Revisit with fresh eyes.
 
 Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://oneuptime.com/blog/post/2026-03-03-set-up-a-pull-through-cache-registry-mirror-in-talos/view) · [nh2/nix-binary-cache-proxy](https://github.com/nh2/nix-binary-cache-proxy)
@@ -323,9 +324,8 @@ Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://one
 - **Talos has no SSH/shell** — all via `talosctl`. Mindset shift from Rocky/Ubuntu.
 - **AMT security:** vPro/AMT is a powerful remote-management plane — set a strong password, keep it LAN-only, patch it. A neglected AMT is a backdoor.
 - **Secrets discipline** — doubly important with the public-repo goal; see `PUBLISH-CHECKLIST.md`.
-- **Current state (2026-06):** the T61 is **retired**; the UniFi controller now runs **in-cluster**
-  (`tofu/unifi.tf`, VIP `192.168.40.12`) and Matchbox runs on a **Proxmox LXC** (not the T61) — see
-  `docs/provisioning.md`. (Phase 3 was built there, not on the T61.)
+- **Current state (2026-06):** the UniFi controller runs **in-cluster** (`tofu/unifi.tf`, VIP
+  `192.168.40.12`) and Matchbox runs on a **Proxmox LXC** — see `docs/provisioning.md`.
 
 ## Immediate next actions (smallest useful steps)
 

@@ -40,9 +40,6 @@ FRR) and a trusted HTTPS name via OPNsense HAProxy:
 **Cloudflare Tunnel** + client-certificate **mTLS** (the `teststuff.net` zone now lives on Cloudflare;
 LAN names stay on local HAProxy). See [`docs/cloudflare.md`](docs/cloudflare.md).
 
-> The Lenovo T61 (.2) that used to run netboot.xyz + the UniFi controller is **dead/retired** —
-> both have been migrated into the cluster.
-
 ## Use
 
 ```bash

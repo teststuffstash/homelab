@@ -103,7 +103,7 @@ with the O-X-L collection, run through `scripts/opnsense-playbook.sh`. **Conside
 **Why:** no click-ops (principle #3); OPNsense has the API + an Ansible collection. **Consequences:**
 the collection **pin must track the os-frr/OPNsense version** (currently `25.7.8` for os-frr 1.52 /
 OPNsense 26.1); the generic `raw` module needs `action: post` for mutations; `unbound_host` needs a
-reconfigure handler. (pfSense config backup is legacy — slated for deletion, see PUBLISH-CHECKLIST.)
+reconfigure handler. (The legacy pfSense config backup + the `rocky/`/`netboot.xyz/` dirs were deleted for publish.)
 
 ### ADR-023 — LAN DHCP: dnsmasq, not ISC dhcpd
 **Status:** Accepted (2026-06). **Decision:** LAN DHCP via OPNsense dnsmasq, rebuilt idempotently by
@@ -153,11 +153,11 @@ WiFi traffic, no double-scrape, every future HA entity is monitored for free. **
 Alertmanager webhooks back into HA for notifications; one scrape token; needs the `monitoring` ns
 labelled PodSecurity=privileged (node-exporter host access).
 
-### ADR-043 — UniFi controller: in-cluster Network Application (not UniFi OS Server, not the T61)
+### ADR-043 — UniFi controller: in-cluster Network Application (not UniFi OS Server)
 **Status:** Accepted (2026-06). **Decision:** run linuxserver `unifi-network-application` + Mongo on
 Longhorn in-cluster (VIP `192.168.40.12`); APs adopt via the inform host `ubiquiti.teststuff.net`.
-**Considered:** UniFi OS Server, keeping the Docker controller on the (now dead) T61.
-**Why:** the T61 is retired; **UniFi OS Server needs privileged/systemd-PID1 and won't run on Talos**.
+**Considered:** UniFi OS Server, keeping the previous Docker-based controller.
+**Why:** the previous controller host was retired; **UniFi OS Server needs privileged/systemd-PID1 and won't run on Talos**.
 **Consequences:** image pinned by digest; devices re-inform on reboot; no UniFi-OS features.
 
 ### ADR-044 — Compute tiering: laptops tainted "ephemeral"
