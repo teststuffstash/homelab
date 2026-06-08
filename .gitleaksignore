@@ -1,0 +1,17 @@
+# gitleaks allowlist — known, historical, handled findings.
+#
+# This repo is published WITH its full git history (intentionally — mistakes are part of
+# the thought process). The findings below are device secrets from the early ESPHome configs
+# (commit 8fd6127b). They are accounted for:
+#   - the API *encryption key* (2Pdhh…) has been ROTATED — the historical value is dead.
+#   - the AP fallback password has been ROTATED — dead.
+#   - the OTA password (a997e595…) is still live on a LAN-only device (no WAN); rotation is
+#     pending a one-time USB flash. Worst case is "someone already on the WiFi could flash it."
+# The files themselves were deleted from the working tree; these entries silence the history hits.
+#
+# Format: <commit>:<file>:<rule>:<line>  (one fingerprint per line)
+
+8fd6127ba775033a5f838041c6904c0831650da9:esphome/config/trash/droplet.yaml:generic-api-key:16
+8fd6127ba775033a5f838041c6904c0831650da9:esphome/config/droplettest.yaml:generic-api-key:32
+8fd6127ba775033a5f838041c6904c0831650da9:esphome/config/droplettest.yaml:generic-api-key:111
+8fd6127ba775033a5f838041c6904c0831650da9:esphome/droplet.yml:generic-api-key:113
