@@ -145,7 +145,7 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
 - ✅ Cloudflare edge security at the public edge: client-certificate **mTLS** (WAF-enforced, not
   Enterprise Access) on `ha.teststuff.net`, plus **scoped per-job Cloudflare API tokens** as code
   (`tofu/cloudflare-token/`). AWS access is IAM Identity Center SSO (no static admin keys).
-- 🔜 SOPS+age (mandated before public — see `PUBLISH-CHECKLIST.md`), Cilium NetworkPolicy,
+- 🔜 SOPS+age (for anything that must live in git), Cilium NetworkPolicy,
   AMT hardening, OPNsense firewall as code.
 - ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.
 

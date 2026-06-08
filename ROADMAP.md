@@ -213,8 +213,8 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 - **IaC:** OpenTofu. **Providers:** `bpg/proxmox`, `siderolabs/talos`, `poseidon/matchbox`.
 - **Talos images:** Talos **Image Factory** schematics (e.g. `qemu-guest-agent` for VMs).
 - **CNI:** Cilium. **GitOps (later):** ArgoCD or Flux.
-- **Secrets:** SOPS + age (or sealed-secrets). **No plaintext secrets in git** — repo is
-  slated to go public (`PUBLISH-CHECKLIST.md`). Talos machine configs, `talosconfig`,
+- **Secrets:** SOPS + age (or sealed-secrets). **No plaintext secrets in git** — the repo is
+  public. Talos machine configs, `talosconfig`,
   `kubeconfig`, Proxmox/Matchbox/AMT creds must stay out; serve configs over the LAN-only
   provisioning host, never commit them.
 
@@ -323,7 +323,7 @@ Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://one
 - **HA radio = single point of failure** even on the network; the coordinator going down takes Zigbee with it (same as any HA setup).
 - **Talos has no SSH/shell** — all via `talosctl`. Mindset shift from Rocky/Ubuntu.
 - **AMT security:** vPro/AMT is a powerful remote-management plane — set a strong password, keep it LAN-only, patch it. A neglected AMT is a backdoor.
-- **Secrets discipline** — doubly important with the public-repo goal; see `PUBLISH-CHECKLIST.md`.
+- **Secrets discipline** — doubly important now the repo is public: no plaintext secrets in git.
 - **Current state (2026-06):** the UniFi controller runs **in-cluster** (`tofu/unifi.tf`, VIP
   `192.168.40.12`) and Matchbox runs on a **Proxmox LXC** — see `docs/provisioning.md`.
 

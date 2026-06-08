@@ -274,7 +274,7 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
 | R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds come from HA (defaults 60 %/180 s via `initial:`) |
 | R10 | **Lost OTA / API credentials** → can't manage remotely | Low | Low | OTA pw recorded in `~/.claude/homelab-droplet/`; API key in config; captive-portal/USB fallback |
-| R11 | **API encryption key committed in plaintext** in `office-plants-irrigation.yaml` | Certain | Low (LAN) / High if repo goes public | **Move to `secrets.yaml` before publishing** (see repo PUBLISH-CHECKLIST) |
+| R11 | **Device secrets (API key, OTA/AP passwords) in the config** | — | — | ✅ Moved to `!secret` (gitignored `secrets.yaml`); API key + AP password **rotated** (OTA pw pending a USB flash) |
 
 ---
 

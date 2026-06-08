@@ -229,7 +229,7 @@ no root, no static admin keys. The headless jail uses a **scoped read-only** key
 **Status:** Open / planned (2026-05-24). **Decision:** all credentials live outside git under
 `~/.claude/` today; anything that must live in git will be SOPS+age-encrypted before publishing.
 **Considered:** sealed-secrets, Vault, plaintext. **Why:** repo is public-by-default (principle #9);
-SOPS+age is simple and git-native. **Consequences:** mandated by `PUBLISH-CHECKLIST.md`; tofu state,
+SOPS+age is simple and git-native. **Consequences:** tofu state,
 `*.tfvars`, `kubeconfig`, `talosconfig` gitignored.
 
 ---

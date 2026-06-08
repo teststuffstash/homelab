@@ -102,8 +102,8 @@ Out-of-repo, in the jail under `~/.claude/`: `homelab-opnsense/{key,secret}` (OP
 `homelab-pve-ssh/` (Proxmox token + SSH seed key), `homelab-matchbox/` (gRPC client certs),
 `homelab-ha/` (Home Assistant tokens + Grafana pw), `homelab-droplet/`, `cloudflare/`
 (read/write/acme tokens + the phone `.p12`), `homelab-aws/` (scoped read-only audit key). Tofu state, `*.tfvars`,
-`kubeconfig`, `talosconfig` are gitignored. The repo is **slated to go public eventually** — keep
-secrets out of git (SOPS+age for anything that must live in git); see `PUBLISH-CHECKLIST.md`.
+`kubeconfig`, `talosconfig` are gitignored. The repo is **public** — keep secrets out of git
+(SOPS+age for anything that must live in git).
 
 ## Safety
 

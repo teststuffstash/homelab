@@ -86,8 +86,8 @@ export TF_VAR_proxmox_api_token='tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xx
 ```
 
 > The live cluster was bootstrapped with a broad `root@pam!tofu` token (in the gitignored
-> `terraform.tfvars`) — **burnable: rotate to a scoped `tofu@pve` token + SOPS before this
-> repo goes public** (see `../PUBLISH-CHECKLIST.md`). The SSH key bpg uses for disk import
+> `terraform.tfvars`) — **burnable: rotate to a scoped `tofu@pve` token + SOPS** (it was never
+> committed). The SSH key bpg uses for disk import
 > lives outside the repo at `~/.claude/homelab-pve-ssh/` (authorize its `.pub` in pve root's
 > `authorized_keys` — the one-time root-of-trust seed; no Proxmox API can inject it).
 
@@ -116,9 +116,8 @@ KUBECONFIG=$PWD/kubeconfig kubectl get nodes
 ## Secrets
 
 `talos_machine_secrets`, `talosconfig`, `kubeconfig`, and the Proxmox token are secret.
-`*.tfstate*`, `*.tfvars`, `kubeconfig`, `talosconfig` are gitignored. Before this repo goes
-public, the token + any state must be handled per `../PUBLISH-CHECKLIST.md` (SOPS for anything
-that must live in git).
+`*.tfstate*`, `*.tfvars`, `kubeconfig`, `talosconfig` are gitignored (never committed). Use
+SOPS for anything that must live in git.
 
 ## Done
 

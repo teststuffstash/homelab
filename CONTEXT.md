@@ -97,8 +97,8 @@ when a decision trades one of them away:
    reproduce? Favor clarity over cleverness.
 8. **Budget-conscious** — secondhand / AliExpress hardware, no enterprise BMC. Solve
    remote-management with vPro/AMT, WoL, smart plugs — not by buying IPMI servers.
-9. **Public by default** — everything here is heading to a **public repo**
-   (`PUBLISH-CHECKLIST.md`), so: no secrets in git, write it like someone will read it.
+9. **Public by default** — this is a **public repo**, so: no secrets in git, write it like
+   someone will read it.
 
 ## Standing constraints for the homelab
 
