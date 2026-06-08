@@ -1,0 +1,49 @@
+# Deployment config for the OPNsense router (group `opnsense`). The roles under
+# roles/opnsense-* hold the *logic*; the *values* live here — so when a role is
+# eventually extracted to its own git repo, only these values stay behind.
+#
+# Secrets are NOT here: the API key/secret and the ACME Cloudflare token come from
+# the environment (set by scripts/opnsense-playbook.sh from ~/.claude/...).
+
+# --- API connection (shared by all oxlorg.opnsense modules via module_defaults) ---
+opnsense_conn:
+  firewall: "{{ ansible_host }}"            # 192.168.2.1 (from the inventory)
+  api_key: "{{ lookup('env', 'OPN_API_KEY') }}"
+  api_secret: "{{ lookup('env', 'OPN_API_SECRET') }}"
+  ssl_verify: false                          # default self-signed cert
+
+# --- opnsense-bgp : FRR/BGP peering with Cilium ---
+opnsense_asn: 64512
+cluster_asn: 64513
+bgp_router_id: "192.168.2.1"
+bgp_node_ips:                                # Talos nodes that peer (BGP neighbors)
+  - 192.168.2.51
+  - 192.168.2.61
+  - 192.168.2.62
+
+# --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
+acme_account_name: "TestStuff OPNSense"
+acme_account_email: "teststuffou@protonmail.com"
+acme_cf_account_id: "07b08646b26bb43cd3073826f43b73da"   # non-secret zone/account IDs
+acme_cf_zone_id: "6b63f95592a9e036f8b8f6934511d321"      # teststuff.net
+# ACME_CF_TOKEN comes from the env (only needed when (re)setting the validation).
+acme_cert_specs:                             # name + the service to reload post-issue
+  - { name: opnsense.teststuff.net, restart_action: "restart web gui" }
+  - { name: homeassistant.teststuff.net, restart_action: "reload haproxy" }
+  - { name: grafana.teststuff.net, restart_action: "reload haproxy" }
+  - { name: prometheus.teststuff.net, restart_action: "reload haproxy" }
+  - { name: alertmanager.teststuff.net, restart_action: "reload haproxy" }
+
+# --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
+# name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
+# existing objects match. One dedicated LAN IP-alias VIP each (every frontend binds
+# :443; OPNsense's own web UI owns .1:443).
+haproxy_proxied_services:
+  - { name: ha, cert_domain: homeassistant.teststuff.net, vip: 192.168.2.5, backend_ip: 192.168.40.10, backend_port: 8123 }
+  - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.2.6, backend_ip: 192.168.40.11, backend_port: 80 }
+  - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.2.7, backend_ip: 192.168.40.13, backend_port: 9090 }
+  - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
+
+# --- opnsense-unbound : static LAN host overrides not created by another role ---
+unbound_hosts:
+  - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }

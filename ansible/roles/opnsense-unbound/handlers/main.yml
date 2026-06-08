@@ -1,0 +1,3 @@
+---
+- name: reconfigure unbound
+  oxlorg.opnsense.raw: { module: unbound, controller: service, command: reconfigure, action: post }

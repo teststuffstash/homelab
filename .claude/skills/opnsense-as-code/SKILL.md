@@ -10,18 +10,21 @@ description: >
 
 # OPNsense as code
 
-OPNsense is managed with the `oxlorg.opnsense` Ansible collection. Never click-ops it — find the
-right playbook, edit it, and apply with the wrapper.
+OPNsense is managed with the `oxlorg.opnsense` Ansible collection, in a **roles layout**: edit the
+**config value in `ansible/group_vars/opnsense.yml`** (the logic lives in `ansible/roles/opnsense-*`),
+then apply the matching playbook with the wrapper. Never click-ops it.
 
-## Pick the playbook
+## Pick the value to edit (in `ansible/group_vars/opnsense.yml`) + playbook to run
 
-| Want to... | Edit | 
-|---|---|
-| Add/repoint a LAN DNS name | `ansible/opnsense-unbound-hosts.yml` (`unbound_hosts` list) |
-| Expose an in-cluster service as `<name>.teststuff.net` (HTTPS) | `ansible/opnsense-haproxy.yml` (`proxied_services`) — and add the cert in `opnsense-acme.yml` first |
-| Issue/renew a cert | `ansible/opnsense-acme.yml` (`cert_specs`) |
-| BGP/FRR peering with Cilium | `ansible/opnsense-bgp.yml` |
-| LAN DHCP (reservations, range) | `opnsense/dnsmasq-dhcp.py` (run `python3 opnsense/dnsmasq-dhcp.py` with OPN creds) |
+| Want to... | Edit (group_vars/opnsense.yml) | Run |
+|---|---|---|
+| Add/repoint a LAN DNS name | `unbound_hosts` | `ansible/opnsense-unbound.yml` |
+| Expose an in-cluster service as `<name>.teststuff.net` (HTTPS) | `haproxy_proxied_services` (issue the cert first) | `ansible/opnsense-haproxy.yml` |
+| Issue/renew a cert | `acme_cert_specs` | `ansible/opnsense-acme.yml` |
+| BGP/FRR peering with Cilium | `bgp_node_ips` / ASNs | `ansible/opnsense-bgp.yml` |
+| LAN DHCP (reservations, range) | — | `opnsense/dnsmasq-dhcp.py` (run `python3 opnsense/dnsmasq-dhcp.py` with OPN creds) |
+
+To change *behaviour* (not just values), edit the role's `roles/opnsense-<x>/tasks/main.yml`.
 
 ## Apply
 
@@ -36,7 +39,7 @@ interpreter as `-e` (required — `devbox run` strips the env var).
 ## Gotchas (also in docs/runbook.md)
 
 - The generic `raw` module needs `action: post` for any mutation (defaults to `get` → silent no-op).
-- `unbound_host` saves but does NOT apply — the playbook's reconfigure handler flushes Unbound.
+- `unbound_host` saves but does NOT apply — the `opnsense-unbound` role's reconfigure handler flushes Unbound.
   Match on `[hostname, domain, record_type]` (exclude `value`) so a repoint updates in place.
 - Verify DNS bypassing the jail's stale cache: `devbox run -- dig +short <name> @192.168.2.1`.
 - HAProxy frontends must have HTTP/2 disabled (WebSocket upgrade). Each needs its own LAN IP-alias

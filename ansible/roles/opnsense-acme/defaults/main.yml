@@ -1,0 +1,7 @@
+---
+# Defaults — real values live in group_vars/opnsense.yml.
+acme_account_name: "OPNsense ACME"
+acme_account_email: "admin@example.com"
+acme_cf_account_id: ""
+acme_cf_zone_id: ""
+acme_cert_specs: []

@@ -13,7 +13,7 @@
 /.venv/
 /.devbox/
 
-# ESPHome flash toolchain (created by `devbox run flash-droplet`): a pip venv +
+# ESPHome flash toolchain (created by `devbox run flash-irrigation`): a pip venv +
 # PlatformIO core/toolchain cache. Large, machine-local, regenerated on demand.
 /esphome/.flash-venv/
 /esphome/.platformio/

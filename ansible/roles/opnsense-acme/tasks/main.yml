@@ -1,0 +1,83 @@
+---
+# OPNsense ACME (Let's Encrypt) — TLS certs for the *.teststuff.net names.
+# DNS-01 via Cloudflare (the zone moved off Route53 — LE queries the Cloudflare NS).
+# Config (cert list, account, CF account/zone IDs) is in group_vars/opnsense.yml;
+# the connection comes from module_defaults in ansible/opnsense-acme.yml.
+#
+# Mint the scoped CF token with tofu/cloudflare-token/ (output acme_dns_token) and
+# pass it as ACME_CF_TOKEN — only needed when (re)setting the validation.
+#
+# Prereq: the os-acme-client plugin must be INSTALLED on OPNsense.
+
+- name: ACME general settings
+  oxlorg.opnsense.acme_general:
+    auto_renewal: true
+    challenge_port: 43580
+    tls_challenge_port: 43581
+    restart_timeout: 600
+    haproxy_integration: false
+
+# NOTE: `email` is CREATE-ONLY here — the acme_account module's change-detection set is
+# ['description','custom_ca','eab_kid','eab_hmac'], so it will NOT update the email of an
+# *existing* account. A fresh build registers with acme_account_email (boot-from-git);
+# to change it on a live box, edit it in the GUI (Services > ACME Client > Accounts) —
+# don't delete+recreate the account, the issued certs reference it by UUID.
+- name: Let's Encrypt account
+  oxlorg.opnsense.acme_account:
+    name: "{{ acme_account_name }}"
+    email: "{{ acme_account_email }}"
+    ca: letsencrypt
+    register: true
+
+# Post-issue/renewal actions: reload the service that serves each cert.
+- name: Restart-web-UI action (opnsense.teststuff.net)
+  oxlorg.opnsense.acme_action:
+    name: "restart web gui"
+    type: configd_restart_gui
+
+- name: Reload-HAProxy action (homeassistant/grafana/...)
+  oxlorg.opnsense.acme_action:
+    name: "reload haproxy"
+    type: configd_restart_haproxy
+
+# DNS-01 via Cloudflare. We UPDATE the existing `aws-acme` validation in place,
+# swapping its backend dns_aws -> dns_cf, so the certs (which bind to the name
+# `aws-acme`) need no change. The name is now just a retained identifier. Guarded on
+# the CF token being present: the swap run sets ACME_CF_TOKEN; later cert-adding runs
+# can omit it (OPNsense keeps the stored creds).
+- name: "Cloudflare DNS-01 validation (repoint aws-acme -> Cloudflare)"
+  oxlorg.opnsense.acme_validation:
+    name: aws-acme
+    method: dns01
+    dns_service: dns_cf
+    dns_cf_token: "{{ lookup('env', 'ACME_CF_TOKEN') }}"
+    dns_cf_account_id: "{{ acme_cf_account_id }}"
+    dns_cf_zone_id: "{{ acme_cf_zone_id }}"
+  when: lookup('env', 'ACME_CF_TOKEN') | length > 0
+
+# Certificate: managed create-if-absent (keyed on name), NOT full reconcile — the
+# acme_certificate module matches existing certs by `description`, but os-acme-client
+# 4.16 does not persist that field, so the module can never match an existing cert
+# and would append a duplicate on every run. Guarding on the cert name is safe on the
+# live box (skips) and correct on a fresh box (creates once).
+- name: List existing ACME certificates
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: search
+  register: acme_certs
+
+- name: "ACME certificate (create if absent)"
+  oxlorg.opnsense.acme_certificate:
+    description: "{{ item.name }}"
+    name: "{{ item.name }}"
+    alt_names: ["{{ item.name }}"]
+    account: "{{ acme_account_name }}"
+    validation: aws-acme
+    restart_actions: ["{{ item.restart_action }}"]
+    key_length: key_ec384
+    auto_renewal: true
+    renew_interval: 60
+  loop: "{{ acme_cert_specs }}"
+  loop_control: { label: "{{ item.name }}" }
+  when: item.name not in (acme_certs.response.rows | map(attribute='name') | list)

@@ -51,7 +51,7 @@ HOSTS = [  # static reservations preserved from ISC
     # under ISC; drifted to .19 after the dnsmasq migration, which broke HA's ESPHome
     # integration that's addressed at .245). Any HA/integration device referenced by a
     # fixed IP needs a reservation here.
-    {"host": "droplettest", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
+    {"host": "office-plants-irrigation", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
 ]
 
 

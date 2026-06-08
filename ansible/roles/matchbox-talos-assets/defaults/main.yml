@@ -1,0 +1,5 @@
+---
+# Defaults — real values live in group_vars/matchbox.yml.
+matchbox_assets: /var/lib/matchbox/assets
+talos_arch: amd64
+talos_factory_base: "https://factory.talos.dev/image"

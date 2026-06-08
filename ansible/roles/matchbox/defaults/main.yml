@@ -1,0 +1,8 @@
+---
+# Defaults — real values live in group_vars/matchbox.yml.
+matchbox_version: v0.11.0
+matchbox_arch: linux-amd64
+matchbox_data_dir: /var/lib/matchbox
+matchbox_tls_dir: /etc/matchbox
+matchbox_san: "DNS.1:matchbox"
+matchbox_client_cert_dest: /tmp/matchbox-client-certs

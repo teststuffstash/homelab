@@ -4,7 +4,7 @@
 # created above. On a from-scratch apply the LXC/service don't exist yet, so target
 # the container + run ansible/matchbox*.yml first, THEN apply these:
 #   tofu -chdir=tofu/provisioning apply -target=proxmox_virtual_environment_container.matchbox
-#   ansible-playbook -i '192.168.2.30,' ansible/matchbox.yml ansible/matchbox-talos-assets.yml
+#   ANSIBLE_CONFIG=ansible/ansible.cfg devbox run -- ansible-playbook ansible/matchbox.yml ansible/matchbox-talos-assets.yml
 #   tofu -chdir=tofu/provisioning apply
 # Steady-state (LXC already up) it's just a normal apply.
 provider "matchbox" {

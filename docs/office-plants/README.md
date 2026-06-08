@@ -7,7 +7,7 @@ with thresholds and per-plant run-times configured in **Home Assistant**.
 - **Owner:** Rasmus (homelab)
 - **Status:** in service (4 plants live)
 - **Source of truth:** this repo
-  - Firmware/config: [`esphome/config/droplettest.yaml`](../../esphome/config/droplettest.yaml)
+  - Firmware/config: [`esphome/config/office-plants-irrigation.yaml`](../../esphome/config/office-plants-irrigation.yaml)
   - HA helpers: [`homeassistant/ha-config/packages/irrigation.yaml`](../../homeassistant/ha-config/packages/irrigation.yaml)
   - HA dashboard: [`homeassistant/ha-config/dashboards/home.yaml`](../../homeassistant/ha-config/dashboards/home.yaml)
   - Monitoring: [`tofu/monitoring.tf`](../../tofu/monitoring.tf), HA export [`packages/prometheus.yaml`](../../homeassistant/ha-config/packages/prometheus.yaml), alert relay [`packages/alerting.yaml`](../../homeassistant/ha-config/packages/alerting.yaml) — see [§9 Monitoring](#9-monitoring-prometheus--grafana)
@@ -72,7 +72,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph office["Physical (office)"]
-      droplet["**Droplet** ESP32 @ 192.168.2.245<br/>ESPHome firmware<br/>pumps 1-4, soil 1-4, OLED, buzzer"]
+      droplet["**Droplet** ESP32 @ 192.168.2.245<br/>ESPHome firmware<br/>pumps 1-4, soil 1-4, buzzer"]
       pumps["4 pumps + soaker hoses"]
       sensors["4 capacitive soil sensors"]
       reservoir["Water reservoir"]
@@ -92,7 +92,7 @@ flowchart TB
       ha --- irr
     end
 
-    popos["pop-os 192.168.2.10<br/>ESPHome dashboard :6052<br/>(firmware builds/flash)"]
+    popos["any host w/ repo + devbox<br/>devbox run flash-irrigation<br/>(OTA firmware build/flash)"]
 
     droplet -. WiFi .-> aps
     droplet -->|SNTP| ntpd
@@ -117,14 +117,14 @@ attach to the controller on brass barbed fittings.
 
 | Component | Where | Address | Notes |
 |---|---|---|---|
-| Droplet controller | Office, mains/USB powered | `192.168.2.245` (`droplettest`, MAC `30:c6:f7:22:a8:fc`) | ESP32 `esp32dev`, ESPHome; always-on (no deep sleep) |
+| Droplet controller | Office, mains/USB powered | `192.168.2.245` (`office-plants-irrigation`, MAC `30:c6:f7:22:a8:fc`) | ESP32 `esp32dev`, ESPHome; always-on (no deep sleep) |
 | Pumps 1–4 | Droplet board outputs | GPIO 13 / 4 / 16 / 17 | one per plant, via soaker hoses |
 | Soil sensors 1–4 | Droplet ADC inputs | GPIO 34 / 35 / 32 / 33 | capacitive; calibrated dry 2.30 V→0 %, water 0.89 V→100 % |
 | Home Assistant | k8s (Talos) on Proxmox `pve` | VIP `192.168.40.10:8123`, `https://homeassistant.teststuff.net` (LAN), `https://ha.teststuff.net` (remote, Cloudflare Tunnel + mTLS) | thresholds, run-times, dashboard, time peer |
 | HA config (package + dashboard) | git → HA `/config` Longhorn PVC | `homeassistant/ha-config/...` | applied via `kubectl cp` + reload/restart |
 | WiFi | Ubiquiti APs | SSID `Walther` | UniFi controller now **in-cluster** (`192.168.40.12`, see [runbook](../runbook.md#unifi)); APs adopt via `ubiquiti.teststuff.net` |
 | NTP | OPNsense | `192.168.2.1` (+ `pool.ntp.org` fallback) | used for the day/night guard |
-| ESPHome dashboard | pop-os | `192.168.2.10:6052` | build + flash firmware |
+| ESPHome flash (devbox) | any host w/ repo + devbox | `devbox run flash-irrigation` | build + OTA-flash firmware |
 
 ---
 
@@ -137,15 +137,17 @@ All runtime tuning is in Home Assistant (dashboard card **"Watering time per pla
 |---|---|---|---|
 | Desired moisture | `input_number.moisture_level_for_pump1..4` | 0–100 % | water while `soil% < this` |
 | Run time per plant | `input_number.watering_seconds_pump1..4` | 5–600 s | how long that pump runs each pass |
-| Master enable | `switch.droplettest_droplet_auto_watering` | on/off | default off after fresh flash; restores last state on reboot |
-| Manual one-shot | `button.droplettest_droplet_water_now` | press | runs one cycle ignoring auto/daytime (still only waters below-threshold plants) |
+| Master enable | `switch.office_plants_irrigation_auto_watering` | on/off | default off after fresh flash; restores last state on reboot |
+| Manual one-shot | `button.office_plants_irrigation_water_now` | press | runs one cycle ignoring auto/daytime (still only waters below-threshold plants) |
 
 Behaviour constants (less-often changed) live as `substitutions:` at the top of
-`droplettest.yaml`: `check_interval` (15 min), `soak_seconds` (10 s), `day_start`/`day_end`
-(8/21), `watering_seconds` (60 s fallback only).
+`office-plants-irrigation.yaml`: `check_interval` (15 min), `soak_seconds` (10 s), `day_start`/`day_end`
+(8/21), `watering_seconds` (180 s fallback only).
 
-> **Note:** the HA helpers intentionally have **no `initial:`** value, so they *persist*
-> across HA restarts (a restart with `initial:` set silently resets them).
+> **Note:** the HA helpers set **`initial:`** to the proven defaults (**60 % desired, 180 s
+> run-time**), so a fresh deploy (boot-from-git) and any HA restart land on sane values. Tune
+> live with the dashboard sliders; a restart re-applies these initials — to change the default,
+> edit `irrigation.yaml`.
 
 > **Note:** desired moisture and run-times are read from HA over the encrypted ESPHome API.
 > If HA is unreachable those values are `NaN` and **no watering happens** (fail-safe).
@@ -183,7 +185,7 @@ flowchart LR
 | **NTP (OPNsense `.1` / pool)** | day/night guard (auto only) | clock invalid → daytime guard fails closed → **no auto watering** (manual Water Now still works) |
 | **Home Assistant** | thresholds + run-times | values go `NaN` → **no watering at all** (fail-safe) |
 | **Talos k8s + Proxmox `pve`** | hosting Home Assistant | HA down → see above |
-| **ESPHome dashboard (pop-os)** | firmware changes only | no runtime impact |
+| **ESPHome toolchain (devbox)** | firmware changes only | no runtime impact |
 
 Local-first: NTP and the cluster are on-LAN, so watering does **not** depend on the internet
 (public NTP is only a fallback).
@@ -199,18 +201,22 @@ Local-first: NTP and the cluster are on-LAN, so watering does **not** depend on 
 | Stop everything | turn **Auto Watering** off (and/or set thresholds to 0) |
 | Check soil readings | HA → Plant 1–4 sensors, or device `soilm_sens_N` |
 | Read raw sensor voltage | device diagnostic sensors `soilN_raw` (hidden by default; enable in HA or read via API) |
-| View logs | ESPHome dashboard (`192.168.2.10:6052`) → Logs, or `esphome logs` |
-| Update firmware | edit `droplettest.yaml` → OTA (see below) |
+| View logs | `devbox run irrigation-logs` |
+| Update firmware | edit `office-plants-irrigation.yaml` → `devbox run flash-irrigation` (OTA, see below) |
 
 ### Firmware update / OTA
-From a machine with the repo + ESPHome (or the dashboard at `192.168.2.10:6052`):
+From a machine with the repo + devbox (`devbox run flash-irrigation`, which wraps `esphome run`):
 ```bash
-# esphome/config/secrets.yaml (gitignored) must hold wifi_ssid / wifi_password / ota_password
-esphome run esphome/config/droplettest.yaml --device 192.168.2.245
+# esphome/config/secrets.yaml (gitignored) must hold wifi_ssid / wifi_password / ota_password / api_encryption_key / ap_password
+devbox run flash-irrigation
+#   (equivalent to: esphome run esphome/config/office-plants-irrigation.yaml --device 192.168.2.245)
 ```
 - **OTA password** is recorded at `~/.claude/homelab-droplet/ota_password`.
 - If OTA auth ever fails: block the device in UniFi → it starts its fallback AP → upload the
   built `.bin` via the captive portal (`http://192.168.4.1`). USB-UART is the last resort.
+- The old standalone ESPHome **web dashboard** (it ran on pop-os via docker-compose) is retired —
+  flashing is the devbox CLI above. It could return later as a **Home Assistant add-on** if a web UI
+  is wanted.
 
 ---
 
@@ -222,7 +228,7 @@ esphome run esphome/config/droplettest.yaml --device 192.168.2.245
 3. Disconnect the failed pump from its Droplet output terminal and its tubing.
 4. Fit the replacement pump to the **same** terminal + tubing (match polarity/voltage).
 5. No config change — the GPIO mapping is unchanged (`pump1=13, pump2=4, pump3=16, pump4=17`).
-6. Test: HA → toggle `switch.droplettest_droplet_pump_N` on for a few seconds (or press
+6. Test: HA → toggle `switch.office_plants_irrigation_pump_N` on for a few seconds (or press
    **Water Now** with that plant below threshold) and confirm flow.
 7. Auto Watering → on.
 
@@ -238,7 +244,7 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
    reports the **actual voltage**.
 2. Put the sensor in **dry** soil/air → note `soilN_raw` (e.g. `2.30 V`).
 3. Put the sensor in **plain water** → note `soilN_raw` (e.g. `0.89 V`).
-4. Edit that sensor's `calibrate_linear` in `droplettest.yaml`:
+4. Edit that sensor's `calibrate_linear` in `office-plants-irrigation.yaml`:
    ```yaml
    filters:
      - calibrate_linear:
@@ -266,9 +272,9 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | R6 | **Leak / hose pops off** while pumping | Low | Low–Med | **Droplet sits elevated on the reservoir box → leaks drain back into it**, limiting water damage; daytime-only, short runs. Still no leak/flow detection → Next steps |
 | R7 | **WiFi outage** → device offline | Low | Medium | APs keep serving WiFi without the controller; UniFi controller now runs in-cluster (`192.168.40.12`) |
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
-| R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds persist (no `initial:`) |
+| R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds come from HA (defaults 60 %/180 s via `initial:`) |
 | R10 | **Lost OTA / API credentials** → can't manage remotely | Low | Low | OTA pw recorded in `~/.claude/homelab-droplet/`; API key in config; captive-portal/USB fallback |
-| R11 | **API encryption key committed in plaintext** in `droplettest.yaml` | Certain | Low (LAN) / High if repo goes public | **Move to `secrets.yaml` before publishing** (see repo PUBLISH-CHECKLIST) |
+| R11 | **API encryption key committed in plaintext** in `office-plants-irrigation.yaml` | Certain | Low (LAN) / High if repo goes public | **Move to `secrets.yaml` before publishing** (see repo PUBLISH-CHECKLIST) |
 
 ---
 
@@ -351,11 +357,11 @@ sensor, (reservoir-low once R2's sensor exists).
   heavier, and couples the wall display to Grafana being up. Pick this only if the actual **graph/trend
   panels** are wanted on the wall; for "moisture + OK" the ESPHome render is simpler and more robust.
 
-**Tie-in — retire the Droplet OLED.** The Droplet's tiny on-board OLED needs a button press to wake, so
-it's never used → **remove it entirely**: delete the OLED `display:` + its wake-button logic from
-`esphome/config/droplettest.yaml`, and **3D-print a new Droplet case without the OLED cutout**. The
-e-paper wall display becomes the always-on, glanceable status surface instead. *(When done, also update
-the OLED mentions in [§2](#2-architecture-c4) and [§10](#10-quick-reference).)*
+**Tie-in — retire the Droplet OLED.** ✅ The OLED `display:` + font + its wake-button action have
+been **removed from `esphome/config/office-plants-irrigation.yaml`** (the display needed a button press to wake
+and was never used; takes effect on the next flash). Still TODO on the hardware side: **3D-print a
+new Droplet case without the OLED cutout**. The e-paper wall display becomes the always-on,
+glanceable status surface instead.
 
 ---
 
@@ -391,17 +397,17 @@ needs to be an HA entity); Prometheus still scrapes a single target.
 ### What "water usage" means here
 There is **no flow meter** (R2/R6), so usage is a **time proxy**: each pump accumulates a
 monotonic on-seconds counter on-device (`pumpN_seconds_total`, persisted to flash), exposed
-as `sensor.droplettest_droplet_pump_N_water_seconds` (`state_class: total_increasing`).
+as `sensor.office_plants_irrigation_pump_N_water_seconds` (`state_class: total_increasing`).
 `increase(...[24h])` = seconds pumped today ≈ relative water used. To convert to millilitres
 later, calibrate ml/s per pump (a slider-free constant) — deferred by choice.
 
 ### Metrics (HA `prometheus:` export → Prometheus)
 | Signal | Entity | Prometheus metric (confirmed from live `/api/prometheus`) |
 |---|---|---|
-| Soil moisture % | `sensor.droplettest_droplet_soilm_sens_1..4` | `homeassistant_sensor_voltage_percent{entity=...}` |
-| Water used (on-seconds) | `sensor.droplettest_droplet_pump_1..4_water_seconds` | `homeassistant_sensor_duration_s{entity=...}` |
-| WiFi signal | `sensor.droplettest_droplet_wifi_signal_sensor` | `homeassistant_sensor_signal_strength_dbm{entity=...}` |
-| Controller online | `binary_sensor.droplettest_droplet_status` | `homeassistant_binary_sensor_state{entity=...}` |
+| Soil moisture % | `sensor.office_plants_irrigation_soilm_sens_1..4` | `homeassistant_sensor_voltage_percent{entity=...}` |
+| Water used (on-seconds) | `sensor.office_plants_irrigation_pump_1..4_water_seconds` | `homeassistant_sensor_duration_s{entity=...}` |
+| WiFi signal | `sensor.office_plants_irrigation_wifi_signal_sensor` | `homeassistant_sensor_signal_strength_dbm{entity=...}` |
+| Controller online | `binary_sensor.office_plants_irrigation_status` | `homeassistant_binary_sensor_state{entity=...}` |
 | HA reachable | — | `up{job="home-assistant"}` |
 
 > HA names the metric from the entity's **device_class** (then unit): the ESPHome ADC sensors
@@ -425,7 +431,7 @@ in-RAM soil state inside `do_water_cycle`).
 ### Deploy
 1. **Firmware** (counters + 60s reporting) — OTA from a machine with the repo + ESPHome:
    ```bash
-   esphome run esphome/config/droplettest.yaml --device 192.168.2.245
+   esphome run esphome/config/office-plants-irrigation.yaml --device 192.168.2.245
    ```
 2. **HA export** — copy the package into the HA `/config` PV and reload, then create the token:
    ```bash
@@ -461,13 +467,13 @@ in-RAM soil state inside `do_water_cycle`).
 
 | Item | Value |
 |---|---|
-| Device IP / host | `192.168.2.245` / `droplettest` |
-| ESPHome API | `:6053` (encrypted; key in `droplettest.yaml`) |
+| Device IP / host | `192.168.2.245` / `office-plants-irrigation` |
+| ESPHome API | `:6053` (encrypted; key in `office-plants-irrigation.yaml`) |
 | OTA | `:3232`; password in `~/.claude/homelab-droplet/ota_password` |
 | WiFi SSID | `Walther` (secrets in `esphome/config/secrets.yaml`, gitignored) |
 | Pumps | `pump1=GPIO13, pump2=GPIO4, pump3=GPIO16, pump4=GPIO17` |
 | Soil sensors | `Soil1=GPIO34, Soil2=GPIO35, Soil3=GPIO32, Soil4=GPIO33` |
 | Time | SNTP `192.168.2.1` + `pool.ntp.org`, TZ Europe/Tallinn |
 | Home Assistant | `https://homeassistant.teststuff.net` (LAN) · `https://ha.teststuff.net` (remote) / `192.168.40.10:8123` |
-| ESPHome dashboard | `http://192.168.2.10:6052` |
+| Flash / logs | `devbox run flash-irrigation` / `devbox run irrigation-logs` |
 | HA package / dashboard | `homeassistant/ha-config/packages/irrigation.yaml`, `.../dashboards/home.yaml` |

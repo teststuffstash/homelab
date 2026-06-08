@@ -84,12 +84,13 @@ Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuf
 - `tofu/cloudflare/` — remote access (tunnel, `cloudflared` Deployment, DNS, mTLS cert + WAF rule;
   separate root/state). `tofu/cloudflare-token/` mints the scoped CF tokens (run once with an admin
   token, outside the jail). See `docs/cloudflare.md`.
-- `ansible/` — OPNsense as code: `opnsense-bgp.yml`, `opnsense-acme.yml`, `opnsense-haproxy.yml`,
-  `opnsense-unbound-hosts.yml`, `opnsense/dnsmasq-dhcp.py`, and `matchbox*.yml`. Run OPNsense
-  playbooks via **`bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml`** (handles the
-  httpx interpreter + creds — see `docs/runbook.md`).
-- `esphome/` — ESPHome dashboard + device configs (`config/droplettest.yaml`); flash with
-  `devbox run flash-droplet`.
+- `ansible/` — OPNsense + Matchbox as code, **thin playbooks → `roles/`** with config in
+  `group_vars/` (`opnsense-bgp`, `-acme`, `-haproxy`, `-unbound`; `matchbox*`), plus
+  `opnsense/dnsmasq-dhcp.py` (LAN DHCP). Run OPNsense playbooks via
+  **`bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml`** (handles the httpx
+  interpreter + creds + `ANSIBLE_CONFIG` — see `ansible/readme.md`, `docs/runbook.md`).
+- `esphome/` — ESPHome device configs (`config/office-plants-irrigation.yaml`); flash with
+  `devbox run flash-irrigation` (logs: `devbox run irrigation-logs`).
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
 - `scripts/` — `talos-usb.sh`, `opnsense-playbook.sh`, `longhorn-register-optane.sh`,
   `make-client-p12.sh` (phone mTLS cert, pinned openssl), `aws-*.sh` (one-shot AWS audit/cleanup).

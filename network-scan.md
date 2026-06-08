@@ -114,7 +114,7 @@ Internet ── WAN 176.46.101.184 ──┐
     Application (`tofu/unifi.tf`) on the BGP VIP `192.168.40.12`; all APs + the
     USW-Lite re-adopted there. `ubiquiti.teststuff.net` was a legacy, *untracked*
     OPNsense Unbound host override pointing at the dead T61 — now captured as IaC in
-    `ansible/opnsense-unbound-hosts.yml` and repointed to `192.168.40.12`. T61 retired.
+    the `opnsense-unbound` role (`ansible/group_vars/opnsense.yml`) and repointed to `192.168.40.12`. T61 retired.
 - **OctoPi / Raspberry Pi 3B not seen** — no host exposes OctoPrint (`:80/:5000`).
   Consistent with the 3D printer being off.
 - The dual-homed Pop!_OS host (`.10/.57`) running the homelab stack isn't described

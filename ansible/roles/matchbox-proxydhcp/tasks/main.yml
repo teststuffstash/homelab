@@ -1,0 +1,58 @@
+---
+# Boot delivery for the PXE chainload: dnsmasq in PROXY-DHCP mode on the Matchbox
+# LXC. OPNsense dnsmasq still leases IPs; this only answers PXE boot requests
+# (proxyDHCP, RFC 4578) — the two coexist by design. Config in group_vars/matchbox.yml.
+#
+# Why here and not on OPNsense: OPNsense's dnsmasq plugin doesn't expose pxe-service
+# (won't emit the bootfile via the structured model), and there's no shell to work
+# around it. On this LXC we have full dnsmasq config + logs.
+
+- name: Install dnsmasq
+  ansible.builtin.apt:
+    name: dnsmasq
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# dnsmasq serves TFTP itself now; retire the standalone tftpd-hpa to free :69.
+- name: Disable tftpd-hpa (dnsmasq owns TFTP)
+  ansible.builtin.systemd:
+    name: tftpd-hpa
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+
+- name: Write dnsmasq proxy-DHCP config
+  ansible.builtin.copy:
+    dest: /etc/dnsmasq.d/proxydhcp.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by the matchbox-proxydhcp role
+      port=0                       # no DNS (Unbound on the router owns :53)
+      log-dhcp                     # log tag/boot decisions (journalctl -u dnsmasq)
+      interface=eth0
+      bind-interfaces
+      dhcp-range={{ lan_subnet }},proxy   # proxyDHCP only — does NOT hand out IPs
+      enable-tftp
+      tftp-root={{ tftp_root }}
+      # iPXE detection (either signal sets tag 'ipxe')
+      dhcp-userclass=set:ipxe,iPXE
+      dhcp-match=set:ipxe,175
+      # stage 1 — non-iPXE PXE ROM: chainload the arch-appropriate iPXE binary
+      pxe-service=tag:#ipxe,x86PC,"Chainload iPXE (BIOS)",undionly.kpxe
+      pxe-service=tag:#ipxe,BC_EFI,"Chainload iPXE (UEFI)",ipxe.efi
+      pxe-service=tag:#ipxe,X86-64_EFI,"Chainload iPXE (UEFI x64)",ipxe.efi
+      # stage 2 — iPXE: hand the Matchbox entry script (HTTP)
+      pxe-service=tag:ipxe,x86PC,"Matchbox",{{ matchbox_script }}
+      pxe-service=tag:ipxe,BC_EFI,"Matchbox",{{ matchbox_script }}
+      pxe-service=tag:ipxe,X86-64_EFI,"Matchbox",{{ matchbox_script }}
+  notify: Restart dnsmasq
+
+- name: Enable and start dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
+    enabled: true
+    state: started

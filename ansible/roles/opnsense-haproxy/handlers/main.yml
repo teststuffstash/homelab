@@ -1,0 +1,3 @@
+---
+- name: reconfigure haproxy
+  oxlorg.opnsense.raw: { module: haproxy, controller: service, command: reconfigure, action: post }

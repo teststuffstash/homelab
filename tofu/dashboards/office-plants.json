@@ -27,7 +27,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "homeassistant_sensor_voltage_percent{entity=~\"sensor.droplettest_droplet_soilm_sens_[1-4]\"}",
+          "expr": "homeassistant_sensor_voltage_percent{entity=~\"sensor.office_plants_irrigation_soilm_sens_[1-4]\"}",
           "legendFormat": "{{friendly_name}}"
         }
       ]
@@ -42,7 +42,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "increase(homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}[24h])",
+          "expr": "increase(homeassistant_sensor_duration_s{entity=~\"sensor.office_plants_irrigation_pump_[1-4]_water_seconds\"}[24h])",
           "legendFormat": "{{friendly_name}}",
           "instant": true
         }
@@ -57,7 +57,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "rate(homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}[30m]) * 60",
+          "expr": "rate(homeassistant_sensor_duration_s{entity=~\"sensor.office_plants_irrigation_pump_[1-4]_water_seconds\"}[30m]) * 60",
           "legendFormat": "{{friendly_name}}"
         }
       ]
@@ -71,7 +71,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "homeassistant_sensor_duration_s{entity=~\"sensor.droplettest_droplet_pump_[1-4]_water_seconds\"}",
+          "expr": "homeassistant_sensor_duration_s{entity=~\"sensor.office_plants_irrigation_pump_[1-4]_water_seconds\"}",
           "legendFormat": "{{friendly_name}}"
         }
       ]
@@ -85,7 +85,7 @@
       "targets": [
         {
           "datasource": "${datasource}",
-          "expr": "homeassistant_sensor_signal_strength_dbm{entity=\"sensor.droplettest_droplet_wifi_signal_sensor\"}",
+          "expr": "homeassistant_sensor_signal_strength_dbm{entity=\"sensor.office_plants_irrigation_wifi_signal_sensor\"}",
           "legendFormat": "WiFi dBm"
         }
       ]

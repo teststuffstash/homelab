@@ -1,0 +1,3 @@
+---
+# Defaults — real values live in group_vars/opnsense.yml.
+unbound_hosts: []

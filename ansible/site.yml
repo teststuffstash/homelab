@@ -1,8 +1,0 @@
----
-- hosts: netbootxyz
-  roles:
-    - netbootxyz
-
-- hosts: ubiquiti
-  roles:
-    - ubiquiti-appliance

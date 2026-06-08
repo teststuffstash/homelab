@@ -1,0 +1,36 @@
+# Deployment config for the Matchbox PXE provisioning LXC (group `matchbox`).
+# Logic in roles/matchbox*; values here. See docs/provisioning.md.
+
+# --- SSH connection (root via the Proxmox seed key, outside the repo) ---
+ansible_user: root
+ansible_ssh_private_key_file: /home/node/.claude/homelab-pve-ssh/id_ed25519
+ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# --- matchbox (server install) ---
+matchbox_version: v0.11.0
+matchbox_sha256: a341c73ac6415a3305111def40f30530c05a92064b58844527674b65d6d37545
+matchbox_arch: linux-amd64
+# SANs baked into the gRPC server cert. IP = container IP; add a DNS name if you
+# later give Matchbox a hostname in OPNsense Unbound.
+matchbox_san: "IP.1:{{ ansible_host }},DNS.1:matchbox,DNS.2:matchbox.teststuff.net"
+matchbox_data_dir: /var/lib/matchbox
+matchbox_tls_dir: /etc/matchbox
+matchbox_assets: "{{ matchbox_data_dir }}/assets"
+# Where the generated CLIENT certs land on the controller (the jail) so the tofu
+# poseidon/matchbox provider can authenticate to gRPC. Outside the repo.
+matchbox_client_cert_dest: /home/node/.claude/homelab-matchbox
+
+# --- matchbox-ipxe-tftp + matchbox-proxydhcp (PXE chainload) ---
+tftp_root: /srv/tftp
+matchbox_http: "http://{{ ansible_host }}:8080"
+matchbox_script: "{{ matchbox_http }}/assets/boot-or-disk.ipxe"
+lan_subnet: 192.168.2.0
+
+# --- matchbox-talos-assets (PXE boot images) ---
+# schematic_id selects baked-in extensions (iscsi-tools + util-linux-tools for
+# Longhorn). Regenerate at https://factory.talos.dev if extensions change; bump
+# talos_version in lockstep with tofu/ (var.talos_version).
+talos_version: v1.13.2
+talos_schematic_id: 613e1592b2da41ae5e265e8789429f22e121aab91cb4deb6bc3c0b6262961245
+talos_arch: amd64
+talos_factory_base: "https://factory.talos.dev/image"

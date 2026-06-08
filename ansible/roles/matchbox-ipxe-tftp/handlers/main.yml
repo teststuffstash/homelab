@@ -1,0 +1,5 @@
+---
+- name: Restart tftpd
+  ansible.builtin.systemd:
+    name: tftpd-hpa
+    state: restarted

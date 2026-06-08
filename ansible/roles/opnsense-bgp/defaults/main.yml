@@ -1,0 +1,7 @@
+---
+# Defaults — real values live in group_vars/opnsense.yml (this deployment) so the
+# role stays portable. Listed here for documentation + safe standalone use.
+opnsense_asn: 64512
+cluster_asn: 64513
+bgp_router_id: "192.168.2.1"
+bgp_node_ips: []

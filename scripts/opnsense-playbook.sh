@@ -18,6 +18,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."   # repo root (nix build path:./... and ansible/ are relative to it)
 
 export NIX_CONFIG="experimental-features = nix-command flakes"
+export ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg"   # inventory + roles_path (paths are repo-root-relative)
 export OPN_API_KEY="$(cat "$HOME/.claude/homelab-opnsense/key")"
 export OPN_API_SECRET="$(cat "$HOME/.claude/homelab-opnsense/secret")"
 
@@ -26,4 +27,6 @@ PYBIN="$(nix build --no-link --print-out-paths path:./ansible/controller-env)/bi
 # Fresh jails don't have the collection installed; cheap to ensure each run.
 devbox run -- ansible-galaxy collection install -r ansible/collections/requirements.yml >/dev/null 2>&1 || true
 
+# The opnsense-* playbooks target the `opnsense` inventory host (connection: local);
+# roles live in ansible/roles, config in ansible/group_vars (auto-loaded).
 exec devbox run -- ansible-playbook "$@" -e ansible_python_interpreter="$PYBIN"

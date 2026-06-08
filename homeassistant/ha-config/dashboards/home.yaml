@@ -56,13 +56,13 @@ views:
       - type: glance
         title: Soil moisture (%)
         entities:
-          - entity: sensor.droplettest_droplet_soilm_sens_1
+          - entity: sensor.office_plants_irrigation_soilm_sens_1
             name: Plant 1
-          - entity: sensor.droplettest_droplet_soilm_sens_2
+          - entity: sensor.office_plants_irrigation_soilm_sens_2
             name: Plant 2
-          - entity: sensor.droplettest_droplet_soilm_sens_3
+          - entity: sensor.office_plants_irrigation_soilm_sens_3
             name: Plant 3
-          - entity: sensor.droplettest_droplet_soilm_sens_4
+          - entity: sensor.office_plants_irrigation_soilm_sens_4
             name: Plant 4
       - type: entities
         title: Desired moisture thresholds
@@ -78,17 +78,17 @@ views:
           - input_number.watering_seconds_pump2
           - input_number.watering_seconds_pump3
           - input_number.watering_seconds_pump4
-          - switch.droplettest_droplet_auto_watering
-          - button.droplettest_droplet_water_now
+          - switch.office_plants_irrigation_auto_watering
+          - button.office_plants_irrigation_water_now
       - type: glance
         title: Pumps
         show_state: true
         entities:
-          - entity: switch.droplettest_droplet_pump_1
+          - entity: switch.office_plants_irrigation_pump_1
             name: Pump 1
-          - entity: switch.droplettest_droplet_pump_2
+          - entity: switch.office_plants_irrigation_pump_2
             name: Pump 2
-          - entity: switch.droplettest_droplet_pump_3
+          - entity: switch.office_plants_irrigation_pump_3
             name: Pump 3
-          - entity: switch.droplettest_droplet_pump_4
+          - entity: switch.office_plants_irrigation_pump_4
             name: Pump 4

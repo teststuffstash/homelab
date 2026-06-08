@@ -1,0 +1,24 @@
+---
+# OPNsense Unbound — static LAN host overrides (config-as-code).
+# Home for hand-made overrides NOT created by another role (per-service names for
+# HAProxy-proxied backends are managed by the opnsense-haproxy role — don't duplicate
+# them here). The list is in group_vars/opnsense.yml (unbound_hosts).
+#
+# match_fields EXCLUDES `value`: matching on hostname+domain+record_type updates the
+# existing record in place (a repoint) instead of appending a duplicate.
+#
+# NOTE: the unbound_host module saves the record but does NOT apply it — Unbound keeps
+# serving the old answer until reconfigured. The handler forces that apply (raw
+# mutating commands need action:post, else they default to get and silently no-op).
+
+- name: Unbound host override per entry
+  oxlorg.opnsense.unbound_host:
+    hostname: "{{ item.hostname }}"
+    domain: "{{ item.domain }}"
+    record_type: A
+    value: "{{ item.value }}"
+    description: "{{ item.description }}"
+    match_fields: [hostname, domain, record_type]
+  loop: "{{ unbound_hosts }}"
+  loop_control: { label: "{{ item.hostname }}.{{ item.domain }} -> {{ item.value }}" }
+  notify: reconfigure unbound

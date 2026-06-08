@@ -183,7 +183,7 @@ resource "helm_release" "kube_prometheus_stack" {
             },
             {
               "alert"       = "DropletOffline"
-              "expr"        = "homeassistant_binary_sensor_state{entity=\"binary_sensor.droplettest_droplet_status\"} == 0"
+              "expr"        = "homeassistant_binary_sensor_state{entity=\"binary_sensor.office_plants_irrigation_status\"} == 0"
               "for"         = "10m"
               "labels"      = { severity = "critical" }
               "annotations" = { summary = "Droplet irrigation controller offline", description = "The Droplet ({{ $labels.entity }}) has been disconnected for 10m — no watering and no soil readings." }
@@ -192,7 +192,7 @@ resource "helm_release" "kube_prometheus_stack" {
               # A capacitive sensor stuck at exactly 0% for hours is usually disconnected/failed
               # rather than truly bone-dry soil.
               "alert"       = "SoilSensorSuspectZero"
-              "expr"        = "homeassistant_sensor_voltage_percent{entity=~\"sensor.droplettest_droplet_soilm_sens_[1-4]\"} == 0"
+              "expr"        = "homeassistant_sensor_voltage_percent{entity=~\"sensor.office_plants_irrigation_soilm_sens_[1-4]\"} == 0"
               "for"         = "2h"
               "labels"      = { severity = "warning" }
               "annotations" = { summary = "Soil sensor stuck at 0%", description = "{{ $labels.friendly_name }} has read 0% for 2h — check the sensor wiring/calibration." }

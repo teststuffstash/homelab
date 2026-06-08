@@ -1,0 +1,5 @@
+---
+# Defaults — real values live in group_vars/matchbox.yml.
+tftp_root: /srv/tftp
+matchbox_assets: /var/lib/matchbox/assets
+matchbox_http: "http://127.0.0.1:8080"

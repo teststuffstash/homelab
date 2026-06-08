@@ -1,0 +1,5 @@
+---
+# Defaults — real values live in group_vars/matchbox.yml.
+tftp_root: /srv/tftp
+lan_subnet: 192.168.2.0
+matchbox_script: "http://127.0.0.1:8080/assets/boot-or-disk.ipxe"

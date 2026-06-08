@@ -49,15 +49,15 @@
       "talos-usb": [
         "bash scripts/talos-usb.sh"
       ],
-      "flash-droplet": [
+      "flash-irrigation": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",
         "test -x esphome/.flash-venv/bin/esphome || python3 -m venv esphome/.flash-venv",
         "esphome/.flash-venv/bin/pip install -q --upgrade esphome",
-        "esphome/.flash-venv/bin/esphome run esphome/config/droplettest.yaml --device 192.168.2.245 --no-logs",
+        "esphome/.flash-venv/bin/esphome run esphome/config/office-plants-irrigation.yaml --device 192.168.2.245 --no-logs",
         "chown -R $(stat -c %u:%g devbox.json) esphome/.flash-venv esphome/.platformio esphome/config/.esphome 2>/dev/null || true"
       ],
-      "droplet-logs": [
-        "esphome/.flash-venv/bin/esphome logs esphome/config/droplettest.yaml --device 192.168.2.245"
+      "irrigation-logs": [
+        "esphome/.flash-venv/bin/esphome logs esphome/config/office-plants-irrigation.yaml --device 192.168.2.245"
       ]
     }
   }

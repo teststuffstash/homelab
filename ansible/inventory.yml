@@ -1,0 +1,18 @@
+# Inventory for the homelab control targets. Group names (opnsense, matchbox) drive
+# group_vars/*.yml; host names are distinct from the groups to avoid Ansible's
+# "group and host with same name" warning. Playbooks target the GROUPS.
+#   - opnsense : the router @ .1, driven via its REST API *from the controller*
+#               (connection: local — the oxlorg.opnsense modules POST to the API).
+#   - matchbox : the PXE provisioning LXC @ .30, configured over SSH.
+# Per-group connection + config values live in group_vars/{opnsense,matchbox}.yml.
+all:
+  children:
+    opnsense:
+      hosts:
+        opnsense-fw:
+          ansible_host: 192.168.2.1
+          ansible_connection: local
+    matchbox:
+      hosts:
+        matchbox-lxc:
+          ansible_host: 192.168.2.30

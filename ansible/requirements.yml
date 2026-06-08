@@ -1,0 +1,13 @@
+---
+# Role requirements. All roles currently live in-repo under roles/ (one git repo).
+# This file is the extraction seam: when a role grows big/reusable enough to deserve
+# its own repo (the "is this role too big to eyeball?" signal), move it out and pin it
+# here by git tag, e.g.:
+#
+#   roles:
+#     - name: opnsense-haproxy
+#       src: https://github.com/<you>/ansible-role-opnsense-haproxy
+#       version: v1.0.0      # git tag — the infra repo then carries only config + this pin
+#
+# Install with: ansible-galaxy role install -r ansible/requirements.yml
+roles: []

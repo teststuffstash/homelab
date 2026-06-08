@@ -1,0 +1,13 @@
+---
+# OPNsense Unbound static host overrides. Thin role-caller — logic in
+# roles/opnsense-unbound, config in group_vars/opnsense.yml.
+# (Renamed from opnsense-unbound-hosts.yml.)
+# Run: bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml
+- name: OPNsense Unbound static host overrides
+  hosts: opnsense
+  gather_facts: false
+  module_defaults:
+    oxlorg.opnsense.unbound_host: "{{ opnsense_conn }}"
+    oxlorg.opnsense.raw: "{{ opnsense_conn }}"
+  roles:
+    - opnsense-unbound

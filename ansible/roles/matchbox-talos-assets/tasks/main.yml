@@ -1,0 +1,28 @@
+---
+# Download Talos PXE boot assets (kernel + initramfs) into Matchbox's asset store,
+# so the talos-worker profile boots from the LAN (offline of factory.talos.dev at
+# boot time, and fast). Config in group_vars/matchbox.yml.
+
+- name: Create versioned asset dir
+  ansible.builtin.file:
+    path: "{{ matchbox_assets }}/talos/{{ talos_version }}"
+    state: directory
+    owner: matchbox
+    group: matchbox
+    mode: "0755"
+
+- name: Download Talos kernel
+  ansible.builtin.get_url:
+    url: "{{ talos_factory_base }}/{{ talos_schematic_id }}/{{ talos_version }}/kernel-{{ talos_arch }}"
+    dest: "{{ matchbox_assets }}/talos/{{ talos_version }}/vmlinuz-{{ talos_arch }}"
+    owner: matchbox
+    group: matchbox
+    mode: "0644"
+
+- name: Download Talos initramfs
+  ansible.builtin.get_url:
+    url: "{{ talos_factory_base }}/{{ talos_schematic_id }}/{{ talos_version }}/initramfs-{{ talos_arch }}.xz"
+    dest: "{{ matchbox_assets }}/talos/{{ talos_version }}/initramfs-{{ talos_arch }}.xz"
+    owner: matchbox
+    group: matchbox
+    mode: "0644"

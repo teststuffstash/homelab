@@ -1,14 +1,18 @@
-# Droplet irrigation — desired soil-moisture thresholds per pump.
-# The ESPHome droplet (192.168.2.245) reads these input_numbers from HA via its
-# `homeassistant` sensor platform and runs the pump comparison logic on-device:
-# if measured soil moisture < desired level, the pump runs for watering_seconds_pumpN.
+# Office Plants Irrigation — desired soil-moisture thresholds + run-times per pump.
+# The ESPHome node (office-plants-irrigation, 192.168.2.245) reads these input_numbers
+# from HA via its `homeassistant` sensor platform and runs the pump comparison logic
+# on-device: if measured soil moisture < desired level, the pump runs for
+# watering_seconds_pumpN.
 #
-# Per-plant run time is configurable here (bigger pots / soaker-hose priming need
-# longer). Loaded via HA packages (homeassistant.packages in configuration.yaml).
-# Source of truth lives here in git; copied into the HA /config PV.
+# `initial:` sets the proven defaults (60% desired, 180s run-time) — so a fresh deploy
+# (boot-from-git) and any HA restart land on sane values. Tune live via the dashboard
+# sliders; note a restart re-applies these initials (change the default here in git).
+# Loaded via HA packages (homeassistant.packages in configuration.yaml); source of
+# truth is git, copied into the HA /config PV.
 input_number:
   watering_seconds_pump1:
     name: Watering seconds pump 1
+    initial: 180
     min: 5
     max: 600
     step: 5
@@ -16,6 +20,7 @@ input_number:
     icon: mdi:timer-outline
   watering_seconds_pump2:
     name: Watering seconds pump 2
+    initial: 180
     min: 5
     max: 600
     step: 5
@@ -23,6 +28,7 @@ input_number:
     icon: mdi:timer-outline
   watering_seconds_pump3:
     name: Watering seconds pump 3
+    initial: 180
     min: 5
     max: 600
     step: 5
@@ -30,6 +36,7 @@ input_number:
     icon: mdi:timer-outline
   watering_seconds_pump4:
     name: Watering seconds pump 4
+    initial: 180
     min: 5
     max: 600
     step: 5
@@ -38,6 +45,7 @@ input_number:
 
   moisture_level_for_pump1:
     name: Desired moisture pump 1
+    initial: 60
     min: 0
     max: 100
     step: 1
@@ -45,6 +53,7 @@ input_number:
     icon: mdi:water-percent
   moisture_level_for_pump2:
     name: Desired moisture pump 2
+    initial: 60
     min: 0
     max: 100
     step: 1
@@ -52,6 +61,7 @@ input_number:
     icon: mdi:water-percent
   moisture_level_for_pump3:
     name: Desired moisture pump 3
+    initial: 60
     min: 0
     max: 100
     step: 1
@@ -59,13 +69,7 @@ input_number:
     icon: mdi:water-percent
   moisture_level_for_pump4:
     name: Desired moisture pump 4
-    min: 0
-    max: 100
-    step: 1
-    unit_of_measurement: "%"
-    icon: mdi:water-percent
-  moisture_level_for_pump5:
-    name: Desired moisture pump 5
+    initial: 60
     min: 0
     max: 100
     step: 1

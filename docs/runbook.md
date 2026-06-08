@@ -36,15 +36,16 @@ In the jail under `~/.claude/`: `homelab-opnsense/{key,secret}`, `homelab-pve-ss
 ## OPNsense as code
 
 OPNsense (router @ .1, currently 26.1.x) is managed with the `oxlorg.opnsense` Ansible collection.
-Playbooks: `opnsense-bgp.yml` (FRR/BGP ↔ Cilium), `opnsense-acme.yml` (Let's Encrypt, **DNS-01 via
-Cloudflare** — `ACME_CF_TOKEN`, since `teststuff.net` moved off Route53),
-`opnsense-haproxy.yml` (HTTPS reverse proxy), `opnsense-unbound-hosts.yml` (static DNS overrides),
+Layout is **thin playbooks → roles**, with config values in `ansible/group_vars/` (see
+`ansible/readme.md`): `opnsense-bgp.yml` (FRR/BGP ↔ Cilium), `opnsense-acme.yml` (Let's Encrypt,
+**DNS-01 via Cloudflare** — `ACME_CF_TOKEN`, since `teststuff.net` moved off Route53),
+`opnsense-haproxy.yml` (HTTPS reverse proxy), `opnsense-unbound.yml` (static DNS overrides),
 plus `opnsense/dnsmasq-dhcp.py` (LAN DHCP). **Run them with the wrapper** (handles the httpx
-interpreter + creds):
+interpreter + creds + `ANSIBLE_CONFIG`):
 
 ```bash
 bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml          # or any opnsense-*.yml
-bash scripts/opnsense-playbook.sh ansible/opnsense-unbound-hosts.yml -e ...   # extra args pass through
+bash scripts/opnsense-playbook.sh ansible/opnsense-unbound.yml -e ...    # extra args pass through
 ```
 
 Why the wrapper exists (the non-obvious bits):
@@ -61,7 +62,7 @@ API/module gotchas:
   backend/frontend/server). **Mutating `raw` commands need `action: post`** — they default to `get`
   and silently no-op (`{"result":"failed"}`).
 - `unbound_host` **saves but does not apply** — Unbound keeps serving the old answer until you POST
-  `/unbound/service/reconfigure` (the `opnsense-unbound-hosts.yml` handler does this). Match on
+  `/unbound/service/reconfigure` (the `opnsense-unbound` role's handler does this). Match on
   `[hostname, domain, record_type]` (exclude `value`) to update-in-place on a repoint.
 - Verify a DNS record bypassing the jail's stale Docker/host cache: `devbox run -- dig +short
   <name> @192.168.2.1` (jail `getent` caches the pre-change answer).
@@ -152,7 +153,7 @@ Host setting is under *Device Updates and Settings* in the new UI.
 ## ESPHome / Droplet
 
 The Droplet plant-waterer (ESP32 @ .245, ESPHome native API on 6053). Config
-`esphome/config/droplettest.yaml`; flash with `devbox run flash-droplet` (a pip-venv shim — nix
+`esphome/config/office-plants-irrigation.yaml`; flash with `devbox run flash-irrigation` (a pip-venv shim — nix
 esphome's PlatformIO can't run under the jail's seccomp). Service docs: `docs/office-plants/`.
 OTA password at `~/.claude/homelab-droplet/ota_password`.
 
