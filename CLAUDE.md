@@ -25,7 +25,7 @@ devbox run k9s          # cluster TUI on tofu/kubeconfig
 ```
 
 Toolchain: opentofu, kubectl, talosctl, kubernetes-helm, cilium-cli, k9s, ansible, sops, age, jq,
-yq, python3, **dig/host (bind), nmap, curl, nc/ncat, cloudflared**. `nix` commands need
+yq, python3, openssl, awscli2, **dig/host (bind), nmap, curl, nc/ncat, cloudflared**. `nix` commands need
 `export NIX_CONFIG="experimental-features = nix-command flakes"`. `devbox run` executes from the
 repo root and runs scripts under **dash** — keep them simple, use absolute paths / `tofu -chdir=`,
 avoid `bash -c '<multiline>'` (it mangles).
@@ -69,12 +69,21 @@ advertised. L2 auto-discovery does NOT cross this L3/BGP boundary.
 OPNsense web UI: `https://opnsense.teststuff.net`. Storage is **Longhorn** (default StorageClass,
 replicated) + a `longhorn-fast` node-local tier on the ThinkCentre's Optane.
 
+**Remote access (live):** Home Assistant is reachable from anywhere at **`https://ha.teststuff.net`**
+via a **Cloudflare Tunnel** (`cloudflared` in-cluster) gated by **client-certificate mTLS** — see
+`tofu/cloudflare/` + `docs/cloudflare.md`. The `teststuff.net` zone now lives on **Cloudflare**
+(moved off Route53), so OPNsense **ACME is DNS-01 via Cloudflare** (`ansible/opnsense-acme.yml`), not
+Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuff.net` is public.
+
 ## Repo layout
 
 - `tofu/` — main cluster root (Talos VMs, Cilium + BGP, Longhorn, Home Assistant, UniFi,
   monitoring, bare-metal nodes `metal.tf`, image factory). State is local + gitignored.
   Run via `devbox run -- tofu -chdir=tofu <cmd>`. **Always `plan` and review before `apply`.**
 - `tofu/provisioning/` — Matchbox LXC + PXE content (separate root/state).
+- `tofu/cloudflare/` — remote access (tunnel, `cloudflared` Deployment, DNS, mTLS cert + WAF rule;
+  separate root/state). `tofu/cloudflare-token/` mints the scoped CF tokens (run once with an admin
+  token, outside the jail). See `docs/cloudflare.md`.
 - `ansible/` — OPNsense as code: `opnsense-bgp.yml`, `opnsense-acme.yml`, `opnsense-haproxy.yml`,
   `opnsense-unbound-hosts.yml`, `opnsense/dnsmasq-dhcp.py`, and `matchbox*.yml`. Run OPNsense
   playbooks via **`bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml`** (handles the
@@ -82,7 +91,11 @@ replicated) + a `longhorn-fast` node-local tier on the ThinkCentre's Optane.
 - `esphome/` — ESPHome dashboard + device configs (`config/droplettest.yaml`); flash with
   `devbox run flash-droplet`.
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
-- `scripts/` — `talos-usb.sh`, `opnsense-playbook.sh`, `longhorn-register-optane.sh`.
+- `scripts/` — `talos-usb.sh`, `opnsense-playbook.sh`, `longhorn-register-optane.sh`,
+  `make-client-p12.sh` (phone mTLS cert, pinned openssl), `aws-*.sh` (one-shot AWS audit/cleanup).
+- `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
+- `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
+  decision history in `docs/adr.md`.
 - `rocky/`, `ubuntu/`, `cloud-init.yml`, `netboot.xyz/`, `pfsense/` — legacy/full-OS provisioning,
   mostly superseded by the Talos/Matchbox path.
 
@@ -90,7 +103,8 @@ replicated) + a `longhorn-fast` node-local tier on the ThinkCentre's Optane.
 
 Out-of-repo, in the jail under `~/.claude/`: `homelab-opnsense/{key,secret}` (OPNsense API),
 `homelab-pve-ssh/` (Proxmox token + SSH seed key), `homelab-matchbox/` (gRPC client certs),
-`homelab-ha/` (Home Assistant tokens + Grafana pw), `homelab-droplet/`. Tofu state, `*.tfvars`,
+`homelab-ha/` (Home Assistant tokens + Grafana pw), `homelab-droplet/`, `cloudflare/`
+(read/write/acme tokens + the phone `.p12`), `homelab-aws/` (scoped read-only audit key). Tofu state, `*.tfvars`,
 `kubeconfig`, `talosconfig` are gitignored. The repo is **slated to go public eventually** — keep
 secrets out of git (SOPS+age for anything that must live in git); see `PUBLISH-CHECKLIST.md`.
 

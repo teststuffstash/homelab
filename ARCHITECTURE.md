@@ -5,8 +5,8 @@ How this homelab is *shaped*, documented the way the
 does it: not as a vertical stack (hardware → OS → k8s → apps) but as **horizontal planes** —
 domains that scale sideways and talk to each other through APIs.
 
-Companion docs: **`ROADMAP.md`** = what/when, **`CONTEXT.md`** = why/how-I-think, this file =
-*how it's shaped*.
+Companion docs: **`ROADMAP.md`** = what/when, **`CONTEXT.md`** = why/how-I-think,
+**`docs/adr.md`** = the decisions (what was considered + chosen), this file = *how it's shaped*.
 
 **How to read it.** Three planes flow left→right (the path from me to a running workload);
 two planes are cross-cutting bands over all of them:
@@ -102,7 +102,9 @@ _Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IP
 - ✅ Proxmox host, OPNsense (DHCP/DNS/FW/FRR as code), ESPHome + the `droplet` node.
 - ✅ Talos VMs **and** bare-metal nodes, Matchbox PXE provisioning, Cilium + BGP LoadBalancer,
   Longhorn storage, Home Assistant + UniFi controller in-cluster.
-- 🔜 Cloudflare Tunnel (remote access, `docs/cloudflare.md`), S3 backups, Civo burst.
+- ✅ Cloudflare Tunnel (Home Assistant remote access via `ha.teststuff.net` + mTLS, `docs/cloudflare.md`);
+  `teststuff.net` DNS now on Cloudflare.
+- 🔜 S3 backups, Civo burst.
 - ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy).
 
 ## 4 · Observability Plane _(cross-cutting)_
@@ -131,7 +133,7 @@ flowchart TB
         F["OPNsense firewall · Cilium NetworkPolicy · WireGuard / VPN"]
     end
     subgraph IAM["IAM / Identity"]
-        I["k8s RBAC · Cloudflare Access (public) · OPNsense users"]
+        I["k8s RBAC · Cloudflare mTLS (client certs) + scoped API tokens · OPNsense users"]
     end
     subgraph POSTURE["Posture / Policy"]
         P["AMT hardening (LAN-only) · image/policy scanning"]
@@ -140,6 +142,9 @@ flowchart TB
 
 _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays locked, the BMC patched._
 
+- ✅ Cloudflare edge security at the public edge: client-certificate **mTLS** (WAF-enforced, not
+  Enterprise Access) on `ha.teststuff.net`, plus **scoped per-job Cloudflare API tokens** as code
+  (`tofu/cloudflare-token/`). AWS access is IAM Identity Center SSO (no static admin keys).
 - 🔜 SOPS+age (mandated before public — see `PUBLISH-CHECKLIST.md`), Cilium NetworkPolicy,
   AMT hardening, OPNsense firewall as code.
 - ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.

@@ -1,5 +1,8 @@
 # Power measurements
 
+_Part of the [homelab docs](README.md). Structured inventory + generated tables:
+[`../machines/`](../machines/README.md). Why the laptops are the compute tier: [`adr.md`](adr.md) ADR-044._
+
 Max-power (stress) measurements of homelab nodes, taken at the wall via the Tuya smart plugs
 (`sensor.plug_<box>_power`, see `homeassistant/ha-config/packages/power.yaml`) while all CPU cores
 are maxed. Reproducible.

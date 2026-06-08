@@ -1,11 +1,15 @@
-# Cloudflare — remote access design (in progress)
+# Cloudflare — remote access (live)
 
 Goal: reach **Home Assistant from the phone, anywhere**, and move `teststuff.net` DNS to
-Cloudflare. Status: **LIVE (applied + verified 2026-06-06).** NS cutover done; both tofu roots
-applied; tunnel healthy; `https://ha.teststuff.net` returns **403 without a client cert** (mTLS +
-WAF enforcing) and tunnels to HA with the cert. Phone `.p12` built at `~/.claude/cloudflare/
-ha-client.p12` (password in the sibling `.password` file). Remaining: install the `.p12` on the
-phone + swap OPNsense ACME Route53→Cloudflare (LAN cert renewals break until then). This doc is the decision record. Two separate roots (own state, like
+Cloudflare. Status: **LIVE & verified (2026-06-06).** NS cutover done; both tofu roots applied;
+tunnel healthy; `https://ha.teststuff.net` returns **403 without a client cert** (mTLS + WAF
+enforcing) and serves HA **with** the cert — confirmed from the phone on mobile data. The phone
+`.p12` is at `~/.claude/cloudflare/ha-client.p12`; OPNsense ACME has been swapped to Cloudflare
+DNS-01 and a real renewal verified. **Only open item:** delete the orphaned Route53 hosted zone
+(see "nameserver cutover" below).
+
+This doc is the design + decision/gotcha record; the *why* (options considered) is condensed in
+[`adr.md`](adr.md) (ADR-050…054). Two separate roots (own state, like
 `tofu/provisioning/`): `tofu/cloudflare-token/` (mints the scoped write token, applied once with
 an admin token) and `tofu/cloudflare/` (the infra, applied with that scoped token). See each
 root's `README.md` for the apply runbook.

@@ -8,10 +8,13 @@ running services fit together, how to operate them, and their risks.
 
 | Doc | Summary |
 |---|---|
-| [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, HA, UniFi, ESPHome — and the gotchas behind them |
+| [adr.md](adr.md) | **Architecture Decision Record** — what was considered (e.g. Ceph vs Longhorn) and what was chosen, with rationale. Start here for *why*. |
+| [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
-| [cloudflare.md](cloudflare.md) | Remote-access design (Cloudflare Tunnel + app-security mTLS) + scoped-token RBAC |
+| [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
 | [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
+| [power-measurements.md](power-measurements.md) | Node max-power (stress) + perf/watt benchmarks |
+| [../machines/README.md](../machines/README.md) | Machine inventory + perf/watt table (generated from `machines/machines.yaml`) |
 
 ## Services
 

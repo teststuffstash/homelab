@@ -1,6 +1,10 @@
 # Homelab roadmap — bare-metal k8s, the hybrid way
 
-_Last updated: 2026-05-24_
+_Planning record, written 2026-05-24. The plan below largely **happened**: as of 2026-06 the Talos
+cluster (VMs + bare-metal), Cilium+BGP, Longhorn, Home Assistant, monitoring, UniFi-in-cluster and
+Cloudflare remote access are all live. For the **current** state see [`CLAUDE.md`](CLAUDE.md) and
+[`README.md`](README.md); for **why each choice was made** see [`docs/adr.md`](docs/adr.md). This
+file is kept as the original phased plan + the research that shaped it._
 
 ## The goal (in one sentence)
 
@@ -75,7 +79,7 @@ graph TB
     end
 
     OPN -->|PXE next-server| MB
-    MB -->|disk | exit/sanboot| metal
+    MB -->|disk: exit/sanboot| metal
     MB -->|install profile| metal
     MB -->|install profile| proxmox
     GIT -->|opentofu apply| MB
@@ -222,26 +226,26 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
 - [ ] Scaffold `tofu/` (providers: proxmox, talos, matchbox); gitignore state/secrets/kubeconfig.
 - [ ] Set up SOPS+age + `.sops.yaml`.
 
-### Phase 1 — Stable base cluster (Talos VMs on Proxmox)
+### Phase 1 — Stable base cluster (Talos VMs on Proxmox) ✅ done
 - [ ] Talos Image Factory schematic (qemu-guest-agent) → upload to Proxmox.
 - [ ] OpenTofu: 1 control-plane + 2 worker Talos VMs; generate machine config, bootstrap, fetch kubeconfig.
 - [ ] Install Cilium (BGP Control Plane + LB IPAM); peer with OPNsense FRR; smoke-test a
       LoadBalancer service reachable from the LAN; snapshot as known-good baseline.
 
-### Phase 2 — Home Assistant on the cluster
+### Phase 2 — Home Assistant on the cluster ✅ done (Zigbee coordinator still TODO; recorder = SQLite-on-Longhorn)
 - [ ] Order/flash a **network Zigbee coordinator** (SLZB-06 or similar); plan Z-Wave-over-network if used.
 - [ ] Deploy HA Container + PV (Longhorn or local), Mosquitto, Zigbee2MQTT (→ network coordinator), ESPHome.
 - [ ] Re-onboard devices (greenfield); validate the existing ESPHome `droplet` against the new HA.
 - [ ] Decide recorder backend (SQLite-on-PV vs external Postgres).
 
-### Phase 3 — MAC-table provisioning pipeline (no IPMI)
+### Phase 3 — MAC-table provisioning pipeline (no IPMI) ✅ done (Matchbox on a Proxmox LXC, not the T61)
 - [ ] Stand up **Matchbox** (on the T61 or a VM); define groups/profiles: `talos-worker`, `proxmox`, `ubuntu`/`rocky`.
 - [ ] Default behavior = **boot local disk**; install only when a MAC is in an install group.
 - [ ] Wire **OPNsense DHCP** two-stage iPXE chainload to Matchbox.
 - [ ] Enable **WoL** per box (BIOS + NIC + record MAC); add **HA smart-plug** power control; (AMT where available).
 - [ ] End-to-end test on **one** box: flag for install → WoL → PXE → Talos installs → joins cluster → then flip to disk-boot and confirm normal reboot; finally test a **central forced wipe/reinstall**.
 
-### Phase 4 — Promote to a real bare-metal cluster
+### Phase 4 — Promote to a real bare-metal cluster 🟡 in progress (4 metal nodes joined: thinkcentre, hp-01, wk-metal-01/02)
 - [ ] PXE-provision the remaining boxes via their MAC profiles (Talos workers; Proxmox for the beefy ones).
 - [ ] Bring everything under the same OpenTofu repo (workspaces/modules for VMs vs metal).
 - [ ] Decide which services live on the VM cluster vs bare-metal cluster.
@@ -319,7 +323,9 @@ Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://one
 - **Talos has no SSH/shell** — all via `talosctl`. Mindset shift from Rocky/Ubuntu.
 - **AMT security:** vPro/AMT is a powerful remote-management plane — set a strong password, keep it LAN-only, patch it. A neglected AMT is a backdoor.
 - **Secrets discipline** — doubly important with the public-repo goal; see `PUBLISH-CHECKLIST.md`.
-- **Current state:** UniFi controller + T61 are offline (`network-scan.md`); confirm T61 is the right home for Matchbox before building Phase 3 there.
+- **Current state (2026-06):** the T61 is **retired**; the UniFi controller now runs **in-cluster**
+  (`tofu/unifi.tf`, VIP `192.168.40.12`) and Matchbox runs on a **Proxmox LXC** (not the T61) — see
+  `docs/provisioning.md`. (Phase 3 was built there, not on the T61.)
 
 ## Immediate next actions (smallest useful steps)
 

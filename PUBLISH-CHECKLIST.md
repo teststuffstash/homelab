@@ -44,9 +44,15 @@ So: history rewrite / `git filter-repo` is **off the table**; rotate-then-(ideal
 
 ## Info disclosure — decide whether to scrub
 
-- [ ] `*.teststuff.net` domain (real domain you own?) across README / CLAUDE.md
+- [ ] `*.teststuff.net` domain (real domain you own?) across README / CLAUDE.md / docs
+- [ ] **Cloudflare account ID + zone ID** now committed as variable defaults in
+      `tofu/cloudflare/` and `tofu/cloudflare-token/` (identifiers, not secrets — decide whether to
+      move to gitignored tfvars before publishing). The CF API **tokens** themselves are out of git
+      (`~/.claude/cloudflare/`), as is the AWS account ID in `scripts/aws-*.sh` (decide).
+- [ ] `machines/machines.yaml` lists hardware models, IPs and the like (inventory disclosure).
 - [ ] ISP, hardware inventory, location (`Europe/Tallinn`), username/email
-- [ ] README still lists Telia (gone) — update network layout to current reality
+- [x] README network layout refreshed to current reality (no longer lists the old Telia router /
+      retired T61). `docs/network-physical.md` still shows the Telia **ONT** (the actual fibre box).
 
 ## Hygiene (not security)
 

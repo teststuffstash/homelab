@@ -12,6 +12,22 @@ with thresholds and per-plant run-times configured in **Home Assistant**.
   - HA dashboard: [`homeassistant/ha-config/dashboards/home.yaml`](../../homeassistant/ha-config/dashboards/home.yaml)
   - Monitoring: [`tofu/monitoring.tf`](../../tofu/monitoring.tf), HA export [`packages/prometheus.yaml`](../../homeassistant/ha-config/packages/prometheus.yaml), alert relay [`packages/alerting.yaml`](../../homeassistant/ha-config/packages/alerting.yaml) — see [§9 Monitoring](#9-monitoring-prometheus--grafana)
 
+> **Why this page is the entrypoint:** this irrigation service is the original *reason* the whole
+> homelab platform exists (see [`CONTEXT.md`](../../CONTEXT.md) — assistive-tech R&D). Everything
+> below it (Talos cluster, Home Assistant, monitoring, remote access) was built to run it reliably.
+
+### Documentation map
+
+| Read this for… | Doc |
+|---|---|
+| The whole repo at a glance | [`/README.md`](../../README.md) |
+| **Why** decisions were made (Ceph vs Longhorn, Tunnel vs VPN, …) | [`docs/adr.md`](../adr.md) |
+| **How to operate** things (recipes + gotchas) | [`docs/runbook.md`](../runbook.md) |
+| Onboard a bare-metal node (PXE) | [`docs/provisioning.md`](../provisioning.md) |
+| Remote access (Cloudflare Tunnel + mTLS) | [`docs/cloudflare.md`](../cloudflare.md) |
+| The shape (planes) / the plan (phases) | [`ARCHITECTURE.md`](../../ARCHITECTURE.md) · [`ROADMAP.md`](../../ROADMAP.md) |
+| All docs index | [`docs/README.md`](../README.md) |
+
 ---
 
 ## 1. What it does
@@ -71,7 +87,7 @@ flowchart TB
     end
 
     subgraph cluster["Talos k8s cluster on Proxmox 'pve' (192.168.2.3)"]
-      ha["**Home Assistant** pod (ns home-assistant)<br/>VIP 192.168.40.10:8123 (Cilium BGP)<br/>hostPath PV on wk-01"]
+      ha["**Home Assistant** pod (ns home-assistant)<br/>VIP 192.168.40.10:8123 (Cilium BGP)<br/>Longhorn PVC (replicated)"]
       irr["irrigation package:<br/>input_number.moisture_level_for_pumpN<br/>input_number.watering_seconds_pumpN"]
       ha --- irr
     end
@@ -104,9 +120,9 @@ attach to the controller on brass barbed fittings.
 | Droplet controller | Office, mains/USB powered | `192.168.2.245` (`droplettest`, MAC `30:c6:f7:22:a8:fc`) | ESP32 `esp32dev`, ESPHome; always-on (no deep sleep) |
 | Pumps 1–4 | Droplet board outputs | GPIO 13 / 4 / 16 / 17 | one per plant, via soaker hoses |
 | Soil sensors 1–4 | Droplet ADC inputs | GPIO 34 / 35 / 32 / 33 | capacitive; calibrated dry 2.30 V→0 %, water 0.89 V→100 % |
-| Home Assistant | k8s (Talos) on Proxmox `pve` | VIP `192.168.40.10:8123`, `https://homeassistant.teststuff.net` | thresholds, run-times, dashboard, time peer |
-| HA config (package + dashboard) | git → HA `/config` PV | `homeassistant/ha-config/...` | applied via `kubectl cp` + reload/restart |
-| WiFi | Ubiquiti APs | SSID `Walther` | controller on dead T61; APs run standalone (see [Risks](#7-risk-analysis)) |
+| Home Assistant | k8s (Talos) on Proxmox `pve` | VIP `192.168.40.10:8123`, `https://homeassistant.teststuff.net` (LAN), `https://ha.teststuff.net` (remote, Cloudflare Tunnel + mTLS) | thresholds, run-times, dashboard, time peer |
+| HA config (package + dashboard) | git → HA `/config` Longhorn PVC | `homeassistant/ha-config/...` | applied via `kubectl cp` + reload/restart |
+| WiFi | Ubiquiti APs | SSID `Walther` | UniFi controller now **in-cluster** (`192.168.40.12`, see [runbook](../runbook.md#unifi)); APs adopt via `ubiquiti.teststuff.net` |
 | NTP | OPNsense | `192.168.2.1` (+ `pool.ntp.org` fallback) | used for the day/night guard |
 | ESPHome dashboard | pop-os | `192.168.2.10:6052` | build + flash firmware |
 
@@ -242,13 +258,13 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 
 | # | Risk | Likelihood | Impact | Mitigation / status |
 |---|---|---|---|---|
-| R1 | **Home Assistant down** (cluster/Proxmox/storage) → device can't read thresholds → no watering | Medium | High (plants dry out) | Fail-safe (no false watering); HA on cluster; **next:** HA HA / alerting. Single hostPath PV on wk-01 is a SPOF |
+| R1 | **Home Assistant down** (cluster/Proxmox/storage) → device can't read thresholds → no watering | Medium | High (plants dry out) | Fail-safe (no false watering); HA on cluster; storage now **Longhorn (replicated)** — no longer a single-node-disk SPOF; alerting live ([§9](#9-monitoring-prometheus--grafana)). **Next:** HA replicas across nodes |
 | R2 | **Reservoir runs empty / pump runs dry** | High | High | Manual refill checks; **no level sensor yet** → see Next steps |
 | R3 | **Pump fails** (weak/dead) — plant silently not watered | Medium | Medium | "soil not rising after watering" is the tell; **next:** auto-detect & alert |
 | R4 | **Sensor drift / failure** → over- or under-watering | Medium | Medium | Periodic recalibration; `soilN_raw` diagnostics; clamp 0–100 |
 | R5 | **Threshold set higher than soil can reach** → pump runs every cycle (over-water) | Medium | Medium | Pick reachable thresholds; **next:** per-run max + daily cap |
 | R6 | **Leak / hose pops off** while pumping | Low | Low–Med | **Droplet sits elevated on the reservoir box → leaks drain back into it**, limiting water damage; daytime-only, short runs. Still no leak/flow detection → Next steps |
-| R7 | **WiFi outage** → device offline | Low | Medium | APs run standalone; UniFi controller migration in progress |
+| R7 | **WiFi outage** → device offline | Low | Medium | APs keep serving WiFi without the controller; UniFi controller now runs in-cluster (`192.168.40.12`) |
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
 | R9 | **Power loss to Droplet** | Low | Medium | Auto Watering restores last state on boot; thresholds persist (no `initial:`) |
 | R10 | **Lost OTA / API credentials** → can't manage remotely | Low | Low | OTA pw recorded in `~/.claude/homelab-droplet/`; API key in config; captive-portal/USB fallback |
@@ -265,10 +281,81 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
   *(Started — Prometheus/Alertmanager → HA, see [§9](#9-monitoring-prometheus--grafana). Reservoir-low still needs R2's level sensor.)*
 - Make **`check_interval` configurable from HA** (like the per-plant seconds) for long-run setups.
 - **Per-sensor / multi-point calibration** for better mid-range accuracy.
-- **Home Assistant resilience:** real storage provisioner instead of single-node hostPath; HA across nodes.
+- **Home Assistant resilience:** ~~real storage provisioner instead of single-node hostPath~~ **done** (Longhorn, replicated); still single-replica → **next:** HA across nodes.
 - **Move the API encryption key to `secrets.yaml`** (R11) ahead of making the repo public.
 - ~~Graph soil %, watering count, and run-time per plant for trend visibility.~~ **Done** — Grafana dashboard ([§9](#9-monitoring-prometheus--grafana)).
 - **Per-plant water *volume*** (not just on-seconds): calibrate ml/s per pump, or add flow sensors (deferred — time proxy chosen for now).
+- **Presence-gated watering** — only water when **nobody is home** (see the feature request below).
+- **Wall-mounted e-ink status display** — glanceable plant health on the wall; also retires the never-used Droplet OLED (see the feature request below).
+
+### Feature request: presence-gated watering (privacy-preserving)
+
+**Status:** requested, not designed. **Want:** the Droplet only runs a watering cycle when **no one
+is home**; "home" = a known phone is associated to the home WiFi. Likely the **first service that
+needs custom code** in this lab.
+
+**Hard constraint — minimal disclosure.** The only fact that may leave the detector is a **single
+boolean** (`someone_home` / `nobody_home`). It must **not** be exposed as a queryable endpoint or a
+Prometheus metric — it is **pushed (written) to Home Assistant** (and from there read by the Droplet
+over the existing encrypted ESPHome API). **No other cluster service may learn presence.** So: no
+shared "presence service", no per-device MAC/IP/name data flowing into HA, nothing in the monitoring
+stack. (Possibly enforce with a Cilium NetworkPolicy around the detector + HA.)
+
+**Presence source — open question (OPNsense vs UniFi):**
+- **UniFi (leaning).** The controller now runs in-cluster (`tofu/unifi.tf`, `192.168.40.12`) and
+  tracks real **client association state + last-seen** per AP — the accurate signal. HA even has a
+  first-class UniFi `device_tracker`. Caveat: that built-in integration pulls **all** clients
+  (names/MACs) into HA — *more* disclosure than we want; the boolean should be reduced **outside** HA.
+- **OPNsense.** Could derive from DHCP leases / ARP table, but those are **unreliable for presence**
+  (phones keep a lease while asleep; Wi-Fi power-save). More accurate would need the AP's association
+  state, which OPNsense doesn't have. → UniFi is the better source unless a scoped, presence-only
+  read proves easier on OPNsense.
+
+**Why it probably needs code (the token-granularity question Rasmus raised):** neither UniFi nor
+OPNsense can mint a token scoped to *"only a home/away boolean"* — the narrowest is a **read-only
+account that can list clients**. So the privacy-preserving shape is a **tiny detector service** that
+(a) reads client presence with that least-privilege credential, (b) reduces it to the boolean
+(any tracked phone associated → home), (c) **writes only the boolean** to an HA helper
+(`input_boolean`/`binary_sensor`, via the HA API or a webhook). If a sufficiently-scoped read token
+*can't* be created, that further argues for the detector owning the credential and never re-exposing it.
+
+**Droplet integration:** add a `nobody_home` gate to the on-device `do_water_cycle` (alongside the
+day/night + threshold checks) — read like the other HA-provided values. **Decide the fail-safe:** if
+presence is **unknown/unreachable**, default to *don't water* (treat as "someone home") so a detector
+outage can't water unattended-unexpectedly — or the opposite; pick deliberately (cf. the NaN fail-safe
+in [§3](#3-configuration)).
+
+**Caveats:** MAC randomization (stable per-SSID on the home network, so trackable), guest phones,
+a dead/absent phone reading as "away". Coarse presence — fine for "don't water while someone's around".
+
+### Feature request: wall-mounted e-ink status display
+
+**Status:** requested, not designed. **Want:** a wall-mounted **4–6" e-paper** display (e.g. the
+[Waveshare 5.83" e-Paper (G)](https://www.waveshare.com/5.83inch-e-paper-g.htm)) showing an
+at-a-glance **plant-health summary** — mostly the 4 soil-moisture readings + a single "**everything is
+working**" line. E-paper suits this: it holds the image with no power and only refreshes on change, so
+it can sit on a wall on battery (periodic wake) or USB.
+
+**What to show:** per-plant moisture % (4 bars), a global health line, last-watered, online/offline.
+The "everything is working" line maps to the existing alert signals
+([§9](#9-monitoring-prometheus--grafana)): Droplet online (`binary_sensor…_status`), no stuck-zero
+sensor, (reservoir-low once R2's sensor exists).
+
+**Source — open choice:**
+- **ESPHome-native render (leaning, local-first).** A second **ESP32 + e-paper** node running ESPHome
+  (it has Waveshare e-paper `display:` components), pulling the moisture/health values from HA and
+  drawing them with a `lambda`. No Grafana dependency, matches the existing stack, keeps working on the
+  LAN during a WAN outage; ESP32 deep-sleep + periodic wake → battery-friendly.
+- **Grafana screenshot to e-ink.** Reuses the existing dashboard panels but needs
+  `grafana-image-renderer` (or a kiosk + screenshot service) and the device fetching a rendered PNG —
+  heavier, and couples the wall display to Grafana being up. Pick this only if the actual **graph/trend
+  panels** are wanted on the wall; for "moisture + OK" the ESPHome render is simpler and more robust.
+
+**Tie-in — retire the Droplet OLED.** The Droplet's tiny on-board OLED needs a button press to wake, so
+it's never used → **remove it entirely**: delete the OLED `display:` + its wake-button logic from
+`esphome/config/droplettest.yaml`, and **3D-print a new Droplet case without the OLED cutout**. The
+e-paper wall display becomes the always-on, glanceable status surface instead. *(When done, also update
+the OLED mentions in [§2](#2-architecture-c4) and [§10](#10-quick-reference).)*
 
 ---
 
@@ -282,8 +369,8 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | Alertmanager | **https://alertmanager.teststuff.net** | `192.168.40.14:9093` | `192.168.2.8:443` |
 
 Same pattern as Home Assistant: OPNsense HAProxy terminates TLS (per-service LAN IP-alias
-VIP) and proxies to the in-cluster BGP LoadBalancer VIP; certs via os-acme-client (DNS-01 /
-Route 53); local DNS via Unbound host overrides. Managed in `ansible/opnsense-acme.yml` +
+VIP) and proxies to the in-cluster BGP LoadBalancer VIP; certs via os-acme-client (DNS-01 via
+**Cloudflare**, since `teststuff.net` moved off Route 53); local DNS via Unbound host overrides. Managed in `ansible/opnsense-acme.yml` +
 `ansible/opnsense-haproxy.yml`; the LoadBalancer VIPs are in `tofu/monitoring.tf`. The raw
 `192.168.40.x` VIPs remain reachable directly (no TLS) for in-cluster/debug use.
 
@@ -358,15 +445,13 @@ in-RAM soil state inside `do_water_cycle`).
 4. **Verify:** Grafana at `https://grafana.teststuff.net` (admin / your password) → *Office Plants — Irrigation*;
    Prometheus *Targets* shows `home-assistant` UP.
 
-> **Storage:** Prometheus uses a node-pinned hostPath PV (`/var/mnt/prometheus` on `wk-02`,
-> 90-day retention), mirroring HA's pattern since there's still no dynamic provisioner — the
-> same SPOF caveat applies (R1). The "real storage provisioner" roadmap step would replace both.
-> Three Talos/cluster prerequisites are baked into the code: a Talos `kubelet.extraMounts`
-> bind for `/var/mnt/prometheus` (`talos.tf` — `/var/mnt` is otherwise read-only to the
-> kubelet), a no-provisioner `manual` `StorageClass` (the prometheus-operator validates the SC
-> exists, unlike core PV binding), and the `monitoring` namespace labelled
-> `pod-security.kubernetes.io/enforce=privileged` (Talos enforces `baseline`; node-exporter
-> needs host access). Credentials live outside the repo: HA scrape token at
+> **Storage:** Prometheus's TSDB is on **Longhorn** (replicated, default StorageClass, 90-day
+> retention) — dynamically provisioned via a `volumeClaimTemplate`, no node pinning, so the old
+> single-node-disk SPOF is gone (the earlier hostPath PV + its `kubelet.extraMounts` bind and the
+> placeholder `manual` StorageClass have been removed). Grafana keeps no state. One Talos quirk
+> remains in code: the `monitoring` namespace is labelled
+> `pod-security.kubernetes.io/enforce=privileged` (Talos enforces `baseline`; node-exporter needs
+> host access). Credentials live outside the repo: HA scrape token at
 > `~/.claude/homelab-ha/prometheus_llat`, Grafana admin password at
 > `~/.claude/homelab-ha/grafana_admin_password`.
 
@@ -383,6 +468,6 @@ in-RAM soil state inside `do_water_cycle`).
 | Pumps | `pump1=GPIO13, pump2=GPIO4, pump3=GPIO16, pump4=GPIO17` |
 | Soil sensors | `Soil1=GPIO34, Soil2=GPIO35, Soil3=GPIO32, Soil4=GPIO33` |
 | Time | SNTP `192.168.2.1` + `pool.ntp.org`, TZ Europe/Tallinn |
-| Home Assistant | `https://homeassistant.teststuff.net` / `192.168.40.10:8123` |
+| Home Assistant | `https://homeassistant.teststuff.net` (LAN) · `https://ha.teststuff.net` (remote) / `192.168.40.10:8123` |
 | ESPHome dashboard | `http://192.168.2.10:6052` |
 | HA package / dashboard | `homeassistant/ha-config/packages/irrigation.yaml`, `.../dashboards/home.yaml` |

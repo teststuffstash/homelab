@@ -9,7 +9,7 @@ concern is its own playbook.
 | Playbook | Manages |
 |---|---|
 | `opnsense-bgp.yml` | FRR/BGP peering Cilium (AS 64512 ↔ 64513), LB VIPs `192.168.40.0/24` |
-| `opnsense-acme.yml` | Let's Encrypt certs (DNS-01 via Route53) for the `*.teststuff.net` names |
+| `opnsense-acme.yml` | Let's Encrypt certs (DNS-01 via **Cloudflare** — `ACME_CF_TOKEN`) for the `*.teststuff.net` names |
 | `opnsense-haproxy.yml` | HTTPS reverse proxy → in-cluster service VIPs |
 | `opnsense-unbound-hosts.yml` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
 

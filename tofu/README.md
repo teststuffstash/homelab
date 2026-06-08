@@ -32,8 +32,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 
 - `talos.tf` — Talos machine config, bootstrap, kubeconfig. Patches: install disk
   `/dev/sda`; `cni=none` + `proxy.disabled=true` on control-plane (Cilium owns CNI and
-  service routing); a kubelet `extraMount` for `/var/mnt/homeassistant` (Talos rootfs is
-  read-only, so hostPath PVs need a writable bind).
+  service routing). (Stateful services are on **Longhorn** now — the old `/var/mnt/*` hostPath
+  kubelet `extraMounts` were removed; Longhorn uses `/var/lib/longhorn`.)
 - `image.tf` — Talos Image Factory schematic (+ qemu-guest-agent) and the node download.
 - `cilium.tf` — Cilium Helm release. `kubeProxyReplacement=true` via Talos KubePrism
   (`localhost:7445`), `bgpControlPlane.enabled`, Talos-specific cgroup/capabilities,
@@ -126,12 +126,18 @@ that must live in git).
   (boot-from-git); kube-proxy-free (Talos `proxy.disabled` + Cilium `kubeProxyReplacement`).
 - **Service exposure** — Cilium BGP ↔ OPNsense FRR; LoadBalancer VIPs from `192.168.40.0/24`
   routed on the LAN (replaces NodePort/MetalLB). OPNsense side as code in `../ansible/`.
-- **Phase 2** — Home Assistant deployed; reachable on `http://192.168.40.10:8123`.
+- **Phase 2** — Home Assistant deployed; `http://192.168.40.10:8123`, HTTPS `homeassistant.teststuff.net`
+  (LAN HAProxy) and `ha.teststuff.net` (remote, via the Cloudflare root).
+
+## Related roots
+
+- **`../tofu/cloudflare/`** + **`../tofu/cloudflare-token/`** — remote access (Cloudflare Tunnel +
+  mTLS, **live**); separate roots/state. See `../docs/cloudflare.md`.
+- **`../tofu/provisioning/`** — Matchbox PXE LXC (separate root/state); see `../docs/provisioning.md`.
 
 ## Not included yet (next steps)
 
 - Remote/encrypted state backend (currently local state).
 - Home Assistant `/config` → object-storage (S3) backup per ROADMAP (Longhorn covers in-cluster
   replication, not off-cluster DR).
-- Cloudflare Tunnel for remote access (`../docs/cloudflare.md`).
 - GitOps (ArgoCD/Flux) for workloads; Civo cloud-burst.

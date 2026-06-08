@@ -30,12 +30,14 @@ Gotchas:
 
 In the jail under `~/.claude/`: `homelab-opnsense/{key,secret}`, `homelab-pve-ssh/{api_token_*,id_ed25519}`,
 `homelab-matchbox/{ca.crt,client.crt,client.key}`, `homelab-ha/{owner_password,prometheus_llat,grafana_admin_password,access_token,refresh_token}`,
-`homelab-droplet/ota_password`. Tofu state/`*.tfvars`/`kubeconfig`/`talosconfig` are gitignored.
+`homelab-droplet/ota_password`, `cloudflare/{read-key,write-key,acme-token,ha-client.p12,...}`,
+`homelab-aws/{audit-key,audit-secret}`. Tofu state/`*.tfvars`/`kubeconfig`/`talosconfig` are gitignored.
 
 ## OPNsense as code
 
 OPNsense (router @ .1, currently 26.1.x) is managed with the `oxlorg.opnsense` Ansible collection.
-Playbooks: `opnsense-bgp.yml` (FRR/BGP ↔ Cilium), `opnsense-acme.yml` (Let's Encrypt, DNS-01),
+Playbooks: `opnsense-bgp.yml` (FRR/BGP ↔ Cilium), `opnsense-acme.yml` (Let's Encrypt, **DNS-01 via
+Cloudflare** — `ACME_CF_TOKEN`, since `teststuff.net` moved off Route53),
 `opnsense-haproxy.yml` (HTTPS reverse proxy), `opnsense-unbound-hosts.yml` (static DNS overrides),
 plus `opnsense/dnsmasq-dhcp.py` (LAN DHCP). **Run them with the wrapper** (handles the httpx
 interpreter + creds):
@@ -154,8 +156,22 @@ The Droplet plant-waterer (ESP32 @ .245, ESPHome native API on 6053). Config
 esphome's PlatformIO can't run under the jail's seccomp). Service docs: `docs/office-plants/`.
 OTA password at `~/.claude/homelab-droplet/ota_password`.
 
-## Cloudflare (in progress)
+## Cloudflare (live)
 
-Remote access to Home Assistant via Cloudflare Tunnel + mTLS — design and decisions in
-`docs/cloudflare.md`. The Cloudflare **Docs MCP** is wired into this project (`claude mcp list`) —
-use it to ground Cloudflare work in current docs rather than stale model knowledge.
+Home Assistant is reachable from anywhere at **`https://ha.teststuff.net`** via a Cloudflare Tunnel
+(`cloudflared` Deployment, ns `cloudflared`) gated by **client-certificate mTLS** (WAF-enforced). All
+as code in `tofu/cloudflare/` (infra) + `tofu/cloudflare-token/` (scoped tokens); design + the full
+decision/gotcha record in `docs/cloudflare.md`.
+
+- **Apply (infra):** `export CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/write-key)` then
+  `devbox run -- tofu -chdir=tofu/cloudflare plan/apply`. The scoped write token is minted once by
+  `tofu/cloudflare-token/` with an admin token, **outside the jail**.
+- **Phone cert:** `bash scripts/make-client-p12.sh` → `~/.claude/cloudflare/ha-client.p12` (pinned
+  openssl, explicit algorithms; the cert/key come from the `hashicorp/tls` provider + Cloudflare's
+  managed CA). Install on the device; the HA app's **External URL** must be `https://ha.teststuff.net`
+  (Internal stays `homeassistant.teststuff.net` for the fast LAN HAProxy path).
+- **Gotchas (full list in `docs/cloudflare.md`):** the tunnel origin needs a **trailing-dot FQDN**
+  (else the pod search-domain + the `*.local.teststuff.net` wildcard makes cloudflared dial
+  `127.0.0.1` → 502); HA needs `http.use_x_forwarded_for` + `trusted_proxies` (pod CIDR) or it 400s.
+- The Cloudflare **Docs MCP** is wired into this project (`claude mcp list`) — use it to ground
+  Cloudflare work in current docs rather than stale model knowledge (provider v5 renamed resources).
