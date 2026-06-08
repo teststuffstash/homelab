@@ -49,5 +49,10 @@ devbox run nodes                               # kubectl get nodes -o wide
 bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml   # OPNsense as code
 ```
 
-State, `*.tfvars`, `kubeconfig`/`talosconfig`, and secrets are gitignored / kept out of the repo.
-This repo is **slated to go public** — see `PUBLISH-CHECKLIST.md` before pushing it anywhere public.
+State, `*.tfvars`, `kubeconfig`/`talosconfig`, and secrets are gitignored / kept out of the repo
+(they live in `~/.claude/`). This is a real, running homelab published openly — infrastructure
+code shouldn't need security-through-obscurity.
+
+## License
+
+[AGPL-3.0-or-later](LICENSE) — Copyright (C) 2026 Rasmus Soot. Build on it; keep derivatives open.
