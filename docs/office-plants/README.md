@@ -288,11 +288,12 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 - Make **`check_interval` configurable from HA** (like the per-plant seconds) for long-run setups.
 - **Per-sensor / multi-point calibration** for better mid-range accuracy.
 - **Home Assistant resilience:** ~~real storage provisioner instead of single-node hostPath~~ **done** (Longhorn, replicated); still single-replica → **next:** HA across nodes.
-- **Move the API encryption key to `secrets.yaml`** (R11) ahead of making the repo public.
+- ~~Move the API encryption key to `secrets.yaml` (R11)~~ **Done** — device secrets are `!secret`; API key + AP password rotated.
 - ~~Graph soil %, watering count, and run-time per plant for trend visibility.~~ **Done** — Grafana dashboard ([§9](#9-monitoring-prometheus--grafana)).
 - **Per-plant water *volume*** (not just on-seconds): calibrate ml/s per pump, or add flow sensors (deferred — time proxy chosen for now).
 - **Presence-gated watering** — only water when **nobody is home** (see the feature request below).
 - **Wall-mounted e-ink status display** — glanceable plant health on the wall; also retires the never-used Droplet OLED (see the feature request below).
+- **NDVI / SI-NDVI plant-health camera** — near-infrared imaging for early vigour/stress detection, *before* soil moisture or visible wilting shows it (experimental — see the feature request below).
 
 ### Feature request: presence-gated watering (privacy-preserving)
 
@@ -362,6 +363,44 @@ been **removed from `esphome/config/office-plants-irrigation.yaml`** (the displa
 and was never used; takes effect on the next flash). Still TODO on the hardware side: **3D-print a
 new Droplet case without the OLED cutout**. The e-paper wall display becomes the always-on,
 glanceable status surface instead.
+
+### Feature request: NDVI / SI-NDVI plant-health camera (experimental)
+
+**Status:** a "crazy idea to try", **no research done yet** — captured here. **Want:** detect plant
+vigour/stress from **near-infrared reflectance**, *earlier* than soil moisture or visible wilting
+reveal it. Healthy leaves reflect a lot of NIR; stressed/diseased leaves reflect less — so
+**NDVI = (NIR − Red) / (NIR + Red)** is a standard vegetation-health index.
+
+**Approach (the suggested cheap path):** a **Pi NoIR camera** (IR-blocking filter removed → it sees
+near-IR) + a **blue gel filter** (the "blue thing") gives a **single-camera SI-NDVI** the Public
+Lab / Infragram way: the blue channel captures visible, the red channel captures NIR (IR leaks into
+the red photosites), then compute a per-pixel pseudo-NDVI → a false-colour health map + an aggregate
+index per plant. Refs: [Pi NoIR camera v2](https://www.raspberrypi.com/products/pi-noir-camera-v2/),
+background [*"What's that blue thing doing here?"*](https://www.raspberrypi.com/news/whats-that-blue-thing-doing-here/).
+
+**Homelab fit:** a small camera node (e.g. Pi Zero 2 W + NoIR) images the 4 plants on a schedule;
+compute the index on-device or in an in-cluster job; push a **per-plant NDVI number** to HA →
+Prometheus/Grafana ([§9](#9-monitoring-prometheus--grafana)) next to soil moisture, trend it, alert
+on a drop (early stress). Could also surface on the wall e-ink display.
+
+**Caveats / research-needed (this is the experimental part):**
+1. ⚠️ **Indoor light has almost no NIR.** NDVI needs NIR *illumination* to reflect off the leaves —
+   sunlight is full-spectrum, but **office LED/fluorescent lighting emits little-to-no near-IR**, so
+   indoors the signal may be too weak to be meaningful. Likely need a **window/daylight spot** or a
+   dedicated **NIR light source** (850/940 nm LEDs). This is the make-or-break unknown for an *office*.
+2. **Single-camera SI-NDVI is approximate** — channel crosstalk, white-balance/calibration dependence
+   (calibrate against a known reference card under the actual light). Good for *relative trends*, not
+   absolute/scientific values.
+3. **Compute/hardware:** the NoIR camera wants a Raspberry Pi (cheap Pi Zero 2 W); NDVI math via
+   NumPy/OpenCV on the Pi, or ship frames to an in-cluster job. (ESP32-CAM is cheaper but lacks the
+   NoIR + processing story.)
+4. **Privacy:** a camera in the office images **people**, not just plants — same boundary as the
+   presence feature. Keep all imaging + processing **local** (Pi / in-cluster, never cloud); only a
+   per-plant *number* leaves the detector, never frames. (cf. presence-gated watering above.)
+
+**First step:** run the Infragram pipeline on a few **daylight** photos of the plants to see if the
+index even tracks plant state — and test whether the office lighting yields any usable NIR or whether
+daylight / an NIR lamp is mandatory. Cheap to prototype (camera + a blue gel).
 
 ---
 
