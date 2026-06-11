@@ -71,6 +71,13 @@ resource "helm_release" "kube_prometheus_stack" {
       }
       prometheusSpec = {
         replicas = 1
+        # Scrape ServiceMonitors / PodMonitors / PrometheusRules cluster-wide, not just the chart's
+        # own (the default selector only matches release=kube-prometheus-stack). Lets Cilium +
+        # Longhorn (and future) monitors/rules be picked up without per-object label wrangling.
+        serviceMonitorSelectorNilUsesHelmValues = false
+        podMonitorSelectorNilUsesHelmValues     = false
+        probeSelectorNilUsesHelmValues          = false
+        ruleSelectorNilUsesHelmValues           = false
         # No point scraping faster than HA reports (devices report at 60s).
         scrapeInterval = "60s"
         retention      = "90d"
@@ -209,6 +216,82 @@ resource "helm_release" "kube_prometheus_stack" {
           ]
         }]
       }
+
+      # Cilium BGP — the LoadBalancer-VIP lifeline. If peering with OPNsense drops, .40.0/24 VIPs
+      # stop being advertised and every LAN-exposed service goes dark. (These metrics caught the
+      # metal nodes never being in bgp_node_ips — 2026-06-11.)
+      cilium-bgp = {
+        groups = [{
+          name = "cilium-bgp"
+          rules = [
+            {
+              "alert"       = "CiliumBGPAllSessionsDown"
+              "expr"        = "sum(cilium_bgp_control_plane_session_state == bool 1) == 0"
+              "for"         = "5m"
+              "labels"      = { severity = "critical" }
+              "annotations" = { summary = "No Cilium BGP sessions established", description = "Not one node is peering with OPNsense — all LoadBalancer VIPs (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...) are no longer advertised and are unreachable from the LAN." }
+            },
+            {
+              "alert"       = "CiliumBGPNodeSessionDown"
+              "expr"        = "cilium_bgp_control_plane_session_state != 1"
+              "for"         = "15m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Cilium BGP session down on a node", description = "{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (reduced redundancy/ECMP). A new node must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml." }
+            }
+          ]
+        }]
+      }
+
+      cilium = {
+        groups = [{
+          name = "cilium"
+          rules = [
+            {
+              "alert"       = "CiliumAgentScrapeDown"
+              "expr"        = "up{job=\"cilium-agent\"} == 0"
+              "for"         = "10m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Cilium agent unreachable", description = "Prometheus can't scrape the Cilium agent on {{ $labels.instance }} for 10m — the node's CNI may be down (the node will go NotReady)." }
+            },
+            {
+              "alert"       = "CiliumUnreachableNodes"
+              "expr"        = "cilium_unreachable_nodes > 0"
+              "for"         = "10m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Cilium reports unreachable nodes", description = "A Cilium agent ({{ $labels.instance }}) can't reach {{ $value }} other node(s) in the mesh for 10m — cross-node pod networking is degraded." }
+            }
+          ]
+        }]
+      }
+
+      longhorn = {
+        groups = [{
+          name = "longhorn"
+          rules = [
+            {
+              "alert"       = "LonghornVolumeFaulted"
+              "expr"        = "max by (volume) (longhorn_volume_robustness) == 3"
+              "for"         = "5m"
+              "labels"      = { severity = "critical" }
+              "annotations" = { summary = "Longhorn volume faulted", description = "Volume {{ $labels.volume }} is faulted (no healthy replica) for 5m — data unavailable / at risk." }
+            },
+            {
+              "alert"       = "LonghornVolumeDegraded"
+              "expr"        = "max by (volume) (longhorn_volume_robustness) == 2"
+              "for"         = "20m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Longhorn volume degraded", description = "Volume {{ $labels.volume }} has been degraded (a replica missing/rebuilding) for 20m — running below the desired replica count." }
+            },
+            {
+              "alert"       = "LonghornNodeStorageLow"
+              "expr"        = "(longhorn_node_storage_usage_bytes / longhorn_node_storage_capacity_bytes) > 0.85"
+              "for"         = "30m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Longhorn node storage low", description = "{{ $labels.node }} Longhorn storage is over 85% used for 30m — volumes may fail to schedule or rebuild." }
+            }
+          ]
+        }]
+      }
     }
   })]
 
@@ -250,6 +333,19 @@ resource "kubernetes_config_map" "cluster_health_dashboard" {
     labels    = { grafana_dashboard = "1" }
   }
   data = { "cluster-health.json" = file("${path.module}/dashboards/cluster-health.json") }
+}
+
+# Component dashboards (Cilium agent metrics 21431, Cilium/Hubble network 24056, Longhorn 16888) —
+# community dashboards from grafana.com, with ${DS_PROMETHEUS} rewritten to the provisioned
+# Prometheus datasource uid ("prometheus") so they render via the sidecar without an import step.
+resource "kubernetes_config_map" "component_dashboards" {
+  for_each = toset(["cilium-metrics", "cilium-network", "longhorn"])
+  metadata {
+    name      = "grafana-dashboard-${each.key}"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "${each.key}.json" = file("${path.module}/dashboards/${each.key}.json") }
 }
 
 output "grafana_url" {

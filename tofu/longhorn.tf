@@ -90,6 +90,10 @@ resource "helm_release" "longhorn" {
     }
     # single replica of the UI/manager bits is plenty for a homelab
     longhornUI = { replicas = 1 }
+    # Prometheus ServiceMonitor for longhorn-manager (:9500 longhorn_* metrics: volume
+    # robustness/state, node storage, replica counts). Scraped via the relaxed selector
+    # (monitoring.tf); alerts on degraded/faulted volumes + low storage live there.
+    metrics = { serviceMonitor = { enabled = true } }
   })]
 }
 

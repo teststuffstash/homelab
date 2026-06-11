@@ -30,9 +30,22 @@ resource "helm_release" "cilium" {
     k8sServicePort       = 7445
     # BGP control plane: advertise LoadBalancer service IPs to OPNsense (FRR).
     bgpControlPlane = { enabled = true }
+    # Prometheus metrics: the agent exposes cilium_* incl. cilium_bgp_control_plane_* (BGP session
+    # health — the alert that catches a peering drop before every .40.x VIP goes dark). The
+    # serviceMonitors need the Prometheus Operator CRDs (kube-prometheus-stack) and are scraped via
+    # the relaxed serviceMonitorSelector in monitoring.tf.
+    prometheus = { enabled = true, serviceMonitor = { enabled = true } }
+    # Hubble flow metrics (drop/dns/tcp/flow/icmp) — network-level observability ≈ continuous tests.
+    hubble = {
+      enabled = true
+      metrics = {
+        enabled        = ["dns", "drop", "tcp", "flow", "icmp", "port-distribution"]
+        serviceMonitor = { enabled = true }
+      }
+    }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
-    operator = { replicas = 1 }
+    operator = { replicas = 1, prometheus = { enabled = true, serviceMonitor = { enabled = true } } }
     cgroup = {
       autoMount = { enabled = false }
       hostRoot  = "/sys/fs/cgroup"
