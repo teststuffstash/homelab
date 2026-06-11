@@ -10,6 +10,18 @@
 # (baked into the metal install image + the wk-02 'longhorn' VM image). The namespace
 # must be PodSecurity=privileged (Talos enforces baseline; Longhorn's instance-managers
 # are privileged), same as monitoring.tf.
+#
+# ⚠️ BEFORE upgrading Talos to v1.14+: 1.14 mounts EPHEMERAL (/var) `noexec`, which breaks
+# Longhorn v1 — instance-manager exec's engine binaries the engine-image DaemonSet drops in
+# /var/lib/longhorn/engine-binaries/ (=> "permission denied", storage dies on the post-upgrade
+# reboot). We run the v1 data engine (v2-data-engine=false), so we're affected. Apply this
+# patch (machine config, all nodes) FIRST, then upgrade:
+#     apiVersion: v1alpha1
+#     kind: VolumeConfig
+#     name: EPHEMERAL
+#     mount: { secure: false }   # re-enables exec (also drops nosuid/nodev on /var)
+# (Longhorn v2 / SPDK runs the data plane in-process and is NOT affected — moot if we migrate.)
+# Ref: Talos v1.14.0-alpha.1 release notes ("noexec on EPHEMERAL").
 variable "longhorn_version" {
   description = "Longhorn Helm chart version."
   type        = string
