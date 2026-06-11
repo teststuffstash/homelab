@@ -17,9 +17,16 @@ opnsense_asn: 64512
 cluster_asn: 64513
 bgp_router_id: "192.168.2.1"
 bgp_node_ips:                                # Talos nodes that peer (BGP neighbors)
-  - 192.168.2.51
-  - 192.168.2.61
-  - 192.168.2.62
+  - 192.168.2.51   # cp-01
+  - 192.168.2.61   # wk-01
+  - 192.168.2.62   # wk-02
+  # Bare-metal nodes — were never added when onboarded, so they sat BGP `idle` (never peered,
+  # never advertised VIPs); the Cilium BGP metrics caught it (2026-06-11). Cilium's nodeSelector
+  # is all-nodes, so OPNsense must list every node here (explicit neighbors, not a listen-range).
+  - 192.168.2.54   # hp-01
+  - 192.168.2.53   # thinkcentre
+  - 192.168.2.182  # wk-metal-01
+  - 192.168.2.183  # wk-metal-02
 
 # --- opnsense-acme : Let's Encrypt certs (DNS-01 via Cloudflare) ---
 acme_account_name: "TestStuff OPNSense"
