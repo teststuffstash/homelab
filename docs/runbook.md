@@ -71,6 +71,33 @@ API/module gotchas:
 - ⚠️ Never iterate destructive firmware endpoints (`/firmware/reboot`, `/poweroff`) with a real
   body to "discover" them — they execute.
 
+### Expose an in-cluster service over HTTPS (`<name>.teststuff.net`)
+
+1. Edit `group_vars/opnsense.yml`: add the hostname to **`acme_cert_specs`** (`restart_action: "reload
+   haproxy"`) and a **`haproxy_proxied_services`** entry `{ name, cert_domain, vip, backend_ip,
+   backend_port }`. Each frontend needs its **own LAN IP-alias VIP** (`.5`–`.9` in use — take the next
+   free; OPNsense owns `.1:443`). The haproxy role auto-creates the Unbound override (`name → vip`).
+2. Run **in this order** — the sign step in the middle is the trap:
+   - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert **spec only; does
+     NOT issue it** (the role is create-if-absent; issuance is left to OPNsense's ACME cron).
+   - ⚠️ **Sign the cert before running haproxy.** Trigger issuance now instead of waiting for the cron:
+     `POST /api/acmeclient/certificates/sign/<uuid>` (uuid from `certificates/search`), then poll
+     `certificates/search` until that cert's `statusCode == 200` (DNS-01 takes ~30–60s). Or click
+     *ACME → Certificates → (sign)* in the GUI.
+   - `bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml` — server/backend/frontend + VIP.
+3. If the backend app emits absolute URLs, point its base URL at the https name (e.g. Forgejo
+   `gitea.config.server.ROOT_URL = https://<name>.teststuff.net/` in `tofu/forgejo.tf`).
+4. Verify: `devbox run -- dig +short <name>.teststuff.net @192.168.2.1` → the VIP; `curl -sI
+   https://<name>.teststuff.net` → 200; `echo | openssl s_client -connect <name>.teststuff.net:443
+   -servername <name>.teststuff.net | openssl x509 -noout -subject` → CN matches (not `opnsense...`).
+
+⚠️ **If you ran haproxy *before* the cert was signed**, the frontend was created with an empty cert
+(`certRefId` was blank) and serves the default `opnsense.teststuff.net` cert → TLS CN mismatch (`curl`
+exit 60 / HTTP 000). The haproxy role is **create-if-absent**, so a plain re-run won't re-link it —
+**delete the `<name>-frontend`** (`POST /api/haproxy/settings/delFrontend/<uuid>`) and re-run
+`opnsense-haproxy.yml` so it recreates the frontend with the now-issued `certRefId`. (Done for
+`forgejo.teststuff.net` → VIP `.9` → `192.168.40.15:3000`, 2026-06-11.)
+
 ### LAN DHCP / DNS
 
 LAN DHCP was migrated **ISC dhcpd → dnsmasq** (ISC has no settings API). `opnsense/dnsmasq-dhcp.py`
