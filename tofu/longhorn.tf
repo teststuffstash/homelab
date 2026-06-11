@@ -82,6 +82,9 @@ resource "helm_release" "longhorn" {
       defaultDataLocality                = "best-effort"
       storageOverProvisioningPercentage  = 100
       orphanAutoDeletion                 = true
+      # Let Longhorn read the Metrics Server (metrics-server.tf) so it populates the
+      # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
+      kubernetesMetricsServerMetricsEnabled = true
     }
     persistence = {
       defaultClass             = true # make `longhorn` the default StorageClass
