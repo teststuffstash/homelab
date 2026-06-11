@@ -21,6 +21,10 @@
     "awscli2@latest",
     "openssl@latest"
   ],
+  "env": {
+    "TALOSCONFIG": "$PWD/tofu/talosconfig",
+    "KUBECONFIG": "$PWD/tofu/kubeconfig"
+  },
   "shell": {
     "init_hook": [
       "echo \"homelab toolchain ready — $(tofu version | head -1)\""
@@ -39,6 +43,12 @@
       ],
       "nodes": [
         "KUBECONFIG=$PWD/tofu/kubeconfig kubectl get nodes -o wide"
+      ],
+      "cordon": [
+        "kubectl cordon \"$@\""
+      ],
+      "uncordon": [
+        "kubectl uncordon \"$@\""
       ],
       "opnsense": [
         "echo 'Run an OPNsense playbook with creds+httpx interpreter:' && echo '  bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml'"
