@@ -24,6 +24,10 @@ variable "metal_nodes" {
     # /var/lib/longhorn/optane<N>; registered into Longhorn with tag "fast" (see
     # scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass in longhorn.tf).
     optane_disks = optional(list(string), [])
+    # Pin the hostname via a HostnameConfig patch (see below). Default true. Set false for a node
+    # that has NOT yet been reinstalled with the pinned config — otherwise a plain `tofu apply`
+    # would push the hostname change to the *running* node and ghost it (install-time only).
+    pin_hostname = optional(bool, true)
   }))
   default = {
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
@@ -31,11 +35,13 @@ variable "metal_nodes" {
     # ThinkPad X250 — 128GB SanDisk SDSSDHP1 SATA SSD (confirmed via `talosctl get disks`).
     # Laptop/compute tier like the X240: tainted ephemeral below, no Longhorn disk.
     wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda" }
-    # ThinkCentre Edge — 120GB Kingston SV300 (NOT sda=USB-boot, NOT nvme=Optane scratch).
-    # Key == node name (from its DHCP-reservation hostname). Onboarded via USB ISO at Talos
-    # v1.13.0; since upgraded in-place to v1.13.2 (matches cluster). Two Intel Optane M10 16GB
-    # (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
-    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdc", optane_disks = ["/dev/nvme0n1", "/dev/nvme1n1"] }
+    # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
+    # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
+    # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
+    # since the NIC cable was fixed (2026-06-11) — was "flaky PXE" purely because the marginal
+    # link timed out netboot. (A diskSelector by serial/wwid would be more robust than /dev/sdX.)
+    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
+    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdb", optane_disks = ["/dev/nvme0n1", "/dev/nvme1n1"], pin_hostname = true }
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
     hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
@@ -52,15 +58,18 @@ data "talos_machine_configuration" "metal" {
   kubernetes_version = trimprefix(var.kubernetes_version, "v")
   talos_version      = var.talos_version
 
-  # Hostname comes from the DHCP reservation (dnsmasq sends it). It CANNOT be pinned via
-  # machine.network.hostname applied in-place: Talos treats the DHCP-acquired hostname as
-  # already-set in the running v1alpha1 config and rejects a static one
-  # (`static hostname is already set in v1alpha1 config`, confirmed 2026-06-05). A static
-  # hostname would only stick if baked in at INSTALL time (fresh maintenance-mode apply), not
-  # on a running node — not worth reinstalling the fleet for.
-  # ⚠️ Consequence: a simultaneous cold power-cycle can let a metal node DHCP-discover BEFORE
-  # OPNsense's dnsmasq is up, so Talos generates a `talos-xxx` name and rejoins as a GHOST.
-  # Recovery is the reclaim-reboot runbook (docs/runbook.md → "Power-loss / ghost nodes").
+  # Hostname is PINNED via the HostnameConfig document (highest-priority source, overrides DHCP),
+  # so a cold-booted node no longer ghosts as `talos-xxx` if it DHCP-discovers before dnsmasq.
+  # NOTE the provider quirk (terraform-provider-talos#296): the generated config already contains
+  # a `HostnameConfig` doc with `auto: stable`. `auto` and `hostname` are mutually exclusive and
+  # setting the legacy `machine.network.hostname` conflicts with it (`static hostname is already
+  # set in v1alpha1 config`). The working fix is to patch that doc: set `hostname` AND delete the
+  # `auto` key via the strategic-merge `$patch: delete` directive (per #296; field is `hostname`,
+  # not `static`, confirmed against the v1.13 HostnameConfig reference).
+  # ⚠️ INSTALL-TIME ONLY. Applying a hostname change to a *running* node re-derives the name live
+  # and ghosts it (cluster-crashing — al9ef9 in #296, and seen here 2026-06-09). Changing this
+  # field requires a reinstall: reset → maintenance → `tofu apply -replace` (a plain apply is a
+  # no-op against an already-applied node). See docs/runbook.md.
   config_patches = concat(
     [yamlencode({
       machine = {
@@ -70,6 +79,12 @@ data "talos_machine_configuration" "metal" {
         }
       }
     })],
+    each.value.pin_hostname ? [yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      hostname   = each.key
+      auto       = { "$patch" = "delete" }
+    })] : [],
     # Format + mount any extra disks (Optane) under /var/lib/longhorn so longhorn-manager
     # can see them. Talos partitions (GPT, full disk) + makes a filesystem + mounts.
     length(each.value.optane_disks) > 0 ? [yamlencode({
