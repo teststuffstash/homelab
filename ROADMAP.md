@@ -333,6 +333,31 @@ Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://one
 2. I generate the Phase 1 OpenTofu module (3-node Talos VM cluster) you can `apply`.
 3. I draft the Matchbox group/profile layout + the OPNsense iPXE/DHCP chainload snippet (Phase 3) so the bare-metal path is ready.
 
+## Backlog / parked features
+
+### Bare-metal node suspend/resume — an "autoscaler" without IPMI (parked 2026-06-11)
+Power idle ephemeral nodes off and wake them on demand to cut idle draw. **Parked** until there's
+enough to scale — more services + the home↔Civo multi-cloud (see *Service tiers*) — so the burst
+tier actually flexes. Feature-request synthesis (so it isn't re-researched):
+
+- **No off-the-shelf option.** cluster-autoscaler / metal3-Ironic / CAPI all assume a cloud that
+  *creates & destroys* instances gated by a **BMC (IPMI/Redfish)** our consumer gear lacks;
+  [siderolabs/kube-scheduler](https://github.com/siderolabs/kube-scheduler) is an IPMI talk-demo.
+  Reframe: our node set is **fixed**, so this is **node suspend/resume**, not autoscaling — which
+  is why CA's "terminate the instance" model doesn't fit.
+- **Targets = the tainted ephemeral laptops** (wk-metal-01/02; ADR-044). NOT the storage desktops
+  (hp-01/thinkcentre hold Longhorn).
+- **Power model** (extends ADR-013): sleep = `talosctl shutdown` (graceful S5); wake = **WoL**.
+  ⚠️ Laptops have **batteries**, so smart-plug power-off doesn't work (they keep running on
+  battery) — WoL is the *only* wake path. **Feasibility gate:** verify ThinkPad X240/X250
+  WoL-from-AC (drain → `talosctl shutdown` → magic packet → does it boot?). If WoL fails, laptop
+  scaling isn't viable as-is.
+- **Build:** prefer a small **purpose-built controller** (watch Pending pods → wake a slept node;
+  sustained idle → drain + sleep) over cluster-autoscaler's `externalgrpc` provider — CA wants to
+  delete/create nodes, ours persist and only change power state (impedance mismatch).
+- **Pieces already in place:** HA REST API (plugs), WoL via a hostNetwork pod, `talosctl shutdown`,
+  Prometheus power metrics, the `homelab.io/ephemeral` taint. Write an ADR when picked up.
+
 ## Sources
 
 - [Talos on Proxmox + Terraform (May 2026)](https://www.jonashietala.se/blog/2026/05/22/talos_linux_on_proxmox_with_terraform/) · [Talos+Proxmox+OpenTofu turnkey](https://github.com/max-pfeiffer/proxmox-talos-opentofu) · [erwinkersten/homelab](https://github.com/erwinkersten/homelab)
