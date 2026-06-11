@@ -51,6 +51,15 @@ resource "helm_release" "kube_prometheus_stack" {
   timeout = 900
 
   values = [yamlencode({
+    # ---- Talos control-plane scrape tuning --------------------------------
+    # No kube-proxy (Cilium kube-proxy-free; talos.tf cluster.proxy.disabled) → don't scrape it,
+    # else KubeProxyDown fires forever. Scheduler + controller-manager metrics are exposed on the
+    # node IP by talos.tf (bind-address 0.0.0.0); point the ServiceMonitors at the control-plane
+    # IP(s). The chart scrapes https on :10259/:10257 with insecureSkipVerify by default.
+    kubeProxy             = { enabled = false }
+    kubeScheduler         = { endpoints = local.controlplane_ips }
+    kubeControllerManager = { endpoints = local.controlplane_ips }
+
     # ---- Prometheus -------------------------------------------------------
     prometheus = {
       # BGP LoadBalancer VIP so OPNsense HAProxy can reach it for the TLS frontend
@@ -229,6 +238,18 @@ resource "kubernetes_config_map" "power_dashboard" {
     labels    = { grafana_dashboard = "1" }
   }
   data = { "power.json" = file("${path.module}/dashboards/power.json") }
+}
+
+# Whole-cluster health overview (dotdc "Kubernetes / Views / Global", grafana.com 15757) —
+# node up/down, cluster CPU/mem/disk/network, pod counts. Complements the chart's built-in
+# k8s-resources-* dashboards. Uses the ${datasource} template var → resolves via the sidecar.
+resource "kubernetes_config_map" "cluster_health_dashboard" {
+  metadata {
+    name      = "grafana-dashboard-cluster-health"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "cluster-health.json" = file("${path.module}/dashboards/cluster-health.json") }
 }
 
 output "grafana_url" {

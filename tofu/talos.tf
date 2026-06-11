@@ -35,6 +35,13 @@ data "talos_machine_configuration" "node" {
           # (kubeProxyReplacement). Fixes NodePort hairpin drop on the backend
           # node and preps for Cilium LB. Cilium uses Talos KubePrism (:7445).
           proxy = { disabled = true }
+          # Expose scheduler + controller-manager metrics on the node IP (Talos binds them
+          # to 127.0.0.1 by default, so kube-prometheus-stack can't scrape them → false
+          # "InstanceUnreachable"/"TargetDown" alerts). LAN-only; :10259/:10257 still need auth.
+          # Applied in-place (static-pod restart, no reboot). monitoring.tf points the chart's
+          # ServiceMonitors at the control-plane IP.
+          scheduler         = { extraArgs = { "bind-address" = "0.0.0.0" } }
+          controllerManager = { extraArgs = { "bind-address" = "0.0.0.0" } }
         }
       })
     ] : []
