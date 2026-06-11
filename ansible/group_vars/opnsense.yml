@@ -33,6 +33,7 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: grafana.teststuff.net, restart_action: "reload haproxy" }
   - { name: prometheus.teststuff.net, restart_action: "reload haproxy" }
   - { name: alertmanager.teststuff.net, restart_action: "reload haproxy" }
+  - { name: forgejo.teststuff.net, restart_action: "reload haproxy" }
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
@@ -43,6 +44,7 @@ haproxy_proxied_services:
   - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.2.6, backend_ip: 192.168.40.11, backend_port: 80 }
   - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.2.7, backend_ip: 192.168.40.13, backend_port: 9090 }
   - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
+  - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.2.9, backend_ip: 192.168.40.15, backend_port: 3000 }
 
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
 unbound_hosts:
