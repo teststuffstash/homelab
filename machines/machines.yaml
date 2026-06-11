@@ -7,7 +7,10 @@
 #
 # Fields (leave null/omit what's not measured yet):
 #   name, role, hardware, cpu_cores (logical), memory_gb, ip, plug (HA entity),
-#   idle_w, load_w, singlecore_bogo_s, multicore_bogo_s, notes
+#   idle_w, load_w, singlecore_bogo_s, multicore_bogo_s, remote_power, notes
+#
+# remote_power = how the box is powered on/cycled remotely (WoL, smart-plug, hypervisor, …).
+# Matters for power-loss recovery — see docs/runbook.md "Power-loss / ghost-node recovery".
 
 machines:
   - name: pve
@@ -47,7 +50,14 @@ machines:
     load_w: 54.5
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
-    notes: Desktop — highest absolute throughput of the tested boxes, but thirsty.
+    remote_power: smart-plug (switch.konditsioneer_socket); auto-boots on AC restore — NOT WoL
+    notes: >-
+      Desktop — highest absolute throughput of the tested boxes, but thirsty.
+      WoL is not the control path: BIOS is set to power-on after AC loss, so the box never rests
+      in S5 (a magic packet sent 2026-06-09 while the plug was ON found it already at full idle
+      draw, ~28 W, not waiting in standby). Remote power = cycle switch.konditsioneer_socket via
+      Home Assistant; it boots when AC returns. NIC-level WoL support is therefore unverified
+      (Talos ships no ethtool) and moot for this box.
 
   - name: wk-metal-01
     role: k8s worker (ephemeral / compute tier, tainted)
@@ -86,4 +96,5 @@ machines:
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
+    remote_power: Wake-on-LAN (PXE-booted; no smart plug)
     notes: No smart plug — power not measurable from here.

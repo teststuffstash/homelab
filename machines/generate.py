@@ -50,6 +50,7 @@ COLUMNS = [
     ("1-core (bogo/s)", lambda m: cell(m.get("singlecore_bogo_s"))),
     ("Multi (bogo/s)", lambda m: cell(m.get("multicore_bogo_s"))),
     ("Perf/W",         lambda m: perf_per_watt(m)),
+    ("Remote power",   lambda m: m.get("remote_power") or "—"),
 ]
 
 HEADER_NOTE = (
