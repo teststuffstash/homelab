@@ -15,8 +15,13 @@ Admin: `forgejo_admin` / `tofu -chdir=tofu output -raw forgejo_admin_password`.
 
 When investing further (roughly in order):
 
-- [ ] **Disable open registration** — `gitea.config.service.DISABLE_REGISTRATION = true`. Currently
-      anyone on the LAN can self-signup; do this before putting anything real in it.
+- [x] **Disable open registration** — `gitea.config.service.DISABLE_REGISTRATION = true` (applied
+      2026-06-12). Admin creates users now (`forgejo_admin` + the new `rasmus`).
+- [x] **SSH clone** (2026-06-12) — `forgejo-ssh` is now a LoadBalancer sharing VIP `.40.15` (Cilium
+      LB-IPAM sharing-key), exposed on `forgejo.teststuff.net:22` via a new **HAProxy TCP-passthrough**
+      frontend (extended the `opnsense-haproxy` role with `haproxy_tcp_services`). `tea@latest` added
+      to devbox. User `rasmus` (public, soot.rasmus@gmail.com) in private org `rasmus-personal`, with
+      ed25519 SSH + GPG signing keys uploaded; key material in `~/.claude/homelab-forgejo/`.
 - [ ] **External Postgres** — the chart dropped bundled postgres (v14), so SQLite is the trial DB.
       Stand up Postgres (CloudNativePG is the clean k8s-native operator) and point Forgejo at it
       (`gitea.config.database.*`); migrate the SQLite data or start fresh.
@@ -24,7 +29,10 @@ When investing further (roughly in order):
       survives GitHub being down (the ArgoCD-resilience goal — don't be hostage to GitHub uptime).
 - [ ] **Forgejo Actions runner** (`act_runner`) — the vendor-neutral CI seam: workflows just call
       `devbox run <task>` so build/test logic stays in the repo, not the forge's YAML (cf. the
-      vfarcic example). The same logic then runs under GitHub Actions *and* Forgejo Actions.
+      vfarcic example). The same logic then runs under GitHub Actions *and* Forgejo Actions. Pin it
+      to the tainted ephemeral laptop tier (CI noise/privilege off the service nodes). This is also
+      **Phase 1** of the supply-chain plan — see [`slsa.md`](slsa.md) (act_runner + cosign + SBOM =
+      Build L2; throwaway test clusters via `k3d`/`vcluster` in `devbox run test`, not DinD/kubedock).
 - [ ] **SSH clone** — `service.ssh` is ClusterIP (HTTP clone only for now). Expose if wanted.
 - [ ] **Gogs on the edge** — separate, lighter Git service for the grandma tablet+minipc (ROADMAP).
 

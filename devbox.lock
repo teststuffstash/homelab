@@ -1254,6 +1254,54 @@
         }
       }
     },
+    "tea@latest": {
+      "last_modified": "2026-05-21T08:15:18Z",
+      "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#tea",
+      "source": "devbox-search",
+      "version": "0.14.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n82kla88rckr872klpfajpv9rvkaqs3m-tea-0.14.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n82kla88rckr872klpfajpv9rvkaqs3m-tea-0.14.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rxdai3cjxlfsh3015may8vnpxb5b643v-tea-0.14.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rxdai3cjxlfsh3015may8vnpxb5b643v-tea-0.14.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9xw86b3ywn2jqdrmmlgw1k5ayx5lgkng-tea-0.14.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/9xw86b3ywn2jqdrmmlgw1k5ayx5lgkng-tea-0.14.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vzqla9g8dy8c3bphqa0ahrwg4yhamdp1-tea-0.14.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vzqla9g8dy8c3bphqa0ahrwg4yhamdp1-tea-0.14.0"
+        }
+      }
+    },
     "yq-go@latest": {
       "last_modified": "2026-05-21T08:15:18Z",
       "resolved": "github:NixOS/nixpkgs/4a29d733e8a7d5b824c3d8c958a946a9867b3eb2#yq-go",

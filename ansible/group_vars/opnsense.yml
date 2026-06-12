@@ -53,6 +53,11 @@ haproxy_proxied_services:
   - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
   - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.2.9, backend_ip: 192.168.40.15, backend_port: 3000 }
 
+# TCP passthrough (no TLS) — Forgejo SSH clone on forgejo.teststuff.net:22 -> cluster VIP.
+# Reuses the forgejo HTTPS VIP (.2.9, created above), so one hostname serves HTTPS:443 + SSH:22.
+haproxy_tcp_services:
+  - { name: forgejo-ssh, vip: 192.168.2.9, port: 22, backend_ip: 192.168.40.15, backend_port: 22 }
+
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
 unbound_hosts:
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }

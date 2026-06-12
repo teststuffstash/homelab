@@ -19,7 +19,8 @@
     "bind@latest",
     "netcat-gnu@latest",
     "awscli2@latest",
-    "openssl@latest"
+    "openssl@latest",
+    "tea@latest"
   ],
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",

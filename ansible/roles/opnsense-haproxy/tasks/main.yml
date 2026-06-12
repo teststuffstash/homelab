@@ -126,6 +126,105 @@
   when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
 
+# --- TCP passthrough services (no TLS) — e.g. Forgejo SSH clone on :22 --------
+# Raw TCP from <vip>:<port> to the cluster VIP, no cert/termination (SSH does its own
+# crypto). Reuses an IP-alias VIP already created above (e.g. forgejo's .2.9), so the
+# same hostname (forgejo.teststuff.net) serves HTTPS:443 and SSH:22. Config:
+# haproxy_tcp_services in group_vars. All guarded so an empty list is a no-op.
+- name: Find HAProxy servers (TCP pass)
+  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+  register: hap_tcp_servers
+  when: haproxy_tcp_services | length > 0
+- name: Create HAProxy TCP server <name>-srv
+  oxlorg.opnsense.raw:
+    module: haproxy
+    controller: settings
+    command: addServer
+    action: post
+    data:
+      server:
+        enabled: "1"
+        name: "{{ item.name }}-srv"
+        address: "{{ item.backend_ip }}"
+        port: "{{ item.backend_port }}"
+        mode: active
+        type: static
+        ssl: "0"
+  loop: "{{ haproxy_tcp_services }}"
+  loop_control: { label: "{{ item.name }}-srv" }
+  when:
+    - haproxy_tcp_services | length > 0
+    - (item.name ~ '-srv') not in (hap_tcp_servers.response.rows | map(attribute='name') | list)
+  notify: reconfigure haproxy
+- name: Re-read servers (TCP uuids)
+  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchServers }
+  register: hap_tcp_servers2
+  when: haproxy_tcp_services | length > 0
+- name: Map TCP server name -> uuid
+  ansible.builtin.set_fact:
+    tcp_server_uuid: "{{ dict(hap_tcp_servers2.response.rows | map(attribute='name') | list | zip(hap_tcp_servers2.response.rows | map(attribute='uuid') | list)) }}"
+  when: haproxy_tcp_services | length > 0
+
+- name: Find HAProxy backends (TCP pass)
+  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+  register: hap_tcp_backends
+  when: haproxy_tcp_services | length > 0
+- name: Create HAProxy TCP backend <name>-backend
+  oxlorg.opnsense.raw:
+    module: haproxy
+    controller: settings
+    command: addBackend
+    action: post
+    data:
+      backend:
+        enabled: "1"
+        name: "{{ item.name }}-backend"
+        mode: tcp
+        algorithm: source
+        linkedServers: "{{ tcp_server_uuid[item.name ~ '-srv'] }}"
+        healthCheckEnabled: "0"
+        tuning_timeoutServer: 60m   # long-lived git-over-SSH sessions
+  loop: "{{ haproxy_tcp_services }}"
+  loop_control: { label: "{{ item.name }}-backend" }
+  when:
+    - haproxy_tcp_services | length > 0
+    - (item.name ~ '-backend') not in (hap_tcp_backends.response.rows | map(attribute='name') | list)
+  notify: reconfigure haproxy
+- name: Re-read backends (TCP uuids)
+  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchBackends }
+  register: hap_tcp_backends2
+  when: haproxy_tcp_services | length > 0
+- name: Map TCP backend name -> uuid
+  ansible.builtin.set_fact:
+    tcp_backend_uuid: "{{ dict(hap_tcp_backends2.response.rows | map(attribute='name') | list | zip(hap_tcp_backends2.response.rows | map(attribute='uuid') | list)) }}"
+  when: haproxy_tcp_services | length > 0
+
+- name: Find HAProxy frontends (TCP pass)
+  oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: searchFrontends }
+  register: hap_tcp_frontends
+  when: haproxy_tcp_services | length > 0
+- name: Create HAProxy TCP frontend <name>-frontend
+  oxlorg.opnsense.raw:
+    module: haproxy
+    controller: settings
+    command: addFrontend
+    action: post
+    data:
+      frontend:
+        enabled: "1"
+        name: "{{ item.name }}-frontend"
+        bind: "{{ item.vip }}:{{ item.port }}"
+        mode: tcp
+        defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
+        ssl_enabled: "0"
+        tuning_timeoutClient: 60m
+  loop: "{{ haproxy_tcp_services }}"
+  loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:{{ item.port }})" }
+  when:
+    - haproxy_tcp_services | length > 0
+    - (item.name ~ '-frontend') not in (hap_tcp_frontends.response.rows | map(attribute='name') | list)
+  notify: reconfigure haproxy
+
 # --- enable + start HAProxy (no enable flag on the general module) -------
 - name: Read HAProxy general settings
   oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: get }

@@ -43,13 +43,26 @@ resource "helm_release" "forgejo" {
     }
 
     # BGP LoadBalancer VIP (Cilium LB-IPAM via annotation; advertised by the bgp=advertise label).
-    # SSH stays ClusterIP — HTTP clone is enough to try it out.
+    # http + ssh share one VIP (.40.15) via a Cilium LB-IPAM sharing-key (distinct ports 3000/22).
+    # SSH is reached from the LAN via an OPNsense HAProxy TCP frontend on forgejo.teststuff.net:22.
     service = {
       http = {
-        type        = "LoadBalancer"
-        port        = 3000
-        labels      = { bgp = "advertise" }
-        annotations = { "lbipam.cilium.io/ips" = local.forgejo_lb_ip }
+        type   = "LoadBalancer"
+        port   = 3000
+        labels = { bgp = "advertise" }
+        annotations = {
+          "lbipam.cilium.io/ips"         = local.forgejo_lb_ip
+          "lbipam.cilium.io/sharing-key" = "forgejo"
+        }
+      }
+      ssh = {
+        type   = "LoadBalancer"
+        port   = 22
+        labels = { bgp = "advertise" }
+        annotations = {
+          "lbipam.cilium.io/ips"         = local.forgejo_lb_ip
+          "lbipam.cilium.io/sharing-key" = "forgejo"
+        }
       }
     }
 
@@ -63,13 +76,17 @@ resource "helm_release" "forgejo" {
         database = { DB_TYPE = "sqlite3" }
         session  = { PROVIDER = "memory" }
         cache    = { ADAPTER = "memory" }
+        # Private instance: close LAN self-signup. Admins still create users (we make `rasmus`).
+        service = { DISABLE_REGISTRATION = true }
         # Reached via OPNsense HAProxy (TLS terminated there) at forgejo.teststuff.net; Forgejo
         # still serves plain HTTP on :3000 to the backend. ROOT_URL must be the public https name
         # so generated links + clone URLs are correct.
         server = {
-          DOMAIN    = "forgejo.teststuff.net"
-          ROOT_URL  = "https://forgejo.teststuff.net/"
-          HTTP_PORT = "3000"
+          DOMAIN     = "forgejo.teststuff.net"
+          ROOT_URL   = "https://forgejo.teststuff.net/"
+          HTTP_PORT  = "3000"
+          SSH_DOMAIN = "forgejo.teststuff.net" # clone URLs: git@forgejo.teststuff.net:org/repo.git
+          SSH_PORT   = "22"                     # advertised port (HAProxy .2.9:22 -> .40.15:22)
         }
       }
     }
