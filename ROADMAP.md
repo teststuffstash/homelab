@@ -335,6 +335,16 @@ Sources: [Spegel](https://spegel.dev/) · [Talos pull-through cache](https://one
 
 ## Backlog / parked features
 
+### Self-hosted supply-chain security (SLSA L3 / "L4") — plan written 2026-06-12
+Build **real software** here with verifiable provenance **without GitHub/Chainguard as services**.
+Full plan, self-hosted stack, phased steps and the hardware decision live in
+[`docs/slsa.md`](docs/slsa.md). Headlines: current setup reaches **Build L2** easily (act_runner +
+cosign + SBOM) and a **self-hosted L3** (Tekton Chains + Kata microVMs on bare metal + self-hosted
+Fulcio/Rekor) is doable in software; **confidential "L4" is hardware-gated** — SEV-SNP is **EPYC-only**
+(Threadripper PRO's BIOS toggles are dead; Strix Halo has none), so it means buying a **used EPYC
+Milan quiet tower** when/if it becomes a real project. Hermetic/reproducible via **melange/apko/Wolfi**
++ Nix is the early win. Parked behind: actually having software to build + Forgejo Actions runner.
+
 ### Bare-metal node suspend/resume — an "autoscaler" without IPMI (parked 2026-06-11)
 Power idle ephemeral nodes off and wake them on demand to cut idle draw. **Parked** until there's
 enough to scale — more services + the home↔Civo multi-cloud (see *Service tiers*) — so the burst
