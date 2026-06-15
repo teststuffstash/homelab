@@ -9,8 +9,11 @@ the call was made; most trace to the 2026-05 planning and the 2026-06 build. Dec
 against the `CONTEXT.md` principles — reproducible-from-git, deterministic diffs, local-first,
 open-source/replaceable, budget-conscious, public-by-default.
 
-> Newest decisions are at the bottom of each area. Where a decision was **reversed mid-flight**, the
-> reversal is recorded too (it's part of the record).
+> Newest decisions are at the bottom of each area. **Edit a block in place** for small corrections or
+> details settled during implementation. Reversing a **significant, established** decision instead gets
+> a **new ADR**, with the old one marked `Superseded-by` (e.g. swapping Garage for a MinIO fork, or
+> LAN-only → public). Keep blocks to **one decision** — operational detail belongs in `docs/`, and
+> application design belongs in the app's own repo (ADR-004).
 
 ---
 
@@ -35,6 +38,44 @@ code gets wrapped (API/IaC) or logged as a temporary exception; constrains every
 today; add a GitOps controller later. **Considered:** ArgoCD vs Flux vs tofu-only.
 **Why:** solo lab, one source of truth already (git → tofu); a CD controller is overhead until there
 are more workloads. **Consequences:** no continuous reconciliation yet; drift is caught by re-plan.
+
+### ADR-004 — Repo topology: homelab is the platform; apps live in their own repos
+**Status:** Open / planned (2026-06-13). **Decision:** treat this repo as the **platform** (clusters,
+networking, storage, observability, shared services) and build each **application** in its **own repo**
+with its own Helm chart and docs; homelab carries only the app's **platform wiring** — its ArgoCD
+**Application** manifest + values, and the platform resources it needs (buckets, DB, DNS, OIDC client).
+**Considered:** monorepo with apps + service docs inside homelab (the early-work state — feels wrong as
+apps grow); fully separate with no homelab footprint (rejected — platform resources must be code here).
+**Why:** clean platform/product separation; apps get independent CI/release/versioning; matches the
+ArgoCD **app-of-apps** model. Evolves ADR-003 — adopting ArgoCD is the delivery half; until then an app
+can be wired via `tofu apply`+Helm against the same chart. **Consequences:** new apps start as their own
+repo; homelab gains an `apps/` (ArgoCD Applications) area when ArgoCD lands; **service-implementation
+docs leave homelab for their app repos** (so the sleep-tracking build doc lives in its app repo, ADR-045).
+
+### ADR-074 — Platform resources are app-owned (apps provision their own buckets/keys/DBs)
+**Status:** Accepted (2026-06-14; supersedes part of ADR-045). **Decision:** the platform provides a
+**capability** (the Garage store, later Postgres, an OIDC issuer, …) plus a thin **admin seam**; each
+**app declares the instances it needs — buckets, keys, grants, databases — from its own repo** (ADR-004)
+and consumes the generated secret in its own namespace. homelab creates **no** app buckets and holds
+**no** app keys. **Considered:** homelab centrally owning every app's buckets/keys (the earlier ADR-045
+position — rejected: every new app needs a homelab PR, app repos aren't self-contained, contradicts the
+per-app-repo model). **Why:** clean platform/product separation; apps get independent lifecycle; matches
+the app-of-apps direction. **Consequences:** the platform must expose a provisioning seam (admin API +
+token); cross-app sharing is **bucket-owner-grants-consumer** (e.g. snore-recorder grants the
+sleep-tracking ingester read on `sleep-snore`). Reusable how-to: `docs/patterns/app-owned-resources.md`;
+mechanism: ADR-075.
+
+### ADR-075 — App resource-provisioning mechanism: app-repo tofu now, Crossplane later
+**Status:** Accepted (2026-06-14). **Decision:** apps provision their Garage resources from their own
+repo's **tofu** using the **`jkossis/garage`** provider (Terraform registry), reaching the admin API via
+a `kubectl` port-forward (`infra/apply.sh`). **Considered / deferred:** a **Crossplane Garage provider**
+for app-declared CRs reconciled in-cluster (the steady state once a control plane lands) — but the only
+native one (`kikokikok`) is **too immature** to trust with key material (1★, AI-scaffolded, stale); the
+likely bridge is Crossplane **`provider-terraform`** wrapping the same `jkossis` module. **Why:** no
+control plane yet ("tofu now, ArgoCD later", ADR-003); build-time trust (runs only during apply) beats a
+standing in-cluster controller holding admin creds. **Consequences:** each app carries `infra/` (tofu +
+a port-forward wrapper); keys land in the app's local state (SOPS+age before public, ADR-061). Migrating
+to Crossplane is a re-point at the same provider.
 
 ---
 
@@ -127,6 +168,33 @@ SQLite recorder. **Consequences:** HA + Prometheus TSDB are now replicated (no S
 must live under `/var/lib/longhorn`; a `longhorn-fast` (replica=1, node-local) tier uses the
 ThinkCentre's Optane for scratch. Ceph remains the likely choice **when** the 3-node cluster exists.
 
+### ADR-031 — Self-hosted S3 object store: Garage (not MinIO)
+**Status:** Accepted (2026-06-13). **Decision:** run **Garage** (Deuxfleurs) as the in-cluster
+S3-compatible object store, introduced as the convergence point for the sleep-tracking pipeline
+(ADR-045); candidate to later also serve the Longhorn/HA backups currently sent to external S3/B2.
+**Considered:** **MinIO** (rejected — community edition went maintenance-mode and had console/features
+gutted in 2025; fresh forks e.g. OpenMaxIO too unproven for personal data); **SeaweedFS** (more
+features — filer, tiering — but more moving parts; the fallback if scale grows); **Ceph/Rook RGW**
+(deferred with Ceph itself to the 3-node HA build, ADR-030); external **AWS S3 / Backblaze B2**
+(third-party custody of private data). **Why:** single Rust binary, light on the heterogeneous fleet,
+S3 `Put/GetObject` is all the pipeline needs, actively developed, deployable via Helm under ADR-003.
+Self-hosting keeps private data on-infra (vs the external S3 used only for backups). **Consequences:**
+auth is **per-bucket access keys** (read/write/owner), **not** AWS-style prefix IAM — isolation is by
+**separate buckets**. Obeys "data is the only non-code thing → bucket-id in git": layout/config is
+code, the bytes are data. Deploy/access/ops live in **`docs/garage.md`**. Follow-on decisions split
+out: access model → **ADR-073**, who owns buckets → **ADR-074**, provisioning mechanism → **ADR-075**.
+
+### ADR-073 — Garage access model: LAN-only
+**Status:** Accepted (2026-06-14). **Decision:** expose the Garage S3 API **on the LAN only** —
+in-cluster consumers use the ClusterIP Service; LAN clients use `s3.teststuff.net` (OPNsense HAProxy →
+BGP VIP 192.168.40.16, valid Let's Encrypt cert). Admin (3903) + RPC (3901) stay cluster-internal.
+**Considered:** a **Cloudflare tunnel** (rejected — its 100 MB body cap blocks bulk/backup objects,
+and the only off-LAN writer, the phone's Gadgetbridge export, runs on home WiFi); a **public
+LoadBalancer** (rejected — exposes the home IP + an always-on S3 port for no gain). **Why:** every real
+consumer is in-cluster or on-LAN, so keep the attack surface at zero — consistent with "only HA is
+public" (ADR-050/051). **Consequences:** off-LAN access would be a deliberate future decision;
+endpoints/VIP/HAProxy detail in `docs/garage.md`.
+
 ---
 
 ## Services
@@ -166,6 +234,17 @@ Longhorn in-cluster (VIP `192.168.40.12`); APs adopt via the inform host `ubiqui
 **Considered:** treat all nodes equally. **Why:** laptops are far more power-efficient (measured ~64%
 better perf/W, see `docs/power-measurements.md`) but come and go / hold no replicas. **Consequences:**
 stateful data stays on the desktop/SFF storage nodes (wk-02, thinkcentre, hp-01).
+
+### ADR-045 — Sleep-tracking: first application on the per-app-repo model
+**Status:** Accepted (2026-06-13; build pending). **Decision:** build sleep-tracking as a standalone
+**app in its own repo** (ADR-004); homelab holds only its **platform wiring** — a Postgres instance,
+the ArgoCD Application + values, and a future OIDC client (ADR-055). The app **owns its Garage
+buckets/keys** (`sleep-band`, plus a cross-read on snore-recorder's `sleep-snore`) per **ADR-074**,
+declared from its repo. **Why:** first exercise of the platform/app split — it proves the
+app-owned-resources pattern (ADR-074/075) end-to-end. **Consequences:** the app **design** (data
+sources, the nightly ingester → Postgres, audience-split presentation) lives in the **sleep-tracking
+repo** (`docs/ARCHITECTURE.md`), not here; the "Others" presentation is gated on the IDP (ADR-055/072).
+Garage store = ADR-031.
 
 ---
 
@@ -215,6 +294,18 @@ algorithms. **Why:** openssl defaults drift across versions and have silently br
 (RC2/3DES→AES, MAC alg); reproducibility + explicitness (user feedback). **Consequences:** never
 interactive openssl; emit a `.der` for diffing certs on asn1js (a `.p12` isn't byte-reproducible).
 
+### ADR-055 — Custom OIDC IDP for "Others" (planned)
+**Status:** Open / planned (2026-06-13). **Decision:** stand up a **custom, self-hosted OIDC IDP** to
+authenticate **Others** — non-homelab people granted read-only access to specific apps (e.g. the sleep
+dashboard, ADR-072) — kept separate from my own admin access (mTLS, ADR-051). **Considered:** off-the-
+shelf IDPs (Authentik, Keycloak, Zitadel, Authelia) vs a **custom build** — chose custom to fit the
+intended users' familiar login methods; per-app passwords / magic-links rejected (stopgap, don't scale).
+**Why:** one revocable, least-privilege login plane for externally-shared apps, instead of asking non-
+technical people for `.p12` client certs (ADR-051) they can't install. **Consequences:** a new public-
+tier component; shared apps become OIDC clients; ties into the not-yet-built public tier + Cilium
+NetworkPolicy isolation. Design is tracked out-of-repo (not yet public); built when the first externally-
+shared app (the sleep "Others" page) needs it.
+
 ---
 
 ## Cloud accounts & secrets
@@ -246,6 +337,20 @@ to a **single boolean**, and **writes only that** to Home Assistant (never a que
 no other cluster service learns presence). Likely the lab's **first custom-code service**. Full writeup:
 [`office-plants/README.md` §8](office-plants/README.md#8-next-steps). **Consequences:** when built, this
 gets its own service doc + an ADR supersede; may warrant a Cilium NetworkPolicy isolating the detector + HA.
+
+### ADR-072 — Access for "Others" to read-only personal dashboards
+**Status:** Open (2026-06-13; direction set, IDP pending). **Decision:** read-only, phone-first
+dashboards (ADR-045) must be reachable by **Others** — non-technical, external, with no homelab
+accounts. Auth direction: a **self-hosted OIDC IDP** (ADR-055); the minimal web page becomes an OIDC
+client and Others log in there. This sidesteps the current edge, where the only public hostname is
+`ha.teststuff.net` via Cloudflare Tunnel (ADR-050) gated by **client-cert mTLS** (ADR-051) that an
+external person can't present. Exposure = a **non-mTLS public-tier hostname** fronting the OIDC-gated
+page. **Considered:** mTLS for Others (rejected — can't ask a non-technical person to install a `.p12`);
+magic-link / signed-URL (workable stopgap before the IDP); **static HTML/PDF export** shared by link
+(smallest surface; fine for v1 before any live exposure); Grafana public snapshot (rejected — Grafana-
+flavoured + a live surface). **Why pending:** the IDP (ADR-055) and public tier aren't built. **Consequences:**
+until then, sharing is a **static export** (v1) or manual; when live, the page + IDP get a Cilium
+NetworkPolicy and an ADR supersede.
 
 ### ADR-070 — Local caching tier (images / nix / apt): undecided
 **Status:** Open (2026-05-24). **Decision:** none yet — leaning to an out-of-cluster, always-on LAN box
