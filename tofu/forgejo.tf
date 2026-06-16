@@ -78,6 +78,9 @@ resource "helm_release" "forgejo" {
         cache    = { ADAPTER = "memory" }
         # Private instance: close LAN self-signup. Admins still create users (we make `rasmus`).
         service = { DISABLE_REGISTRATION = true }
+        # Forgejo Actions (self-hosted CI — SLSA Build L2, see docs/slsa.md). The act_runner
+        # is tofu/forgejo-runner.tf. DEFAULT_ACTIONS_URL=github so `uses: actions/*` resolve.
+        actions = { ENABLED = "true", DEFAULT_ACTIONS_URL = "github" }
         # Reached via OPNsense HAProxy (TLS terminated there) at forgejo.teststuff.net; Forgejo
         # still serves plain HTTP on :3000 to the backend. ROOT_URL must be the public https name
         # so generated links + clone URLs are correct.
