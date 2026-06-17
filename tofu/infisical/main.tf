@@ -76,6 +76,42 @@ resource "kubernetes_secret" "eso_machine_identity" {
   }
 }
 
+# Write identity for Crossplane provider-terraform: lets app Workspaces publish their
+# generated keys into Infisical (e.g. snore-recorder's write key). Project "member" role
+# (read+write secrets). Creds land in a crossplane-system secret the provider pod reads.
+resource "infisical_identity" "tf_writer" {
+  name   = "crossplane-tf-writer"
+  org_id = var.infisical_org_id
+  role   = "no-access"
+}
+
+resource "infisical_identity_universal_auth" "tf_writer" {
+  identity_id = infisical_identity.tf_writer.id
+}
+
+resource "infisical_identity_universal_auth_client_secret" "tf_writer" {
+  identity_id = infisical_identity.tf_writer.id
+  description = "Crossplane provider-terraform publishes app keys to Infisical"
+  depends_on  = [infisical_identity_universal_auth.tf_writer]
+}
+
+resource "infisical_project_identity" "tf_writer" {
+  project_id  = infisical_project.homelab.id
+  identity_id = infisical_identity.tf_writer.id
+  roles       = [{ role_slug = "member" }] # read+write secrets
+}
+
+resource "kubernetes_secret" "tf_writer" {
+  metadata {
+    name      = "infisical-tf-writer"
+    namespace = "crossplane-system"
+  }
+  data = {
+    clientId     = infisical_identity_universal_auth_client_secret.tf_writer.client_id
+    clientSecret = infisical_identity_universal_auth_client_secret.tf_writer.client_secret
+  }
+}
+
 # Demo secret to prove the chain end-to-end (homelab/prod /DEMO_PING). The example
 # ExternalSecret in argocd/resources/extras/ pulls this into a k8s Secret.
 resource "infisical_secret" "demo_ping" {

@@ -22,3 +22,16 @@ spec:
                     secretKeyRef:
                       name: garage-admin
                       key: GARAGE_TOKEN
+                # Infisical write creds — so app Workspaces can publish their generated
+                # keys into Infisical (infisical_secret). Identity: crossplane-tf-writer
+                # (tofu/infisical), project member. Host is set in the provider block.
+                - name: INFISICAL_UNIVERSAL_AUTH_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: infisical-tf-writer
+                      key: clientId
+                - name: INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: infisical-tf-writer
+                      key: clientSecret

@@ -13,6 +13,9 @@ spec:
         garage = {
           source = "jkossis/garage"
         }
+        infisical = {
+          source = "Infisical/infisical"
+        }
       }
       backend "kubernetes" {
         secret_suffix     = "garage"
@@ -22,3 +25,13 @@ spec:
     }
 
     provider "garage" {}
+
+    # App Workspaces can publish keys to Infisical. Auth via the crossplane-tf-writer
+    # Universal-Auth creds in the pod env (INFISICAL_UNIVERSAL_AUTH_CLIENT_ID/SECRET).
+    # Only invoked by workspaces that declare infisical_* resources (others ignore it).
+    provider "infisical" {
+      host = "http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080"
+      auth = {
+        universal = {}
+      }
+    }
