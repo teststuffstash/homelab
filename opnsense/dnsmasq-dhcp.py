@@ -27,7 +27,11 @@ AUTH = "Basic " + base64.b64encode(f"{KEY}:{SEC}".encode()).decode()
 
 # --- LAN DHCP definition (mirrors the migrated-from ISC dhcpd config) -----------
 INTERFACE = "lan"
-RANGE = {"interface": INTERFACE, "start_addr": "192.168.2.10", "end_addr": "192.168.2.245",
+# DHCP pool starts at .100 so .2-.99 is a generous STATIC range (cluster LAN VIPs,
+# infrastructure, reservations). Was .10-.245 (only .2-.9 static, which filled up).
+# Devices that were leased below .100 are pinned via HOSTS below so they don't
+# renumber; new dynamic clients land in .100-.245 (146 addrs, ample).
+RANGE = {"interface": INTERFACE, "start_addr": "192.168.2.100", "end_addr": "192.168.2.245",
          "subnet_mask": "255.255.255.0", "lease_time": "7200", "domain_type": "range",
          "domain": "teststuff.net", "description": "LAN pool"}
 OPTIONS = [  # explicit router + DNS so clients get the gateway / Unbound resolver
@@ -51,6 +55,16 @@ HOSTS = [  # static reservations preserved from ISC
     # integration that's addressed at .245). Any HA/integration device referenced by a
     # fixed IP needs a reservation here.
     {"host": "office-plants-irrigation", "hwaddr": "30:c6:f7:22:a8:fc", "ip": "192.168.2.245"},
+    # --- pinned so they survive the .10->.100 pool move (were dynamic leases <.100) ---
+    # UniFi network backbone — keep the switch + APs at stable IPs.
+    {"host": "USW-Lite-8-PoE", "hwaddr": "68:d7:9a:5d:bb:48", "ip": "192.168.2.11"},
+    {"host": "U6Lite2ndfloor", "hwaddr": "f4:92:bf:aa:1b:08", "ip": "192.168.2.12"},
+    {"host": "UAP-AC-LiteOffice", "hwaddr": "e0:63:da:70:2e:28", "ip": "192.168.2.14"},
+    {"host": "U6LiteBasement", "hwaddr": "f4:92:bf:aa:1e:10", "ip": "192.168.2.63"},
+    # named leaf devices referenced by IP elsewhere / worth keeping stable.
+    {"host": "lwip0", "hwaddr": "c0:f8:53:db:62:80", "ip": "192.168.2.16"},
+    {"host": "rockrobo", "hwaddr": "7c:49:eb:9f:bf:f4", "ip": "192.168.2.26"},
+    {"host": "ESP-1CF343", "hwaddr": "c4:dd:57:1c:f3:43", "ip": "192.168.2.80"},
 ]
 
 
