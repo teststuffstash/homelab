@@ -42,6 +42,8 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: alertmanager.teststuff.net, restart_action: "reload haproxy" }
   - { name: forgejo.teststuff.net, restart_action: "reload haproxy" }
   - { name: s3.teststuff.net, restart_action: "reload haproxy" }
+  - { name: argocd.teststuff.net, restart_action: "reload haproxy" }
+  - { name: infisical.teststuff.net, restart_action: "reload haproxy" }
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
@@ -53,7 +55,11 @@ haproxy_proxied_services:
   - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.2.7, backend_ip: 192.168.40.13, backend_port: 9090 }
   - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
   - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.2.9, backend_ip: 192.168.40.15, backend_port: 3000 }
-  - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.2.4, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style); .4 = free static slot (.10+ is the DHCP pool / pop-os)
+  - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.2.4, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
+  # GitOps + secrets UIs — TLS terminated here; backends serve plain HTTP (argocd-server
+  # --insecure, infisical). VIPs from the expanded static range (pool now starts .100).
+  - { name: argocd, cert_domain: argocd.teststuff.net, vip: 192.168.2.2, backend_ip: 192.168.40.17, backend_port: 80 }
+  - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.2.10, backend_ip: 192.168.40.18, backend_port: 80 }
 
 # TCP passthrough (no TLS) — Forgejo SSH clone on forgejo.teststuff.net:22 -> cluster VIP.
 # Reuses the forgejo HTTPS VIP (.2.9, created above), so one hostname serves HTTPS:443 + SSH:22.
