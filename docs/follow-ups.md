@@ -29,9 +29,10 @@ app: `sleep-snore` + write key, reconciled via ArgoCD, key published to Infisica
 - [ ] **Writer key → Infisical is a manual publish** — currently a `devbox run infisical-secret`
       sourced from the connection Secret. Make it fully GitOps with an ESO **PushSecret** + a
       write-capable Infisical identity (a second `tofu/infisical` machine identity with project write).
-- [ ] **sleep-tracking read keys via ESO** — sleep-tracking still uses app-repo tofu for its *own*
-      keys (the ingester read key + the sleep-db rw key). Migrate it to a Crossplane Workspace +
-      ExternalSecrets like snore-recorder (its chart's `secret.yaml` → `existingName` from ESO).
+- [x] **sleep-tracking migrated** (2026-06-17) — Crossplane Workspace that **adopts** the live
+      buckets/keys/grants via config-driven `import` (deletionPolicy: Orphan — sleep-db history
+      preserved); keys published to Infisical from the old state; `sleep-ingester-credentials`
+      delivered via ESO ExternalSecret. (Both apps now on ADR-076.)
 - [ ] **`provider-terraform` package pinned to a digest** — currently the `:v1.1.1` tag.
 
 ## Forgejo (self-hosted Git) — minimal trial is LIVE; next steps deferred
