@@ -21,6 +21,19 @@ The stack is live and reconciling (ADR-005/046/062, `docs/secrets.md`, `argocd/R
 - [ ] **Second admin / break-glass** — one Infisical super admin for now (signups disabled). Decide
       whether a break-glass second admin is worth codifying.
 
+## App-owned resources via Crossplane (ADR-076) — LIVE; refinements
+
+provider-terraform reconciles Garage buckets/keys from `Workspace` CRs (snore-recorder is the first
+app: `sleep-snore` + write key, reconciled via ArgoCD, key published to Infisical). Loose ends:
+
+- [ ] **Writer key → Infisical is a manual publish** — currently a `devbox run infisical-secret`
+      sourced from the connection Secret. Make it fully GitOps with an ESO **PushSecret** + a
+      write-capable Infisical identity (a second `tofu/infisical` machine identity with project write).
+- [ ] **sleep-tracking read keys via ESO** — sleep-tracking still uses app-repo tofu for its *own*
+      keys (the ingester read key + the sleep-db rw key). Migrate it to a Crossplane Workspace +
+      ExternalSecrets like snore-recorder (its chart's `secret.yaml` → `existingName` from ESO).
+- [ ] **`provider-terraform` package pinned to a digest** — currently the `:v1.1.1` tag.
+
 ## Forgejo (self-hosted Git) — minimal trial is LIVE; next steps deferred
 
 Running minimally to try it out (`tofu/forgejo.tf`): Forgejo 15.0.3 (chart 17.1.1), built-in

@@ -32,6 +32,7 @@ truth.
 | **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; declare a CNPG `Cluster` in your namespace |
 | **Infisical** | 🟢 LIVE | Secrets manager (the source ESO reads) | `infisical.teststuff.net` · in-cluster | ADR-062; `devbox run infisical-secret`, [`docs/secrets.md`](docs/secrets.md) |
 | **External Secrets Operator** | 🟢 LIVE | Syncs Infisical → native k8s Secrets | in-cluster (`ClusterSecretStore` `infisical`) | ADR-062; [`docs/secrets.md`](docs/secrets.md) |
+| **Crossplane (+ provider-terraform)** | 🟢 LIVE | Reconciles app-owned resources (Garage buckets/keys) from `Workspace` CRs | in-cluster | ADR-076; [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md) |
 | **OIDC IDP** | 🔴 PLANNED | Auth for "Others" | — not deployed | ADR-055 |
 
 ## Consuming a LIVE service

@@ -79,7 +79,7 @@ sleep-tracking ingester read on `sleep-snore`). Reusable how-to: `docs/patterns/
 mechanism: ADR-075.
 
 ### ADR-075 — App resource-provisioning mechanism: app-repo tofu now, Crossplane later
-**Status:** Accepted (2026-06-14). **Decision:** apps provision their Garage resources from their own
+**Status:** Superseded-by ADR-076 (2026-06-17). **Decision:** apps provision their Garage resources from their own
 repo's **tofu** using the **`jkossis/garage`** provider (Terraform registry), reaching the admin API via
 a `kubectl` port-forward (`infra/apply.sh`). **Considered / deferred:** a **Crossplane Garage provider**
 for app-declared CRs reconciled in-cluster (the steady state once a control plane lands) — but the only
@@ -89,6 +89,21 @@ control plane yet ("tofu now, ArgoCD later", ADR-003); build-time trust (runs on
 standing in-cluster controller holding admin creds. **Consequences:** each app carries `infra/` (tofu +
 a port-forward wrapper); keys land in the app's local state (SOPS+age before public, ADR-061). Migrating
 to Crossplane is a re-point at the same provider.
+
+### ADR-076 — App resource provisioning: Crossplane provider-terraform (the "later" landed)
+**Status:** Accepted (2026-06-17, supersedes ADR-075). **Decision:** now that ArgoCD is live (ADR-005),
+app Garage resources are reconciled **in-cluster** by **Crossplane `provider-terraform`**
+(`xpkg.crossplane.io/crossplane-contrib/provider-terraform`) wrapping the same `jkossis/garage` module —
+declared as a `Workspace` CR in the **app's own repo** (ADR-074) and synced by ArgoCD. The Garage admin
+credential reaches the provider pod via **ESO** (Infisical → `garage-admin` secret → pod env), so the
+standing controller never holds a git-borne secret; TF state is a kubernetes-backend secret in
+`crossplane-system`. **Considered:** keeping app-repo tofu (ADR-075 — manual `apply.sh`, no continuous
+reconciliation); a native Garage Crossplane provider (still too immature, ADR-075). **Why:** GitOps
+reconciliation + drift-correction for app resources, the steady state ADR-075 deferred. **Consequences:**
+the generated key lands in a connection `Secret` and is published to Infisical as the source of truth;
+**offline devices still consume via sops-nix** (sourced from Infisical), since ESO can't reach them
+(snore-recorder is the first example). Per-app-repo needs an ArgoCD repo credential. First migration:
+snore-recorder (`sleep-snore`), 2026-06-17.
 
 ---
 

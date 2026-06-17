@@ -56,8 +56,12 @@ before public, ADR-061).
 3. Wire the key into the app (env/Secret). For cross-app reads, add the grant in the **owning** repo.
 4. Add the Garage ground-truth block to the app's `CLAUDE.md`.
 
-## Steady state (ADR-075)
+## Steady state — Crossplane (ADR-076, LIVE)
 
-When a control plane lands, apps declare these as reconciled CRs — a Crossplane Garage provider, or
-Crossplane `provider-terraform` wrapping the same `jkossis` module — so buckets reconcile in-cluster
-and the admin port-forward goes away. Until then, the above is the path.
+The control plane landed: apps now declare their Garage resources as a Crossplane **`Workspace`** CR
+(`provider-terraform` wrapping the same `jkossis/garage` module) in their **own repo**, synced by an
+ArgoCD `Application` from the homelab repo. The provider reconciles in-cluster (admin token injected via
+ESO), so the manual `apply.sh` port-forward goes away. The generated key lands in a connection `Secret`
+and is published to **Infisical** (source of truth); in-cluster consumers read it via an `ExternalSecret`,
+**offline devices via sops-nix** (sourced from Infisical — ESO can't reach them). Worked example:
+`snore-recorder` (`infra/garage-workspace.yaml` + homelab `argocd/platform/snore-recorder.yaml`).
