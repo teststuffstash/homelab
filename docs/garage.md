@@ -51,10 +51,11 @@ only provides the seam (the Garage admin API + a token). Mechanism, by timeline:
   CRs that run a small tofu module — combines GitOps ownership with a trustworthy provider).
 - **Interim (before Crossplane/ArgoCD):** the app creates its buckets from **its own repo's tofu**
   using `registry.terraform.io/jkossis/garage` against the admin API. Still app-owned, no control
-  plane. Keys land in that app's tofu state / SOPS, not homelab's.
+  plane. Keys land in that app's local (gitignored) tofu state, not homelab's.
 
-Either way the keys are the app's secrets (ADR-061: SOPS+age before public). Homelab does **not**
-create app buckets or hold app keys.
+Either way the keys are the app's secrets — kept out of git and (steady state) published to **Infisical**
+as the source of truth (ADR-062; SOPS was considered but not adopted). Homelab does **not** create app
+buckets or hold app keys.
 
 ## Verify (from the LAN, once HAProxy/DNS are wired)
 

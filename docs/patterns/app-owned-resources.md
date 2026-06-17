@@ -31,8 +31,9 @@ An `infra/` directory with tofu + a wrapper (copy from `sleep-tracking` or `snor
   and `GARAGE_TOKEN` from the stash, then runs tofu. `devbox run buckets-plan|buckets-apply`.
 - devbox: `opentofu`, `kubectl` (+ `awscli2` to inspect data).
 
-State is **local + gitignored** — it holds the keys. Never commit keys (repos are public; SOPS+age
-before public, ADR-061).
+State is **local + gitignored** — it holds the keys. Never commit keys (repos are public). _(This is the
+**interim** app-repo-tofu path; the steady state below moves provisioning to Crossplane and the key into
+Infisical — SOPS was considered for this but not adopted, ADR-062.)_
 
 ## Conventions
 
@@ -63,5 +64,6 @@ The control plane landed: apps now declare their Garage resources as a Crossplan
 ArgoCD `Application` from the homelab repo. The provider reconciles in-cluster (admin token injected via
 ESO), so the manual `apply.sh` port-forward goes away. The generated key lands in a connection `Secret`
 and is published to **Infisical** (source of truth); in-cluster consumers read it via an `ExternalSecret`,
-**offline devices via sops-nix** (sourced from Infisical — ESO can't reach them). Worked example:
+**offline devices read it from Infisical at provision time** (plaintext on-device — ESO can't reach them;
+no sops). Worked example:
 `snore-recorder` (`infra/garage-workspace.yaml` + homelab `argocd/platform/snore-recorder.yaml`).

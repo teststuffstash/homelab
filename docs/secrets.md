@@ -1,7 +1,7 @@
 # Secrets — how they're tiered, stored, and delivered
 
-The decision is **ADR-062** (platform) + **ADR-061** (the original out-of-repo/SOPS call it
-refines). This is the operational how-to.
+The decision is **ADR-062** (platform; supersedes the original SOPS plan in **ADR-061**). This is
+the operational how-to. _(SOPS+age is **not used** anywhere — see "Why no SOPS" below.)_
 
 > **One rule frames everything:** a secret lives at the lowest tier that can actually reach its
 > consumer. The cluster can't decrypt the creds that *create* it, and an offline device can't be
@@ -13,7 +13,7 @@ refines). This is the operational how-to.
 |---|---|---|---|
 | **0 — root / bootstrap** | creds that create the cluster or that the secret platform itself needs | **KeePass wallet** (out-of-repo) | a human / `tofu`, never the cluster |
 | **1·2 — platform & app** | every in-cluster secret (DB creds, API keys, S3 keys, …) | **Infisical** (self-hosted) | **ESO** → a native `Secret` in the app's namespace |
-| **(appliance)** | the offline `snore-recorder` device | **SOPS + age** (`sops-nix`) | decrypted on-device at boot |
+| **(appliance)** | the offline `snore-recorder` device | **Infisical** (read once at provision) | written as plaintext `mode 600` files onto the device when you flash it |
 
 **Tier 0 (KeePass).** `~/.claude/homelab-keepass/{homelab.kdbx,homelab.keyx}` — key-file-only so the
 jail reads it unattended; copy both to a laptop to open in KeePassXC. Seed/refresh with
@@ -25,8 +25,17 @@ git PAT, Postgres app passwords, the Grafana/HA creds. **This is the only ring y
 store; **External Secrets Operator** pulls from it via the `infisical` `ClusterSecretStore` and writes a
 normal k8s `Secret`. ArgoCD only ever syncs the *`ExternalSecret`* manifest — values never touch git.
 
-**Appliance (SOPS).** Kept **only** for the bedside Pi (`snore-recorder`), which syncs over flaky Wi-Fi
-and would sit `NotReady` as a cluster node — ESO can't serve it. Everything else moved off SOPS.
+**Appliance (offline device).** The bedside Pi (`snore-recorder`) syncs over flaky Wi-Fi and would
+sit `NotReady` as a cluster node, so ESO can't serve it. Instead its secrets are **read from Infisical
+once at provision time** and written as plaintext `mode 600` files on the SD card
+(`/var/lib/snore-secrets/{s3.env,wifi.env}`, via the snore-recorder repo's `devbox run provision-secrets`).
+Infisical stays the source of truth; the device just holds a local copy.
+
+**Why no SOPS.** SOPS+age (the ADR-061 plan) was dropped. In-cluster, ArgoCD would need a decrypt
+plugin and you lose rotation/audit (Infisical/ESO win). On the offline device, `sops-nix` gave **no real
+at-rest protection** — the age private key has to live on the same card as the ciphertext, so a stolen
+card yields both; it was pure ceremony for a single hand-provisioned box. Net: KeePass for Tier-0,
+Infisical/ESO for the rest, plaintext-from-Infisical for the device.
 
 ## Bootstrap order (why it's `tofu`, not ArgoCD)
 

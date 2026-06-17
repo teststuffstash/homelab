@@ -104,8 +104,9 @@ the generated key lands in a connection `Secret` and is **published to Infisical
 itself** (the Infisical TF provider in provider-terraform, authed by the `crossplane-tf-writer` UA
 identity) — **not** via ESO PushSecret, because the ESO Infisical provider is **read-only**
 (`ClusterSecretStore` capabilities = `ReadOnly`). In-cluster consumers read that key back via an ESO
-`ExternalSecret`; **offline devices consume via sops-nix** (sourced from Infisical), since ESO can't
-reach them. Apps with **pre-existing data** (sleep-tracking) **adopt** their resources via config-driven
+`ExternalSecret`; **offline devices read their secrets from Infisical at provision time** (written as
+plaintext `mode 600` files on the device — no sops, ADR-062), since ESO can't reach them. Apps with
+**pre-existing data** (sleep-tracking) **adopt** their resources via config-driven
 `import` blocks + `deletionPolicy: Orphan` (never recreate); their key secrets are published to Infisical
 from the old state instead. Per-app-repo needs an ArgoCD repo credential. Migrated 2026-06-17:
 snore-recorder (`sleep-snore`, created fresh) and sleep-tracking (`sleep-band`/`sleep-db`, adopted).
@@ -362,20 +363,25 @@ no root, no static admin keys. The headless jail uses a **scoped read-only** key
 **Consequences:** scripts must fail with an `aws sso login` hint, never prompt for static keys.
 
 ### ADR-061 — Secrets: out-of-repo creds now; SOPS+age before public
-**Status:** Refined-by ADR-062 (2026-06-17). **Decision:** all credentials live outside git under
+**Status:** Superseded-by ADR-062 (2026-06-17). **Decision:** all credentials live outside git under
 `~/.claude/` today; anything that must live in git will be SOPS+age-encrypted before publishing.
 **Considered:** sealed-secrets, Vault, plaintext. **Why:** repo is public-by-default (principle #9);
 SOPS+age is simple and git-native. **Consequences:** tofu state,
-`*.tfvars`, `kubeconfig`, `talosconfig` gitignored. _Update:_ the SOPS-in-git plan is now scoped to the
-**offline device only** — in-cluster secrets moved to Infisical+ESO (ADR-062).
+`*.tfvars`, `kubeconfig`, `talosconfig` gitignored. _Update:_ **SOPS+age was ultimately NOT adopted
+anywhere** (ADR-062) — in-cluster secrets use Infisical+ESO, bootstrap uses KeePass, and the offline
+`snore-recorder` device reads its secrets from Infisical at provision time (plaintext `mode 600` on the
+device; `sops-nix` was dropped — the age key would sit on the same card as the ciphertext, so it bought
+nothing). The "no plaintext secrets *in git*" rule still holds; the gitignore guards stand.
 
 ### ADR-062 — Secrets platform: KeePass (Tier-0) + Infisical + ESO
 **Status:** Accepted (2026-06-17, refines ADR-061). **Decision:** three tiers (full how-to:
 [`docs/secrets.md`](secrets.md)) — **(0)** root/bootstrap creds the cluster can't decrypt for itself
 live in a **KeePass** wallet (out-of-repo, seeded to `tofu` via `scripts/keepass-env.sh`); **(1·2)**
 every in-cluster secret lives in **self-hosted Infisical** (on CloudNativePG, ADR-046) and is delivered
-to workloads by the **External Secrets Operator** (`ExternalSecret` → namespace `Secret`); **SOPS+age is
-kept only for the offline `snore-recorder` device** (`sops-nix`; ESO can't reach an offline appliance).
+to workloads by the **External Secrets Operator** (`ExternalSecret` → namespace `Secret`); the offline
+`snore-recorder` device (which ESO can't reach) **reads its secrets from Infisical at provision time** and
+stores them as plaintext `mode 600` files on the SD card. **SOPS+age is not used at all** — on the device
+`sops-nix` gave no at-rest benefit (the age key lives on the same card as the ciphertext).
 **Considered:** SOPS-everywhere (ADR-061 — ArgoCD needs a decrypt plugin, no rotation/UI, and the team-
 sharing benefit is moot solo); **sealed-secrets** (lightest, but no UI/rotation/audit); **Vault/OpenBao**
 (heavier than wanted); **keeenv/KeePass-as-the-backend** (no ESO provider — kept as the human Tier-0

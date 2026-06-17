@@ -26,7 +26,7 @@ flowchart LR
         R["Proxmox · bare-metal · Talos VMs · Cilium · OPNsense · Cloudflare · S3 · Civo"]
     end
     subgraph SEC["Security Plane · cross-cutting"]
-        S["SOPS+age · OPNsense FW · Cilium NetworkPolicy · WireGuard · AMT · RBAC"]
+        S["KeePass + Infisical/ESO · OPNsense FW · Cilium NetworkPolicy · WireGuard · AMT · RBAC"]
     end
     OBS -.spans.-> DEV
     DEV --> DEL --> RES
@@ -128,7 +128,7 @@ _Fig. 4: Observability Plane — small agents collect, one central brain visuali
 ```mermaid
 flowchart TB
     subgraph SECRETS["Secrets"]
-        K["KeePass (Tier-0 bootstrap, out-of-repo) · Infisical + ESO (in-cluster) · SOPS+age (offline device)"]
+        K["KeePass (Tier-0 bootstrap, out-of-repo) · Infisical + ESO (in-cluster) · Infisical→provision (offline device)"]
     end
     subgraph NETSEC["Network Security"]
         F["OPNsense firewall · Cilium NetworkPolicy · WireGuard / VPN"]
@@ -148,7 +148,8 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
   (`tofu/cloudflare-token/`). AWS access is IAM Identity Center SSO (no static admin keys).
 - ✅ Secrets platform (ADR-062, `docs/secrets.md`): **KeePass** Tier-0 bootstrap →
   **Infisical** (self-hosted, on CloudNativePG) → **External Secrets Operator** delivers to workloads.
-  SOPS+age retained only for the offline `snore-recorder` device.
+  The offline `snore-recorder` device reads its secrets from Infisical at provision time (plaintext
+  on-device). **SOPS+age is not used.**
 - 🔜 Cilium NetworkPolicy, AMT hardening, OPNsense firewall as code.
 - ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.
 
