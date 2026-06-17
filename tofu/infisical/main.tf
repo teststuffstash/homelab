@@ -52,6 +52,16 @@ resource "infisical_project_identity" "eso" {
   roles       = [{ role_slug = "viewer" }]
 }
 
+# Add the super admin as a project member (admin). Org membership doesn't grant project
+# access in Infisical, and the project was created by a machine identity — so without this
+# the admin sees "Join as Admin" instead of being a member. The user must already exist
+# (created by autoBootstrap).
+resource "infisical_project_user" "admin" {
+  project_id = infisical_project.homelab.id
+  username   = var.admin_username
+  roles      = [{ role_slug = "admin" }]
+}
+
 # The one secret that closes the loop: ESO's UA credentials. The ClusterSecretStore
 # (argocd/resources/extras/clustersecretstore.yaml) references this by name. Created
 # here so it's never in git; rotates by re-applying.

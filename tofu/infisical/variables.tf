@@ -21,3 +21,9 @@ variable "kubeconfig" {
   type        = string
   default     = "../kubeconfig"
 }
+
+variable "admin_username" {
+  description = "Super-admin email — added to the homelab project as admin (so it's a member, not just org). From KeePass via apply.sh."
+  type        = string
+  default     = "admin@teststuff.net"
+}
