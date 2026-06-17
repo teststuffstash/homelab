@@ -101,6 +101,23 @@ resource "kubernetes_secret" "argocd_repo_github" {
   depends_on = [helm_release.argocd]
 }
 
+# Read credential for app repos ArgoCD reconciles (per ADR-004 per-app-repo). Same PAT
+# (org-scoped). Add more entries as apps onboard, or switch to an org creds-template.
+resource "kubernetes_secret" "argocd_repo_snore_recorder" {
+  metadata {
+    name      = "repo-snore-recorder-github"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type     = "git"
+    url      = "https://github.com/teststuffstash/snore-recorder.git"
+    username = "git"
+    password = var.argocd_github_pat
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.
