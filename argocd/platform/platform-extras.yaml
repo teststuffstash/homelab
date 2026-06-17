@@ -1,0 +1,28 @@
+# Platform extras (wave 3): the bits that depend on Infisical being up —
+#   * the BGP LoadBalancer VIP for the Infisical UI (.40.18), and
+#   * the ESO ClusterSecretStore that points at Infisical.
+# Raw manifests in argocd/resources/extras/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-extras
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/extras
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infisical
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

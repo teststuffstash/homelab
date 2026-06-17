@@ -1,0 +1,53 @@
+# Infisical — the self-hosted secrets backend ESO reads from. Wave 2: needs its
+# Postgres (wave 1) and the tofu-seeded secrets (infisical-secrets / infisical-db).
+#
+# - postgresql.enabled=false → use the CNPG cluster via the existing connection-string
+#   secret (NOT the bundled bitnami Postgres).
+# - redis bundled (the queue backend; small, no HA need here).
+# - ingress disabled → exposed on a BGP VIP + OPNsense HAProxy (platform-extras), like
+#   the other LAN UIs, not the chart's bundled ingress-nginx.
+# - ENCRYPTION_KEY/AUTH_SECRET come from infisical-secrets (kubeSecretRef), seeded by
+#   tofu from KeePass so they never rotate under the data.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infisical
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://dl.cloudsmith.io/public/infisical/helm-charts/helm/charts
+    chart: infisical-standalone
+    targetRevision: 1.9.0
+    helm:
+      valuesObject:
+        infisical:
+          replicaCount: 1
+          kubeSecretRef: infisical-secrets
+          service:
+            type: ClusterIP
+        postgresql:
+          enabled: false
+          useExistingPostgresSecret:
+            enabled: true
+            existingConnectionStringSecret:
+              name: infisical-db
+              key: DB_CONNECTION_URI
+        redis:
+          enabled: true
+        ingress:
+          enabled: false
+          nginx:
+            enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infisical
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

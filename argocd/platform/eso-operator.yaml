@@ -1,0 +1,30 @@
+# External Secrets Operator — pulls secrets from a backend (Infisical) into native
+# k8s Secrets. Wave 0 (operator only); the ClusterSecretStore that points it at
+# Infisical lives in platform-extras (wave 3), after Infisical is up.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: eso-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: 2.6.0
+    helm:
+      valuesObject:
+        installCRDs: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

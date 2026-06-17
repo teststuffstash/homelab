@@ -1,0 +1,20 @@
+# CNPG Postgres for Infisical. HA pair on Longhorn. The app role's password is supplied
+# (not generated) via the tofu-seeded basic-auth secret `infisical-pg-app`, so tofu's
+# connection string (infisical-db) always matches. CNPG creates the `infisical-pg-rw`
+# service the connection string targets.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: infisical-pg
+  namespace: infisical
+spec:
+  instances: 2
+  storage:
+    size: 5Gi
+    storageClass: longhorn
+  bootstrap:
+    initdb:
+      database: infisical
+      owner: infisical
+      secret:
+        name: infisical-pg-app # tofu-seeded basic-auth (username: infisical)

@@ -126,3 +126,50 @@ variable "nodes" {
     error_message = "At least one controlplane node is required."
   }
 }
+
+# ---- ArgoCD + Infisical bootstrap (the GitOps seam, tofu/argocd.tf) --------
+# These are Tier-0/1 bootstrap secrets sourced from the KeePass wallet, not the
+# cluster (the cluster can't decrypt them for itself yet — Infisical+ESO is what
+# closes that loop). Load them with:  source scripts/keepass-env.sh
+
+variable "argocd_chart_version" {
+  description = "argo-cd Helm chart version (argoproj.github.io/argo-helm)."
+  type        = string
+  default     = "9.5.21"
+}
+
+variable "argocd_apps_chart_version" {
+  description = "argocd-apps Helm chart version (root app-of-apps)."
+  type        = string
+  default     = "2.0.5"
+}
+
+variable "argocd_repo_url" {
+  description = "Git source ArgoCD reconciles from. GitHub during bootstrap; cut over to Forgejo later."
+  type        = string
+  default     = "https://github.com/teststuffstash/homelab.git"
+}
+
+variable "argocd_github_pat" {
+  description = "Fine-grained GitHub PAT (read-only contents) so ArgoCD can pull the private homelab repo. From KeePass."
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_encryption_key" {
+  description = "Infisical ENCRYPTION_KEY (32 hex chars / 128-bit). From KeePass; never auto-generate in the cluster (would rotate under it)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_auth_secret" {
+  description = "Infisical AUTH_SECRET (base64). From KeePass."
+  type        = string
+  sensitive   = true
+}
+
+variable "infisical_db_password" {
+  description = "Password for the Infisical Postgres app role. tofu sets it on the CNPG cluster AND builds the connection string from it. From KeePass."
+  type        = string
+  sensitive   = true
+}

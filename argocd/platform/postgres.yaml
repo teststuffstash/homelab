@@ -1,0 +1,28 @@
+# Postgres clusters (CNPG Cluster CRs). Wave 1: needs the operator (wave 0). The
+# Cluster's app-role password comes from the tofu-seeded `infisical-pg-app` secret
+# (so tofu can build the matching connection string). Raw manifests in
+# argocd/resources/postgres/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/postgres
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infisical
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10 # tolerate the CRD-not-ready race against the operator
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

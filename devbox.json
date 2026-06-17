@@ -20,7 +20,8 @@
     "netcat-gnu@latest",
     "awscli2@latest",
     "openssl@latest",
-    "tea@latest"
+    "tea@latest",
+    "keepassxc@latest"
   ],
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",
@@ -28,7 +29,7 @@
   },
   "shell": {
     "init_hook": [
-      "echo \"homelab toolchain ready — $(tofu version | head -1)\""
+      "test -n \"$DEVBOX_QUIET\" || echo \"homelab toolchain ready — $(tofu version | head -1)\""
     ],
     "scripts": {
       "tf-validate": [
@@ -59,6 +60,9 @@
       ],
       "talos-usb": [
         "bash scripts/talos-usb.sh"
+      ],
+      "keepass-init": [
+        "bash scripts/keepass-init.sh"
       ],
       "flash-irrigation": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",

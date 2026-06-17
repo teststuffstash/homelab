@@ -1,0 +1,23 @@
+# BGP LoadBalancer VIP for the Infisical UI. Same pattern as garage.tf's separate LB
+# Service: the bgp=advertise label (which Cilium keys advertisement off) can't be set on
+# the chart's own Service, so we add our own selecting the infisical backend pods.
+# HTTP only — TLS terminates at the OPNsense HAProxy edge (infisical.teststuff.net).
+apiVersion: v1
+kind: Service
+metadata:
+  name: infisical-lb
+  namespace: infisical
+  labels:
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.18"
+spec:
+  type: LoadBalancer
+  selector:
+    component: infisical
+    app: infisical-standalone
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
