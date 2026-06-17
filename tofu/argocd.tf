@@ -19,10 +19,11 @@ locals {
   argocd_lb_ip    = "192.168.40.17" # BGP-advertised VIP (.16 = garage; .17/.18 free)
   infisical_lb_ip = "192.168.40.18"
 
-  # Infisical talks to its CNPG cluster over the in-cluster -rw service. sslmode=require
-  # encrypts without verifying CNPG's self-signed server cert (VERIFY on first boot; drop
-  # to disable only if the node-pg client rejects it).
-  infisical_db_uri = "postgresql://infisical:${var.infisical_db_password}@infisical-pg-rw.infisical.svc.cluster.local:5432/infisical?sslmode=require"
+  # Infisical talks to its CNPG cluster over the in-cluster -rw service. sslmode=disable:
+  # the node-pg client rejects CNPG's self-signed server cert with sslmode=require
+  # (SELF_SIGNED_CERT_IN_CHAIN), and CNPG permits non-TLS host connections. Traffic is
+  # pod-to-pod on the cluster network; revisit if Cilium transparent-encryption matters.
+  infisical_db_uri = "postgresql://infisical:${var.infisical_db_password}@infisical-pg-rw.infisical.svc.cluster.local:5432/infisical?sslmode=disable"
 }
 
 # ---------------------------------------------------------------------------
@@ -129,6 +130,20 @@ resource "kubernetes_secret" "infisical_db" {
     namespace = kubernetes_namespace.infisical.metadata[0].name
   }
   data = { DB_CONNECTION_URI = local.infisical_db_uri }
+}
+
+# Super-admin credentials for the chart's autoBootstrap job (envFrom this secret →
+# `infisical bootstrap`). Creates the first admin non-interactively instead of the
+# "Create your first Super Admin Account" screen. Creds live in KeePass.
+resource "kubernetes_secret" "infisical_bootstrap_credentials" {
+  metadata {
+    name      = "infisical-bootstrap-credentials"
+    namespace = kubernetes_namespace.infisical.metadata[0].name
+  }
+  data = {
+    INFISICAL_ADMIN_EMAIL    = var.infisical_admin_email
+    INFISICAL_ADMIN_PASSWORD = var.infisical_admin_password
+  }
 }
 
 # App-role password for the CNPG cluster's bootstrap (initdb.secret). basic-auth type;

@@ -28,6 +28,18 @@ spec:
           kubeSecretRef: infisical-secrets
           service:
             type: ClusterIP
+          # Create the super admin declaratively (no manual signup screen). Creds come
+          # from the tofu-seeded infisical-bootstrap-credentials secret (→ KeePass).
+          # Idempotent: --ignore-if-bootstrapped=true. Output identity token lands in
+          # infisical-bootstrap-secret (in this ns).
+          autoBootstrap:
+            enabled: true
+            organization: homelab
+            credentialSecret:
+              name: infisical-bootstrap-credentials
+            secretDestination:
+              name: infisical-bootstrap-secret
+              namespace: infisical
         postgresql:
           enabled: false
           useExistingPostgresSecret:

@@ -173,3 +173,15 @@ variable "infisical_db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "infisical_admin_email" {
+  description = "Infisical super-admin email — created declaratively by the chart's autoBootstrap job. From KeePass."
+  type        = string
+  default     = "admin@teststuff.net"
+}
+
+variable "infisical_admin_password" {
+  description = "Infisical super-admin password. From KeePass; consumed by the autoBootstrap job via the bootstrap-credentials secret."
+  type        = string
+  sensitive   = true
+}

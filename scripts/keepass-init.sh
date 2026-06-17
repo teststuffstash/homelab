@@ -54,6 +54,8 @@ add_secret() {
 
 gen_hex()    { openssl rand -hex "${1:-16}"; }
 gen_b64()    { openssl rand -base64 "${1:-32}"; }
+# strong password that satisfies Infisical's policy (len + upper/lower/digit/special)
+gen_admin_pw() { printf '%sAa1!' "$(openssl rand -base64 21 | tr -d '/+=')"; }
 file_or()    { [ -f "$1" ] && tr -d '\n' <"$1" || echo "$2"; }
 
 echo "Seeding entries:"
@@ -61,6 +63,9 @@ echo "Seeding entries:"
 add_secret infisical-encryption-key "$(gen_hex 16)"     # ENCRYPTION_KEY (32 hex chars)
 add_secret infisical-auth-secret    "$(gen_b64 32)"     # AUTH_SECRET
 add_secret infisical-db-password     "$(gen_b64 24 | tr -d '/+=')"  # CNPG app-role pw (URL-safe)
+# Infisical super admin — created declaratively by the chart's autoBootstrap job.
+add_secret infisical-admin-email    "admin@teststuff.net"
+add_secret infisical-admin-password "$(gen_admin_pw)"
 
 # --- ArgoCD git credential (repo is private → ArgoCD needs read access) --------
 # Reuse the existing fine-grained PAT from the git remote if present, else placeholder.
