@@ -118,6 +118,21 @@ resource "kubernetes_secret" "argocd_repo_snore_recorder" {
   depends_on = [helm_release.argocd]
 }
 
+resource "kubernetes_secret" "argocd_repo_sleep_tracking" {
+  metadata {
+    name      = "repo-sleep-tracking-github"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type     = "git"
+    url      = "https://github.com/teststuffstash/sleep-tracking.git"
+    username = "git"
+    password = var.argocd_github_pat
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.
