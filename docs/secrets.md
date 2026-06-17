@@ -78,6 +78,9 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
 
 - **Repos are public** — never commit a value. Tofu state in `tofu/infisical/` is local + gitignored
   (it holds the ESO client secret); the provider lock is committed.
-- The Infisical→ESO path is **read-only** (`eso-reader` has project `viewer`). Writes go through
-  `infisical-secret` / the UI as an admin.
+- The Infisical→ESO path is **read-only** — by design (`eso-reader` has project `viewer`) **and** by
+  capability (the ESO Infisical provider is read-only; `ClusterSecretStore` reports `ReadOnly`, so ESO
+  `PushSecret` to Infisical does not work). Writes happen three ways: `devbox run infisical-secret` /
+  the UI (ad-hoc, as admin), or a **Crossplane Workspace** publishing via the Infisical TF provider
+  (the `crossplane-tf-writer` identity — how app-generated keys land in Infisical, ADR-076).
 - Rotation: re-run the relevant `tofu`/`infisical-secret`; ESO re-syncs consumers on its refresh.

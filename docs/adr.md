@@ -100,10 +100,15 @@ standing controller never holds a git-borne secret; TF state is a kubernetes-bac
 `crossplane-system`. **Considered:** keeping app-repo tofu (ADR-075 — manual `apply.sh`, no continuous
 reconciliation); a native Garage Crossplane provider (still too immature, ADR-075). **Why:** GitOps
 reconciliation + drift-correction for app resources, the steady state ADR-075 deferred. **Consequences:**
-the generated key lands in a connection `Secret` and is published to Infisical as the source of truth;
-**offline devices still consume via sops-nix** (sourced from Infisical), since ESO can't reach them
-(snore-recorder is the first example). Per-app-repo needs an ArgoCD repo credential. First migration:
-snore-recorder (`sleep-snore`), 2026-06-17.
+the generated key lands in a connection `Secret` and is **published to Infisical by the Workspace
+itself** (the Infisical TF provider in provider-terraform, authed by the `crossplane-tf-writer` UA
+identity) — **not** via ESO PushSecret, because the ESO Infisical provider is **read-only**
+(`ClusterSecretStore` capabilities = `ReadOnly`). In-cluster consumers read that key back via an ESO
+`ExternalSecret`; **offline devices consume via sops-nix** (sourced from Infisical), since ESO can't
+reach them. Apps with **pre-existing data** (sleep-tracking) **adopt** their resources via config-driven
+`import` blocks + `deletionPolicy: Orphan` (never recreate); their key secrets are published to Infisical
+from the old state instead. Per-app-repo needs an ArgoCD repo credential. Migrated 2026-06-17:
+snore-recorder (`sleep-snore`, created fresh) and sleep-tracking (`sleep-band`/`sleep-db`, adopted).
 
 ---
 

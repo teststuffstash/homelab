@@ -26,9 +26,11 @@ The stack is live and reconciling (ADR-005/046/062, `docs/secrets.md`, `argocd/R
 provider-terraform reconciles Garage buckets/keys from `Workspace` CRs (snore-recorder is the first
 app: `sleep-snore` + write key, reconciled via ArgoCD, key published to Infisical). Loose ends:
 
-- [ ] **Writer key → Infisical is a manual publish** — currently a `devbox run infisical-secret`
-      sourced from the connection Secret. Make it fully GitOps with an ESO **PushSecret** + a
-      write-capable Infisical identity (a second `tofu/infisical` machine identity with project write).
+- [x] **Writer key → Infisical is now GitOps** (2026-06-17) — **not** via ESO PushSecret (the ESO
+      Infisical provider is **read-only**: `ClusterSecretStore` reports `ReadOnly`). Instead the
+      snore-recorder **Workspace publishes it itself** via the Infisical TF provider
+      (`infisical_secret`), authed by the `crossplane-tf-writer` UA identity injected into the
+      provider pod. Replaces the manual `infisical-secret` step.
 - [x] **sleep-tracking migrated** (2026-06-17) — Crossplane Workspace that **adopts** the live
       buckets/keys/grants via config-driven `import` (deletionPolicy: Orphan — sleep-db history
       preserved); keys published to Infisical from the old state; `sleep-ingester-credentials`
