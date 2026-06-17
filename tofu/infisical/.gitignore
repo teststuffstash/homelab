@@ -1,0 +1,5 @@
+# Local state holds the ESO client secret — never commit.
+# (.terraform.lock.hcl IS committed — deterministic provider pin.)
+*.tfstate
+*.tfstate.*
+.terraform/
