@@ -28,8 +28,10 @@ truth.
 | **UniFi Network App** | 🟢 LIVE | Network controller | `192.168.40.12` (8443/8080/3478/10001) · `ubiquiti.teststuff.net` | ADR-043 |
 | **Cilium** | 🟢 LIVE | CNI · BGP · LB-IPAM (VIPs from `192.168.40.0/24`) | in-cluster | — |
 | **metrics-server** | 🟢 LIVE | `kubectl top` / HPA | in-cluster | — |
-| **Postgres** | 🔴 PLANNED | Relational DB (intended platform service) | — **not deployed** | ADR-045 wants it; **build it before depending on it** |
-| **ArgoCD** | 🔴 PLANNED | GitOps CD | — not deployed | deferred, ADR-003; "tofu now, ArgoCD later" |
+| **ArgoCD** | 🟢 LIVE | GitOps CD (reconciles `argocd/` from GitHub) | `argocd.teststuff.net` · in-cluster | ADR-005; `argocd/README.md` |
+| **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; declare a CNPG `Cluster` in your namespace |
+| **Infisical** | 🟢 LIVE | Secrets manager (the source ESO reads) | `infisical.teststuff.net` · in-cluster | ADR-062; `devbox run infisical-secret`, [`docs/secrets.md`](docs/secrets.md) |
+| **External Secrets Operator** | 🟢 LIVE | Syncs Infisical → native k8s Secrets | in-cluster (`ClusterSecretStore` `infisical`) | ADR-062; [`docs/secrets.md`](docs/secrets.md) |
 | **OIDC IDP** | 🔴 PLANNED | Auth for "Others" | — not deployed | ADR-055 |
 
 ## Consuming a LIVE service
@@ -38,15 +40,19 @@ truth.
   and consume the key. Full recipe: [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md).
   Reach data at `https://s3.teststuff.net` (region `garage`, path-style) with your key.
 - **Storage (Longhorn):** request a PVC with `storageClassName: longhorn` (or `longhorn-fast`).
+- **Secrets (Infisical → ESO):** put the value in Infisical (`devbox run infisical-secret K=V`) and
+  pull it into your namespace with an `ExternalSecret` against the `infisical` `ClusterSecretStore`.
+  Full recipe: [`docs/secrets.md`](docs/secrets.md). Never commit secret values (repos are public).
+- **Database (Postgres/CNPG):** declare a `postgresql.cnpg.io/v1` `Cluster` in your namespace; consume
+  the operator-generated `<cluster>-app` secret (or supply your own). Example: `argocd/resources/postgres/`.
 - **Dashboards (Grafana):** for "me"-facing views. For non-technical "Others", see ADR-072 (gated on
   the PLANNED IDP).
 
 ## ⚠️ Depending on a PLANNED service
 
-If your app needs **Postgres** (or ArgoCD, or the IDP): it **isn't there**. Don't write migrations,
-fixtures, or datasources against a database that doesn't exist. Either (a) get the platform service
-built first (a homelab change), or (b) re-scope the app to what's LIVE. The sleep-tracking ingester is
-the current example — its Postgres steps are blocked until Postgres is a 🟢 LIVE row above.
+If your app needs the **OIDC IDP**: it **isn't there** yet (ADR-055). Don't wire auth against it; either
+get it built first (a homelab change) or re-scope to what's LIVE. _(Postgres and ArgoCD used to be here
+and are now 🟢 LIVE — the sleep-tracking ingester's Postgres steps are unblocked.)_
 
 ## Maintenance
 

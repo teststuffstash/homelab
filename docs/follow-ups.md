@@ -4,7 +4,22 @@ Running list of loose ends and deferred work — the stuff intentionally not fin
 features land complete + committed; this captures the "come back to it" items so they don't get
 lost. Bigger parked features live in `ROADMAP.md` → "Backlog".
 
-_Last updated: 2026-06-11._
+_Last updated: 2026-06-17._
+
+## GitOps & secrets (ArgoCD / CloudNativePG / Infisical / ESO) — LIVE; follow-ups
+
+The stack is live and reconciling (ADR-005/046/062, `docs/secrets.md`, `argocd/README.md`). Loose ends:
+
+- [ ] **ArgoCD → Forgejo cutover** — ArgoCD is sourced from **GitHub** for now (no Forgejo/Postgres
+      dependency on its own git source). To honor the offline principle, mirror the repo into Forgejo
+      (see the Forgejo section below) and flip `var.argocd_repo_url` + the child-app `repoURL`s, then
+      deliver the Forgejo read cred via ESO. Procedure in `argocd/README.md` "Forgejo cutover".
+- [ ] **`platform` root app shows OutOfSync/Healthy** — cosmetic app-of-apps self-diff (ArgoCD
+      normalising the child `Application` specs), not real drift. Tidy if it gets noisy.
+- [ ] **CNPG self-signed TLS** — Infisical↔Postgres uses `sslmode=disable` (node-pg rejects CNPG's
+      self-signed cert). Fine pod-to-pod; revisit if Cilium transparent encryption is wanted.
+- [ ] **Second admin / break-glass** — one Infisical super admin for now (signups disabled). Decide
+      whether a break-glass second admin is worth codifying.
 
 ## Forgejo (self-hosted Git) — minimal trial is LIVE; next steps deferred
 
@@ -23,10 +38,11 @@ When investing further (roughly in order):
       to devbox. User `rasmus` (public, soot.rasmus@gmail.com) in private org `rasmus-personal`, with
       ed25519 SSH + GPG signing keys uploaded; key material in `~/.claude/homelab-forgejo/`.
 - [ ] **External Postgres** — the chart dropped bundled postgres (v14), so SQLite is the trial DB.
-      Stand up Postgres (CloudNativePG is the clean k8s-native operator) and point Forgejo at it
+      **CloudNativePG is now LIVE** (ADR-046) — give Forgejo its own CNPG `Cluster` and point it at it
       (`gitea.config.database.*`); migrate the SQLite data or start fresh.
 - [ ] **GitHub → Forgejo mirroring** — Forgejo pull-mirrors so a local copy of the GitHub repos
-      survives GitHub being down (the ArgoCD-resilience goal — don't be hostage to GitHub uptime).
+      survives GitHub being down. This is the prerequisite for the **ArgoCD → Forgejo cutover** (see the
+      GitOps & secrets section above) — the ArgoCD-resilience goal: don't be hostage to GitHub uptime.
 - [ ] **Forgejo Actions runner** (`act_runner`) — the vendor-neutral CI seam: workflows just call
       `devbox run <task>` so build/test logic stays in the repo, not the forge's YAML (cf. the
       vfarcic example). The same logic then runs under GitHub Actions *and* Forgejo Actions. Pin it

@@ -34,10 +34,23 @@ code gets wrapped (API/IaC) or logged as a temporary exception; constrains every
 `bpg/proxmox`, `siderolabs/talos`, `poseidon/matchbox`, `cloudflare/cloudflare`, `hashicorp/{kubernetes,helm,tls}`.
 
 ### ADR-003 — GitOps (ArgoCD/Flux) deferred; `tofu apply` for now
-**Status:** Open (2026-05-24). **Decision:** drive the cluster with `tofu apply` (+ a Helm provider)
+**Status:** Superseded-by ADR-005 (2026-06-17). **Decision:** drive the cluster with `tofu apply` (+ a Helm provider)
 today; add a GitOps controller later. **Considered:** ArgoCD vs Flux vs tofu-only.
 **Why:** solo lab, one source of truth already (git → tofu); a CD controller is overhead until there
 are more workloads. **Consequences:** no continuous reconciliation yet; drift is caught by re-plan.
+
+### ADR-005 — GitOps: ArgoCD reconciles the app layer; `tofu` keeps the substrate
+**Status:** Accepted (2026-06-17, supersedes ADR-003). **Decision:** **ArgoCD** is live — installed +
+seeded by `tofu/argocd.tf`, then an app-of-apps (`argocd/`) reconciles the platform/app layer from git.
+Governing rule: **anything ArgoCD needs in order to run cannot be ArgoCD-managed**, so the substrate
+(cluster, Cilium, Longhorn, CloudNativePG, Infisical, ESO, ArgoCD itself + their bootstrap secrets)
+stays in `tofu`; ArgoCD owns everything downstream. **Source = GitHub for now**, cut over to self-hosted
+Forgejo later (follow-up). **Considered:** Flux; ArgoCD sourced from Forgejo at bootstrap (a Forgejo→
+Postgres→ArgoCD chicken-and-egg); staying tofu-only (ADR-003). **Why:** enough workloads now (the
+secrets stack + real apps) to want continuous reconciliation; the GitHub seed sidesteps the Forgejo
+bootstrap paradox while keeping the offline-resilience goal reachable. **Consequences:** sync-waves order
+CNPG → Postgres → Infisical → ESO; UI at `argocd.teststuff.net`; bootstrap secrets seeded from KeePass
+(ADR-062); Forgejo cutover tracked in `docs/follow-ups.md`. See `argocd/README.md`.
 
 ### ADR-004 — Repo topology: homelab is the platform; apps live in their own repos
 **Status:** Open / planned (2026-06-13). **Decision:** treat this repo as the **platform** (clusters,
@@ -246,6 +259,18 @@ sources, the nightly ingester → Postgres, audience-split presentation) lives i
 repo** (`docs/ARCHITECTURE.md`), not here; the "Others" presentation is gated on the IDP (ADR-055/072).
 Garage store = ADR-031.
 
+### ADR-046 — Postgres platform service: CloudNativePG
+**Status:** Accepted (2026-06-17). **Decision:** **CloudNativePG** (operator) provides Postgres as a
+platform service — one HA `Cluster` CR per consumer, in the consumer's namespace. First consumers:
+**Infisical** (ADR-062), **sleep-tracking** (ADR-045), and Forgejo (on cutover). **Considered:** the
+chart-bundled (bitnami) Postgres per app, the Zalando operator, an external managed DB. **Why:**
+k8s-native, declarative HA + failover + backups; it was the lynchpin that unblocked Infisical, Forgejo-
+for-real, and sleep-tracking at once. **Consequences:** when `tofu` must build a connection string, the
+app role password is **supplied** (a basic-auth secret referenced by `bootstrap.initdb`) rather than
+operator-generated, so the string always matches; Postgres is now **LIVE** in `SERVICES.md` (sleep-
+tracking's DB steps are unblocked). In-cluster app↔DB uses `sslmode=disable` (CNPG self-signed cert;
+traffic is pod-to-pod).
+
 ---
 
 ## Remote access, DNS & edge security
@@ -317,11 +342,30 @@ no root, no static admin keys. The headless jail uses a **scoped read-only** key
 **Consequences:** scripts must fail with an `aws sso login` hint, never prompt for static keys.
 
 ### ADR-061 — Secrets: out-of-repo creds now; SOPS+age before public
-**Status:** Open / planned (2026-05-24). **Decision:** all credentials live outside git under
+**Status:** Refined-by ADR-062 (2026-06-17). **Decision:** all credentials live outside git under
 `~/.claude/` today; anything that must live in git will be SOPS+age-encrypted before publishing.
 **Considered:** sealed-secrets, Vault, plaintext. **Why:** repo is public-by-default (principle #9);
 SOPS+age is simple and git-native. **Consequences:** tofu state,
-`*.tfvars`, `kubeconfig`, `talosconfig` gitignored.
+`*.tfvars`, `kubeconfig`, `talosconfig` gitignored. _Update:_ the SOPS-in-git plan is now scoped to the
+**offline device only** — in-cluster secrets moved to Infisical+ESO (ADR-062).
+
+### ADR-062 — Secrets platform: KeePass (Tier-0) + Infisical + ESO
+**Status:** Accepted (2026-06-17, refines ADR-061). **Decision:** three tiers (full how-to:
+[`docs/secrets.md`](secrets.md)) — **(0)** root/bootstrap creds the cluster can't decrypt for itself
+live in a **KeePass** wallet (out-of-repo, seeded to `tofu` via `scripts/keepass-env.sh`); **(1·2)**
+every in-cluster secret lives in **self-hosted Infisical** (on CloudNativePG, ADR-046) and is delivered
+to workloads by the **External Secrets Operator** (`ExternalSecret` → namespace `Secret`); **SOPS+age is
+kept only for the offline `snore-recorder` device** (`sops-nix`; ESO can't reach an offline appliance).
+**Considered:** SOPS-everywhere (ADR-061 — ArgoCD needs a decrypt plugin, no rotation/UI, and the team-
+sharing benefit is moot solo); **sealed-secrets** (lightest, but no UI/rotation/audit); **Vault/OpenBao**
+(heavier than wanted); **keeenv/KeePass-as-the-backend** (no ESO provider — kept as the human Tier-0
+layer instead). **Why:** an ESO backend was needed regardless; Infisical **self-hosts** (principle),
+adds rotation/audit/UI, and lets ArgoCD stay dumb (just syncs `ExternalSecret`s, no SOPS plugin).
+**Consequences:** Infisical bootstrapped via the chart's `autoBootstrap` (admin creds in KeePass, signups
+then disabled); its project + read-only `eso-reader` machine identity are created declaratively by
+`tofu/infisical/` (Infisical TF provider, authing with the non-expiring instance-admin token — the one
+bootstrap seam); add an app secret = `devbox run infisical-secret` + an `ExternalSecret`. Crossplane
+(ADR-075) is no longer needed to deliver secrets.
 
 ---
 

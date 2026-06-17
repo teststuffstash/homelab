@@ -57,7 +57,7 @@ flowchart TB
 _Fig. 1: Developer Control Plane — where I author the platform from git, never by clicking._
 
 - ✅ Git/GitHub, OpenTofu, kubectl/talosctl/k9s/Devbox/Helm (daily tools).
-- 🔜 ArgoCD/Flux as the GitOps front (lives mostly in plane 2).
+- ✅ ArgoCD as the GitOps front (lives mostly in plane 2; ADR-005).
 - ⬜ No internal developer portal (Backstage) — out of scope for a solo lab; the only
   "portal" that matters is the **end-user tablet UI** for the elderly-care product.
 
@@ -75,7 +75,8 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
 
 - ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources.
 - ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes control plane (v1.13.2 / v1.36.1).
-- 🔜 ArgoCD/Flux GitOps front.
+- ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover pending).
+  Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ⬜ CI (GitHub Actions) not wired yet; no internal image registry (use upstream for now).
 
 ## 3 · Resource Plane
@@ -127,7 +128,7 @@ _Fig. 4: Observability Plane — small agents collect, one central brain visuali
 ```mermaid
 flowchart TB
     subgraph SECRETS["Secrets"]
-        K["SOPS + age (encrypted in git) · Proxmox/AMT creds out of git"]
+        K["KeePass (Tier-0 bootstrap, out-of-repo) · Infisical + ESO (in-cluster) · SOPS+age (offline device)"]
     end
     subgraph NETSEC["Network Security"]
         F["OPNsense firewall · Cilium NetworkPolicy · WireGuard / VPN"]
@@ -145,8 +146,10 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
 - ✅ Cloudflare edge security at the public edge: client-certificate **mTLS** (WAF-enforced, not
   Enterprise Access) on `ha.teststuff.net`, plus **scoped per-job Cloudflare API tokens** as code
   (`tofu/cloudflare-token/`). AWS access is IAM Identity Center SSO (no static admin keys).
-- 🔜 SOPS+age (for anything that must live in git), Cilium NetworkPolicy,
-  AMT hardening, OPNsense firewall as code.
+- ✅ Secrets platform (ADR-062, `docs/secrets.md`): **KeePass** Tier-0 bootstrap →
+  **Infisical** (self-hosted, on CloudNativePG) → **External Secrets Operator** delivers to workloads.
+  SOPS+age retained only for the offline `snore-recorder` device.
+- 🔜 Cilium NetworkPolicy, AMT hardening, OPNsense firewall as code.
 - ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.
 
 ---
