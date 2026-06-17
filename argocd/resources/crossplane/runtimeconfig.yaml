@@ -1,0 +1,24 @@
+# Inject the Garage admin credentials into the provider-terraform pod, so every
+# Workspace's `provider "garage" {}` (configured in providerconfig.yaml) authenticates.
+# GARAGE_ENDPOINT is the ClusterIP-only admin API on garage-0 (headless-svc DNS, :3903);
+# GARAGE_TOKEN comes from the ESO-delivered garage-admin secret.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: terraform-runtime
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: package-runtime
+              env:
+                - name: GARAGE_ENDPOINT
+                  value: http://garage-0.garage-headless.garage.svc.cluster.local:3903
+                - name: GARAGE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: garage-admin
+                      key: GARAGE_TOKEN

@@ -1,0 +1,29 @@
+# Crossplane provider-terraform + its config (Provider, DeploymentRuntimeConfig,
+# ProviderConfig, and the ESO-delivered Garage admin secret). Wave 4: after Crossplane
+# core (wave 1) and the ESO ClusterSecretStore (platform-extras, wave 3) are up — the
+# garage-admin ExternalSecret needs the store Ready, and the Provider CRDs need core.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: crossplane-providers
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/crossplane
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 10 # tolerate Provider-CRD-not-ready race for the ProviderConfig
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,10 @@
+# provider-terraform — runs Terraform modules in-cluster as Workspace CRs. Ref confirmed
+# resolvable (Installed+Healthy). runtimeConfigRef injects the Garage admin env.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-terraform
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-terraform:v1.1.1
+  runtimeConfigRef:
+    name: terraform-runtime

@@ -1,0 +1,24 @@
+# Base Terraform config injected into every Garage Workspace: the jkossis/garage provider
+# (reads GARAGE_ENDPOINT/GARAGE_TOKEN from the pod env, set by runtimeconfig.yaml) and a
+# kubernetes backend for state (provider-terraform doesn't persist state itself — each
+# workspace's state is a Secret in crossplane-system).
+apiVersion: tf.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  configuration: |
+    terraform {
+      required_providers {
+        garage = {
+          source = "jkossis/garage"
+        }
+      }
+      backend "kubernetes" {
+        secret_suffix     = "garage"
+        namespace         = "crossplane-system"
+        in_cluster_config = true
+      }
+    }
+
+    provider "garage" {}
