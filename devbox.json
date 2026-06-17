@@ -21,7 +21,9 @@
     "awscli2@latest",
     "openssl@latest",
     "tea@latest",
-    "keepassxc@latest"
+    "keepassxc@latest",
+    "argocd@latest",
+    "infisical@latest"
   ],
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",
@@ -63,6 +65,12 @@
       ],
       "keepass-init": [
         "bash scripts/keepass-init.sh"
+      ],
+      "infisical-secret": [
+        "bash scripts/infisical-secret.sh \"$@\""
+      ],
+      "infisical-harden": [
+        "bash scripts/infisical-harden.sh"
       ],
       "flash-irrigation": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",
