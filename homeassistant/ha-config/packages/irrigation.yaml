@@ -2,45 +2,46 @@
 # The ESPHome node (office-plants-irrigation, 192.168.2.245) reads these input_numbers
 # from HA via its `homeassistant` sensor platform and runs the pump comparison logic
 # on-device: if measured soil moisture < desired level, the pump runs for
-# watering_seconds_pumpN.
+# watering_minutes_pumpN (the device converts minutes→ms for the pump delay).
 #
-# `initial:` sets the proven defaults (60% desired, 180s run-time) — so a fresh deploy
-# (boot-from-git) and any HA restart land on sane values. Tune live via the dashboard
-# sliders; note a restart re-applies these initials (change the default here in git).
-# Loaded via HA packages (homeassistant.packages in configuration.yaml); source of
+# Run-time is in MINUTES (the slow daily loop waters once/day, so think "minutes per day
+# per plant", not seconds). `initial:` sets the proven defaults (60% desired, 5 min run-time)
+# — so a fresh deploy (boot-from-git) and any HA restart land on sane values. Tune live via
+# the dashboard sliders; note a restart re-applies these initials (change the default here in
+# git). Loaded via HA packages (homeassistant.packages in configuration.yaml); source of
 # truth is git, copied into the HA /config PV.
 input_number:
-  watering_seconds_pump1:
-    name: Watering seconds pump 1
-    initial: 180
-    min: 5
-    max: 600
-    step: 5
-    unit_of_measurement: "s"
+  watering_minutes_pump1:
+    name: Watering minutes pump 1
+    initial: 5
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: "min"
     icon: mdi:timer-outline
-  watering_seconds_pump2:
-    name: Watering seconds pump 2
-    initial: 180
-    min: 5
-    max: 600
-    step: 5
-    unit_of_measurement: "s"
+  watering_minutes_pump2:
+    name: Watering minutes pump 2
+    initial: 5
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: "min"
     icon: mdi:timer-outline
-  watering_seconds_pump3:
-    name: Watering seconds pump 3
-    initial: 180
-    min: 5
-    max: 600
-    step: 5
-    unit_of_measurement: "s"
+  watering_minutes_pump3:
+    name: Watering minutes pump 3
+    initial: 5
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: "min"
     icon: mdi:timer-outline
-  watering_seconds_pump4:
-    name: Watering seconds pump 4
-    initial: 180
-    min: 5
-    max: 600
-    step: 5
-    unit_of_measurement: "s"
+  watering_minutes_pump4:
+    name: Watering minutes pump 4
+    initial: 5
+    min: 1
+    max: 30
+    step: 1
+    unit_of_measurement: "min"
     icon: mdi:timer-outline
 
   moisture_level_for_pump1:

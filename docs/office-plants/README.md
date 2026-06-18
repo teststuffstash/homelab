@@ -32,11 +32,15 @@ with thresholds and per-plant run-times configured in **Home Assistant**.
 
 ## 1. What it does
 
-Every **15 min during the day (08:00–21:00 local)**, the Droplet checks each plant:
-if `soil_moisture% < desired%` it runs that plant's pump for its configured number of
-seconds, soaks ~10 s, then moves to the next plant (one pump at a time). All four thresholds
-and run-times are set from Home Assistant; nothing waters at night, and a master
-**Auto Watering** switch (plus a manual **Water Now** button) is exposed in HA.
+**Once a day (08:00 local)**, the Droplet checks each plant: if `soil_moisture% < desired%`
+**and** that plant hasn't been watered in the last `min_water_interval_h` hours (default 24),
+it runs that plant's pump for its configured number of **minutes**, soaks ~10 s, then moves to
+the next plant (one pump at a time). The slow once-a-day cadence + per-plant settle lockout is
+deliberate: capacitive soil probes lag watering by hours, so a fast reactive loop re-waters
+before the last dose registers and overwaters (it did — see R5 / the 2026-06 plant-4 incident).
+"Water one day, measure the next." All four thresholds and run-times are set from Home
+Assistant; nothing waters at night, and a master **Auto Watering** switch (plus a manual
+**Water Now** button that bypasses the lockout) is exposed in HA.
 
 Decision + timing logic runs **on the device** (ESPHome), so it keeps its last-known
 thresholds in RAM and only *needs* Home Assistant to (re)read configuration — see
@@ -88,7 +92,7 @@ flowchart TB
 
     subgraph cluster["Talos k8s cluster on Proxmox 'pve' (192.168.2.3)"]
       ha["**Home Assistant** pod (ns home-assistant)<br/>VIP 192.168.40.10:8123 (Cilium BGP)<br/>Longhorn PVC (replicated)"]
-      irr["irrigation package:<br/>input_number.moisture_level_for_pumpN<br/>input_number.watering_seconds_pumpN"]
+      irr["irrigation package:<br/>input_number.moisture_level_for_pumpN<br/>input_number.watering_minutes_pumpN"]
       ha --- irr
     end
 
@@ -136,15 +140,16 @@ All runtime tuning is in Home Assistant (dashboard card **"Watering time per pla
 | Setting | Entity | Range | Meaning |
 |---|---|---|---|
 | Desired moisture | `input_number.moisture_level_for_pump1..4` | 0–100 % | water while `soil% < this` |
-| Run time per plant | `input_number.watering_seconds_pump1..4` | 5–600 s | how long that pump runs each pass |
+| Run time per plant | `input_number.watering_minutes_pump1..4` | 1–30 min | how long that pump runs each daily pass |
 | Master enable | `switch.office_plants_irrigation_auto_watering` | on/off | default off after fresh flash; restores last state on reboot |
-| Manual one-shot | `button.office_plants_irrigation_water_now` | press | runs one cycle ignoring auto/daytime (still only waters below-threshold plants) |
+| Manual one-shot | `button.office_plants_irrigation_water_now` | press | runs one cycle ignoring auto/daytime/lockout (still only waters below-threshold plants) |
 
 Behaviour constants (less-often changed) live as `substitutions:` at the top of
-`office-plants-irrigation.yaml`: `check_interval` (15 min), `soak_seconds` (10 s), `day_start`/`day_end`
-(8/21), `watering_seconds` (180 s fallback only).
+`office-plants-irrigation.yaml`: daily decision at `day_start` (08:00) via `time.on_time`,
+`min_water_interval_h` (24 h per-plant settle lockout), `soak_seconds` (10 s), `day_end` (21),
+`watering_minutes` (5 min fallback only).
 
-> **Note:** the HA helpers set **`initial:`** to the proven defaults (**60 % desired, 180 s
+> **Note:** the HA helpers set **`initial:`** to the proven defaults (**60 % desired, 5 min
 > run-time**), so a fresh deploy (boot-from-git) and any HA restart land on sane values. Tune
 > live with the dashboard sliders; a restart re-applies these initials — to change the default,
 > edit `irrigation.yaml`.
@@ -154,7 +159,7 @@ Behaviour constants (less-often changed) live as `substitutions:` at the top of
 
 ### Bigger pots / weak pumps / soaker-hose priming
 Pumps are underpowered for the larger pots, and soaker hoses absorb the first part of each
-run before dripping. Compensate by **raising `watering_seconds_pumpN`** (up to 600 s) for the
+run before dripping. Compensate by **raising `watering_minutes_pumpN`** (up to 30 min) for the
 thirsty pots — no reflash needed, it's a slider.
 
 ---
@@ -268,7 +273,7 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 | R2 | **Reservoir runs empty / pump runs dry** | High | High | Manual refill checks; **no level sensor yet** → see Next steps |
 | R3 | **Pump fails** (weak/dead) — plant silently not watered | Medium | Medium | "soil not rising after watering" is the tell; **next:** auto-detect & alert |
 | R4 | **Sensor drift / failure** → over- or under-watering | Medium | Medium | Periodic recalibration; `soilN_raw` diagnostics; clamp 0–100 |
-| R5 | **Threshold set higher than soil can reach** → pump runs every cycle (over-water) | Medium | Medium | Pick reachable thresholds; **next:** per-run max + daily cap |
+| R5 | **Threshold set higher than soil can reach** → over-water | Medium | Low | **Mitigated 2026-06:** once-a-day decision + per-plant 24 h settle lockout (`min_water_interval_h`) replaced the old 15-min reactive loop that gave plant 4 12×3-min runs in one morning. Still: pick reachable thresholds. |
 | R6 | **Leak / hose pops off** while pumping | Low | Low–Med | **Droplet sits elevated on the reservoir box → leaks drain back into it**, limiting water damage; daytime-only, short runs. Still no leak/flow detection → Next steps |
 | R7 | **WiFi outage** → device offline | Low | Medium | APs keep serving WiFi without the controller; UniFi controller now runs in-cluster (`192.168.40.12`) |
 | R8 | **NTP unreachable** → daytime guard blocks auto watering | Low | Medium | Local OPNsense NTP + public fallback; manual Water Now unaffected |
@@ -285,7 +290,7 @@ Calibration maps ADC volts → %. Defaults: dry `2.30 V → 0 %`, water `0.89 V 
 - **Flow/leak detection** or a hardware max-run fuse (R6).
 - **Notifications** (HA): watering events, stale/again-NaN sensors, reservoir low.
   *(Started — Prometheus/Alertmanager → HA, see [§9](#9-monitoring-prometheus--grafana). Reservoir-low still needs R2's level sensor.)*
-- Make **`check_interval` configurable from HA** (like the per-plant seconds) for long-run setups.
+- Make the **daily decision hour / `min_water_interval_h` configurable from HA** (like the per-plant minutes).
 - **Per-sensor / multi-point calibration** for better mid-range accuracy.
 - **Home Assistant resilience:** ~~real storage provisioner instead of single-node hostPath~~ **done** (Longhorn, replicated); still single-replica → **next:** HA across nodes.
 - ~~Move the API encryption key to `secrets.yaml` (R11)~~ **Done** — device secrets are `!secret`; API key + AP password rotated.
@@ -464,7 +469,7 @@ notification. Reservoir-low and pump-health alerts still wait on hardware (R2/R3
 
 ### Reporting cadence & WiFi
 Soil + WiFi sensors report at **60s** (1-min resolution — ample for plants, and it cuts
-airtime vs. the old 10s). The on-device 15-min control loop is unaffected (it reads the
+airtime vs. the old 10s). The on-device once-a-day control loop is unaffected (it reads the
 in-RAM soil state inside `do_water_cycle`).
 
 ### Deploy

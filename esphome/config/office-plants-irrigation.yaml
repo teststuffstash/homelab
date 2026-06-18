@@ -1,10 +1,17 @@
 substitutions:
   # --- watering behaviour (tune here) ---
-  watering_seconds: "180"  # FALLBACK only — per-plant run time is set in HA (input_number.watering_seconds_pumpN)
+  watering_minutes: "5"    # FALLBACK only — per-plant run time (MINUTES) is set in HA (input_number.watering_minutes_pumpN)
   soak_seconds: "10"       # pause between plants in a cycle
-  check_interval: "15min"  # how often to evaluate whether to water
-  day_start: "8"           # only water at/after 08:00 ...
-  day_end: "21"            # ... and before 21:00 (no buzzing/watering at night)
+  day_start: "8"           # run the ONE daily watering decision at this hour (08:00), and the
+  day_end: "21"            # earliest hour an on-turn-on / manual eval may water; quiet after 21:00.
+  # --- SLOW control loop (deliberate — do not turn this back into a fast reactive loop) ---
+  # Soil-moisture probes lag watering by MANY HOURS (water must diffuse through the soil to
+  # reach the probe). A fast loop re-measures before the last dose has registered and waters
+  # again and again — on 2026-06-14 plant 4 got 12×3-min runs in one morning and then drifted
+  # up ~58%→~82% over the next 3 days. So: evaluate once per day, and never re-water a plant
+  # until its last dose has had a full settle window to show up. "Water one day, measure the next."
+  min_water_interval_h: "24"  # per-plant lockout (hours) between waterings. Raise to 48 for
+                              # water-one-day / skip-one-day / measure cadence.
 
 esphome:
   name: office-plants-irrigation
@@ -47,6 +54,19 @@ time:
       - 192.168.2.1        # OPNsense NTP (LAN)
       - 0.pool.ntp.org
       - 1.pool.ntp.org
+    on_time:
+      # The ONE watering decision per day. Fires only when SNTP time is valid. The slow
+      # cadence is the whole point — see the substitutions block. Per-plant lockout in
+      # do_water_cycle still applies, so this never double-doses.
+      - seconds: 0
+        minutes: 0
+        hours: ${day_start}
+        then:
+          - if:
+              condition:
+                switch.is_on: auto_watering
+              then:
+                - script.execute: do_water_cycle
 
 one_wire: # https://esphome.io/components/one_wire
   - platform: gpio
@@ -95,6 +115,14 @@ globals:
   - { id: pump2_seconds_total, type: double, restore_value: yes, initial_value: '0' }
   - { id: pump3_seconds_total, type: double, restore_value: yes, initial_value: '0' }
   - { id: pump4_seconds_total, type: double, restore_value: yes, initial_value: '0' }
+  # Wall-clock epoch (seconds) of each plant's last watering — drives the per-plant settle
+  # lockout. restore_value so the lockout survives reboots (0 = never watered yet).
+  - { id: pump1_last_water_epoch, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump2_last_water_epoch, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump3_last_water_epoch, type: double, restore_value: yes, initial_value: '0' }
+  - { id: pump4_last_water_epoch, type: double, restore_value: yes, initial_value: '0' }
+  # Set by the "Water Now" button to bypass the settle lockout for one cycle (manual testing).
+  - { id: force_water, type: bool, restore_value: no, initial_value: 'false' }
 
 sensor:
   # --- Raw ADC voltage per channel (calibration aid; disabled in HA by default) ---
@@ -183,25 +211,25 @@ sensor:
     internal: true
     entity_id: input_number.moisture_level_for_pump4
 
-  # --- Per-plant watering run time (seconds), driven by Home Assistant helpers ---
-  # Bigger pots / soaker-hose priming need longer. Falls back to ${watering_seconds}
-  # if the HA value is unavailable.
+  # --- Per-plant watering run time (MINUTES), driven by Home Assistant helpers ---
+  # Bigger pots / soaker-hose priming need longer. Falls back to ${watering_minutes}
+  # if the HA value is unavailable. Converted to ms (×60000) in do_water_cycle.
   - platform: homeassistant
-    id: water_secs_1
+    id: water_mins_1
     internal: true
-    entity_id: input_number.watering_seconds_pump1
+    entity_id: input_number.watering_minutes_pump1
   - platform: homeassistant
-    id: water_secs_2
+    id: water_mins_2
     internal: true
-    entity_id: input_number.watering_seconds_pump2
+    entity_id: input_number.watering_minutes_pump2
   - platform: homeassistant
-    id: water_secs_3
+    id: water_mins_3
     internal: true
-    entity_id: input_number.watering_seconds_pump3
+    entity_id: input_number.watering_minutes_pump3
   - platform: homeassistant
-    id: water_secs_4
+    id: water_mins_4
     internal: true
-    entity_id: input_number.watering_seconds_pump4
+    entity_id: input_number.watering_minutes_pump4
 
   - platform: wifi_signal
     name: WiFi Signal Sensor
@@ -296,7 +324,9 @@ switch:
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
     on_turn_on:
-      - lambda: 'id(pump1_on_ms) = millis();'
+      - lambda: |-
+          id(pump1_on_ms) = millis();
+          if (id(ha_time).now().is_valid()) id(pump1_last_water_epoch) = id(ha_time).now().timestamp;
     on_turn_off:
       - lambda: 'if (id(pump1_on_ms) != 0) { id(pump1_seconds_total) += (millis() - id(pump1_on_ms)) / 1000.0; id(pump1_on_ms) = 0; }'
   - platform: gpio
@@ -306,7 +336,9 @@ switch:
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
     on_turn_on:
-      - lambda: 'id(pump2_on_ms) = millis();'
+      - lambda: |-
+          id(pump2_on_ms) = millis();
+          if (id(ha_time).now().is_valid()) id(pump2_last_water_epoch) = id(ha_time).now().timestamp;
     on_turn_off:
       - lambda: 'if (id(pump2_on_ms) != 0) { id(pump2_seconds_total) += (millis() - id(pump2_on_ms)) / 1000.0; id(pump2_on_ms) = 0; }'
   - platform: gpio
@@ -316,7 +348,9 @@ switch:
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
     on_turn_on:
-      - lambda: 'id(pump3_on_ms) = millis();'
+      - lambda: |-
+          id(pump3_on_ms) = millis();
+          if (id(ha_time).now().is_valid()) id(pump3_last_water_epoch) = id(ha_time).now().timestamp;
     on_turn_off:
       - lambda: 'if (id(pump3_on_ms) != 0) { id(pump3_seconds_total) += (millis() - id(pump3_on_ms)) / 1000.0; id(pump3_on_ms) = 0; }'
   - platform: gpio
@@ -326,7 +360,9 @@ switch:
     icon: mdi:water-pump
     restore_mode: ALWAYS_OFF
     on_turn_on:
-      - lambda: 'id(pump4_on_ms) = millis();'
+      - lambda: |-
+          id(pump4_on_ms) = millis();
+          if (id(ha_time).now().is_valid()) id(pump4_last_water_epoch) = id(ha_time).now().timestamp;
     on_turn_off:
       - lambda: 'if (id(pump4_on_ms) != 0) { id(pump4_seconds_total) += (millis() - id(pump4_on_ms)) / 1000.0; id(pump4_on_ms) = 0; }'
 
@@ -339,94 +375,111 @@ output:
     pin: GPIO23
     id: rtttl_out
 
-# One watering pass: for each plant, if it's below its desired level, run the pump for
-# >= watering_seconds, then pause (soak) before the next plant. mode:single means a new
-# cycle can't start while one is running, so pumps never "stutter" the way the old
-# 2-second toggle did. A plant with desired = 0 (or an unavailable HA value) is skipped.
+# One watering pass: for each plant, water it ONLY if (a) it's below its desired level AND
+# (b) it hasn't been watered within ${min_water_interval_h} hours (the settle lockout — so we
+# decide on a settled reading, not on soil that's still soaking up the last dose). Then run the
+# pump for watering_minutes and soak before the next plant. mode:single means a new cycle
+# can't start while one is running. A plant with desired = 0 (or unavailable HA value) is skipped.
+# The "Water Now" button sets force_water to bypass the lockout for one manual cycle.
 script:
   - id: do_water_cycle
     mode: single
     then:
       - lambda: |-
           auto t = id(ha_time).now();
-          ESP_LOGI("water", "cycle: time_valid=%d hour=%d | s1=%.0f/d%.0f/%.0fs s2=%.0f/d%.0f/%.0fs s3=%.0f/d%.0f/%.0fs s4=%.0f/d%.0f/%.0fs",
+          ESP_LOGI("water", "cycle: time_valid=%d hour=%d | s1=%.0f/d%.0f/%.1fmin s2=%.0f/d%.0f/%.1fmin s3=%.0f/d%.0f/%.1fmin s4=%.0f/d%.0f/%.1fmin",
                    t.is_valid(), t.is_valid() ? (int) t.hour : -1,
-                   id(Soil1).state, id(desired_mois_value_1).state, id(water_secs_1).state,
-                   id(Soil2).state, id(desired_mois_value_2).state, id(water_secs_2).state,
-                   id(Soil3).state, id(desired_mois_value_3).state, id(water_secs_3).state,
-                   id(Soil4).state, id(desired_mois_value_4).state, id(water_secs_4).state);
+                   id(Soil1).state, id(desired_mois_value_1).state, id(water_mins_1).state,
+                   id(Soil2).state, id(desired_mois_value_2).state, id(water_mins_2).state,
+                   id(Soil3).state, id(desired_mois_value_3).state, id(water_mins_3).state,
+                   id(Soil4).state, id(desired_mois_value_4).state, id(water_mins_4).state);
       - if:
           condition:
-            lambda: 'return id(Soil1).state < id(desired_mois_value_1).state;'
+            lambda: |-
+              if (isnan(id(Soil1).state) || isnan(id(desired_mois_value_1).state)) return false;  // sensors not ready (e.g. at boot) → fail-safe, never water blind
+              if (id(Soil1).state >= id(desired_mois_value_1).state) return false;  // at/above target (desired=0 disables)
+              if (id(force_water)) return true;                                     // manual "Water Now" override
+              time_t now = id(ha_time).now().timestamp;
+              double last = id(pump1_last_water_epoch);
+              return last <= 0 || (now - last) >= (${min_water_interval_h} * 3600.0);  // settle lockout elapsed
           then:
             - logger.log: "Droplet: watering plant 1"
             - switch.turn_on: pump1
             - delay: !lambda |-
-                float s = id(water_secs_1).state;
-                if (isnan(s) || s < 1) s = ${watering_seconds};
-                return (uint32_t) (s * 1000.0);
+                float m = id(water_mins_1).state;
+                if (isnan(m) || m < 1) m = ${watering_minutes};
+                return (uint32_t) (m * 60000.0);
             - switch.turn_off: pump1
             - delay: ${soak_seconds}s
       - if:
           condition:
-            lambda: 'return id(Soil2).state < id(desired_mois_value_2).state;'
+            lambda: |-
+              if (isnan(id(Soil2).state) || isnan(id(desired_mois_value_2).state)) return false;  // sensors not ready (e.g. at boot) → fail-safe, never water blind
+              if (id(Soil2).state >= id(desired_mois_value_2).state) return false;  // at/above target (desired=0 disables)
+              if (id(force_water)) return true;                                     // manual "Water Now" override
+              time_t now = id(ha_time).now().timestamp;
+              double last = id(pump2_last_water_epoch);
+              return last <= 0 || (now - last) >= (${min_water_interval_h} * 3600.0);  // settle lockout elapsed
           then:
             - logger.log: "Droplet: watering plant 2"
             - switch.turn_on: pump2
             - delay: !lambda |-
-                float s = id(water_secs_2).state;
-                if (isnan(s) || s < 1) s = ${watering_seconds};
-                return (uint32_t) (s * 1000.0);
+                float m = id(water_mins_2).state;
+                if (isnan(m) || m < 1) m = ${watering_minutes};
+                return (uint32_t) (m * 60000.0);
             - switch.turn_off: pump2
             - delay: ${soak_seconds}s
       - if:
           condition:
-            lambda: 'return id(Soil3).state < id(desired_mois_value_3).state;'
+            lambda: |-
+              if (isnan(id(Soil3).state) || isnan(id(desired_mois_value_3).state)) return false;  // sensors not ready (e.g. at boot) → fail-safe, never water blind
+              if (id(Soil3).state >= id(desired_mois_value_3).state) return false;  // at/above target (desired=0 disables)
+              if (id(force_water)) return true;                                     // manual "Water Now" override
+              time_t now = id(ha_time).now().timestamp;
+              double last = id(pump3_last_water_epoch);
+              return last <= 0 || (now - last) >= (${min_water_interval_h} * 3600.0);  // settle lockout elapsed
           then:
             - logger.log: "Droplet: watering plant 3"
             - switch.turn_on: pump3
             - delay: !lambda |-
-                float s = id(water_secs_3).state;
-                if (isnan(s) || s < 1) s = ${watering_seconds};
-                return (uint32_t) (s * 1000.0);
+                float m = id(water_mins_3).state;
+                if (isnan(m) || m < 1) m = ${watering_minutes};
+                return (uint32_t) (m * 60000.0);
             - switch.turn_off: pump3
             - delay: ${soak_seconds}s
       - if:
           condition:
-            lambda: 'return id(Soil4).state < id(desired_mois_value_4).state;'
+            lambda: |-
+              if (isnan(id(Soil4).state) || isnan(id(desired_mois_value_4).state)) return false;  // sensors not ready (e.g. at boot) → fail-safe, never water blind
+              if (id(Soil4).state >= id(desired_mois_value_4).state) return false;  // at/above target (desired=0 disables)
+              if (id(force_water)) return true;                                     // manual "Water Now" override
+              time_t now = id(ha_time).now().timestamp;
+              double last = id(pump4_last_water_epoch);
+              return last <= 0 || (now - last) >= (${min_water_interval_h} * 3600.0);  // settle lockout elapsed
           then:
             - logger.log: "Droplet: watering plant 4"
             - switch.turn_on: pump4
             - delay: !lambda |-
-                float s = id(water_secs_4).state;
-                if (isnan(s) || s < 1) s = ${watering_seconds};
-                return (uint32_t) (s * 1000.0);
+                float m = id(water_mins_4).state;
+                if (isnan(m) || m < 1) m = ${watering_minutes};
+                return (uint32_t) (m * 60000.0);
             - switch.turn_off: pump4
             - delay: ${soak_seconds}s
+      # Clear the one-shot manual override so the daily/auto cycles stay lockout-governed.
+      - lambda: 'id(force_water) = false;'
 
-# Evaluate periodically. Only runs a watering cycle when auto-watering is ON and it is
-# daytime (between day_start and day_end). If the time isn't known yet, it does nothing.
-interval:
-  - interval: ${check_interval}
-    then:
-      - if:
-          condition:
-            and:
-              - switch.is_on: auto_watering
-              - lambda: |-
-                  auto t = id(ha_time).now();
-                  if (!t.is_valid()) return false;
-                  return t.hour >= ${day_start} && t.hour < ${day_end};
-          then:
-            - script.execute: do_water_cycle
+# The daily watering decision is driven by time.on_time at ${day_start} (see the time:
+# component). No fast interval loop — that's what overwatered plant 4. The per-plant settle
+# lockout in do_water_cycle is the real safety net; the daily cadence keeps it gentle.
 
 button:
-  # Manual "water now" — runs one cycle regardless of auto/daytime (still only
-  # waters plants below their threshold). Handy for testing.
+  # Manual "water now" — runs one cycle immediately, BYPASSING the settle lockout (sets
+  # force_water), but still only waters plants below their threshold. Handy for testing.
   - platform: template
     name: Water Now
     icon: mdi:watering-can
     on_press:
+      - lambda: 'id(force_water) = true;'
       - script.execute: do_water_cycle
 
 binary_sensor:
