@@ -33,6 +33,21 @@ resource "kubernetes_manifest" "forgejo_pg" {
     }
     spec = {
       instances = 2
+      # Pin to the stable VM workers — the bare-metal nodes flap-reboot (qemu-guest-agent boot
+      # hang, see metal-node-flapping); a flap on a node hosting a PG instance breaks the cluster.
+      affinity = {
+        nodeAffinity = {
+          requiredDuringSchedulingIgnoredDuringExecution = {
+            nodeSelectorTerms = [{
+              matchExpressions = [{
+                key      = "kubernetes.io/hostname"
+                operator = "In"
+                values   = ["wk-01", "wk-02"]
+              }]
+            }]
+          }
+        }
+      }
       storage = {
         size         = "5Gi"
         storageClass = "longhorn"
