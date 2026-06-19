@@ -4,13 +4,12 @@
 # VM cluster — these resources reuse the shared cluster secrets + endpoint only.
 # Flow: box PXE-boots Talos (maintenance mode, DHCP-reserved IP) -> `tofu apply` pushes
 # this worker config -> Talos installs to disk, reboots, joins the cluster.
-# Install image with the Longhorn-required system extensions baked in
-# (qemu-guest-agent + iscsi-tools + util-linux-tools). MUST be set or the install goes
-# vanilla (no extensions) even when the PXE/USB boot image had them — keep in lockstep
-# with the schematic used for the Matchbox assets / talos-usb ISO.
-variable "talos_install_image" {
-  type    = string
-  default = "factory.talos.dev/installer/53513e54bb39202f35694412577a6bc53d484744d35a126e5d42ef34785c0d83:v1.13.2"
+# Install image = the **metal** schematic (image.tf): iscsi-tools + util-linux-tools for
+# Longhorn, but NO qemu-guest-agent (that VM-only extension hangs the boot on physical HW —
+# root cause of the metal flapping, see image.tf). MUST be set or the install goes vanilla.
+# Changing it requires a reinstall (reset → maintenance → `tofu apply -replace`).
+locals {
+  talos_install_image = data.talos_image_factory_urls.metal.urls.installer
 }
 
 variable "metal_nodes" {
@@ -75,7 +74,7 @@ data "talos_machine_configuration" "metal" {
       machine = {
         install = {
           disk  = each.value.install_disk
-          image = var.talos_install_image
+          image = local.talos_install_image
         }
       }
     })],

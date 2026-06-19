@@ -59,6 +59,31 @@ data "talos_image_factory_urls" "longhorn" {
   architecture  = "amd64"
 }
 
+# Bare-metal install image (metal.tf `talos_install_image`). iscsi-tools + util-linux-tools
+# for Longhorn, but deliberately NO qemu-guest-agent: that VM-only extension never reports
+# healthy on physical hardware, so Talos's boot phase startAllServices waits on it until the
+# deadline (~11 min) → "context deadline exceeded" → boot sequence fails → reboot. That was the
+# chronic bare-metal flapping (root-caused 2026-06-19 via the dmesg tap). VMs keep qemu-guest-agent.
+resource "talos_image_factory_schematic" "metal" {
+  schematic = yamlencode({
+    customization = {
+      systemExtensions = {
+        officialExtensions = [
+          "siderolabs/iscsi-tools",
+          "siderolabs/util-linux-tools",
+        ]
+      }
+    }
+  })
+}
+
+data "talos_image_factory_urls" "metal" {
+  talos_version = var.talos_version
+  schematic_id  = talos_image_factory_schematic.metal.id
+  platform      = "metal"
+  architecture  = "amd64"
+}
+
 resource "proxmox_download_file" "talos_longhorn" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
