@@ -1,6 +1,6 @@
-# Forgejo — self-hosted Git (Gitea-based). MINIMAL "kick the tires" deploy: built-in SQLite,
-# in-memory sessions + cache, single replica, one small Longhorn PVC. No HA DB/cache — the chart
-# dropped the bundled postgres/valkey subcharts, so minimal is the default (only `common` dep).
+# Forgejo — self-hosted Git (Gitea-based). DB is **CNPG Postgres** (tofu/forgejo-pg.tf) — the
+# built-in SQLite 500'd under Forgejo Actions' write load. In-memory sessions + cache, single
+# replica, one small Longhorn PVC for /data (git repos + attachments; relational data is in PG).
 # Exposed on a BGP-advertised LoadBalancer VIP, HTTP only (no HAProxy/HTTPS name yet — add that
 # when we invest more: github mirrors, Forgejo Actions runner, HTTPS). See ROADMAP "self-hosted git".
 # Try it:  http://192.168.40.15:3000   (admin creds via `tofu output -raw forgejo_admin_password`)
@@ -32,10 +32,13 @@ resource "helm_release" "forgejo" {
   version    = var.forgejo_version
   timeout    = 600
 
+  # PG cluster + its -rw service and the app secret must exist before Forgejo starts.
+  depends_on = [kubernetes_manifest.forgejo_pg, kubernetes_secret.forgejo_pg_app]
+
   values = [yamlencode({
     replicaCount = 1
 
-    # Single RWO Longhorn volume for /data (sqlite db + repos). Survives pod restarts.
+    # Single RWO Longhorn volume for /data (git repos + attachments). Survives pod restarts.
     persistence = {
       enabled      = true
       size         = "5Gi"
@@ -73,8 +76,16 @@ resource "helm_release" "forgejo" {
         email    = "admin@teststuff.net"
       }
       config = {
-        database = { DB_TYPE = "sqlite3" }
-        session  = { PROVIDER = "memory" }
+        # CNPG Postgres (tofu/forgejo-pg.tf). PASSWD is the tofu-seeded forgejo-pg-app password,
+        # so this connection string and the DB role always match. HOST = the CNPG -rw service.
+        database = {
+          DB_TYPE = "postgres"
+          HOST    = "forgejo-pg-rw.forgejo.svc.cluster.local:5432"
+          NAME    = "forgejo"
+          USER    = "forgejo"
+          PASSWD  = random_password.forgejo_db.result
+        }
+        session = { PROVIDER = "memory" }
         cache    = { ADAPTER = "memory" }
         # Private instance: close LAN self-signup. Admins still create users (we make `rasmus`).
         service = { DISABLE_REGISTRATION = true }

@@ -217,6 +217,24 @@ resource "helm_release" "kube_prometheus_stack" {
         }]
       }
 
+      # Node reboots — the bare-metal Talos nodes (hp-01, thinkcentre, wk-metal-01/02) flapped a
+      # staggered reboot wave on 2026-06-19 that took down CNPG replicas; node-exporter is already
+      # scraped, so alert when any node's uptime is < 10m to catch + timestamp the next occurrence.
+      node-health = {
+        groups = [{
+          name = "node-health"
+          rules = [
+            {
+              "alert"       = "NodeRebooted"
+              "expr"        = "(time() - node_boot_time_seconds) < 600"
+              "for"         = "0m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "Node {{ $labels.instance }} rebooted", description = "{{ $labels.instance }} booted {{ $value | humanizeDuration }} ago. Metal-node flapping is under investigation (2026-06-19) — note which node + time." }
+            }
+          ]
+        }]
+      }
+
       # Cilium BGP — the LoadBalancer-VIP lifeline. If peering with OPNsense drops, .40.0/24 VIPs
       # stop being advertised and every LAN-exposed service goes dark. (These metrics caught the
       # metal nodes never being in bgp_node_ips — 2026-06-11.)

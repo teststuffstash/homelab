@@ -112,6 +112,13 @@ resource "kubernetes_deployment" "forgejo_runner" {
           args = [<<-EOT
             set -e
             cd /data
+            # Wait for the dind sidecar's daemon — both containers start together, so without
+            # this the runner reaches docker before dind is up, exits, and crash-loops (the 96
+            # restarts we saw). The runner image has no `docker` CLI, so poll the daemon's HTTP
+            # API _ping with wget (which it does have) instead.
+            echo "waiting for dind at $DOCKER_HOST …"
+            until wget -qO- http://localhost:2375/_ping >/dev/null 2>&1; do sleep 1; done
+            echo "dind ready."
             if [ ! -f .runner ]; then
               forgejo-runner register --no-interactive \
                 --instance http://forgejo-http.forgejo.svc.cluster.local:3000 \
