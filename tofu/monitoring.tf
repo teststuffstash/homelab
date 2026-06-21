@@ -145,6 +145,43 @@ resource "helm_release" "kube_prometheus_stack" {
       sidecar = {
         dashboards = { enabled = true, searchNamespace = "ALL", label = "grafana_dashboard" }
       }
+
+      # --- sleep-tracking dashboard (SQLite v1, ADR-045) ---------------------------------
+      # The sleep-overview dashboard reads a SQLite store via the frser plugin. A sidecar
+      # syncs sleep-db/sleep.sqlite from Garage into a shared emptyDir every 10 min; the
+      # datasource (uid "sleep-notes", matched by the dashboard ConfigMap) reads it.
+      plugins = ["frser-sqlite-datasource"]
+      additionalDataSources = [{
+        name      = "sleep-notes"
+        uid       = "sleep-notes"
+        type      = "frser-sqlite-datasource"
+        access    = "proxy"
+        isDefault = false
+        editable  = false
+        jsonData  = { path = "/data/sleep.sqlite" }
+      }]
+      extraEmptyDirMounts = [{ name = "sleep-data", mountPath = "/data" }]
+      extraContainers = <<-EOT
+        - name: sleep-sqlite-sync
+          image: amazon/aws-cli:2.17.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              aws configure set default.s3.addressing_style path
+              while true; do
+                aws --endpoint-url "$S3_ENDPOINT" s3 cp "s3://sleep-db/sleep.sqlite" /data/sleep.sqlite || true
+                sleep 600
+              done
+          env:
+            - { name: S3_ENDPOINT, value: "https://s3.teststuff.net" }
+            - { name: AWS_DEFAULT_REGION, value: "garage" }
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_ACCESS_KEY_ID } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_SECRET_KEY } }
+          volumeMounts:
+            - { name: sleep-data, mountPath: /data }
+      EOT
     }
 
     # ---- Alertmanager → Home Assistant ------------------------------------
@@ -339,6 +376,39 @@ resource "kubernetes_config_map" "power_dashboard" {
     labels    = { grafana_dashboard = "1" }
   }
   data = { "power.json" = file("${path.module}/dashboards/power.json") }
+}
+
+# Sleep Overview dashboard (sleep-tracking, ADR-045) — discovered by the grafana_dashboard sidecar.
+# Datasource ref was rewritten ${DS_SLEEP_DB} → uid "sleep-notes" (the provisioned SQLite source).
+resource "kubernetes_config_map" "sleep_dashboard" {
+  metadata {
+    name      = "grafana-dashboard-sleep-overview"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "sleep-overview.json" = file("${path.module}/dashboards/sleep-overview.json") }
+}
+
+# S3 read creds for the Grafana sleep.sqlite sync sidecar — mirrors the sleep-ingester's
+# STORE_S3 key (rw on sleep-db) from Infisical via ESO into the monitoring namespace.
+resource "kubernetes_manifest" "sleep_db_reader" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "sleep-db-reader"
+      namespace = kubernetes_namespace.monitoring.metadata[0].name
+    }
+    spec = {
+      refreshInterval = "1h"
+      secretStoreRef  = { name = "infisical", kind = "ClusterSecretStore" }
+      target          = { name = "sleep-db-reader", creationPolicy = "Owner" }
+      data = [
+        { secretKey = "STORE_S3_ACCESS_KEY_ID", remoteRef = { key = "SLEEP_STORE_S3_ACCESS_KEY_ID" } },
+        { secretKey = "STORE_S3_SECRET_KEY", remoteRef = { key = "SLEEP_STORE_S3_SECRET_KEY" } },
+      ]
+    }
+  }
 }
 
 # Whole-cluster health overview (dotdc "Kubernetes / Views / Global", grafana.com 15757) —
