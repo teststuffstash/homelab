@@ -220,6 +220,24 @@ resource "helm_release" "argocd_apps" {
           syncOptions = ["CreateNamespace=true", "ApplyOutOfSyncOnly=true"]
         }
       }
+      # Separate app-of-apps for the sleep-tracking stack (argocd/sleep/): its Garage infra
+      # (Workspace + ESO) and the ingester Helm release (chart from the sleep-tracking repo,
+      # values from this repo). Kept apart from `platform` so the app's lifecycle is independent.
+      sleep = {
+        namespace = "argocd"
+        project   = "default"
+        source = {
+          repoURL        = var.argocd_repo_url
+          targetRevision = "master"
+          path           = "argocd/sleep"
+          directory      = { recurse = false }
+        }
+        destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+        syncPolicy = {
+          automated   = { prune = true, selfHeal = true }
+          syncOptions = ["CreateNamespace=true", "ApplyOutOfSyncOnly=true"]
+        }
+      }
     }
   })]
 

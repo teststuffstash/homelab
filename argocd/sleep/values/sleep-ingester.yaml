@@ -1,0 +1,48 @@
+# Helm values for the sleep-ingester chart — the homelab deploy config (per the request: chart
+# values live in the homelab repo). Consumed by argocd/sleep/sleep-ingester.yaml via $values.
+# The chart itself (templates) is in the sleep-tracking repo.
+
+image:
+  # Self-hosted Forgejo container registry (LAN, PRIVATE → needs the pull secret below).
+  repository: forgejo.teststuff.net/rasmus/sleep-ingester
+  tag: "0.1.1" # nights/-prefix fix; bump when the Forgejo build publishes a new tag
+  pullPolicy: IfNotPresent
+
+# ESO-managed dockerconfigjson (sleep-tracking infra/externalsecret.yaml: sleep-ingester-registry,
+# from Infisical SLEEP_FORGEJO_REGISTRY_TOKEN).
+imagePullSecrets:
+  - name: sleep-ingester-registry
+
+schedule: "42 */6 * * *"
+cronTimezone: "Europe/Tallinn"
+
+config:
+  s3Endpoint: "https://s3.teststuff.net"
+  s3Region: "garage"
+  tz: "Europe/Tallinn"
+  sleepBandBucket: "sleep-band"
+  sleepSnoreBucket: "sleep-snore"
+  sleepDbBucket: "sleep-db"
+  storeUrl: "sqlite:///data/sleep.sqlite" # Postgres at cutover (#42)
+
+# Garage keys delivered by ESO (sleep-tracking infra/) into this Secret; the chart envFroms it.
+secret:
+  create: false
+  existingName: "sleep-ingester-credentials"
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 256Mi }
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: { drop: ["ALL"] }
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1001

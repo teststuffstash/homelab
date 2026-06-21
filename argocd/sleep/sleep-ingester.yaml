@@ -1,0 +1,35 @@
+# The sleep-ingester CronJob — now GitOps-managed (was a manual helm release). Multi-source:
+# the Helm CHART comes from the sleep-tracking repo, the VALUES live in THIS (homelab) repo
+# (argocd/sleep/values/sleep-ingester.yaml). Wave 1: after sleep-tracking (wave 0) creates the
+# Garage keys + the sleep-ingester-credentials / sleep-ingester-registry secrets the chart needs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sleep-ingester
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    # 1) the chart (templates) from the app repo
+    - repoURL: https://github.com/teststuffstash/sleep-tracking.git
+      targetRevision: master
+      path: chart
+      helm:
+        valueFiles:
+          - $values/argocd/sleep/values/sleep-ingester.yaml
+    # 2) the homelab repo, referenced as $values — supplies the values file above
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sleep-tracking
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 10
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
