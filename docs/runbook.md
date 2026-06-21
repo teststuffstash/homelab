@@ -123,9 +123,29 @@ formatted+mounted via `metal.tf` `optane_disks` and registered with
   that path. A disk with a pre-existing filesystem wedges Talos boot → `talosctl wipe disk` first.
 - Stuck `instance-manager`/`longhorn-manager` after node churn → `kubectl delete` the pod (the
   DaemonSet recreates it).
-- **WoL recovery** (tested on hp-01): `talosctl shutdown` → S5, then a magic packet from a
-  hostNetwork pod on the same L2 segment (the jail is NAT'd and can't). Set BIOS boot order
-  disk-first or wake→Ready takes ~5 min of PXE timeouts.
+- **WoL recovery** (tested on hp-01): `talosctl shutdown` → S5, then a magic packet from a host on
+  the same L2 segment (the jail is NAT'd and can't — but Proxmox/OPNsense/another metal node can).
+  Set BIOS boot order disk-first or wake→Ready takes ~5 min of PXE timeouts. **Recipe** — send from
+  Proxmox over SSH (works from the jail; verified 2026-06-19):
+  ```bash
+  ssh -i ~/.claude/homelab-pve-ssh/id_ed25519 -o IdentitiesOnly=yes root@192.168.2.3 \
+    'python3 -c "import socket; m=bytes.fromhex(\"b4b52fdf01bc\"); p=b\"\xff\"*6+m*16; \
+     s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.setsockopt(1,6,1); \
+     s.sendto(p,(\"255.255.255.255\",9))"'
+  ```
+  Physical NIC MACs (from `opnsense/dnsmasq-dhcp.py` reservations): hp-01 `b4:b5:2f:df:01:bc`,
+  thinkcentre `8c:89:a5:23:49:da`, wk-metal-01 `50:7b:9d:01:b3:54`, wk-metal-02 `68:f7:28:80:84:09`.
+  (NB: a plain `talosctl reboot` keeps the node powered → it returns on its own; WoL is only for an
+  S5/powered-off node.)
+
+### Re-imaging a metal node (change install extensions, e.g. drop qemu-guest-agent)
+Metal nodes **upgrade fine** (unlike nocloud VMs). To switch a metal node to a new install image
+WITHOUT a reset/reinstall: `talosctl -n <ip> -e <ip> upgrade --image <factory installer>` then
+`talosctl -n <ip> -e <ip> reboot`. ⚠ On a **worker** the upgrade installs to the B partition then
+errors `kubeconfig is only available on control plane nodes` at its auto-drain step and does NOT
+reboot — that's why the explicit `reboot` follows (switches to B). Verify with `talosctl get
+extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
+(iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
 
 ## Power-loss / ghost-node recovery
 
