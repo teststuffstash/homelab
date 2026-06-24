@@ -44,8 +44,8 @@ cmd_check() {
   cat <<EOF
   1. Create the GitHub App     -> 'manifest' then 'convert' (one Create click), then INSTALL it on
                                   the org (one Install click; pick the two repos or All).
-  2. Mint a ghcr pull PAT      -> github.com/settings/tokens : a classic PAT with scope 'read:packages'
-                                  (or a fine-grained PAT, Packages: read-only). Export it as GHCR_TOKEN.
+  2. Mint a ghcr pull PAT      -> github.com/settings/tokens : a CLASSIC PAT with scope 'read:packages'.
+                                  (Fine-grained PATs CANNOT access Packages/ghcr — classic only.) Export it as GHCR_TOKEN.
   Then: 'secrets', 'access', 'verify'.
 EOF
 }
@@ -135,9 +135,14 @@ cmd_access() {
     gh api -X PUT "/repos/$ORG/$r/actions/permissions" -F enabled=true -f allowed_actions=all \
       && echo "  ok ($ORG/$r)" || warn "could not set (token scope? do it in repo Settings>Actions)"
   done
-  say "Org runner-group visibility (the scale set must be reachable by the repos)"
-  gh api "/orgs/$ORG/actions/runner-groups" --jq '.runner_groups[] | "  group \(.name): visibility=\(.visibility)"' \
-    || warn "couldn't read runner-groups (token scope). In Org Settings>Actions>Runner groups, ensure the group hosting '$SCALESET' allows these repos."
+  say "Org runner-group visibility (informational — NON-BLOCKING)"
+  if gh api "/orgs/$ORG/actions/runner-groups" --jq '.runner_groups[] | "  group \(.name): visibility=\(.visibility)"' 2>/dev/null; then :; else
+    warn "can't read runner-groups — needs admin:org (a classic PAT) or a fine-grained token with the"
+    warn "  org 'Self-hosted runners' permission. read:org/repo is NOT enough. This is OPTIONAL: ARC"
+    warn "  registers as the GitHub App (which HAS that permission), and the 'Default' runner group is"
+    warn "  available to all org repos by default — so the scale set works without this. Verify in the UI"
+    warn "  only if you've restricted the Default group: Org > Settings > Actions > Runner groups."
+  fi
   echo "  NOTE: the build-image workflow elevates its own GITHUB_TOKEN (permissions: packages: write),"
   echo "        so no org-wide default-token change is needed for ghcr push."
 }

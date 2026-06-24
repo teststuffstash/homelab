@@ -23,11 +23,12 @@
     "tea@latest",
     "keepassxc@latest",
     "argocd@latest",
-    "infisical@latest"
+    "infisical@latest",
+    "gh@latest"
   ],
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",
-    "KUBECONFIG": "$PWD/tofu/kubeconfig"
+    "KUBECONFIG":  "$PWD/tofu/kubeconfig"
   },
   "shell": {
     "init_hook": [

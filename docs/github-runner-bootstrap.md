@@ -60,9 +60,10 @@ installation whose id step 4 discovers.
 ## 3. Mint the ghcr pull PAT (1 click)
 
 The cluster pulls the **private** `ghcr.io/teststuffstash/*` image, so it needs a read token. At
-**github.com/settings/tokens**, create a PAT with **`read:packages`** (classic) — or a fine-grained
-PAT with *Packages: Read-only*. Keep it; you'll pass it as `GHCR_TOKEN` next. (CI *push* needs no
-token — the workflow's `GITHUB_TOKEN` with `packages: write` covers it.)
+**github.com/settings/tokens**, create a **classic** PAT with **`read:packages`**. Fine-grained PATs
+**cannot** access Packages/ghcr — GitHub Packages only supports classic PATs. Keep it; you'll pass it
+as `GHCR_TOKEN` next. (CI *push* needs no token — the workflow's `GITHUB_TOKEN` with `packages: write`
+covers it.)
 
 ## 4. Deliver all creds to Infisical — `secrets`
 
@@ -85,9 +86,15 @@ authed as an owner, or pass `INSTALL_ID=` explicitly (find it under the org App 
 ```bash
 devbox run github-runner-bootstrap access
 ```
-Enables Actions on each repo and reports the **runner-group** visibility — ensure the group hosting
-`homelab-ephemeral` is allowed for these repos (Org → Settings → Actions → Runner groups). Needs an
-org-admin token; otherwise do the toggle in the UI.
+Enables Actions on each repo and reports the **runner-group** visibility. **This step is optional /
+non-blocking** — ARC registers the scale set authenticating as the **GitHub App** (which holds the org
+self-hosted-runners permission), and the **Default** runner group is available to all org repos by
+default, so the runner works without it.
+
+The runner-group *read* needs **`admin:org`** (a classic PAT) or a fine-grained token with the org
+**Self-hosted runners** permission — **`read:org`/`repo`/`workflow` is NOT enough** (you'll get
+`403: You must be an org admin or have the runners and runner groups fine-grained permission`). Only
+act on it if you've *restricted* the Default group: Org → Settings → Actions → Runner groups (UI).
 
 ## 6. Deploy ARC (GitOps)
 
