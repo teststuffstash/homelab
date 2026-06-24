@@ -12,10 +12,12 @@ metadata:
 spec:
   project: default
   sources:
-    # 1) the chart (templates) from the app repo
-    - repoURL: https://github.com/teststuffstash/sleep-tracking.git
-      targetRevision: master
-      path: chart
+    # 1) the chart from ghcr as an OCI artifact. Published by the sleep-tracking release workflow on
+    #    a v* tag (chart version == appVersion == git tag). Bump targetRevision per release. The
+    #    package is public, so no repo credential is needed.
+    - repoURL: ghcr.io/teststuffstash/charts
+      chart: sleep-ingester
+      targetRevision: 0.2.0
       helm:
         valueFiles:
           - $values/argocd/sleep/values/sleep-ingester.yaml

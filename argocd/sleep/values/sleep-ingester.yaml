@@ -6,7 +6,7 @@ image:
   # ghcr.io (PRIVATE package → needs the pull secret below). Canonical registry: CI in the
   # sleep-tracking repo (.github/workflows/build-image.yaml) builds + pushes here.
   repository: ghcr.io/teststuffstash/sleep-ingester
-  tag: "0.1.1" # bump when the ghcr build publishes a new tag (sha/branch/semver)
+  tag: "0.2.0" # release v0.2.0 (chart + image move together; bump per release)
   pullPolicy: IfNotPresent
 
 # ESO-managed dockerconfigjson (sleep-tracking infra/externalsecret.yaml: sleep-ingester-registry,
