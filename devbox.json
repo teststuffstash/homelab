@@ -71,6 +71,9 @@
       "github-runner-bootstrap": [
         "bash scripts/github-runner-bootstrap.sh \"$@\""
       ],
+      "garage-s3": [
+        "bash scripts/garage-s3.sh \"$@\""
+      ],
       "infisical-harden": [
         "bash scripts/infisical-harden.sh"
       ],
