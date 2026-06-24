@@ -57,3 +57,83 @@ Bring-up steps + open items: `docs/follow-ups.md` → "CI — GitHub-canonical t
 repo on Forgejo, push images to the Forgejo registry, run `.forgejo/workflows/` (same `devbox run`
 seam). This is also where the self-hosted **SLSA** story continues (cosign + SBOM on a hosted,
 not-a-laptop builder) — see `slsa.md`.
+
+## Execution environments — VM vs container, and the nix-in-CI problem
+
+The whole `devbox run` seam needs a **working Nix** in the runner. Whether that's easy or painful
+comes down to one thing: **is the runner a VM (own kernel + an init system) or a container (shares
+the node kernel, no init)?** Nix's multi-user install wants a daemon, and a daemon wants a supervisor
+(systemd). A VM has that; a bare container doesn't.
+
+```mermaid
+flowchart TB
+  subgraph hosted["GitHub-hosted: runs-on ubuntu-latest"]
+    direction TB
+    h["Ephemeral Azure VM, destroyed after the job<br/>own kernel · systemd · dockerd · passwordless sudo<br/>(Ubuntu 24.04, ~4 vCPU / 16 GB)"]
+    h --> hn["nix-installer → systemd-managed daemon ✓<br/>devbox-install-action just works"]
+  end
+  subgraph arc["Self-hosted ARC pod: runs-on homelab-ephemeral (current)"]
+    direction TB
+    a["Runner is a <b>container</b> on a Talos node — no systemd"]
+    a --> an["nix-installer → no init → 'docker shim' supervisor → ✗ docker 125"]
+  end
+  subgraph pvm["Self-hosted Proxmox VM: runs-on homelab-vm (proposed)"]
+    direction TB
+    p["Debian/Ubuntu VM on pve<br/>own kernel · systemd · dockerd · <b>persistent /nix</b>"]
+    p --> pn["nix-installer → systemd daemon ✓<br/>warm /nix ⇒ no multi-minute cold install"]
+  end
+```
+
+**`ubuntu-latest` is a throwaway VM** (a fresh Azure VM per job, not a container) — that's *why* the
+same `devbox-install-action` succeeds there and fails on our ARC pod. A **Proxmox VM runner** is the
+self-hosted version of exactly that: a VM, so Nix installs normally, and `/nix` can persist (even
+share the host store like the jail does) so there's no cold-install tax.
+
+### Why the ARC pod can't install Nix (and the container layering)
+
+`containerMode: dind` (our `argocd/platform/arc-runners.yaml`) gives each job a runner pod with **two
+containers** sharing the node kernel. The workflow steps run in the *runner* container (no systemd);
+a privileged *dind* sidecar provides a Docker daemon for steps that need `docker`. The Nix installer,
+finding no init but a reachable Docker, tries to run its daemon **as a Docker container via the dind
+sidecar** — and that's the step that 125s.
+
+```mermaid
+flowchart TB
+  k["Talos node — ONE Linux kernel (no binfmt_misc → no arm64 emulation)"]
+  k --> cd["containerd — the Kubernetes CRI (runs every pod on the node)"]
+  cd --> pod
+  subgraph pod["EphemeralRunner pod (namespace arc-runners, PodSecurity: privileged)"]
+    direction TB
+    r["<b>runner</b> container<br/>actions/runner agent = PID 1<br/>runs the workflow steps · NO systemd · NO gh"]
+    d["<b>dind</b> sidecar (privileged)<br/>dockerd → embeds its OWN containerd"]
+    r -. "DOCKER_HOST = tcp://localhost:2375" .-> d
+  end
+  r --> step["step 'Install devbox': nix-installer sees container + Docker<br/>→ launches a daemon-supervisor container via dind → docker 125 ✗"]
+  step -. via .-> d
+```
+
+**"How many containerds?"** — for a job, **two container engines, one kernel**:
+1. the node's **containerd** (the CRI Kubernetes uses to run *all* pods, including the runner pod), and
+2. the **dockerd inside the dind sidecar**, which itself embeds a second containerd — nested one level
+   down, only for the job's own `docker` commands.
+
+(Talos also runs a separate system containerd for its own services, but that's below Kubernetes and
+irrelevant here.) A **VM runner collapses this** to a single kernel + a single dockerd, no nesting —
+which is the other reason the Proxmox-VM option is appealing.
+
+### Trade-offs
+
+| | GitHub-hosted `ubuntu-latest` | ARC pod (dind) | Proxmox VM runner |
+|---|---|---|---|
+| Nix/devbox install | ✓ works | ✗ (this bug) | ✓ works |
+| Self-hosted | ✗ (Azure) | ✓ | ✓ (pve) |
+| Cold-start | slow (fresh VM + install) | slow (fresh pod + install) | **fast** (warm /nix) |
+| Isolation per job | full VM, ephemeral | container, ephemeral | VM, usually persistent (pet) |
+| IaC fit | n/a | ArgoCD (built) | tofu Proxmox + cloud-init (like the Talos VMs) |
+| arm64 builds | hosted arm runners | ✗ (no binfmt) | ✓ if VM has binfmt |
+
+**Direction:** for lint/test CI that needs nothing from the homelab, `ubuntu-latest` is the
+zero-infra "green now" path. For a *self-hosted* answer that actually fits devbox, a **tofu-provisioned
+Proxmox VM runner** (registered as `actions/runner` via cloud-init, label `homelab-vm`, persistent
+`/nix`) is the clean fix — keep the ARC pods only for jobs that must run *in* the cluster (kube
+access). The in-pod-dind path is the wrong shape for Nix and is not worth chasing.
