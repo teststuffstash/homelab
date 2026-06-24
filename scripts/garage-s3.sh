@@ -10,7 +10,14 @@
 # Endpoint defaults to https://s3.teststuff.net (LAN VIP). When that isn't routable (e.g. from the
 # jail), port-forward and override: GARAGE_S3_ENDPOINT=http://127.0.0.1:3900.
 set -euo pipefail
-CRED="${GARAGE_CRED_DIR:-$HOME/.claude/homelab-garage}"
+# Find the browse-key dir. ~/.claude in the jail is bind-mounted to ~/Projects/.claude-data on the
+# host, so the path differs by where you run this — try the likely candidates.
+CRED=""
+for d in "${GARAGE_CRED_DIR:-}" "$HOME/.claude/homelab-garage" \
+         "$HOME/Projects/.claude-data/homelab-garage" "$PWD/../.claude-data/homelab-garage"; do
+  [ -n "$d" ] && [ -f "$d/browse-key-id" ] && { CRED="$d"; break; }
+done
+[ -n "$CRED" ] || { echo "ERROR: browse-key-id not found (set GARAGE_CRED_DIR=…). Looked in ~/.claude/homelab-garage and ~/Projects/.claude-data/homelab-garage" >&2; exit 1; }
 export AWS_ACCESS_KEY_ID="$(cat "$CRED/browse-key-id")"
 export AWS_SECRET_ACCESS_KEY="$(cat "$CRED/browse-secret")"
 export AWS_REGION=garage AWS_DEFAULT_REGION=garage

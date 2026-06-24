@@ -116,7 +116,7 @@
       },
       "targets": [
         {
-          "queryText": "SELECT night_date AS time, total_sleep_min AS value FROM sleep_nights ORDER BY night_date",
+          "queryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, total_sleep_min AS value FROM sleep_nights ORDER BY night_date",
           "datasource": {
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
@@ -174,7 +174,7 @@
       },
       "targets": [
         {
-          "queryText": "SELECT night_date AS time, hr_avg, hr_min FROM sleep_nights ORDER BY night_date",
+          "queryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, hr_avg, hr_min FROM sleep_nights ORDER BY night_date",
           "datasource": {
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
@@ -217,7 +217,7 @@
       },
       "targets": [
         {
-          "queryText": "SELECT night_date AS time, snore_score, snore_pct FROM sleep_nights ORDER BY night_date",
+          "queryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, snore_score, snore_pct FROM sleep_nights ORDER BY night_date",
           "datasource": {
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
