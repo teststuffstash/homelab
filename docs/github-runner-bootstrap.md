@@ -75,8 +75,12 @@ Discovers the installation id (`GET /orgs/teststuffstash/installations`) and pus
 
 | Infisical key | Consumed by |
 |---|---|
-| `GHARC_APP_ID`, `GHARC_INSTALL_ID`, `GHARC_PRIVATE_KEY` | ESO → `arc-github-app` secret (arc-runners ns) → ARC chart `githubConfigSecret` |
+| `GHARC_APP_ID`, `GHARC_INSTALL_ID`, `GHARC_PRIVATE_KEY_B64` | ESO → `arc-github-app` secret (arc-runners ns) → ARC chart `githubConfigSecret` |
 | `SLEEP_GHCR_PULL_TOKEN` | ESO → `sleep-ingester-registry` dockerconfigjson (sleep-tracking ns) |
+
+> The private key is stored **base64-encoded** (`GHARC_PRIVATE_KEY_B64`) and `b64dec`-ed in the ESO
+> template — a raw multiline PEM loses its newlines in the secrets store and ARC then rejects it
+> ("Key must be a PEM encoded PKCS1 or PKCS8 key"). The script handles the encoding.
 
 If `secrets` can't list installations (a fine-grained jail token may lack org-admin), re-run it
 authed as an owner, or pass `INSTALL_ID=` explicitly (find it under the org App settings → Install).

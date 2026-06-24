@@ -119,11 +119,13 @@ cmd_secrets() {
     echo "$install_id" > "$CRED_DIR/installation-id"
   fi
   say "Pushing creds into Infisical (homelab/prod) via scripts/infisical-secret.sh"
-  # Reuses the canonical helper (in-cluster bootstrap token + port-forward). PEM is multiline — fine.
+  # The PEM is stored **base64-encoded** (GHARC_PRIVATE_KEY_B64): a raw multiline PEM loses its
+  # newlines through the secrets store and ARC's PEM parser then rejects it. The ESO ExternalSecret
+  # (argocd/resources/github-runner/externalsecret.yaml) b64decs it back to a byte-exact key.
   devbox run infisical-secret \
     "GHARC_APP_ID=$app_id" \
     "GHARC_INSTALL_ID=$install_id" \
-    "GHARC_PRIVATE_KEY=$(cat "$pem")" \
+    "GHARC_PRIVATE_KEY_B64=$(base64 < "$pem" | tr -d '\n')" \
     "SLEEP_GHCR_PULL_TOKEN=$ghcr"
   say "Done. ESO will render arc-github-app (arc-runners ns) + sleep-ingester-registry (sleep-tracking ns)."
   echo "  app_id=$app_id  install_id=$install_id"

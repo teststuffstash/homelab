@@ -31,9 +31,7 @@
     "KUBECONFIG":  "$PWD/tofu/kubeconfig"
   },
   "shell": {
-    "init_hook": [
-      "test -n \"$DEVBOX_QUIET\" || echo \"homelab toolchain ready — $(tofu version | head -1)\""
-    ],
+    "init_hook": [],
     "scripts": {
       "tf-validate": [
         "tofu -chdir=tofu init -backend=false -input=false",
