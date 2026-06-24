@@ -76,11 +76,31 @@ When investing further (roughly in order):
       in [`docs/ci.md`](ci.md).** SLSA Phase-1 (cosign + SBOM on top of the hosted runner) still TODO —
       see [`slsa.md`](slsa.md).
 
-## CI — GitHub-canonical tier (ARC + ghcr) — manifests landed; bootstrap pending
+## CI — GitHub-canonical tier (ARC + ghcr) — LIVE
 
-The two GitHub-canonical repos now carry thin `.github/workflows/` that call `devbox run <task>`
-(`ci` / `test-chart` / `scan-secrets` / build→ghcr). They target a self-hosted runner
-`runs-on: homelab-ephemeral`. Manifests are in git; the live bring-up is the remaining work:
+The two GitHub-canonical repos carry thin `.github/workflows/` that call `devbox run <task>`
+(`ci` / `test-chart` / `scan-secrets` / build→ghcr), `runs-on: homelab-ephemeral`. **The ARC runner
+is live and CI is green** (sleep-tracking PR #1). Key gotchas now resolved + load-bearing:
+
+- [x] **Nix in the ARC pod** (2026-06-24) — the runner is a *container* (no systemd), so devbox's
+      daemon-based installer fails ("docker shim → exit 125"). Fix: install **single-user** Nix
+      (`cachix/install-nix-action@v31` `--no-daemon`) + `devbox skip-nix-installation`, and apt-install
+      `xz` (the slim `actions-runner` image lacks it). See [`docs/ci.md`](ci.md). Follow-ups: a custom
+      runner image (bake `xz`/`gh`/devbox + warm store) to kill per-job apt + the ~5min cold install,
+      and a LAN Nix substituter so jobs don't hit the WAN.
+- [x] **OCI release flow** (2026-06-24) — `release.yaml` on a `v*` tag builds + pushes the image AND
+      the Helm **chart** to ghcr (`oci://ghcr.io/teststuffstash/charts`, chart version == appVersion ==
+      git tag; `scripts/package-chart.sh`). **sleep-ingester is deployed from the OCI chart** (v0.2.0):
+      `argocd/sleep/sleep-ingester.yaml` source 1 = `ghcr.io/teststuffstash/charts` chart
+      `sleep-ingester`. Chart package is **public** (ArgoCD pulls anonymously); image stays private.
+      **Release procedure:** tag `vX.Y.Z` → release.yaml publishes → bump `targetRevision` + image `tag`
+      in homelab → ArgoCD syncs.
+- [x] **`sleep` app-of-apps drift** (2026-06-24) — it had fallen out of the live `argocd-apps` release
+      during the platform→sleep app-of-apps split (final `tofu apply` never ran), leaving the
+      sleep-ingester CronJob orphaned. Re-applied `helm_release.argocd_apps`; `sleep` +
+      `sleep-tracking` + `sleep-ingester` are Synced/Healthy again.
+
+The original bring-up items (kept for history):
 
 - [ ] **Run the bootstrap** — `scripts/github-runner-bootstrap.sh` (runbook:
       [`docs/github-runner-bootstrap.md`](github-runner-bootstrap.md)). Scripted: creates the
