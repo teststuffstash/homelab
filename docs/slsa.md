@@ -149,9 +149,12 @@ Branch protection on the tracked branch (PR-only, signed commits required, prote
 two-person review when a second identity exists. → Source L2→L3.
 
 **Phase 1 — Build L1/L2 (low effort, high ROI — do regardless of the rest).**
-`act_runner` on the tainted ephemeral tier → generate provenance → **cosign sign** + **syft SBOM** +
-**grype/trivy scan**, push image + attestations to Forgejo's built-in registry. Covers the realistic
-homelab threat model.
+A **hosted (not-a-laptop) runner** → generate provenance → **cosign sign** + **syft SBOM** +
+**grype/trivy scan**, push image + attestations to a registry. Covers the realistic homelab threat
+model. NOTE (2026-06-24): the homelab now has **two** hosted runners (see [`ci.md`](ci.md)) — **ARC**
+for GitHub-canonical projects (→ ghcr; GitHub OIDC also unlocks **keyless** cosign + native build
+attestations) and **`act_runner`** for Forgejo-only projects (→ Forgejo registry). Either is a valid
+L2 base; pick per project's tier. The cosign/SBOM/scan layer is still TODO on both.
 
 **Phase 2 — Hermetic + reproducible (the software "L4" leg, medium effort).**
 Move the *actual software* to **melange** (build packages in isolated envs) + **apko** (assemble

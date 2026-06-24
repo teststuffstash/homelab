@@ -56,15 +56,52 @@ When investing further (roughly in order):
 - [ ] **External Postgres** — the chart dropped bundled postgres (v14), so SQLite is the trial DB.
       **CloudNativePG is now LIVE** (ADR-046) — give Forgejo its own CNPG `Cluster` and point it at it
       (`gitea.config.database.*`); migrate the SQLite data or start fresh.
-- [ ] **GitHub → Forgejo mirroring** — Forgejo pull-mirrors so a local copy of the GitHub repos
+- [~] **GitHub → Forgejo mirroring** — Forgejo pull-mirrors so a local copy of the GitHub repos
       survives GitHub being down. This is the prerequisite for the **ArgoCD → Forgejo cutover** (see the
       GitOps & secrets section above) — the ArgoCD-resilience goal: don't be hostage to GitHub uptime.
-- [ ] **Forgejo Actions runner** (`act_runner`) — the vendor-neutral CI seam: workflows just call
-      `devbox run <task>` so build/test logic stays in the repo, not the forge's YAML (cf. the
-      vfarcic example). The same logic then runs under GitHub Actions *and* Forgejo Actions. Pin it
-      to the tainted ephemeral laptop tier (CI noise/privilege off the service nodes). This is also
-      **Phase 1** of the supply-chain plan — see [`slsa.md`](slsa.md) (act_runner + cosign + SBOM =
-      Build L2; throwaway test clusters via `k3d`/`vcluster` in `devbox run test`, not DinD/kubedock).
+      **Started (2026-06-21):** private org **`sleep-lab`** holds pull-mirrors of the two private GitHub
+      repos `teststuffstash/{sleep-tracking,snore-recorder}` (8h interval, releases on / issues+PRs+wiki
+      off), authed with the jail GitHub PAT. Created imperatively via the Forgejo migrate API (a one-shot
+      `org-mirror-setup` token with `write:organization,write:repository` scopes, since deleted; the
+      standing `rasmus` `~/.claude/homelab-forgejo/api-token` lacks org scopes). The earlier manual
+      `rasmus/snore-recorder` push is left in place. Still TODO: mirror the **homelab** repo itself
+      (the actual ArgoCD-cutover prerequisite) and decide whether to codify org/mirror creation (Forgejo
+      TF provider) vs. keep it imperative like the `rasmus`/`rasmus-personal` bootstrap.
+- [~] **Forgejo Actions runner** (`act_runner`) — DEPLOYED (`tofu/forgejo-runner.tf`, ephemeral
+      laptop tier, DinD). **Repurposed: this is now the Tier-B engine** — for fully-private
+      **Forgejo-only** projects (Forgejo git + act_runner + Forgejo registry, self-contained).
+      **Tier-A** (GitHub-canonical) projects — sleep-tracking, snore-recorder — moved to a self-hosted
+      **GitHub** runner instead (see below). The CI seam is unchanged: workflows just call
+      `devbox run <task>`, so the same logic runs under either forge. **Two-tier model is documented
+      in [`docs/ci.md`](ci.md).** SLSA Phase-1 (cosign + SBOM on top of the hosted runner) still TODO —
+      see [`slsa.md`](slsa.md).
+
+## CI — GitHub-canonical tier (ARC + ghcr) — manifests landed; bootstrap pending
+
+The two GitHub-canonical repos now carry thin `.github/workflows/` that call `devbox run <task>`
+(`ci` / `test-chart` / `scan-secrets` / build→ghcr). They target a self-hosted runner
+`runs-on: homelab-ephemeral`. Manifests are in git; the live bring-up is the remaining work:
+
+- [ ] **Run the bootstrap** — `scripts/github-runner-bootstrap.sh` (runbook:
+      [`docs/github-runner-bootstrap.md`](github-runner-bootstrap.md)). Scripted: creates the
+      `teststuffstash` GitHub App (Organization → Self-hosted runners: R/W, + Metadata: Read) via the
+      App-manifest REST flow, discovers the install id, and pushes `GHARC_APP_ID`/`GHARC_INSTALL_ID`/
+      `GHARC_PRIVATE_KEY` + `SLEEP_GHCR_PULL_TOKEN` (read:packages PAT) into Infisical (copies to
+      `~/.claude/homelab-github-arc/`). Only manual clicks: App "Create" + "Install", and minting the
+      ghcr PAT.
+- [ ] **Sync ARC** — `argocd/platform/{arc-controller,github-runner-secrets,arc-runners}.yaml` +
+      `argocd/resources/github-runner/`. **Confirm the ARC chart version** (`0.12.1` placeholder in
+      both `arc-controller.yaml` and `arc-runners.yaml` — they MUST match) against
+      github.com/actions/actions-runner-controller/releases. Verify the `homelab-ephemeral` scale set
+      shows up in the org runner settings and a `workflow_dispatch` spawns a pod on a wk-metal node.
+- [ ] **ghcr cutover for sleep-ingester** — registry flipped to `ghcr.io/teststuffstash/sleep-ingester`
+      (`argocd/sleep/values/sleep-ingester.yaml` + the repo's `infra/externalsecret.yaml` now build a
+      ghcr dockerconfigjson). First ghcr build must publish before bumping the `tag`; until then the
+      old Forgejo image keeps the CronJob running. Verify the CronJob pod pulls from ghcr (no
+      `ImagePullBackOff`). The old `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key can be retired after.
+- [ ] **sleep-tracking has 4 red tests** — working CI immediately surfaced pre-existing failures
+      (snore `nights/` prefix change not reflected in fixtures; coverage 84.41% < 85% gate). Fix the
+      fixtures/coverage or adjust the gate — they were invisible while CI ran on a dead `main` branch.
 - [ ] **SSH clone** — `service.ssh` is ClusterIP (HTTP clone only for now). Expose if wanted.
 - [ ] **Gogs on the edge** — separate, lighter Git service for the grandma tablet+minipc (ROADMAP).
 

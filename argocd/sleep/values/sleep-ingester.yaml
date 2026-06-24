@@ -3,13 +3,14 @@
 # The chart itself (templates) is in the sleep-tracking repo.
 
 image:
-  # Self-hosted Forgejo container registry (LAN, PRIVATE → needs the pull secret below).
-  repository: forgejo.teststuff.net/rasmus/sleep-ingester
-  tag: "0.1.1" # nights/-prefix fix; bump when the Forgejo build publishes a new tag
+  # ghcr.io (PRIVATE package → needs the pull secret below). Canonical registry: CI in the
+  # sleep-tracking repo (.github/workflows/build-image.yaml) builds + pushes here.
+  repository: ghcr.io/teststuffstash/sleep-ingester
+  tag: "0.1.1" # bump when the ghcr build publishes a new tag (sha/branch/semver)
   pullPolicy: IfNotPresent
 
 # ESO-managed dockerconfigjson (sleep-tracking infra/externalsecret.yaml: sleep-ingester-registry,
-# from Infisical SLEEP_FORGEJO_REGISTRY_TOKEN).
+# from Infisical SLEEP_GHCR_PULL_TOKEN).
 imagePullSecrets:
   - name: sleep-ingester-registry
 

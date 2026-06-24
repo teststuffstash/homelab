@@ -1,0 +1,51 @@
+# The runner scale set — ephemeral GitHub Actions runners registered org-wide on teststuffstash.
+# Workflows target them with `runs-on: homelab-ephemeral`. Scale-to-zero (minRunners 0); a job
+# spins an ephemeral pod, it runs, then it's torn down. Pinned to the ephemeral laptop tier so CI
+# noise/privilege stays off the service nodes (same tier as the Forgejo runner).
+#
+# Wave 5 — after github-runner-secrets (wave 4) creates the arc-runners ns + the arc-github-app
+# Secret (ESO). Version MUST match arc-controller.yaml.
+#
+# containerMode: dind → jobs get a Docker daemon (Talos has no host docker socket); the chart adds
+# a privileged dind sidecar, hence the ns PodSecurity=privileged label. NOTE: this runner is
+# linux/amd64 — it can build the (amd64) sleep-ingester image, but NOT snore-recorder's arm64 image
+# (the Talos kernel has no binfmt_misc); that one still builds off-cluster. See docs/ci.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-runners
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/actions/actions-runner-controller-charts
+    chart: gha-runner-scale-set
+    targetRevision: 0.12.1 # keep in lockstep with arc-controller.yaml
+    helm:
+      valuesObject:
+        githubConfigUrl: https://github.com/teststuffstash
+        githubConfigSecret: arc-github-app
+        runnerScaleSetName: homelab-ephemeral
+        minRunners: 0
+        maxRunners: 2
+        containerMode:
+          type: dind
+        template:
+          spec:
+            nodeSelector:
+              homelab.io/ephemeral: "true"
+            tolerations:
+              - key: homelab.io/ephemeral
+                operator: Exists
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-runners
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

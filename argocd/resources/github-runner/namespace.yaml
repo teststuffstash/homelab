@@ -1,0 +1,8 @@
+# Runner namespace. PodSecurity=privileged because containerMode=dind gives each runner a
+# privileged Docker-in-Docker sidecar (same opt-up as the Forgejo runner ns + monitoring).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: arc-runners
+  labels:
+    pod-security.kubernetes.io/enforce: privileged

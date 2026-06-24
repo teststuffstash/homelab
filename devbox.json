@@ -69,6 +69,9 @@
       "infisical-secret": [
         "bash scripts/infisical-secret.sh \"$@\""
       ],
+      "github-runner-bootstrap": [
+        "bash scripts/github-runner-bootstrap.sh \"$@\""
+      ],
       "infisical-harden": [
         "bash scripts/infisical-harden.sh"
       ],

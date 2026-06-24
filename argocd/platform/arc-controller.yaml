@@ -1,0 +1,33 @@
+# Actions Runner Controller (ARC) — the operator for self-hosted GitHub Actions runners.
+# This is the **Tier-A** CI build engine: GitHub-canonical repos (sleep-tracking, snore-recorder)
+# run their .github/workflows on ephemeral runner pods this controller schedules. (The Forgejo
+# act_runner — tofu/forgejo-runner.tf — stays for Tier-B Forgejo-only projects. See docs/ci.md.)
+#
+# Two ARC charts, versions MUST match: this controller + the gha-runner-scale-set (arc-runners.yaml).
+# Verify the latest matched pair at https://github.com/actions/actions-runner-controller/releases
+# and bump both. The controller is light + long-running, so it schedules on the stable tier
+# (default), NOT the flaky ephemeral laptops — only the runner pods go there.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: arc-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/actions/actions-runner-controller-charts
+    chart: gha-runner-scale-set-controller
+    targetRevision: 0.12.1 # keep in lockstep with arc-runners.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: arc-systems
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
