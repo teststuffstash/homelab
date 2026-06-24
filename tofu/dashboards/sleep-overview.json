@@ -121,7 +121,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "time series",
+          "queryType": "table",
           "timeColumns": [
             "time"
           ]
@@ -179,7 +179,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "time series",
+          "queryType": "table",
           "timeColumns": [
             "time"
           ]
@@ -222,7 +222,7 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "time series",
+          "queryType": "table",
           "timeColumns": [
             "time"
           ]
