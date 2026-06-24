@@ -119,14 +119,13 @@ cmd_secrets() {
     echo "$install_id" > "$CRED_DIR/installation-id"
   fi
   say "Pushing creds into Infisical (homelab/prod) via scripts/infisical-secret.sh"
-  # The PEM is multiline. Use the Infisical CLI's file-load syntax (KEY=@/abs/path) so the newlines
-  # survive byte-exact — a plain inline value escapes them to literal `\n` and ARC then rejects the
-  # key. Pass an ABSOLUTE path (infisical resolves @paths from its own cwd, = the repo root).
-  local pem_abs; pem_abs=$(cd "$(dirname "$pem")" && pwd)/$(basename "$pem")
+  # The Infisical CLI (0.41.90) escapes the PEM's newlines to literal `\n` on store (and KEY=@file
+  # is not honored). That's fine: the ESO ExternalSecret (argocd/resources/github-runner/
+  # externalsecret.yaml) un-escapes `\n` back to real newlines, so ARC gets a byte-exact key.
   devbox run infisical-secret \
     "GHARC_APP_ID=$app_id" \
     "GHARC_INSTALL_ID=$install_id" \
-    "GHARC_PRIVATE_KEY=@$pem_abs" \
+    "GHARC_PRIVATE_KEY=$(cat "$pem")" \
     "SLEEP_GHCR_PULL_TOKEN=$ghcr"
   say "Done. ESO will render arc-github-app (arc-runners ns) + sleep-ingester-registry (sleep-tracking ns)."
   echo "  app_id=$app_id  install_id=$install_id"
