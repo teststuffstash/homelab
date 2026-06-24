@@ -21,6 +21,7 @@
 #                 REDIRECT_PORT=8765
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export GH_PAGER=cat   # never page gh output (esp. error bodies) into less
 
 ORG="${ORG:-teststuffstash}"
 REPOS="${REPOS:-sleep-tracking snore-recorder}"
@@ -136,7 +137,10 @@ cmd_access() {
       && echo "  ok ($ORG/$r)" || warn "could not set (token scope? do it in repo Settings>Actions)"
   done
   say "Org runner-group visibility (informational — NON-BLOCKING)"
-  if gh api "/orgs/$ORG/actions/runner-groups" --jq '.runner_groups[] | "  group \(.name): visibility=\(.visibility)"' 2>/dev/null; then :; else
+  # Capture stdout so a 403 response BODY (gh prints it to stdout on error) isn't dumped.
+  if rg=$(gh api "/orgs/$ORG/actions/runner-groups" --jq '.runner_groups[] | "  group \(.name): visibility=\(.visibility)"' 2>/dev/null); then
+    printf '%s\n' "$rg"
+  else
     warn "can't read runner-groups — needs admin:org (a classic PAT) or a fine-grained token with the"
     warn "  org 'Self-hosted runners' permission. read:org/repo is NOT enough. This is OPTIONAL: ARC"
     warn "  registers as the GitHub App (which HAS that permission), and the 'Default' runner group is"
@@ -153,8 +157,12 @@ cmd_verify() {
   say "Runner scale set (arc-runners)";    kc -n arc-runners get autoscalingrunnerset,pods 2>/dev/null || warn "no arc-runners yet"
   say "arc-github-app secret (ESO)";        kc -n arc-runners get secret arc-github-app 2>/dev/null || warn "secret missing — run 'secrets' + check ESO"
   say "Registered with GitHub org"
-  gh api "/orgs/$ORG/actions/runners" --jq '.runners[] | "  \(.name)  \(.status)"' 2>/dev/null \
-    || echo "  (none online — scale-to-zero is normal; trigger a job to spawn one)"
+  # Capture stdout so a 403 body isn't dumped (this read needs admin:org / runners perm).
+  if r=$(gh api "/orgs/$ORG/actions/runners" --jq '.runners[] | "  \(.name)  \(.status)"' 2>/dev/null) && [ -n "$r" ]; then
+    printf '%s\n' "$r"
+  else
+    echo "  (none online — scale-to-zero is normal, or token lacks runners read; trigger a job to spawn one)"
+  fi
   cat <<EOF
 
   Smoke test (spawns one ephemeral runner pod, then scales back):

@@ -107,10 +107,9 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n argocd \
   annotate app platform argocd.argoproj.io/refresh=hard --overwrite
 ```
 
-> **Pin the chart version first.** `arc-controller.yaml` and `arc-runners.yaml` both pin
-> `targetRevision: 0.12.1` as a **placeholder** — set both to the same, current
-> gha-runner-scale-set(-controller) release (github.com/actions/actions-runner-controller/releases).
-> Controller + scale-set versions **must match**.
+> **Chart version.** `arc-controller.yaml` and `arc-runners.yaml` pin `targetRevision: 0.14.2`
+> (runner v2.334.0). Controller + scale-set versions **must match**; bump both together to the same
+> current release (github.com/actions/actions-runner-controller/releases).
 
 ## 7. Verify
 

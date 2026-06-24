@@ -22,11 +22,18 @@ spec:
   source:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
     chart: gha-runner-scale-set
-    targetRevision: 0.12.1 # keep in lockstep with arc-controller.yaml
+    targetRevision: 0.14.2 # keep in lockstep with arc-controller.yaml
     helm:
       valuesObject:
         githubConfigUrl: https://github.com/teststuffstash
         githubConfigSecret: arc-github-app
+        # Point the scale set at the controller's SA explicitly. The chart otherwise tries to
+        # DISCOVER it by label at template time — which fails under ArgoCD's `helm template`
+        # (no cluster lookup): "No gha-rs-controller deployment found using label
+        # app.kubernetes.io/part-of=gha-rs-controller". Must match arc-controller (arc-systems).
+        controllerServiceAccount:
+          namespace: arc-systems
+          name: arc-controller-gha-rs-controller
         runnerScaleSetName: homelab-ephemeral
         minRunners: 0
         maxRunners: 2
