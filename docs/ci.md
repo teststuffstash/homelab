@@ -121,19 +121,47 @@ flowchart TB
 irrelevant here.) A **VM runner collapses this** to a single kernel + a single dockerd, no nesting —
 which is the other reason the Proxmox-VM option is appealing.
 
+### The fix that works on the ARC pod — single-user Nix
+
+The daemon is the whole problem, so **don't install one.** A *single-user* Nix install (`--no-daemon`)
+runs Nix as the runner user with no daemon, no init, no docker-shim — so it works in the container.
+We install it ourselves and tell `devbox` to reuse it (the action's own installer is daemon-based and
+can't be told otherwise in v0.13.0). Working `ci.yaml` (sleep-tracking, verified green on
+`homelab-ephemeral`):
+
+```yaml
+# the slim ghcr.io/actions/actions-runner image lacks tools GitHub-hosted runners bundle (xz, gh…)
+- run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils   # nix installer needs xz
+- uses: cachix/install-nix-action@v31
+  with: { install_options: --no-daemon }          # single-user → no daemon/systemd/docker-shim
+- uses: jetify-com/devbox-install-action@v0.13.0
+  with: { skip-nix-installation: "true" }          # reuse the nix above
+- run: devbox run ci
+```
+
+Two residual costs, both solvable in-cluster (no VM needed):
+
+- **Slim runner image.** `ghcr.io/actions/actions-runner` omits `xz`, `gh`, `udevadm`, … We apt-install
+  what's needed per job. The clean fix is a **custom runner image** with `xz`/`gh`/devbox/nix baked in.
+- **Cold-start (~5 min).** The Nix store + devbox CLI download from `cache.nixos.org` (WAN) on every
+  fresh pod. Fix with **caching**: a LAN Nix substituter (attic/harmonia) + the devbox action's
+  `enable-cache` (GitHub Actions cache), and/or bake a warm store into the custom image — then fresh
+  pods restore over LAN, never the WAN. (The custom image solves both costs at once.)
+
 ### Trade-offs
 
-| | GitHub-hosted `ubuntu-latest` | ARC pod (dind) | Proxmox VM runner |
+| | GitHub-hosted `ubuntu-latest` | ARC pod (dind), single-user nix | Proxmox VM runner |
 |---|---|---|---|
-| Nix/devbox install | ✓ works | ✗ (this bug) | ✓ works |
+| Nix/devbox install | ✓ | ✓ (`--no-daemon` + skip) | ✓ |
 | Self-hosted | ✗ (Azure) | ✓ | ✓ (pve) |
-| Cold-start | slow (fresh VM + install) | slow (fresh pod + install) | **fast** (warm /nix) |
+| Cold-start | slow | slow until cached (LAN substituter / baked store) | **fast** (warm /nix) |
 | Isolation per job | full VM, ephemeral | container, ephemeral | VM, usually persistent (pet) |
+| Missing base tools | none | apt per job, or bake a custom image | none (full VM) |
 | IaC fit | n/a | ArgoCD (built) | tofu Proxmox + cloud-init (like the Talos VMs) |
 | arm64 builds | hosted arm runners | ✗ (no binfmt) | ✓ if VM has binfmt |
 
-**Direction:** for lint/test CI that needs nothing from the homelab, `ubuntu-latest` is the
-zero-infra "green now" path. For a *self-hosted* answer that actually fits devbox, a **tofu-provisioned
-Proxmox VM runner** (registered as `actions/runner` via cloud-init, label `homelab-vm`, persistent
-`/nix`) is the clean fix — keep the ARC pods only for jobs that must run *in* the cluster (kube
-access). The in-pod-dind path is the wrong shape for Nix and is not worth chasing.
+**Direction:** the ARC pod path **works** with single-user Nix (current state — all four Tier-A gates
+green on `homelab-ephemeral`). Next, a **custom runner image** (baked `xz`/`gh`/devbox + warm store)
+removes the per-job apt and the cold-start in one move. A **Proxmox VM runner** (`actions/runner` via
+tofu + cloud-init, persistent `/nix`) stays the option if you'd rather a full-VM, GitHub-hosted-like
+environment; `ubuntu-latest` remains the zero-infra escape hatch for CI that needs nothing on-prem.
