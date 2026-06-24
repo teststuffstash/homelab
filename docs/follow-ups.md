@@ -107,6 +107,18 @@ The two GitHub-canonical repos now carry thin `.github/workflows/` that call `de
 
 ## Monitoring / Longhorn
 
+- [x] **CloudNativePG monitoring** (2026-06-24) — added a `cnpg` PrometheusRule group + the
+      `CloudNativePG` Grafana dashboard (`tofu/dashboards/cnpg.json`) and enabled
+      `spec.monitoring.enablePodMonitor` on both Clusters (forgejo-pg, infisical-pg). Prompted by
+      **forgejo-pg-2 sitting as a broken replica for 2.5 days unnoticed**: a failover during the
+      2026-06-19 metal flap left it on a divergent timeline, so it crash-looped on
+      `pg_rewind: could not find common ancestor of the source and target cluster's timelines`
+      (readiness 500). **Recovery recipe** (no data loss — primary is intact): delete the replica's
+      PVC + pod so CNPG re-clones it via `pg_basebackup` —
+      `kubectl -n <ns> delete pvc <cluster>-N; kubectl -n <ns> delete pod <cluster>-N`
+      (CNPG re-creates as the next instance number, e.g. `-2` → `-3`). If a replica re-diverges,
+      suspect the node it lands on (forgejo-pg is pinned to wk-01/wk-02; watch wk-02).
+
 - [ ] **Longhorn runs on the ephemeral laptops** — `KubeDaemonSetMisScheduled` ×2 + a stale
       instance-manager PDB (`KubePdbNotEnoughHealthyPods`) fire because Longhorn schedules its
       manager/engine-image/instance-manager onto wk-metal-01/02 (compute-only, no storage). Decide:
