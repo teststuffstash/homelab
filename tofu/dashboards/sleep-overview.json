@@ -31,7 +31,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "table"
+          "queryType": "table",
+          "rawQueryText": "SELECT night_date, deep_min AS deep, light_min AS light, rem_min AS rem, awake_min AS awake FROM sleep_nights ORDER BY night_date"
         }
       ],
       "fieldConfig": {
@@ -124,7 +125,8 @@
           "queryType": "table",
           "timeColumns": [
             "time"
-          ]
+          ],
+          "rawQueryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, total_sleep_min AS value FROM sleep_nights ORDER BY night_date"
         }
       ],
       "fieldConfig": {
@@ -182,7 +184,8 @@
           "queryType": "table",
           "timeColumns": [
             "time"
-          ]
+          ],
+          "rawQueryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, hr_avg, hr_min FROM sleep_nights ORDER BY night_date"
         }
       ],
       "fieldConfig": {
@@ -225,7 +228,8 @@
           "queryType": "table",
           "timeColumns": [
             "time"
-          ]
+          ],
+          "rawQueryText": "SELECT CAST(strftime('%s', night_date) AS INTEGER) AS time, snore_score, snore_pct FROM sleep_nights ORDER BY night_date"
         }
       ],
       "fieldConfig": {
@@ -263,7 +267,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "table"
+          "queryType": "table",
+          "rawQueryText": "SELECT snore_score AS x, hr_avg AS y, night_date FROM sleep_nights WHERE snore_score IS NOT NULL ORDER BY night_date"
         }
       ],
       "fieldConfig": {
@@ -330,7 +335,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "sleep-notes"
           },
-          "queryType": "table"
+          "queryType": "table",
+          "rawQueryText": "SELECT snore_score AS x, total_sleep_min AS y, night_date FROM sleep_nights WHERE snore_score IS NOT NULL ORDER BY night_date"
         }
       ],
       "fieldConfig": {
