@@ -9,6 +9,10 @@ metadata:
   namespace: infisical
 spec:
   instances: 2
+  # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
+  # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (tofu/monitoring.tf).
+  monitoring:
+    enablePodMonitor: true
   storage:
     size: 5Gi
     storageClass: longhorn

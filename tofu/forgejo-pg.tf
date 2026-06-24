@@ -33,6 +33,9 @@ resource "kubernetes_manifest" "forgejo_pg" {
     }
     spec = {
       instances = 2
+      # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
+      # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (monitoring.tf).
+      monitoring = { enablePodMonitor = true }
       # Pin to the stable VM workers — the bare-metal nodes flap-reboot (qemu-guest-agent boot
       # hang, see metal-node-flapping); a flap on a node hosting a PG instance breaks the cluster.
       affinity = {

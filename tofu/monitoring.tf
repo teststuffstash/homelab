@@ -9,9 +9,9 @@
 # (dashboards + datasource provisioned as code), Alertmanager uses ephemeral storage.
 locals {
   prometheus_pv_size = "20Gi"
-  grafana_lb_ip        = "192.168.40.11" # BGP-advertised VIP, like ha_lb_ip (.10)
-  prometheus_lb_ip     = "192.168.40.13" # (.12 is unifi) — fronted by HAProxy TLS
-  alertmanager_lb_ip   = "192.168.40.14"
+  grafana_lb_ip      = "192.168.40.11" # BGP-advertised VIP, like ha_lb_ip (.10)
+  prometheus_lb_ip   = "192.168.40.13" # (.12 is unifi) — fronted by HAProxy TLS
+  alertmanager_lb_ip = "192.168.40.14"
   # HA webhook Alertmanager posts to (HA reachable on its BGP VIP from the cluster).
   ha_alert_webhook = "http://${local.ha_lb_ip}:8123/api/webhook/prometheus-alerts"
 }
@@ -161,7 +161,7 @@ resource "helm_release" "kube_prometheus_stack" {
         jsonData  = { path = "/data/sleep.sqlite" }
       }]
       extraEmptyDirMounts = [{ name = "sleep-data", mountPath = "/data" }]
-      extraContainers = <<-EOT
+      extraContainers     = <<-EOT
         - name: sleep-sqlite-sync
           image: amazon/aws-cli:2.17.0
           command: ["/bin/sh", "-c"]
@@ -347,11 +347,53 @@ resource "helm_release" "kube_prometheus_stack" {
           ]
         }]
       }
+
+      # CloudNativePG (forgejo-pg, infisical-pg). The 2026-06-19 metal flap stranded forgejo-pg-2 as
+      # a replica that crash-looped on pg_rewind ("no common timeline ancestor") for 2.5 DAYS unnoticed
+      # — these would have paged in minutes. The kube-state-metrics rules need no CNPG exporter (they
+      # caught the readiness-500 case); the cnpg_* rules need the per-cluster PodMonitor
+      # (spec.monitoring.enablePodMonitor, set on both Clusters). Add new CNPG namespaces to the
+      # kube_pod_* selectors below.
+      cnpg = {
+        groups = [{
+          name = "cnpg"
+          rules = [
+            {
+              "alert"       = "CNPGInstanceNotReady"
+              "expr"        = "kube_pod_container_status_ready{namespace=~\"forgejo|infisical\",container=\"postgres\"} == 0"
+              "for"         = "10m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "CloudNativePG instance {{ $labels.pod }} not ready", description = "Postgres instance {{ $labels.pod }} ({{ $labels.namespace }}) has been NotReady for 10m — the CNPG cluster is degraded (often a replica that can't rejoin and loops on pg_rewind; the primary may be serving alone). Recovery: delete the replica's PVC+pod so CNPG re-clones from the primary." }
+            },
+            {
+              "alert"       = "CNPGInstanceCrashLooping"
+              "expr"        = "increase(kube_pod_container_status_restarts_total{namespace=~\"forgejo|infisical\",container=\"postgres\"}[15m]) > 3"
+              "for"         = "0m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "CloudNativePG instance {{ $labels.pod }} crash-looping", description = "{{ $labels.pod }} ({{ $labels.namespace }}) restarted >3 times in 15m — likely a replica stuck on pg_rewind (no common timeline ancestor). Re-clone it: delete the replica's PVC + pod." }
+            },
+            {
+              "alert"       = "CNPGReplicationLagHigh"
+              "expr"        = "cnpg_pg_replication_lag > 300"
+              "for"         = "5m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "CloudNativePG replication lag high", description = "Streaming lag on {{ $labels.pod }} is {{ $value | humanizeDuration }} (>5m) for 5m — the standby is falling behind the primary." }
+            },
+            {
+              "alert"       = "CNPGInstanceExporterDown"
+              "expr"        = "cnpg_collector_up == 0"
+              "for"         = "5m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "CloudNativePG metrics collector down", description = "The CNPG collector on {{ $labels.pod }} can't reach Postgres for 5m — the instance is unhealthy or the exporter is failing." }
+            }
+          ]
+        }]
+      }
     }
   })]
 
   depends_on = [
-    helm_release.cilium,  # CNI + BGP must exist for the Grafana LoadBalancer VIP
+    helm_release.cilium,   # CNI + BGP must exist for the Grafana LoadBalancer VIP
     helm_release.longhorn, # default StorageClass for the Prometheus TSDB PVC
     kubernetes_secret.ha_token,
   ]
@@ -421,6 +463,18 @@ resource "kubernetes_config_map" "cluster_health_dashboard" {
     labels    = { grafana_dashboard = "1" }
   }
   data = { "cluster-health.json" = file("${path.module}/dashboards/cluster-health.json") }
+}
+
+# CloudNativePG dashboard (forgejo-pg, infisical-pg) — instances ready/NotReady, streaming replicas,
+# replication lag, restarts, connections. The cnpg_* panels need spec.monitoring.enablePodMonitor on
+# the Clusters; the kube_pod_* panels work regardless. Datasource uid "prometheus" (provisioned).
+resource "kubernetes_config_map" "cnpg_dashboard" {
+  metadata {
+    name      = "grafana-dashboard-cnpg"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "cnpg.json" = file("${path.module}/dashboards/cnpg.json") }
 }
 
 # Component dashboards (Cilium agent metrics 21431, Cilium/Hubble network 24056, Longhorn 16888) —

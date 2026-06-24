@@ -1,0 +1,101 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Ready Postgres instances",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(kube_pod_container_status_ready{container=\"postgres\"} == 1)" } ]
+    },
+    {
+      "id": 2,
+      "title": "NotReady Postgres instances",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(kube_pod_container_status_ready{container=\"postgres\"} == 0) or vector(0)" } ]
+    },
+    {
+      "id": 3,
+      "title": "Streaming replicas (per primary)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cnpg_pg_replication_streaming_replicas)" } ]
+    },
+    {
+      "id": 4,
+      "title": "Max replication lag",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 300 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cnpg_pg_replication_lag)" } ]
+    },
+    {
+      "id": 5,
+      "title": "Instance readiness (1 = Ready)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "min", "lastNotNull" ] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kube_pod_container_status_ready{container=\"postgres\"}", "legendFormat": "{{namespace}}/{{pod}}" } ]
+    },
+    {
+      "id": 6,
+      "title": "Container restarts",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull" ] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kube_pod_container_status_restarts_total{container=\"postgres\"}", "legendFormat": "{{namespace}}/{{pod}}" } ]
+    },
+    {
+      "id": 7,
+      "title": "Replication lag (s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "max", "lastNotNull" ] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cnpg_pg_replication_lag", "legendFormat": "{{pod}}" } ]
+    },
+    {
+      "id": 8,
+      "title": "Active backends (connections)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull" ] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (pod) (cnpg_backends_total)", "legendFormat": "{{pod}}" } ]
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [ "cnpg", "postgres" ],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CloudNativePG",
+  "uid": "cnpg-overview",
+  "version": 1,
+  "weekStart": ""
+}
