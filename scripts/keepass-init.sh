@@ -75,6 +75,7 @@ add_secret argocd-github-pat "${gh_pat:-REPLACE_with_github_pat}"
 # --- migrate existing plaintext cred files into the wallet ---------------------
 add_secret grafana-admin-password "$(file_or "$HOME/.claude/homelab-ha/grafana_admin_password" REPLACE)"
 add_secret ha-prometheus-token    "$(file_or "$HOME/.claude/homelab-ha/prometheus_llat" REPLACE)"
+add_secret forgejo-runner-token   "$(file_or "$HOME/.claude/homelab-forgejo/runner-token" REPLACE)"
 
 echo
 echo "Done. Inspect with:"

@@ -7,7 +7,12 @@
 #
 # Returns non-zero (without killing your shell) if the wallet is missing.
 
-_kp_dir="${KP_DIR:-$HOME/.claude/homelab-keepass}"
+# Resolve the wallet dir: explicit KP_DIR, else jail (~/.claude) or host (~/Projects/.claude-data).
+# Same dual-path trick as scripts/garage-s3.sh, so `source`-ing works in both without an override.
+_kp_dir=""
+for _d in "${KP_DIR:-}" "$HOME/.claude/homelab-keepass" "$HOME/Projects/.claude-data/homelab-keepass"; do
+  [ -n "$_d" ] && [ -f "$_d/homelab.kdbx" ] && _kp_dir="$_d" && break
+done
 _kp_db="$_kp_dir/homelab.kdbx"
 _kp_key="$_kp_dir/homelab.keyx"
 export DEVBOX_QUIET=1
@@ -35,7 +40,8 @@ export TF_VAR_infisical_db_password="$(_kp_get infisical-db-password)"
 export TF_VAR_argocd_github_pat="$(_kp_get argocd-github-pat)"
 export TF_VAR_infisical_admin_email="$(_kp_get infisical-admin-email)"
 export TF_VAR_infisical_admin_password="$(_kp_get infisical-admin-password)"
+export TF_VAR_forgejo_runner_token="$(_kp_get forgejo-runner-token)"
 
-echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,infisical_admin_*} from $_kp_db" >&2
+echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,infisical_admin_*,forgejo_runner_token} from $_kp_db" >&2
 unset -f _kp _kp_get
-unset _kp_dir _kp_db _kp_key
+unset _kp_dir _kp_db _kp_key _d

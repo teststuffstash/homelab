@@ -39,7 +39,11 @@
       ],
       "tf-plan": [
         "tofu -chdir=tofu init -input=false",
-        "tofu -chdir=tofu plan"
+        "sh scripts/tf.sh plan \"$@\""
+      ],
+      "tf-apply": [
+        "tofu -chdir=tofu init -input=false",
+        "sh scripts/tf.sh apply \"$@\""
       ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"

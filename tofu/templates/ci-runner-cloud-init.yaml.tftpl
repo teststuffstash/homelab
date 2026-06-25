@@ -1,0 +1,44 @@
+#cloud-config
+hostname: ci-runner-01
+package_update: true
+# qemu-guest-agent: so Proxmox sees the agent/IP + clean shutdowns (the VM sets agent.enabled=true).
+packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent]
+users:
+  - name: debian
+    groups: [sudo, docker]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_key}
+  - name: runner
+    groups: [docker]
+    shell: /bin/bash
+write_files:
+  # GitHub App private key — used ONLY to mint short-lived runner registration tokens at boot.
+  - path: /etc/runner-app/private-key.pem
+    permissions: '0600'
+    owner: root:root
+    content: |
+      ${indent(6, app_private_key)}
+  # The minting primitive (same script as homelab scripts/gh-app-runner-token.sh).
+  - path: /usr/local/bin/mint-runner-token.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      ${indent(6, mint_script)}
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  # Persistent journal so a first-boot kernel panic is debuggable next time (it wasn't).
+  - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  - install -d -o runner -g runner /home/runner/actions-runner
+  - su - runner -c 'cd ~/actions-runner && curl -fsSL -o r.tar.gz https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz && tar xzf r.tar.gz && rm r.tar.gz'
+  - |
+    set -e
+    TOKEN=$(GH_APP_ID='${app_id}' GH_APP_INSTALLATION_ID='${installation_id}' \
+      GH_APP_PRIVATE_KEY_FILE=/etc/runner-app/private-key.pem GH_RUNNER_ORG='${org}' \
+      /usr/local/bin/mint-runner-token.sh)
+    su - runner -c "cd ~/actions-runner && ./config.sh --unattended --replace \
+      --url https://github.com/${org} --token $TOKEN --name ci-runner-01 --labels '${labels}'"
+    cd /home/runner/actions-runner && ./svc.sh install runner && ./svc.sh start

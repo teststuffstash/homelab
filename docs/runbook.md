@@ -22,9 +22,12 @@ Gotchas:
   use `tofu -chdir=...` / absolute paths, and avoid `bash -c '<multiline>'` (mangles newlines).
   Don't put `source <(... completion)` in `init_hook` — it parse-errors under dash and breaks
   every `devbox run`.
-- Tofu in the main root needs two secret vars; source them from the cred files:
-  `export TF_VAR_grafana_admin_password=$(cat ~/.claude/homelab-ha/grafana_admin_password)` and
-  `export TF_VAR_ha_prometheus_token=$(cat ~/.claude/homelab-ha/prometheus_llat)`.
+- Tofu in the main root needs secret vars — **don't pass them by hand, use the wrappers**:
+  `devbox run tf-plan` / `devbox run tf-apply` source them via `scripts/tf.sh` (→ `keepass-env.sh`
+  reads the KeePass wallet; the GitHub-App key resolves from the cred dir). These work **in the jail
+  (`~/.claude`) or on the host (`~/Projects/.claude-data`)** — same dual-path trick as `garage-s3`.
+  `proxmox_api_token` + non-secret IDs stay in `tofu/terraform.tfvars`. `devbox run tf-validate`
+  needs no secrets. To seed/refresh the wallet (incl. the Forgejo runner token): `devbox run keepass-init`.
 
 ## Secrets (out of repo)
 
