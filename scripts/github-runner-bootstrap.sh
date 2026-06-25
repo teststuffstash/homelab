@@ -16,7 +16,7 @@
 #   access                ensure repo Actions enabled + report runner-group vis  (needs admin tok)
 #   verify                live checks: controller, scale set, registered runner  (jail OK)
 #
-# Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder"
+# Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder openrouter-operator"
 #                 SCALESET=homelab-ephemeral  CRED_DIR=~/.claude/homelab-github-arc
 #                 REDIRECT_PORT=8765
 set -euo pipefail
@@ -24,7 +24,7 @@ cd "$(dirname "$0")/.."
 export GH_PAGER=cat   # never page gh output (esp. error bodies) into less
 
 ORG="${ORG:-teststuffstash}"
-REPOS="${REPOS:-sleep-tracking snore-recorder}"
+REPOS="${REPOS:-sleep-tracking snore-recorder openrouter-operator}"
 SCALESET="${SCALESET:-homelab-ephemeral}"
 CRED_DIR="${CRED_DIR:-$HOME/.claude/homelab-github-arc}"
 REDIRECT_PORT="${REDIRECT_PORT:-8765}"

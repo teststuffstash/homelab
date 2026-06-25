@@ -17,7 +17,7 @@ devbox run github-runner-bootstrap <check|manifest|convert|secrets|access|verify
 > single **Create** click via the App-manifest REST flow), **Installing** the App on the org, and
 > minting the **ghcr PAT**. Everything after is `gh`/REST/`infisical` automation.
 
-Defaults: `ORG=teststuffstash`, `REPOS="sleep-tracking snore-recorder"`, `SCALESET=homelab-ephemeral`,
+Defaults: `ORG=teststuffstash`, `REPOS="sleep-tracking snore-recorder openrouter-operator"`, `SCALESET=homelab-ephemeral`,
 creds cached in `~/.claude/homelab-github-arc/`. Override via env.
 
 ---
@@ -101,6 +101,15 @@ The runner-group *read* needs **`admin:org`** (a classic PAT) or a fine-grained 
 **Self-hosted runners** permission — **`read:org`/`repo`/`workflow` is NOT enough** (you'll get
 `403: You must be an org admin or have the runners and runner groups fine-grained permission`). Only
 act on it if you've *restricted* the Default group: Org → Settings → Actions → Runner groups (UI).
+
+> **Public repos need one more toggle.** Even with the Default group on *All repositories*, a
+> **public** repo's jobs are blocked from self-hosted runners until **"Allow public repositories"**
+> is enabled on the runner group (Org → Settings → Actions → Runner groups → Default). Without it the
+> job sits **queued forever** and no runner pod is created — looks like a capacity bug but isn't
+> (`openrouter-operator` hit exactly this). **Security:** this lets *any* org public repo — including
+> **fork PRs** — run on the in-cluster runners. Pair it with "Require approval for all outside
+> collaborators" (Actions → General → Fork pull request workflows), or drop `pull_request` triggers
+> on public repos so only pushes (which only members can do) reach the runner.
 
 ## 6. Deploy ARC (GitOps)
 

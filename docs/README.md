@@ -9,9 +9,12 @@ running services fit together, how to operate them, and their risks.
 | Doc | Summary |
 |---|---|
 | [adr.md](adr.md) | **Architecture Decision Record** — what was considered (e.g. Ceph vs Longhorn) and what was chosen, with rationale. Start here for *why*. |
+| [agents/](agents/README.md) | **Agent platform** (design/scaffolding) — in-cluster MCP capability + ephemeral sandbox harness; trust model, identity/secrets, testing doctrine, the worked sleep-tracker fix flow |
 | [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
+| [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
+| [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
 | [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
 | [power-measurements.md](power-measurements.md) | Node max-power (stress) + perf/watt benchmarks |
 | [../machines/README.md](../machines/README.md) | Machine inventory + perf/watt table (generated from `machines/machines.yaml`) |
