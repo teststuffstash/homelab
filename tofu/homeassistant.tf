@@ -86,6 +86,13 @@ resource "kubernetes_deployment" "ha" {
       }
     }
   }
+
+  lifecycle {
+    # A manual `kubectl rollout restart` stamps spec.template.metadata.annotations
+    # (kubectl.kubernetes.io/restartedAt). We don't manage pod-template annotations here, so ignore
+    # them rather than reverting the stamp on every plan (this was the perpetual "HA drift").
+    ignore_changes = [spec[0].template[0].metadata[0].annotations]
+  }
 }
 
 resource "kubernetes_service" "ha" {

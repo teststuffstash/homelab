@@ -48,6 +48,28 @@ resource "helm_release" "argocd" {
         # double-termination dance and matches grafana/forgejo.
         "server.insecure" = true
       }
+      cm = {
+        # The ESO admission webhook defaults a pile of spec fields (remoteRef.*Strategy/Policy,
+        # target.creation/deletionPolicy) that aren't in git, so EVERY ExternalSecret reads
+        # OutOfSync (though Healthy). Ignore those defaulted paths globally — clears the drift
+        # across all ESO-delivering apps (crossplane-providers, sleep, openrouter-operator, …).
+        "resource.customizations.ignoreDifferences.external-secrets.io_ExternalSecret" = yamlencode({
+          jqPathExpressions = [
+            ".spec.target.creationPolicy",
+            ".spec.target.deletionPolicy",
+            ".spec.data[]?.remoteRef.conversionStrategy",
+            ".spec.data[]?.remoteRef.decodingStrategy",
+            ".spec.data[]?.remoteRef.metadataPolicy",
+            ".spec.data[]?.remoteRef.nullBytePolicy",
+          ]
+        })
+        # App-of-apps children: `spec.source.directory.recurse: false` is the default, which ArgoCD
+        # drops from the desired state but the live Application keeps → every child Application reads
+        # OutOfSync (so `platform`/`sleep` do too). Ignore that one defaulted field.
+        "resource.customizations.ignoreDifferences.argoproj.io_Application" = yamlencode({
+          jqPathExpressions = [".spec.source.directory"]
+        })
+      }
     }
 
     # The UI/API Service stays ClusterIP; the BGP VIP is a separate labelled Service
