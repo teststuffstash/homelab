@@ -66,4 +66,27 @@ ESO), so the manual `apply.sh` port-forward goes away. The generated key lands i
 and is published to **Infisical** (source of truth); in-cluster consumers read it via an `ExternalSecret`,
 **offline devices read it from Infisical at provision time** (plaintext on-device — ESO can't reach them;
 no sops). Worked example:
-`snore-recorder` (`infra/garage-workspace.yaml` + homelab `argocd/platform/snore-recorder.yaml`).
+`snore-recorder` (`infra/garage-workspace.yaml` + homelab `argocd/sleep/snore-recorder.yaml`).
+
+## OpenRouter keys — the `OpenRouterKey` CR (LIVE)
+
+For a per-project, **budget-capped OpenRouter API key**, an app declares an `OpenRouterKey` CR in its
+own repo's `infra/` (synced by ArgoCD). The in-cluster **`openrouter-operator`** (kopf) mints the key
+on OpenRouter and writes it to a Secret (`<project>-openrouter`, key `OPENROUTER_API_KEY`) in the
+app's namespace. Weekly budget by default — caps a runaway agent's blast radius.
+
+```yaml
+apiVersion: openrouter.teststuff.net/v1alpha1
+kind: OpenRouterKey
+metadata: { name: <app>, namespace: <app> }
+spec:
+  project: <app>
+  budgetUSD: 5
+  resetInterval: weekly # daily|weekly|monthly
+  # guardrail: only-free  # declared for intent; guardrail-assign not yet wired
+```
+
+One Tier-0 **provisioning key** (Infisical → the operator's own ESO) mints all per-app runtime keys,
+so a new app gets a budgeted key by adding one CR — no shared key, no UI click. **Replaces the
+cloudopsworks Terraform provider** path, which couldn't reconcile (issue #20). Worked example:
+`sleep-tracking` (`infra/openrouter-key.yaml`).

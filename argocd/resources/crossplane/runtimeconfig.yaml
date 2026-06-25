@@ -35,12 +35,3 @@ spec:
                     secretKeyRef:
                       name: infisical-tf-writer
                       key: clientSecret
-                # OpenRouter MANAGEMENT/provisioning key — lets openrouter_* workspaces mint
-                # per-project, budget-capped runtime keys. optional: true so the pod still starts
-                # before the provisioning key reaches Infisical (the openrouter-management ESO).
-                - name: OPENROUTER_API_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: openrouter-management
-                      key: OPENROUTER_API_KEY
-                      optional: true
