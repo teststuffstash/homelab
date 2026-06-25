@@ -58,6 +58,13 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   branch-protection endpoint.
 - **Default runner** — repos using homelab CI set `runs-on: homelab-ephemeral`; the rest use
   `ubuntu-latest`.
+- **Package visibility** — a ghcr package is **private by default**, inheriting nothing from a public
+  repo. A package pulled by an in-cluster pod uses a `read:packages` PAT (ESO), so it can stay private;
+  but one pulled by an **offline/roaming device** (e.g. the `snore-recorder` Pi, anonymous `docker
+  compose pull`) must be **Public**, else the pull 401s `unauthorized`. Click-only: *Packages → `<pkg>`
+  → Package settings → Danger Zone → Change visibility → Public*. There's no API on the jail PAT for it
+  (`403`). `snore-recorder` is public for this reason; the ansible role's `registry_token` path is the
+  keep-private alternative.
 
 ## 6. The click-only checklist (recreating from scratch)
 
@@ -69,6 +76,8 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 6. **Fork-PR approval** = require approval for outside collaborators.
 7. Per new repo: confirm Actions on; add to nothing else (org-level App + group cover it); set
    branch protection when the repo joins the auto-merge flow.
+8. Per package pulled by an **offline device**: flip its **visibility → Public** (private by default,
+   even under a public repo).
 
 ## Parallel non-GitHub "clicks" (cross-ref)
 
