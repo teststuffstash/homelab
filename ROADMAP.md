@@ -261,6 +261,36 @@ Per-MAC state machine, served by Matchbox, triggered over the network:
     StorageClass (operator validates SC existence) and the `monitoring` ns labelled
     PodSecurity=privileged (Talos enforces `baseline`; node-exporter needs host access).
 
+## Agent platform — phased
+
+_Added 2026-06-25. A program distinct from the original 2026-05-24 cluster plan: an in-cluster MCP
+capability + an ephemeral sandbox harness that turns a natural-language bug report into a tested,
+auto-merged fix. Full design + trust model + the worked sleep-tracker example:
+[`docs/agents/`](docs/agents/README.md). Each phase is independently useful._
+
+- **P0 — read-only triage MCP.** The Type-1 homelab MCP server (in-cluster SA, read-only:
+  Grafana/Prometheus, Garage S3, repo source) + a triage recipe that turns a report into a GitHub
+  Issue + a **synthetic data table**. Zero blast radius; useful on its own. Goes in `SERVICES.md`
+  when live.
+- **P1 — fixer sandbox + full-stack gate.** Agent-sandbox pod running the per-app fixer recipe
+  (`.agents/fix.yaml`, no data creds, branch+PR only) → CI runs `devbox run ci` + the **full-stack
+  ephemeral test** (`devbox run test-integration`: k3d + Garage + ingester + Grafana + Playwright on
+  a **Tofu'd Proxmox VM runner**) + a cross-vendor reviewer subagent → branch-protected auto-merge →
+  ghcr image. Also gates Renovate/Dependabot bumps.
+- **P2 — bump-PR + deploy verify.** Renovate (or Argo CD Image Updater) opens the homelab tag-bump
+  PR → ArgoCD syncs on merge → a PostSync verification step re-runs the synthetic fixture against
+  the deployed stack. Rollback deferred (testing gates pre-merge; if needed, `git revert` the bump —
+  never `kubectl rollout undo`).
+- **P3 — local/cheap tier + shared memory.** Hermes (or other OpenRouter/Ollama models) as the cheap
+  high-volume tier via the model knob; shared **memory-as-MCP** (durable git-markdown + disposable
+  vector cache). Local-LLM serving is real infra (vLLM/prefix-cache) — keep the MCP tool surface
+  small and stable so it caches; see [`docs/agents/`](docs/agents/README.md#open--deferred).
+
+**Identity/secrets** reuse existing primitives (Infisical+ESO, Cilium FQDN policy, a dedicated
+"agents" GitHub App minting 1h scoped tokens) — no new secret platform. **CI runners are Tofu-defined
+Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC (revisit a CI cluster only if PR
+parallelism outgrows a VM).
+
 ## Edge tier (future — out of current scope)
 
 A *separate* deployment target from the homelab cluster, tied to the assistive-tech

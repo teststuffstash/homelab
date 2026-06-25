@@ -395,6 +395,75 @@ bootstrap seam); add an app secret = `devbox run infisical-secret` + an `Externa
 
 ---
 
+## Agent platform
+
+Full design + trust model + the worked sleep-tracker example: [`agents/`](agents/README.md). These
+records are intentionally thin; the narrative lives in the design doc.
+
+### ADR-077 — Agent runtime: Goose (leaning), wrapped by agent-sandbox
+**Status:** Proposed (2026-06-25, leaning Goose). **Decision:** the per-task coding/triage agents run
+**Goose** recipes (model as a config knob via `claude-or`/OpenRouter, MCP-native, subagents, sandbox
+mode, vendor-neutral under the Linux Foundation). The agent itself is boot-from-git: the recipe is the
+reproducible spec (`<app>/.agents/*.yaml`), only the model key is out-of-repo. **Considered:** Claude
+Code + Docker jail (Anthropic-locked); opencode (model-agnostic, no jail); raw Hermes; **Omnigent** as a
+meta-harness *above* harnesses (deferred — adopt only if governing multiple harnesses becomes real, see
+ADR-081 for the one Omnigent pattern we do take). **Consequences:** still evaluating in practice; the
+recipe format is portable enough that the runtime can change without rewriting the pipeline.
+
+### ADR-078 — Isolation layer: agent-sandbox (k8s-native), not a mesh
+**Status:** Accepted (2026-06-25). **Decision:** ephemeral agents run in
+[agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) pods — a CRD-driven, recreatable
+sandbox-per-task that fits boot-from-git; snapshot/restore is treated as pure cache (a dead sandbox is
+re-dispatched, never resurrected). **Considered:** Omnigent's own Omnibox sandbox (overlaps; we keep
+agent-sandbox as the substrate and borrow only Omnigent's egress-proxy idea); Istio/service-mesh
+(rejected — heavy, and it doesn't do the hard part, ADR-081). **Consequences:** the durable artifact is
+always the git branch / S3 object the task produced, not the pod.
+
+### ADR-079 — Write policy: agents propose, GitOps applies (strict-PR)
+**Status:** Accepted (2026-06-25). **Decision:** an agent's only "write" is *open a PR / push a branch*;
+ArgoCD + Tofu reconcile. No imperative `kubectl apply` / `tofu apply` from an agent, except a narrow
+allow-list of runbook ops that genuinely can't be expressed in git. Master is protected (branch
+protection + required checks); token scope is the belt, the protection rule the suspenders.
+**Considered:** letting an in-cluster agent apply directly (rejected — violates boot-from-git / no
+click-ops, and makes blast radius unreviewable). **Consequences:** every agent change is a reviewable
+diff; the in-cluster MCP agent is read + propose, not a generic `kubectl` passthrough.
+
+### ADR-080 — State model: durable git/S3 is truth; context/vectors/snapshots are cache
+**Status:** Accepted (2026-06-25; candidate to graduate into `CONTEXT.md`). **Decision:** the source of
+truth for any agent work is durable, auditable state — **git + S3** — not conversation history, vector
+stores, or sandbox snapshots, which are all disposable cache rebuildable from the durable layer. Applies
+to memory too (markdown facts are durable; a vector index is cache). **Considered:** Memory-OS-style
+DB/vector memory as primary (rejected as primary — opaque, un-`git diff`-able, conflicts with
+reviewability; fine as a cache layer). **Consequences:** re-dispatch beats resurrect; three independent
+sources converged on this (Memory-OS Layer-1, agent-sandbox state, the local-LLM "structured world
+state" pattern).
+
+### ADR-081 — Per-job identity: minted short-lived creds + Cilium egress + injection proxy
+**Status:** Accepted (2026-06-25). **Decision:** no long-lived secrets in agent pods. LLM keys = a
+master/provisioning key in **Infisical** mints a budget-capped, short-lived runtime key per job (the cap
+is the spend guardrail). GitHub = a dedicated **"agents" GitHub App** (private key in Infisical) mints
+**~1h installation tokens** scoped to specific repos+permissions per job — no hand-made per-repo PATs.
+Egress = **Cilium `toFQDNs`/L7 policy** (the pod can reach only the proxy) **+ a small auth-injecting
+forward proxy** that holds the minted creds and adds the headers, so the agent never sees them (the one
+Omnigent pattern adopted). **Considered:** Istio EnvoyFilter header injection (rejected — drags in a
+mesh to do what a ~50-line proxy does); static PATs (rejected — long-lived, hand-managed).
+**Consequences:** one egress proxy is where all secrets are injected; ghcr **push** stays a classic PAT
+(CI's credential, not the agent's).
+
+### ADR-082 — CI runners: Tofu'd Proxmox VMs running ephemeral k3d
+**Status:** Accepted (2026-06-25). **Decision:** the full-stack confidence gate
+(`devbox run test-integration`: k3d + Garage + ingester + Grafana + Playwright) runs on **self-hosted
+GitHub Actions runners that are Tofu-defined Proxmox VMs**, which create+destroy the k3d stack per PR.
+The VM is infrastructure/cattle (recreatable from git); the *environment-under-test* is ephemeral — so
+an always-on runner does not violate "only production is long-running." **Considered:** DinD on the slim
+in-cluster ARC pods (rejected for now — needs privileged, which we avoid); off-cluster pop-os only (the
+`build-image` precedent, but not declarative/owned); a dedicated CI cluster with autoscaling privileged
+ARC (deferred — revisit only if parallel PR volume outgrows a VM). **Consequences:** new `tofu/`
+resource + a GitHub self-hosted-runner registration; same harness gates both agent PRs and
+Renovate/Dependabot bumps.
+
+---
+
 ## Open / undecided
 
 ### ADR-071 — Presence detection for presence-gated watering: source + privacy boundary undecided

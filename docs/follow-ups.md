@@ -114,14 +114,11 @@ The original bring-up items (kept for history):
       both `arc-controller.yaml` and `arc-runners.yaml` — they MUST match) against
       github.com/actions/actions-runner-controller/releases. Verify the `homelab-ephemeral` scale set
       shows up in the org runner settings and a `workflow_dispatch` spawns a pod on a wk-metal node.
-- [ ] **ghcr cutover for sleep-ingester** — registry flipped to `ghcr.io/teststuffstash/sleep-ingester`
-      (`argocd/sleep/values/sleep-ingester.yaml` + the repo's `infra/externalsecret.yaml` now build a
-      ghcr dockerconfigjson). First ghcr build must publish before bumping the `tag`; until then the
-      old Forgejo image keeps the CronJob running. Verify the CronJob pod pulls from ghcr (no
-      `ImagePullBackOff`). The old `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key can be retired after.
-- [ ] **sleep-tracking has 4 red tests** — working CI immediately surfaced pre-existing failures
-      (snore `nights/` prefix change not reflected in fixtures; coverage 84.41% < 85% gate). Fix the
-      fixtures/coverage or adjust the gate — they were invisible while CI ran on a dead `main` branch.
+- [x] **ghcr cutover for sleep-ingester** (2026-06-25) — done; CronJob now pulls from
+      `ghcr.io/teststuffstash/sleep-ingester` (no `ImagePullBackOff`). The old
+      `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key can be retired.
+- [x] **sleep-tracking has 4 red tests** (2026-06-25) — fixed; the `nights/` fixture mismatch +
+      coverage gate are green again.
 - [ ] **SSH clone** — `service.ssh` is ClusterIP (HTTP clone only for now). Expose if wanted.
 - [ ] **Gogs on the edge** — separate, lighter Git service for the grandma tablet+minipc (ROADMAP).
 
