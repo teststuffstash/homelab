@@ -24,10 +24,10 @@ resource "proxmox_virtual_environment_vm" "node" {
   disk {
     datastore_id = var.datastore_vms
     # storage-tier VMs (longhorn=true) boot the iscsi/util-linux image; others the base one
-    file_id      = each.value.longhorn ? proxmox_download_file.talos_longhorn.id : proxmox_download_file.talos.id
-    interface    = "scsi0"
-    size         = each.value.disk_gb
-    file_format  = "raw"
+    file_id     = each.value.longhorn ? proxmox_download_file.talos_longhorn.id : proxmox_download_file.talos.id
+    interface   = "scsi0"
+    size        = each.value.disk_gb
+    file_format = "raw"
   }
 
   network_device {

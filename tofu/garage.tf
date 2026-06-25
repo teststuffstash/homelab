@@ -48,7 +48,7 @@ resource "helm_release" "garage" {
 
   values = [yamlencode({
     garage = {
-      replicationFactor = "1"                       # single node, no redundancy at the Garage layer
+      replicationFactor = "1" # single node, no redundancy at the Garage layer
       consistencyMode   = "consistent"
       rpcSecret         = random_id.garage_rpc.hex
       s3 = {

@@ -74,14 +74,14 @@ resource "helm_release" "longhorn" {
   values = [yamlencode({
     defaultSettings = {
       # storage only on labelled nodes; everything else stays compute-only
-      createDefaultDiskLabeledNodes      = true
-      defaultDataPath                    = "/var/lib/longhorn"
-      defaultReplicaCount                = 2
-      replicaSoftAntiAffinity            = true
-      replicaZoneSoftAntiAffinity        = true # spread the 2 replicas across zones
-      defaultDataLocality                = "best-effort"
-      storageOverProvisioningPercentage  = 100
-      orphanAutoDeletion                 = true
+      createDefaultDiskLabeledNodes     = true
+      defaultDataPath                   = "/var/lib/longhorn"
+      defaultReplicaCount               = 2
+      replicaSoftAntiAffinity           = true
+      replicaZoneSoftAntiAffinity       = true # spread the 2 replicas across zones
+      defaultDataLocality               = "best-effort"
+      storageOverProvisioningPercentage = 100
+      orphanAutoDeletion                = true
       # Let Longhorn read the Metrics Server (metrics-server.tf) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
       kubernetesMetricsServerMetricsEnabled = true

@@ -86,7 +86,7 @@ resource "helm_release" "forgejo" {
           PASSWD  = random_password.forgejo_db.result
         }
         session = { PROVIDER = "memory" }
-        cache    = { ADAPTER = "memory" }
+        cache   = { ADAPTER = "memory" }
         # Private instance: close LAN self-signup. Admins still create users (we make `rasmus`).
         service = { DISABLE_REGISTRATION = true }
         # Forgejo Actions (self-hosted CI — SLSA Build L2, see docs/slsa.md). The act_runner
@@ -100,7 +100,7 @@ resource "helm_release" "forgejo" {
           ROOT_URL   = "https://forgejo.teststuff.net/"
           HTTP_PORT  = "3000"
           SSH_DOMAIN = "forgejo.teststuff.net" # clone URLs: git@forgejo.teststuff.net:org/repo.git
-          SSH_PORT   = "22"                     # advertised port (HAProxy .2.9:22 -> .40.15:22)
+          SSH_PORT   = "22"                    # advertised port (HAProxy .2.9:22 -> .40.15:22)
         }
       }
     }
