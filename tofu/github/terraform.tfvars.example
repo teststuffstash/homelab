@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored) only if you need to override defaults. The token is NOT here
+# — it comes from the GITHUB_TOKEN env var (see providers.tf). Defaults already target teststuffstash.
+
+# org         = "teststuffstash"
+# enforcement = "active"   # flip from the default "evaluate" once the admin bypass is verified
+
+# protected_repos = {
+#   sleep-tracking = { required_checks = ["ci"] }
+#   snore-recorder = { required_checks = ["ci"] }
+# }
