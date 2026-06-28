@@ -2,7 +2,7 @@
 # — it comes from the GITHUB_TOKEN env var (see providers.tf). Defaults already target teststuffstash.
 
 # org         = "teststuffstash"
-# enforcement = "active"   # flip from the default "evaluate" once the admin bypass is verified
+# enforcement = "active"   # default is "disabled"; flip to "active" deliberately (evaluate = Enterprise-only)
 
 # protected_repos = {
 #   sleep-tracking = { required_checks = ["ci"] }

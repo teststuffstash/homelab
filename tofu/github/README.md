@@ -11,32 +11,71 @@ Two layers (per the chosen design):
 - **Per-repo required checks** (`repo_rulesets.tf`, `github_repository_ruleset`): each agent-target
   repo requires its PR-triggered CI checks (+ up-to-date branch) before merge.
 
+## Plan requirement (GitHub Team)
+
+⚠ **Rulesets on _private_ repos — and _org-level_ rulesets at all — require a paid plan.** On the
+free plan an org ruleset `POST` returns `404` and a private-repo ruleset `POST` returns
+`403 Upgrade to GitHub Pro or make this repository public`. `teststuffstash` is therefore on
+**GitHub Team** (org owner: Settings → Billing → Upgrade). With Team this root applies unchanged;
+nothing here needs editing for the plan.
+
 ## Run it (OUTSIDE the jail)
 
-Rulesets need **Administration: write** on the org, which the jail PAT deliberately lacks. Run this
-root on a host authenticated as a `teststuffstash` owner — the same pattern as `tofu/cloudflare/`:
+Rulesets need **Administration: write** at two levels: **Organization** (for the org ruleset) and
+**Repository** (for the per-repo rulesets). The jail PAT deliberately lacks both.
+
+**Use a fine-grained PAT, not `gh auth token`.** `gh auth token` only carries `read:org`, so the
+org-ruleset endpoint returns `404` (GitHub hides unauthorized endpoints as 404, not 403). The obvious
+fix — `gh auth refresh -s admin:org` — grants org-admin across **every** org you belong to (classic
+scopes are global). A **fine-grained PAT is scoped to one resource owner**, so it can touch only this
+org. Mint one (github.com → Settings → Developer settings → Fine-grained tokens) as a `teststuffstash`
+owner:
+
+- **Resource owner:** `teststuffstash`  ← the single-org scoping; the token can reach nothing else
+- **Repository access:** All repositories (or just the agent-target repos)
+- **Organization permissions → Administration: Read and write**  ← unblocks the org ruleset
+- **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets
+
+If the org enforces PAT approval the token sits "pending"; approve it yourself as owner. Then:
 
 ```sh
-export GITHUB_TOKEN=$(gh auth token)            # as an org owner, or a token with org Administration
+export GITHUB_TOKEN=github_pat_xxxxx            # the fine-grained token (NOT gh auth token)
 devbox run -- tofu -chdir=tofu/github init
 devbox run -- tofu -chdir=tofu/github plan      # review
 devbox run -- tofu -chdir=tofu/github apply
 ```
 
-## Safe rollout (important)
+## Safe rollout (important — no dry-run on Team)
 
-`var.enforcement` defaults to **`evaluate`** (dry-run): GitHub records what *would* be blocked but
-enforces nothing. Apply it, then in the org's **Settings → Rules → Insights** confirm that:
-1. your own direct-to-master pushes show as **bypassed** (the admin bypass works), and
-2. the agents App would be **blocked**.
+⚠ **`evaluate` mode AND ruleset Insights are both GitHub Enterprise-only.** The API accepts
+`enforcement="evaluate"` on Team, but the ruleset is then **inert and uninspectable** — it looks
+protected and isn't. On Team the only meaningful values are **`active`** and **`disabled`**; there is
+no dry-run to observe first.
 
-Only then flip to active:
+So verify the admin bypass **empirically**, with `disabled` as an instant OpenTofu rollback. The org
+ruleset is `~ALL` repos, so a broken `actor_id = 1 / OrganizationAdmin` bypass would block your own
+direct-to-master on **every** repo (incl. homelab) — but only *you* push these branches and you can
+roll back in one apply, so the blast radius is self-inflicted and reversible.
+
 ```sh
+# 1. go active
 devbox run -- tofu -chdir=tofu/github apply -var enforcement=active
+
+# 2. verify YOUR bypass works (non-destructive): rules applying to you on a default branch.
+#    Empty [] = you bypass (good). A pull_request rule object = you are blocked (bypass broken).
+gh api repos/teststuffstash/agent-runtime/rules/branches/master
+
+# 3. confirm enforcement is real for non-bypass identities: a direct push must be refused.
+#    Do this on a low-stakes public repo (agent-runtime), as a non-admin / the agents App — NOT as you.
+
+# 4. if the bypass is broken, roll back instantly, then fix the bypass_actors encoding:
+devbox run -- tofu -chdir=tofu/github apply -var enforcement=disabled
 ```
-Applying `active` before verifying the admin bypass would block your own direct-to-master IaC pushes
-on **every** repo. The `actor_id = 1 / OrganizationAdmin` bypass in `org_ruleset.tf` is the thing to
-confirm in `evaluate` first.
+
+The bypass is evaluated on the **pushing identity**, not the token's scopes: your pushes (PAT or local
+git, both authored as the org owner) bypass; the **agents App** pushes as a Bot that is *not* in
+`bypass_actors`, so its `contents:write` still can't reach a default branch. That asymmetry is the
+whole point.
 
 ## Adding repos / checks
 

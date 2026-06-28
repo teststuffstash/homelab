@@ -4,17 +4,18 @@ variable "org" {
   default     = "teststuffstash"
 }
 
-# Rollout safety: start in "evaluate" (dry-run — GitHub records what WOULD be blocked but enforces
-# nothing), confirm in the org ruleset Insights that humans still pass and only the agent is caught,
-# THEN flip to "active". Applying "active" before the admin bypass is verified would block your own
-# direct-to-master IaC pushes on every repo.
+# Rollout safety. ⚠ "evaluate" (dry-run) AND its Insights are GitHub Enterprise-only — on Team the API
+# accepts evaluate but the ruleset is inert and uninspectable (looks protected, isn't). On Team the
+# only meaningful values are "active" and "disabled"; there is no observe-first mode. Default is
+# "disabled" so a bare apply never silently half-protects: flip to "active" deliberately, then verify
+# the OrganizationAdmin bypass empirically (see README "Safe rollout"); "disabled" is the rollback.
 variable "enforcement" {
-  description = "Ruleset enforcement: evaluate (dry-run), active, or disabled."
+  description = "Ruleset enforcement: active or disabled (evaluate is Enterprise-only — inert on Team)."
   type        = string
-  default     = "evaluate"
+  default     = "disabled"
   validation {
     condition     = contains(["evaluate", "active", "disabled"], var.enforcement)
-    error_message = "enforcement must be one of: evaluate, active, disabled."
+    error_message = "enforcement must be one of: evaluate, active, disabled (evaluate needs Enterprise)."
   }
 }
 
