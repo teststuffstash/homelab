@@ -44,7 +44,14 @@ IMAGE="${HARNESS_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${PROJECT}-openrouter"          # operator-minted, budget-capped (e.g. sleep-tracking-openrouter)
 POD="agent-${PROJECT}-$(date -u +%H%M%S)"
-GOOSE_MODEL="${MODEL#openrouter/}"      # goose's provider is GOOSE_PROVIDER; its model id has no prefix
+# goose's provider is GOOSE_PROVIDER, so drop the conventional openrouter/ prefix from the model id —
+# BUT OpenRouter's own cloaked models (e.g. openrouter/owl-alpha) genuinely live UNDER that namespace,
+# so only strip when a vendor/model slug remains (still has a '/'); otherwise keep the full id.
+_stripped="${MODEL#openrouter/}"
+case "$_stripped" in
+  */*) GOOSE_MODEL="$_stripped" ;;   # qwen/qwen3-coder:free → drop prefix
+  *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/owl-alpha → keep (cloaked model is in the openrouter/ ns)
+esac
 
 if [ -n "$RUN_CMD" ]; then
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$RUN_CMD" | jq -Rs .)]"
