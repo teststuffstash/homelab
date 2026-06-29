@@ -87,6 +87,10 @@ spec:
           value: "${GOOSE_MODEL}"
         - name: MODEL
           value: "${MODEL}"
+        # Auto-approve tool calls: a headless `--run` recipe has no TTY to confirm at, so without this
+        # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
+        - name: GOOSE_MODE
+          value: "auto"
         - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }
