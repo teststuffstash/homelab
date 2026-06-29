@@ -22,9 +22,16 @@ spec:
         write = true
         owner = false
       }
-      output "bucket"            { value = garage_bucket.loki.global_alias }
-      output "access_key_id"     { value = garage_key.loki.id }
-      output "secret_access_key" { value = garage_key.loki.secret_access_key, sensitive = true }
+      output "bucket" {
+        value = garage_bucket.loki.global_alias
+      }
+      output "access_key_id" {
+        value = garage_key.loki.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.loki.secret_access_key
+        sensitive = true
+      }
   writeConnectionSecretToRef:
     namespace: loki
     name: loki-garage-s3
