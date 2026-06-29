@@ -4,7 +4,9 @@
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
 > [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in
 > [`../../ROADMAP.md`](../../ROADMAP.md). Where a piece goes LIVE it gets a row in
-> [`../../SERVICES.md`](../../SERVICES.md).
+> [`../../SERVICES.md`](../../SERVICES.md). The **fixer control flow** (worker gates, fresh-vs-hot,
+> the coordinator state machine + webhooks) is in [`workflow.md`](workflow.md); the **operational**
+> launcher reference + findings/follow-ups is in [`../../agents/README.md`](../../agents/README.md).
 
 ## What this is
 

@@ -39,12 +39,18 @@ attaches; the blast radius collapses to a single project.
 # interactive: prep the repo, drop into a shell, run goose/opencode by hand
 bash agents/agent-session.sh sleep-tracking
 
-# non-interactive: run a recipe to a branch+PR, stream logs, pod self-terminates
-bash agents/agent-session.sh sleep-tracking \
+# interactive but spawned by a non-TTY caller: prep the pod + print the attach cmd, don't exec.
+# Attach the TUI from a REAL terminal afterwards (re-attachable; pod stays up until you delete it).
+bash agents/agent-session.sh sleep-tracking --harness opencode --model openrouter/owl-alpha --no-attach
+
+# non-interactive: run a recipe to a branch+PR, stream logs, post a stats comment, pod self-terminates
+bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/owl-alpha \
     --run "goose run --recipe .agents/fix.yaml --params issue=42"
 ```
 
-The image must exist in ghcr first — build/push it from the `agent-runtime` repo.
+Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode` ·
+`--model <provider/model>` · `--no-attach`. The image must exist in ghcr first — build/push it from
+the `agent-runtime` repo.
 
 ## Known gaps (v1)
 
@@ -58,7 +64,53 @@ The image must exist in ghcr first — build/push it from the `agent-runtime` re
   **v2/ADR-081**: the egress proxy injects it, never held in the pod.
 - **Egress not locked down** — once the Cilium policy lands it must allow the nix cache
   (`cache.nixos.org` / a self-hosted **attic**) or the project `devbox install` will hang.
-- **Cold start** — first project `devbox install` pulls the full closure; a shared nix store / attic
-  cache (the in-cluster analog of the jail's bind-mounted `/nix`) makes it near-instant.
+- **Cold start (mitigated, not gone)** — the in-cluster [nix pull-through cache](../SERVICES.md)
+  (`nixcache.nix-cache.svc`) + a **common toolchain baked into `agent-base`** (python/uv/kubectl/
+  gitleaks, as a cache-warm) cut the first `devbox install`; the per-project delta still installs at
+  runtime. A shared/persistent `/nix` store would remove the rest. ⚠️ Bake hits only land for
+  *version-pinned* packages — `@latest` tools (kubectl/uv) drift vs the project lock and re-fetch;
+  pin a minor (`kubectl@1.36`) in both `agent-base` and the project to get the cache hit.
 - **opencode → homelab plugin (future UX)** — a thin opencode plugin could spawn the scoped pod the
   way Daytona's spawns a Daytona sandbox, replacing the launcher.
+
+## Operational findings (2026-06-29)
+
+- **opencode needs AVX2; goose runs anywhere.** opencode's Bun runtime SIGILLs (`Illegal
+  instruction`) on the non-AVX2 nodes (`hp-01`, `thinkcentre`). The launcher pins the **opencode**
+  harness to nodes labelled `homelab.io/cpu-avx2=true` (the Xeon VMs + the Haswell/Broadwell
+  ThinkPads); the label is codified in Talos `machine.nodeLabels` (`tofu/locals.tf` `avx2_nodes`).
+- **Run observability.** Agent pods are Loki-labelled `app=agent-session` + `pod`/`node`. Review any
+  run in Grafana Explore: `{app="agent-session", namespace="<project>"}`, narrow by `pod`, `| json`
+  to parse the structured final line. Every headless run also drops an `AGENT_RUN_STATS {json}` line
+  (via `agent-finalize`) and the launcher posts a **PR comment** with the stats + a Grafana deep-link
+  to that pod's logs — so a PR review is one click from both the numbers and the full run.
+- **Cost is provider-routing + request-count, not output.** Autopsy of a real run (qwen3-coder paid,
+  $5.79): output was negligible ($0.03); the spend was **all input** = OpenRouter routing to a
+  pricier provider (AtlasCloud ~$1.15/M vs the $0.22 model-page headline) × **0% prompt caching**
+  (the ~27K context re-sent on all 187 requests) × **looping** (187 req vs owl's 72; it never read
+  the issue). Owl's provider cached 83% → near-free input. **Estimate:**
+  `cost ≈ requests × avg_context_tokens × effective_$/M_input × (1 − cache_hit)`. Levers, ranked:
+  route to a **caching** provider > pin a **cheaper** provider > **fewer requests**. Check the
+  *effective* provider price in the OpenRouter activity export, not the model-page headline.
+- **Model strategy.** `qwen/qwen3-coder:free` caps at **8 rpm** → useless for a tool loop.
+  `openrouter/owl-alpha` (free cloaked) is the working free fixer model (solved issue #2 → PR #6).
+  The per-project key is **budget-capped** (`<project>/infra/openrouter-key.yaml`, $5/wk) — the cap
+  is **soft** (a run spent $5.79 before the 403). ⚠️ `guardrail: only-free` in that CR is currently
+  **decorative** — the operator doesn't assign guardrails yet, so the key *can* spend on paid models.
+
+## Follow-ups
+
+- **OpenRouter provider routing** — prefer a prompt-caching, cheaper provider for the paid path
+  (request `provider` prefs on the call / key / account). Biggest cost lever; under investigation.
+- **Recipe `gh issue view` + incremental push** — landed in `sleep-tracking/.agents/fix.yaml`;
+  replicate when other repos get a fixer recipe.
+- **Stats v2** — token breakdown (prompt/completion/cached/requests) needs the OpenRouter *activity*
+  API (the in-pod inference key can self-report cost but not the per-request token split). The
+  `AGENT_RUN_STATS` lines in Loki also enable a cross-run Grafana dashboard (`{app="agent-session"}
+  | json`) — not built yet.
+- **goose retry policy** — it retried a budget-exhausted `403` 812×; configure it to hard-stop on
+  auth/limit errors.
+- **Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain cache hits.
+- **Live PR-comment demo** — both halves of the stats collector are validated independently; a real
+  comment on a real PR still needs one fresh-issue owl run (~$0).
+- **Wire `guardrail` in the openrouter-operator** so `only-free` is enforced, not just declared.
