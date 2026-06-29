@@ -59,6 +59,16 @@ else
   ARGS="[\"sleep\",\"infinity\"]"       # idle after prep; you exec in below
 fi
 
+# Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
+# `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox
+# install`). Optional — projects without the PVC just get an ephemeral cache. RWX so concurrent
+# agent pods can share it; fsGroup below makes it writable for the non-root user.
+UV_MOUNT=""; UV_VOLUME=""
+if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
+  UV_MOUNT=$'      volumeMounts:\n        - { name: uv-cache, mountPath: /uv-cache }'
+  UV_VOLUME=$'  volumes:\n    - name: uv-cache\n      persistentVolumeClaim: { claimName: agent-uv-cache }'
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod
@@ -68,6 +78,8 @@ metadata:
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
+  securityContext:
+    fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
   containers:
     - name: agent
       image: ${IMAGE}
@@ -87,6 +99,9 @@ spec:
           value: "${GOOSE_MODEL}"
         - name: MODEL
           value: "${MODEL}"
+        # Persistent uv wheel cache (mounted only if the agent-uv-cache PVC exists; harmless otherwise).
+        - name: UV_CACHE_DIR
+          value: "/uv-cache"
         # Auto-approve tool calls: a headless `--run` recipe has no TTY to confirm at, so without this
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
@@ -110,7 +125,9 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
-        limits:   { cpu: "2",    memory: "4Gi" }
+        limits:   { cpu: "6",    memory: "4Gi" }   # install is partly CPU-bound; allow burst past 2
+${UV_MOUNT}
+${UV_VOLUME}
 EOF
 
 echo "→ waiting for ${POD} (clone + project devbox install can be slow on a cold nix store)…"
