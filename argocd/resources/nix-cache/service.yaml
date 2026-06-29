@@ -1,0 +1,13 @@
+# In-cluster only (ClusterIP) — agent pods reach it at http://nixcache.nix-cache.svc.cluster.local.
+# No BGP/LoadBalancer VIP: nothing off-cluster needs the cache.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nixcache
+  namespace: nix-cache
+  labels: { app: nixcache }
+spec:
+  type: ClusterIP
+  selector: { app: nixcache }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }

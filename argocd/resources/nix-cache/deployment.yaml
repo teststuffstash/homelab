@@ -1,0 +1,53 @@
+# Single nginx replica (RWO cache PVC). Infrastructure/cattle — like the CI runner VM, a long-running
+# cache does not violate "only prod is long-running" (the environment-under-test is still ephemeral).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nixcache
+  namespace: nix-cache
+  labels: { app: nixcache }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }            # RWO volume — don't run two pods at once
+  selector:
+    matchLabels: { app: nixcache }
+  template:
+    metadata:
+      labels: { app: nixcache }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101                     # nginx-unprivileged uid
+        runAsGroup: 101
+        fsGroup: 101                       # so the cache PVC is writable
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - { name: http, containerPort: 8080 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true }
+            - { name: cache,  mountPath: /var/cache/nginx }
+            - { name: tmp,    mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits:   { cpu: "2",    memory: "512Mi" }
+      volumes:
+        - name: config
+          configMap: { name: nixcache-nginx }
+        - name: cache
+          persistentVolumeClaim: { claimName: nixcache-data }
+        - name: tmp
+          emptyDir: {}

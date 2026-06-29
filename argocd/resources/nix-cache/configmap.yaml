@@ -1,0 +1,43 @@
+# nginx as a transparent PULL-THROUGH cache for https://cache.nixos.org. Agent sandbox pods set it as
+# a higher-priority nix substituter; the first miss fetches upstream and caches the (immutable) narinfo
+# + nar to the Longhorn PVC, every run after is LAN-speed. Bodies pass through byte-for-byte, so the
+# upstream cache.nixos.org signatures stay valid — no new trusted key is needed on the clients.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nixcache-nginx
+  namespace: nix-cache
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      # immutable content → big cache, long retention; LRU evicts at max_size.
+      proxy_cache_path /var/cache/nginx/nixcache levels=1:2 keys_zone=nixcache:50m
+                       max_size=8g inactive=30d use_temp_path=off;
+      proxy_temp_path /tmp/proxy_temp;
+      access_log off;
+      server {
+        listen 8080;
+        # readiness — cheap, no upstream dependency.
+        location = /healthz { return 200 "ok\n"; }
+        location / {
+          proxy_pass https://cache.nixos.org;          # resolved via CoreDNS (pod resolv.conf) at start
+          proxy_set_header Host cache.nixos.org;
+          proxy_ssl_server_name on;
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_cache nixcache;
+          proxy_cache_key "$request_uri";
+          proxy_cache_valid 200 301 302 30d;           # store paths are immutable
+          proxy_cache_valid 404 1m;                     # nix probes many missing narinfo; don't pin 404s
+          proxy_cache_lock on;                          # collapse concurrent identical pulls (many pods)
+          proxy_cache_revalidate on;
+          proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+          proxy_max_temp_file_size 8192m;               # large nars
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+      }
+    }

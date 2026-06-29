@@ -1,0 +1,28 @@
+# nix pull-through cache (wave 1, no deps): an nginx mirror of cache.nixos.org on a Longhorn PVC, so
+# agent-sandbox pods stop re-pulling the same ~200 MiB closure from the WAN on every cold run. Raw
+# manifests in argocd/resources/nix-cache/. Consumed by the agent-base entrypoint (NIX_CONFIG
+# extra-substituters → http://nixcache.nix-cache.svc.cluster.local).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nix-cache
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/nix-cache
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nix-cache
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

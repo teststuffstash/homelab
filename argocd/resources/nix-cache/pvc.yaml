@@ -1,0 +1,13 @@
+# Cache storage. Pure regenerable cache (anything lost is re-fetched from upstream), so size is a
+# cost/throughput knob, not durability — the default replicated Longhorn SC is fine at this size.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nixcache-data
+  namespace: nix-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
