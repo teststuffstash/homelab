@@ -27,14 +27,15 @@ PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] 
 shift || true
 
 # Default to a real free coder model (the openrouter/free auto-router is flaky on strict output).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/qwen/qwen3-coder:free"
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/qwen/qwen3-coder:free"; NO_ATTACH=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --run)     RUN_CMD="$2"; shift 2;;
-    --ref)     BASE_REF="$2"; shift 2;;
-    --repo)    REPO_URL="$2"; shift 2;;
-    --harness) HARNESS="$2"; shift 2;;
-    --model)   MODEL="$2"; shift 2;;
+    --run)       RUN_CMD="$2"; shift 2;;
+    --ref)       BASE_REF="$2"; shift 2;;
+    --repo)      REPO_URL="$2"; shift 2;;
+    --harness)   HARNESS="$2"; shift 2;;
+    --model)     MODEL="$2"; shift 2;;
+    --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -69,6 +70,16 @@ if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
   UV_VOLUME=$'  volumes:\n    - name: uv-cache\n      persistentVolumeClaim: { claimName: agent-uv-cache }'
 fi
 
+# opencode's Bun runtime needs AVX2 → it SIGILLs ("Illegal instruction") on the older homelab CPUs
+# (hp-01, thinkcentre). goose (Rust) runs anywhere. Pin opencode pods to AVX2-capable nodes via the
+# homelab.io/cpu-avx2 label (the Proxmox VMs + the Haswell/Broadwell ThinkPads carry it). NB: that
+# label is currently set imperatively — codify it in Talos machine.nodeLabels so it survives a node
+# reinstall (boot-from-git follow-up).
+AFFINITY=""
+if [ "$HARNESS" = "opencode" ]; then
+  AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n              - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }'
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod
@@ -78,6 +89,7 @@ metadata:
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
+${AFFINITY}
   securityContext:
     fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
   containers:
@@ -102,7 +114,7 @@ spec:
         # Persistent uv wheel cache (mounted only if the agent-uv-cache PVC exists; harmless otherwise).
         - name: UV_CACHE_DIR
           value: "/uv-cache"
-        # Auto-approve tool calls: a headless `--run` recipe has no TTY to confirm at, so without this
+        # Auto-approve tool calls: a headless --run recipe has no TTY to confirm at, so without this
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
           value: "auto"
@@ -137,9 +149,18 @@ if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}"
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
 else
-  echo "→ attached at /work/repo. harnesses are wired to OpenRouter (model: ${MODEL}); try:"
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"
+  echo "→ pod ${POD} ready at /work/repo. harnesses are wired to OpenRouter (model: ${MODEL}); try:"
   echo "    goose run -t \"<task>\"        # or: goose run --recipe .agents/fix.yaml --params issue=N"
   echo "    opencode -m \"\$MODEL\"          # TUI   |   opencode run -m \"\$MODEL\" \"<task>\"   # headless"
-  echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
-  "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -c 'cd /work/repo 2>/dev/null; exec bash'
+  if [ -n "$NO_ATTACH" ]; then
+    # A non-TTY caller (orchestrator / jail agent) can prep the pod; you attach the TUI from YOUR
+    # terminal. Re-runnable — attach, detach, re-attach without recreating the pod.
+    echo "→ attach the interactive TUI from a real terminal:"
+    echo "    ${ATTACH}"
+    echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
+  else
+    echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -c 'cd /work/repo 2>/dev/null; exec bash'
+  fi
 fi
