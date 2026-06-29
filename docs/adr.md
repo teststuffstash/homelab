@@ -462,6 +462,37 @@ ARC (deferred — revisit only if parallel PR volume outgrows a VM). **Consequen
 resource + a GitHub self-hosted-runner registration; same harness gates both agent PRs and
 Renovate/Dependabot bumps.
 
+### ADR-083 — Packaging in-cluster workloads: raw manifests over Helm for simple components
+**Status:** Accepted (2026-06-29). **Decision:** deploy **simple, single-component** workloads as **raw
+Kubernetes manifests** (ArgoCD-synced under `argocd/resources/<svc>/`), and reserve **Helm** for charts
+that **encapsulate real multi-component complexity we'd otherwise reinvent**. First applied to the
+logging stack — **Loki (single-binary) + Alloy DaemonSet** are raw manifests, not the `grafana/loki` /
+`grafana/alloy` charts; the **nix pull-through cache** (nginx) is likewise raw; **kube-prometheus-stack**
+stays Helm. This is **orthogonal to "minimize tofu"** — raw-via-ArgoCD and Helm-via-ArgoCD are both
+GitOps/no-tofu; the axis here is abstraction-vs-control, not the deploy tool.
+
+**Pros (why raw here):** (1) **determinism** — we write the component's *real* config (Loki's
+`config.yaml`) instead of guessing how chart `values` template into it, which matters when every
+deploy→debug cycle is a live-cluster round-trip; (2) **small surface** — single-binary Loki + a
+DaemonSet is ~4 files, vs the chart's gateway / canary / results-cache / ServiceMonitors /
+multi-Deployment machinery we'd only disable; (3) **stabler schema** — component config keys churn less
+than chart `values` schemas across releases; (4) **clean GitOps diffs** — what's in git is what runs, no
+templating layer to reason through.
+
+**Cons (what we accept):** (1) **we own the config across upgrades** — Renovate bumps the *image* but
+won't migrate a deprecated key or `schema_config`; the chart maintainers would; (2) **we forgo
+maintained operational defaults** — tuned probes, the canary self-monitor, query caching; (3) it's only
+sound **because** we picked single-binary Loki — for SimpleScalable/distributed, the chart's component
+wiring earns its keep. Note the `grafana/loki` chart's `loki.structuredConfig` *can* hold raw config
+too, so "config control" isn't exclusively a raw benefit — this was a judgment call, not a clean win.
+
+**Considered:** the `grafana/loki` + `grafana/alloy` charts (rejected for this simple deployment per
+above); Helm with `structuredConfig` (the viable fallback). **Consequences:** raw manifests are the
+default for simple custom services; if a Loki upgrade ever turns config-maintenance painful, switching to
+the chart while keeping our exact config via `structuredConfig` is a small, contained, **reversible**
+change. Rule of thumb: **Helm when the chart saves you from reinventing complexity; raw when the chart
+is more abstraction than value.**
+
 ---
 
 ## Open / undecided

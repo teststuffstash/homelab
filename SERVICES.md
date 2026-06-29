@@ -24,6 +24,7 @@ truth.
 | **Grafana** | 🟢 LIVE | Dashboards | `192.168.40.11` · `grafana.teststuff.net` | ADR-042 |
 | **Prometheus** | 🟢 LIVE | Metrics TSDB (scrapes **only** Home Assistant) | `192.168.40.13:9090` · `prometheus.teststuff.net` | ADR-042 — not a general metrics sink |
 | **Alertmanager** | 🟢 LIVE | Alerting | `192.168.40.14:9093` · `alertmanager.teststuff.net` | ADR-042 |
+| **Loki + Alloy (logs)** | 🟢 LIVE | Log aggregation — Alloy DaemonSet → Loki on Garage S3, **7-day** retention | in-cluster `loki.loki.svc:3100` · query in **Grafana** (Explore → Loki datasource) | ADR-083 (raw manifests); `argocd/resources/loki/` — covers all pods incl. ephemeral/deleted |
 | **Forgejo** | 🟢 LIVE | Self-hosted Git | `forgejo.teststuff.net` (HTTPS + SSH :22) · `192.168.40.15:3000` | ADR — `docs/follow-ups.md` |
 | **UniFi Network App** | 🟢 LIVE | Network controller | `192.168.40.12` (8443/8080/3478/10001) · `ubiquiti.teststuff.net` | ADR-043 |
 | **Cilium** | 🟢 LIVE | CNI · BGP · LB-IPAM (VIPs from `192.168.40.0/24`) | in-cluster | — |
@@ -36,6 +37,7 @@ truth.
 | **CI runner — ephemeral** | 🟢 LIVE | Self-hosted GitHub Actions runners (ARC, ephemeral laptop tier) | org scaleset · in-cluster (`arc-systems`/`arc-runners`) | `runs-on: homelab-ephemeral`; a **public** repo needs runner-group "Allow public repositories" → [`docs/github-setup.md`](docs/github-setup.md), [`docs/github-runner-bootstrap.md`](docs/github-runner-bootstrap.md) |
 | **CI runner — Proxmox VM** | 🟢 LIVE | Real-kernel runner for image builds (arm64 emulation, k3d/Docker) | `ci-runner-01` @ 192.168.2.55 | `runs-on: [self-hosted, proxmox-vm]`; ADR-082 — builds needing Docker/binfmt |
 | **OpenRouter keys (operator)** | 🟢 LIVE | Mints per-project, budget-capped OpenRouter API keys → writes them to a Secret | in-cluster (`openrouter-operator`, kopf) | declare an `OpenRouterKey` CR ([repo](https://github.com/teststuffstash/openrouter-operator)); replaces the cloudopsworks TF provider (issue #20) — see app-owned-resources.md |
+| **Nix cache (pull-through)** | 🟢 LIVE | nginx mirror of `cache.nixos.org` on a Longhorn PVC — speeds agent-sandbox `devbox install` | in-cluster `nixcache.nix-cache.svc` | agent-base entrypoint sets it as a nix substituter; `argocd/resources/nix-cache/` |
 | **OIDC IDP** | 🔴 PLANNED | Auth for "Others" | — not deployed | ADR-055 |
 
 ## Consuming a LIVE service
