@@ -55,7 +55,11 @@ case "$_stripped" in
 esac
 
 if [ -n "$RUN_CMD" ]; then
-  ARGS="[\"bash\",\"-c\",$(printf '%s' "$RUN_CMD" | jq -Rs .)]"
+  # Run the harness, tee its output to a file, then emit the AGENT_RUN_STATS line (agent-finalize
+  # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
+  # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
+  WRAPPED="set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; agent-finalize /tmp/run.log"
+  ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"sleep\",\"infinity\"]"       # idle after prep; you exec in below
 fi
@@ -103,6 +107,12 @@ ${AFFINITY}
           value: "${BASE_REF}"
         - name: HARNESS
           value: "${HARNESS}"
+        # Stats context for agent-finalize (project label + which node it ran on).
+        - name: PROJECT
+          value: "${PROJECT}"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef: { fieldPath: spec.nodeName }
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
         # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
         - name: GOOSE_PROVIDER
@@ -146,8 +156,39 @@ echo "→ waiting for ${POD} (clone + project devbox install can be slow on a co
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=300s || true
 
 if [ -n "$RUN_CMD" ]; then
-  "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}"
+  RUNLOG="$(mktemp)"
+  "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" | tee "$RUNLOG"
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+
+  # End-of-session stats: agent-finalize emitted one AGENT_RUN_STATS json line into the logs (cost,
+  # duration, model, and the recipe's outcome). Echo it, and if a PR was opened, post it as a PR
+  # comment with a Grafana Explore deep-link to THIS pod's logs — so reviewing the PR is one click
+  # from both the stats and the full run logs (no more guessing the pod name). Posted from here (the
+  # jail GH_TOKEN can comment) rather than the pod (scoped agent token may lack issues:write).
+  STATS="$(grep -ao 'AGENT_RUN_STATS .*' "$RUNLOG" | tail -1 | sed 's/^AGENT_RUN_STATS //')"
+  if [ -n "$STATS" ]; then
+    echo "→ stats: $STATS"
+    PR_URL="$(printf '%s' "$STATS" | jq -r '.pr_url // empty' 2>/dev/null)"
+    if [ -n "$PR_URL" ] && [ -n "${GH_TOKEN:-}" ]; then
+      GRAFANA_URL="${GRAFANA_URL:-https://grafana.teststuff.net}"
+      PANES="$(jq -cn --arg pod "$POD" '{ag:{datasource:"loki",queries:[{refId:"A",expr:("{pod=\""+$pod+"\"}"),datasource:{type:"loki",uid:"loki"}}],range:{from:"now-6h",to:"now"}}}')"
+      LOGS_URL="${GRAFANA_URL}/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$PANES" '$p|@uri')"
+      BODY="$(printf '%s' "$STATS" | jq -r --arg logs "$LOGS_URL" '
+        "🤖 **Agent run stats**\n\n" +
+        "| metric | value |\n|---|---|\n" +
+        "| model | `\(.model // "?")` (\(.harness // "?")) |\n" +
+        "| cost | $\(.cost_usd // 0) |\n" +
+        "| duration | \(.duration_s // 0)s |\n" +
+        "| reproduced | \(.reproduced // "?") |\n" +
+        "| ci_passed | \(.ci_passed // "?") |\n" +
+        "| coverage | \(.coverage_pct // "?")% |\n" +
+        "| node / pod | `\(.node // "?")` / `\(.pod // "?")` |\n\n" +
+        "[📜 run logs in Grafana](\($logs))"')"
+      echo "→ posting stats comment to ${PR_URL}"
+      gh pr comment "$PR_URL" --body "$BODY" 2>&1 | tail -1 || echo "  (comment failed — non-fatal)"
+    fi
+  fi
+  rm -f "$RUNLOG"
 else
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"
   echo "→ pod ${POD} ready at /work/repo. harnesses are wired to OpenRouter (model: ${MODEL}); try:"
