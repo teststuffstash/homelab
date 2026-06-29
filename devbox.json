@@ -78,6 +78,12 @@
       "garage-s3": [
         "bash scripts/garage-s3.sh \"$@\""
       ],
+      "agent-session": [
+        "bash agents/agent-session.sh \"$@\""
+      ],
+      "estimate-budget": [
+        "python3 agents/estimate_budget.py \"$@\""
+      ],
       "infisical-harden": [
         "bash scripts/infisical-harden.sh"
       ],

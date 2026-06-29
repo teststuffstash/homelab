@@ -52,6 +52,34 @@ Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|o
 `--model <provider/model>` · `--no-attach`. The image must exist in ghcr first — build/push it from
 the `agent-runtime` repo.
 
+## Per-session budget (the breaker)
+
+The shared `<project>-openrouter` key has a *soft per-week* cap, so one runaway session can eat the
+whole window — which is exactly what happened (a qwen3-coder run spent $5.79 before the 403). The fix
+is a **per-session hard cap**: mint a fresh, single-shot, self-expiring OpenRouter key sized to a
+**pre-flight estimate**, used only by that pod.
+
+1. **Estimate** the cost and pick a budget tier (`estimate_budget.py`, pure + `--self-test`):
+
+   ```sh
+   gh issue view 42 --repo teststuffstash/sleep-tracking --json title,body \
+       -q '.title+"\n"+.body' \
+     | devbox run estimate-budget -- --model qwen/qwen3-coder \
+           --project sleep-tracking --session issue-42-round-1 --emit-cr
+   ```
+
+   It bands the issue by size (`cost ≈ rounds × requests/round × context_tokens × eff_$/M ×
+   (1−cache)`), applies a buffer, and maps to a tier — `xs $0.25 / sm $0.50 / md $1 / lg $2` (force
+   one with `--label agent-budget/sm`; an estimate above `lg` sets `escalate` for a human to eyeball).
+   `--emit-cr` prints an **ephemeral `OpenRouterKey`** sized to the cap.
+
+2. **Mint** it by applying that CR — the [`openrouter-operator`](https://github.com/teststuffstash/openrouter-operator)
+   creates a key with a HARD `budgetUSD` (no reset window) + `expiresAt`, and writes a per-session
+   Secret (`<project>-session-<id>-openrouter`). The pod consumes that Secret instead of the shared
+   key; the key 403s the moment the session hits its cap and self-destructs at `expiresAt`.
+
+The standing project key stays as the **funding ceiling**; the session key is the actual breaker.
+
 ## Known gaps (v1)
 
 - **Plain Pod, not [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)** — controller
@@ -100,8 +128,21 @@ the `agent-runtime` repo.
 
 ## Follow-ups
 
-- **OpenRouter provider routing** — prefer a prompt-caching, cheaper provider for the paid path
-  (request `provider` prefs on the call / key / account). Biggest cost lever; under investigation.
+- **Per-session budget — partly landed (2026-06-29).** The cost autopsy traced the $5.79 to the
+  *weekly* key (one session can eat the window). Built: (1) the `openrouter-operator` now mints
+  **ephemeral session keys** (hard `budgetUSD`, no reset, `expiresAt`) — `ephemeral: true` +
+  `session`; (2) `agents/estimate_budget.py` sizes the pre-flight cap into a tier. **Remaining
+  wiring:** the coordinator (still MVP) must, per dispatch, emit+apply the CR and point the pod's
+  `OPENROUTER_API_KEY` at the per-session Secret, then delete the CR on finish — `agent-session.sh`
+  still consumes the shared `<project>-openrouter` key today.
+- **OpenRouter provider routing — root cause found (2026-06-29), not yet wired.** The playground
+  **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so the pod sent
+  *no* `provider` field → default routing (filter ~30s-outage providers, then load-balance weighted
+  by **1/price²** — a lottery, not a floor) drew AtlasCloud and stuck. Fix = send `provider` per
+  request: `{order:["DeepInfra"], max_price:{prompt:0.3,completion:0.5}, ignore:["AtlasCloud"]}`.
+  Inject via `opencode.json` `options.provider` (goose won't carry it) or — the real home — the
+  **ADR-081 egress proxy** rewriting the body for every harness. Prefer a *caching* provider over
+  blind `sort:"price"` (cheapest is often 0% cache). Biggest cost lever.
 - **Recipe `gh issue view` + incremental push** — landed in `sleep-tracking/.agents/fix.yaml`;
   replicate when other repos get a fixer recipe.
 - **Stats v2** — token breakdown (prompt/completion/cached/requests) needs the OpenRouter *activity*
