@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# coordinator-session — run Claude Code as the coordinator in a scoped pod, and attach.
+#
+# The coordinator is the cockpit's brain (brief: agents/coordinator/README.md). This launcher is the
+# sibling of agent-session.sh: where that spawns a per-PROJECT *worker* pod, this spawns the single
+# *coordinator* pod — Claude Code, the homelab repo cloned in, subscription auth, and a ServiceAccount
+# scoped (rbac.yaml) to spawn workers + mint per-session budget keys. Interactive and headless are the
+# same pod; only the command differs.
+#
+#   bash agents/coordinator-session.sh
+#       → interactive: clone homelab, drop you into `claude` loaded with the coordinator brief.
+#   bash agents/coordinator-session.sh --run "Do one reconcile pass over open agent-fix issues."
+#       → headless: `claude -p` runs one pass and the pod self-terminates.
+#
+# Bootstrap once (see agents/coordinator/README.md §Bootstrap):
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+#   kubectl -n agent-coordinator create secret generic coordinator-claude \
+#       --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"   # ~1y subscription token
+#   kubectl -n agent-coordinator create secret generic coordinator-git \
+#       --from-literal=GH_TOKEN="<a token that can read/label issues + merge PRs>"
+#   # and build/push ghcr.io/teststuffstash/agent-coordinator (Dockerfile alongside).
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
+# kubectl isn't on the bare jail PATH (devbox/nix tool); fall back to the devbox profile.
+KUBECTL="$(command -v kubectl || true)"
+[ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
+
+RUN_CMD=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE=""; NO_ATTACH=""
+REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --run)             RUN_CMD="$2"; shift 2;;
+    --ref)             BASE_REF="$2"; shift 2;;
+    --repo)            REPO_URL="$2"; shift 2;;
+    --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Pro ⇒ sonnet.
+    --permission-mode) PERM_MODE="$2"; shift 2;;   # default|acceptEdits|plan|auto|dontAsk|bypassPermissions
+    --no-attach)       NO_ATTACH=1; shift;;
+    *) echo "unknown arg: $1" >&2; exit 2;;
+  esac
+done
+
+NS="agent-coordinator"
+IMAGE="${COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}"
+POD="coordinator-$(date -u +%H%M%S)"
+BRIEF="agents/coordinator/README.md"   # loaded as Claude's appended system prompt
+
+# The model/permission flags shared by both modes. Interactive defaults to supervised (no
+# --permission-mode unless asked); headless --run defaults to bypassPermissions — the pod is the
+# isolation boundary, like GOOSE_MODE=auto for the worker.
+COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF}"
+[ -n "$PERM_MODE" ] && COMMON_FLAGS="${COMMON_FLAGS} --permission-mode ${PERM_MODE}"
+
+# Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
+PREP="set -e; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab; cd /work/homelab"
+
+if [ -n "$RUN_CMD" ]; then
+  HEADLESS_PERM=""; [ -z "$PERM_MODE" ] && HEADLESS_PERM="--permission-mode bypassPermissions"
+  WRAPPED="${PREP}; exec claude -p ${COMMON_FLAGS} ${HEADLESS_PERM} $(printf '%s' "$RUN_CMD" | jq -Rs .)"
+  ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
+else
+  ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
+fi
+
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD}
+  labels: { app: agent-coordinator }
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 5
+  serviceAccountName: agent-coordinator
+  containers:
+    - name: coordinator
+      image: ${IMAGE}
+      args: ${ARGS}
+      env:
+        - name: HOME
+          value: "/home/node"
+        # Subscription auth (Pro/Max): a ~1y token from \`claude setup-token\`, kept in a Secret.
+        # NB: do NOT also set ANTHROPIC_API_KEY here — it would take auth precedence over this.
+        - name: CLAUDE_CODE_OAUTH_TOKEN
+          valueFrom:
+            secretKeyRef: { name: coordinator-claude, key: CLAUDE_CODE_OAUTH_TOKEN, optional: true }
+        # gh/git ops: read+label issues, open/merge PRs across the project repos.
+        - name: GH_TOKEN
+          valueFrom:
+            secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true }
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+        seccompProfile: { type: RuntimeDefault }
+      resources:
+        requests: { cpu: "250m", memory: "512Mi" }
+        limits:   { cpu: "2",    memory: "2Gi" }
+EOF
+
+echo "→ waiting for ${POD} (clone)…"
+"$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=180s || true
+
+if [ -n "$RUN_CMD" ]; then
+  "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
+  echo "→ pass finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+else
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/homelab; exec claude ${COMMON_FLAGS}'"
+  echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL})."
+  if [ -n "$NO_ATTACH" ]; then
+    echo "→ attach the interactive coordinator from a real terminal:"
+    echo "    ${ATTACH}"
+    echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
+  else
+    echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/homelab; exec claude '"${COMMON_FLAGS}"
+  fi
+fi

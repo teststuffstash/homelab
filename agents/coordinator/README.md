@@ -61,21 +61,58 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 
 ## Runtime
 
-- **v1 — interactive, anywhere.** Run a Claude Code session with this file as the brief and follow
-  the runbook. Works from the jail today (it already has `kubectl`, the repo, and the launchers).
-- **Target — a coordinator pod** (mirrors `agent-session.sh`): Claude Code in a pod with the homelab
-  repo cloned, a **scoped** kubeconfig/ServiceAccount (spawn agent pods + apply `OpenRouterKey` CRs +
-  read issues), and subscription auth via **`CLAUDE_CODE_OAUTH_TOKEN`** (one-time `claude
-  setup-token`, ~1-year, stored in a Secret — *not* `ANTHROPIC_API_KEY`, which would take
-  precedence). Launcher: `coordinator-session.sh` (TODO).
+The coordinator runs as **Claude Code in a scoped pod**, the sibling of the worker launcher —
+`coordinator-session.sh` (`devbox run coordinator-session`):
 
-## Open wiring (not done yet)
+```sh
+# interactive: clone homelab, drop into `claude` loaded with this brief (supervised)
+devbox run coordinator-session
 
-- `coordinator-session.sh` + a Claude Code coordinator image + the scoped SA/RBAC.
-- `agent-session.sh` must accept a per-session secret name so the worker uses the ephemeral key
-  instead of the shared `<project>-openrouter`.
-- `provider`-routing injection (opencode.json or the ADR-081 egress proxy) so the paid path stops
-  default-routing to a pricey provider.
+# headless: run one reconcile pass and self-terminate
+devbox run coordinator-session -- --run "Do one reconcile pass over open agent-fix issues."
+```
 
-See [`../README.md`](../README.md) (launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
+The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
+worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via
+**`CLAUDE_CODE_OAUTH_TOKEN`** (*not* `ANTHROPIC_API_KEY` — it takes precedence). Interactive is
+supervised by default (no `--permission-mode`); `--run` defaults to `bypassPermissions` (the pod is
+the isolation boundary). Model defaults to `sonnet` (a Pro plan); pass `--model opus` on Max.
+
+**In-pod, call the scripts directly** (the image has no devbox): `python3 agents/estimate_budget.py …`
+and `bash agents/agent-session.sh …` (it falls back to the pod's in-cluster ServiceAccount). Mint the
+session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wait on the
+`OpenRouterKey` `.status` hash** (not the Secret), and dispatch the worker with
+`--openrouter-secret <project>-session-<id>-openrouter`.
+
+## Bootstrap (one-time)
+
+```sh
+# 1. scoped identity
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+
+# 2. subscription token (~1y) — paste-a-code flow works in the jail; store it
+kubectl -n agent-coordinator create secret generic coordinator-claude \
+    --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+
+# 3. a git token that can read/label issues + merge PRs across the project repos
+kubectl -n agent-coordinator create secret generic coordinator-git \
+    --from-literal=GH_TOKEN="<token>"
+
+# 4. build + push the image (until CI owns it)
+docker build -t ghcr.io/teststuffstash/agent-coordinator:latest agents/coordinator
+docker push  ghcr.io/teststuffstash/agent-coordinator:latest
+```
+
+The two secrets are imperative for now; fold them into Infisical/ESO later. The image build belongs
+in CI (à la `agent-base` in `agent-runtime`).
+
+## Open wiring (still TODO)
+
+- **Image build in CI** + push to ghcr (currently a manual `docker build`).
+- **`provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid worker
+  path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
+- **Graduate the loop** off hand-driving to a durable engine (Temporal / Argo Workflows+Events / a
+  CRD+controller) once the runbook is proven — state already lives in labels+CRs, so it's a swap.
+
+See [`../README.md`](../README.md) (worker launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
 (reconcile loop + hazards), and [`../../docs/agents/README.md`](../../docs/agents/README.md) (design/ADRs).

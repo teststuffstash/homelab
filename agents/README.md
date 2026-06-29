@@ -128,13 +128,13 @@ The standing project key stays as the **funding ceiling**; the session key is th
 
 ## Follow-ups
 
-- **Per-session budget — partly landed (2026-06-29).** The cost autopsy traced the $5.79 to the
-  *weekly* key (one session can eat the window). Built: (1) the `openrouter-operator` now mints
-  **ephemeral session keys** (hard `budgetUSD`, no reset, `expiresAt`) — `ephemeral: true` +
-  `session`; (2) `agents/estimate_budget.py` sizes the pre-flight cap into a tier. **Remaining
-  wiring:** the coordinator (still MVP) must, per dispatch, emit+apply the CR and point the pod's
-  `OPENROUTER_API_KEY` at the per-session Secret, then delete the CR on finish — `agent-session.sh`
-  still consumes the shared `<project>-openrouter` key today.
+- **Per-session budget — landed (2026-06-29).** The cost autopsy traced the $5.79 to the *weekly*
+  key (one session can eat the window). Built: (1) the `openrouter-operator` mints **ephemeral
+  session keys** (hard `budgetUSD`, no reset, `expiresAt`) — `ephemeral: true` + `session`; (2)
+  `agents/estimate_budget.py` sizes the pre-flight cap into a tier and `--emit-cr`s the CR; (3)
+  `agent-session.sh --openrouter-secret <name>` binds a worker to a per-session key instead of the
+  shared `<project>-openrouter`. The **coordinator** (`agents/coordinator/`) ties them together per
+  dispatch. Remaining: the coordinator's own dispatch loop is still hand-driven (by design, v1).
 - **OpenRouter provider routing — root cause found (2026-06-29), not yet wired.** The playground
   **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so the pod sent
   *no* `provider` field → default routing (filter ~30s-outage providers, then load-balance weighted

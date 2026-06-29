@@ -18,16 +18,20 @@
 # egress policy must allow the nix cache (cache.nixos.org / a self-hosted attic) for `devbox install`.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
-# kubectl isn't on the bare jail PATH (it's a devbox/nix tool); fall back to the devbox profile.
+# Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall
+# back to the pod's in-cluster ServiceAccount (KUBE empty → kubectl auto-detects in-cluster config).
+if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
+# kubectl isn't on the bare jail PATH (it's a devbox/nix tool); fall back to the devbox profile, then
+# to a PATH kubectl (the coordinator image ships one).
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
+[ -x "$KUBECTL" ] || KUBECTL="kubectl"
 
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode] [--model provider/model]}"
 shift || true
 
 # Default to a real free coder model (the openrouter/free auto-router is flaky on strict output).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/qwen/qwen3-coder:free"; NO_ATTACH=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/qwen/qwen3-coder:free"; NO_ATTACH=""; OR_SECRET=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -35,6 +39,7 @@ while [ $# -gt 0 ]; do
     --repo)      REPO_URL="$2"; shift 2;;
     --harness)   HARNESS="$2"; shift 2;;
     --model)     MODEL="$2"; shift 2;;
+    --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -43,7 +48,7 @@ done
 NS="$PROJECT"
 IMAGE="${HARNESS_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
-SECRET="${PROJECT}-openrouter"          # operator-minted, budget-capped (e.g. sleep-tracking-openrouter)
+SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 POD="agent-${PROJECT}-$(date -u +%H%M%S)"
 # goose's provider is GOOSE_PROVIDER, so drop the conventional openrouter/ prefix from the model id —
 # BUT OpenRouter's own cloaked models (e.g. openrouter/owl-alpha) genuinely live UNDER that namespace,

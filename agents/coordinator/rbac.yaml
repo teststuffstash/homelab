@@ -1,0 +1,54 @@
+# Scoped identity for the coordinator pod. It runs in its own namespace and talks to the cluster via
+# this ServiceAccount (in-cluster config — no kubeconfig file in the pod). The grant is exactly the
+# coordinator's job: spawn/observe agent worker pods in project namespaces, and mint/observe/delete
+# the ephemeral per-session OpenRouterKey CRs. Deliberately NO access to Secret *values* — it waits
+# on the OpenRouterKey `.status` (the operator stamps the hash when minted), never reads the key.
+#
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-coordinator
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-coordinator
+  namespace: agent-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-coordinator
+rules:
+  # Spawn + observe worker pods (agent-session.sh creates Pods in the project namespace).
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list, watch, create, delete]
+  # Attach to an interactive worker (agent-session.sh exec). Drop if only headless --run is used.
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  # Discover project namespaces.
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list]
+  # Mint / observe / clean up ephemeral per-session budget keys. status: wait for the minted hash
+  # instead of reading the Secret value.
+  - apiGroups: [openrouter.teststuff.net]
+    resources: [openrouterkeys, openrouterkeys/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-coordinator
+subjects:
+  - kind: ServiceAccount
+    name: agent-coordinator
+    namespace: agent-coordinator
