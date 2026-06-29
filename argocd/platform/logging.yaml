@@ -1,0 +1,28 @@
+# Logging stack — raw resources (wave 6, after Crossplane providers are Installed+Healthy):
+# the Garage Workspace that provisions Loki's S3 bucket+key, and (added next) the Grafana Loki
+# datasource configmap. The Loki + Alloy Helm charts are separate Applications (loki.yaml, alloy.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/loki
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: loki
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

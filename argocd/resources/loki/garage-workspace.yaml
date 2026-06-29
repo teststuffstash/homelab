@@ -1,0 +1,30 @@
+# Garage bucket + key for Loki chunk/index storage, reconciled by Crossplane provider-terraform
+# (ADR-076) — NO tofu, NO Infisical round-trip. Unlike the app-owned workspaces this CREATEs the
+# resources (not import), so Terraform holds the key secret and Crossplane writes it straight into
+# the `loki-garage-s3` Secret in the loki namespace, which the Loki chart consumes.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: loki-garage
+  namespace: loki
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "loki" { global_alias = "loki" }
+      resource "garage_key" "loki" { name = "loki" }
+      resource "garage_bucket_permission" "loki_rw" {
+        bucket_id     = garage_bucket.loki.id
+        access_key_id = garage_key.loki.id
+        read  = true
+        write = true
+        owner = false
+      }
+      output "bucket"            { value = garage_bucket.loki.global_alias }
+      output "access_key_id"     { value = garage_key.loki.id }
+      output "secret_access_key" { value = garage_key.loki.secret_access_key, sensitive = true }
+  writeConnectionSecretToRef:
+    namespace: loki
+    name: loki-garage-s3
