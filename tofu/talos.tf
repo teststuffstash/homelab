@@ -25,6 +25,11 @@ data "talos_machine_configuration" "node" {
         # extraMounts were removed. Longhorn uses /var/lib/longhorn, not an extraMount.)
       }
     })],
+    # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). Talos applies
+    # machine.nodeLabels to the kubelet registration live — safe on a running node, no reboot.
+    contains(local.avx2_nodes, each.key) ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/cpu-avx2" = "true" } }
+    })] : [],
     # CNI is cluster-scoped → only patch control-plane nodes. "none" disables the
     # default Flannel so Cilium can be installed instead (see ROADMAP service-exposure).
     each.value.role == "controlplane" ? [

@@ -78,6 +78,11 @@ data "talos_machine_configuration" "metal" {
         }
       }
     })],
+    # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). The Haswell/Broadwell
+    # ThinkPads have AVX2; hp-01 + thinkcentre do not. Talos applies machine.nodeLabels live.
+    contains(local.avx2_nodes, each.key) ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/cpu-avx2" = "true" } }
+    })] : [],
     each.value.pin_hostname ? [yamlencode({
       apiVersion = "v1alpha1"
       kind       = "HostnameConfig"
