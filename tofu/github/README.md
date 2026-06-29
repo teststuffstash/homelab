@@ -9,7 +9,10 @@ Two layers (per the chosen design):
   force-push + default-branch deletion. **Org admins bypass** (you keep direct-to-master IaC); the
   **agents App is not in the bypass list**, so its `contents:write` still can't reach master.
 - **Per-repo required checks** (`repo_rulesets.tf`, `github_repository_ruleset`): each agent-target
-  repo requires its PR-triggered CI checks (+ up-to-date branch) before merge.
+  repo requires its PR-triggered CI checks (+ up-to-date branch) before merge. **Org admins bypass
+  here too** (same `OrganizationAdmin` actor as the org ruleset) — without it a required check, which
+  only reports on a PR, blocks even the owner's direct-to-master since a bare push has no check run.
+  The agents App is still not a bypass actor, so its PRs must go green.
 
 ## Plan requirement (GitHub Team)
 

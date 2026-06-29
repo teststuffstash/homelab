@@ -16,6 +16,15 @@ resource "github_repository_ruleset" "required_checks" {
     }
   }
 
+  # Org admins (you) bypass the required check too, matching the org structural ruleset — otherwise a
+  # required check (which only reports on a PR) blocks even the owner's direct-to-master, since a bare
+  # push has no check run. The agents App is deliberately NOT listed, so its PRs must still go green.
+  bypass_actors {
+    actor_id    = 1
+    actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
   rules {
     required_status_checks {
       strict_required_status_checks_policy = true # branch must be up to date before merge
