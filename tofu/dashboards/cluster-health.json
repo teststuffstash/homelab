@@ -3421,6 +3421,88 @@
       ],
       "title": "Network Received (loopback only) by instance",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Pods most throttled by the CPU CFS quota over the last 15m — i.e. repeatedly hitting their CPU limit. Ratio = throttled periods / total periods (the same number the per-pod dashboard shows). Empty/green is good. Short-lived pods only appear while running.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": false },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.25 } ] },
+          "unit": "percentunit"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Throttled" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } } ] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 200 },
+      "id": 9001,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true, "sortBy": [ { "displayName": "Throttled", "desc": true } ] },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "editorMode": "code",
+          "expr": "topk(25, sum by (namespace, pod) (rate(container_cpu_cfs_throttled_periods_total{container!=\"\", cluster=\"$cluster\"}[15m])) / sum by (namespace, pod) (rate(container_cpu_cfs_periods_total{container!=\"\", cluster=\"$cluster\"}[15m])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU throttling — top pods by ratio (hit CPU limit)",
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "cluster": true, "job": true }, "indexByName": {}, "renameByName": { "namespace": "Namespace", "pod": "Pod", "Value": "Throttled" } } }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Pods by absolute CPU throttling impact over the last 15m: throttled CPU-seconds per second (~ how many cores' worth of work was held back). Complements the ratio view — a tiny pod can show 100% ratio but negligible impact.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true, "inspect": false },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 1 } ] },
+          "unit": "none"
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Throttled cores" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } } ] }
+        ]
+      },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 200 },
+      "id": 9002,
+      "options": { "cellHeight": "sm", "footer": { "show": false }, "showHeader": true, "sortBy": [ { "displayName": "Throttled cores", "desc": true } ] },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "editorMode": "code",
+          "expr": "topk(25, sum by (namespace, pod) (rate(container_cpu_cfs_throttled_seconds_total{container!=\"\", cluster=\"$cluster\"}[15m])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "CPU throttling — top pods by throttled CPU-seconds/s",
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "cluster": true, "job": true }, "indexByName": {}, "renameByName": { "namespace": "Namespace", "pod": "Pod", "Value": "Throttled cores" } } }
+      ],
+      "type": "table"
     }
   ],
   "refresh": "30s",

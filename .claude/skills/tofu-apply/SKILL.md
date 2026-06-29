@@ -15,14 +15,37 @@ hits live machines.
 
 ## Environment
 
+The `tofu/` root has **9 required (no-default) secret vars** — `proxmox_api_token` is in
+`tofu/terraform.tfvars` (auto-loaded); the rest come from cred files + the homelab **KeePass**
+(Tier-0). ⚠ Even a `-target`ed run needs ALL of them set (tofu validates the whole config before
+scoping), so source the full block every time:
+
 ```bash
 cd /workspace/homelab
 export NIX_CONFIG="experimental-features = nix-command flakes"
-# the main tofu/ root needs two secret vars (sourced from the cred files):
+
+# file-based creds (~/.claude/):
 export TF_VAR_grafana_admin_password=$(cat ~/.claude/homelab-ha/grafana_admin_password)
 export TF_VAR_ha_prometheus_token=$(cat ~/.claude/homelab-ha/prometheus_llat)
-# tofu/provisioning/ instead needs:  TF_VAR_proxmox_api_token=$(cat ~/.claude/homelab-pve-ssh/api_token_matchbox)
+export TF_VAR_forgejo_runner_token=$(cat ~/.claude/homelab-forgejo/runner-token)
+
+# Tier-0 secrets from the homelab KeePass (keyfile-only, NO master password; keepassxc-cli is a
+# nix tool, not on the bare PATH):
+KP="$HOME/.claude/homelab-keepass"; KCLI="$PWD/.devbox/nix/profile/default/bin/keepassxc-cli"
+kp(){ "$KCLI" show -s -a Password --no-password --key-file "$KP/homelab.keyx" "$KP/homelab.kdbx" "$1"; }
+export TF_VAR_argocd_github_pat=$(kp argocd-github-pat)
+export TF_VAR_infisical_encryption_key=$(kp infisical-encryption-key)
+export TF_VAR_infisical_auth_secret=$(kp infisical-auth-secret)
+export TF_VAR_infisical_db_password=$(kp infisical-db-password)
+export TF_VAR_infisical_admin_password=$(kp infisical-admin-password)
+
+# tofu/provisioning/ (separate root) instead needs:
+#   export TF_VAR_proxmox_api_token=$(cat ~/.claude/homelab-pve-ssh/api_token_matchbox)
 ```
+
+If a future `tofu plan` errors `No value for required variable <x>`, a new required var was added —
+add it here, sourced from KeePass (`kp <entry>`; list entries with
+`$KCLI ls --no-password --key-file "$KP/homelab.keyx" "$KP/homelab.kdbx"`) or a `~/.claude/` cred file.
 
 ## Plan / apply
 
