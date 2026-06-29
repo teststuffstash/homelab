@@ -55,23 +55,21 @@ devbox run -- tofu -chdir=tofu/github apply
 protected and isn't. On Team the only meaningful values are **`active`** and **`disabled`**; there is
 no dry-run to observe first.
 
-So verify the admin bypass **empirically**, with `disabled` as an instant OpenTofu rollback. The org
-ruleset is `~ALL` repos, so a broken `actor_id = 1 / OrganizationAdmin` bypass would block your own
-direct-to-master on **every** repo (incl. homelab) — but only *you* push these branches and you can
-roll back in one apply, so the blast radius is self-inflicted and reversible.
+**`enforcement` defaults to `active`** — protection is this root's whole purpose, so a bare `apply`
+keeps it on; you never need a flag to stay protected, and you can't disable it by forgetting one.
+`disabled` is a deliberate, explicit rollback. The admin bypass is already verified live (a direct
+owner push returns `remote: Bypassed rule violations …` and succeeds), on both the org structural
+ruleset and the per-repo required-checks ruleset.
 
 ```sh
-# 1. go active
-devbox run -- tofu -chdir=tofu/github apply -var enforcement=active
+# normal apply — stays active (no flag needed)
+devbox run -- tofu -chdir=tofu/github apply
 
-# 2. verify YOUR bypass works (non-destructive): rules applying to you on a default branch.
-#    Empty [] = you bypass (good). A pull_request rule object = you are blocked (bypass broken).
+# re-confirm YOUR bypass any time (non-destructive): rules applying to you on a default branch.
+# Empty [] = you bypass (good). A pull_request rule object = you are blocked (bypass broken).
 gh api repos/teststuffstash/agent-runtime/rules/branches/master
 
-# 3. confirm enforcement is real for non-bypass identities: a direct push must be refused.
-#    Do this on a low-stakes public repo (agent-runtime), as a non-admin / the agents App — NOT as you.
-
-# 4. if the bypass is broken, roll back instantly, then fix the bypass_actors encoding:
+# deliberate rollback (turns protection OFF on every repo — explicit only):
 devbox run -- tofu -chdir=tofu/github apply -var enforcement=disabled
 ```
 

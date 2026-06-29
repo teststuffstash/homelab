@@ -4,15 +4,16 @@ variable "org" {
   default     = "teststuffstash"
 }
 
-# Rollout safety. ⚠ "evaluate" (dry-run) AND its Insights are GitHub Enterprise-only — on Team the API
-# accepts evaluate but the ruleset is inert and uninspectable (looks protected, isn't). On Team the
-# only meaningful values are "active" and "disabled"; there is no observe-first mode. Default is
-# "disabled" so a bare apply never silently half-protects: flip to "active" deliberately, then verify
-# the OrganizationAdmin bypass empirically (see README "Safe rollout"); "disabled" is the rollback.
+# Rollout. ⚠ "evaluate" (dry-run) AND its Insights are GitHub Enterprise-only — on Team the API accepts
+# evaluate but the ruleset is inert and uninspectable (looks protected, isn't). On Team the only
+# meaningful values are "active" and "disabled"; there is no observe-first mode. Default is "active":
+# protection is this root's whole purpose, so a bare `apply` must KEEP it on — never silently disable
+# it by omitting a flag. The admin bypass is verified live (a direct owner push shows "Bypassed rule
+# violations"). For a deliberate rollback: `apply -var enforcement=disabled`.
 variable "enforcement" {
   description = "Ruleset enforcement: active or disabled (evaluate is Enterprise-only — inert on Team)."
   type        = string
-  default     = "disabled"
+  default     = "active"
   validation {
     condition     = contains(["evaluate", "active", "disabled"], var.enforcement)
     error_message = "enforcement must be one of: evaluate, active, disabled (evaluate needs Enterprise)."
