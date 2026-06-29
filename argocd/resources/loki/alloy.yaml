@@ -1,0 +1,55 @@
+# Alloy log collector — one per node (DaemonSet), tolerating all taints so the tainted metal/compute
+# nodes are covered too. API-based (no hostPath), so it runs fully non-root.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: loki
+  labels: { app: alloy }
+spec:
+  selector:
+    matchLabels: { app: alloy }
+  template:
+    metadata:
+      labels: { app: alloy }
+      annotations:
+        config-hash: v1
+    spec:
+      serviceAccountName: alloy
+      tolerations:
+        - operator: Exists           # collect logs from tainted nodes too (metal/compute tier)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.5.1
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --storage.path=/tmp/alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --disable-reporting
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: { fieldPath: spec.nodeName }
+          ports:
+            - { name: http, containerPort: 12345 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/alloy, readOnly: true }
+            - { name: data, mountPath: /tmp/alloy }
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+      volumes:
+        - name: config
+          configMap: { name: alloy-config }
+        - name: data
+          emptyDir: {}

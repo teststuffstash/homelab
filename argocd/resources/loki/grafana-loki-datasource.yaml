@@ -1,0 +1,21 @@
+# Loki datasource for Grafana, discovered by the grafana-sc-datasources sidecar (label
+# grafana_datasource=1, watches the monitoring namespace). No tofu / additionalDataSources edit.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-loki
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        uid: loki
+        url: http://loki.loki.svc.cluster.local:3100
+        isDefault: false
+        jsonData:
+          maxLines: 1000

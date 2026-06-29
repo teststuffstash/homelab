@@ -1,0 +1,81 @@
+# Loki single-binary (target=all). Chunks/index → Garage S3; local PVC holds the tsdb cache +
+# compactor working dir + wal. One replica (replication_factor 1) — fine for a homelab log store.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: loki
+  labels: { app: loki }
+spec:
+  serviceName: loki
+  replicas: 1
+  selector:
+    matchLabels: { app: loki }
+  template:
+    metadata:
+      labels: { app: loki }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: loki
+          image: grafana/loki:3.4.2
+          args:
+            - -config.file=/etc/loki/config.yaml
+            - -config.expand-env=true
+          ports:
+            - { name: http, containerPort: 3100 }
+            - { name: grpc, containerPort: 9095 }
+          env:
+            - name: LOKI_S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: loki-garage-s3, key: access_key_id }
+            - name: LOKI_S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: loki-garage-s3, key: secret_access_key }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /ready, port: 3100 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /ready, port: 3100 }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki }
+            - { name: data, mountPath: /loki }
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits:   { cpu: "2",    memory: "2Gi" }
+      volumes:
+        - name: config
+          configMap: { name: loki-config }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: loki
+  labels: { app: loki }
+spec:
+  type: ClusterIP
+  selector: { app: loki }
+  ports:
+    - { name: http, port: 3100, targetPort: 3100 }
+    - { name: grpc, port: 9095, targetPort: 9095 }
