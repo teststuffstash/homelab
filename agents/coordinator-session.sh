@@ -26,7 +26,7 @@ KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
 
-RUN_CMD=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE=""; NO_ATTACH=""
+RUN_CMD=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,18 +45,20 @@ IMAGE="${COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}"
 POD="coordinator-$(date -u +%H%M%S)"
 BRIEF="agents/coordinator/README.md"   # loaded as Claude's appended system prompt
 
-# The model/permission flags shared by both modes. Interactive defaults to supervised (no
-# --permission-mode unless asked); headless --run defaults to bypassPermissions — the pod is the
-# isolation boundary, like GOOSE_MODE=auto for the worker.
-COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF}"
-[ -n "$PERM_MODE" ] && COMMON_FLAGS="${COMMON_FLAGS} --permission-mode ${PERM_MODE}"
+# The model/permission flags shared by both modes. The pod IS the isolation boundary (scoped
+# SA/RBAC, per-session OpenRouter/git tokens, NO secret-value access) — security lives there, not in
+# per-command approval — so the agent runs with permissions skipped by default, like the jail. The
+# `--permission-mode bypassPermissions` FLAG form suppresses the one-time bypass dialog (settings'
+# defaultMode does NOT — anthropics/claude-code#52501). Pass `--permission-mode default` for a
+# supervised session. (rm -rf / and ~ still trip hard circuit breakers; deny rules + hooks still
+# apply, regardless of mode.)
+COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF} --permission-mode ${PERM_MODE}"
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 PREP="set -e; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab; cd /work/homelab"
 
 if [ -n "$RUN_CMD" ]; then
-  HEADLESS_PERM=""; [ -z "$PERM_MODE" ] && HEADLESS_PERM="--permission-mode bypassPermissions"
-  WRAPPED="${PREP}; exec claude -p ${COMMON_FLAGS} ${HEADLESS_PERM} $(printf '%s' "$RUN_CMD" | jq -Rs .)"
+  WRAPPED="${PREP}; exec claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .)"
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"

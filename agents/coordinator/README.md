@@ -74,9 +74,11 @@ devbox run coordinator-session -- --run "Do one reconcile pass over open agent-f
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
 worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via
-**`CLAUDE_CODE_OAUTH_TOKEN`** (*not* `ANTHROPIC_API_KEY` — it takes precedence). Interactive is
-supervised by default (no `--permission-mode`); `--run` defaults to `bypassPermissions` (the pod is
-the isolation boundary). Model defaults to `sonnet` (a Pro plan); pass `--model opus` on Max.
+**`CLAUDE_CODE_OAUTH_TOKEN`** (*not* `ANTHROPIC_API_KEY` — it takes precedence). Permissions are
+**skipped by default** (`--permission-mode bypassPermissions`) for both interactive and headless —
+the security boundary is the pod (scoped tokens + RBAC + pre-trusted `/work/homelab`), not
+per-command approval, exactly like the jail. Pass `--permission-mode default` for a supervised
+session. Model defaults to `sonnet` (a Pro plan); pass `--model opus` on Max.
 
 **In-pod, call the scripts directly** (the image has no devbox): `python3 agents/estimate_budget.py …`
 and `bash agents/agent-session.sh …` (it falls back to the pod's in-cluster ServiceAccount). Mint the
