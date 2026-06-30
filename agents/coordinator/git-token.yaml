@@ -1,0 +1,76 @@
+# Coordinator git token (homelab ADR-081, agents/coordinator/). The same low-privilege
+# "homelab-agents" GitHub App that mints the per-project WORKER token also mints the COORDINATOR's —
+# but broader: it spans the agent project repos and adds issues:write so the coordinator can move the
+# `agent/*` labels and merge approved PRs. Still no hand PAT; the App private key is the only
+# long-lived secret (Infisical). Short-lived (~1h), refreshed by ESO.
+#
+# ⚠️ SCAFFOLD — prereqs (one-time): the App is bootstrapped + its key is in Infisical
+# (scripts/github-agents-app-bootstrap.sh) AND it has issues:write granted + accepted on the
+# teststuffstash installation. Apply AFTER rbac.yaml (which creates the namespace); infra like this
+# is applied with kubectl, NOT via ArgoCD:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agents-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: agents-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        # un-escape the literal \n the Infisical CLI introduces (no-op if already real newlines).
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: AGENTS_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token across the agent repos + contents/PR/issues.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: coordinator-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "4150968"          # same App as the worker token — from `…app-bootstrap.sh secrets` output
+  installID: "142724430"    # the teststuffstash installation (must now carry the issues:write grant)
+  auth:
+    privateKey:
+      secretRef: { name: agents-github-app, key: privateKey }
+  permissions:                     # narrower than the App's grant (defense in depth); + issues:write
+    contents: write                #   merge commits to master via an approved PR
+    pull_requests: write           #   merge PRs
+    issues: write                  #   move the agent/* labels
+  repositories:                    # only the repos where agent-fix work lives
+    - sleep-tracking
+    - snore-recorder
+---
+# 3) Drive the generator → write the Secret the coordinator pod reads as GH_TOKEN. The generator
+# yields key `token`; remap it to GH_TOKEN (what coordinator-session.sh's secretKeyRef expects).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: coordinator-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m             # token lives ~1h; refresh before expiry
+  target:
+    name: coordinator-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: coordinator-git-gen

@@ -87,23 +87,23 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 ## Bootstrap (one-time)
 
 ```sh
-# 1. scoped identity
+# 1. scoped identity (creates the agent-coordinator namespace)
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
 
-# 2. subscription token (~1y) — paste-a-code flow works in the jail; store it
+# 2. git token — ESO mints it from the homelab-agents App (needs issues:write granted on the App).
+#    Writes the coordinator-git Secret (key GH_TOKEN), auto-refreshed ~hourly. See §Git token.
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
+
+# 3. subscription token (~1y) — paste-a-code flow works in the jail; still imperative for now
 kubectl -n agent-coordinator create secret generic coordinator-claude \
     --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
-
-# 3. a git token that can read/label issues + merge PRs across the project repos (see §Git token)
-kubectl -n agent-coordinator create secret generic coordinator-git \
-    --from-literal=GH_TOKEN="<token>"
 ```
 
 The image is built + pushed to `ghcr.io/teststuffstash/agent-coordinator:latest` by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo (every push to master,
 à la `agent-base` in `agent-runtime`) — **no manual `docker build`**. After the first build, make that
-ghcr package public (or add an imagePullSecret). The two secrets above are imperative for now; fold
-them into Infisical/ESO later.
+ghcr package public (or add an imagePullSecret). `coordinator-git` is now GitOps'd via ESO
+(`git-token.yaml`); only `coordinator-claude` stays imperative — fold it into Infisical/ESO later.
 
 ## Git token
 
