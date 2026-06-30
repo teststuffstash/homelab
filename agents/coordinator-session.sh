@@ -98,6 +98,9 @@ spec:
           value: "/var/run/coordinator-git/GH_TOKEN"
       volumeMounts:
         - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        # Persist Claude Code session transcripts (the interactive session's only "log"). Mounts a
+        # subdir of ~/.claude so the image-baked settings.json / .claude.json are untouched.
+        - { name: transcripts, mountPath: /home/node/.claude/projects }
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -108,11 +111,17 @@ spec:
       resources:
         requests: { cpu: "250m", memory: "512Mi" }
         limits:   { cpu: "2",    memory: "2Gi" }
+  securityContext:
+    fsGroup: 1000          # make the RWX transcripts volume writable for the non-root (1000) user
   volumes:
     # kubelet keeps a mounted Secret current as ESO re-mints it (~1min lag) — the gh-wrapper reads the
     # live token from here so a multi-hour session never uses a stale 1h token.
     - name: coordinator-git
       secret: { secretName: coordinator-git, optional: true }
+    # Durable, shared transcript store (RWX) — survives pod deletion, accumulates across sessions.
+    # optional via a claim that must exist; if absent, the pod won't start, so it's part of bootstrap.
+    - name: transcripts
+      persistentVolumeClaim: { claimName: coordinator-transcripts }
 EOF
 
 echo "→ waiting for ${POD} (clone)…"

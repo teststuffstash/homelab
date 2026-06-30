@@ -1,0 +1,18 @@
+# Durable, shared store for the coordinator's Claude Code session transcripts (~/.claude/projects/
+# *.jsonl — the full turn-by-turn record: every prompt, tool call, result). The interactive session
+# runs via `kubectl exec`, so its output never reaches the pod's stdout (`kubectl logs` is empty) —
+# the transcript IS the log. RWX so it survives pod deletion and accumulates across sessions for
+# cross-run behaviour analysis (read with `devbox run coordinator-logs`).
+#
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/transcripts-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coordinator-transcripts
+  namespace: agent-coordinator
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi

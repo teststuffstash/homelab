@@ -29,6 +29,13 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 Invariants: **one active worker per PR**; **bounded rounds** (max 3, then `agent/blocked`);
 idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-spawns.
 
+> **Be visible; never stall silently.** Your state lives in **GitHub**, not your head. The moment you
+> pick up an issue, **claim it** (relabel + a one-line plan comment) — do this *before* investigating,
+> not after. Keep narrating progress as issue comments. If you get stuck — ambiguous issue, repeated
+> failure, missing access, the estimator says `⚠ ESCALATE` — **label `agent/blocked` and comment
+> exactly what's blocking, then move on**. Investigating quietly and then doing nothing is the **one
+> unacceptable outcome**: a blocked issue a human can see beats a silent stall every time.
+
 ## Per-issue runbook (what the interactive coordinator does)
 
 > **You are running IN the pod, not the jail.** Tools are on `$PATH` and called **directly** — there
@@ -45,7 +52,13 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
-2. **Read + estimate.** Pipe the issue text into the budget estimator:
+2. **Claim it FIRST — before investigating.** Relabel and comment a one-line plan, so the work is
+   visible and won't be double-picked:
+   ```sh
+   gh issue edit <N> --repo teststuffstash/<project> --add-label agent/in-progress --remove-label agent/queued
+   gh issue comment <N> --repo teststuffstash/<project> --body "🤖 picking this up (round <r>): <one-line plan>"
+   ```
+3. **Read + estimate.** Pipe the issue text into the budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
      | python3 agents/estimate_budget.py --model openrouter/deepseek/deepseek-v4-flash \
@@ -55,8 +68,8 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
-3. **Mint the per-session budget IMMEDIATELY before dispatch** — by re-running the estimate command
-   from step 2 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
+4. **Mint the per-session budget IMMEDIATELY before dispatch** — by re-running the estimate command
+   from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
    no reset, ~2h `expiresAt`. The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
    read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
@@ -65,7 +78,7 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    So **always (re)apply right before dispatch** rather than reusing a key minted earlier — a 2h key
    that sat unused can expire, and a stale `status.hash` does NOT prove the key is still live. This is
    the real breaker — the worker can't outspend `budgetUSD`.
-4. **Dispatch a fresh worker** for this round and relabel `agent/in-progress`:
+5. **Dispatch a fresh worker** for this round (already labelled `agent/in-progress` from step 2):
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model openrouter/deepseek/deepseek-v4-flash \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
@@ -76,14 +89,14 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    `spec.secretName` (`<project>-session-<session>-openrouter`, with the `-session-` infix). **Do NOT
    reconstruct it** from the CR's `metadata.name` (`<project>-<session>`); that omits `-session-` and
    the worker crash-loops on `secret … not found`.
-5. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
+6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
    PR opens → relabel `agent/review`.
-6. **Drive the round.** Review the PR (humans only ever review the fixer's diff):
+7. **Drive the round.** Review the PR (humans only ever review the fixer's diff):
    - approved + CI green → **merge** → `agent/done`; delete the session CR.
-   - changes requested (by human *or* a reviewer agent) and `round < max` → bump round, go to step 2
+   - changes requested (by human *or* a reviewer agent) and `round < max` → bump round, go to step 3
      with a **fresh** pod + **fresh** session key.
    - `round == max` or ambiguous → `agent/blocked` + comment.
-7. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
+8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
 
 ## Runtime
 
@@ -115,8 +128,9 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 ## Bootstrap (one-time)
 
 ```sh
-# 1. scoped identity (creates the agent-coordinator namespace)
+# 1. scoped identity (creates the agent-coordinator namespace) + the durable transcript store
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/transcripts-pvc.yaml
 
 # 2. git token — ESO mints it from the homelab-agents App (needs issues:write granted on the App).
 #    Writes the coordinator-git Secret (key GH_TOKEN), auto-refreshed ~hourly. See §Git token.
@@ -132,6 +146,20 @@ The image is built + pushed to `ghcr.io/teststuffstash/agent-coordinator:latest`
 à la `agent-base` in `agent-runtime`) — **no manual `docker build`**. After the first build, make that
 ghcr package public (or add an imagePullSecret). `coordinator-git` is now GitOps'd via ESO
 (`git-token.yaml`); only `coordinator-claude` stays imperative — fold it into Infisical/ESO later.
+
+## Logs & behaviour analysis
+
+`kubectl logs` on a coordinator pod is **empty** — the interactive `claude` runs via `kubectl exec`,
+not as PID 1 (`sleep infinity`). The real record is Claude Code's **session transcript**
+(`~/.claude/projects/*.jsonl` — every prompt, tool call, and result), persisted to the
+`coordinator-transcripts` RWX PVC so it survives pod deletion and accumulates across sessions. Read it
+as a behaviour trace:
+
+```sh
+devbox run coordinator-logs            # render the latest session (turns + tool calls + results)
+devbox run coordinator-logs -- -f      # follow the live session
+devbox run coordinator-logs -- --raw   # raw jsonl for jq / deeper analysis
+```
 
 ## Git token
 

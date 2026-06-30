@@ -84,6 +84,9 @@
       "coordinator-session": [
         "bash agents/coordinator-session.sh \"$@\""
       ],
+      "coordinator-logs": [
+        "bash scripts/coordinator-logs.sh \"$@\""
+      ],
       "estimate-budget": [
         "python3 agents/estimate_budget.py \"$@\""
       ],
