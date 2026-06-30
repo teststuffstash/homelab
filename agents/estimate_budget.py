@@ -19,7 +19,7 @@ Pure core (`estimate_cost`, `requests_per_round`, `pick_tier`) has no I/O and is
 Usage:
     python3 agents/estimate_budget.py --issue-file issue.md --model qwen/qwen3-coder
     gh issue view 42 --json title,body -q '.title+"\\n"+.body' \\
-        | python3 agents/estimate_budget.py --model openrouter/owl-alpha \\
+        | python3 agents/estimate_budget.py --model openrouter/deepseek/deepseek-v4-flash \\
               --project sleep-tracking --session issue-42-round-1 --emit-cr
 """
 
@@ -46,12 +46,19 @@ _REQ_LARGE = 160  # ≥ 2000 tok — a multi-file change
 
 # Effective INPUT price ($/M tokens) for known models. "Effective" = the price of a CACHING, sanely
 # routed provider, NOT the model-page headline (see the routing follow-up). Override with
-# --price-per-mtok when routing/provider differs. Free cloaked/`:free` models are ~$0.
+# --price-per-mtok when routing/provider differs. `:free` models are ~$0 but rate-limited (≈8 rpm) →
+# unreliable for a tool loop; prefer a cheap PAID model bounded by the per-session cap. NB: avoid
+# *cloaked* models (e.g. the former owl-alpha) for the standing path — OpenRouter rotates them out
+# and they 404 mid-run.
 _MODEL_PRICE: dict[str, float] = {
-    "openrouter/owl-alpha": 0.0,
     "qwen/qwen3-coder:free": 0.0,
     "openrouter/qwen/qwen3-coder:free": 0.0,
     "qwen/qwen3-coder": 0.30,  # DeepInfra effective input (the cheap caching provider)
+    "openrouter/qwen/qwen3-coder": 0.30,
+    # The default worker model: cheap + many cached providers @ 99%+ uptime (≈$0.09–0.10/M in,
+    # ~$0.02/M cached), so it's reliable AND inexpensive — no cloaked-model 404s.
+    "deepseek/deepseek-v4-flash": 0.10,
+    "openrouter/deepseek/deepseek-v4-flash": 0.10,
 }
 _DEFAULT_PRICE = 1.0  # conservative fallback for an unknown paid model
 
@@ -209,7 +216,7 @@ def _run_cli(argv: list[str]) -> int:
     src = p.add_mutually_exclusive_group()
     src.add_argument("--issue-file", help="path to the issue text (else stdin)")
     src.add_argument("--issue-chars", type=int, help="issue length in characters (skip reading)")
-    p.add_argument("--model", default="openrouter/owl-alpha")
+    p.add_argument("--model", default="openrouter/deepseek/deepseek-v4-flash")
     p.add_argument("--price-per-mtok", type=float, help="effective input $/M (override the table)")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS)
     p.add_argument("--context-tokens", type=int, default=DEFAULT_CONTEXT_TOKENS)
@@ -266,7 +273,7 @@ def _self_test() -> None:
     assert requests_per_round(5000) == _REQ_LARGE
 
     # a free model is always ~$0 → smallest tier, never escalates
-    free = estimate(issue_tokens=3000, model="openrouter/owl-alpha")
+    free = estimate(issue_tokens=3000, model="qwen/qwen3-coder:free")
     assert free.estimate_usd == 0.0 and free.tier == "xs" and not free.escalate
 
     # emit_cr sets an explicit, authoritative secretName (the -session- form) so the dispatcher never
@@ -292,7 +299,7 @@ def _self_test() -> None:
     assert big >= small
 
     # label override forces the tier regardless of estimate
-    forced = estimate(issue_tokens=100, model="openrouter/owl-alpha", label="agent-budget/lg")
+    forced = estimate(issue_tokens=100, model="qwen/qwen3-coder:free", label="agent-budget/lg")
     assert forced.tier == "lg" and forced.cap_usd == 2.00
 
     # unknown label tier is rejected

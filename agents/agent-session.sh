@@ -30,8 +30,9 @@ KUBECTL="$(command -v kubectl || true)"
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode] [--model provider/model]}"
 shift || true
 
-# Default to a real free coder model (the openrouter/free auto-router is flaky on strict output).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/qwen/qwen3-coder:free"; NO_ATTACH=""; OR_SECRET=""
+# Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap — NOT a
+# `:free` tier (≈8 rpm, chokes a tool loop) and NOT a cloaked model (rotated out → 404s mid-run).
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -51,12 +52,12 @@ REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 POD="agent-${PROJECT}-$(date -u +%H%M%S)"
 # goose's provider is GOOSE_PROVIDER, so drop the conventional openrouter/ prefix from the model id —
-# BUT OpenRouter's own cloaked models (e.g. openrouter/owl-alpha) genuinely live UNDER that namespace,
-# so only strip when a vendor/model slug remains (still has a '/'); otherwise keep the full id.
+# BUT OpenRouter's own *cloaked* models (e.g. a bare `openrouter/<codename>`) genuinely live UNDER
+# that namespace, so only strip when a vendor/model slug remains (still has a '/'); otherwise keep it.
 _stripped="${MODEL#openrouter/}"
 case "$_stripped" in
-  */*) GOOSE_MODEL="$_stripped" ;;   # qwen/qwen3-coder:free → drop prefix
-  *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/owl-alpha → keep (cloaked model is in the openrouter/ ns)
+  */*) GOOSE_MODEL="$_stripped" ;;   # openrouter/deepseek/deepseek-v4-flash → deepseek/deepseek-v4-flash
+  *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/<cloaked-codename> → keep (it's in the openrouter/ ns)
 esac
 
 if [ -n "$RUN_CMD" ]; then

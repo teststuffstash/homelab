@@ -41,10 +41,10 @@ bash agents/agent-session.sh sleep-tracking
 
 # interactive but spawned by a non-TTY caller: prep the pod + print the attach cmd, don't exec.
 # Attach the TUI from a REAL terminal afterwards (re-attachable; pod stays up until you delete it).
-bash agents/agent-session.sh sleep-tracking --harness opencode --model openrouter/owl-alpha --no-attach
+bash agents/agent-session.sh sleep-tracking --harness opencode --model openrouter/deepseek/deepseek-v4-flash --no-attach
 
 # non-interactive: run a recipe to a branch+PR, stream logs, post a stats comment, pod self-terminates
-bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/owl-alpha \
+bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/deepseek/deepseek-v4-flash \
     --run "goose run --recipe .agents/fix.yaml --params issue=42"
 ```
 
@@ -120,11 +120,13 @@ The standing project key stays as the **funding ceiling**; the session key is th
   `cost ≈ requests × avg_context_tokens × effective_$/M_input × (1 − cache_hit)`. Levers, ranked:
   route to a **caching** provider > pin a **cheaper** provider > **fewer requests**. Check the
   *effective* provider price in the OpenRouter activity export, not the model-page headline.
-- **Model strategy.** `qwen/qwen3-coder:free` caps at **8 rpm** → useless for a tool loop.
-  `openrouter/owl-alpha` (free cloaked) is the working free fixer model (solved issue #2 → PR #6).
-  The per-project key is **budget-capped** (`<project>/infra/openrouter-key.yaml`, $5/wk) — the cap
-  is **soft** (a run spent $5.79 before the 403). ⚠️ `guardrail: only-free` in that CR is currently
-  **decorative** — the operator doesn't assign guardrails yet, so the key *can* spend on paid models.
+- **Model strategy (updated 2026-06-30).** **Don't chase free/cloaked.** `:free` tiers cap at ~8 rpm
+  → useless for a tool loop, and **cloaked** models (the former `openrouter/owl-alpha`, which solved
+  issue #2 → PR #6) get **rotated out and 404 mid-run** — exactly what happened. Default to a cheap,
+  *multi-provider, cached* PAID model bounded by the per-session cap: **`deepseek/deepseek-v4-flash`**
+  (~$0.09–0.10/M in, ~$0.02/M cached, ~12 providers @ 99%+ uptime). The per-session ephemeral key is
+  the real guardrail now (hard `budgetUSD`), so paid-but-bounded beats free-but-flaky. The standing
+  per-project key stays the weekly funding ceiling.
 
 ## Follow-ups
 
