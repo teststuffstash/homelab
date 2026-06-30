@@ -31,25 +31,35 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 
 ## Per-issue runbook (what the interactive coordinator does)
 
+> **You are running IN the pod, not the jail.** Tools are on `$PATH` and called **directly** — there
+> is **no `devbox`** here, and **no `tofu/kubeconfig`** (it's gitignored, absent from the clone).
+> So: `kubectl …` (plain — it auths via the pod's in-cluster ServiceAccount; **never** `devbox run`
+> and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
+> `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
+
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
-2. **Read + estimate.** `gh issue view <N> --json title,body` → pipe to the budget estimator:
+2. **Read + estimate.** Pipe the issue text into the budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
-     | devbox run estimate-budget -- --model <model> \
+     | python3 agents/estimate_budget.py --model <model> \
            --project <project> --session issue-<N>-round-<r> --emit-cr
    ```
    If the estimate sets `escalate` (above the `lg` tier) → label `agent/blocked`, comment the
    numbers, stop. Humans review the *fixer*, but they also gate an unusually expensive run.
-3. **Mint the per-session budget.** Apply the emitted ephemeral `OpenRouterKey` CR (hard `budgetUSD`,
-   no reset, `expiresAt`); the openrouter-operator writes `<project>-session-issue-<N>-round-<r>-openrouter`.
-   This is the real breaker — the worker can't outspend it (see [`../README.md`](../README.md) §budget).
+3. **Mint the per-session budget.** Apply the emitted ephemeral `OpenRouterKey` CR (append
+   `| kubectl apply -f -` to the estimate command, or apply the saved YAML): hard `budgetUSD`, no
+   reset, `expiresAt`. The openrouter-operator mints the key and writes the Secret
+   `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
+   read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
+   returns non-empty once minted. This is the real breaker — the worker can't outspend it.
 4. **Dispatch a fresh worker** for this round and relabel `agent/in-progress`:
    ```sh
-   devbox run agent-session -- <project> --harness <goose|opencode> --model <model> \
+   bash agents/agent-session.sh <project> --harness <goose|opencode> --model <model> \
+       --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
-   (The worker consumes the session Secret, not the standing key — wiring TODO, see below.)
+   `--openrouter-secret` binds the worker to the per-session key (not the shared standing one).
 5. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
    PR opens → relabel `agent/review`.
 6. **Drive the round.** Review the PR (humans only ever review the fixer's diff):
