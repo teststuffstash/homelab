@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # github-agents-app-bootstrap.sh — bootstrap the low-privilege "homelab-agents" GitHub App that the
-# coding agents use to clone private repos, push a branch, and open a PR (homelab ADR-081,
-# docs/agents/). Sibling of github-runner-bootstrap.sh and built the same way: automate everything
-# GitHub has an API for; reduce the browser to the TWO clicks GitHub can't mint — one "Create" (via
-# the App-manifest REST flow) and one "Install" (pick the selected repos). Everything else
-# (App id, private key, install-id discovery, secret delivery) is scripted.
+# agent platform uses against the project repos (homelab ADR-081, docs/agents/). Sibling of
+# github-runner-bootstrap.sh and built the same way: automate everything GitHub has an API for;
+# reduce the browser to the TWO clicks GitHub can't mint — one "Create" (via the App-manifest REST
+# flow) and one "Install" (pick the selected repos). Everything else (App id, private key, install-id
+# discovery, secret delivery) is scripted.
 #
-# The App is intentionally tiny: contents:write + pull_requests:write (+ metadata:read). Each job
-# mints a ~1h installation token via the ESO GithubAccessToken generator, scoped further to ONE repo
-# (see <project>/infra/agent/git-token.yaml). It can never reach master — branch protection + the
-# token's branch+PR-only scope are belt & suspenders.
+# The App stays small — metadata:read + contents:write + pull_requests:write + issues:write — and is
+# the MAX; two consumers each scope down from it via their own ESO GithubAccessToken generator:
+#   - workers — a ~1h token scoped to ONE repo, contents+PR only (clone + push branch + open PR; see
+#     <project>/infra/agent/git-token.yaml). Branch protection + that branch+PR-only scope mean a
+#     worker can never reach master — belt & suspenders.
+#   - the coordinator — needs issues:write (move the agent/* labels) + pull_requests:write (merge PRs)
+#     across the agent repos (agents/coordinator/). issues:write lives here for it; the worker token
+#     stays narrow.
 #
 # Subcommands:
 #   check              prereqs + what still needs the browser                 (jail OK)
@@ -53,12 +57,13 @@ EOF
 cmd_manifest() {
   need gh; need jq
   local out="/tmp/gh-agents-app-manifest.html"
-  # Low-priv coding agent: clone+push private repos + open PRs. Nothing else. No webhook/events.
+  # Low-priv: workers clone+push+PR (contents+PR); the coordinator labels issues + merges PRs
+  # (issues:write). No webhook/events.
   local manifest
   manifest=$(jq -nc --arg n "$APP_NAME" --arg url "https://github.com/$ORG" \
     --arg redir "http://localhost:$REDIRECT_PORT/callback" '{
       name:$n, url:$url, redirect_url:$redir, public:false,
-      default_permissions:{ metadata:"read", contents:"write", pull_requests:"write" },
+      default_permissions:{ metadata:"read", contents:"write", pull_requests:"write", issues:"write" },
       default_events:[] }')
   cat > "$out" <<HTML
 <!doctype html><meta charset=utf-8><title>Create $APP_NAME GitHub App</title>
