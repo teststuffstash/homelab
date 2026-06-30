@@ -55,12 +55,16 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
-3. **Mint the per-session budget.** Apply the emitted ephemeral `OpenRouterKey` CR (append
-   `| kubectl apply -f -` to the estimate command, or apply the saved YAML): hard `budgetUSD`, no
-   reset, `expiresAt`. The openrouter-operator mints the key and writes the Secret
+3. **Mint the per-session budget IMMEDIATELY before dispatch.** Apply the emitted ephemeral
+   `OpenRouterKey` CR (append `| kubectl apply -f -`): hard `budgetUSD`, no reset, `expiresAt` (24h
+   default). The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
    read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
-   returns non-empty once minted. This is the real breaker — the worker can't outspend it.
+   returns non-empty once minted. ⚠️ A hash means the key was minted *once* — it does **NOT** prove the
+   key is still live. The operator treats `expiresAt` as create-time-only, so **re-applying a CR does
+   NOT extend an expired key** (you'd get a stale hash + a dead key → the worker hits OpenRouter `401
+   User not found`). If a round's key may have expired, mint a **new round** (fresh `session` id), don't
+   re-apply the old CR. This is the real breaker — the worker can't outspend `budgetUSD`.
 4. **Dispatch a fresh worker** for this round and relabel `agent/in-progress`:
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model openrouter/deepseek/deepseek-v4-flash \

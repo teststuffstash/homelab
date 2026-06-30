@@ -224,7 +224,11 @@ def _run_cli(argv: list[str]) -> int:
     p.add_argument("--label", help="force a tier, e.g. agent-budget/sm")
     p.add_argument("--project", help="project/namespace (for --emit-cr)")
     p.add_argument("--session", help="unique session id (for --emit-cr)")
-    p.add_argument("--ttl-hours", type=float, default=2.0, help="ephemeral key TTL (--emit-cr)")
+    # TTL must outlast the WHOLE multi-round fix session, not one run: a 2h key expired mid-session
+    # → OpenRouter '401 User not found', and the operator treats expiresAt as create-time-only so
+    # re-applying the CR does NOT extend the live key. 24h is safe — spend is bounded by budgetUSD,
+    # and the key is revoked when the CR is deleted on cleanup.
+    p.add_argument("--ttl-hours", type=float, default=24.0, help="ephemeral key TTL (--emit-cr)")
     p.add_argument("--emit-cr", action="store_true", help="print the ephemeral OpenRouterKey CR")
     p.add_argument("--self-test", action="store_true", help="run the assertion suite and exit")
     args = p.parse_args(argv)
