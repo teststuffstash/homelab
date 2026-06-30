@@ -18,7 +18,7 @@
 #       --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"   # ~1y subscription token
 #   kubectl -n agent-coordinator create secret generic coordinator-git \
 #       --from-literal=GH_TOKEN="<a token that can read/label issues + merge PRs>"
-#   # and build/push ghcr.io/teststuffstash/agent-coordinator (Dockerfile alongside).
+#   # the image is built+pushed by CI in the teststuffstash/agent-coordinator repo — no manual build.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"

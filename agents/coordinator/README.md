@@ -94,21 +94,36 @@ kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
 kubectl -n agent-coordinator create secret generic coordinator-claude \
     --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
 
-# 3. a git token that can read/label issues + merge PRs across the project repos
+# 3. a git token that can read/label issues + merge PRs across the project repos (see §Git token)
 kubectl -n agent-coordinator create secret generic coordinator-git \
     --from-literal=GH_TOKEN="<token>"
-
-# 4. build + push the image (until CI owns it)
-docker build -t ghcr.io/teststuffstash/agent-coordinator:latest agents/coordinator
-docker push  ghcr.io/teststuffstash/agent-coordinator:latest
 ```
 
-The two secrets are imperative for now; fold them into Infisical/ESO later. The image build belongs
-in CI (à la `agent-base` in `agent-runtime`).
+The image is built + pushed to `ghcr.io/teststuffstash/agent-coordinator:latest` by CI in the
+[`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo (every push to master,
+à la `agent-base` in `agent-runtime`) — **no manual `docker build`**. After the first build, make that
+ghcr package public (or add an imagePullSecret). The two secrets above are imperative for now; fold
+them into Infisical/ESO later.
+
+## Git token
+
+The coordinator's `coordinator-git` (`GH_TOKEN`) is broader than the per-project *worker* git-token
+(which is `contents`+`pull_requests`, one repo, ~1h, minted by the `homelab-agents` GitHub App). The
+coordinator needs, across the agent project repos: **`issues:write`** (apply/move the `agent/*`
+labels) + **`pull_requests:write`** + **`contents`** (merge). Two ways to source it, least-sprawl
+first:
+
+- **Preferred — the existing `homelab-agents` GitHub App.** Add `issues:write` to the App and install
+  it on the coordinator's target repos, then mint the coordinator token from it (ESO, like the worker
+  token) — *no new standing credential to track*.
+- **Interim — a scoped fine-grained PAT** (`issues:write` + `pull_requests:write` + `contents:write`
+  on the agent repos). Simple, but it's one more static token; rotate it like the rest.
+
+The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
+(`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
 
 ## Open wiring (still TODO)
 
-- **Image build in CI** + push to ghcr (currently a manual `docker build`).
 - **`provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid worker
   path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
 - **Graduate the loop** off hand-driving to a durable engine (Temporal / Argo Workflows+Events / a

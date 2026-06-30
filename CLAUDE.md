@@ -109,6 +109,15 @@ Out-of-repo, in the jail under `~/.claude/`: `homelab-opnsense/{key,secret}` (OP
 `kubeconfig`, `talosconfig` are gitignored. The repo is **public** — keep secrets out of git
 (SOPS+age for anything that must live in git).
 
+**In-cluster agent secrets** (k8s Secrets, not `~/.claude/` files): per-project `<project>-openrouter`
+(operator-minted OpenRouter key) + the worker `agent-git-token` (per-repo, ~1h, from the `homelab-agents`
+GitHub App). The **coordinator** (`agents/coordinator/`) adds two in ns `agent-coordinator`:
+`coordinator-claude` (`CLAUDE_CODE_OAUTH_TOKEN` — a ~1y `claude setup-token`, the operator's Pro/Max
+subscription) and `coordinator-git` (`GH_TOKEN` — `issues:write`+`pull_requests:write`+`contents` across
+the agent repos; prefer minting from the `homelab-agents` App over a new PAT — see
+`agents/coordinator/README.md` §Git token). The coordinator **image** CI needs no token (ghcr push via
+the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later.
+
 ## Safety
 
 - `plan`/dry-run and review before any `apply`; this hits live machines.
