@@ -37,16 +37,24 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 > and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
 > `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
 
+> **MODEL — do not freelance.** The worker model is **`openrouter/deepseek/deepseek-v4-flash`** (cheap,
+> instruct-tuned, priced in the estimator). Use it for BOTH `--model` flags below. Do **not** swap in a
+> model you happen to know (especially **reasoning** models like `deepseek-r1*` — slow, verbose,
+> pricier) — that produces a bogus $1/M-default estimate and a worse fix. Only change the model if the
+> human tells you to.
+
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
 2. **Read + estimate.** Pipe the issue text into the budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
-     | python3 agents/estimate_budget.py --model <model> \
+     | python3 agents/estimate_budget.py --model openrouter/deepseek/deepseek-v4-flash \
            --project <project> --session issue-<N>-round-<r> --emit-cr
    ```
-   If the estimate sets `escalate` (above the `lg` tier) → label `agent/blocked`, comment the
-   numbers, stop. Humans review the *fixer*, but they also gate an unusually expensive run.
+   **Read the estimator's stderr verdict.** If it prints `⚠ ESCALATE` (estimate exceeds the **top**
+   tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
+   can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
+   verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
 3. **Mint the per-session budget.** Apply the emitted ephemeral `OpenRouterKey` CR (append
    `| kubectl apply -f -` to the estimate command, or apply the saved YAML): hard `budgetUSD`, no
    reset, `expiresAt`. The openrouter-operator mints the key and writes the Secret
@@ -55,7 +63,7 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    returns non-empty once minted. This is the real breaker — the worker can't outspend it.
 4. **Dispatch a fresh worker** for this round and relabel `agent/in-progress`:
    ```sh
-   bash agents/agent-session.sh <project> --harness <goose|opencode> --model <model> \
+   bash agents/agent-session.sh <project> --harness goose --model openrouter/deepseek/deepseek-v4-flash \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```

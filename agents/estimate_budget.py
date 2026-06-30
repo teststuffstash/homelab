@@ -249,12 +249,21 @@ def _run_cli(argv: list[str]) -> int:
         if not (args.project and args.session):
             p.error("--emit-cr requires --project and --session")
         sys.stdout.write(emit_cr(est, project=args.project, session=args.session, ttl_hours=args.ttl_hours))
-        # The CR YAML goes to stdout (→ `kubectl apply -f -`). Print the AUTHORITATIVE secret name +
-        # the dispatch command to STDERR, so the caller sees the exact `--openrouter-secret` value
-        # even when stdout is piped — no guessing the name off the CR's metadata.name.
+        # The CR YAML goes to stdout (→ `kubectl apply -f -`). Print the verdict + AUTHORITATIVE secret
+        # name + dispatch command to STDERR, so the caller sees them even when stdout is piped. Surface
+        # `escalate` here too — otherwise an emit-cr caller applies the CR blind to the gate.
         secret = session_secret_name(args.project, args.session)
+        verdict = (
+            f"⚠ ESCALATE — estimate ${est.estimate_usd} exceeds the top tier (cap ${est.cap_usd}); "
+            f"a HUMAN must approve before dispatch (a cheaper/priced model may fix this — the cap "
+            f"can't cover the estimate, so the run may 403 unfinished)."
+            if est.escalate
+            else f"OK — tier {est.tier}, cap ${est.cap_usd}, estimate ${est.estimate_usd} (no escalation)."
+        )
         print(
-            f"\n→ session Secret (pass verbatim to --openrouter-secret): {secret}\n"
+            f"\n→ {verdict}\n"
+            f"→ model priced at ${est.price_per_mtok}/M in (unknown model ⇒ $1.0/M default — check it's a PRICED model)\n"
+            f"→ session Secret (pass verbatim to --openrouter-secret): {secret}\n"
             f"→ dispatch:  bash agents/agent-session.sh {args.project} "
             f'--openrouter-secret {secret} --run "<recipe …>"',
             file=sys.stderr,
