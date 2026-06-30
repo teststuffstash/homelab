@@ -166,6 +166,14 @@ def estimate(
     )
 
 
+def session_secret_name(project: str, session: str) -> str:
+    """The Secret the operator writes for an ephemeral session key. emit_cr sets this EXPLICITLY in
+    the CR (rather than relying on the operator's derived default) so the dispatcher reads ONE
+    authoritative name and never reconstructs it from the CR's metadata.name (which differs — that
+    guess is what crash-loops the worker on a 'secret not found')."""
+    return f"{project}-session-{session}-openrouter"
+
+
 def emit_cr(est: Estimate, *, project: str, session: str, ttl_hours: float) -> str:
     """Render an ephemeral OpenRouterKey CR sized to the estimate (consumed by openrouter-operator)."""
     expires = (datetime.now(UTC) + timedelta(hours=ttl_hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -179,6 +187,7 @@ def emit_cr(est: Estimate, *, project: str, session: str, ttl_hours: float) -> s
         f"  budgetUSD: {est.cap_usd}            # tier {est.tier}; estimate ${est.estimate_usd}\n"
         "  ephemeral: true\n"
         f"  session: {session}\n"
+        f"  secretName: {session_secret_name(project, session)}\n"
         f'  expiresAt: "{expires}"\n'
     )
 
@@ -233,6 +242,16 @@ def _run_cli(argv: list[str]) -> int:
         if not (args.project and args.session):
             p.error("--emit-cr requires --project and --session")
         sys.stdout.write(emit_cr(est, project=args.project, session=args.session, ttl_hours=args.ttl_hours))
+        # The CR YAML goes to stdout (→ `kubectl apply -f -`). Print the AUTHORITATIVE secret name +
+        # the dispatch command to STDERR, so the caller sees the exact `--openrouter-secret` value
+        # even when stdout is piped — no guessing the name off the CR's metadata.name.
+        secret = session_secret_name(args.project, args.session)
+        print(
+            f"\n→ session Secret (pass verbatim to --openrouter-secret): {secret}\n"
+            f"→ dispatch:  bash agents/agent-session.sh {args.project} "
+            f'--openrouter-secret {secret} --run "<recipe …>"',
+            file=sys.stderr,
+        )
         return 0
 
     print(json.dumps(est.__dict__, indent=2))
@@ -249,6 +268,12 @@ def _self_test() -> None:
     # a free model is always ~$0 → smallest tier, never escalates
     free = estimate(issue_tokens=3000, model="openrouter/owl-alpha")
     assert free.estimate_usd == 0.0 and free.tier == "xs" and not free.escalate
+
+    # emit_cr sets an explicit, authoritative secretName (the -session- form) so the dispatcher never
+    # reconstructs it from metadata.name (sleep-tracking-issue-7-round-1 → -openrouter = wrong key)
+    assert session_secret_name("p", "issue-7-round-1") == "p-session-issue-7-round-1-openrouter"
+    cr = emit_cr(free, project="p", session="issue-7-round-1", ttl_hours=2)
+    assert "secretName: p-session-issue-7-round-1-openrouter" in cr and "ephemeral: true" in cr
 
     # the autopsy scenario: paid qwen, looping, no cache → a real (capped) cost
     paid = estimate(issue_tokens=1000, model="qwen/qwen3-coder", price_override=1.15)

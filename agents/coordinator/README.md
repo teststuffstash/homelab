@@ -59,7 +59,11 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
-   `--openrouter-secret` binds the worker to the per-session key (not the shared standing one).
+   `--openrouter-secret` binds the worker to the per-session key (not the shared standing one). Use
+   the **exact** name `--emit-cr` printed to stderr (`→ session Secret: …`) — it's the CR's
+   `spec.secretName` (`<project>-session-<session>-openrouter`, with the `-session-` infix). **Do NOT
+   reconstruct it** from the CR's `metadata.name` (`<project>-<session>`); that omits `-session-` and
+   the worker crash-loops on `secret … not found`.
 5. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
    PR opens → relabel `agent/review`.
 6. **Drive the round.** Review the PR (humans only ever review the fixer's diff):
