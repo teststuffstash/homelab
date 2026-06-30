@@ -86,10 +86,18 @@ spec:
         - name: CLAUDE_CODE_OAUTH_TOKEN
           valueFrom:
             secretKeyRef: { name: coordinator-claude, key: CLAUDE_CODE_OAUTH_TOKEN, optional: true }
-        # gh/git ops: read+label issues, open/merge PRs across the project repos.
+        # gh/git ops: read+label issues, open/merge PRs across the project repos. The coordinator-git
+        # token is a ~1h GitHub App token that ESO re-mints ~hourly — too short for a long session if
+        # frozen as an env var. So ALSO mount it as a file (below) and point the image's gh-wrapper at
+        # it via GH_TOKEN_FILE; the wrapper reads the LIVE token per call. The env stays as a fallback
+        # for the pre-wrapper image.
         - name: GH_TOKEN
           valueFrom:
             secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true }
+        - name: GH_TOKEN_FILE
+          value: "/var/run/coordinator-git/GH_TOKEN"
+      volumeMounts:
+        - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -100,6 +108,11 @@ spec:
       resources:
         requests: { cpu: "250m", memory: "512Mi" }
         limits:   { cpu: "2",    memory: "2Gi" }
+  volumes:
+    # kubelet keeps a mounted Secret current as ESO re-mints it (~1min lag) — the gh-wrapper reads the
+    # live token from here so a multi-hour session never uses a stale 1h token.
+    - name: coordinator-git
+      secret: { secretName: coordinator-git, optional: true }
 EOF
 
 echo "→ waiting for ${POD} (clone)…"
