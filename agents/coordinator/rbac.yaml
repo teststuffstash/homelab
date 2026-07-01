@@ -34,6 +34,12 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list]
+  # agent-session.sh probes for the optional agent-uv-cache PVC to decide whether to mount the shared
+  # uv wheel cache. Without this read the probe 403s, the mount is skipped, and (pre-fix) UV_CACHE_DIR
+  # pointed at an unmounted /uv-cache the worker couldn't write. Read-only.
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list]
   # Mint / observe / clean up ephemeral per-session budget keys. status: wait for the minted hash
   # instead of reading the Secret value.
   - apiGroups: [openrouter.teststuff.net]

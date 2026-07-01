@@ -131,6 +131,11 @@ if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
   echo "→ pass finished. delete with: kubectl -n ${NS} delete pod ${POD}"
 else
+  # `wait --for=condition=Ready` fires the instant the container process starts — it does NOT gate on
+  # the in-container `git clone` (headless sequences clone→claude in one command, but the interactive
+  # attach is a separate exec that can outrun the clone). Poll for the brief file so we never attach
+  # `claude --append-system-prompt-file ${BRIEF}` before the clone has written it.
+  "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "until [ -f /work/homelab/${BRIEF} ]; do sleep 0.5; done" 2>/dev/null || true
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/homelab; exec claude ${COMMON_FLAGS}'"
   echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL})."
   if [ -n "$NO_ATTACH" ]; then

@@ -74,10 +74,15 @@ fi
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox
 # install`). Optional — projects without the PVC just get an ephemeral cache. RWX so concurrent
 # agent pods can share it; fsGroup below makes it writable for the non-root user.
-UV_MOUNT=""; UV_VOLUME=""
+UV_MOUNT=""; UV_VOLUME=""; UV_ENV=""
 if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
   UV_MOUNT=$'      volumeMounts:\n        - { name: uv-cache, mountPath: /uv-cache }'
   UV_VOLUME=$'  volumes:\n    - name: uv-cache\n      persistentVolumeClaim: { claimName: agent-uv-cache }'
+  # Point uv at the shared cache ONLY when it's actually mounted. Setting UV_CACHE_DIR=/uv-cache
+  # without the mount makes uv `mkdir /uv-cache` at `/`, which the non-root (1000) user can't write —
+  # "failed to create directory /uv-cache: Permission denied". Absent the mount, leaving UV_CACHE_DIR
+  # unset lets uv fall back to its writable default (~/.cache/uv). Couple the two; never split them.
+  UV_ENV=$'        - name: UV_CACHE_DIR\n          value: "/uv-cache"'
 fi
 
 # opencode's Bun runtime needs AVX2 → it SIGILLs ("Illegal instruction") on the older homelab CPUs
@@ -127,9 +132,9 @@ ${AFFINITY}
           value: "${GOOSE_MODEL}"
         - name: MODEL
           value: "${MODEL}"
-        # Persistent uv wheel cache (mounted only if the agent-uv-cache PVC exists; harmless otherwise).
-        - name: UV_CACHE_DIR
-          value: "/uv-cache"
+        # Persistent uv wheel cache: env emitted ONLY when the agent-uv-cache PVC is mounted (UV_ENV),
+        # so an unmounted /uv-cache never gets set as the cache dir. See the UV_ENV note above.
+${UV_ENV}
         # Auto-approve tool calls: a headless --run recipe has no TTY to confirm at, so without this
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
