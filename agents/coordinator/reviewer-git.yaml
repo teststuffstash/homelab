@@ -1,0 +1,71 @@
+# Reviewer git token (agents/reviewer-session.sh, docs/agents/workflow.md). Mints the `reviewer-git`
+# Secret the reviewer pod mounts as GH_TOKEN — the review bot's GitHub identity for `gh pr review
+# --approve` / `--request-changes`. Distinct from coordinator-git/agent-git-token ON PURPOSE: those
+# are homelab-agents[bot] (the PR author), and GitHub blocks self-approval. This is homelab-reviewer[bot].
+#
+# ⚠️ SCAFFOLD — prereqs (one-time): the homelab-reviewer App is bootstrapped + its key is in Infisical
+# (scripts/github-reviewer-app-bootstrap.sh) and installed on the agent repos. Fill appID/installID
+# below from `…reviewer-app-bootstrap.sh secrets`. Applied with kubectl (not ArgoCD), AFTER rbac.yaml:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/reviewer-git.yaml
+---
+# 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: reviewer-github-app
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: reviewer-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: REVIEWER_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token scoped to review — contents:read + pull_requests:write,
+# NO merge (auto-merge does that once the review + CI pass).
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: reviewer-git-gen
+  namespace: agent-coordinator
+spec:
+  appID: "REPLACE_ME"        # from `scripts/github-reviewer-app-bootstrap.sh secrets`
+  installID: "REPLACE_ME"    # the teststuffstash installation of homelab-reviewer
+  auth:
+    privateKey:
+      secretRef: { name: reviewer-github-app, key: privateKey }
+  permissions:
+    contents: read           #   clone the PR branch
+    pull_requests: write     #   submit the review (approve / request-changes) + inline comments
+  repositories:              #   the repos where agent PRs land (mirror the worker/coordinator set)
+    - sleep-tracking
+    - snore-recorder
+---
+# 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: reviewer-git
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 45m
+  target:
+    name: reviewer-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        GH_TOKEN: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: reviewer-git-gen
