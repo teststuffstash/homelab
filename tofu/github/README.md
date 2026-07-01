@@ -14,6 +14,16 @@ Two layers (per the chosen design):
   only reports on a PR, blocks even the owner's direct-to-master since a bare push has no check run.
   The agents App is still not a bypass actor, so its PRs must go green.
 
+Plus, the repos themselves are managed here (fully, not click-ops):
+- **Repos** (`repos.tf`, `github_repository`, adopted via `import` blocks): every writable setting is
+  declared — visibility, merge methods, and the auto-merge + auto-delete-branch that complete the flow.
+- **Agent labels** (`labels.tf`, `github_issue_label`): the coordinator's state-machine label taxonomy
+  (`agent-fix`, `agent/*`, `agent-budget/*`) — non-authoritative, so other labels are left alone.
+- **App installation scope** — NOT manageable here. `github_app_installation_repositories` reads via
+  `GET /user/installations/{id}/repositories`, a user-to-server endpoint that a **fine-grained PAT
+  can't access (403)** — and this root is deliberately fine-grained-PAT-only. So which repos an App is
+  installed on stays a browser step (the install repo picker). Tried 2026-07-01; removed.
+
 ## Plan requirement (GitHub Team)
 
 ⚠ **Rulesets on _private_ repos — and _org-level_ rulesets at all — require a paid plan.** On the
@@ -37,7 +47,8 @@ owner:
 - **Resource owner:** `teststuffstash`  ← the single-org scoping; the token can reach nothing else
 - **Repository access:** All repositories (or just the agent-target repos)
 - **Organization permissions → Administration: Read and write**  ← unblocks the org ruleset
-- **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets
+- **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets + `github_repository` (repos.tf)
+- **Repository permissions → Issues: Read and write**  ← for the agent labels (labels.tf; labels live under Issues, not Administration)
 
 If the org enforces PAT approval the token sits "pending"; approve it yourself as owner. Then:
 
