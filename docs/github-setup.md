@@ -21,10 +21,21 @@ this is the broader catalog.
 |---|---|---|---|---|
 | **homelab-arc-…** | the in-cluster **Actions Runner Controller** registers the org-level `homelab-ephemeral` scale set as this App | Org → *Self-hosted runners: R/W*; Metadata: read | **All repositories** + **Allow public repositories** | install `142353606` |
 | **homelab-runner-registrar** | the Proxmox **CI-runner VM** (ADR-082) mints its own Actions registration tokens at boot | Org → *Self-hosted runners: R/W* | (as installed) | App `4141567`, install `142515626` |
+| **homelab-agents** | mints the worker + coordinator git tokens (clone/push/PR, label issues, merge) — `homelab-agents[bot]`, the PR **author** | Repo → Contents: R/W, Pull requests: R/W, Issues: R/W; Metadata: read | the agent repos | App `4150968`, install `142724430` — `scripts/github-agents-app-bootstrap.sh` |
+| **homelab-reviewer** | the review bot's identity — `homelab-reviewer[bot]` submits `--approve`/`--request-changes` on the worker's PR. **Distinct App on purpose**: GitHub blocks self-approval, so the reviewer must not be the PR author | Repo → Contents: **read**, Pull requests: R/W; Metadata: read (no merge — auto-merge does that) | the agent repos | `scripts/github-reviewer-app-bootstrap.sh` → `agents/coordinator/reviewer-git.yaml` |
 
 **Click-only (per the runner bootstrap doc):** *creating* an App (driven to a single Create via the
 App-manifest REST flow), **Installing** it on the org, generating its **private key**. The private
 keys live out-of-repo (KeePass/Infisical / `~/.claude/homelab-runner-app/`).
+
+**Also click-only: an App installation's repository selection** (Settings → Installed GitHub Apps →
+Configure → Repository access). Tempting to codify — `tofu`'s `github_app_installation_repositories`
+exists — but it mutates via `PUT /user/installations/{id}/repositories/{repo_id}`, a **user-to-server**
+endpoint that requires a **user OAuth access token from the App's authorization flow** (the install's
+repo scope is controlled by the org owner who installed it, not by the App). A **fine-grained PAT is
+refused** there (`403 Resource not accessible by personal access token`), and `tofu/github/` is
+deliberately fine-grained-PAT-only — so this stays a click. Install each agent App as **"Only select
+repositories"** and pick the agent repos (tried the tofu route 2026-07-01; removed).
 
 > If the two runner Apps can be merged into one, do it — both only need org self-hosted-runners R/W.
 
@@ -53,9 +64,21 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 ## 5. Per-repo settings
 
 - **Actions enabled** (above).
-- **Branch protection on `master`** — *not yet set; needed for the agentic auto-merge model*
-  (required status checks + the reviewer approval before merge; ADR-079). Click-only / API via the
-  branch-protection endpoint.
+- **Branch protection on `master`** — **managed as code in [`tofu/github/`](../tofu/github/)** (rulesets
+  via the `integrations/github` provider; separate root/state like `tofu/cloudflare/`). Org structural
+  (`org_ruleset.tf`: `default-branch-protection`, `~ALL` repos, PR required + block force-push/deletion,
+  OrganizationAdmin bypass) + per-repo required checks (`repo_rulesets.tf`, driven by
+  `var.protected_repos`). New repos are covered by the `~ALL` org ruleset automatically. To change it,
+  edit the tofu and `tofu -chdir=tofu/github apply` **outside the jail** with a fine-grained admin PAT
+  (see that README) — never via `gh api`, which drifts and is reverted on the next apply. The org
+  ruleset intentionally sets `required_approving_review_count = 0`; the reviewer-approval gate for the
+  agentic auto-merge model is a **per-repo** `pull_request` rule in `repo_rulesets.tf` (ADR-079).
+- **Allow auto-merge + Automatically delete head branches** — the repos are now **fully managed** in
+  [`tofu/github/repos.tf`](../tofu/github/repos.tf) (`github_repository`, every writable attribute
+  declared, adopted via `import` blocks). Auto-merge completes the PR once the ruleset's requirements
+  (approval + CI) are met; auto-delete cleans up the worker's branch. The agent state labels are code
+  too, in [`tofu/github/labels.tf`](../tofu/github/labels.tf). The admin PAT needs **Issues: R/W** for
+  the labels (they're under Issues, not Administration).
 - **Default runner** — repos using homelab CI set `runs-on: homelab-ephemeral`; the rest use
   `ubuntu-latest`.
 - **Package visibility** — a ghcr package is **private by default**, inheriting nothing from a public
@@ -74,9 +97,16 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 4. Create + install the **runner-registrar App** (ADR-082) → private key → Infisical.
 5. Runner group **Default**: All repositories **+ Allow public repositories**.
 6. **Fork-PR approval** = require approval for outside collaborators.
-7. Per new repo: confirm Actions on; add to nothing else (org-level App + group cover it); set
-   branch protection when the repo joins the auto-merge flow.
-8. Per package pulled by an **offline device**: flip its **visibility → Public** (private by default,
+7. Create + install the **homelab-agents** and **homelab-reviewer** Apps (manifest flow) → keys →
+   Infisical (`scripts/github-agents-app-bootstrap.sh`, `scripts/github-reviewer-app-bootstrap.sh`).
+   Install each as **"Only select repositories"** and pick the agent repos — the install's repo scope
+   is click-only (fine-grained PATs 403 on the `/user/installations` API; see §2).
+8. **Branch protection** is code in [`tofu/github/`](../tofu/github/) (org ruleset targets `~ALL`, so
+   future repos are auto-covered). For the agentic gate: add the repo to `var.protected_repos` (with its
+   PR `ci` check) and a per-repo `pull_request` approval rule in `repo_rulesets.tf`, then
+   `tofu -chdir=tofu/github apply` outside the jail. Per-repo **auto-merge + auto-delete-branch** and the
+   agent **labels** are now code too (`repos.tf` import blocks, `labels.tf`) — same apply.
+9. Per package pulled by an **offline device**: flip its **visibility → Public** (private by default,
    even under a public repo).
 
 ## Parallel non-GitHub "clicks" (cross-ref)
