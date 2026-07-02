@@ -13,7 +13,7 @@
 # (CNPG → Postgres → Infisical → ESO) from git, and every downstream secret flows
 # Infisical → ESO → namespace Secret. We bootstrap against GitHub on purpose (public-
 # readable later, no Forgejo dependency yet) and cut the repoURL over to Forgejo once
-# that path is real — see argocd/README.md "Forgejo cutover".
+# that path is real — FU-007, see argocd/README.md "Forgejo cutover".
 
 locals {
   argocd_lb_ip    = "192.168.40.17" # BGP-advertised VIP (.16 = garage; .17/.18 free)

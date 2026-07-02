@@ -50,7 +50,7 @@ Postgres→ArgoCD chicken-and-egg); staying tofu-only (ADR-003). **Why:** enough
 secrets stack + real apps) to want continuous reconciliation; the GitHub seed sidesteps the Forgejo
 bootstrap paradox while keeping the offline-resilience goal reachable. **Consequences:** sync-waves order
 CNPG → Postgres → Infisical → ESO; UI at `argocd.teststuff.net`; bootstrap secrets seeded from KeePass
-(ADR-062); Forgejo cutover tracked in `docs/follow-ups.md`. See `argocd/README.md`.
+(ADR-062); Forgejo cutover tracked as FU-007 in `docs/follow-ups.md`. See `argocd/README.md`.
 
 ### ADR-004 — Repo topology: homelab is the platform; apps live in their own repos
 **Status:** Open / planned (2026-06-13). **Decision:** treat this repo as the **platform** (clusters,
@@ -349,8 +349,8 @@ intended users' familiar login methods; per-app passwords / magic-links rejected
 **Why:** one revocable, least-privilege login plane for externally-shared apps, instead of asking non-
 technical people for `.p12` client certs (ADR-051) they can't install. **Consequences:** a new public-
 tier component; shared apps become OIDC clients; ties into the not-yet-built public tier + Cilium
-NetworkPolicy isolation. Design is tracked out-of-repo (not yet public); built when the first externally-
-shared app (the sleep "Others" page) needs it.
+NetworkPolicy isolation. Design is tracked out-of-repo in the private business repo; built when the
+first externally-shared app (the sleep "Others" page) needs it.
 
 ---
 
@@ -522,12 +522,16 @@ flavoured + a live surface). **Why pending:** the IDP (ADR-055) and public tier 
 until then, sharing is a **static export** (v1) or manual; when live, the page + IDP get a Cilium
 NetworkPolicy and an ADR supersede.
 
-### ADR-070 — Local caching tier (images / nix / apt): undecided
-**Status:** Open (2026-05-24). **Decision:** none yet — leaning to an out-of-cluster, always-on LAN box
-running **Zot or Harbor** as a pull-through image cache (consumed via Talos `registries.mirrors`), plus
-maybe a nix substituter + apt-cacher-ng. **Considered:** Harbor, Zot, `distribution/registry`, Spegel
-(in-cluster P2P), Squid (rejected). **Why pending:** weight vs benefit; which host. **Consequences:**
-repeated pulls still hit upstream / rate-limits until decided.
+### ADR-070 — Local caching tier (images / nix / apt): partially resolved
+**Status:** Open (2026-05-24; nix leg resolved 2026-06). **Decision (images/apt):** none yet —
+leaning to an out-of-cluster, always-on LAN box running **Zot or Harbor** as a pull-through image
+cache (consumed via Talos `registries.mirrors`), plus maybe apt-cacher-ng. **Considered:** Harbor,
+Zot, `distribution/registry`, Spegel (in-cluster P2P), Squid (rejected). _Update:_ the **nix** leg
+landed differently than the original "out-of-cluster" lean — an **in-cluster** pull-through cache
+(nginx on a Longhorn PVC, ADR-083, `argocd/resources/nix-cache/`), acceptable because losing it on
+a cluster wipe only costs a re-fill and its main consumer (agent pods) lives in-cluster anyway.
+**Why still open:** image-mirror weight vs benefit; which host. **Consequences:** repeated image
+pulls still hit upstream / rate-limits until decided.
 
 ---
 

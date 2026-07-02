@@ -82,22 +82,22 @@ The standing project key stays as the **funding ceiling**; the session key is th
 
 ## Known gaps (v1)
 
-- **Plain Pod, not [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)** — controller
-  not installed yet (ADR-078). Migrate `Pod` → `Sandbox` CR when it lands.
+- **FU-019 — Plain Pod, not [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)** —
+  controller not installed yet (ADR-078). Migrate `Pod` → `Sandbox` CR when it lands.
 - **Git token (wired; needs the App)** — a low-priv `homelab-agents` GitHub App mints a ~1h
   installation token via the ESO `GithubAccessToken` generator (per-project, scoped to one repo +
   contents/PR), delivered as `GH_TOKEN`; the entrypoint uses it for private clone+push and `gh pr
   create`. Bootstrap with `scripts/github-agents-app-bootstrap.sh` (one Create + one Install click,
   rest scripted) + apply `<project>/infra/agent/git-token.yaml`. **v1**: pod holds the 1h token;
-  **v2/ADR-081**: the egress proxy injects it, never held in the pod.
-- **Egress not locked down** — once the Cilium policy lands it must allow the nix cache
+  **v2/ADR-081**: the egress proxy injects it, never held in the pod (FU-018).
+- **FU-020 — Egress not locked down** — once the Cilium policy lands it must allow the nix cache
   (`cache.nixos.org` / a self-hosted **attic**) or the project `devbox install` will hang.
 - **Cold start (mitigated, not gone)** — the in-cluster [nix pull-through cache](../SERVICES.md)
   (`nixcache.nix-cache.svc`) + a **common toolchain baked into `agent-base`** (python/uv/kubectl/
   gitleaks, as a cache-warm) cut the first `devbox install`; the per-project delta still installs at
   runtime. A shared/persistent `/nix` store would remove the rest. ⚠️ Bake hits only land for
   *version-pinned* packages — `@latest` tools (kubectl/uv) drift vs the project lock and re-fetch;
-  pin a minor (`kubectl@1.36`) in both `agent-base` and the project to get the cache hit.
+  pin a minor (`kubectl@1.36`) in both `agent-base` and the project to get the cache hit (FU-022).
 - **opencode → homelab plugin (future UX)** — a thin opencode plugin could spawn the scoped pod the
   way Daytona's spawns a Daytona sandbox, replacing the launcher.
 
@@ -128,7 +128,7 @@ The standing project key stays as the **funding ceiling**; the session key is th
   the real guardrail now (hard `budgetUSD`), so paid-but-bounded beats free-but-flaky. The standing
   per-project key stays the weekly funding ceiling.
 
-## Follow-ups
+## Follow-ups (tracked in [`docs/follow-ups.md`](../docs/follow-ups.md) — ids below)
 
 - **Per-session budget — landed (2026-06-29).** The cost autopsy traced the $5.79 to the *weekly*
   key (one session can eat the window). Built: (1) the `openrouter-operator` mints **ephemeral
@@ -136,24 +136,27 @@ The standing project key stays as the **funding ceiling**; the session key is th
   `agents/estimate_budget.py` sizes the pre-flight cap into a tier and `--emit-cr`s the CR; (3)
   `agent-session.sh --openrouter-secret <name>` binds a worker to a per-session key instead of the
   shared `<project>-openrouter`. The **coordinator** (`agents/coordinator/`) ties them together per
-  dispatch. Remaining: the coordinator's own dispatch loop is still hand-driven (by design, v1).
-- **OpenRouter provider routing — root cause found (2026-06-29), not yet wired.** The playground
-  **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so the pod sent
-  *no* `provider` field → default routing (filter ~30s-outage providers, then load-balance weighted
-  by **1/price²** — a lottery, not a floor) drew AtlasCloud and stuck. Fix = send `provider` per
-  request: `{order:["DeepInfra"], max_price:{prompt:0.3,completion:0.5}, ignore:["AtlasCloud"]}`.
-  Inject via `opencode.json` `options.provider` (goose won't carry it) or — the real home — the
-  **ADR-081 egress proxy** rewriting the body for every harness. Prefer a *caching* provider over
-  blind `sort:"price"` (cheapest is often 0% cache). Biggest cost lever.
+  dispatch. Remaining: the coordinator's own dispatch loop is still hand-driven (by design, v1 —
+  FU-026).
+- **FU-018 — OpenRouter provider routing: root cause found (2026-06-29), not yet wired.** The
+  playground **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so
+  the pod sent *no* `provider` field → default routing (filter ~30s-outage providers, then
+  load-balance weighted by **1/price²** — a lottery, not a floor) drew AtlasCloud and stuck. Fix =
+  send `provider` per request: `{order:["DeepInfra"], max_price:{prompt:0.3,completion:0.5},
+  ignore:["AtlasCloud"]}`. Inject via `opencode.json` `options.provider` (goose won't carry it) or —
+  the real home — the **ADR-081 egress proxy** rewriting the body for every harness. Prefer a
+  *caching* provider over blind `sort:"price"` (cheapest is often 0% cache). Biggest cost lever.
 - **Recipe `gh issue view` + incremental push** — landed in `sleep-tracking/.agents/fix.yaml`;
   replicate when other repos get a fixer recipe.
-- **Stats v2** — token breakdown (prompt/completion/cached/requests) needs the OpenRouter *activity*
-  API (the in-pod inference key can self-report cost but not the per-request token split). The
-  `AGENT_RUN_STATS` lines in Loki also enable a cross-run Grafana dashboard (`{app="agent-session"}
-  | json`) — not built yet.
-- **goose retry policy** — it retried a budget-exhausted `403` 812×; configure it to hard-stop on
-  auth/limit errors.
-- **Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain cache hits.
-- **Live PR-comment demo** — both halves of the stats collector are validated independently; a real
-  comment on a real PR still needs one fresh-issue owl run (~$0).
-- **Wire `guardrail` in the openrouter-operator** so `only-free` is enforced, not just declared.
+- **FU-023 — Stats v2** — token breakdown (prompt/completion/cached/requests) needs the OpenRouter
+  *activity* API (the in-pod inference key can self-report cost but not the per-request token
+  split). The `AGENT_RUN_STATS` lines in Loki also enable a cross-run Grafana dashboard
+  (`{app="agent-session"} | json`) — not built yet.
+- **FU-021 — goose retry policy** — it retried a budget-exhausted `403` 812×; configure it to
+  hard-stop on auth/limit errors.
+- **FU-022 — Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain
+  cache hits.
+- **FU-027 — Live PR-comment demo** — both halves of the stats collector are validated
+  independently; a real comment on a real PR still needs one fresh-issue run.
+- **FU-024 — Wire `guardrail` in the openrouter-operator** so `only-free` is enforced, not just
+  declared.

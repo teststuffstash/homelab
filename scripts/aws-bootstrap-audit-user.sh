@@ -12,7 +12,7 @@
 # the host's bind-mounted copy so the jail can read it, e.g.:
 #     AWS_PROFILE=<p> HOMELAB_AWS_DIR=$HOME/Projects/.claude-data/homelab-aws bash scripts/aws-bootstrap-audit-user.sh
 #
-# (This is a one-off bootstrap — the audit user can later be declared in tofu/aws/.)
+# (This is a one-off bootstrap — the audit user can later be declared in tofu/aws/, FU-036.)
 set -euo pipefail
 
 USER=homelab-aws-audit

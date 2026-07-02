@@ -153,7 +153,7 @@ target state (`benedict`/`paris.ns.cloudflare.com`). Keep teststuff.net's **auto
 2026-08-16, mid-migration). AWS cruft cleanup (S3/ACM/CloudMap/old zones) was done
 2026-06-05 via `scripts/aws-cleanup-legacy.sh`.
 
-### TODO: delete the orphaned Route53 hosted zone for teststuff.net
+### FU-036: delete the orphaned Route53 hosted zone for teststuff.net
 
 After cutover the Route53 **hosted zone** `teststuff.net` (`ZCGRPARGVE3CW`) is orphaned — the
 registrar NS point at Cloudflare, so it serves nothing. As of 2026-06-06 it still holds the default
@@ -173,30 +173,15 @@ aws route53 delete-hosted-zone --id $ZID
 NB: this is the **hosted zone** (DNS records), not the **registered domain** — leave the domain
 registration (Route53 Domains, auto-renew ON) alone; only its NS were repointed to Cloudflare.
 
-## ⚠️ Migration side effect: ACME — swap coded, apply pending
+## Migration side effect: ACME — ✅ swapped & verified
 
-Certs were issued **DNS-01 via Route53**; the NS move **breaks that** (LE queries the
-authoritative NS = now Cloudflare). The swap is now **in code**, pending apply:
-
-- **Token:** `tofu/cloudflare-token/acme-dns.tf` mints `homelab-acme-dns` (Zone:Read + DNS:Edit
-  on teststuff.net only) → output `acme_dns_token`.
-- **OPNsense:** `ansible/opnsense-acme.yml` now uses `dns_service: dns_cf` — it **repoints the
-  existing `aws-acme` validation in place** (backend `dns_aws → dns_cf`), so the 5 certs that
-  bind to that name need no change. Token via `ACME_CF_TOKEN` env; account/zone IDs are vars.
-
-Apply order:
-```bash
-# 1. (outside jail, admin token) mint + save the scoped ACME token
-export CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/admin-key)
-tofu -chdir=tofu/cloudflare-token apply
-tofu -chdir=tofu/cloudflare-token output -raw acme_dns_token \
-  > ~/Projects/.claude-data/cloudflare/acme-token && chmod 600 $_
-# 2. (jail) swap the validation backend
-export ACME_CF_TOKEN=$(cat ~/.claude/cloudflare/acme-token)
-bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml
-# 3. force one re-issue in the OPNsense GUI (or acmeclient) to confirm DNS-01 via Cloudflare,
-#    then the rest renew on schedule.
-```
+Certs were issued **DNS-01 via Route53**; the NS move breaks that (LE queries the authoritative
+NS = now Cloudflare). The swap is **done and a real renewal verified** (2026-06-06):
+`tofu/cloudflare-token/acme-dns.tf` mints the scoped `homelab-acme-dns` token (Zone:Read + DNS:Edit
+on teststuff.net only, output `acme_dns_token`, stashed at `~/.claude/cloudflare/acme-token`), and
+`ansible/opnsense-acme.yml` uses `dns_service: dns_cf` (token via the `ACME_CF_TOKEN` env — the
+`opnsense-playbook.sh` runs need it exported when touching ACME). It repointed the existing
+`aws-acme` validation in place, so the certs bound to that name needed no change.
 
 ## Cloudflare MCP
 

@@ -37,13 +37,13 @@ refused** there (`403 Resource not accessible by personal access token`), and `t
 deliberately fine-grained-PAT-only — so this stays a click. Install each agent App as **"Only select
 repositories"** and pick the agent repos (tried the tofu route 2026-07-01; removed).
 
-> If the two runner Apps can be merged into one, do it — both only need org self-hosted-runners R/W.
+> FU-017: if the two runner Apps can be merged into one, do it — both only need org self-hosted-runners R/W.
 
 ## 3. Tokens / PATs (none of the values live in git)
 
 | Token | Type | Scope / can-do | Can't-do (the gaps that bite) | Where |
 |---|---|---|---|---|
-| **jail `GH_TOKEN`** | fine-grained PAT | push **code + workflows** to selected repos | **create repos** (org admin); **read Actions runs** (some endpoints 403); **read runner-groups** (403) | env + embedded in git remotes ⚠️ (move to a credential helper — see follow-ups) |
+| **jail `GH_TOKEN`** | fine-grained PAT | push **code + workflows** to selected repos | **create repos** (org admin); **read Actions runs** (some endpoints 403); **read runner-groups** (403) | env + embedded in git remotes ⚠️ (move to a credential helper — FU-002) |
 | **ghcr push** | **classic** PAT | `write:packages` → push images to ghcr | fine-grained PATs *cannot* touch ghcr | used at image-build time (CI) |
 | **ghcr pull** | classic PAT | `read:packages` | — | Infisical `SLEEP_GHCR_PULL_TOKEN` → ESO → pod |
 

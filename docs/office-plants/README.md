@@ -13,7 +13,7 @@ with thresholds and per-plant run-times configured in **Home Assistant**.
   - Monitoring: [`tofu/monitoring.tf`](../../tofu/monitoring.tf), HA export [`packages/prometheus.yaml`](../../homeassistant/ha-config/packages/prometheus.yaml), alert relay [`packages/alerting.yaml`](../../homeassistant/ha-config/packages/alerting.yaml) — see [§9 Monitoring](#9-monitoring-prometheus--grafana)
 
 > **Why this page is the entrypoint:** this irrigation service is the original *reason* the whole
-> homelab platform exists (see [`CONTEXT.md`](../../CONTEXT.md) — assistive-tech R&D). Everything
+> homelab platform exists (see [`CONTEXT.md`](../../CONTEXT.md) — edge/appliance R&D). Everything
 > below it (Talos cluster, Home Assistant, monitoring, remote access) was built to run it reliably.
 
 ### Documentation map

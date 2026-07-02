@@ -107,8 +107,8 @@ LAN DHCP was migrated **ISC dhcpd → dnsmasq** (ISC has no settings API). `opns
 rebuilds it idempotently (range .10–.245, gateway/DNS .1, domain `teststuff.net`, static
 reservations incl. the metal nodes). dnsmasq is **DHCP-only** (`port=0`) so Unbound keeps `:53`.
 PXE is NOT served here — it's a separate dnsmasq proxy-DHCP on the Matchbox LXC (see provisioning).
-⚠️ **Pending one-time click-op:** ISC dhcpd is stopped but still `enable=1` in config.xml (no API to
-disable) — uncheck *Services → ISC DHCPv4 → [LAN] → Enable* in the UI for reboot-safety.
+⚠️ **Pending one-time click-op (FU-035):** ISC dhcpd is stopped but still `enable=1` in config.xml
+(no API to disable) — uncheck *Services → ISC DHCPv4 → [LAN] → Enable* in the UI for reboot-safety.
 
 ## Storage (Longhorn)
 
@@ -150,14 +150,28 @@ reboot — that's why the explicit `reboot` follows (switches to B). Verify with
 extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
 (iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
 
+## CloudNativePG (Postgres)
+
+CNPG `Cluster`s (`infisical-pg`, `forgejo-pg`) run with `enablePodMonitor` + the `cnpg`
+PrometheusRule group and Grafana dashboard (`tofu/dashboards/cnpg.json`) — added after forgejo-pg-2
+sat as a broken replica for 2.5 days unnoticed (2026-06).
+
+- **Broken-replica recovery** (crash-loop on `pg_rewind: could not find common ancestor of the
+  source and target cluster's timelines` after a failover, readiness 500): no data loss if the
+  primary is intact — delete the replica's PVC **and** pod so CNPG re-clones it via `pg_basebackup`:
+  `kubectl -n <ns> delete pvc <cluster>-N; kubectl -n <ns> delete pod <cluster>-N` (it returns as
+  the next instance number, e.g. `-2` → `-3`). If a replica re-diverges, suspect the node it landed on.
+
 ## Power-loss / ghost-node recovery
 
-After a **simultaneous cold power-cycle** (whole lab loses power), metal Talos nodes can rejoin
-under generated `talos-xxx` hostnames — they DHCP-discover before OPNsense's dnsmasq is back up, so
-Talos can't get its reserved hostname and makes one up. Symptoms: `kubectl get nodes` shows
-`talos-xxx` ghosts next to (or instead of) the real metal names, volumes fail to attach
-(Multi-Attach / "driver.longhorn.io not found"). The hostname can't be pinned in config (see
-`tofu/metal.tf`), so recover with reboots:
+Historically, after a **simultaneous cold power-cycle** (whole lab loses power), metal Talos nodes
+could rejoin under generated `talos-xxx` hostnames — they DHCP-discover before OPNsense's dnsmasq
+is back up, so Talos can't get its reserved hostname and makes one up. **Metal hostnames are now
+pinned** via an install-time `HostnameConfig` patch (`tofu/metal.tf` `pin_hostname`, default on),
+so this shouldn't recur. If a ghost still appears (e.g. a node was reinstalled without the patch):
+symptoms are `kubectl get nodes` showing `talos-xxx` ghosts next to (or instead of) the real metal
+names, and volumes failing to attach (Multi-Attach / "driver.longhorn.io not found"). Recover with
+reboots:
 
 1. **Reboot each ghosted metal node** to reclaim its reserved hostname (dnsmasq is healthy now):
    `devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> reboot`. Do storage nodes

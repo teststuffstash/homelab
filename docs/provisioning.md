@@ -56,8 +56,9 @@ Bare-metal nodes are defined in `tofu/metal.tf` (`metal_nodes` map). Steps:
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
 - `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE.
 - `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
-- `thinkcentre` — .53, `/dev/sdc` (120GB Kingston), Longhorn + 2×Optane fast tier. Onboarded via
-  **USB ISO** (`devbox run talos-usb`) because its PXE firmware never executes network boot.
+- `thinkcentre` — .53, `/dev/sdb` (120GB Kingston), Longhorn + 2×Optane fast tier. Originally
+  onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a
+  **bad NIC cable** (100Mbps + link flapping), replaced 2026-06-11; it PXE-onboards fine now.
 
 ## Upgrading a metal node's Talos
 
@@ -74,5 +75,6 @@ a manual `talosctl reboot` then boots the staged version).
 ## Firmware reality (why USB sometimes)
 
 Smart-plug power alone isn't enough — some boxes need a display/console for a one-time BIOS change
-(enable Network Stack / PXE OpROM, Secure Boot off, NIC first). The ThinkCentre is the standing
-example; it's onboarded by USB ISO instead. This is the roadmap's argument for vPro/AMT boxes.
+(enable Network Stack / PXE OpROM, Secure Boot off, NIC first). The ThinkCentre needed exactly that
+one-time visit (and its "PXE never works" turned out to be a bad cable, not firmware — USB ISO
+remains the fallback for genuinely PXE-less boxes). This is the argument for vPro/AMT boxes.

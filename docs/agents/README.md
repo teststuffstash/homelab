@@ -1,6 +1,9 @@
 # Agent platform — in-cluster MCP capability + ephemeral sandbox harness
 
-> **Status: design / scaffolding (2026-06-25).** This is the narrative home for the agent
+> **Status: substrate LIVE, loop hand-driven (2026-07).** The launcher/worker/budget/reviewer
+> pieces run for real (`../../agents/README.md`); the coordinator is a hand-driven brief
+> (`../../agents/coordinator/README.md`, durable engine = FU-026); the egress proxy is pending
+> (FU-018). This is the narrative home for the agent
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
 > [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in
 > [`../../ROADMAP.md`](../../ROADMAP.md). Where a piece goes LIVE it gets a row in
@@ -78,6 +81,11 @@ The whole design is three zones and the artifacts that cross between them:
 The one-line rule: **triage reads everything but only writes an Issue; the fixer writes code but
 sees no data and can't touch master; the bridge is the synthetic data table.** Master is protected
 by branch protection + required checks — the token scope is belt, the protection rule is suspenders.
+
+A corollary: **the Issue must be self-contained.** The fixer has only the app repo + the Issue —
+no homelab checkout, no `SERVICES.md`, no cluster access — and app repos deliberately don't mirror
+platform docs (they'd go stale). So triage/the coordinator copies the platform facts a task needs
+(endpoints, bucket names, service status) into the Issue alongside the synthetic table.
 
 ## Identity & secrets
 
@@ -201,12 +209,12 @@ Recorded as thin ADRs in [`../adr.md`](../adr.md):
 
 | ADR | Decision | Status |
 |---|---|---|
-| ADR-077 | Agent runtime = **Goose** (in agent-sandbox); meta-harness/egress pattern from Omnigent | proposed |
-| ADR-078 | Isolation layer = **agent-sandbox** (k8s-native), not Omnibox/Istio | proposed |
-| ADR-079 | **Strict-PR write policy** — agents propose, GitOps applies | proposed |
-| ADR-080 | **Durable git/S3 state is truth; context/vectors/snapshots are cache** (may rise to CONTEXT.md) | proposed |
-| ADR-081 | Per-job identity — minted budget-capped LLM keys + 1h GitHub App tokens; Cilium FQDN + injection proxy | proposed |
-| ADR-082 | **CI runners = Tofu'd Proxmox VMs** running ephemeral k3d (not privileged ARC, not off-cluster pop-os) | accepted |
+| ADR-077 | Agent runtime = **Goose** (in agent-sandbox); meta-harness/egress pattern from Omnigent | proposed (Goose running in practice) |
+| ADR-078 | Isolation layer = **agent-sandbox** (k8s-native), not Omnibox/Istio | accepted (plain Pod until it lands — FU-019) |
+| ADR-079 | **Strict-PR write policy** — agents propose, GitOps applies | accepted |
+| ADR-080 | **Durable git/S3 state is truth; context/vectors/snapshots are cache** (may rise to CONTEXT.md) | accepted |
+| ADR-081 | Per-job identity — minted budget-capped LLM keys + 1h GitHub App tokens; Cilium FQDN + injection proxy | accepted (proxy pending — FU-018) |
+| ADR-082 | **CI runners = Tofu'd Proxmox VMs** running ephemeral k3d (not privileged ARC, not off-cluster pop-os) | accepted (ci-runner-01 live) |
 
 ## Open / deferred
 

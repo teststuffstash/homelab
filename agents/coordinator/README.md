@@ -36,6 +36,14 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 > exactly what's blocking, then move on**. Investigating quietly and then doing nothing is the **one
 > unacceptable outcome**: a blocked issue a human can see beats a silent stall every time.
 
+> **Issues must be self-contained — the issue is the context channel.** The worker pod clones ONLY
+> the project repo: no `../homelab` checkout, no `SERVICES.md`, no kubeconfig. App repos deliberately
+> don't duplicate platform docs, so before dispatching, make sure the issue carries every platform
+> fact the task needs (service endpoints/status from `SERVICES.md`, bucket names + key/Secret names,
+> the relevant runbook/pattern excerpt) — add a comment with the missing facts if the reporter didn't.
+> A round that fails because the worker lacked a platform fact is a triage bug: fix the issue, not
+> the recipe.
+
 ## Per-issue runbook (what the interactive coordinator does)
 
 > **You are running IN the pod, not the jail.** Tools are on `$PATH` and called **directly** — there
@@ -170,7 +178,8 @@ The image is built + pushed to `ghcr.io/teststuffstash/agent-coordinator:latest`
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo (every push to master,
 à la `agent-base` in `agent-runtime`) — **no manual `docker build`**. After the first build, make that
 ghcr package public (or add an imagePullSecret). `coordinator-git` is now GitOps'd via ESO
-(`git-token.yaml`); only `coordinator-claude` stays imperative — fold it into Infisical/ESO later.
+(`git-token.yaml`); only `coordinator-claude` stays imperative — fold it into Infisical/ESO later
+(FU-001).
 
 ## Logs & behaviour analysis
 
@@ -203,15 +212,17 @@ first:
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
 
-## Open wiring (still TODO)
+## Open wiring (still TODO — ids in [`docs/follow-ups.md`](../../docs/follow-ups.md))
 
-- **`provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid worker
-  path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
-- **Graduate the loop** off hand-driving to a durable engine (Temporal / Argo Workflows+Events / a
-  CRD+controller) once the runbook is proven — state already lives in labels+CRs, so it's a swap.
-- **Deploy-versioning + repo-structure rework** (the next step): the release→deploy path today is
-  manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Until it's reworked,
-  step 7a only *flags* a pending deploy — don't automate release/deploy against the current path.
+- **FU-018 — `provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid
+  worker path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
+- **FU-026 — Graduate the loop** off hand-driving to a durable engine (Temporal / Argo
+  Workflows+Events / a CRD+controller) once the runbook is proven — state already lives in
+  labels+CRs, so it's a swap.
+- **FU-025 — Deploy-versioning + repo-structure rework** (the next step): the release→deploy path
+  today is manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Until it's
+  reworked, step 7a only *flags* a pending deploy — don't automate release/deploy against the
+  current path.
 
 See [`../README.md`](../README.md) (worker launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
 (reconcile loop + hazards), and [`../../docs/agents/README.md`](../../docs/agents/README.md) (design/ADRs).

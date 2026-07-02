@@ -10,8 +10,14 @@ running services fit together, how to operate them, and their risks.
 |---|---|
 | [adr.md](adr.md) | **Architecture Decision Record** — what was considered (e.g. Ceph vs Longhorn) and what was chosen, with rationale. Start here for *why*. |
 | [agents/](agents/README.md) | **Agent platform** (design/scaffolding) — in-cluster MCP capability + ephemeral sandbox harness; trust model, identity/secrets, testing doctrine, the worked sleep-tracker fix flow |
-| [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
+| [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, CNPG, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
+| [follow-ups.md](follow-ups.md) | **The FU tracker** — every loose end / deferred item as a stable `FU-NNN` id (conventions in its header) |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
+| [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
+| [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
+| [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
+| [patterns/app-owned-resources.md](patterns/app-owned-resources.md) | How an app provisions its own buckets/keys/DBs from its own repo (ADR-074/076) |
+| [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |
 | [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |

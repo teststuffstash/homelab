@@ -45,6 +45,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `hp-01` (metal, PXE) | 192.168.2.54 | worker + Longhorn (WoL-capable) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted) |
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted) |
+| `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
 
@@ -58,15 +59,10 @@ Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-pro
 
 In-cluster Services get **LoadBalancer VIPs from `192.168.40.0/24`** via Cilium BGP peering
 OPNsense FRR (cluster ASN 64513 ↔ OPNsense 64512). Only Services labelled `bgp=advertise` are
-advertised. L2 auto-discovery does NOT cross this L3/BGP boundary.
-
-| Service | Cluster VIP | HTTPS name (OPNsense HAProxy → LAN VIP) |
-|---|---|---|
-| Home Assistant | 192.168.40.10:8123 | `homeassistant.teststuff.net` (.5) |
-| Grafana | 192.168.40.11 | `grafana.teststuff.net` (.6) |
-| UniFi Network App | 192.168.40.12 (8443/8080/3478/10001) | `ubiquiti.teststuff.net` → .40.12 (Unbound) |
-| Prometheus | 192.168.40.13:9090 | `prometheus.teststuff.net` (.7) |
-| Alertmanager | 192.168.40.14:9093 | `alertmanager.teststuff.net` (.8) |
+advertised. L2 auto-discovery does NOT cross this L3/BGP boundary. LAN HTTPS names
+(`<name>.teststuff.net`) ride OPNsense HAProxy IP-alias VIPs (`.2.5`–`.2.9`) + Unbound overrides —
+recipe in `docs/runbook.md`. **The per-service VIP/hostname assignments live in `SERVICES.md`**
+(don't duplicate them here).
 
 OPNsense web UI: `https://opnsense.teststuff.net`. Storage is **Longhorn** (default StorageClass,
 replicated) + a `longhorn-fast` node-local tier on the ThinkCentre's Optane.
@@ -94,8 +90,11 @@ Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuf
 - `esphome/` — ESPHome device configs (`config/office-plants-irrigation.yaml`); flash with
   `devbox run flash-irrigation` (logs: `devbox run irrigation-logs`).
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
-- `scripts/` — `talos-usb.sh`, `opnsense-playbook.sh`, `longhorn-register-optane.sh`,
-  `make-client-p12.sh` (phone mTLS cert, pinned openssl), `aws-*.sh` (one-shot AWS audit/cleanup).
+- `scripts/` — wrappers + one-shots: `tf.sh` / `keepass-{env,init}.sh` (secret vars for tofu),
+  `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`, `github-{runner,agents,reviewer}-*bootstrap.sh`
+  + `gh-app-runner-token.sh` (GitHub Apps), `garage-s3.sh`, `talos-usb.sh`,
+  `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
+  `coordinator-logs.sh`/`render-transcript.py`, `follow-ups-lint.sh`, `aws-*.sh` (one-shot audit/cleanup).
 - `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
 - `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
   decision history in `docs/adr.md`.
@@ -107,7 +106,7 @@ Out-of-repo, in the jail under `~/.claude/`: `homelab-opnsense/{key,secret}` (OP
 `homelab-ha/` (Home Assistant tokens + Grafana pw), `homelab-droplet/`, `cloudflare/`
 (read/write/acme tokens + the phone `.p12`), `homelab-aws/` (scoped read-only audit key). Tofu state, `*.tfvars`,
 `kubeconfig`, `talosconfig` are gitignored. The repo is **public** — keep secrets out of git
-(SOPS+age for anything that must live in git).
+(values live in KeePass/Infisical, see `docs/secrets.md`; SOPS is NOT used, ADR-062).
 
 **In-cluster agent secrets** (k8s Secrets, not `~/.claude/` files): per-project `<project>-openrouter`
 (operator-minted OpenRouter key) + the worker `agent-git-token` (per-repo, ~1h, from the `homelab-agents`
@@ -116,7 +115,18 @@ GitHub App). The **coordinator** (`agents/coordinator/`) adds two in ns `agent-c
 subscription) and `coordinator-git` (`GH_TOKEN` — `issues:write`+`pull_requests:write`+`contents` across
 the agent repos; prefer minting from the `homelab-agents` App over a new PAT — see
 `agents/coordinator/README.md` §Git token). The coordinator **image** CI needs no token (ghcr push via
-the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later.
+the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later (FU-001).
+
+## Follow-ups (FU-NNN)
+
+Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item
+(`FU-NNN`, never reused — conventions at the top of that file). The rules that keep it consistent:
+
+- **New deferred work / discovered loose end** → add an `FU-NNN` item there first. Never leave a
+  free-floating `TODO` in code or docs — write the comment as `FU-NNN: <context>` instead.
+- **Resolved something?** `git grep FU-NNN` and delete the item **and every reference** in the same
+  commit as the fix. `devbox run follow-ups-lint` catches dangling references.
+- Roadmap-scale parked *features* go to `ROADMAP.md` → Backlog, not here.
 
 ## Safety
 

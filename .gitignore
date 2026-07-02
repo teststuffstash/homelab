@@ -16,3 +16,4 @@
 # PlatformIO core/toolchain cache. Large, machine-local, regenerated on demand.
 /esphome/.flash-venv/
 /esphome/.platformio/
+/.obsidian/

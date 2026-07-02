@@ -1,173 +1,150 @@
-# Follow-ups & in-progress
+# Follow-ups (the FU tracker)
 
-Running list of loose ends and deferred work — the stuff intentionally not finished yet. Most
-features land complete + committed; this captures the "come back to it" items so they don't get
-lost. Bigger parked features live in `ROADMAP.md` → "Backlog".
+Running list of loose ends and deferred work — the stuff intentionally not finished yet. Bigger
+parked *features* live in `ROADMAP.md` → "Backlog / parked features"; this file is the operational
+tracker.
 
-_Last updated: 2026-06-17._
+**Conventions (the contract):**
 
-## GitOps & secrets (ArgoCD / CloudNativePG / Infisical / ESO) — LIVE; follow-ups
+- Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
+  Next free id: **FU-040**.
+- **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
+  reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
+  the code/doc it concerns; the item here carries the one-liner and links to the detail.
+- **Resolving an item:** `git grep FU-NNN`, then delete the item here **and every reference**, in
+  the same commit as the fix. `devbox run follow-ups-lint` flags references to ids that no longer
+  exist here.
+- **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
+  the counter above.
 
-The stack is live and reconciling (ADR-005/046/062, `docs/secrets.md`, `argocd/README.md`). Loose ends:
+_Last updated: 2026-07-02._
 
-- [ ] **ArgoCD → Forgejo cutover** — ArgoCD is sourced from **GitHub** for now (no Forgejo/Postgres
-      dependency on its own git source). To honor the offline principle, mirror the repo into Forgejo
-      (see the Forgejo section below) and flip `var.argocd_repo_url` + the child-app `repoURL`s, then
-      deliver the Forgejo read cred via ESO. Procedure in `argocd/README.md` "Forgejo cutover".
-- [ ] **`platform` root app shows OutOfSync/Healthy** — cosmetic app-of-apps self-diff (ArgoCD
-      normalising the child `Application` specs), not real drift. Tidy if it gets noisy.
-- [ ] **CNPG self-signed TLS** — Infisical↔Postgres uses `sslmode=disable` (node-pg rejects CNPG's
-      self-signed cert). Fine pod-to-pod; revisit if Cilium transparent encryption is wanted.
-- [ ] **Second admin / break-glass** — one Infisical super admin for now (signups disabled). Decide
-      whether a break-glass second admin is worth codifying.
+## Secrets (the "secret cleanup" track)
 
-## App-owned resources via Crossplane (ADR-076) — LIVE; refinements
+- [ ] **FU-001** — Consolidate imperative secrets into the platform (`docs/secrets.md` tiers):
+      the `coordinator-claude` Secret (`CLAUDE_CODE_OAUTH_TOKEN`, kubectl-created —
+      `agents/coordinator/README.md`) → Infisical/ESO; the `~/.claude/homelab-*` flat-file sprawl
+      (opnsense, pve-ssh, matchbox, ha, droplet, cloudflare, aws, forgejo, garage, github-arc)
+      → KeePass Tier-0 or Infisical.
+- [ ] **FU-002** — The jail GitHub PAT is embedded in the git remote URL (visible in
+      `git remote -v`); move it to a git credential helper.
+- [ ] **FU-003** — HA `refresh_token` is dead (`invalid_grant`; falling back to `prometheus_llat`).
+      Regenerate the refresh/long-lived token (recipe: `docs/runbook.md` → Home Assistant).
+- [ ] **FU-004** — Rotate the broad bootstrap `root@pam!tofu` Proxmox token to a scoped `tofu@pve`
+      token (`tofu/README.md` has the `pveum` recipe).
+- [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
+      super admin today, signups disabled).
+- [ ] **FU-006** — Retire the obsolete `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key (ghcr cutover
+      done 2026-06-25).
 
-provider-terraform reconciles Garage buckets/keys from `Workspace` CRs (snore-recorder is the first
-app: `sleep-snore` + write key, reconciled via ArgoCD, key published to Infisical). Loose ends:
+## GitOps & platform
 
-- [x] **Writer key → Infisical is now GitOps** (2026-06-17) — **not** via ESO PushSecret (the ESO
-      Infisical provider is **read-only**: `ClusterSecretStore` reports `ReadOnly`). Instead the
-      snore-recorder **Workspace publishes it itself** via the Infisical TF provider
-      (`infisical_secret`), authed by the `crossplane-tf-writer` UA identity injected into the
-      provider pod. Replaces the manual `infisical-secret` step.
-- [x] **sleep-tracking migrated** (2026-06-17) — Crossplane Workspace that **adopts** the live
-      buckets/keys/grants via config-driven `import` (deletionPolicy: Orphan — sleep-db history
-      preserved); keys published to Infisical from the old state; `sleep-ingester-credentials`
-      delivered via ESO ExternalSecret. (Both apps now on ADR-076.)
-- [ ] **`provider-terraform` package pinned to a digest** — currently the `:v1.1.1` tag.
+- [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
+      **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).
+      Then flip `var.argocd_repo_url` + child-app `repoURL`s and deliver the Forgejo read cred via
+      ESO. Procedure: `argocd/README.md` → "Forgejo cutover".
+- [ ] **FU-008** — Forgejo orgs/mirrors were created imperatively (one-shot token, since deleted).
+      Decide: codify via the Forgejo TF provider vs accept the imperative bootstrap.
+- [ ] **FU-009** — Verify the `platform` root app's cosmetic OutOfSync is gone after the
+      `ignoreDifferences` fixes in `tofu/argocd.tf`; drop this item if so, tidy if not.
+- [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
+      cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
+- [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the
+      `:v1.1.1` tag).
+- [ ] **FU-012** — Remote/encrypted tofu state backend (every root is local, gitignored state).
+- [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
+      bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
+      doesn't DR). `tofu/homeassistant.tf`.
+- [ ] **FU-039** — **Platform self-service via Crossplane** (the "homelab as AWS/Civo" gap): a
+      project can already IaC its S3 buckets/keys (ADR-076 Workspaces), OpenRouter keys
+      (`OpenRouterKey` CR) and Postgres (CNPG `Cluster` CR) — but **not** its git repos
+      (`tofu/github/`, admin PAT outside the jail), HTTPS names (OPNsense ansible), or its own
+      ArgoCD AppProject/namespace. Decide per resource: Crossplane provider vs a thin homelab PR
+      seam. Prereq for the FU-025 per-stack IaC-repo model.
 
-## Forgejo (self-hosted Git) — minimal trial is LIVE; next steps deferred
+## CI & dependency automation
 
-Running minimally to try it out (`tofu/forgejo.tf`): Forgejo 15.0.3 (chart 17.1.1), built-in
-**SQLite + in-memory** sessions/cache, 1 replica, 5Gi Longhorn PVC, BGP VIP `192.168.40.15`, HTTPS
-at **https://forgejo.teststuff.net** (OPNsense HAProxy + Let's Encrypt).
-Admin: `forgejo_admin` / `tofu -chdir=tofu output -raw forgejo_admin_password`.
+- [ ] **FU-014** — **Renovate (auto-update PRs) — not set up anywhere yet**, though `ROADMAP.md`
+      (agent P2), `docs/ci.md` and `docs/agents/README.md` all assume it. Scope: image/chart/action
+      bumps on the app repos + homelab, gated by the existing CI (later the full-stack gate,
+      ADR-082).
+- [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
+      per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
+      substituter for runner pods. `docs/ci.md` → "residual costs".
+- [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
+      Plan: `docs/slsa.md`.
+- [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
+      — both need only org self-hosted-runners R/W. `docs/github-setup.md` §2.
 
-When investing further (roughly in order):
+## Agents
 
-- [x] **Disable open registration** — `gitea.config.service.DISABLE_REGISTRATION = true` (applied
-      2026-06-12). Admin creates users now (`forgejo_admin` + the new `rasmus`).
-- [x] **SSH clone** (2026-06-12) — `forgejo-ssh` is now a LoadBalancer sharing VIP `.40.15` (Cilium
-      LB-IPAM sharing-key), exposed on `forgejo.teststuff.net:22` via a new **HAProxy TCP-passthrough**
-      frontend (extended the `opnsense-haproxy` role with `haproxy_tcp_services`). `tea@latest` added
-      to devbox. User `rasmus` (public, soot.rasmus@gmail.com) in private org `rasmus-personal`, with
-      ed25519 SSH + GPG signing keys uploaded; key material in `~/.claude/homelab-forgejo/`.
-- [ ] **External Postgres** — the chart dropped bundled postgres (v14), so SQLite is the trial DB.
-      **CloudNativePG is now LIVE** (ADR-046) — give Forgejo its own CNPG `Cluster` and point it at it
-      (`gitea.config.database.*`); migrate the SQLite data or start fresh.
-- [~] **GitHub → Forgejo mirroring** — Forgejo pull-mirrors so a local copy of the GitHub repos
-      survives GitHub being down. This is the prerequisite for the **ArgoCD → Forgejo cutover** (see the
-      GitOps & secrets section above) — the ArgoCD-resilience goal: don't be hostage to GitHub uptime.
-      **Started (2026-06-21):** private org **`sleep-lab`** holds pull-mirrors of the two private GitHub
-      repos `teststuffstash/{sleep-tracking,snore-recorder}` (8h interval, releases on / issues+PRs+wiki
-      off), authed with the jail GitHub PAT. Created imperatively via the Forgejo migrate API (a one-shot
-      `org-mirror-setup` token with `write:organization,write:repository` scopes, since deleted; the
-      standing `rasmus` `~/.claude/homelab-forgejo/api-token` lacks org scopes). The earlier manual
-      `rasmus/snore-recorder` push is left in place. Still TODO: mirror the **homelab** repo itself
-      (the actual ArgoCD-cutover prerequisite) and decide whether to codify org/mirror creation (Forgejo
-      TF provider) vs. keep it imperative like the `rasmus`/`rasmus-personal` bootstrap.
-- [~] **Forgejo Actions runner** (`act_runner`) — DEPLOYED (`tofu/forgejo-runner.tf`, ephemeral
-      laptop tier, DinD). **Repurposed: this is now the Tier-B engine** — for fully-private
-      **Forgejo-only** projects (Forgejo git + act_runner + Forgejo registry, self-contained).
-      **Tier-A** (GitHub-canonical) projects — sleep-tracking, snore-recorder — moved to a self-hosted
-      **GitHub** runner instead (see below). The CI seam is unchanged: workflows just call
-      `devbox run <task>`, so the same logic runs under either forge. **Two-tier model is documented
-      in [`docs/ci.md`](ci.md).** SLSA Phase-1 (cosign + SBOM on top of the hosted runner) still TODO —
-      see [`slsa.md`](slsa.md).
+- [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
+      and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
+      providers) — the biggest cost lever. Interim: `opencode.json` `options.provider`. Cost
+      autopsy: `agents/README.md` → Operational findings.
+- [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
+      `agents/agent-session.sh`.
+- [ ] **FU-020** — Cilium egress lockdown for worker pods (deny-all + allow the proxy and the nix
+      cache — without the nix allowance `devbox install` hangs).
+- [ ] **FU-021** — goose retry policy: hard-stop on auth/limit errors (it retried a
+      budget-exhausted 403 812×).
+- [ ] **FU-022** — Pin tool versions in `agent-base` + project `devbox.json` so the baked-toolchain
+      cache hits land (`@latest` drifts vs the project lock and re-fetches).
+- [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
+      cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
+- [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
+      not enforced).
+- [ ] **FU-025** — **Deploy-versioning + repo-structure rework**: the release→deploy path is
+      manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
+      automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
+      a per-stack `sleep-iac` repo** — the ArgoCD AppProject + app-of-apps for the sleep stack
+      (today's homelab `argocd/sleep/` + values + the apps' `infra/` CRs move there) — so app
+      repos stay platform-agnostic (standard Helm/Secrets/S3/Postgres, publish image+chart only)
+      and a deploy = a version-bump PR in `sleep-iac` with its own CI gates; homelab keeps just
+      the platform + a root Application pointing at `sleep-iac`. Homelab-as-a-platform, like AWS/Civo.
+- [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
+      (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
+      it's a mechanical swap.
+- [ ] **FU-027** — One fresh-issue live run to demo the PR stats comment end-to-end (both halves
+      are validated separately).
 
-## CI — GitHub-canonical tier (ARC + ghcr) — LIVE
+## Monitoring & storage
 
-The two GitHub-canonical repos carry thin `.github/workflows/` that call `devbox run <task>`
-(`ci` / `test-chart` / `scan-secrets` / build→ghcr), `runs-on: homelab-ephemeral`. **The ARC runner
-is live and CI is green** (sleep-tracking PR #1). Key gotchas now resolved + load-bearing:
+- [ ] **FU-028** — Longhorn schedules manager/engine-image/instance-manager onto the ephemeral
+      laptops (compute-only) → `KubeDaemonSetMisScheduled` ×2 + a stale-PDB alert. Scope Longhorn
+      off the ephemeral tier (node selector / taint) or silence the two rules.
+- [ ] **FU-029** — The Longhorn dashboard "Alerts" panel is empty by design (it's a Grafana
+      unified-alerting list; we alert via Prometheus→Alertmanager). Optional: repoint that panel
+      to a Prometheus `ALERTS{alertname=~"Longhorn.*"}` query.
+- [ ] **FU-030** — Loki 7-day retention: revisit after watching usage
+      (`argocd/resources/loki/loki-config.yaml`).
 
-- [x] **Nix in the ARC pod** (2026-06-24) — the runner is a *container* (no systemd), so devbox's
-      daemon-based installer fails ("docker shim → exit 125"). Fix: install **single-user** Nix
-      (`cachix/install-nix-action@v31` `--no-daemon`) + `devbox skip-nix-installation`, and apt-install
-      `xz` (the slim `actions-runner` image lacks it). See [`docs/ci.md`](ci.md). Follow-ups: a custom
-      runner image (bake `xz`/`gh`/devbox + warm store) to kill per-job apt + the ~5min cold install,
-      and a LAN Nix substituter so jobs don't hit the WAN.
-- [x] **OCI release flow** (2026-06-24) — `release.yaml` on a `v*` tag builds + pushes the image AND
-      the Helm **chart** to ghcr (`oci://ghcr.io/teststuffstash/charts`, chart version == appVersion ==
-      git tag; `scripts/package-chart.sh`). **sleep-ingester is deployed from the OCI chart** (v0.2.0):
-      `argocd/sleep/sleep-ingester.yaml` source 1 = `ghcr.io/teststuffstash/charts` chart
-      `sleep-ingester`. Chart package is **public** (ArgoCD pulls anonymously); image stays private.
-      **Release procedure:** tag `vX.Y.Z` → release.yaml publishes → bump `targetRevision` + image `tag`
-      in homelab → ArgoCD syncs.
-- [x] **`sleep` app-of-apps drift** (2026-06-24) — it had fallen out of the live `argocd-apps` release
-      during the platform→sleep app-of-apps split (final `tofu apply` never ran), leaving the
-      sleep-ingester CronJob orphaned. Re-applied `helm_release.argocd_apps`; `sleep` +
-      `sleep-tracking` + `sleep-ingester` are Synced/Healthy again.
+## Hardware & nodes
 
-The original bring-up items (kept for history):
+- [ ] **FU-031** — thinkcentre BIOS → disk-first (it's PXE-first, so every boot pays a PXE timeout;
+      disk-first would also make a persistent matchbox flag safe again).
+- [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
+      wk-metal-02's one unexplained reboot. On recurrence: chase cable/switch-port
+      (thinkcentre) resp. battery/power (wk-metal-02, plug `laptop4`).
+- [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
+      `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
+- [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
+      (ADR-041, Open).
 
-- [ ] **Run the bootstrap** — `scripts/github-runner-bootstrap.sh` (runbook:
-      [`docs/github-runner-bootstrap.md`](github-runner-bootstrap.md)). Scripted: creates the
-      `teststuffstash` GitHub App (Organization → Self-hosted runners: R/W, + Metadata: Read) via the
-      App-manifest REST flow, discovers the install id, and pushes `GHARC_APP_ID`/`GHARC_INSTALL_ID`/
-      `GHARC_PRIVATE_KEY` + `SLEEP_GHCR_PULL_TOKEN` (read:packages PAT) into Infisical (copies to
-      `~/.claude/homelab-github-arc/`). Only manual clicks: App "Create" + "Install", and minting the
-      ghcr PAT.
-- [ ] **Sync ARC** — `argocd/platform/{arc-controller,github-runner-secrets,arc-runners}.yaml` +
-      `argocd/resources/github-runner/`. **Confirm the ARC chart version** (`0.12.1` placeholder in
-      both `arc-controller.yaml` and `arc-runners.yaml` — they MUST match) against
-      github.com/actions/actions-runner-controller/releases. Verify the `homelab-ephemeral` scale set
-      shows up in the org runner settings and a `workflow_dispatch` spawns a pod on a wk-metal node.
-- [x] **ghcr cutover for sleep-ingester** (2026-06-25) — done; CronJob now pulls from
-      `ghcr.io/teststuffstash/sleep-ingester` (no `ImagePullBackOff`). The old
-      `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key can be retired.
-- [x] **sleep-tracking has 4 red tests** (2026-06-25) — fixed; the `nights/` fixture mismatch +
-      coverage gate are green again.
-- [ ] **SSH clone** — `service.ssh` is ClusterIP (HTTP clone only for now). Expose if wanted.
-- [ ] **Gogs on the edge** — separate, lighter Git service for the grandma tablet+minipc (ROADMAP).
+## One-time ops
 
-## Monitoring / Longhorn
+- [ ] **FU-035** — Click-op: disable ISC DHCPv4 in the OPNsense UI (stopped but still `enable=1`
+      in config.xml; no API) for reboot-safety. `docs/runbook.md` → LAN DHCP.
+- [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
+      leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
+      is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
+      (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
+- [ ] **FU-037** — Investigate the standing `kubernetes_deployment.ha` tofu plan drift (a manual
+      live change?); reconcile into git or accept it.
+- [ ] **FU-038** — Tuya plugs: drop the cloud dependency for local-API polling; then the `/10`
+      power correction can go away (`homeassistant/ha-config/packages/power.yaml`).
 
-- [x] **CloudNativePG monitoring** (2026-06-24) — added a `cnpg` PrometheusRule group + the
-      `CloudNativePG` Grafana dashboard (`tofu/dashboards/cnpg.json`) and enabled
-      `spec.monitoring.enablePodMonitor` on both Clusters (forgejo-pg, infisical-pg). Prompted by
-      **forgejo-pg-2 sitting as a broken replica for 2.5 days unnoticed**: a failover during the
-      2026-06-19 metal flap left it on a divergent timeline, so it crash-looped on
-      `pg_rewind: could not find common ancestor of the source and target cluster's timelines`
-      (readiness 500). **Recovery recipe** (no data loss — primary is intact): delete the replica's
-      PVC + pod so CNPG re-clones it via `pg_basebackup` —
-      `kubectl -n <ns> delete pvc <cluster>-N; kubectl -n <ns> delete pod <cluster>-N`
-      (CNPG re-creates as the next instance number, e.g. `-2` → `-3`). If a replica re-diverges,
-      suspect the node it lands on (forgejo-pg is pinned to wk-01/wk-02; watch wk-02).
+---
 
-- [ ] **Longhorn runs on the ephemeral laptops** — `KubeDaemonSetMisScheduled` ×2 + a stale
-      instance-manager PDB (`KubePdbNotEnoughHealthyPods`) fire because Longhorn schedules its
-      manager/engine-image/instance-manager onto wk-metal-01/02 (compute-only, no storage). Decide:
-      scope Longhorn off the ephemeral tier (taint-toleration / system-managed-components node
-      selector) vs. silence those two default rules.
-- [ ] **Longhorn dashboard "Alerts" panel** stays empty by design — it's a Grafana unified-alerting
-      `alertlist`, but we alert via Prometheus→Alertmanager (where the Longhorn alerts *do* fire).
-      Optional: repoint that one panel to a Prometheus `ALERTS{alertname=~"Longhorn.*"}` query
-      (small dashboard-JSON tweak, lost on re-fetch).
-
-## Hardware / nodes
-
-- [ ] **thinkcentre BIOS → disk-first** — it's PXE-first, so every boot pays a PXE timeout before
-      falling to disk. Setting BIOS disk-first gives fast boots (and a persistent matchbox flag
-      would then be safe again).
-- [ ] **Watch thinkcentre + wk-metal-02** — thinkcentre had one brief 1Gbps link blip after the
-      cable fix (2026-06-11); wk-metal-02 had one unexplained reboot. If either recurs: chase the
-      cable/switch-port (thinkcentre) or battery/power (wk-metal-02, on smart-plug laptop4).
-- [ ] **qemu-guest-agent on metal nodes** — harmless `ext-qemu-guest-agent` "Waiting" service on
-      bare metal (install image shared with the VMs). Keeps Talos's stage at `booting`; dropping it
-      needs a metal-specific schematic — not worth a fleet reinstall.
-
-## Ops / housekeeping
-
-- [ ] **`kubernetes_deployment.ha` tofu drift** — `tofu plan` shows Home Assistant wanting an
-      in-place update that's been target-skipped repeatedly. Investigate what drifted (a manual live
-      change?) and reconcile into git or accept it.
-- [ ] **HA `refresh_token` is dead** — `~/.claude/homelab-ha/refresh_token` returns `invalid_grant`;
-      currently falling back to `prometheus_llat`. Regenerate the refresh/long-lived token.
-- [ ] **GitHub PAT in plaintext** — the `origin` URL embeds the PAT (visible in `git remote -v`).
-      Move it to a git credential helper.
-- [ ] **Talos 1.14 upgrade prep** — before upgrading, apply the `VolumeConfig secure:false` patch or
-      `noexec` on `/var` breaks Longhorn v1 (already documented in `tofu/longhorn.tf`).
-
-See also `ROADMAP.md` → "Backlog / parked features" (bare-metal node suspend/resume "autoscaler").
+See also `ROADMAP.md` → "Backlog / parked features" (self-hosted SLSA L3 build-out, bare-metal node
+suspend/resume, the caching-tier image mirror ADR-070, the edge tier).

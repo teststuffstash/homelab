@@ -52,7 +52,7 @@ data:
       compaction_interval: 10m
 
     limits_config:
-      retention_period: 168h          # 7 days — keep it small (revisit after watching usage)
+      retention_period: 168h          # 7 days — keep it small (FU-030: revisit after watching usage)
       reject_old_samples: true
       reject_old_samples_max_age: 168h
       ingestion_rate_mb: 8

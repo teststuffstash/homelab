@@ -24,17 +24,14 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | `cp-01` / `wk-01` / `wk-02` | .51 / .61 / .62 | Talos cluster VMs (control plane + workers) |
 | `thinkcentre` / `hp-01` | .53 / .54 | bare-metal workers (+ Longhorn) |
 | `wk-metal-01` / `wk-metal-02` | .182 / .183 | bare-metal workers (ThinkPad X240/X250, ephemeral tier) |
+| `ci-runner-01` (VM) | 192.168.2.55 | self-hosted GitHub Actions runner (Docker/binfmt builds) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 
 Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** (kube-proxy-free), **Longhorn**
 storage. In-cluster Services get LoadBalancer VIPs from `192.168.40.0/24` (Cilium BGP ↔ OPNsense
-FRR) and a trusted HTTPS name via OPNsense HAProxy:
-
-| Service | VIP | HTTPS |
-|---|---|---|
-| Home Assistant | 192.168.40.10 | `homeassistant.teststuff.net` (LAN) · `ha.teststuff.net` (remote) |
-| Grafana / Prometheus / Alertmanager | .11 / .13 / .14 | `grafana` / `prometheus` / `alertmanager.teststuff.net` |
-| UniFi Network Application | 192.168.40.12 | `ubiquiti.teststuff.net` |
+FRR) and a trusted HTTPS name via OPNsense HAProxy. **The service catalog — what's running, every
+endpoint, how to consume it — is [`SERVICES.md`](SERVICES.md)** (Home Assistant, Grafana/Prometheus,
+UniFi, Garage S3, Forgejo, ArgoCD, Infisical/ESO, Postgres/CNPG, CI runners, …).
 
 **Remote access:** Home Assistant is reachable from anywhere at `https://ha.teststuff.net` via a
 **Cloudflare Tunnel** + client-certificate **mTLS** (the `teststuff.net` zone now lives on Cloudflare;
@@ -50,8 +47,9 @@ bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml   # OPNsense as c
 ```
 
 State, `*.tfvars`, `kubeconfig`/`talosconfig`, and secrets are gitignored / kept out of the repo
-(they live in `~/.claude/`). This is a real, running homelab published openly — infrastructure
-code shouldn't need security-through-obscurity.
+(secret values live in a KeePass Tier-0 wallet + self-hosted Infisical/ESO — see
+[`docs/secrets.md`](docs/secrets.md)). This is a real, running homelab published openly —
+infrastructure code shouldn't need security-through-obscurity.
 
 ## License
 

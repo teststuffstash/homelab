@@ -49,7 +49,7 @@ test-chart` = helm-unittest; `devbox run scan-secrets` = gitleaks. The workflow 
   snore-recorder's **arm64** image — the Talos node kernel has no `binfmt_misc`, so QEMU emulation
   fails. arm64 images build **off-cluster** via `devbox run build-image` on a binfmt-capable host.
 
-Bring-up steps + open items: `docs/follow-ups.md` → "CI — GitHub-canonical tier".
+Open items: FU-015 (custom runner image + LAN substituter), FU-014 (Renovate) — `docs/follow-ups.md`.
 
 ## Tier B — act_runner (Forgejo-only)
 

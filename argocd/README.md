@@ -10,17 +10,20 @@ there it reconciles this directory from git. Decision background: `docs/secrets.
 > root app-of-apps. Everything below that line is git-driven.
 
 ```
-tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db,
-       │                               infisical-pg-app, repo-homelab-github
-       └──applies──► root Application "platform"  (helm: argocd-apps)
-                          │  source = GitHub, path argocd/platform   ← bootstrap source
-                          ▼
-        argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
-          wave 0  cnpg-operator      (CloudNativePG)
-          wave 0  eso-operator       (External Secrets Operator)
-          wave 1  postgres           → argocd/resources/postgres/  (CNPG Cluster)
-          wave 2  infisical          (infisical-standalone on the CNPG cluster)
-          wave 3  platform-extras    → argocd/resources/extras/    (UI VIP + ClusterSecretStore)
+tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db, infisical-pg-app,
+       │                     repo-homelab-github, repo-sleep-tracking-github
+       └──applies──► TWO root Applications (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
+                          │
+          "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
+             wave 0  cnpg-operator · eso-operator · arc-controller
+             wave 1  postgres (CNPG Cluster) · crossplane · nix-cache
+             wave 2  infisical          (infisical-standalone on the CNPG cluster)
+             wave 3  platform-extras    → argocd/resources/extras/  (UI VIP + ClusterSecretStore)
+             wave 4  crossplane-providers · github-runner-secrets
+             wave 5  arc-runners · openrouter-operator
+             wave 6  logging            → argocd/resources/loki/    (Loki + Alloy)
+          "sleep" ──► argocd/sleep/*.yaml  (the sleep-tracking stack: app infra Workspaces/ESO +
+                      the OCI-chart ingester — kept apart so the app's lifecycle is independent)
 ```
 
 ## Secret flow
@@ -29,7 +32,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 |---|---|---|
 | `infisical-secrets` (ENCRYPTION_KEY, AUTH_SECRET) | tofu ← KeePass | not in git |
 | `infisical-db` (DB_CONNECTION_URI), `infisical-pg-app` | tofu ← KeePass | not in git |
-| `repo-homelab-github` (ArgoCD git creds) | tofu ← KeePass | not in git |
+| `repo-homelab-github` / `repo-sleep-tracking-github` (ArgoCD git creds) | tofu ← KeePass | not in git |
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
 
@@ -53,7 +56,7 @@ KUBECONFIG=tofu/kubeconfig devbox run -- kubectl -n argocd get applications -w
 
 ArgoCD admin password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d` → store in KeePass.
 
-## Forgejo cutover (later — NOT done yet)
+## Forgejo cutover (later — NOT done yet; FU-007)
 
 We bootstrap against **GitHub** so there's no Forgejo/Postgres dependency on ArgoCD's own
 git source. To honor the offline principle later, mirror the repo into Forgejo and flip the

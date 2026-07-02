@@ -145,7 +145,7 @@ variable "argocd_apps_chart_version" {
 }
 
 variable "argocd_repo_url" {
-  description = "Git source ArgoCD reconciles from. GitHub during bootstrap; cut over to Forgejo later."
+  description = "Git source ArgoCD reconciles from. GitHub during bootstrap; cut over to Forgejo later (FU-007)."
   type        = string
   default     = "https://github.com/teststuffstash/homelab.git"
 }

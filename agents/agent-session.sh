@@ -13,9 +13,9 @@
 #
 # Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode  --model provider/model
 #
-# TODO (ADR-078/081): migrate Pod → agent-sandbox Sandbox CR; scoped SA + RBAC; Cilium egress
-# policy + auth-injecting proxy so the git/LLM tokens are INJECTED, never held in the pod. The
-# egress policy must allow the nix cache (cache.nixos.org / a self-hosted attic) for `devbox install`.
+# FU-019 (ADR-078): migrate Pod → agent-sandbox Sandbox CR; scoped SA + RBAC. FU-020/FU-018
+# (ADR-081): Cilium egress policy + auth-injecting proxy so the git/LLM tokens are INJECTED, never
+# held in the pod; the egress policy must allow the nix cache for `devbox install`.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall

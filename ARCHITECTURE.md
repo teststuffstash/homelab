@@ -20,10 +20,10 @@ flowchart LR
         D["Git · OpenTofu · Ansible · kubectl · talosctl · k9s · Helm"]
     end
     subgraph DEL["2 · Integration & Delivery Plane"]
-        I["GitHub · Actions · GHCR · ArgoCD/Flux · Talos + k8s control plane"]
+        I["GitHub · Actions (self-hosted runners) · GHCR · ArgoCD · Talos + k8s control plane"]
     end
     subgraph RES["3 · Resource Plane"]
-        R["Proxmox · bare-metal · Talos VMs · Cilium · OPNsense · Cloudflare · S3 · Civo"]
+        R["Proxmox · bare-metal · Talos VMs · Cilium · OPNsense · Cloudflare · Garage S3 · Civo"]
     end
     subgraph SEC["Security Plane · cross-cutting"]
         S["KeePass + Infisical/ESO · OPNsense FW · Cilium NetworkPolicy · WireGuard · AMT · RBAC"]
@@ -50,7 +50,7 @@ flowchart TB
         B["Git · OpenTofu (bpg/proxmox, talos, matchbox) · Ansible (O-X-L OPNsense) · Helm"]
     end
     subgraph PORTAL["Portal"]
-        C["large-button tablet UI (end-user, for the assistive-tech product)"]
+        C["end-user tablet UI (edge/appliance product — private business repo)"]
     end
 ```
 
@@ -59,25 +59,28 @@ _Fig. 1: Developer Control Plane — where I author the platform from git, never
 - ✅ Git/GitHub, OpenTofu, kubectl/talosctl/k9s/Devbox/Helm (daily tools).
 - ✅ ArgoCD as the GitOps front (lives mostly in plane 2; ADR-005).
 - ⬜ No internal developer portal (Backstage) — out of scope for a solo lab; the only
-  "portal" that matters is the **end-user tablet UI** for the elderly-care product.
+  "portal" that matters is the **end-user tablet UI** for the edge/appliance product.
 
 ## 2 · Integration & Delivery Plane
 
 ```mermaid
 flowchart LR
-    VC["Version Control<br/>GitHub"] --> CI["CI<br/>GitHub Actions"]
+    VC["Version Control<br/>GitHub"] --> CI["CI<br/>GitHub Actions (self-hosted)"]
     CI --> REG["Registry<br/>GHCR / Docker Hub"]
-    REG --> CD["Orchestration & CD<br/>OpenTofu · ArgoCD/Flux"]
+    REG --> CD["Orchestration & CD<br/>OpenTofu · ArgoCD"]
     CD --> CCP["Cluster Control Plane<br/>Talos + Kubernetes"]
 ```
 
 _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled cluster._
 
-- ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources.
+- ✅ GitHub (`teststuffstash`), GHCR/Docker Hub as image sources; releases publish images + OCI
+  charts to ghcr.
 - ✅ OpenTofu provisioning (cluster live), Talos + Kubernetes control plane (v1.13.2 / v1.36.1).
-- ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover pending).
+- ✅ ArgoCD GitOps front (app-of-apps in `argocd/`, sourced from GitHub; Forgejo cutover = FU-007).
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
-- ⬜ CI (GitHub Actions) not wired yet; no internal image registry (use upstream for now).
+- ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
+  the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
+- ⬜ No internal image registry / pull-through mirror yet (ADR-070; use upstream for now).
 
 ## 3 · Resource Plane
 
@@ -88,7 +91,7 @@ flowchart TB
         C2["Provisioning: Matchbox (MAC table) · WoL / AMT / smart-plug power"]
     end
     subgraph DATA["Data"]
-        D1["local-lvm · Longhorn · S3 / MinIO (backups, bucket-in-git) · Postgres/MariaDB"]
+        D1["local-lvm · Longhorn · Garage S3 (bucket-in-git) · Postgres (CNPG)"]
     end
     subgraph NET["Networking"]
         N1["OPNsense (DHCP/DNS/FW/FRR) · Cilium CNI + BGP · Cloudflare Tunnel · CARP"]
@@ -105,8 +108,9 @@ _Fig. 3: Resource Plane — where YAMLs finally meet hardware (and there's no IP
   Longhorn storage, Home Assistant + UniFi controller in-cluster.
 - ✅ Cloudflare Tunnel (Home Assistant remote access via `ha.teststuff.net` + mTLS, `docs/cloudflare.md`);
   `teststuff.net` DNS now on Cloudflare.
-- 🔜 S3 backups, Civo burst.
-- ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy).
+- ✅ Garage S3 (LAN-only, ADR-031/073) + Postgres via CloudNativePG (ADR-046).
+- 🔜 Off-cluster backups to S3 (FU-013), Civo burst.
+- ⬜ CARP HA pair (needs ≥2 hosts), network Zigbee coordinator (to buy — FU-034).
 
 ## 4 · Observability Plane _(cross-cutting)_
 
@@ -120,8 +124,10 @@ flowchart LR
 _Fig. 4: Observability Plane — small agents collect, one central brain visualizes and alerts._
 
 - ✅ Prometheus + Grafana + Alertmanager in-cluster (`tofu/monitoring.tf`), exposed at
-  `grafana`/`prometheus`/`alertmanager.teststuff.net`.
-- 🔜 Log aggregation (Loki), alerting routed to Home Assistant, Civo cost/FinOps.
+  `grafana`/`prometheus`/`alertmanager.teststuff.net`; Alertmanager notifies via the Home
+  Assistant webhook (ADR-042).
+- ✅ Log aggregation: Loki + Alloy, 7-day retention, queried in Grafana (ADR-083).
+- 🔜 Civo cost/FinOps (no Civo footprint yet).
 
 ## 5 · Security Plane _(cross-cutting)_
 

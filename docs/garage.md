@@ -37,27 +37,21 @@ by homelab** (ADR-074; pattern in `docs/patterns/app-owned-resources.md`) — th
 the *buckets* it needs from its own repo. So `sleep-band` / `sleep-snore` are declared by the
 **sleep-tracking app**, not here. See "Who provisions buckets" below.
 
-### Who provisions buckets (app-owned)
+### Who provisions buckets (app-owned — Crossplane, LIVE)
 
 Isolation in Garage is by **separate buckets + keys** (no AWS-style prefix IAM — ADR-031), which
 maps cleanly onto the per-app-repo model (ADR-004): an app declares its own buckets, write keys, and
 permission grants, and consumes the generated key as a Secret **in its own namespace**. The platform
-only provides the seam (the Garage admin API + a token). Mechanism, by timeline:
+only provides the seam (the Garage admin API + a token).
 
-- **Steady state (when a control plane lands):** apps declare buckets as reconciled resources, with
-  the generated key delivered straight to the app's namespace. Options: a **Crossplane Garage
-  provider** (native CRs, but the only one today — `kikokikok` — is immature, see below); or
-  **Crossplane `provider-terraform` wrapping the mature `jkossis/garage` tofu provider** (app-declared
-  CRs that run a small tofu module — combines GitOps ownership with a trustworthy provider).
-- **Interim (before Crossplane/ArgoCD):** the app creates its buckets from **its own repo's tofu**
-  using `registry.terraform.io/jkossis/garage` against the admin API. Still app-owned, no control
-  plane. Keys land in that app's local (gitignored) tofu state, not homelab's.
+The mechanism is **Crossplane `provider-terraform`** (ADR-076, live since 2026-06-17): the app
+declares a `Workspace` CR (wrapping the `jkossis/garage` tofu provider) in its own repo, ArgoCD
+syncs it, the provider reconciles in-cluster (admin token injected via ESO), and the generated key
+is published to **Infisical** as the source of truth (ADR-062). Full recipe + conventions:
+[`patterns/app-owned-resources.md`](patterns/app-owned-resources.md). Homelab does **not** create
+app buckets or hold app keys.
 
-Either way the keys are the app's secrets — kept out of git and (steady state) published to **Infisical**
-as the source of truth (ADR-062; SOPS was considered but not adopted). Homelab does **not** create app
-buckets or hold app keys.
-
-## Verify (from the LAN, once HAProxy/DNS are wired)
+## Verify (from the LAN)
 
 ```sh
 aws --endpoint-url https://s3.teststuff.net --region garage \

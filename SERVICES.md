@@ -25,7 +25,7 @@ truth.
 | **Prometheus** | 🟢 LIVE | Metrics TSDB (scrapes **only** Home Assistant) | `192.168.40.13:9090` · `prometheus.teststuff.net` | ADR-042 — not a general metrics sink |
 | **Alertmanager** | 🟢 LIVE | Alerting | `192.168.40.14:9093` · `alertmanager.teststuff.net` | ADR-042 |
 | **Loki + Alloy (logs)** | 🟢 LIVE | Log aggregation — Alloy DaemonSet → Loki on Garage S3, **7-day** retention | in-cluster `loki.loki.svc:3100` · query in **Grafana** (Explore → Loki datasource) | ADR-083 (raw manifests); `argocd/resources/loki/` — covers all pods incl. ephemeral/deleted |
-| **Forgejo** | 🟢 LIVE | Self-hosted Git | `forgejo.teststuff.net` (HTTPS + SSH :22) · `192.168.40.15:3000` | ADR — `docs/follow-ups.md` |
+| **Forgejo** | 🟢 LIVE | Self-hosted Git | `forgejo.teststuff.net` (HTTPS + SSH :22) · `192.168.40.15:3000` | no ADR; `tofu/forgejo.tf` (CNPG-backed); cutover plan FU-007 |
 | **UniFi Network App** | 🟢 LIVE | Network controller | `192.168.40.12` (8443/8080/3478/10001) · `ubiquiti.teststuff.net` | ADR-043 |
 | **Cilium** | 🟢 LIVE | CNI · BGP · LB-IPAM (VIPs from `192.168.40.0/24`) | in-cluster | — |
 | **metrics-server** | 🟢 LIVE | `kubectl top` / HPA | in-cluster | — |

@@ -1,8 +1,9 @@
-# `tofu/` — Talos k8s cluster on Proxmox (Phases 1 & 2)
+# `tofu/` — the main cluster root (Talos on Proxmox + bare metal, and the platform substrate)
 
-Provisions a Talos Linux Kubernetes cluster as VMs on the Proxmox host (`pve`,
-`192.168.2.3`), installs Cilium as the CNI, exposes services on the LAN via Cilium
-BGP, and runs Home Assistant on it. Implements ROADMAP.md Phases 1–2.
+Provisions the Talos Linux Kubernetes cluster (VMs on the Proxmox host `pve` `192.168.2.3` +
+bare-metal workers), installs Cilium as the CNI, exposes services on the LAN via Cilium BGP, and
+carries the platform substrate that ArgoCD can't manage for itself (ADR-005): storage, monitoring,
+Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1–2.
 
 > **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
 > (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` **+ bare-metal**
@@ -49,11 +50,18 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   `LoadBalancer` VIP `192.168.40.12` (mixed TCP/UDP). **Applied & live**; image pinned by digest.
 - `longhorn.tf` — Longhorn storage (default StorageClass, replicated) + a `longhorn-fast`
   node-local tier on the ThinkCentre's Optane.
-- `metal.tf` — bare-metal Talos workers (PXE/USB-installed, not Proxmox VMs); see
-  `../docs/provisioning.md`.
-- `monitoring.tf` — Prometheus + Grafana + Alertmanager (BGP VIPs `.13`/`.11`/`.14`).
-- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, `home_assistant_url`, `unifi_url`,
-  `grafana_url`, `monitoring_urls`.
+- `metal.tf` — bare-metal Talos workers (PXE/USB-installed, not Proxmox VMs), incl. the
+  `HostnameConfig` hostname pinning; see `../docs/provisioning.md`.
+- `monitoring.tf` — Prometheus + Grafana + Alertmanager (BGP VIPs `.13`/`.11`/`.14`);
+  `dashboards/` holds the provisioned Grafana dashboard JSON.
+- `metrics-server.tf` — `kubectl top` / HPA.
+- `argocd.tf` — ArgoCD install + bootstrap secret seeds + the two app-of-apps roots
+  (`../argocd/README.md`); `infisical/` (sub-root) declares the Infisical project + ESO identity.
+- `garage.tf` — Garage S3 object store (vendored chart `charts/garage/`; `../docs/garage.md`).
+- `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo (CNPG-backed) + the Tier-B
+  `act_runner` (`../docs/ci.md`).
+- `ci-runner.tf` — the Proxmox VM GitHub Actions runner `ci-runner-01` @ `.2.55` (ADR-082).
+- `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, service URLs, admin credentials.
 
 **Hardware-specific** — swap these for the DR target; the cluster layer stays put:
 
@@ -86,7 +94,7 @@ export TF_VAR_proxmox_api_token='tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xx
 ```
 
 > The live cluster was bootstrapped with a broad `root@pam!tofu` token (in the gitignored
-> `terraform.tfvars`) — **burnable: rotate to a scoped `tofu@pve` token + SOPS** (it was never
+> `terraform.tfvars`) — **burnable: rotate to a scoped `tofu@pve` token (FU-004)** (it was never
 > committed). The SSH key bpg uses for disk import
 > lives outside the repo at `~/.claude/homelab-pve-ssh/` (authorize its `.pub` in pve root's
 > `authorized_keys` — the one-time root-of-trust seed; no Proxmox API can inject it).
@@ -116,8 +124,9 @@ KUBECONFIG=$PWD/kubeconfig kubectl get nodes
 ## Secrets
 
 `talos_machine_secrets`, `talosconfig`, `kubeconfig`, and the Proxmox token are secret.
-`*.tfstate*`, `*.tfvars`, `kubeconfig`, `talosconfig` are gitignored (never committed). Use
-SOPS for anything that must live in git.
+`*.tfstate*`, `*.tfvars`, `kubeconfig`, `talosconfig` are gitignored (never committed). Secret
+values live in the KeePass wallet / Infisical (`../docs/secrets.md`, ADR-062) — nothing secret
+goes in git.
 
 ## Done
 
@@ -133,10 +142,12 @@ SOPS for anything that must live in git.
 - **`../tofu/cloudflare/`** + **`../tofu/cloudflare-token/`** — remote access (Cloudflare Tunnel +
   mTLS, **live**); separate roots/state. See `../docs/cloudflare.md`.
 - **`../tofu/provisioning/`** — Matchbox PXE LXC (separate root/state); see `../docs/provisioning.md`.
+- **`../tofu/github/`** — GitHub repos, branch-protection rulesets + agent labels (separate root;
+  applied outside the jail with an admin PAT — see its README).
+- **`tofu/infisical/`** — Infisical project + `eso-reader` identity (separate state; `apply.sh`).
 
 ## Not included yet (next steps)
 
-- Remote/encrypted state backend (currently local state).
-- Home Assistant `/config` → object-storage (S3) backup per ROADMAP (Longhorn covers in-cluster
+- FU-012 — remote/encrypted state backend (currently local state).
+- FU-013 — Home Assistant `/config` → object-storage (S3) backup (Longhorn covers in-cluster
   replication, not off-cluster DR).
-- GitOps (ArgoCD/Flux) for workloads; Civo cloud-burst.

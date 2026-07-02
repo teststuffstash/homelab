@@ -3,7 +3,7 @@
 #
 # Storage: Longhorn (replicated, default StorageClass) — dynamically provisioned, so the
 # pod is NOT node-pinned and reschedules freely across the iscsi-capable nodes. Data
-# backs up to object storage later per ROADMAP.
+# backs up to object storage later (FU-013).
 provider "kubernetes" {
   host                   = talos_cluster_kubeconfig.this.kubernetes_client_configuration.host
   client_certificate     = base64decode(talos_cluster_kubeconfig.this.kubernetes_client_configuration.client_certificate)

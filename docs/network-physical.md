@@ -31,15 +31,16 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03.
      │  wk-02 .62       │                     ├─► Office AP (UAP-AC-Lite, .14)
      └ Matchbox LXC .30 │                     └─► pop-os (.57)
                         │
-   ThinkCentre Edge ◄───┘  (.52 / reserved .53)   ← flaky PXE firmware
+   ThinkCentre Edge ◄───┘  (.53)
 ```
 
 ## Notes relevant to PXE / provisioning
 
 - **ThinkCentre and Proxmox share the same unmanaged TP-Link 10-port switch, one hop
   from OPNsense LAN.** Matchbox (LXC on Proxmox, via `vmbr0`) is therefore on the **same
-  L2 segment** as the ThinkCentre — DHCP/PXE broadcasts reach it directly. So a PXE
-  failure on the ThinkCentre is **not** a network-path problem.
+  L2 segment** as the ThinkCentre — DHCP/PXE broadcasts reach it directly. (Its 2026-06
+  "flaky PXE" was ultimately a **bad NIC cable** — 100Mbps + link flapping — replaced
+  2026-06-11; PXE has worked since.)
 - **Unmanaged switches** (TP-Link 10-port, office 5-port) → no STP forwarding delay to
   blame for a PXE-vs-STP race.
 - OPT1–OPT3 on the Intel card: not documented here yet (purpose/!connection TBD).
@@ -50,7 +51,7 @@ graph TD
   ONT[Telia ONT] -->|WAN| OPN["Big Data — OPNsense (.1)"]
   OPN -->|LAN| SW10[TP-Link 10-port unmanaged]
   SW10 --> PVE["Proxmox pve (.3)"]
-  SW10 --> TC["ThinkCentre (.52/.53) — flaky PXE"]
+  SW10 --> TC["ThinkCentre (.53)"]
   SW10 --> POE1[TP-Link PoE switch]
   SW10 --> UBNT["Ubiquiti PoE switch (.11)"]
   POE1 --> APB["Basement AP (.63)"]

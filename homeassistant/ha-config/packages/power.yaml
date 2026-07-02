@@ -16,7 +16,7 @@
 # — identified by the stress test in docs/power-measurements.md; aquarium / konditsioneer = the
 # original two plugs.
 #
-# TODO: drop the Tuya CLOUD dependency for a local API; then the /10 correction can go away.
+# FU-038: drop the Tuya CLOUD dependency for a local API; then the /10 correction can go away.
 # Source of truth in git; copied into the HA /config PV.
 template:
   - sensor:
