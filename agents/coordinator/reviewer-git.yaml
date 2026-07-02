@@ -36,8 +36,8 @@ metadata:
   name: reviewer-git-gen
   namespace: agent-coordinator
 spec:
-  appID: "REPLACE_ME"        # from `scripts/github-reviewer-app-bootstrap.sh secrets`
-  installID: "REPLACE_ME"    # the teststuffstash installation of homelab-reviewer
+  appID: "4199252"           # homelab-reviewer App (github-reviewer-app-bootstrap.sh, 2026-07-02)
+  installID: "143941082"     # the teststuffstash installation of homelab-reviewer
   auth:
     privateKey:
       secretRef: { name: reviewer-github-app, key: privateKey }

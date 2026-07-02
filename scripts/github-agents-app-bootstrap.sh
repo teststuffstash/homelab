@@ -85,12 +85,16 @@ EOF
 }
 
 cmd_convert() {
-  need gh; need jq
+  need curl; need jq
   local code="${1:?usage: convert <code-from-redirect-url>}"
   mkdir -p "$CRED_DIR"; chmod 700 "$CRED_DIR"
   say "Exchanging manifest code for App credentials (POST /app-manifests/$code/conversions)"
-  local resp; resp=$(gh api -X POST "/app-manifests/$code/conversions") \
-    || die "conversion failed (code expired? it's one-shot + ~1h TTL — re-run 'manifest')"
+  # MUST be unauthenticated: the code IS the credential, and GitHub 404s this endpoint when a token is
+  # attached (a fine-grained PAT in particular). `gh api` always injects one, so use plain curl here.
+  local resp http; resp=$(curl -sS -o /dev/stdout -w '\n%{http_code}' -X POST \
+    -H "Accept: application/vnd.github+json" "https://api.github.com/app-manifests/$code/conversions")
+  http=${resp##*$'\n'}; resp=${resp%$'\n'*}
+  [ "$http" = "201" ] || die "conversion failed (HTTP $http): $(echo "$resp" | jq -r '.message // .' 2>/dev/null || echo "$resp") — fresh code + no token attached? (one-shot, ~1h TTL)"
   echo "$resp" | jq -r '.id'  > "$CRED_DIR/app-id"
   echo "$resp" | jq -r '.pem' > "$CRED_DIR/private-key.pem"
   echo "$resp" | jq -r '.slug' > "$CRED_DIR/slug"

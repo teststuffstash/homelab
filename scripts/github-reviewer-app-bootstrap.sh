@@ -13,7 +13,9 @@
 # Install (pick the agent repos). Delivery target differs: one Infisical key, consumed by ONE ESO
 # generator (agents/coordinator/reviewer-git.yaml) → the `reviewer-git` Secret the reviewer pod mounts.
 #
-# Subcommands:  check | manifest | convert <code> | secrets | verify
+# Subcommands:  check | manifest | catch | convert <code> | secrets | verify
+#   catch — robust alternative to 'convert': listens on REDIRECT_PORT, captures the redirect 'code'
+#           byte-exact + converts immediately (no copy-paste truncation, no &state, no TTL race).
 # Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder"
 #   APP_NAME=homelab-reviewer  CRED_DIR=~/.claude/homelab-github-reviewer  REDIRECT_PORT=8767
 set -euo pipefail
@@ -65,20 +67,38 @@ HTML
   cat <<EOF
   Open it in a browser logged in as a $ORG owner:
       xdg-open $out     # or: open $out  (macOS)
-  Click "Create"; copy the 'code' from the redirect URL (the page won't load — fine), then:
+
+  ROBUST (recommended — no copy-paste of the code): in ANOTHER shell first run
+      scripts/github-reviewer-app-bootstrap.sh catch
+  then click "Create GitHub App for $ORG" in the browser; it captures the redirect + converts.
+
+  MANUAL fallback: click "Create"; copy the 'code' from the localhost:$REDIRECT_PORT redirect URL
+  (page won't load — fine; take ONLY the value after code=, drop any &state=...), then:
       scripts/github-reviewer-app-bootstrap.sh convert XXXX
 EOF
 }
 
-cmd_convert() {
-  need gh; need jq
-  local code="${1:?usage: convert <code-from-redirect-url>}" resp
+# Exchange a manifest <code> for App creds. MUST be unauthenticated: the code IS the credential, and
+# GitHub 404s this endpoint when a fine-grained PAT is attached (gh api always injects one). Plain curl,
+# no Authorization header, is the documented flow. Echoes the JSON on success; dies on non-201.
+_convert_code() {   # <code> -> JSON on stdout
+  need curl; need jq
+  local code="$1" http body
+  body=$(curl -sS -o /dev/stdout -w '\n%{http_code}' -X POST \
+           -H "Accept: application/vnd.github+json" \
+           "https://api.github.com/app-manifests/$code/conversions")
+  http=${body##*$'\n'}; body=${body%$'\n'*}
+  [ "$http" = "201" ] || die "conversion failed (HTTP $http): $(echo "$body" | jq -r '.message // .' 2>/dev/null || echo "$body")
+  If HTTP 404 with a fresh code: don't attach a token (this endpoint is unauthenticated). If 'name already
+  taken': the App exists — delete it in $ORG's App settings or reuse it (APP_ID=/APP_PRIVATE_KEY_FILE=)."
+  echo "$body"
+}
+
+_save_conversion() {   # <json> — persist id/pem/slug to CRED_DIR (shared by convert + catch)
+  local resp="$1"
   mkdir -p "$CRED_DIR"; chmod 700 "$CRED_DIR"
-  say "Exchanging manifest code for App credentials (POST /app-manifests/$code/conversions)"
-  resp=$(gh api -X POST "/app-manifests/$code/conversions") \
-    || die "conversion failed (code expired? it's one-shot + ~1h TTL — re-run 'manifest')"
-  echo "$resp" | jq -r '.id'  > "$CRED_DIR/app-id"
-  echo "$resp" | jq -r '.pem' > "$CRED_DIR/private-key.pem"
+  echo "$resp" | jq -r '.id'   > "$CRED_DIR/app-id"
+  echo "$resp" | jq -r '.pem'  > "$CRED_DIR/private-key.pem"
   echo "$resp" | jq -r '.slug' > "$CRED_DIR/slug"
   chmod 600 "$CRED_DIR"/*
   say "Saved App id=$(cat "$CRED_DIR/app-id") + private key to $CRED_DIR"
@@ -87,6 +107,42 @@ cmd_convert() {
       https://github.com/organizations/$ORG/settings/apps/$(echo "$resp" | jq -r .slug)/installations
   Then:  scripts/github-reviewer-app-bootstrap.sh secrets
 EOF
+}
+
+cmd_catch() {
+  need jq; need curl; need python3
+  say "Listening on http://localhost:$REDIRECT_PORT for GitHub's manifest redirect"
+  echo "  Now open /tmp/gh-reviewer-app-manifest.html and click \"Create GitHub App for $ORG\"."
+  echo "  (If you haven't generated it yet: run 'manifest' first, in another shell.)"
+  # Block until the browser redirect hits us; print ONLY the captured code on stdout.
+  local code
+  code=$(REDIRECT_PORT="$REDIRECT_PORT" python3 - <<'PY'
+import http.server, urllib.parse, os, sys
+port = int(os.environ["REDIRECT_PORT"])
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        code = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("code", [None])[0]
+        body = b"Got it \xe2\x80\x94 you can close this tab; return to the terminal." if code else b"No 'code' in redirect."
+        self.send_response(200 if code else 400)
+        self.send_header("Content-Type", "text/plain; charset=utf-8"); self.end_headers()
+        self.wfile.write(body)
+        if code:
+            print(code)          # -> captured by the shell
+            sys.stdout.flush()
+            os._exit(0)
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
+PY
+)
+  [ -n "$code" ] || die "no code captured"
+  say "Captured code (${#code} chars) — converting (POST /app-manifests/<code>/conversions)"
+  _save_conversion "$(_convert_code "$code")"
+}
+
+cmd_convert() {
+  local code="${1:?usage: convert <code-from-redirect-url>}"
+  say "Exchanging manifest code for App credentials (POST /app-manifests/$code/conversions)"
+  _save_conversion "$(_convert_code "$code")"
 }
 
 cmd_secrets() {
@@ -110,8 +166,11 @@ cmd_secrets() {
 cmd_verify() {
   need devbox
   say "reviewer-git ESO chain (ns agent-coordinator)"
-  devbox run --quiet -- kubectl --kubeconfig tofu/kubeconfig -n agent-coordinator get externalsecret,githubaccesstoken reviewer-git reviewer-git-gen 2>/dev/null \
-    || warn "not applied yet (fill appID/installID + kubectl apply -f agents/coordinator/reviewer-git.yaml)"
+  # Query each kind by its own name — a combined `get es,gat name1 name2` cross-products the
+  # names over both kinds and exits non-zero on the (expected) missing combinations.
+  devbox run --quiet -- kubectl --kubeconfig tofu/kubeconfig -n agent-coordinator get externalsecret reviewer-github-app reviewer-git 2>/dev/null \
+    || warn "ExternalSecrets not applied yet (fill appID/installID + kubectl apply -f agents/coordinator/reviewer-git.yaml)"
+  devbox run --quiet -- kubectl --kubeconfig tofu/kubeconfig -n agent-coordinator get githubaccesstoken reviewer-git-gen 2>/dev/null || true
   devbox run --quiet -- kubectl --kubeconfig tofu/kubeconfig -n agent-coordinator get secret reviewer-git 2>/dev/null \
     && echo "  → reviewer-git Secret present (key: GH_TOKEN)" || warn "no reviewer-git Secret yet (check ExternalSecret status)"
 }
@@ -119,6 +178,7 @@ cmd_verify() {
 case "${1:-check}" in
   check)    cmd_check ;;
   manifest) cmd_manifest ;;
+  catch)    cmd_catch ;;
   convert)  shift; cmd_convert "$@" ;;
   secrets)  cmd_secrets ;;
   verify)   cmd_verify ;;

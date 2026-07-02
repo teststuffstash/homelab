@@ -39,3 +39,42 @@ resource "github_repository_ruleset" "required_checks" {
     }
   }
 }
+
+# Per-repo REQUIRED APPROVAL — the reviewer half of the agentic merge gate. The org structural ruleset
+# keeps required_approving_review_count = 0 ("approvals are a per-repo choice"); this makes it 1 on the
+# agent-target repos. GitHub aggregates PR rules across rulesets by the most-restrictive value, so 1
+# wins over the org's 0. Effect: an agent PR (homelab-agents[bot]) needs a native approving review from
+# a DISTINCT identity — homelab-reviewer[bot] (self-approval is blocked) — before GitHub auto-merge fires.
+# Kept a separate ruleset from required-checks so approvals and checks enforce/toggle independently.
+resource "github_repository_ruleset" "required_approval" {
+  for_each = var.protected_repos
+
+  name        = "required-approval"
+  repository  = each.key
+  target      = "branch"
+  enforcement = var.enforcement
+
+  conditions {
+    ref_name {
+      include = ["~DEFAULT_BRANCH"]
+      exclude = []
+    }
+  }
+
+  # Org admins (you) bypass, matching the org structural ruleset — so an owner's direct-to-master isn't
+  # blocked for want of an approval. The agents App is deliberately NOT listed, so its PRs still need one.
+  bypass_actors {
+    actor_id    = 1
+    actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
+  rules {
+    pull_request {
+      required_approving_review_count   = 1    # the reviewer bot's approval
+      dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
+      require_last_push_approval        = false
+      required_review_thread_resolution = false
+    }
+  }
+}
