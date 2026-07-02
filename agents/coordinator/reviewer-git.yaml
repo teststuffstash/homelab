@@ -28,8 +28,10 @@ spec:
     - secretKey: pem
       remoteRef: { key: REVIEWER_GH_APP_PRIVATE_KEY }
 ---
-# 2) The generator: mint an installation token scoped to review — contents:read + pull_requests:write,
-# NO merge (auto-merge does that once the review + CI pass).
+# 2) The generator: mint an installation token — contents:write + pull_requests:write. contents:WRITE is
+# required for homelab-reviewer[bot]'s approval to COUNT toward the required-approval ruleset — GitHub only
+# counts reviews from a reviewer with repo write access; contents:read → authorAssociation NONE, ignored
+# (learned 2026-07-02). The reviewer still never merges — GitHub auto-merge does that once approval + CI pass.
 apiVersion: generators.external-secrets.io/v1alpha1
 kind: GithubAccessToken
 metadata:
@@ -42,7 +44,7 @@ spec:
     privateKey:
       secretRef: { name: reviewer-github-app, key: privateKey }
   permissions:
-    contents: read           #   clone the PR branch
+    contents: write          #   clone the PR branch + make the bot a repo WRITER so its approval counts
     pull_requests: write     #   submit the review (approve / request-changes) + inline comments
   repositories:              #   the repos where agent PRs land (mirror the worker/coordinator set)
     - sleep-tracking

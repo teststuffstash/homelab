@@ -5,8 +5,11 @@
 # Why a SEPARATE App (not reuse homelab-agents): GitHub blocks self-approval. The worker opens the PR
 # as homelab-agents[bot]; a native `gh pr review --approve` from that same bot fails ("Can not approve
 # your own pull request"). So the reviewer needs a DISTINCT identity — this App → homelab-reviewer[bot].
-# It's also strictly smaller: pull_requests:write + contents:read only (NO merge/contents:write —
-# GitHub auto-merge does the merge once the approval + CI land).
+# Grant: metadata:read + pull_requests:write + contents:WRITE. contents:write is REQUIRED — GitHub only
+# counts an approving review from a reviewer with repository *write* access; with contents:read the review
+# is submitted but authorAssociation=NONE and does NOT satisfy the required-approval gate (learned
+# 2026-07-02). Tradeoff accepted: the bot can push to branches (mitigated — session prompt says don't push,
+# ~1h token, master still needs a PR + this approval). GitHub auto-merge still performs the merge itself.
 #
 # Sibling of scripts/github-agents-app-bootstrap.sh, same shape: automate everything GitHub has an API
 # for; the browser is reduced to two clicks it can't mint — one Create (App-manifest REST flow) and one
@@ -48,11 +51,12 @@ EOF
 cmd_manifest() {
   need jq
   local out="/tmp/gh-reviewer-app-manifest.html" manifest
-  # Minimal review-bot grant: read code (clone) + write PRs (submit reviews / request-changes). No more.
+  # Review-bot grant: write PRs (submit reviews) + contents:WRITE. contents:write is required for the
+  # approval to COUNT (GitHub only counts reviews from a reviewer with repo write access — see header).
   manifest=$(jq -nc --arg n "$APP_NAME" --arg url "https://github.com/$ORG" \
     --arg redir "http://localhost:$REDIRECT_PORT/callback" '{
       name:$n, url:$url, redirect_url:$redir, public:false,
-      default_permissions:{ metadata:"read", contents:"read", pull_requests:"write" },
+      default_permissions:{ metadata:"read", contents:"write", pull_requests:"write" },
       default_events:[] }')
   cat > "$out" <<HTML
 <!doctype html><meta charset=utf-8><title>Create $APP_NAME GitHub App</title>

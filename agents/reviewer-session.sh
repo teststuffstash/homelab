@@ -80,7 +80,7 @@ RUBRIC_FLAG=""
 [ -f "${RUBRIC}" ] && RUBRIC_FLAG="--append-system-prompt-file ${RUBRIC}"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch. Run /code-review to find correctness bugs and post them as inline PR comments. Then submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve if you found no blocking correctness bugs, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the blockers. Do NOT merge and do NOT push — auto-merge completes the PR once your review and CI pass.'
-exec claude -p "\$PROMPT" --model ${MODEL} \$RUBRIC_FLAG --permission-mode ${PERM_MODE}
+exec claude -p "\$PROMPT" --model ${MODEL} \$RUBRIC_FLAG --permission-mode ${PERM_MODE} --output-format json
 PREP
 )
 ARGS="[\"bash\",\"-lc\",$(printf '%s' "$PREP" | jq -Rs .)]"
@@ -131,10 +131,23 @@ spec:
       secret: { secretName: ${REVIEWER_GIT}, optional: true }
 EOF
 
-echo "→ waiting for ${POD} (clone + checkout)…"
+echo "→ waiting for ${POD} (clone + checkout + review)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=120s || true
-# Headless: stream from container start (covers the clone) — no interactive attach, so no clone race.
-"$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
+# `claude -p --output-format json` is silent until it finishes, then prints ONE result object (not the
+# turn-by-turn transcript — use --output-format json, NOT stream-json/--verbose, which would stream every
+# tool call). `logs -f` blocks until the container exits, so we capture the whole run: pass the pre-claude
+# preamble (clone/checkout/banner) through, then reduce claude's JSON to a single usage/cost line + the
+# verdict text. A caller that ingests this (the coordinator) gets a couple of lines, not the full run, and
+# we record exact tokens+cost — Claude Code computes total_cost_usd itself (subscription-equivalent).
+raw=$("$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" 2>/dev/null || true)
+printf '%s\n' "$raw" | awk '/^\{/{exit} NF'                       # preamble before claude's JSON
+json=$(printf '%s\n' "$raw" | awk '/^\{/{f=1} f')                 # claude's JSON result (from first {)
+if [ -n "$json" ]; then
+  printf '%s' "$json" | jq -r '"→ reviewer \(.subtype // "done"): in=\(.usage.input_tokens // 0) out=\(.usage.output_tokens // 0) cache_read=\(.usage.cache_read_input_tokens // 0) turns=\(.num_turns // 0) cost=$\(.total_cost_usd // 0)", (.result // "")' 2>/dev/null \
+    || printf '%s\n' "$json"
+else
+  echo "  (no JSON result — reviewer likely errored; kubectl --kubeconfig tofu/kubeconfig -n ${NS} logs ${POD})"
+fi
 echo "→ review submitted on ${REPO_SLUG}#${PR}. verdict:"
 gh pr view "${PR}" --repo "${REPO_SLUG}" --json reviewDecision -q .reviewDecision 2>/dev/null | sed 's/^/    reviewDecision=/' || true
 echo "  (APPROVED + CI green ⇒ auto-merge completes the PR; CHANGES_REQUESTED ⇒ back to the worker.)"
