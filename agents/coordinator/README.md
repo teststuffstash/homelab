@@ -90,12 +90,37 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    reconstruct it** from the CR's `metadata.name` (`<project>-<session>`); that omits `-session-` and
    the worker crash-loops on `secret … not found`.
 6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
-   PR opens → relabel `agent/review`.
-7. **Drive the round.** Review the PR (humans only ever review the fixer's diff):
-   - approved + CI green → **merge** → `agent/done`; delete the session CR.
-   - changes requested (by human *or* a reviewer agent) and `round < max` → bump round, go to step 3
-     with a **fresh** pod + **fresh** session key.
-   - `round == max` or ambiguous → `agent/blocked` + comment.
+   PR opens → relabel `agent/review`, and confirm **auto-merge is armed** (`gh pr merge <PR> --repo
+   teststuffstash/<project> --auto --squash`; arm it yourself if the worker didn't). You do NOT merge
+   by hand — GitHub auto-merge fires once the gate is satisfied (1 approving review + CI green).
+7. **Get it reviewed — by the bot, not you.** The reviewer is a **distinct GitHub identity**
+   (`homelab-reviewer[bot]`), never the coordinator or the worker: GitHub blocks self-approval, and its
+   **native** approval is what satisfies the branch-protection `required-approval` gate. Trigger it
+   headless (it clones the repo, `gh pr checkout`s the PR, runs `/code-review`, and submits exactly one
+   `gh pr review --approve|--request-changes` as the review bot):
+   ```sh
+   bash agents/reviewer-session.sh <project> <PR>
+   ```
+   Then read the verdict and drive the round:
+   ```sh
+   gh pr view <PR> --repo teststuffstash/<project> --json reviewDecision -q .reviewDecision
+   ```
+   - **`APPROVED`** → hands off. The gate + auto-merge (armed in step 6) complete the PR on their own;
+     do **not** merge manually. When GitHub reports it merged → relabel `agent/done`, clean up (step 8),
+     then deploy (step 7a).
+   - **`CHANGES_REQUESTED`** and `round < max` → bump the round and go to **step 3** with a fresh pod +
+     fresh session key, **passing the reviewer's comments to the fixer** so it addresses them (feed
+     `gh pr view <PR> --repo teststuffstash/<project> --json reviews -q '.reviews[-1].body'` into the
+     fixer's context). New commits re-open the gate (`dismiss_stale_reviews_on_push`), so the bot must
+     re-approve — re-run this step after the next round's PR update.
+   - `round == max` or ambiguous → `agent/blocked` + comment the blockers.
+7a. **Deploy the merged fix (version bump).** ⚠️ Deploy-versioning + repo structure are being
+   **reworked** — until that lands, do NOT autonomously cut release tags or push to homelab. A merged
+   fix is in code but **not live** until a release is cut and the deploy pins to it (today's manual
+   path: a `v*` tag on the project → `release.yaml` publishes the image + OCI chart → bump
+   `argocd/sleep/…/targetRevision` in homelab → ArgoCD syncs). For now, **flag it**: comment on the
+   issue that a release + deploy is pending (with the merged SHA) and leave it for the human. Revisit
+   this step once the rework defines the automated deploy path.
 8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
 
 ## Runtime
@@ -184,6 +209,9 @@ The **image-build CI needs no token** — it pushes to ghcr with the job's built
   path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
 - **Graduate the loop** off hand-driving to a durable engine (Temporal / Argo Workflows+Events / a
   CRD+controller) once the runbook is proven — state already lives in labels+CRs, so it's a swap.
+- **Deploy-versioning + repo-structure rework** (the next step): the release→deploy path today is
+  manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Until it's reworked,
+  step 7a only *flags* a pending deploy — don't automate release/deploy against the current path.
 
 See [`../README.md`](../README.md) (worker launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
 (reconcile loop + hazards), and [`../../docs/agents/README.md`](../../docs/agents/README.md) (design/ADRs).
