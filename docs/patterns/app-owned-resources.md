@@ -1,92 +1,90 @@
-# Pattern: app-owned platform resources
+# Pattern: app-owned platform resources — homelab as a platform
 
 > To find **what** services exist (and their status), see the catalog [`../../SERVICES.md`](../../SERVICES.md).
-> This doc is **how** to consume the storage ones.
->
-> Decision: **ADR-074** (apps own their buckets/keys/DBs). Mechanism: **ADR-075** (app-repo tofu now,
-> Crossplane later). This doc is the reusable **how-to** for adding a new app that needs Garage
-> storage. Garage platform reference: [`garage.md`](../garage.md).
+> This doc is the **doctrine + how-to** for consuming them.
+> Decisions: **ADR-074** (apps own their buckets/keys/DBs) · **ADR-076** (mechanism: Crossplane
+> `provider-terraform`, live).
 
-The platform provides a **capability** (the Garage store) plus a thin **admin seam**. Each app
-declares the **instances** it needs — buckets, keys, permission grants — from **its own repo**, and
-consumes the generated key as a secret in its own namespace. homelab creates no app buckets and holds
-no app keys.
+**Treat homelab like AWS or Civo.** The platform provides **capabilities** (an S3 store, a Postgres
+operator, a secrets platform, an LLM-key minter) behind declarative seams; each app declares the
+**instances** it needs — buckets, keys, grants, databases — **from its own repo**, as CRs reconciled
+in-cluster. homelab creates no app resources and holds no app keys. App repos stay
+**platform-agnostic**: what they contain is standard Kubernetes (a Helm chart, `Secret` refs, an S3
+endpoint, a Postgres URL) — nothing homelab-specific beyond the CR manifests in `infra/`.
 
-## The seam the platform exposes
+## Self-service today (declare a CR, get the resource)
 
-- **Admin API** on `garage-0:3903` — **ClusterIP-only**, never on the LAN/VIP.
-- **Admin token** stashed at `~/.claude/homelab-garage/admin-token` (set from `tofu -chdir=tofu
-  output -raw garage_admin_token`). This is the credential app provisioning uses.
-- Apps reach the admin API via a short-lived `kubectl port-forward` (not by exposing it).
+| Resource | Declare in your repo | Reconciler | The secret lands |
+|---|---|---|---|
+| **Garage bucket / key / grant** | `infra/garage-workspace.yaml` — Crossplane `Workspace` wrapping the `jkossis/garage` module | `provider-terraform` (admin cred ESO-injected platform-side) | connection `Secret` + **published to Infisical** by the Workspace itself (the `crossplane-tf-writer` identity) |
+| **OpenRouter API key** (budget-capped) | `infra/openrouter-key.yaml` — `OpenRouterKey` CR (`budgetUSD`, `resetInterval`; `ephemeral` for per-session breakers) | [`openrouter-operator`](https://github.com/teststuffstash/openrouter-operator) | `<project>-openrouter` Secret in your namespace |
+| **Postgres** (HA) | a `postgresql.cnpg.io/v1` `Cluster` CR in your namespace | CloudNativePG (ADR-046) | the operator's `<cluster>-app` secret (or supply your own) |
+| **Any secret** | an `ExternalSecret` against the `infisical` `ClusterSecretStore` | ESO (ADR-062, [`../secrets.md`](../secrets.md)) | a native `Secret` in your namespace |
 
-## What an app repo carries
+Worked examples: `snore-recorder/infra/` (bucket created fresh + write-only key + cross-app grant),
+`sleep-tracking/infra/` (pre-existing buckets **adopted** via config-driven `import` +
+`deletionPolicy: Orphan` — never recreate resources that hold data).
 
-An `infra/` directory with tofu + a wrapper (copy from `sleep-tracking` or `snore-recorder`):
+## Not yet self-service (FU-039 — the platform gap)
 
-- `versions.tf` — `registry.terraform.io/jkossis/garage` provider (Terraform registry; pinned +
-  checksummed in `.terraform.lock.hcl`). `provider "garage" {}` reads `GARAGE_ENDPOINT`/`GARAGE_TOKEN`.
-- `garage.tf` — `garage_bucket`, `garage_key`, `garage_bucket_permission` resources.
-- `outputs.tf` — the access key id + secret as **sensitive** outputs.
-- `apply.sh` — port-forwards `pod/garage-0:3903`, exports `GARAGE_ENDPOINT=http://127.0.0.1:13903`
-  and `GARAGE_TOKEN` from the stash, then runs tofu. `devbox run buckets-plan|buckets-apply`.
-- devbox: `opentofu`, `kubectl` (+ `awscli2` to inspect data).
+- **Git repos + branch protection + labels** — `tofu/github/`, applied outside the jail with an
+  admin PAT. A new repo is a homelab-side step today.
+- **HTTPS names / DNS** (`<name>.teststuff.net`) — the OPNsense ansible path (`/opnsense-as-code`),
+  run from the homelab repo.
+- **ArgoCD Application / AppProject + namespace** — a PR to homelab's `argocd/` today.
 
-State is **local + gitignored** — it holds the keys. Never commit keys (repos are public). _(This is the
-**interim** app-repo-tofu path; the steady state below moves provisioning to Crossplane and the key into
-Infisical — SOPS was considered for this but not adopted, ADR-062.)_
+Until those close, "provision it yourself" sometimes means "open a small homelab PR" — fine, but
+name it for what it is: a platform gap, not the model.
+
+## Direction — the stack-IaC layer (FU-025)
+
+The target shape is **three layers**, so app repos know *nothing* about homelab:
+
+```
+app repo (sleep-tracking, snore-recorder)      code + chart. Publishes image + OCI chart to ghcr.
+        ▼   version bump = a PR here ↓          Standard k8s all the way; no homelab knowledge.
+stack-iac repo (sleep-iac — to be created)     the ArgoCD AppProject + app-of-apps for one stack:
+        ▼                                       Application manifests + values + the apps' infra CRs
+                                                + pinned versions. Own CI gates; a deploy is a
+                                                version-bump PR here (Renovate/agent P2 territory).
+homelab (this repo)                            the platform: cluster, operators, SERVICES.md, and
+                                                ONE root Application per stack pointing at its iac repo.
+```
+
+Today homelab's `argocd/sleep/` *plays* the stack-iac role in-repo; extracting it into `sleep-iac`
+is the FU-025 rework (it also fixes the drifty release→deploy path and gives the coordinator a
+clean automated-deploy seam). The AppProject is the tenancy boundary: a stack's iac repo can only
+deploy into its own namespaces.
 
 ## Conventions
 
-- **Scope keys tightly, per access method.** A device that only `put_object`s (boto3) gets a
-  **write-only** key (`snore-recorder`). A client that must list the remote to sync (FolderSync) needs
-  **read+write** (`sleep-band-writer`). Isolation is by-bucket regardless.
-- **Cross-app sharing = bucket-owner-grants-consumer.** The bucket's owning repo declares the grant,
-  referencing the consumer's access key **by ID** via a variable (the ID isn't secret). Example:
-  `snore-recorder` grants the `sleep-tracking` ingester read on `sleep-snore`
-  (`var.ingester_access_key_id`).
-- **Reading data ≠ provisioning.** To read a bucket, use the **S3 API** (`https://s3.teststuff.net`,
-  region `garage`, path-style) with a read-capable key. The admin port-forward is only for managing
-  buckets/keys. Don't move data through it.
-- **One CLAUDE.md block per app** stating the Garage ground-truth (endpoints, region, path-style) so
-  fresh sessions don't second-guess whether the platform is real. See the app CLAUDE.md files.
+- **Scope keys tightly, per access method.** A device that only `put_object`s gets a **write-only**
+  key; a client that must list to sync needs **read+write**. Isolation is by-bucket regardless
+  (Garage has no prefix IAM — ADR-031).
+- **Cross-app sharing = bucket-owner-grants-consumer.** The owning repo declares the grant,
+  referencing the consumer's access key **by ID** (not secret). Example: snore-recorder grants the
+  sleep-tracking ingester read on `sleep-snore`.
+- **Reading data ≠ provisioning.** Data goes through the **S3 API** (`https://s3.teststuff.net`,
+  region `garage`, path-style) with a normal key. The admin API (`:3903`) is the platform's
+  provisioning seam only — never move data through it.
+- **Platform knowledge stays out of app repos.** Each app `CLAUDE.md` carries a short "platform
+  knowledge" block: grep this repo's `SERVICES.md` from the jail (never cache catalog state in app
+  docs — it rots); in an agent worker pod the **issue is the context channel**
+  ([`../agents/README.md`](../agents/README.md)). The only pinned facts are app config: the S3
+  endpoint coordinates + the app's own bucket names.
 
 ## Adding a new app — checklist
 
-1. Copy `infra/` from `snore-recorder` (or `sleep-tracking`); set the bucket alias + key name(s).
-2. `devbox run buckets-plan` → review → `devbox run buckets-apply`.
-3. Wire the key into the app (env/Secret). For cross-app reads, add the grant in the **owning** repo.
-4. Add the Garage ground-truth block to the app's `CLAUDE.md`.
+1. Create the repo (homelab-side today: `tofu/github/` — FU-039) and, if it deploys in-cluster,
+   its ArgoCD Application (today: `argocd/`; target: the stack's iac repo).
+2. Copy `infra/` from snore-recorder (fresh resources) or sleep-tracking (adopting existing data);
+   set bucket/key names, add an `OpenRouterKey` if agents will work the repo.
+3. Consume the generated Secrets (`ExternalSecret` / the operator-written Secret) in your chart —
+   standard `envFrom`/`secretRef`, nothing homelab-specific.
+4. Add the platform-knowledge block to the app's `CLAUDE.md` (copy from sleep-tracking).
 
-## Steady state — Crossplane (ADR-076, LIVE)
+## History
 
-The control plane landed: apps now declare their Garage resources as a Crossplane **`Workspace`** CR
-(`provider-terraform` wrapping the same `jkossis/garage` module) in their **own repo**, synced by an
-ArgoCD `Application` from the homelab repo. The provider reconciles in-cluster (admin token injected via
-ESO), so the manual `apply.sh` port-forward goes away. The generated key lands in a connection `Secret`
-and is published to **Infisical** (source of truth); in-cluster consumers read it via an `ExternalSecret`,
-**offline devices read it from Infisical at provision time** (plaintext on-device — ESO can't reach them;
-no sops). Worked example:
-`snore-recorder` (`infra/garage-workspace.yaml` + homelab `argocd/sleep/snore-recorder.yaml`).
-
-## OpenRouter keys — the `OpenRouterKey` CR (LIVE)
-
-For a per-project, **budget-capped OpenRouter API key**, an app declares an `OpenRouterKey` CR in its
-own repo's `infra/` (synced by ArgoCD). The in-cluster **`openrouter-operator`** (kopf) mints the key
-on OpenRouter and writes it to a Secret (`<project>-openrouter`, key `OPENROUTER_API_KEY`) in the
-app's namespace. Weekly budget by default — caps a runaway agent's blast radius.
-
-```yaml
-apiVersion: openrouter.teststuff.net/v1alpha1
-kind: OpenRouterKey
-metadata: { name: <app>, namespace: <app> }
-spec:
-  project: <app>
-  budgetUSD: 5
-  resetInterval: weekly # daily|weekly|monthly
-  # guardrail: only-free  # declared for intent; guardrail-assign not yet wired
-```
-
-One Tier-0 **provisioning key** (Infisical → the operator's own ESO) mints all per-app runtime keys,
-so a new app gets a budgeted key by adding one CR — no shared key, no UI click. **Replaces the
-cloudopsworks Terraform provider** path, which couldn't reconcile (issue #20). Worked example:
-`sleep-tracking` (`infra/openrouter-key.yaml`).
+The **interim** path (ADR-075, retired): apps ran their own `infra/` tofu via a `kubectl
+port-forward` to the Garage admin API (`apply.sh`), keys landing in local gitignored state. ADR-076
+replaced it — if you find references to `apply.sh`/local key state, they're stale.
