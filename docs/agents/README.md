@@ -135,7 +135,7 @@ sequenceDiagram
   F->>F: build sqlite from the table → write FAILING row → red
   F->>F: minimal fix in parser.py → devbox run ci → green (cov ≥85%)
   F->>C: gh pr create
-  C->>C: devbox run ci + scan-secrets + full-stack test + reviewer subagent
+  C->>C: devbox run ci + scan-secrets + full-stack test; reviewer session approves (merge-path.md)
   C-->>I: green + approval → auto-merge → ghcr image
 ```
 
@@ -192,7 +192,9 @@ Config-as-code, co-located with what it operates on (same principle as each app'
 sleep-tracking/
   .agents/
     fix.yaml        # the fixer recipe — model knob, TDD instructions, allowed tools, guardrails
-    review.yaml     # the cross-vendor reviewer subagent
+    review.md       # the reviewer rubric — appended to the reviewer session's system prompt
+                    #   (agents/reviewer-session.sh; the reviewer runs decorrelated on the
+                    #   operator subscription, not the worker's OpenRouter model)
   claude-or         # already exists — model routing (OpenRouter)
   .openrouter.env   # already exists — the model knob (gitignored)
 ```

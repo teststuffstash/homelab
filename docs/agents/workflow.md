@@ -9,7 +9,9 @@
 
 The end-to-end goal (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged
 fix. This doc is the *control flow* that gets it there — who runs the agent, when, and how review and
-CI feed back.
+CI feed back. The last leg — how an approved green PR deterministically lands on master (branch
+updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed separately in
+[`merge-path.md`](merge-path.md) (FU-041).
 
 ## Two gates, not one
 
@@ -44,17 +46,36 @@ way — **do not** hold a session "hot" waiting for review/CI:
 The one narrow case for "hot" — a fast server-side check that comes back red seconds after PR-open
 while the pod is still up — is a deferred micro-opt (a short grace window), not a design pillar.
 
+**The coordinator has an analogous micro-opt: the hot tick.** For a task the budget-banding
+predicts as small, the coordinator session that spawned the worker MAY linger (bounded — one
+CI-cycle timeout, ~30 min) and see the whole worker → CI → review → merge cycle through in the
+same session, so the terminal verification runs with warm context of *why* the fix was dispatched
+instead of a fresh tick re-deriving it. Two hard rules keep it an optimization instead of a second
+architecture: (1) **watch and nudge, never dispatch** — the hot session may edge-trigger the
+reflexes (wake the review cron early, poke the updater) but never runs mechanics itself, or the
+per-repo review serialization breaks ([`merge-path.md`](merge-path.md)); (2) **correctness never
+depends on the session surviving** — everything it does lands in durable state, so if it dies or
+times out, the next level-triggered tick finishes identically. Waiting is cheap (a blocking watch
+burns no tokens between wakeups); the real floor is CI (~8–20 min), not the worker or the review.
+
 ## The coordinator = a level-triggered reconciler
 
 The coordinator holds **state, never agent context** — workers are disposable hands. Same shape as
-the `openrouter-operator` (kopf): reconcile "an issue being worked" toward "merged."
+the `openrouter-operator` (kopf): reconcile "an issue being worked" toward "merged." It reads
+freely (`gh`, `kubectl get`, Grafana/MCP — discovery is not mutation) and is the **tie-breaker**
+when worker and reviewer disagree; its own writes are coordination state only (labels, comments,
+issue/PR lifecycle). Code, approvals, and merges are always delegated (ADR-079), and decision-free
+transitions run as deterministic reflexes without an LLM turn
+([`merge-path.md`](merge-path.md) §Reflexes vs judgment).
 
 ```
 triaged (labelled, has repro + synthetic data table)  → spawn worker (round 1)
 pr-open                                                → await CI + review
+pr-behind-master                                       → updater reflex brings it current  (merge-path.md)
+ci-green + current + unapproved                        → review reflex dispatches the reviewer  (merge-path.md)
 ci-red | changes-requested                            → spawn worker (round N+1, fresh, PR+comments in)
-ci-green + approved                                    → merge  (the NL→auto-merge goal)
-cant-repro | max-rounds-exceeded                       → escalate to a human
+ci-green + current + approved                          → GitHub auto-merge completes  (the NL→auto-merge goal)
+cant-repro | max-rounds-exceeded | review flip-flop    → coordinator tie-breaks / escalates to a human
 ```
 
 Spawning a round = the existing `agents/agent-session.sh` mechanism (→ an `agent-sandbox` `Sandbox`
@@ -79,13 +100,17 @@ CR once that lands, ADR-078/081).
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns
   the per-project budget forever.
 - **Idempotency** — webhook delivery is at-least-once; key a worker off `(issue, base-sha, round)` so
-  a redelivered event doesn't spawn two pods.
+  a redelivered event doesn't spawn two pods. Enforce it mechanically, not by convention: the key
+  IS the Job name (`fix-<repo>-<issue>-r<round>`) — `kubectl create` with a deterministic name is
+  an atomic test-and-set, so racing dispatchers can't double-spawn
+  ([`merge-path.md`](merge-path.md) §Failure modes, "Concurrent triggers / locking").
 - **Concurrency** — one active worker per PR; never open round N+1 while N is in flight.
 - **Budget** — per-issue cap riding on the per-project budget-capped OpenRouter key
   (`<project>/infra/openrouter-key.yaml`); note the cap is *soft* (see operational findings).
 - **Human seam** — "changes requested by human" vs "by agent" are both just inputs to the next round;
-  the coordinator only distinguishes *needs-another-round* from *needs-human-merge* (humans review
-  only the fixer — the operating model).
+  the coordinator only distinguishes *needs-another-round* from *needs-human* (escalation — merges
+  themselves are auto once the reviewer approves; humans review only the fixer — the operating
+  model).
 
 ## MVP
 

@@ -108,6 +108,22 @@ _Last updated: 2026-07-02._
       it's a mechanical swap.
 - [ ] **FU-027** — One fresh-issue live run to demo the PR stats comment end-to-end (both halves
       are validated separately).
+- [ ] **FU-041** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
+      up-to-date branch (`strict_required_status_checks_policy`, `tofu/github/repo_rulesets.tf`)
+      but nothing updates PR branches (`allow_update_branch=false`), so auto-merge never fires on
+      a behind PR. **Direction (2026-07-03): deterministic CI serializer — no LLM in the merge
+      path.** Full design (options table, diagrams, S/M/L worked examples, platform-scale
+      extrapolation to multiple IDP-sized stacks, rollout phases):
+      **[`docs/agents/merge-path.md`](agents/merge-path.md)**. Shape: worker arms auto-merge;
+      per-repo updater workflow (`adRise/update-pr-branch`, update-before-review) keeps one
+      head-of-line PR current; reviewer dispatched only when green+current+unapproved (one review
+      per PR); GitHub auto-merge completes. Team-plan-only features → identical for private and
+      public repos. Coordinator stays the issue's owner start-to-finish but as a tool-less
+      overseer: mechanical transitions run as its deterministic reflexes (updater workflow +
+      review-reflex CronJob), the LLM is consulted only at judgment points (conflict, round
+      limit, stale-red) and only ever delegates. Ruled out (details in the doc):
+      GitHub merge queue (Enterprise-Cloud-only on private + split process), coordinator-LLM
+      merging, `allonsy-studio/actions-pr-auto-update` (hard-skips bot-authored PRs).
 
 ## Monitoring & storage
 
