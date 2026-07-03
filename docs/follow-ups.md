@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-043**.
+  Next free id: **FU-044**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -152,6 +152,19 @@ _Last updated: 2026-07-02._
       already has an open linked agent PR **or** carries `agent/in-progress` (a hard pre-flight in
       `agent-session.sh`, or fold dispatch into a reflex like the review path — same philosophy as
       FU-041). Tightening the brief wording alone is insufficient (that's the guard that just failed).
+- [ ] **FU-043** — **Auto-merge arming (+ stats comment) is coupled to the dispatcher's lifetime**, so
+      an interactively-dispatched PR can be born un-armed and stall silently. `agent-session.sh`'s
+      post-run block (arm auto-merge + post the `AGENT_RUN_STATS` PR comment) runs **in the dispatching
+      process and blocks until the worker pod finishes (~5 min)**. A **headless** coordinator pass
+      (`--run …`) runs it to completion; an **interactive** dispatch that detaches before the worker
+      ends skips it entirely. Live proof 2026-07-03: sleep-tracking#11 (dispatched interactively) got
+      **no** stats comment and **no** auto-merge (armed by hand at 19:41), while #12 (headless pass) got
+      both. Arming is the load-bearing one — an un-armed PR is invisible to the entire merge path
+      (updater/reflex/auto-merge) and stalls with no signal. **Fix: make arming independent of the
+      dispatcher** — e.g. arm from a reflex/CronJob (arm any open agent PR that isn't armed), or have
+      the worker arm its own PR at open (it already has `pull_requests:write`), so it never depends on
+      the interactive session surviving. Relates to FU-041 (deterministic merge path) and the
+      dispatch-idempotency gap in FU-042.
 
 ## Monitoring & storage
 
