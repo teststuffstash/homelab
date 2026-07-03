@@ -12,15 +12,17 @@
 # reviewer, the distinct identity is for BLAST RADIUS + audit legibility, not a hard GitHub constraint).
 #
 # Grant (the update-branch op + reading PR/check state, nothing more):
-#   metadata:read · contents:WRITE (update-branch = a merge commit on the PR head) · pull_requests:READ
-#   (enumerate/inspect open PRs + auto-merge state) · checks:READ + statuses:READ (require_passed_checks).
-#   NO issues, NO pull_requests:write — the conflict-labeling step uses the workflow's GITHUB_TOKEN.
+#   metadata:read · contents:WRITE (update-branch pushes a merge commit to the PR head) · pull_requests:WRITE
+#   (update-branch is a /pulls/ mutation — a GitHub App needs BOTH pull_requests:write AND contents:write, or
+#   the endpoint 403s "Resource not accessible by integration"; PR:read alone is NOT enough — learned the hard
+#   way) · checks:READ + statuses:READ (require_passed_checks). NO issues — the conflict-labeling step uses
+#   the workflow's GITHUB_TOKEN.
 #
 # Sibling of github-agents/reviewer-app-bootstrap.sh, same shape. Delivery target differs: the key goes to
 # ONE Infisical secret (source of truth, MERGE_GH_APP_PRIVATE_KEY) → published to a GitHub org Actions
 # secret by tofu/github/actions_secrets.tf (NOT ESO — GitHub Actions can't read Infisical).
 #
-# Subcommands:  check | manifest | catch | convert <code> | secrets | verify
+# Subcommands:  check | manifest | catch | convert <code> | install | secrets | verify
 #   catch — listens on REDIRECT_PORT, captures the redirect 'code' byte-exact + converts (no copy-paste).
 # Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder"
 #   APP_NAME=homelab-merge  CRED_DIR=~/.claude/homelab-github-merge  REDIRECT_PORT=8768
@@ -46,9 +48,11 @@ cmd_check() {
   say "What still needs the browser"
   cat <<EOF
   1. Create the App   -> 'manifest' then 'catch'/'convert <code>' (one Create click).
-  2. Install the App  -> one Install click; pick the SAME repos as the worker ($REPOS).
-  Then: 'secrets' (pushes the key to Infisical), then publish it to GitHub Actions via
-        tofu/github (TF_VAR_merge_gh_app_id + TF_VAR_merge_gh_app_private_key; see docs/github-setup.md §4).
+  2. INSTALL the App  -> 'install' opens the page (uses the saved slug); pick the SAME repos ($REPOS).
+                         ⚠ NOT optional — the updater 404s/403s until the App is installed.
+  3. Publish secrets  -> 'devbox run github-tofu apply' (reads id+key from $CRED_DIR). 'secrets' also
+                         backs the key up to Infisical. See docs/github-setup.md §4.
+  Then 'verify' (checks the updater workflow actually goes green end-to-end).
 EOF
 }
 
@@ -59,7 +63,7 @@ cmd_manifest() {
   manifest=$(jq -nc --arg n "$APP_NAME" --arg url "https://github.com/$ORG" \
     --arg redir "http://localhost:$REDIRECT_PORT/callback" '{
       name:$n, url:$url, redirect_url:$redir, public:false,
-      default_permissions:{ metadata:"read", contents:"write", pull_requests:"read", checks:"read", statuses:"read" },
+      default_permissions:{ metadata:"read", contents:"write", pull_requests:"write", checks:"read", statuses:"read" },
       default_events:[] }')
   cat > "$out" <<HTML
 <!doctype html><meta charset=utf-8><title>Create $APP_NAME GitHub App</title>
@@ -109,10 +113,24 @@ _save_conversion() {   # <json> — persist id/pem/slug to CRED_DIR (shared by c
   chmod 600 "$CRED_DIR"/*
   say "Saved App id=$(cat "$CRED_DIR/app-id") + private key to $CRED_DIR"
   cat <<EOF
-  NEXT (one Install click): install on the SAME repos as the worker ($REPOS) —
-      https://github.com/organizations/$ORG/settings/apps/$(echo "$resp" | jq -r .slug)/installations
-  Then:  scripts/github-merge-app-bootstrap.sh secrets
+  ⚠ REQUIRED NEXT — the App does NOTHING until it's INSTALLED on the repos (the updater 404s / 403s
+  without an installation). Run this (opens the Install page for the SAME repos as the worker, $REPOS):
+      scripts/github-merge-app-bootstrap.sh install
+  Then publish the org Actions secrets:  devbox run github-tofu apply   (reads id+key from $CRED_DIR)
 EOF
+}
+
+# Open the App's Install page. Reads the slug we saved (no guessing the URL), so this works even when the
+# App got a global-uniqueness suffix (homelab-merge-NNNN). Install on the SAME repos as the worker.
+cmd_install() {
+  local slug="${APP_SLUG:-$(cat "$CRED_DIR/slug" 2>/dev/null || true)}"
+  [ -n "$slug" ] || die "no slug in $CRED_DIR/slug — run 'convert'/'catch' first (or pass APP_SLUG=)"
+  local url="https://github.com/organizations/$ORG/settings/apps/$slug/installations"
+  say "Install '$slug' on the agent repos: pick 'Only select repositories' → $REPOS"
+  echo "  $url"
+  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 || true
+  elif command -v open >/dev/null 2>&1; then open "$url" >/dev/null 2>&1 || true
+  else echo "  (open it manually — no xdg-open/open on PATH)"; fi
 }
 
 cmd_catch() {
@@ -161,25 +179,29 @@ cmd_secrets() {
   # from app-id + private-key + repo automatically (unlike the reviewer's ESO GithubAccessToken generator).
   say "Pushing the merge App private key into Infisical (homelab/prod) — the source of truth"
   devbox run infisical-secret "MERGE_GH_APP_PRIVATE_KEY=$(cat "$pem")"
-  say "Done. Publish to GitHub Actions org secrets via tofu (App key is copied into the CI plane HERE):"
-  echo "  app id (NOT secret): $app_id  → set as var.merge_gh_app_id (tofu/github/variables.tf default or TF_VAR)"
+  say "Done (Infisical backup written). App id (NOT secret): $app_id"
   cat <<EOF
-  export TF_VAR_merge_gh_app_id="$app_id"
-  export TF_VAR_merge_gh_app_private_key="\$(cat "$pem")"   # or: infisical secrets get MERGE_GH_APP_PRIVATE_KEY --plain ...
-  tofu -chdir=tofu/github apply    # OUTSIDE the jail, admin token — creates MERGE_GH_APP_ID + _PRIVATE_KEY org secrets
+  If you haven't yet:  scripts/github-merge-app-bootstrap.sh install   # ⚠ REQUIRED — install on $REPOS
+  Publish the org Actions secrets:  devbox run github-tofu apply       # reads id+key from $CRED_DIR
 EOF
 }
 
 cmd_verify() {
   need gh
-  say "GitHub org Actions secrets (names only — values are write-only)"
-  gh secret list --org "$ORG" 2>/dev/null | grep -E 'MERGE_GH_APP_(ID|PRIVATE_KEY)' \
-    && echo "  → both org Actions secrets present" \
-    || warn "MERGE_GH_APP_ID / MERGE_GH_APP_PRIVATE_KEY not set yet (run 'secrets' then tofu apply)"
-  say "App installed on the agent repos?"
+  # The ONLY reliable end-to-end check: does the updater workflow actually go green? That single signal
+  # covers App-installed + org-secrets-set + permissions-correct all at once — a green run is impossible
+  # unless all three hold. (Introspecting the install directly needs the App's own JWT, not a PAT; and
+  # `gh secret list --org` needs the org-admin token, which isn't in this shell — so those checks lie.)
+  say "Updater workflow status per repo (green ⇒ App installed + secrets set + permissions correct)"
   for r in $REPOS; do
-    gh api "/repos/$ORG/$r/installation" --jq '.app_slug' 2>/dev/null | grep -q "$APP_NAME" \
-      && echo "  $r: $APP_NAME installed" || warn "  $r: $APP_NAME NOT installed (one Install click)"
+    line="$(gh run list --repo "$ORG/$r" --workflow update-pr-branch.yml --limit 1 \
+              --json conclusion,createdAt,url --jq '.[0] | "\(.conclusion)  \(.createdAt)  \(.url)"' 2>/dev/null || true)"
+    case "$line" in
+      success*) echo "  $r: ✅ $line" ;;
+      "")       warn "  $r: no updater run yet — push the workflow / 'gh workflow run update-pr-branch.yml --repo $ORG/$r'" ;;
+      *)        warn "  $r: ❌ $line
+        └─ inspect: gh run view <id> --repo $ORG/$r --log-failed   (403 'not accessible by integration' ⇒ App perms; 404 'installation' ⇒ not installed)" ;;
+    esac
   done
 }
 
@@ -188,7 +210,8 @@ case "${1:-check}" in
   manifest) cmd_manifest ;;
   catch)    cmd_catch ;;
   convert)  shift; cmd_convert "$@" ;;
+  install)  cmd_install ;;
   secrets)  cmd_secrets ;;
   verify)   cmd_verify ;;
-  *) die "unknown subcommand '$1' (check|manifest|convert|secrets|verify)" ;;
+  *) die "unknown subcommand '$1' (check|manifest|catch|convert|install|secrets|verify)" ;;
 esac

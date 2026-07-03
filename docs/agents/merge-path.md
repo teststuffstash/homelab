@@ -425,8 +425,9 @@ contract-versioning discipline), not a merge-path mechanism.
 - **Updater token** — must be an App token, not `GITHUB_TOKEN` (its pushes wouldn't re-trigger
   CI). Minted from a **dedicated, minimal `homelab-merge` App** (`actions/create-github-app-token`,
   App id + private key as the `MERGE_GH_APP_*` org Actions secrets). Grant:
-  contents:write (update-branch) + pull_requests:read + checks:read + statuses:read
-  (`require_passed_checks`) + metadata:read — **no Issues, no PR write**. Chosen over reusing
+  contents:write **+ pull_requests:write** (update-branch is a `/pulls/` mutation — a GitHub App needs
+  BOTH, or the endpoint 403s "Resource not accessible by integration"; PR:read alone is not enough) +
+  checks:read + statuses:read (`require_passed_checks`) + metadata:read — **no Issues**. Chosen over reusing
   `homelab-agents` (which the design first proposed) because reuse would copy the *agents* key —
   which also mints the coordinator token (issues:write, multi-repo, merge) — into a GitHub org
   Actions secret readable by the **semi-trusted CI plane** (an in-repo agent PR branch can add a

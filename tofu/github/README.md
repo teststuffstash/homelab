@@ -47,6 +47,7 @@ owner:
 - **Resource owner:** `teststuffstash`  ← the single-org scoping; the token can reach nothing else
 - **Repository access:** All repositories (or just the agent-target repos)
 - **Organization permissions → Administration: Read and write**  ← unblocks the org ruleset
+- **Organization permissions → Secrets: Read and write**  ← for the org Actions secrets (actions_secrets.tf; the `MERGE_GH_APP_*` updater creds — 403 on `/orgs/*/actions/secrets/public-key` without it)
 - **Repository permissions → Administration: Read and write**  ← for the per-repo rulesets + `github_repository` (repos.tf)
 - **Repository permissions → Issues: Read and write**  ← for the agent labels (labels.tf; labels live under Issues, not Administration)
 
