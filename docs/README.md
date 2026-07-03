@@ -18,6 +18,7 @@ running services fit together, how to operate them, and their risks.
 | [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
 | [patterns/app-owned-resources.md](patterns/app-owned-resources.md) | How an app provisions its own buckets/keys/DBs from its own repo (ADR-074/076) |
 | [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |
+| [sleep-iac.md](sleep-iac.md) | Blueprint: extract the sleep stack into its own IaC repo (FU-025) — AppProject tenancy, what moves, prune-safe migration |
 | [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
