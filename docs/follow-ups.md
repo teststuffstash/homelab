@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-040**.
+  Next free id: **FU-043**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -140,6 +140,18 @@ _Last updated: 2026-07-02._
       4. Optional Phase 4 later (edge-triggers, Renovate levers per FU-014/FU-015) — see the doc's Rollout.
       Then close this item. Phase-3 done also unblocks the stalled live PRs (e.g. sleep-tracking#8 is
       BEHIND+APPROVED+armed today) once the updater's org secrets land.
+- [ ] **FU-042** — **Coordinator double-dispatches an already-in-progress issue** (no deterministic
+      idempotency). The dispatch guard is soft LLM-judgment in the brief (`agents/coordinator/README.md`
+      step 1: "pick one labelled `agent/queued`"), enforced by nothing. Live failure 2026-07-03:
+      sleep-tracking#10 was claimed correctly (`agent/queued`→`agent/in-progress`, PR #11 opened), then
+      a second coordinator pass ~3h later re-picked the same **`agent/in-progress`** issue, commented a
+      fresh "round 1" unaware of #11, and opened a conflicting **PR #12** (both edit
+      `tests/integration/fixtures/nights.yaml`). Closed #12, kept #11. The brief *states* the invariant
+      "idempotency key `(issue, base-sha, round)` so a re-list never double-spawns" but a stateless LLM
+      ignored it. **Fix: make dispatch idempotent deterministically** — refuse to dispatch if the issue
+      already has an open linked agent PR **or** carries `agent/in-progress` (a hard pre-flight in
+      `agent-session.sh`, or fold dispatch into a reflex like the review path — same philosophy as
+      FU-041). Tightening the brief wording alone is insufficient (that's the guard that just failed).
 
 ## Monitoring & storage
 
