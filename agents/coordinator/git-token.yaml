@@ -5,8 +5,12 @@
 # long-lived secret (Infisical). Short-lived (~1h), refreshed by ESO.
 #
 # ⚠️ SCAFFOLD — prereqs (one-time): the App is bootstrapped + its key is in Infisical
-# (scripts/github-agents-app-bootstrap.sh) AND it has issues:write granted + accepted on the
-# teststuffstash installation. Apply AFTER rbac.yaml (which creates the namespace); infra like this
+# (scripts/github-agents-app-bootstrap.sh) AND it has issues:write + checks:read + statuses:read +
+# actions:read granted and RE-ACCEPTED on the teststuffstash installation (a permission add pends until
+# the install is re-approved). The three read grants let review-reflex.sh read statusCheckRollup;
+# without them `gh pr list --json statusCheckRollup` 403s (checks/statuses for the check+status signals,
+# actions because gh's fixed fragment also reads checkSuite.workflowRun). Apply AFTER rbac.yaml (which
+# creates the namespace); infra like this
 # is applied with kubectl, NOT via ArgoCD:
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
@@ -48,6 +52,11 @@ spec:
     contents: write                #   merge commits to master via an approved PR
     pull_requests: write           #   merge PRs
     issues: write                  #   move the agent/* labels
+    checks: read                   #   review-reflex reads statusCheckRollup to detect "green"
+    statuses: read                 #     (rollup mixes Checks-API + commit-status signals)
+    actions: read                  #     + `gh --json statusCheckRollup`'s fixed fragment also reaches
+                                   #       checkSuite.workflowRun (an Actions resource); without this the
+                                   #       whole GraphQL query 403s and gh returns empty. Read-only.
   repositories:                    # only the repos where agent-fix work lives
     - sleep-tracking
     - snore-recorder

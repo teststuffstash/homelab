@@ -42,9 +42,23 @@ dispatch=()   # "repo pr" pairs, at most one per repo per tick
 
 for repo in $REPOS; do
   slug="$ORG/$repo"
-  prs="$(gh pr list --repo "$slug" --state open --limit 50 \
+  # Fail LOUD, never swallow: a `gh pr list` error (e.g. the token lacking checks:read/statuses:read,
+  # so `--json statusCheckRollup` 403s) must NOT collapse into an empty list — that silently makes every
+  # green PR invisible and the reflex "sees nothing to review" forever. Abort so the pod Fails visibly.
+  # --limit 40 (not 50): gh's fixed statusCheckRollup fragment is deep, and GraphQL bills the *static*
+  # worst-case node count from the query's first:/last: args (independent of how many PRs actually exist).
+  # At 50 that estimate is ~515k > GitHub's 500k cap → hard error; 40 (~412k) always clears it. Bump only
+  # in lockstep with this ceiling. 40 open+auto-merge PRs/repo is far beyond anything the agent flow hits.
+  errfile="$(mktemp)"
+  if ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
       --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits \
-      2>/dev/null || echo '[]')"
+      2>"$errfile")"; then
+    log "[$repo] FATAL: gh pr list failed — aborting rather than silently reviewing nothing:"
+    cat "$errfile" >&2
+    rm -f "$errfile"
+    exit 1
+  fi
+  rm -f "$errfile"
 
   # Reviewable = armed ∧ not-behind ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits ).
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
