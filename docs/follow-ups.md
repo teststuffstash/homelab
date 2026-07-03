@@ -111,19 +111,35 @@ _Last updated: 2026-07-02._
 - [ ] **FU-041** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
       up-to-date branch (`strict_required_status_checks_policy`, `tofu/github/repo_rulesets.tf`)
       but nothing updates PR branches (`allow_update_branch=false`), so auto-merge never fires on
-      a behind PR. **Direction (2026-07-03): deterministic CI serializer — no LLM in the merge
-      path.** Full design (options table, diagrams, S/M/L worked examples, platform-scale
-      extrapolation to multiple IDP-sized stacks, rollout phases):
+      a behind PR. **Deterministic CI serializer — no LLM in the merge path.** Full design (options
+      table, diagrams, S/M/L worked examples, platform-scale extrapolation, rollout phases):
       **[`docs/agents/merge-path.md`](agents/merge-path.md)**. Shape: worker arms auto-merge;
       per-repo updater workflow (`adRise/update-pr-branch`, update-before-review) keeps one
       head-of-line PR current; reviewer dispatched only when green+current+unapproved (one review
-      per PR); GitHub auto-merge completes. Team-plan-only features → identical for private and
-      public repos. Coordinator stays the issue's owner start-to-finish but as a tool-less
-      overseer: mechanical transitions run as its deterministic reflexes (updater workflow +
-      review-reflex CronJob), the LLM is consulted only at judgment points (conflict, round
-      limit, stale-red) and only ever delegates. Ruled out (details in the doc):
-      GitHub merge queue (Enterprise-Cloud-only on private + split process), coordinator-LLM
-      merging, `allonsy-studio/actions-pr-auto-update` (hard-skips bot-authored PRs).
+      per PR); GitHub auto-merge completes. Coordinator stays the issue's owner but as a tool-less
+      overseer; the LLM is consulted only at judgment points (conflict, round limit, stale-red).
+      Ruled out (details in the doc): GitHub merge queue (Enterprise-Cloud-only on private + split
+      process), coordinator-LLM merging, `allonsy-studio/actions-pr-auto-update` (hard-skips bot PRs).
+      **BUILT 2026-07-03 (phases 1–3 committed):** updater workflow in both agent repos, review-reflex
+      `.sh` + CronJob (`agents/review-reflex.sh`, `agents/coordinator/review-reflex.yaml`), auto-merge
+      arming in `agent-session.sh`, `merge-conflict` label in `labels.tf`. **Remaining = operator
+      one-time wiring** (all outside the jail unless noted):
+      1. Bootstrap the **dedicated `homelab-merge` App** (minimal grant: contents:write + PR/checks/statuses
+         read — see docs/github-setup.md §2) — the ONLY blocker for Phase 1:
+         `bash scripts/github-merge-app-bootstrap.sh manifest|catch|secrets` (create + install on the agent
+         repos + push key to Infisical). Kept separate from homelab-agents so its CI-exposed key stays
+         least-privilege (docs/agents/merge-path.md §Updater token).
+      2. `devbox run github-tofu apply` (outside jail — the wrapper loads the org admin token + the merge
+         id/key, no growing export list) — creates the `MERGE_GH_APP_*` org Actions secrets
+         (`actions_secrets.tf`), the `merge-conflict` label (import first if it pre-exists), and, if not
+         already applied, `allow_auto_merge=true` on repos.tf. (Set the wrapper's org-admin wallet knobs
+         once — `GH_ADMIN_KP_DB`/`GH_ADMIN_KP_KEY`/`GH_ADMIN_KP_ENTRY`, see `scripts/github-tf.sh`.)
+      3. `kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/review-reflex.yaml` (Phase 2;
+         needs the coordinator bootstrap already done — rbac + coordinator-git + coordinator-claude +
+         reviewer-git). Verify: `kubectl -n agent-coordinator create job --from=cronjob/review-reflex reflex-test`.
+      4. Optional Phase 4 later (edge-triggers, Renovate levers per FU-014/FU-015) — see the doc's Rollout.
+      Then close this item. Phase-3 done also unblocks the stalled live PRs (e.g. sleep-tracking#8 is
+      BEHIND+APPROVED+armed today) once the updater's org secrets land.
 
 ## Monitoring & storage
 

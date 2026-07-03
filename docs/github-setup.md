@@ -23,6 +23,7 @@ this is the broader catalog.
 | **homelab-runner-registrar** | the Proxmox **CI-runner VM** (ADR-082) mints its own Actions registration tokens at boot | Org → *Self-hosted runners: R/W* | (as installed) | App `4141567`, install `142515626` |
 | **homelab-agents** | mints the worker + coordinator git tokens (clone/push/PR, label issues, merge) — `homelab-agents[bot]`, the PR **author** | Repo → Contents: R/W, Pull requests: R/W, Issues: R/W; Metadata: read | the agent repos | App `4150968`, install `142724430` — `scripts/github-agents-app-bootstrap.sh` |
 | **homelab-reviewer** | the review bot's identity — `homelab-reviewer[bot]` submits `--approve`/`--request-changes` on the worker's PR. **Distinct App on purpose**: GitHub blocks self-approval, so the reviewer must not be the PR author | Repo → Contents: **R/W** (required so the approval *counts* — GitHub only counts reviews from a repo writer; contents:read ⇒ authorAssociation NONE, ignored), Pull requests: R/W; Metadata: read (no manual merge — auto-merge does that) | the agent repos | `scripts/github-reviewer-app-bootstrap.sh` → `agents/coordinator/reviewer-git.yaml` |
+| **homelab-merge** | the merge-serializer identity — `homelab-merge[bot]` runs the FU-041 updater's branch-update push (`update-pr-branch.yml`). **Dedicated (not homelab-agents) on purpose**: its key must be copied into a GitHub org Actions secret readable by the semi-trusted CI plane, so it's kept minimal — a leak only grants branch-updates, not the coordinator's issues/merge grant | Repo → Contents: **R/W** (update-branch = a merge commit), Pull requests: **Read**, **Checks: Read** + **Commit statuses: Read** (`require_passed_checks`); Metadata: read. *No Issues, no PR write* — the conflict-labeling step uses `GITHUB_TOKEN` | the agent repos | `scripts/github-merge-app-bootstrap.sh` → org Actions secrets via `tofu/github/actions_secrets.tf` |
 
 **Click-only (per the runner bootstrap doc):** *creating* an App (driven to a single Create via the
 App-manifest REST flow), **Installing** it on the org, generating its **private key**. The private
@@ -60,6 +61,29 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   outside collaborators".** Because the self-hosted runners are inside the cluster, this stops a
   **fork PR** from running untrusted code on a homelab node without an explicit click.
 - **Actions enabled** per repo (usually on by default; the bootstrap `access` step asserts it).
+- **Org Actions secrets** — the only workflow-visible secrets the platform needs, `visibility = all` so
+  every agent repo's workflow reads them. Used by the FU-041 **updater** workflow
+  (`update-pr-branch.yml`), which mints a **homelab-merge** App token so its branch-update push
+  re-triggers CI (a bare `GITHUB_TOKEN` push would not):
+
+  | secret | value |
+  |---|---|
+  | `MERGE_GH_APP_ID` | the `homelab-merge` App id — not sensitive (`~/.claude/homelab-github-merge/app-id`) |
+  | `MERGE_GH_APP_PRIVATE_KEY` | the App private key — **durable source is Infisical** `MERGE_GH_APP_PRIVATE_KEY` (pushed by `github-merge-app-bootstrap.sh`); local copy at `~/.claude/homelab-github-merge/private-key.pem` |
+
+  **Managed as code** in [`tofu/github/actions_secrets.tf`](../tofu/github/actions_secrets.tf) (same root
+  as the rulesets/repos/labels), and applied via **one wrapper** that loads the org admin token + both
+  values — no growing checklist of `export`s:
+  ```sh
+  devbox run github-tofu plan     # then: devbox run github-tofu apply   (OUTSIDE the jail)
+  ```
+  `scripts/github-tf.sh` sources `TF_VAR_merge_gh_app_{id,private_key}` from the merge cred dir and
+  `GITHUB_TOKEN` from the dedicated org-admin wallet (`~/Documents/homelab-admin.kdbx`, entry
+  `github-homelab-admin`, keyfile `~/Documents/homelab-admin.keyx` — override via `GH_ADMIN_KP_DB`/`GH_ADMIN_KP_KEY`/`GH_ADMIN_KP_ENTRY`).
+  This is the one spot the merge App key is
+  deliberately *copied* out of Infisical into GitHub (Actions can't read Infisical). ⚠ The github
+  provider stores the value in this root's **state** (local + gitignored) — a second at-rest copy of a
+  Tier secret, kept minimal by using the dedicated least-privilege App; see the file header.
 
 ## 5. Per-repo settings
 
@@ -78,7 +102,9 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   declared, adopted via `import` blocks). Auto-merge completes the PR once the ruleset's requirements
   (approval + CI) are met; auto-delete cleans up the worker's branch. The agent state labels are code
   too, in [`tofu/github/labels.tf`](../tofu/github/labels.tf). The admin PAT needs **Issues: R/W** for
-  the labels (they're under Issues, not Administration).
+  the labels (they're under Issues, not Administration) and **Organization → Secrets: R/W** for the
+  `MERGE_GH_APP_*` org Actions secrets (`actions_secrets.tf`) — see the scope list in
+  [`tofu/github/README.md`](../tofu/github/README.md).
 - **Default runner** — repos using homelab CI set `runs-on: homelab-ephemeral`; the rest use
   `ubuntu-latest`.
 - **Package visibility** — a ghcr package is **private by default**, inheriting nothing from a public

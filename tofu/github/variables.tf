@@ -36,3 +36,21 @@ variable "protected_repos" {
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
   }
 }
+
+# The homelab-merge App id — not sensitive (the private key is). Exposed to the agent repos' workflows as
+# the org Actions secret MERGE_GH_APP_ID (actions_secrets.tf), for the FU-041 updater's App-token mint.
+# Provided by scripts/github-tf.sh from the cred dir (~/.claude/homelab-github-merge/app-id) — no default,
+# so a bare `tofu apply` (without the wrapper) fails loudly rather than minting a secret with an empty id.
+variable "merge_gh_app_id" {
+  description = "homelab-merge GitHub App id. Set via TF_VAR_merge_gh_app_id (scripts/github-tf.sh injects it)."
+  type        = string
+}
+
+# The homelab-merge App private key. SENSITIVE — sourced from the cred-dir PEM by scripts/github-tf.sh
+# (durable copy: Infisical MERGE_GH_APP_PRIVATE_KEY); never in tfvars/git. See actions_secrets.tf's header
+# for the secrets-in-state tradeoff. No default → apply fails loudly if it isn't provided.
+variable "merge_gh_app_private_key" {
+  description = "homelab-merge GitHub App PEM private key. Set via TF_VAR_merge_gh_app_private_key (scripts/github-tf.sh)."
+  type        = string
+  sensitive   = true
+}

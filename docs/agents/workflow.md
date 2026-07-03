@@ -10,8 +10,10 @@
 The end-to-end goal (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged
 fix. This doc is the *control flow* that gets it there — who runs the agent, when, and how review and
 CI feed back. The last leg — how an approved green PR deterministically lands on master (branch
-updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed separately in
-[`merge-path.md`](merge-path.md) (FU-041).
+updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed **and built** separately
+in [`merge-path.md`](merge-path.md) (FU-041): a per-repo updater workflow keeps the head-of-line PR
+current, and the **review reflex** CronJob auto-dispatches the reviewer when a PR is green + current +
+unapproved — so the mechanical "trigger the reviewer" step below is now a reflex, not a coordinator turn.
 
 ## Two gates, not one
 

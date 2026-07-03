@@ -97,14 +97,25 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    `spec.secretName` (`<project>-session-<session>-openrouter`, with the `-session-` infix). **Do NOT
    reconstruct it** from the CR's `metadata.name` (`<project>-<session>`); that omits `-session-` and
    the worker crash-loops on `secret … not found`.
+> **Steps 6–7 are now DETERMINISTIC REFLEXES, not coordinator turns** (FU-041,
+> [`../../docs/agents/merge-path.md`](../../docs/agents/merge-path.md)). `agent-session.sh` arms
+> auto-merge at PR open; the per-repo **updater workflow** keeps a behind PR current; the **review
+> reflex** CronJob (`agents/coordinator/review-reflex.yaml`) dispatches the reviewer the moment a PR is
+> green + current + unapproved; GitHub auto-merge completes it. So in the normal path you do **not** run
+> steps 6–7 by hand — you WATCH the reflexes work and only step in for the exception plays (conflict →
+> close + re-dispatch fresh; changes-requested → next round; round-limit / flip-flop / stale-red →
+> decide or escalate). The manual commands below remain valid as a fallback when a reflex is disabled.
+
 6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
-   PR opens → relabel `agent/review`, and confirm **auto-merge is armed** (`gh pr merge <PR> --repo
-   teststuffstash/<project> --auto --squash`; arm it yourself if the worker didn't). You do NOT merge
-   by hand — GitHub auto-merge fires once the gate is satisfied (1 approving review + CI green).
+   PR opens → relabel `agent/review`. Auto-merge is armed by `agent-session.sh` (confirm with `gh pr
+   merge <PR> --repo teststuffstash/<project> --auto --squash`; arm it yourself only if the worker
+   didn't). You do NOT merge by hand — GitHub auto-merge fires once the gate is satisfied (1 approving
+   review + CI green).
 7. **Get it reviewed — by the bot, not you.** The reviewer is a **distinct GitHub identity**
    (`homelab-reviewer[bot]`), never the coordinator or the worker: GitHub blocks self-approval, and its
-   **native** approval is what satisfies the branch-protection `required-approval` gate. Trigger it
-   headless (it clones the repo, `gh pr checkout`s the PR, runs `/code-review`, and submits exactly one
+   **native** approval is what satisfies the branch-protection `required-approval` gate. The **review
+   reflex normally dispatches this for you**; trigger it by hand only as a fallback (it clones the repo,
+   `gh pr checkout`s the PR, runs `/code-review`, and submits exactly one
    `gh pr review --approve|--request-changes` as the review bot):
    ```sh
    bash agents/reviewer-session.sh <project> <PR>

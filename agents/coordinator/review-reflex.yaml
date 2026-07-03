@@ -1,0 +1,100 @@
+# Review reflex CronJob — the deterministic SCHEDULER half of the merge path (homelab FU-041,
+# docs/agents/merge-path.md §Chosen design ▸3, Rollout Phase 2). It is the coordinator subsystem's
+# mechanical transition "PR green + current + unapproved → dispatch a reviewer", extracted to a CronJob
+# so it never costs an LLM turn — NOT a peer controller. It lives in the coordinator's namespace and
+# reuses the coordinator's identity + secrets on purpose (agents/coordinator/README.md).
+#
+# Each tick (~5 min) clones the current homelab (public) and runs agents/review-reflex.sh, which lists
+# open PRs across the agent repos and dispatches agents/reviewer-session.sh for the oldest reviewable
+# one per repo (armed ∧ green ∧ current ∧ reviewable), capped at K concurrent reviewer pods globally.
+# reviewer-session.sh spawns the reviewer pod (which mounts coordinator-claude + reviewer-git itself).
+#
+# Prereqs (already part of the coordinator bootstrap — README.md §Bootstrap):
+#   rbac.yaml (SA agent-coordinator: pods create/delete/log) · coordinator-git · coordinator-claude · reviewer-git
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/review-reflex.yaml
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: review-reflex
+  namespace: agent-coordinator
+spec:
+  schedule: "*/5 * * * *"
+  # Never overlap ticks: reviewer-session.sh blocks for the whole review (~4-8 min), so a tick can outlast
+  # the 5-min cadence. A skipped tick loses nothing — the next one re-lists (level-triggered).
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0                 # no retry — the next cron tick is the retry
+      activeDeadlineSeconds: 900      # a hung reviewer never wedges the reflex forever
+      template:
+        metadata:
+          labels: { app: review-reflex }
+        spec:
+          restartPolicy: Never
+          serviceAccountName: agent-coordinator
+          terminationGracePeriodSeconds: 5
+          securityContext:
+            fsGroup: 1000
+          # Clone the live homelab so the reflex runs the committed review-reflex.sh + reviewer-session.sh
+          # (public repo — no token needed), exactly like coordinator-session.sh does for the brief.
+          initContainers:
+            - name: clone-homelab
+              image: ghcr.io/teststuffstash/agent-coordinator:latest
+              command: ["bash", "-lc"]
+              args: ["set -e; rm -rf /work/homelab; git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab"]
+              volumeMounts:
+                - { name: work, mountPath: /work }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+                seccompProfile: { type: RuntimeDefault }
+              resources:
+                requests: { cpu: "100m", memory: "128Mi" }
+                limits:   { cpu: "1",    memory: "512Mi" }
+          containers:
+            - name: reflex
+              image: ghcr.io/teststuffstash/agent-coordinator:latest
+              command: ["bash", "-lc"]
+              args: ["exec bash /work/homelab/agents/review-reflex.sh"]
+              env:
+                - name: HOME
+                  value: "/home/node"
+                - name: AGENT_REPOS
+                  value: "sleep-tracking snore-recorder"
+                - name: ORG
+                  value: "teststuffstash"
+                - name: REVIEW_CONCURRENCY      # K — global cap on concurrent reviewer pods (subscription quota)
+                  value: "2"
+                # Read-only gh (list PRs, final `gh pr view`). The image's gh-wrapper reads the LIVE ~1h
+                # token from GH_TOKEN_FILE (ESO re-mints it); GH_TOKEN env is the frozen fallback. The
+                # spawned reviewer pods mount reviewer-git themselves (their distinct bot identity).
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true }
+                - name: GH_TOKEN_FILE
+                  value: "/var/run/coordinator-git/GH_TOKEN"
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+                seccompProfile: { type: RuntimeDefault }
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits:   { cpu: "1",    memory: "512Mi" }
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: coordinator-git
+              secret: { secretName: coordinator-git, optional: true }

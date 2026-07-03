@@ -1,6 +1,13 @@
 # Deterministic merge path — serialized auto-update + auto-merge (FU-041)
 
-**Status: design (2026-07-03), not built.** Tracked as FU-041 in [`../follow-ups.md`](../follow-ups.md).
+**Status: built (2026-07-03), phases 1–3 committed, pending operator wiring.** Tracked as FU-041 in
+[`../follow-ups.md`](../follow-ups.md). The pieces below are landed as code; what remains is one-time
+operator setup (org secrets, `tofu -chdir=tofu/github apply`, `kubectl apply` the CronJob) — see
+[`../follow-ups.md`](../follow-ups.md) FU-041 for the exact checklist. Artifacts:
+`{sleep-tracking,snore-recorder}/.github/workflows/update-pr-branch.yml` (updater),
+[`../../agents/review-reflex.sh`](../../agents/review-reflex.sh) +
+[`../../agents/coordinator/review-reflex.yaml`](../../agents/coordinator/review-reflex.yaml) (review reflex),
+and the `gh pr merge --auto --squash` arming step in [`../../agents/agent-session.sh`](../../agents/agent-session.sh).
 
 The last leg of the NL→auto-merged pipeline ([`workflow.md`](workflow.md)): how an approved, green
 agent PR actually lands on master — **without an LLM making any merge decision**. LLMs author code
@@ -416,11 +423,18 @@ contract-versioning discipline), not a merge-path mechanism.
   is a duplicate review — wasted tokens, never a bad merge (the merge gate is GitHub's, evaluated
   once).
 - **Updater token** — must be an App token, not `GITHUB_TOKEN` (its pushes wouldn't re-trigger
-  CI). Mint from the `homelab-agents` App (`actions/create-github-app-token`, App id + private key
-  as org secrets). The update push then appears as `homelab-agents[bot]` — same identity as the PR
-  author, which is fine: `require_last_push_approval = false`, and the review happens *after* the
-  update by construction. If cleaner audit lines are ever wanted, a dedicated minimal
-  "merge-serializer" App (contents:write, pull_requests:write) is a drop-in swap.
+  CI). Minted from a **dedicated, minimal `homelab-merge` App** (`actions/create-github-app-token`,
+  App id + private key as the `MERGE_GH_APP_*` org Actions secrets). Grant:
+  contents:write (update-branch) + pull_requests:read + checks:read + statuses:read
+  (`require_passed_checks`) + metadata:read — **no Issues, no PR write**. Chosen over reusing
+  `homelab-agents` (which the design first proposed) because reuse would copy the *agents* key —
+  which also mints the coordinator token (issues:write, multi-repo, merge) — into a GitHub org
+  Actions secret readable by the **semi-trusted CI plane** (an in-repo agent PR branch can add a
+  workflow that reads org secrets). The dedicated App keeps that CI-exposed key least-privilege: a
+  leak grants only branch-updates. No self-approval conflict (the updater only pushes + reads, never
+  approves; `require_last_push_approval = false`) — so the distinct identity is for blast-radius +
+  audit legibility, not a hard GitHub constraint. Bootstrap: `scripts/github-merge-app-bootstrap.sh`;
+  published to Actions by `tofu/github/actions_secrets.tf` via `devbox run github-tofu apply`.
 - **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. It's a CronJob:
   next tick resumes. Same level-triggered posture as the coordinator doctrine.
 - **Worker still pushing while updater updates** — prevented by ordering, not locking: the updater

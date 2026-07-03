@@ -28,6 +28,9 @@ locals {
     "agent-budget/sm"   = { color = "c5def5", description = "Estimator cap-tier override: sm" }
     "agent-budget/md"   = { color = "c5def5", description = "Estimator cap-tier override: md" }
     "agent-budget/lg"   = { color = "c5def5", description = "Estimator cap-tier override: lg" }
+    # Set by the updater workflow (FU-041) when an auto-merge-armed PR's branch conflicts with master —
+    # the update-branch API can't resolve it (422), so it's flagged for the coordinator to decide.
+    "merge-conflict" = { color = "e11d21", description = "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase" }
   }
 
   # Only the fixer-target repos get the state labels — a repo can be managed in repos.tf (auto-merge etc.)

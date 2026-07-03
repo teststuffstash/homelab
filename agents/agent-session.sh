@@ -181,6 +181,13 @@ if [ -n "$RUN_CMD" ]; then
     echo "→ stats: $STATS"
     PR_URL="$(printf '%s' "$STATS" | jq -r '.pr_url // empty' 2>/dev/null)"
     if [ -n "$PR_URL" ] && [ -n "${GH_TOKEN:-}" ]; then
+      # ARM AUTO-MERGE — mandatory post-PR step (FU-041, docs/agents/merge-path.md §Chosen design ▸1).
+      # The deterministic merge path only ever touches auto-merge-armed PRs: the updater keeps armed PRs
+      # current, the review reflex only reviews armed PRs, and GitHub completes an armed PR the moment
+      # approval + CI land. An un-armed PR is invisible to all of it and stalls. Squash keeps master linear
+      # (matches the reviewer-session.sh header + repos.tf squash config). Idempotent — re-arming is a no-op.
+      echo "→ arming auto-merge (squash) on ${PR_URL}"
+      gh pr merge "$PR_URL" --auto --squash 2>&1 | tail -1 || echo "  (arm failed — non-fatal; coordinator re-arms in step 6)"
       GRAFANA_URL="${GRAFANA_URL:-https://grafana.teststuff.net}"
       PANES="$(jq -cn --arg pod "$POD" '{ag:{datasource:"loki",queries:[{refId:"A",expr:("{pod=\""+$pod+"\"}"),datasource:{type:"loki",uid:"loki"}}],range:{from:"now-6h",to:"now"}}}')"
       LOGS_URL="${GRAFANA_URL}/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$PANES" '$p|@uri')"
