@@ -222,8 +222,12 @@ SLSA isn't the only supply-chain framework, and the others compose:
 - **SCITT** (IETF, transparency + auditability) → for us = **self-hosted Rekor** (the append-only log
   in the stack above). SLSA says *what* attestations to generate; SCITT-style logging makes them
   provable to others.
-- **S2C2F** (consumer side) → **verify** the provenance/SBOMs of dependencies we *ingest*
-  (cosign verify-attestation), not just produce. Closes the loop.
+- **S2C2F** (consumer side) → harden what we *ingest*, not just what we produce. **First leg built
+  (2026-07-04, [`renovate.md`](renovate.md)):** self-hosted Renovate with a **7-day cooldown**
+  (`minimumReleaseAge`), **SHA-pinned GitHub Actions** (defeats tag re-pointing — the Trivy vector),
+  and **OSV** alerts (security fixes bypass the cooldown). Still aspirational: **verify** upstream SLSA
+  provenance / signatures on consumed artifacts (`cosign verify-attestation`) so a backdoored artifact
+  is rejected even inside the cooldown.
 - **SSDF / CIS** → policy ("what") + a concrete hardening checklist; SLSA is the "how" for the
   build/provenance slice.
 

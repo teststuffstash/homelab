@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline enforced on EVERY repo the homelab-renovate App autodiscovers. Per-repo renovate.json only chooses automerge preferences on top of this. Implements the S2C2F (consumer) leg of docs/slsa.md.",
+
+  "extends": ["helpers:pinGitHubActionDigests"],
+
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). Labelled `automerge` so the reviewer reflex approves them; auto-merged so exposure is minimal.",
+    "minimumReleaseAge": null,
+    "labels": ["security", "automerge"],
+    "addLabels": ["automerge"],
+    "automerge": true,
+    "prPriority": 10
+  }
+}

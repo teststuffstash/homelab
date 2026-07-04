@@ -27,6 +27,10 @@ jobs:
   renovate:
     runs-on: homelab-ephemeral
     steps:
+      # Check out homelab just for the GLOBAL config file (the supply-chain baseline applied to every
+      # autodiscovered repo — cooldown, SHA-pin actions, OSV alerts). See .github/renovate-global.json.
+      - uses: actions/checkout@v4
+
       # No `repositories:` → the installation token spans every repo the App is installed on, which is
       # exactly what RENOVATE_AUTODISCOVER should walk.
       - name: Mint homelab-renovate token
@@ -44,5 +48,6 @@ jobs:
         env:
           RENOVATE_PLATFORM: github
           RENOVATE_AUTODISCOVER: "true"
+          RENOVATE_CONFIG_FILE: ${{ github.workspace }}/.github/renovate-global.json # the global baseline
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
