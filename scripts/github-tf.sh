@@ -18,50 +18,46 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-# 1. cred root (jail ~/.claude or host ~/Projects/.claude-data) — same dual-path trick as tf.sh.
-CRED=""
-for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; do
-  [ -n "$d" ] && [ -d "$d" ] && CRED="$d" && break
-done
-[ -n "$CRED" ] || { echo "github-tf: cred dir not found (looked in ~/.claude, ~/Projects/.claude-data; set CLAUDE_CRED_DIR)" >&2; exit 1; }
+# 1. Resolve EACH App cred dir independently across the candidate roots. Creds can be SPLIT: an App
+#    bootstrapped on the HOST lands in the host ~/.claude, one bootstrapped in the JAIL lands in
+#    ~/Projects/.claude-data (the jail's ~/.claude, volume-mounted) — the same file may not be under a
+#    single root. So never assume one root holds them all (the old single-CRED pick missed the reviewer).
+_find_cred() { # $1 = subdir (e.g. homelab-github-reviewer) → echo the dir holding app-id + private-key.pem
+  _sub="$1"
+  for _d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; do
+    [ -n "$_d" ] && [ -f "$_d/$_sub/app-id" ] && [ -f "$_d/$_sub/private-key.pem" ] || continue
+    printf '%s\n' "$_d/$_sub"; return 0
+  done
+  return 1
+}
 
-# 2. homelab-merge App id (non-secret) + private key (Tier-0 file) from the bootstrap cred dir.
-MERGE_DIR="${MERGE_CRED_DIR:-$CRED/homelab-github-merge}"
-[ -f "$MERGE_DIR/app-id" ] && [ -f "$MERGE_DIR/private-key.pem" ] || {
-  echo "github-tf: homelab-merge creds not in $MERGE_DIR — run scripts/github-merge-app-bootstrap.sh" >&2
-  echo "           (or restore private-key.pem from Infisical MERGE_GH_APP_PRIVATE_KEY + app-id from the App page)." >&2
+# 2. homelab-merge App (REQUIRED — the updater's identity).
+MERGE_DIR="${MERGE_CRED_DIR:-$(_find_cred homelab-github-merge || true)}"
+[ -n "$MERGE_DIR" ] && [ -f "$MERGE_DIR/app-id" ] && [ -f "$MERGE_DIR/private-key.pem" ] || {
+  echo "github-tf: homelab-merge creds not found (homelab-github-merge/{app-id,private-key.pem} in ~/.claude or" >&2
+  echo "           ~/Projects/.claude-data) — run scripts/github-merge-app-bootstrap.sh, or restore from Infisical" >&2
+  echo "           MERGE_GH_APP_PRIVATE_KEY + the app-id from the App page." >&2
   exit 1; }
 TF_VAR_merge_gh_app_id="$(cat "$MERGE_DIR/app-id")"
 TF_VAR_merge_gh_app_private_key="$(cat "$MERGE_DIR/private-key.pem")"
 export TF_VAR_merge_gh_app_id TF_VAR_merge_gh_app_private_key
 
-# 2b. homelab-deploy App (OPTIONAL — only once bootstrapped). Same cred-dir shape; drives sleep-iac's
-#     deploy-bump approval bypass + the DEPLOY_APP_ID/KEY Actions secrets. Absent ⇒ the vars keep their
-#     "" defaults and tofu skips both, so this root still applies before the deploy App exists.
-DEPLOY_DIR="${DEPLOY_CRED_DIR:-$CRED/homelab-github-deploy}"
-if [ -f "$DEPLOY_DIR/app-id" ] && [ -f "$DEPLOY_DIR/private-key.pem" ]; then
-  TF_VAR_deploy_app_id="$(cat "$DEPLOY_DIR/app-id")"
-  TF_VAR_deploy_app_private_key="$(cat "$DEPLOY_DIR/private-key.pem")"
+# 2b-d. deploy / renovate / reviewer Apps (OPTIONAL) → their *_APP_* Actions secrets. Absent ⇒ the tofu
+#       vars keep their "" defaults and the count-gated secrets are skipped, so the root still applies.
+if DIR="$(_find_cred homelab-github-deploy)"; then
+  TF_VAR_deploy_app_id="$(cat "$DIR/app-id")"; TF_VAR_deploy_app_private_key="$(cat "$DIR/private-key.pem")"
   export TF_VAR_deploy_app_id TF_VAR_deploy_app_private_key
-  echo "github-tf: homelab-deploy App id=$TF_VAR_deploy_app_id loaded (DEPLOY_APP_* secrets)" >&2
+  echo "github-tf: homelab-deploy App id=$TF_VAR_deploy_app_id loaded (DEPLOY_APP_* secrets) from $DIR" >&2
 fi
-
-# 2c. homelab-renovate App (OPTIONAL) → RENOVATE_APP_* secrets for the self-hosted Renovate runner.
-RENOVATE_DIR="${RENOVATE_CRED_DIR:-$CRED/homelab-github-renovate}"
-if [ -f "$RENOVATE_DIR/app-id" ] && [ -f "$RENOVATE_DIR/private-key.pem" ]; then
-  TF_VAR_renovate_app_id="$(cat "$RENOVATE_DIR/app-id")"
-  TF_VAR_renovate_app_private_key="$(cat "$RENOVATE_DIR/private-key.pem")"
+if DIR="$(_find_cred homelab-github-renovate)"; then
+  TF_VAR_renovate_app_id="$(cat "$DIR/app-id")"; TF_VAR_renovate_app_private_key="$(cat "$DIR/private-key.pem")"
   export TF_VAR_renovate_app_id TF_VAR_renovate_app_private_key
-  echo "github-tf: homelab-renovate App id=$TF_VAR_renovate_app_id loaded (RENOVATE_APP_* secrets)" >&2
+  echo "github-tf: homelab-renovate App id=$TF_VAR_renovate_app_id loaded (RENOVATE_APP_* secrets) from $DIR" >&2
 fi
-
-# 2d. homelab-reviewer App (OPTIONAL, REUSED) → REVIEWER_APP_* secrets for the renovate-approve reflex.
-REVIEWER_DIR="${REVIEWER_CRED_DIR:-$CRED/homelab-github-reviewer}"
-if [ -f "$REVIEWER_DIR/app-id" ] && [ -f "$REVIEWER_DIR/private-key.pem" ]; then
-  TF_VAR_reviewer_app_id="$(cat "$REVIEWER_DIR/app-id")"
-  TF_VAR_reviewer_app_private_key="$(cat "$REVIEWER_DIR/private-key.pem")"
+if DIR="$(_find_cred homelab-github-reviewer)"; then
+  TF_VAR_reviewer_app_id="$(cat "$DIR/app-id")"; TF_VAR_reviewer_app_private_key="$(cat "$DIR/private-key.pem")"
   export TF_VAR_reviewer_app_id TF_VAR_reviewer_app_private_key
-  echo "github-tf: homelab-reviewer App id=$TF_VAR_reviewer_app_id loaded (REVIEWER_APP_* secrets)" >&2
+  echo "github-tf: homelab-reviewer App id=$TF_VAR_reviewer_app_id loaded (REVIEWER_APP_* secrets) from $DIR" >&2
 fi
 
 # 3. org admin token → GITHUB_TOKEN (unless already exported). Read from the separate KeePass wallet.
