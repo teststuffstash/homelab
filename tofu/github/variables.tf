@@ -26,12 +26,18 @@ variable "enforcement" {
 # so it can't be required; its `ci` job does run on PRs.) Add repos here as they grow PR CI + the
 # full-stack confidence gate.
 variable "protected_repos" {
-  description = "Map of repo => required PR status-check contexts."
+  description = "Map of repo => required PR status-check contexts (+ whether the repo also requires an approving review)."
   type = map(object({
     required_checks = list(string)
+    # require_approval=false → the repo gets required-checks (ci) but NOT required-approval. Used by
+    # sleep-iac: its PRs are mechanical deploy bumps (opened by the homelab-deploy App) that must gate
+    # on CI, not a review. GitHub's App/Integration ruleset bypass does NOT waive the "required
+    # approvals" rule on a merge (only OrganizationAdmin does), so a bypass can't make the App's merge
+    # go through — dropping the requirement is the correct fix, and matches "gate the bump with CI".
+    require_approval = optional(bool, true)
   }))
   default = {
-    sleep-iac      = { required_checks = ["ci"] }
+    sleep-iac      = { required_checks = ["ci"], require_approval = false }
     sleep-tracking = { required_checks = ["ci"] }
     # snore-recorder = { required_checks = ["ci"] }   # enable once its PR `ci` check is confirmed
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
@@ -56,14 +62,14 @@ variable "merge_gh_app_private_key" {
   sensitive   = true
 }
 
-# The homelab-deploy App id — NOT sensitive (the key is). Drives two things when set: (1) a bypass actor
-# on sleep-iac's required-approval ruleset (repo_rulesets.tf), so the mechanical deploy-bump PR auto-merges
-# on CI-green without an LLM review; (2) the DEPLOY_APP_ID Actions secret (actions_secrets.tf) the
-# sleep-tracking deploy workflow reads to mint a sleep-iac-scoped token. Empty until the App is
-# bootstrapped (scripts/github-deploy-app-bootstrap.sh) — while empty, both are skipped, so the github root
-# still applies cleanly before the App exists. Injected by scripts/github-tf.sh when the cred dir is present.
+# The homelab-deploy App id — NOT sensitive (the key is). Published as the DEPLOY_APP_ID Actions secret
+# (actions_secrets.tf) the sleep-tracking deploy workflow reads to mint a sleep-iac-scoped token. Empty
+# until the App is bootstrapped (scripts/github-deploy-app-bootstrap.sh) — while empty the secrets are
+# skipped, so the github root applies cleanly before the App exists. Injected by scripts/github-tf.sh when
+# the cred dir is present. (It no longer drives a ruleset bypass: sleep-iac has no required-approval — the
+# deploy bump gates on CI, and an App's Integration bypass can't waive an approval on a merge anyway.)
 variable "deploy_app_id" {
-  description = "homelab-deploy GitHub App id (drives the sleep-iac approval bypass + DEPLOY_APP_ID secret). Empty until bootstrapped; injected by scripts/github-tf.sh."
+  description = "homelab-deploy GitHub App id (drives the DEPLOY_APP_ID Actions secret). Empty until bootstrapped; injected by scripts/github-tf.sh."
   type        = string
   default     = ""
 }

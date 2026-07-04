@@ -209,11 +209,15 @@ app-repo build drives the bump PR instead. Renovate stays in its lane (app deps,
     day-to-day, either delegate it to a non-owner "sleep admin" via **GitHub App managers**, or create
     it under a **machine-user account** (`OWNER_KIND=user`) — details in the script header. Create +
     first install-on-org-repo still need an owner once; ongoing use doesn't.
-- The deploy PR is mechanical, so **don't** run the LLM reviewer on it — the `homelab-deploy` App is a
-  **bypass actor for sleep-iac's `required-approval` ruleset** (`tofu/github/repo_rulesets.tf`, keyed
-  on `var.deploy_app_id`), so a CI-green bump auto-merges without a human/LLM approval. Applied by the
-  same `github-tofu apply` above; until then `deploy-pin.sh` arms auto-merge and the PR just waits (it
-  warns, doesn't fail).
+- The deploy PR is mechanical, so it's gated by **CI only, no review**: **sleep-iac has no
+  `required-approval` ruleset** (`tofu/github`, `protected_repos["sleep-iac"].require_approval = false`)
+  — only `required-checks` (`ci`). So once sleep-iac's `ci` is green on the tip, the `homelab-deploy`
+  App merges the PR directly (`deploy-pin.sh` polls the commit's `ci` check-run, then `gh pr merge
+  --squash`). **Why not a bypass:** GitHub's App (`Integration`) ruleset bypass does **not** waive the
+  "required approvals" rule on a *merge* (only `OrganizationAdmin` does — verified live: the App's merge
+  stayed `REVIEW_REQUIRED` despite the bypass). Dropping the approval requirement for sleep-iac — not
+  bypassing it — is the correct fix, and matches "gate the bump with CI, not a review". GitHub auto-merge
+  is likewise avoided (it doesn't fire deterministically); the workflow merges directly after CI.
 - **ghcr retention can't be done in tofu** — GitHub has no retention API/resource for packages (unlike
   ECR lifecycle policies). It's a **scheduled cleanup workflow** instead:
   `sleep-tracking/.github/workflows/ghcr-cleanup.yaml` (monthly `snok/container-retention-policy`,

@@ -47,7 +47,9 @@ resource "github_repository_ruleset" "required_checks" {
 # a DISTINCT identity — homelab-reviewer[bot] (self-approval is blocked) — before GitHub auto-merge fires.
 # Kept a separate ruleset from required-checks so approvals and checks enforce/toggle independently.
 resource "github_repository_ruleset" "required_approval" {
-  for_each = var.protected_repos
+  # Only repos that opt into a review gate. sleep-iac opts OUT (require_approval=false): its PRs are
+  # mechanical deploy bumps gated by CI, and GitHub's App bypass can't waive the approval on a merge.
+  for_each = { for k, v in var.protected_repos : k => v if v.require_approval }
 
   name        = "required-approval"
   repository  = each.key
@@ -69,19 +71,9 @@ resource "github_repository_ruleset" "required_approval" {
     bypass_mode = "always"
   }
 
-  # homelab-deploy App bypass — ONLY on sleep-iac, and only once the App is bootstrapped (deploy_app_id
-  # set). The deploy pipeline's version-bump PR is MECHANICAL (a one-line chart `targetRevision` bump the
-  # sleep-tracking deploy workflow opens), so we gate it with CI, not an LLM review: the App is a bypass
-  # actor for the approval rule, so a CI-green bump auto-merges without one. Blast radius stays small — the
-  # App grants only contents+PR write on sleep-iac. See docs/sleep-iac.md §"Deploy pipeline".
-  dynamic "bypass_actors" {
-    for_each = (each.key == "sleep-iac" && var.deploy_app_id != "") ? [tonumber(var.deploy_app_id)] : []
-    content {
-      actor_id    = bypass_actors.value
-      actor_type  = "Integration" # a GitHub App
-      bypass_mode = "always"
-    }
-  }
+  # (No homelab-deploy App bypass here: sleep-iac isn't in this ruleset at all — require_approval=false —
+  # because a GitHub App's Integration bypass does NOT waive the "required approvals" rule on a merge, so
+  # bypassing was never going to let the App's deploy-bump merge through. CI gates the bump instead.)
 
   rules {
     pull_request {
