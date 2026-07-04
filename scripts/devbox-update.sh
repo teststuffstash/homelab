@@ -39,11 +39,23 @@ git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
 git push -q --force origin "$BRANCH"
 
 hdr=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
-PR="$(curl -sS "${hdr[@]}" "${API}/pulls?head=${OWNER}:${BRANCH}&state=open" | jq -r '.[0].number // empty')"
+existing="$(curl -sS "${hdr[@]}" "${API}/pulls?head=${OWNER}:${BRANCH}&state=open")"
+PR="$(echo "$existing" | jq -r '.[0].number // empty')"
+NODE="$(echo "$existing" | jq -r '.[0].node_id // empty')"
 if [ -z "$PR" ]; then
-  PR="$(curl -sS -X POST "${hdr[@]}" "${API}/pulls" \
-    -d "$(jq -nc --arg h "$BRANCH" '{title:"chore: devbox update (align toolchain lock)", head:$h, base:"master", body:"Weekly synchronized `devbox update` (FU-022): keeps `@latest` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits. CI-gated; auto-merges via the `automerge` label."}')" \
-    | jq -r '.number')"
+  created="$(curl -sS -X POST "${hdr[@]}" "${API}/pulls" \
+    -d "$(jq -nc --arg h "$BRANCH" '{title:"chore: devbox update (align toolchain lock)", head:$h, base:"master", body:"Weekly synchronized `devbox update` (FU-022): keeps `@latest` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits. CI-gated; auto-merges via the `automerge` label."}')")"
+  PR="$(echo "$created" | jq -r '.number')"
+  NODE="$(echo "$created" | jq -r '.node_id')"
 fi
 curl -sS -X POST "${hdr[@]}" "${API}/issues/${PR}/labels" -d '{"labels":["automerge","dependencies"]}' >/dev/null
-echo "[$REPO] devbox-update PR #${PR} (labelled automerge)"
+
+# ARM auto-merge — REQUIRED, not optional: the FU-041 updater only touches auto-merge-armed PRs
+# (require_auto_merge_enabled), and GitHub only completes the merge once armed. Same rule as the worker /
+# Renovate / deploy. GraphQL (there's no gh on the runner); harmless if already armed.
+arm="$(curl -sS -X POST "${hdr[@]}" https://api.github.com/graphql \
+  -d "$(jq -nc --arg id "$NODE" '{query:"mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}){clientMutationId}}", variables:{id:$id}}')")"
+if echo "$arm" | jq -e '.errors' >/dev/null 2>&1; then
+  echo "::warning::[$REPO] could not arm auto-merge on PR #${PR}: $(echo "$arm" | jq -rc '.errors')"
+fi
+echo "[$REPO] devbox-update PR #${PR} (labelled automerge + armed)"
