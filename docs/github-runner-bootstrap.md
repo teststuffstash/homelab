@@ -151,6 +151,8 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   
 - The runner is **amd64** — it builds the amd64 sleep-ingester image but **not** snore-recorder's
   arm64 image (Talos kernel has no `binfmt_misc`); that one builds off-cluster (`devbox run
   build-image`). See [`ci.md`](ci.md).
-- After the first ghcr build publishes, bump `image.tag` in the sleep-iac repo
-  (`values/sleep-ingester.yaml`, in lockstep with the chart `targetRevision` in `apps/`) and retire
-  the old `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key.
+- Deploys are automated (ADR-084): the sleep-tracking `deploy` workflow builds the image + chart and
+  opens an auto-merging version-bump PR in sleep-iac → ArgoCD syncs — no manual `image.tag` bump (the
+  image tag is the chart appVersion; sleep-iac pins only the chart version). Just retire the old
+  `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key once ghcr is the canonical registry. See
+  [`sleep-iac.md`](sleep-iac.md) §"Deploy pipeline".

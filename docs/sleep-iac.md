@@ -1,9 +1,10 @@
-# sleep-iac — extracting the sleep stack into its own IaC repo (plan)
+# sleep-iac — the sleep stack's own IaC repo + deploy pipeline (three-layer topology)
 
-_Planning record, 2026-07-02 (rev. 2026-07-03: Grafana dashboard migration + platform-precreated
-namespaces; rev. 2026-07-04: **sleep-iac is public** — no ArgoCD repo credential). Executes
-**FU-025** (deploy-versioning + repo-structure rework); doctrine in
-[`patterns/app-owned-resources.md`](patterns/app-owned-resources.md) §"Direction"._
+_Reference for the extracted sleep stack — **built + live** (executed **FU-025**; decision recorded in
+**ADR-084**; doctrine in [`patterns/app-owned-resources.md`](patterns/app-owned-resources.md)
+§"Direction"). Began as a planning record (2026-07-02 → 07-04 revisions: public repo, Grafana dashboard
+migration, platform-precreated namespaces); now documents the live system. The "Migration sequence"
+section below is kept as the build record — the status banner is the current state._
 
 > **Status (2026-07-04): LIVE — steps 1–5 done + dashboard migrated.** The public `sleep-iac` repo is
 > seeded (CI green); the `sleep` AppProject + precreated namespaces are applied; the root `sleep`

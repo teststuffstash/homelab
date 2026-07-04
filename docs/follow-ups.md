@@ -94,7 +94,7 @@ _Last updated: 2026-07-02._
       cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
       not enforced).
-- [ ] **FU-025** — **Deploy-versioning + repo-structure rework**: the release→deploy path is
+- [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
       a per-stack `sleep-iac` repo** — the ArgoCD AppProject + app-of-apps for the sleep stack
@@ -108,8 +108,12 @@ _Last updated: 2026-07-02._
       [`docs/sleep-iac.md`](sleep-iac.md).** **Status (2026-07-04): LIVE** — repo seeded (CI green),
       AppProject + namespaces applied, root app flipped to `sleep-iac//apps` (children Synced/Healthy,
       no prune), `argocd/sleep/` deleted, both app repos' `infra/` emptied, credential dropped, and the
-      Grafana dashboard migrated to GitOps. **Only remaining:** coordinator step-7a automation +
-      enabling Renovate on `sleep-iac` (FU-014). Close FU-025 when those land.
+      Grafana dashboard migrated to GitOps. **The deploy path is now fully automated + tested E2E**
+      (app-repo `deploy` workflow → auto-merging bump PR in sleep-iac → ArgoCD, near-instant via an
+      in-cluster webhook; ADR-084). Coordinator step-7a is a no-op (deploys are hands-off); Renovate
+      for our own artifacts was **dropped by decision** (git-sha versions don't order). **Left as a
+      done-marked item** (not scrubbed) to keep the `FU-025` provenance in the code/doc comments that
+      reference it; the follow-on coordinator-per-stack scope is **FU-045**.
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.

@@ -91,8 +91,9 @@ Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuf
   `devbox run flash-irrigation` (logs: `devbox run irrigation-logs`).
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
 - `scripts/` — wrappers + one-shots: `tf.sh` / `keepass-{env,init}.sh` (secret vars for tofu),
-  `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`, `github-{runner,agents,reviewer}-*bootstrap.sh`
-  + `gh-app-runner-token.sh` (GitHub Apps), `garage-s3.sh`, `talos-usb.sh`,
+  `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`,
+  `github-{runner,agents,reviewer,merge,deploy}-*bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
+  `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
   `coordinator-logs.sh`/`render-transcript.py`, `follow-ups-lint.sh`, `aws-*.sh` (one-shot audit/cleanup).
 - `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).

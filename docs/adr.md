@@ -493,6 +493,58 @@ the chart while keeping our exact config via `structuredConfig` is a small, cont
 change. Rule of thumb: **Helm when the chart saves you from reinventing complexity; raw when the chart
 is more abstraction than value.**
 
+### ADR-084 — Three-layer repo topology + automated deploy for app stacks (sleep-iac)
+**Status:** Accepted (2026-07-04). **Decision:** an app stack is split into **three layers**: (1) **app
+repos** (sleep-tracking, snore-recorder) — code + chart only; on an app-relevant master push they
+build+publish an image + OCI chart to ghcr; platform-agnostic (they know nothing about homelab). (2) a
+**per-stack `-iac` repo** (`sleep-iac`, public) — the stack's *deploy truth*: the ArgoCD app-of-apps
+(child Applications, `project: sleep`) + Helm values + the apps' infra CRs (Garage Workspaces, ESO,
+`OpenRouterKey`). (3) **homelab** — the platform: operators, the stack's AppProject + namespaces, and ONE
+root Application pointing at the `-iac` repo. Refines ADR-004/ADR-074 (the app still *owns* its
+resources, but the declarations live in the stack's iac repo, not the app repo). Executes **FU-025**.
+
+**The chart is the deployable unit; IaC pins ONE number.** A deploy builds the image AND packages the
+chart at a single version `2026.<m>.<d>-g<sha>` (commit-date CalVer + short git sha; the sha rides as a
+SemVer *prerelease* because OCI Helm requires a valid SemVer — a bare sha is illegal, and `+build` isn't
+a legal OCI tag char). `chart version == appVersion == image tag`, and the chart defaults `image.tag` to
+`.Chart.AppVersion`, so **`sleep-iac` sets only the chart `targetRevision`** — the image tag never
+appears in IaC. Versioning is **CalVer+sha, not SemVer**: no human version decision per change, and **no
+Renovate for our own artifacts** (a git-sha doesn't order, so Renovate can't drive it; it stays in its
+lane — app deps, platform charts).
+
+**Deploy is automated + CI-gated, no review.** The app repo's `deploy` workflow opens an **auto-merging**
+version-bump PR in the `-iac` repo (fixed `deploy/<app>` branch ⇒ one open PR; concurrency
+cancel-in-progress + a monotonic ancestor guard ⇒ no older-sha regression). The `-iac` repo gates on **CI
+only** (`require_approval=false`) — a mechanical bump doesn't warrant an LLM/human review — so GitHub
+auto-merges on ci-green. ArgoCD then syncs **near-instantly**: the merge's master push fires an
+in-cluster `sync.yaml` that POSTs a push event to ArgoCD's native `/api/webhook`, so argocd-server stays
+LAN-only (the runner reaches it, GitHub never does) instead of waiting up to ~3 min for the reconcile
+poll. Workflows build artifacts via **devbox** (pinned tools; the slim ARC runner lacks helm/gh/xz);
+only auth/push use provided actions.
+
+**Sharp operational lesson (verified live):** a GitHub App's **`Integration` ruleset bypass does NOT
+waive the "required approvals" pull_request rule on a *merge*** — only `OrganizationAdmin` does. So
+"give the deploy bot a bypass actor" can't make its PR auto-merge past a review requirement (it stays
+`REVIEW_REQUIRED`). The fix is to **drop the approval requirement** (let CI be the gate) or add a
+distinct approver — not a bypass.
+
+**Considered:** keeping the stack in-repo (homelab `argocd/sleep/`, the pre-FU-025 state) — rejected:
+couples app deploy to the platform and leaves the release→deploy path manual + drifty (`Chart.yaml` vs a
+`v*` tag vs ArgoCD `targetRevision`). Manual `v*` SemVer releases — rejected: a version decision per
+change + lockstep chart/image bumps in IaC. Renovate driving the pin — rejected (git-sha unorderable; we
+don't want Renovate touching our artifacts). A coordinator step that deploys — **superseded**: the deploy
+workflow does it, so the coordinator never touches homelab (step 7a is a no-op). For instant sync: a
+GitHub-delivered webhook (needs public exposure of the LAN-only argocd-server) and just lowering
+`timeout.reconciliation` (not instant) — both rejected for the in-cluster webhook nudge.
+
+**Consequences:** app repos are pure artifact producers (platform-agnostic); a deploy is a reviewable
+one-line PR that's usually fully automatic; homelab behaves like a real platform (AWS/Civo), tightening
+the FU-039 direction. A cross-repo deploy needs a scoped `homelab-deploy` GitHub App (contents+PR on the
+`-iac` repo) whose key is a sleep-tracking-only Actions secret. sha-tagged images accumulate in ghcr → a
+scheduled cleanup workflow (GitHub has no packages-retention API, so *not* tofu). Post-deploy
+health/rollback is deferred (**FU-044**, in-cluster off ArgoCD events); the coordinator's context becomes
+per-stack (**FU-045**). Full design + runbook: [`sleep-iac.md`](sleep-iac.md).
+
 ---
 
 ## Open / undecided
