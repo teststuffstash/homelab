@@ -3,8 +3,15 @@
 _Planning record, 2026-07-02 (rev. 2026-07-03: Grafana dashboard migration + platform-precreated
 namespaces; rev. 2026-07-04: **sleep-iac is public** — no ArgoCD repo credential). Executes
 **FU-025** (deploy-versioning + repo-structure rework); doctrine in
-[`patterns/app-owned-resources.md`](patterns/app-owned-resources.md) §"Direction". Being built —
-this doc is the blueprint._
+[`patterns/app-owned-resources.md`](patterns/app-owned-resources.md) §"Direction"._
+
+> **Status (2026-07-04): LIVE through step 4.** The public `sleep-iac` repo is seeded (CI green), the
+> `sleep` AppProject + precreated namespaces are applied, and the root `sleep` Application is flipped
+> to `sleep-iac//apps` — all three child apps Synced/Healthy on `project: sleep`, Workspaces adopted
+> (no prune/recreate). **Remaining:** step 5's app-repo cleanup (empty `sleep-tracking/infra/` +
+> `snore-recorder/infra/` to a README pointer; update `agent-session.sh` to apply `agent/` from
+> sleep-iac; drop the unused `repo-sleep-tracking-github` credential), the standalone Grafana
+> dashboard→GitOps slice, and coordinator step-7a automation. FU-025 stays open until those land.
 
 ## Goal
 

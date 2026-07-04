@@ -51,10 +51,11 @@ homelab (this repo)                            the platform: cluster, operators,
                                                 ONE root Application per stack pointing at its iac repo.
 ```
 
-Today homelab's `argocd/sleep/` *plays* the stack-iac role in-repo; extracting it into `sleep-iac`
-is the FU-025 rework (it also fixes the drifty release→deploy path and gives the coordinator a
-clean automated-deploy seam). The AppProject is the tenancy boundary: a stack's iac repo can only
-deploy into its own namespaces.
+The sleep stack was **extracted** into its own public `sleep-iac` repo (FU-025) — homelab's root
+`sleep` Application now points at `sleep-iac//apps`, not the old in-repo `argocd/sleep/`. That fixed
+the drifty release→deploy path (a deploy is a version-bump PR in sleep-iac) and gave the coordinator
+a clean automated-deploy seam. The `sleep` AppProject (`argocd/platform/sleep-project.yaml`) is the
+tenancy boundary: the iac repo can only deploy into its own (platform-precreated) namespaces.
 
 ## Conventions
 

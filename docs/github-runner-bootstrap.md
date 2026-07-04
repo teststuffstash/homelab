@@ -151,5 +151,6 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   
 - The runner is **amd64** — it builds the amd64 sleep-ingester image but **not** snore-recorder's
   arm64 image (Talos kernel has no `binfmt_misc`); that one builds off-cluster (`devbox run
   build-image`). See [`ci.md`](ci.md).
-- After the first ghcr build publishes, bump `image.tag` in `argocd/sleep/values/sleep-ingester.yaml`
-  and retire the old `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key.
+- After the first ghcr build publishes, bump `image.tag` in the sleep-iac repo
+  (`values/sleep-ingester.yaml`, in lockstep with the chart `targetRevision` in `apps/`) and retire
+  the old `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key.
