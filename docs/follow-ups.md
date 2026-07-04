@@ -105,7 +105,11 @@ _Last updated: 2026-07-02._
       AWS/Civo. Includes a standalone **Grafana dashboard → GitOps** slice (the Sleep Overview CM
       leaves `tofu/monitoring.tf` for the sleep-tracking ns; datasource/sidecar stay platform-owned)
       and a platform-precreated-namespace `sleep` AppProject. **Full extraction blueprint:
-      [`docs/sleep-iac.md`](sleep-iac.md).**
+      [`docs/sleep-iac.md`](sleep-iac.md).** **Status (2026-07-04): LIVE** — repo seeded (CI green),
+      AppProject + namespaces applied, root app flipped to `sleep-iac//apps` (children Synced/Healthy,
+      no prune), `argocd/sleep/` deleted, both app repos' `infra/` emptied, credential dropped, and the
+      Grafana dashboard migrated to GitOps. **Only remaining:** coordinator step-7a automation +
+      enabling Renovate on `sleep-iac` (FU-014). Close FU-025 when those land.
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.

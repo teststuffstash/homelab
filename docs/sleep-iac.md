@@ -5,13 +5,18 @@ namespaces; rev. 2026-07-04: **sleep-iac is public** — no ArgoCD repo credenti
 **FU-025** (deploy-versioning + repo-structure rework); doctrine in
 [`patterns/app-owned-resources.md`](patterns/app-owned-resources.md) §"Direction"._
 
-> **Status (2026-07-04): LIVE through step 4.** The public `sleep-iac` repo is seeded (CI green), the
-> `sleep` AppProject + precreated namespaces are applied, and the root `sleep` Application is flipped
-> to `sleep-iac//apps` — all three child apps Synced/Healthy on `project: sleep`, Workspaces adopted
-> (no prune/recreate). **Remaining:** step 5's app-repo cleanup (empty `sleep-tracking/infra/` +
-> `snore-recorder/infra/` to a README pointer; update `agent-session.sh` to apply `agent/` from
-> sleep-iac; drop the unused `repo-sleep-tracking-github` credential), the standalone Grafana
-> dashboard→GitOps slice, and coordinator step-7a automation. FU-025 stays open until those land.
+> **Status (2026-07-04): LIVE — steps 1–5 done + dashboard migrated.** The public `sleep-iac` repo is
+> seeded (CI green); the `sleep` AppProject + precreated namespaces are applied; the root `sleep`
+> Application is flipped to `sleep-iac//apps` (all three children Synced/Healthy on `project: sleep`,
+> Workspaces adopted, no prune). Cleanup done: `argocd/sleep/` deleted; both app repos' `infra/`
+> emptied to README pointers (pure artifact producers); `agent-session.sh`/bootstrap refs repointed to
+> `sleep-iac`; the unused `repo-sleep-tracking-github` credential removed; the **Sleep Overview
+> dashboard moved to GitOps** (`sleep-tracking/` kustomize `configMapGenerator`; tofu CM +
+> `tofu/dashboards/sleep-overview.json` removed; Grafana provisions it from the sleep-tracking ns).
+> **Remaining (FU-025 stays open):** coordinator step-7a automation (flag-and-stop → version-bump PR in
+> sleep-iac) and enabling Renovate on the repo (FU-014). Op note: the Grafana k8s-sidecar
+> (`UNIQUE_FILENAMES=false`) only writes on CM watch events, so removing one of two same-key dashboard
+> CMs needs a MODIFY event / grafana restart on the survivor to rewrite the file.
 
 ## Goal
 
