@@ -399,6 +399,12 @@ contract-versioning discipline), not a merge-path mechanism.
 - **Conflicted PR** — update-branch API returns 422; the action skips it. It can never become
   current → never reviewed → never merged. Needs a worker re-run or human rebase. The updater
   workflow should label it (`merge-conflict`) so triage sees it.
+- **Renovate PR — `close` is NOT terminal.** The escalation table's "close the PR" plays assume an
+  *agent* PR; for a `renovate[bot]` PR, Renovate owns whether the update exists — a bare close is at best
+  a one-version skip that churns on the next version, and vulnerability PRs are recreated even when closed.
+  Abandon an upgrade via a **Renovate config change** (`ignoreDeps` / pin), and handle changes-requested by
+  dispatching a **worker to fix on the `renovate/*` branch**, never a close. See [`../renovate.md`](../renovate.md)
+  §"Coordinator × Renovate PRs" (FU-046).
 - **Reviewer requests changes** — auto-merge stays blocked (changes-requested is a hard block
   independent of approvals). Worker pushes a fix → that push dismisses nothing (there's no
   approval) but re-triggers CI → PR re-enters the queue. The *request-changes review itself*

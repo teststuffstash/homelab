@@ -42,12 +42,34 @@ Needs the upstream to publish verifiable provenance + a verify step in CI — [`
 
 - **Digest bumps automerge** (base-image `@sha256`, SHA-pinned Actions). A human comparing two hashes
   is security theatre; the real gates are the **cooldown + CI + the reviewer reflex**, not eyeballs.
-- **Reviewable bumps stay manual** — runtime dep *version* bumps (changelogs exist; they run in prod),
-  major base-image / major Action changes (behavior change). These get a human (`reviewers`).
+- **Reviewable bumps go to the LLM reviewer, not a human** — runtime dep *version* bumps (changelogs
+  exist; they run in prod), major base-image / major Action changes. These carry `deps-review`, arm
+  auto-merge, and flow through the **merge-path review reflex** (FU-046): the reviewer approves the
+  harmless ones (→ auto-merge) and requests changes on the rest (→ a worker adapts the code). No human.
 - **Security fixes** (OSV) fast-track: no cooldown, `automerge`, auto-approved, auto-merged.
 
 Each merge that touches a deploy path (`uv.lock`, `Dockerfile`, …) flows through the automated deploy
 (ADR-084), so a hands-off dep bump reaches prod on its own.
+
+## Coordinator × Renovate PRs — "close" is NOT a terminal action
+
+A Renovate PR is **not** an agent PR, so the coordinator's usual escalation verbs differ — Renovate,
+not the coordinator, owns whether an update should exist:
+
+- **Reviewer requests changes** → the PR stays OPEN (changes-requested doesn't close it), Renovate
+  won't duplicate it, and `rebaseWhen: conflicted` keeps it stable. Action: **dispatch a worker to adapt
+  the code on the renovate branch** (FU-046) — never close.
+- **Closing a Renovate PR is not "done."** With Renovate's default `recreateWhen: auto`, a manually
+  closed PR is *not* recreated for the **same** version (close = "reject this version"), but Renovate
+  DOES open a fresh PR when a **newer** version lands → a reject→close→new-version→reject **churn**; and
+  **vulnerability PRs are recreated even when closed**. So a bare close never durably abandons an upgrade.
+- **To abandon an upgrade durably, change the Renovate CONFIG, not the PR:** `ignoreDeps`, a
+  `matchPackageNames … "enabled": false` rule, or an `allowedVersions`/`matchCurrentVersion` pin. That is
+  the coordinator's (or human's) "don't do this bump" verb for Renovate PRs.
+
+Until coordinator ticking is automated (run interactively today, and the changes-requested→worker
+transition isn't built yet), a reviewer-rejected Renovate PR simply **parks** — open, changes-requested,
+auto-merge hard-blocked. Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
