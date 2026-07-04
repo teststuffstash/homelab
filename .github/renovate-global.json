@@ -15,5 +15,13 @@
     "addLabels": ["automerge"],
     "automerge": true,
     "prPriority": 10
-  }
+  },
+
+  "packageRules": [
+    {
+      "description": "Flag EVERY major version bump with a `major` label (all repos, all managers) — the riskiest class. Makes them easy to find/filter (`gh pr list --label major`) and a stable hook for tooling (the review reflex / coordinator can key on it). To give majors a longer human-review window later (FU-046 P3), add `\"minimumReleaseAge\": \"30 days\"` to this same rule.",
+      "matchUpdateTypes": ["major"],
+      "addLabels": ["major"]
+    }
+  ]
 }
