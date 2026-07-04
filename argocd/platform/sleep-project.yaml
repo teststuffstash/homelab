@@ -1,0 +1,36 @@
+# The `sleep` AppProject — the tenancy boundary for the sleep stack (FU-025, docs/sleep-iac.md).
+# Every child Application in the public sleep-iac repo (apps/) sets `project: sleep`; this is what
+# turns homelab into a platform (like an AWS account/Civo team) instead of one flat `default`
+# project. Applied by the `platform` app-of-apps (this directory) so it exists before the root
+# `sleep` Application (tofu/argocd.tf) points its children here.
+#
+# What it allows — deliberately narrow:
+#  - sourceRepos: ONLY the public sleep-iac repo + the ghcr OCI chart registry. The app repos
+#    (sleep-tracking, snore-recorder) are no longer ArgoCD sources at all.
+#  - destinations: ONLY the sleep-tracking + snore-recorder namespaces, in-cluster. No `monitoring`
+#    (the dashboard CM, when it migrates, lands in sleep-tracking — the tenant never writes to the
+#    platform's monitoring ns).
+#  - clusterResourceWhitelist: ONLY the Crossplane `Workspace` (it's cluster-scoped). `Namespace` is
+#    intentionally absent → the tenant CANNOT create namespaces; they're platform-precreated
+#    (sleep-namespaces.yaml) and the child apps run CreateNamespace=false. Everything else is
+#    namespaced-only (namespaceResourceWhitelist omitted → all namespaced kinds allowed).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: sleep
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the child apps that reference it
+spec:
+  description: Sleep stack tenant (sleep-tracking + snore-recorder), deployed from the public sleep-iac repo.
+  sourceRepos:
+    - https://github.com/teststuffstash/sleep-iac.git
+    - ghcr.io/teststuffstash/charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: sleep-tracking
+    - server: https://kubernetes.default.svc
+      namespace: snore-recorder
+  clusterResourceWhitelist:
+    - group: tf.upbound.io
+      kind: Workspace

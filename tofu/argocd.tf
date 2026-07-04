@@ -242,16 +242,20 @@ resource "helm_release" "argocd_apps" {
           syncOptions = ["CreateNamespace=true", "ApplyOutOfSyncOnly=true"]
         }
       }
-      # Separate app-of-apps for the sleep-tracking stack (argocd/sleep/): its Garage infra
-      # (Workspace + ESO) and the ingester Helm release (chart from the sleep-tracking repo,
-      # values from this repo). Kept apart from `platform` so the app's lifecycle is independent.
+      # Root app-of-apps for the sleep stack — now sourced from the standalone **public sleep-iac
+      # repo** (FU-025, docs/sleep-iac.md), not homelab's argocd/sleep/. It reconciles the three
+      # child Applications in sleep-iac/apps/ (each `project: sleep`, the tenancy boundary above).
+      # This root app stays platform-owned (`project: default`) and reads sleep-iac anonymously —
+      # the repo is public, so no ArgoCD repository credential. A deploy is now a version-bump PR in
+      # sleep-iac; homelab only owns the platform + this pointer. Child NAMES are unchanged, so the
+      # source flip adopts the existing Applications/resources in place (no prune, no recreate).
       sleep = {
         namespace = "argocd"
         project   = "default"
         source = {
-          repoURL        = var.argocd_repo_url
+          repoURL        = "https://github.com/teststuffstash/sleep-iac.git"
           targetRevision = "master"
-          path           = "argocd/sleep"
+          path           = "apps"
           directory      = { recurse = false }
         }
         destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }

@@ -10,8 +10,11 @@
 # Run OUTSIDE the jail with the fine-grained admin PAT (Administration:R/W for repos/rulesets, Issues:R/W
 # for labels.tf). See README.md. The `import` blocks adopt the live repos on first apply.
 #
-# Adding a repo: copy a block + its `import`, then plan/apply. Both current repos are private with
-# identical settings, but they're spelled out per-repo (not for_each) so each stays independently editable.
+# Adding a repo: run `scripts/new-agent-repo.sh <name> [--public|--private] [--no-labels]` — it appends
+# the block here (with an `import` iff the repo already exists), wires protected_repos + label_repos, and
+# prints the App-install click + the out-of-jail apply. Or copy a block + its `import` by hand. Both
+# current repos are private with identical settings, but they're spelled out per-repo (not for_each) so
+# each stays independently editable.
 
 import {
   to = github_repository.sleep_tracking
@@ -105,6 +108,47 @@ resource "github_repository" "snore_recorder" {
     # feature with no schema default and not computed — DECLARING it emits a deprecation warning, but
     # OMITTING it perpetually diffs true->false (the provider can't tell "keep" from "set false"). So we
     # neither set it nor reconcile it. It's a dead no-op attribute.
+    ignore_changes = [has_downloads]
+  }
+}
+
+resource "github_repository" "sleep_iac" {
+  name         = "sleep-iac"
+  description  = "IaC/deploy for the sleep stack (FU-025)"
+  homepage_url = ""
+  topics       = []
+  visibility   = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = false
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = false
+  delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
     ignore_changes = [has_downloads]
   }
 }

@@ -31,6 +31,7 @@ variable "protected_repos" {
     required_checks = list(string)
   }))
   default = {
+    sleep-iac      = { required_checks = ["ci"] }
     sleep-tracking = { required_checks = ["ci"] }
     # snore-recorder = { required_checks = ["ci"] }   # enable once its PR `ci` check is confirmed
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first

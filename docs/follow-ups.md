@@ -102,7 +102,10 @@ _Last updated: 2026-07-02._
       repos stay platform-agnostic (standard Helm/Secrets/S3/Postgres, publish image+chart only)
       and a deploy = a version-bump PR in `sleep-iac` with its own CI gates; homelab keeps just
       the platform + a root Application pointing at `sleep-iac`. Homelab-as-a-platform, like
-      AWS/Civo. **Full extraction blueprint: [`docs/sleep-iac.md`](sleep-iac.md).**
+      AWS/Civo. Includes a standalone **Grafana dashboard → GitOps** slice (the Sleep Overview CM
+      leaves `tofu/monitoring.tf` for the sleep-tracking ns; datasource/sidecar stay platform-owned)
+      and a platform-precreated-namespace `sleep` AppProject. **Full extraction blueprint:
+      [`docs/sleep-iac.md`](sleep-iac.md).**
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.

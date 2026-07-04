@@ -1,0 +1,19 @@
+# Platform-precreated namespaces for the sleep tenant (FU-025, docs/sleep-iac.md). homelab owns
+# namespace lifecycle; the `sleep` AppProject only *allowlists* these as destinations, and the child
+# apps run CreateNamespace=false. Precreating them (a) lets us drop `Namespace` from the project's
+# clusterResourceWhitelist — the tenant can't spawn arbitrary namespaces — and (b) means a first
+# sync never fails on a missing ns. Both namespaces already exist live (created imperatively by the
+# old child apps' CreateNamespace=true); ArgoCD adopts them in place via SSA — no recreate.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sleep-tracking
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the sleep child apps deploy into it
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: snore-recorder
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

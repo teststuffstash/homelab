@@ -35,7 +35,7 @@ locals {
 
   # Only the fixer-target repos get the state labels — a repo can be managed in repos.tf (auto-merge etc.)
   # without carrying the agent label taxonomy, so this list is separate from the repos.tf resources.
-  label_repos = ["sleep-tracking", "snore-recorder"]
+  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac"]
 
   repo_labels = {
     for pair in setproduct(local.label_repos, keys(local.agent_labels)) :
