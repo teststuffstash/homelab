@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-046**.
+  Next free id: **FU-047**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -208,6 +208,21 @@ _Last updated: 2026-07-02._
       rather than one homelab-wide. Mostly matters as stacks multiply; today the coordinator doesn't
       need the `-iac` repo in-context because deploys are automatic (it never touches them). Relates to
       FU-026 (durable engine), FU-039 (platform self-service), and the three-layer topology.
+- [ ] **FU-046** — **Agentic dependency upgrades: NO manual dep review — the LLM reviews, an agent
+      fixes.** Renovate's non-automerge bumps (major versions, runtime deps) should NOT be assigned to a
+      human; instead route them into the agent platform (docs/renovate.md + FU-014). Vision: a dep PR
+      (with Renovate's embedded changelog/release-notes as context) triggers the **LLM reviewer** — if
+      CI is green + the bump is benign it approves + merges (no human); if CI breaks OR the reviewer
+      surfaces a real issue (deprecation, API/behaviour change) the **coordinator dispatches a worker to
+      FIX the code in the SAME renovate branch**, loop to green, then merge. So **major upgrades get done
+      by LLMs without human intervention.** Phasing: **P1** reviewer *reviews* dep PRs (assess + approve/
+      flag, reuses reviewer-session.sh; needs the coordinator to pick up `deps-review`-labelled PRs, not
+      just agent-fix issues); **P2** worker *fixes* on the renovate branch (the hard part — Renovate must
+      not clobber the worker's commits: it stops auto-rebasing a manually-edited branch, verify/configure;
+      worker checks out `renovate/*` instead of creating `agent/*`); **P3** a longer cooldown on majors so
+      a human CAN opt into an interactive LLM session for the riskiest. Cost-gate: only non-automerge
+      (major/runtime) bumps, and only when there's actually something to review. Relates to FU-041
+      (deterministic merge path), FU-044 (LLM oversight), and the agent-platform direction.
 
 ## Monitoring & storage
 
