@@ -181,9 +181,12 @@ _Last updated: 2026-07-02._
       a broken sync/degraded health: **roll back** (revert the `sleep-iac` bump PR — deterministic,
       no LLM needed for this half) or, better, **roll forward** — dispatch a worker against the app
       repo to fix the breakage. Prereq the operator is doing first: **harden app CI so prod breakages
-      are rare** (the roll-back is the safety net, not the primary control). Relates to FU-041
-      (deterministic merge path) and the agent platform direction; the ArgoCD-health signal + a
-      post-sync hook are the missing pieces.
+      are rare** (the roll-back is the safety net, not the primary control). **Direction: do this
+      IN-CLUSTER off ArgoCD app-health events, NOT in the GitHub Actions deploy run** — the deploy job
+      now ends at "auto-merge armed" (deploy-pin.sh), so post-deploy health/rollback is decoupled from
+      CI (e.g. ArgoCD notifications / a small controller watching `Application` health → revert the
+      bump PR or dispatch a fixer). Relates to FU-041 (deterministic merge path) and the agent platform
+      direction; the ArgoCD-health signal + that in-cluster reactor are the missing pieces.
 
 ## Monitoring & storage
 
