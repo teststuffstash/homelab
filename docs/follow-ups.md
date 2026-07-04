@@ -96,8 +96,18 @@ _Last updated: 2026-07-02._
       cache — without the nix allowance `devbox install` hangs).
 - [ ] **FU-021** — goose retry policy: hard-stop on auth/limit errors (it retried a
       budget-exhausted 403 812×).
-- [ ] **FU-022** — Pin tool versions in `agent-base` + project `devbox.json` so the baked-toolchain
-      cache hits land (`@latest` drifts vs the project lock and re-fetches).
+- [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
+      pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
+      (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
+      install:** rather than pin every version (the original plan — still drifts between per-repo
+      updates), a **weekly synchronized `devbox update`** (`.github/workflows/devbox-update.yaml` +
+      `scripts/devbox-update.sh`) re-resolves ALL repos' locks *together* in one pass, so shared tools
+      land on ONE version everywhere → cache + bake hits. Keeps `@latest` (Renovate's `nix`/`devbox`
+      manager stays disabled — it mis-resolves `@latest`). Includes `agent-runtime` (agent-base/) so its
+      image rebuilds with the aligned lock. Opens an auto-merging PR per repo. **Operator step:** install
+      the `homelab-renovate` App on the matrix repos (homelab, snore-recorder, openrouter-operator,
+      agent-runtime — sleep-tracking/-iac already have it) so the token mint succeeds; then
+      `gh workflow run devbox-update.yaml`.
 - [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
       cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,

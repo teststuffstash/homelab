@@ -1,0 +1,71 @@
+# devbox-update.yaml — weekly SYNCHRONIZED devbox.lock bump across all repos (FU-022).
+#
+# All repos keep `@latest` devbox pins; this one job re-resolves them TOGETHER (same registry state in
+# one pass) so the shared tools (gitleaks/kubectl/uv/gh/jq/python) land on the SAME version everywhere.
+# That alignment is what makes the in-cluster nix cache (ADR-083) and the `agent-base` baked toolchain
+# HIT instead of re-fetch on every agent-pod start. Renovate's `nix`/`devbox` manager stays disabled
+# (it mis-resolves `@latest`, docs/renovate.md) — this job owns devbox updates instead.
+#
+# `agent-runtime` (agent-base/) is in the matrix ON PURPOSE: its lock bump triggers agent-runtime's
+# build-image.yaml to rebuild agent-base, so the baked toolchain tracks the aligned versions.
+#
+# Each repo gets an auto-merging PR (CI-gated, `automerge` label) — merges where the machinery exists
+# (sleep-iac has no required-approval; sleep-tracking's reviewer-approve reflex approves); elsewhere the
+# PR opens for a human. Prereq: the homelab-renovate App installed on each matrix repo.
+name: devbox-update
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+  workflow_dispatch: {}
+
+permissions: {} # authenticates as the homelab-renovate App token minted per job
+
+concurrency:
+  group: devbox-update
+  cancel-in-progress: false # never run two synchronized passes at once (they'd race per-repo branches)
+
+jobs:
+  update:
+    runs-on: homelab-ephemeral
+    strategy:
+      fail-fast: false # one repo missing the App / red CI must not block the others
+      matrix:
+        include:
+          - { repo: homelab, dir: "." }
+          - { repo: sleep-tracking, dir: "." }
+          - { repo: sleep-iac, dir: "." }
+          - { repo: snore-recorder, dir: "." }
+          - { repo: openrouter-operator, dir: "." }
+          - { repo: agent-runtime, dir: "agent-base" }
+    steps:
+      # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
+      - uses: actions/checkout@v4
+      - name: Install xz + jq (missing from the ARC runner image)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils jq
+      - name: Install Nix (single-user)
+        uses: cachix/install-nix-action@v31
+        with:
+          install_options: --no-daemon
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Install devbox (reuse the single-user Nix)
+        uses: jetify-com/devbox-install-action@v0.13.0
+        with:
+          skip-nix-installation: "true"
+
+      - name: Mint homelab-renovate token for ${{ matrix.repo }}
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: ${{ matrix.repo }}
+
+      - name: devbox update + open PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: teststuffstash/${{ matrix.repo }}
+          DEVBOX_DIR: ${{ matrix.dir }}
+        run: bash scripts/devbox-update.sh

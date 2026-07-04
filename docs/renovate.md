@@ -74,8 +74,10 @@ auto-merge hard-blocked. Safe: no duplication, no churn, nothing auto-acts on it
 ## Gotchas encountered
 
 - **`@latest` devbox/nix pins are un-trackable** → Renovate mis-resolves them (it once proposed
-  downgrading gitleaks to a dead 5-yr-old release). The `nix`/`devbox` manager is **disabled** until the
-  tools are pinned to concrete versions (**FU-022**).
+  downgrading gitleaks to a dead 5-yr-old release). The `nix`/`devbox` manager is **disabled**; devbox
+  updates are owned instead by the weekly **`devbox-update`** job (**FU-022**), which keeps `@latest` but
+  re-resolves *all* repos' locks in one pass so the shared toolchain aligns (nix cache + agent-base bake
+  hits) — alignment a per-repo Renovate bump can't give.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates
   `FROM …@sha256`; a `customManagers` regex on the same line just produces "could not determine new
   digest" warnings. Removed.
