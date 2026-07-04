@@ -159,6 +159,58 @@ the data buckets).
    PRs); the reviewer/auto-merge gate applies as on the app repos. Later the full-stack k3d gate
    (ADR-082) becomes a required check here — that's the "deploy verify" of agent P2.
 
+## Deploy pipeline (build → PR → sync)
+
+**Built 2026-07-04.** How a code change reaches the cluster, and why it carries almost no ceremony.
+
+**Model — the chart is the deployable unit; sleep-iac pins one number.** The `deploy` workflow in
+the app repo builds the image **and** packages the chart at **one version** — CalVer + git sha,
+`2026.<m>.<d>-g<sha>` (commit date, reproducible; the `-g` prefix dodges SemVer's "no all-numeric
+prerelease" rule) — with `chart version == appVersion == image tag`. The chart's
+`values.yaml` leaves `image.tag: ""`, and `templates/cronjob.yaml` defaults the tag to
+`.Chart.AppVersion`, so **the deployed image is fully determined by the pinned chart version**.
+sleep-iac therefore sets only `apps/sleep-ingester.yaml` `targetRevision` and never an image tag.
+(OCI Helm requires a SemVer chart version — a bare git sha isn't legal — which is exactly why the
+sha rides *inside* a CalVer as a prerelease.)
+
+**Flow, from a PR merged to app-repo master:**
+
+1. `deploy.yaml` (path-filtered: `src/ chart/ Dockerfile pyproject.toml uv.lock` — **docs-only pushes
+   do nothing**) computes the version, builds+pushes `ghcr…/sleep-ingester:<ver>` and the chart
+   `charts/sleep-ingester:<ver>`. One build on master is authoritative (squash-merge makes the master
+   commit a new sha anyway, so there's nothing to "reuse" from PR CI).
+2. `scripts/deploy-pin.sh` force-updates a **fixed branch** `deploy/sleep-ingester` in sleep-iac
+   (reset onto master, bump the chart `targetRevision`) and upserts a PR. GitHub allows one open PR
+   per head branch ⇒ **exactly one deploy PR per app**; a second build updates the same PR.
+3. sleep-iac `ci` (render) + auto-merge land it; ArgoCD syncs → rollout. **Rollback / roll-forward =
+   bump `targetRevision` to another published chart version** (a one-line revert of the PR).
+
+**Concurrency / no-regression.** `deploy.yaml` sets `concurrency: { group: deploy-sleep-ingester,
+cancel-in-progress: true }`, so the newest master commit wins (older runs cancel); master is linear,
+so run-order == commit-order. `deploy-pin.sh` adds a **monotonic ancestor guard** (refuse to write a
+pin whose current sha is not an ancestor of the new one — belt to cancel-in-progress; needs the
+`fetch-depth: 0` checkout). ArgoCD is level-triggered, so back-to-back deploys just converge to the
+latest; a skipped intermediate rollout is fine.
+
+**Why not Renovate for this.** Git-sha versions don't order, so Renovate can't tell "newer" — the
+app-repo build drives the bump PR instead. Renovate stays in its lane (app deps, platform charts).
+
+**One-time setup (the only manual bits):**
+
+- A **deploy GitHub App** installed on `sleep-iac` (contents + pull_requests write). Set its
+  `DEPLOY_APP_ID` + `DEPLOY_APP_PRIVATE_KEY` as secrets on the app repo (or org-level). The workflow
+  mints a short-lived, sleep-iac-scoped token with `actions/create-github-app-token` — no static PAT.
+  (Reusing `homelab-agents` is fine if it's installed on sleep-iac; else a dedicated App.)
+- The deploy PR is mechanical, so **don't** run the LLM reviewer on it — instead make the deploy
+  App a **bypass actor for sleep-iac's `required-approval` ruleset** (`tofu/github/repo_rulesets.tf`),
+  so a CI-green bump auto-merges without a human/LLM approval. Until that's set, `deploy-pin.sh` arms
+  auto-merge but the PR waits for an approval (it warns, doesn't fail).
+- Add a **ghcr retention/GC** policy for `sleep-ingester` — every deploy is a new immutable tag, so
+  images accumulate (chart artifacts are tiny). Keep last N + whatever `targetRevision` currently pins.
+
+**Post-deploy health / auto-rollback** (watch ArgoCD app health, revert or dispatch a fixer on a
+broken sync) is **FU-044** — deferred; harden app CI first so it's the safety net, not the control.
+
 ## Decisions to record when built
 
 - **New ADR: three-layer repo topology** (app → stack-iac → platform), refining ADR-004/ADR-074 —

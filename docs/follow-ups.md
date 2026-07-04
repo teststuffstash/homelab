@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-044**.
+  Next free id: **FU-045**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -172,6 +172,18 @@ _Last updated: 2026-07-02._
       the worker arm its own PR at open (it already has `pull_requests:write`), so it never depends on
       the interactive session surviving. Relates to FU-041 (deterministic merge path) and the
       dispatch-idempotency gap in FU-042.
+- [ ] **FU-044** — **LLM oversight of the deploy path: auto-rollback / roll-forward on a broken
+      deploy.** The FU-025 deploy pipeline (app-repo build → chart+image at `<calver>-g<sha>` →
+      auto-bump PR in `sleep-iac` → ArgoCD sync, see `docs/sleep-iac.md` §Deploy pipeline) merges on
+      CI-green but has **no post-deploy health gate** — a chart that renders + passes kubeconform can
+      still break at runtime (bad migration, crashlooping CronJob, failing probe). Add a
+      coordinator-style overseer that watches the ArgoCD app health after a deploy PR merges and, on
+      a broken sync/degraded health: **roll back** (revert the `sleep-iac` bump PR — deterministic,
+      no LLM needed for this half) or, better, **roll forward** — dispatch a worker against the app
+      repo to fix the breakage. Prereq the operator is doing first: **harden app CI so prod breakages
+      are rare** (the roll-back is the safety net, not the primary control). Relates to FU-041
+      (deterministic merge path) and the agent platform direction; the ArgoCD-health signal + a
+      post-sync hook are the missing pieces.
 
 ## Monitoring & storage
 
