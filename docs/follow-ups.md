@@ -220,13 +220,14 @@ _Last updated: 2026-07-02._
       only tie-breaks** exceptions (flip-flop / rounds exhausted), per the escalation table. This
       **resolves the merge-path open question** ("review dep PRs or CI-only?") as a *split*: trivial/digest
       → mechanical CI-only approval (the `renovate-approve` reflex, FU-014); reviewable → LLM reviewer.
-      **Integration work:** (1) the review reflex must review `deps-review` PRs but **skip
-      `automerge`-labelled** ones (those are the mechanical path — else it burns a reviewer run on a digest
-      bump); (2) the changes-requested worker must fix on a `renovate/*` branch, and **Renovate must not
-      clobber its commits** — set `rebaseWhen: conflicted` (done) so the updater owns freshness and
-      Renovate only rebases its own conflicts; verify Renovate leaves a manually-edited branch alone.
-      **P3 (later):** a longer cooldown on majors so a human CAN opt into an interactive LLM session for
-      the riskiest. Prereq: FU-041 review reflex wired. Relates to FU-041, FU-044, FU-014.
+      **Integration work:** (1) ✅ **DONE** — the review reflex (`agents/review-reflex.sh`) now skips
+      `automerge`-labelled PRs (the mechanical path) and reviews the rest, so `deps-review` bumps get the
+      LLM reviewer while digest noise doesn't burn a reviewer run; (2) the changes-requested worker must
+      fix on a `renovate/*` branch, and **Renovate must not clobber its commits** — set `rebaseWhen:
+      conflicted` (done) so the updater owns freshness and Renovate only rebases its own conflicts;
+      **verify on the first real major bump** that Renovate leaves a manually-edited branch alone and the
+      worker pushes to `renovate/*` (not a new `agent/*`). **P3 (later):** a longer cooldown on majors so a
+      human CAN opt into an interactive LLM session for the riskiest. Relates to FU-041, FU-044, FU-014.
 
 ## Monitoring & storage
 

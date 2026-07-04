@@ -51,7 +51,7 @@ for repo in $REPOS; do
   # in lockstep with this ceiling. 40 open+auto-merge PRs/repo is far beyond anything the agent flow hits.
   errfile="$(mktemp)"
   if ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels \
       2>"$errfile")"; then
     log "[$repo] FATAL: gh pr list failed — aborting rather than silently reviewing nothing:"
     cat "$errfile" >&2
@@ -60,9 +60,14 @@ for repo in $REPOS; do
   fi
   rm -f "$errfile"
 
-  # Reviewable = armed ∧ not-behind ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits ).
+  # Reviewable = armed ∧ not-behind ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
+  #              ∧ NOT `automerge`-labelled.
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
   #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   `automerge` label = the MECHANICAL path (Renovate trivial/digest/dev-dep bumps auto-approved by the
+  #   renovate-approve reflex, CI-only, no LLM). Skip them so the reviewer isn't burned on digest noise.
+  #   Renovate's REVIEWABLE bumps carry `deps-review` (not `automerge`) → they fall through here and get
+  #   the LLM reviewer like any agent PR (FU-046; docs/renovate.md + docs/agents/merge-path.md).
   pick="$(printf '%s' "$prs" | jq -r '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
@@ -76,6 +81,7 @@ for repo in $REPOS; do
       (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
     [ .[]
       | select(.isDraft | not)
+      | select(([ .labels[]?.name ] | index("automerge")) | not)
       | select(.autoMergeRequest != null)
       | select(.mergeStateStatus != "BEHIND" and .mergeStateStatus != "DIRTY")
       | select(green)
