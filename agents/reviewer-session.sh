@@ -10,7 +10,16 @@
 # Two distinct identities, on purpose:
 #   • LLM auth = the operator SUBSCRIPTION (coordinator-claude → CLAUDE_CODE_OAUTH_TOKEN): free at
 #     margin, a strong model, deliberately DECORRELATED from the cheap OpenRouter model that wrote the
-#     PR. Reviewer must be at least as capable as the author; same model = same blind spots.
+#     PR. Reviewer must be at least as capable as the author; same model = same blind spots. Review +
+#     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model (**sonnet**,
+#     the default) — NOT the cheap OpenRouter models the workers use. Don't cheap out on the reviewer.
+#     (Proven live: on sleep-tracking#9 a *sonnet* reviewer caught the *coordinator's* own misjudgment —
+#     dispatching a review on a DIRTY, superseded PR — and recommended close. Sonnet is sufficient here;
+#     opus is available for a genuinely high-stakes PR via --model, but it is not the default.)
+#   • VISIBILITY — the reviewer must see enough to reason about MESSY situations, not just the diff: it
+#     does a FULL `gh repo clone` (master present) + `gh pr checkout`, so it can diff the PR against
+#     current master and spot conflicts/supersession (that's how it found master's ced837d superseded #9).
+#     Don't reduce it to a shallow/diff-only clone — visibility into master + history is load-bearing.
 #   • GitHub identity = a SEPARATE review-bot App (reviewer-git → GH_TOKEN, e.g. homelab-reviewer[bot]).
 #     GitHub blocks self-approval, so the reviewer MUST be a different bot than the worker that opened
 #     the PR (homelab-agents[bot]) — reusing coordinator-git/agent-git-token would fail with
