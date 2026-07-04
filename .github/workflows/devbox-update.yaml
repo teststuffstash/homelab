@@ -41,8 +41,8 @@ jobs:
     steps:
       # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
       - uses: actions/checkout@v4
-      - name: Install xz + jq (missing from the ARC runner image)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils jq
+      - name: Install xz (missing from the ARC runner image)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils
       - name: Install Nix (single-user)
         uses: cachix/install-nix-action@v31
         with:
@@ -68,4 +68,10 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: teststuffstash/${{ matrix.repo }}
           DEVBOX_DIR: ${{ matrix.dir }}
-        run: bash scripts/devbox-update.sh
+        # gh via devbox (consistent with deploy-pin.sh's `devbox run` — no raw GraphQL, no pinned binary);
+        # `devbox global add` is light (just gh, not a whole project toolchain). devbox (for `devbox
+        # update`) stays on PATH from the install step above.
+        run: |
+          devbox global add gh
+          eval "$(devbox global shellenv)"
+          bash scripts/devbox-update.sh

@@ -9,15 +9,14 @@
 #
 # Env: GH_TOKEN (contents + pull_requests write on $REPO — a homelab-renovate App token),
 #      REPO (owner/name), DEVBOX_DIR (subdir holding devbox.json; default ".", agent-runtime = "agent-base").
-# Needs: devbox (on PATH — the workflow sets up single-user Nix), git, curl, jq.
+# Needs: devbox (on PATH — the workflow sets up single-user Nix), git, gh (the workflow adds it via
+#        `devbox global add gh`; gh's built-in --jq means no standalone jq).
 set -euo pipefail
 
 REPO="${REPO:?set REPO=owner/name}"
 DIR="${DEVBOX_DIR:-.}"
 : "${GH_TOKEN:?set GH_TOKEN}"
 BRANCH="devbox-update"
-OWNER="${REPO%%/*}"
-API="https://api.github.com/repos/${REPO}"
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 git clone --quiet --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$WORK/r"
@@ -38,24 +37,25 @@ git commit -q -m "chore: devbox update — align the toolchain lock (FU-022)" \
   -m "Weekly synchronized devbox.lock bump so shared tools resolve to the same version across repos (nix cache + agent-base bake hits)."
 git push -q --force origin "$BRANCH"
 
-hdr=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
-existing="$(curl -sS "${hdr[@]}" "${API}/pulls?head=${OWNER}:${BRANCH}&state=open")"
-PR="$(echo "$existing" | jq -r '.[0].number // empty')"
-NODE="$(echo "$existing" | jq -r '.[0].node_id // empty')"
+export GH_TOKEN # gh authenticates from this
+
+# Ensure the labels exist (idempotent) so --label can't fail on a repo Renovate hasn't touched yet.
+for L in automerge dependencies; do gh label create "$L" --repo "$REPO" --color ededed --force >/dev/null 2>&1 || true; done
+
+PR="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
 if [ -z "$PR" ]; then
-  created="$(curl -sS -X POST "${hdr[@]}" "${API}/pulls" \
-    -d "$(jq -nc --arg h "$BRANCH" '{title:"chore: devbox update (align toolchain lock)", head:$h, base:"master", body:"Weekly synchronized `devbox update` (FU-022): keeps `@latest` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits. CI-gated; auto-merges via the `automerge` label."}')")"
-  PR="$(echo "$created" | jq -r '.number')"
-  NODE="$(echo "$created" | jq -r '.node_id')"
+  PR="$(gh pr create --repo "$REPO" --base master --head "$BRANCH" \
+    --label "automerge,dependencies" \
+    --title "chore: devbox update (align toolchain lock)" \
+    --body "Weekly synchronized \`devbox update\` (FU-022): keeps \`@latest\` pins but re-resolves the lock so shared tools stay on ONE version across repos → nix cache + agent-base bake hits. CI-gated; auto-merges via the automerge label." \
+    | grep -oE '[0-9]+$')"
+else
+  gh pr edit "$PR" --repo "$REPO" --add-label "automerge,dependencies" >/dev/null
 fi
-curl -sS -X POST "${hdr[@]}" "${API}/issues/${PR}/labels" -d '{"labels":["automerge","dependencies"]}' >/dev/null
 
 # ARM auto-merge — REQUIRED, not optional: the FU-041 updater only touches auto-merge-armed PRs
-# (require_auto_merge_enabled), and GitHub only completes the merge once armed. Same rule as the worker /
-# Renovate / deploy. GraphQL (there's no gh on the runner); harmless if already armed.
-arm="$(curl -sS -X POST "${hdr[@]}" https://api.github.com/graphql \
-  -d "$(jq -nc --arg id "$NODE" '{query:"mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:SQUASH}){clientMutationId}}", variables:{id:$id}}')")"
-if echo "$arm" | jq -e '.errors' >/dev/null 2>&1; then
-  echo "::warning::[$REPO] could not arm auto-merge on PR #${PR}: $(echo "$arm" | jq -rc '.errors')"
-fi
-echo "[$REPO] devbox-update PR #${PR} (labelled automerge + armed)"
+# (require_auto_merge_enabled) and GitHub only completes an armed merge. Same rule as the worker /
+# Renovate / deploy; `gh pr merge --auto` is the clean way (no raw GraphQL). Harmless if already armed.
+gh pr merge "$PR" --repo "$REPO" --auto --squash \
+  || echo "::warning::[$REPO] could not arm auto-merge on #$PR"
+echo "[$REPO] devbox-update PR #${PR} (labelled + armed)"
