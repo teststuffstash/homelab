@@ -182,8 +182,16 @@ sha rides *inside* a CalVer as a prerelease.)
 2. `scripts/deploy-pin.sh` force-updates a **fixed branch** `deploy/sleep-ingester` in sleep-iac
    (reset onto master, bump the chart `targetRevision`) and upserts a PR. GitHub allows one open PR
    per head branch ⇒ **exactly one deploy PR per app**; a second build updates the same PR.
-3. sleep-iac `ci` (render) + auto-merge land it; ArgoCD syncs → rollout. **Rollback / roll-forward =
-   bump `targetRevision` to another published chart version** (a one-line revert of the PR).
+3. sleep-iac's `ci` (render) is the gate; the deploy PR **auto-merges** on ci-green — sleep-iac has no
+   `required-approval` (an App's Integration bypass can't waive an approval on a merge), so CI is the
+   sole gate. The merge's master push fires sleep-iac's **`sync.yaml`**, which POSTs to ArgoCD's native
+   `/api/webhook` **from an in-cluster runner** (argocd-server stays LAN-only) → ArgoCD syncs **within
+   seconds** instead of waiting up to ~3 min for the reconcile poll. **Rollback / roll-forward = bump
+   `targetRevision` to another published chart version** (a one-line revert of the PR).
+
+   *(sleep-iac + sleep-tracking `ci.yaml` are `pull_request`-only — the PR run is the required-check gate;
+   re-running on master after a squash-merge re-tests identical content and, in sleep-tracking, raced
+   deploy.yaml pointlessly. On master only deploy.yaml (build+deploy) and sync.yaml (nudge) run.)*
 
 **Concurrency / no-regression.** `deploy.yaml` sets `concurrency: { group: deploy-sleep-ingester,
 cancel-in-progress: true }`, so the newest master commit wins (older runs cancel); master is linear,
