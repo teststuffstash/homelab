@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-045**.
+  Next free id: **FU-046**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -187,6 +187,15 @@ _Last updated: 2026-07-02._
       CI (e.g. ArgoCD notifications / a small controller watching `Application` health → revert the
       bump PR or dispatch a fixer). Relates to FU-041 (deterministic merge path) and the agent platform
       direction; the ArgoCD-health signal + that in-cluster reactor are the missing pieces.
+- [ ] **FU-045** — **Coordinator context is per-STACK, not homelab-only.** `coordinator-session.sh`
+      clones just `homelab`, but with the FU-025 three-layer split a stack's deploy truth lives in its
+      own `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is really
+      homelab + sleep-iac + the app repos — and a different stack (`idp`, …) is a different context
+      (homelab + its repos). Generalize the single homelab clone into a **per-stack context** (a small
+      stack manifest → which repos to clone/observe), and possibly run **one coordinator per stack**
+      rather than one homelab-wide. Mostly matters as stacks multiply; today the coordinator doesn't
+      need the `-iac` repo in-context because deploys are automatic (it never touches them). Relates to
+      FU-026 (durable engine), FU-039 (platform self-service), and the three-layer topology.
 
 ## Monitoring & storage
 

@@ -106,6 +106,25 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 > close + re-dispatch fresh; changes-requested → next round; round-limit / flip-flop / stale-red →
 > decide or escalate). The manual commands below remain valid as a fallback when a reflex is disabled.
 
+> **⚠ PRE-FLIGHT BEFORE YOU MANUALLY DISPATCH A REVIEW.** The reflex applies these filters
+> automatically (armed ∧ green ∧ not-BEHIND ∧ **not-DIRTY** ∧ reviewable); when you reach for
+> `reviewer-session.sh` by hand you MUST apply them too — or you review a PR the reflex deliberately
+> excludes and waste a scarce reviewer run. Ask, in order:
+> 1. **Is it an agent PR at all?** A human's PR with no linked `agent-fix` issue is outside your
+>    mandate. Assess it and take the terminal action (usually **close with a comment**, or escalate) —
+>    do **not** shepherd it toward merge as if a worker opened it.
+> 2. **Is it mergeable?** `DIRTY`/`CONFLICTING` (`gh pr view <N> --json mergeStateStatus`) → a review
+>    **cannot** fix a conflict, and an approval can't auto-merge a conflicted branch. Decide directly
+>    (close + re-dispatch a fresh worker from new master, or escalate) — never review a conflicted PR
+>    hoping approval merges it.
+> 3. **Is the change superseded or still needed?** Diff against **current master** — if master already
+>    landed the intent (often *better*), **close with an explanation**, don't approve a redundant diff.
+>
+> The manual `reviewer-session.sh` is ONLY for a PR the reflex *would* pick but hasn't yet (edge-trigger
+> latency) — **never** for one it excludes by design (DIRTY, unarmed, superseded, or non-agent).
+> *(Learned live on sleep-tracking#9: a DIRTY, master-superseded human PR was hand-reviewed instead of
+> closed; the reviewer caught it and recommended close — but a pre-flight would have skipped the run.)*
+
 6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
    PR opens → relabel `agent/review`. Auto-merge is armed by `agent-session.sh` (confirm with `gh pr
    merge <PR> --repo teststuffstash/<project> --auto --squash`; arm it yourself only if the worker
@@ -133,13 +152,12 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
      fixer's context). New commits re-open the gate (`dismiss_stale_reviews_on_push`), so the bot must
      re-approve — re-run this step after the next round's PR update.
    - `round == max` or ambiguous → `agent/blocked` + comment the blockers.
-7a. **Deploy the merged fix (version bump).** ⚠️ Deploy-versioning + repo structure are being
-   **reworked** — until that lands, do NOT autonomously cut release tags or push to homelab. A merged
-   fix is in code but **not live** until a release is cut and the deploy pins to it (today's manual
-   path: a `v*` tag on the project → `release.yaml` publishes the image + OCI chart → bump
-   `argocd/sleep/…/targetRevision` in homelab → ArgoCD syncs). For now, **flag it**: comment on the
-   issue that a release + deploy is pending (with the merged SHA) and leave it for the human. Revisit
-   this step once the rework defines the automated deploy path.
+7a. **Deploy — automatic, nothing to do.** The deploy path is fully automated now and the coordinator
+   **never touches it** (and never touches homelab). Merging the fix PR fires the app repo's `deploy`
+   workflow → it builds the image + chart at `<calver>-g<sha>` and opens an **auto-merging** version-bump
+   PR in the stack's `-iac` repo (e.g. sleep-iac); an in-cluster webhook makes ArgoCD sync near-instantly.
+   So a merged fix reaches prod on its own. At most, *confirm* the rollout went Healthy — post-deploy
+   health/rollback is FU-044, handled in-cluster. See homelab `docs/sleep-iac.md` §"Deploy pipeline".
 8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
 
 ## Runtime
@@ -154,6 +172,14 @@ devbox run coordinator-session
 # headless: run one reconcile pass and self-terminate
 devbox run coordinator-session -- --run "Do one reconcile pass over open agent-fix issues."
 ```
+
+> **Scope note (evolving — FU-045).** The pod clones *homelab* today, but a coordinator instance is
+> really scoped to a **stack**: the platform (homelab) **plus that stack's repos**. Since FU-025 a
+> stack's deploy truth lives in its own `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator"
+> context is homelab + sleep-iac + the app repos — and a *different* stack (e.g. `idp`) is a different
+> context (homelab + idp's repos). "The coordinator runs on cloned homelab" is thus no longer the whole
+> story; generalizing the single homelab clone into a per-stack context (possibly one coordinator per
+> stack) is **FU-045**.
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
 worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via
@@ -230,10 +256,10 @@ The **image-build CI needs no token** — it pushes to ghcr with the job's built
 - **FU-026 — Graduate the loop** off hand-driving to a durable engine (Temporal / Argo
   Workflows+Events / a CRD+controller) once the runbook is proven — state already lives in
   labels+CRs, so it's a swap.
-- **FU-025 — Deploy-versioning + repo-structure rework** (the next step): the release→deploy path
-  today is manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Until it's
-  reworked, step 7a only *flags* a pending deploy — don't automate release/deploy against the
-  current path.
+- **Deploy path (FU-025, done):** the release→deploy path is now automated — the app repo's `deploy`
+  workflow builds + opens an auto-merging version-bump PR in the stack's `-iac` repo, ArgoCD syncs. So
+  step 7a is a no-op (deploy is hands-off); the coordinator never cuts releases or touches homelab.
+  See `docs/sleep-iac.md` §"Deploy pipeline".
 
 See [`../README.md`](../README.md) (worker launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
 (reconcile loop + hazards), and [`../../docs/agents/README.md`](../../docs/agents/README.md) (design/ADRs).
