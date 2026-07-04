@@ -37,18 +37,32 @@ resource "github_actions_organization_secret" "merge_gh_app_private_key" {
 # ⚠ visibility = SELECTED (sleep-tracking only), NOT "all" like the merge secrets: this key grants
 # contents+PR write on sleep-iac ⇒ it can deploy anything, so it must not be readable by every repo's CI
 # plane (which runs semi-trusted agent-authored code). Only the deploy workflow needs it.
+# The secret + its repo allow-list are split: the inline `selected_repository_ids` on the secret is
+# deprecated, so the allow-list lives in the companion `_repositories` resource below.
 resource "github_actions_organization_secret" "deploy_app_id" {
-  count                   = var.deploy_app_id != "" ? 1 : 0
-  secret_name             = "DEPLOY_APP_ID"
-  visibility              = "selected"
-  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
-  value                   = var.deploy_app_id
+  count       = var.deploy_app_id != "" ? 1 : 0
+  secret_name = "DEPLOY_APP_ID"
+  visibility  = "selected"
+  value       = var.deploy_app_id
 }
 
 resource "github_actions_organization_secret" "deploy_app_private_key" {
-  count                   = var.deploy_app_private_key != "" ? 1 : 0
-  secret_name             = "DEPLOY_APP_PRIVATE_KEY"
-  visibility              = "selected"
+  count       = var.deploy_app_private_key != "" ? 1 : 0
+  secret_name = "DEPLOY_APP_PRIVATE_KEY"
+  visibility  = "selected"
+  value       = var.deploy_app_private_key
+}
+
+# Scope both secrets to sleep-tracking ONLY (the non-deprecated way to manage a selected-visibility
+# org secret's allow-list).
+resource "github_actions_organization_secret_repositories" "deploy_app_id" {
+  count                   = var.deploy_app_id != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.deploy_app_id[0].secret_name
   selected_repository_ids = [github_repository.sleep_tracking.repo_id]
-  value                   = var.deploy_app_private_key
+}
+
+resource "github_actions_organization_secret_repositories" "deploy_app_private_key" {
+  count                   = var.deploy_app_private_key != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.deploy_app_private_key[0].secret_name
+  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
 }
