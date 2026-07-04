@@ -9,7 +9,7 @@
 # The App stays small — metadata:read + contents:write + pull_requests:write + issues:write — and is
 # the MAX; two consumers each scope down from it via their own ESO GithubAccessToken generator:
 #   - workers — a ~1h token scoped to ONE repo, contents+PR only (clone + push branch + open PR; see
-#     <project>/infra/agent/git-token.yaml). Branch protection + that branch+PR-only scope mean a
+#     sleep-iac/<project>/agent/git-token.yaml). Branch protection + that branch+PR-only scope mean a
 #     worker can never reach master — belt & suspenders.
 #   - the coordinator — needs issues:write (move the agent/* labels) + pull_requests:write (merge PRs)
 #     across the agent repos (agents/coordinator/). issues:write lives here for it; the worker token
@@ -50,7 +50,7 @@ cmd_check() {
   cat <<EOF
   1. Create the App   -> 'manifest' then 'convert <code>' (one Create click).
   2. Install the App  -> one Install click; pick the SELECTED repos ($REPOS).
-  Then: 'secrets', then fill appID/installID into <project>/infra/agent/git-token.yaml, then 'verify'.
+  Then: 'secrets', then fill appID/installID into sleep-iac/<project>/agent/git-token.yaml, then 'verify'.
 EOF
 }
 
@@ -130,7 +130,7 @@ cmd_secrets() {
   say "Done. Now wire the per-project generator (non-secret ids — paste into git-token.yaml):"
   echo "  appID:     $app_id"
   echo "  installID: $install_id"
-  echo "  Then:  kubectl apply -f <project>/infra/agent/git-token.yaml   (per project)"
+  echo "  Then:  kubectl apply -f sleep-iac/<project>/agent/git-token.yaml   (per project)"
 }
 
 cmd_verify() {
@@ -138,7 +138,7 @@ cmd_verify() {
   say "App private-key secret (ESO → sleep-tracking ns)"
   kc -n sleep-tracking get secret agents-github-app 2>/dev/null || warn "missing — run 'secrets' + apply git-token.yaml + check ESO"
   say "Generator + minted token"
-  kc -n sleep-tracking get githubaccesstoken,externalsecret agent-git-token 2>/dev/null || warn "not applied yet (kubectl apply -f sleep-tracking/infra/agent/git-token.yaml)"
+  kc -n sleep-tracking get githubaccesstoken,externalsecret agent-git-token 2>/dev/null || warn "not applied yet (kubectl apply -f sleep-iac/sleep-tracking/agent/git-token.yaml)"
   kc -n sleep-tracking get secret agent-git-token 2>/dev/null && echo "  → token secret present (key: token)" || warn "no token secret yet (check ExternalSecret status / appID+installID filled)"
 }
 

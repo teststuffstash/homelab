@@ -143,7 +143,7 @@ ${UV_ENV}
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }
         # Scoped ~1h GitHub token minted by the ESO GithubAccessToken generator (per-project,
-        # <project>/infra/agent/git-token.yaml) → clone private repos + push branch + open PR.
+        # sleep-iac/<project>/agent/git-token.yaml) → clone private repos + push branch + open PR.
         # optional:true so sessions still work (public clone) before the agents App exists.
         # v2/ADR-081: injected by the egress proxy instead of held in the pod.
         - name: GH_TOKEN

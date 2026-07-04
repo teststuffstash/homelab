@@ -88,7 +88,7 @@ The standing project key stays as the **funding ceiling**; the session key is th
   installation token via the ESO `GithubAccessToken` generator (per-project, scoped to one repo +
   contents/PR), delivered as `GH_TOKEN`; the entrypoint uses it for private clone+push and `gh pr
   create`. Bootstrap with `scripts/github-agents-app-bootstrap.sh` (one Create + one Install click,
-  rest scripted) + apply `<project>/infra/agent/git-token.yaml`. **v1**: pod holds the 1h token;
+  rest scripted) + apply `sleep-iac/<project>/agent/git-token.yaml`. **v1**: pod holds the 1h token;
   **v2/ADR-081**: the egress proxy injects it, never held in the pod (FU-018).
 - **FU-020 — Egress not locked down** — once the Cilium policy lands it must allow the nix cache
   (`cache.nixos.org` / a self-hosted **attic**) or the project `devbox install` will hang.
