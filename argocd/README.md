@@ -34,7 +34,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 |---|---|---|
 | `infisical-secrets` (ENCRYPTION_KEY, AUTH_SECRET) | tofu ← KeePass | not in git |
 | `infisical-db` (DB_CONNECTION_URI), `infisical-pg-app` | tofu ← KeePass | not in git |
-| `repo-homelab-github` / `repo-sleep-tracking-github` (ArgoCD git creds) | tofu ← KeePass | not in git |
+| `repo-homelab-github` (ArgoCD git cred for the private homelab repo) | tofu ← KeePass | not in git |
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
 
