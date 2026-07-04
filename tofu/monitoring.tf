@@ -420,16 +420,12 @@ resource "kubernetes_config_map" "power_dashboard" {
   data = { "power.json" = file("${path.module}/dashboards/power.json") }
 }
 
-# Sleep Overview dashboard (sleep-tracking, ADR-045) — discovered by the grafana_dashboard sidecar.
-# Datasource ref was rewritten ${DS_SLEEP_DB} → uid "sleep-notes" (the provisioned SQLite source).
-resource "kubernetes_config_map" "sleep_dashboard" {
-  metadata {
-    name      = "grafana-dashboard-sleep-overview"
-    namespace = kubernetes_namespace.monitoring.metadata[0].name
-    labels    = { grafana_dashboard = "1" }
-  }
-  data = { "sleep-overview.json" = file("${path.module}/dashboards/sleep-overview.json") }
-}
+# Sleep Overview dashboard — MOVED to GitOps (FU-025). The dashboard BODY now lives in the sleep-iac
+# repo (sleep-tracking/sleep-overview.json → a grafana_dashboard-labelled ConfigMap via kustomize
+# configMapGenerator, in the sleep-tracking namespace) so a fix is a PR ArgoCD syncs, not a tofu
+# apply. The Grafana sidecar discovers it by label across ALL namespaces. What STAYS platform-owned
+# here: the frser SQLite datasource (uid "sleep-notes" — the dashboard's stable contract), the
+# sleep-sqlite-sync sidecar, and the sleep-db-reader ExternalSecret (Grafana-deployment infra).
 
 # S3 read creds for the Grafana sleep.sqlite sync sidecar — mirrors the sleep-ingester's
 # STORE_S3 key (rw on sleep-db) from Infisical via ESO into the monitoring namespace.
