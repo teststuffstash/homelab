@@ -36,7 +36,13 @@ spec:
           name: arc-controller-gha-rs-controller
         runnerScaleSetName: homelab-ephemeral
         minRunners: 0
-        maxRunners: 2
+        # 2 ephemeral nodes (wk-metal-01/-02, ~4 CPU + 7 GB each); runner pods request no resources, so
+        # THIS cap — not node capacity — is what pinned concurrency to 2 (one runner per node). Bumped to
+        # 4 (≈2 dind runners per metal node): free headroom for the light jobs (ci/deploy/renovate/
+        # devbox-update). Watch memory on the old ThinkPads under concurrent heavy builds; go higher only
+        # by ADDING ephemeral capacity (another quiet node, or a Proxmox VM runner à la ADR-082), not by
+        # overpacking these two.
+        maxRunners: 4
         containerMode:
           type: dind
         template:
