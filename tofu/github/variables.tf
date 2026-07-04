@@ -55,3 +55,25 @@ variable "merge_gh_app_private_key" {
   type        = string
   sensitive   = true
 }
+
+# The homelab-deploy App id — NOT sensitive (the key is). Drives two things when set: (1) a bypass actor
+# on sleep-iac's required-approval ruleset (repo_rulesets.tf), so the mechanical deploy-bump PR auto-merges
+# on CI-green without an LLM review; (2) the DEPLOY_APP_ID Actions secret (actions_secrets.tf) the
+# sleep-tracking deploy workflow reads to mint a sleep-iac-scoped token. Empty until the App is
+# bootstrapped (scripts/github-deploy-app-bootstrap.sh) — while empty, both are skipped, so the github root
+# still applies cleanly before the App exists. Injected by scripts/github-tf.sh when the cred dir is present.
+variable "deploy_app_id" {
+  description = "homelab-deploy GitHub App id (drives the sleep-iac approval bypass + DEPLOY_APP_ID secret). Empty until bootstrapped; injected by scripts/github-tf.sh."
+  type        = string
+  default     = ""
+}
+
+# The homelab-deploy App private key. SENSITIVE — injected by scripts/github-tf.sh from the cred dir
+# (durable copy: Infisical DEPLOY_GH_APP_PRIVATE_KEY). Published to the DEPLOY_APP_PRIVATE_KEY Actions
+# secret, scoped to sleep-tracking ONLY (it grants contents+PR write on sleep-iac). Empty until bootstrapped.
+variable "deploy_app_private_key" {
+  description = "homelab-deploy GitHub App PEM private key. Set via TF_VAR_deploy_app_private_key (scripts/github-tf.sh)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

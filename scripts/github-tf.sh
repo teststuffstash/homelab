@@ -35,6 +35,17 @@ TF_VAR_merge_gh_app_id="$(cat "$MERGE_DIR/app-id")"
 TF_VAR_merge_gh_app_private_key="$(cat "$MERGE_DIR/private-key.pem")"
 export TF_VAR_merge_gh_app_id TF_VAR_merge_gh_app_private_key
 
+# 2b. homelab-deploy App (OPTIONAL — only once bootstrapped). Same cred-dir shape; drives sleep-iac's
+#     deploy-bump approval bypass + the DEPLOY_APP_ID/KEY Actions secrets. Absent ⇒ the vars keep their
+#     "" defaults and tofu skips both, so this root still applies before the deploy App exists.
+DEPLOY_DIR="${DEPLOY_CRED_DIR:-$CRED/homelab-github-deploy}"
+if [ -f "$DEPLOY_DIR/app-id" ] && [ -f "$DEPLOY_DIR/private-key.pem" ]; then
+  TF_VAR_deploy_app_id="$(cat "$DEPLOY_DIR/app-id")"
+  TF_VAR_deploy_app_private_key="$(cat "$DEPLOY_DIR/private-key.pem")"
+  export TF_VAR_deploy_app_id TF_VAR_deploy_app_private_key
+  echo "github-tf: homelab-deploy App id=$TF_VAR_deploy_app_id loaded (sleep-iac bypass + DEPLOY_APP_* secrets)" >&2
+fi
+
 # 3. org admin token → GITHUB_TOKEN (unless already exported). Read from the separate KeePass wallet.
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   # The dedicated org-admin wallet (see header). Keyfile-unlocked; set GH_ADMIN_KP_KEY="" for a password wallet.

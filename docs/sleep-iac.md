@@ -197,16 +197,28 @@ app-repo build drives the bump PR instead. Renovate stays in its lane (app deps,
 
 **One-time setup (the only manual bits):**
 
-- A **deploy GitHub App** installed on `sleep-iac` (contents + pull_requests write). Set its
-  `DEPLOY_APP_ID` + `DEPLOY_APP_PRIVATE_KEY` as secrets on the app repo (or org-level). The workflow
-  mints a short-lived, sleep-iac-scoped token with `actions/create-github-app-token` — no static PAT.
-  (Reusing `homelab-agents` is fine if it's installed on sleep-iac; else a dedicated App.)
-- The deploy PR is mechanical, so **don't** run the LLM reviewer on it — instead make the deploy
-  App a **bypass actor for sleep-iac's `required-approval` ruleset** (`tofu/github/repo_rulesets.tf`),
-  so a CI-green bump auto-merges without a human/LLM approval. Until that's set, `deploy-pin.sh` arms
-  auto-merge but the PR waits for an approval (it warns, doesn't fail).
-- Add a **ghcr retention/GC** policy for `sleep-ingester` — every deploy is a new immutable tag, so
-  images accumulate (chart artifacts are tiny). Keep last N + whatever `targetRevision` currently pins.
+- The **`homelab-deploy` GitHub App** — bootstrap with `scripts/github-deploy-app-bootstrap.sh`
+  (sibling of the agents/reviewer/merge App scripts: `manifest`/`catch` → one Create click →
+  `install` on **sleep-iac** → `secrets` → `devbox run github-tofu apply`). Minimal grant
+  (`contents:write` + `pull_requests:write` on sleep-iac). The workflow mints a short-lived,
+  sleep-iac-scoped token with `actions/create-github-app-token` — no static PAT. tofu then publishes
+  `DEPLOY_APP_ID` + `DEPLOY_APP_PRIVATE_KEY` as org Actions secrets **scoped to sleep-tracking only**
+  (`tofu/github/actions_secrets.tf`) — this key can deploy anything, so it's *not* readable by the
+  whole org's CI plane.
+  - *Owner question:* the App is org-owned (create needs an org owner once). To avoid the owner
+    day-to-day, either delegate it to a non-owner "sleep admin" via **GitHub App managers**, or create
+    it under a **machine-user account** (`OWNER_KIND=user`) — details in the script header. Create +
+    first install-on-org-repo still need an owner once; ongoing use doesn't.
+- The deploy PR is mechanical, so **don't** run the LLM reviewer on it — the `homelab-deploy` App is a
+  **bypass actor for sleep-iac's `required-approval` ruleset** (`tofu/github/repo_rulesets.tf`, keyed
+  on `var.deploy_app_id`), so a CI-green bump auto-merges without a human/LLM approval. Applied by the
+  same `github-tofu apply` above; until then `deploy-pin.sh` arms auto-merge and the PR just waits (it
+  warns, doesn't fail).
+- **ghcr retention can't be done in tofu** — GitHub has no retention API/resource for packages (unlike
+  ECR lifecycle policies). It's a **scheduled cleanup workflow** instead:
+  `sleep-tracking/.github/workflows/ghcr-cleanup.yaml` (monthly `snok/container-retention-policy`,
+  keep-N-most-recent + a `cut-off`, `latest` skipped — tuned so the pinned tag is never pruned; run
+  `workflow_dispatch` with `dry-run` first).
 
 **Post-deploy health / auto-rollback** (watch ArgoCD app health, revert or dispatch a fixer on a
 broken sync) is **FU-044** — deferred; harden app CI first so it's the safety net, not the control.

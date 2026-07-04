@@ -28,3 +28,27 @@ resource "github_actions_organization_secret" "merge_gh_app_private_key" {
   visibility  = "all"
   value       = var.merge_gh_app_private_key
 }
+
+# homelab-deploy App creds → the sleep-tracking `deploy` workflow (deploy.yaml) mints a sleep-iac-scoped
+# token to open the version-bump PR (FU-025, docs/sleep-iac.md §"Deploy pipeline"). Bootstrap:
+# scripts/github-deploy-app-bootstrap.sh; `count` skips these until the App exists (deploy_app_id set),
+# so the github root applies cleanly before then.
+#
+# ⚠ visibility = SELECTED (sleep-tracking only), NOT "all" like the merge secrets: this key grants
+# contents+PR write on sleep-iac ⇒ it can deploy anything, so it must not be readable by every repo's CI
+# plane (which runs semi-trusted agent-authored code). Only the deploy workflow needs it.
+resource "github_actions_organization_secret" "deploy_app_id" {
+  count                   = var.deploy_app_id != "" ? 1 : 0
+  secret_name             = "DEPLOY_APP_ID"
+  visibility              = "selected"
+  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  value                   = var.deploy_app_id
+}
+
+resource "github_actions_organization_secret" "deploy_app_private_key" {
+  count                   = var.deploy_app_private_key != "" ? 1 : 0
+  secret_name             = "DEPLOY_APP_PRIVATE_KEY"
+  visibility              = "selected"
+  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  value                   = var.deploy_app_private_key
+}
