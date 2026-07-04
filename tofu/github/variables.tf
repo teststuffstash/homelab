@@ -83,3 +83,38 @@ variable "deploy_app_private_key" {
   sensitive   = true
   default     = ""
 }
+
+# homelab-renovate App (FU-014) — the identity the self-hosted Renovate runner (homelab
+# .github/workflows/renovate.yaml) runs as. id → RENOVATE_APP_ID secret, key → RENOVATE_APP_PRIVATE_KEY,
+# both scoped to the HOMELAB repo (where the runner lives). Empty until bootstrapped
+# (scripts/github-renovate-app-bootstrap.sh); injected by scripts/github-tf.sh from the cred dir.
+variable "renovate_app_id" {
+  description = "homelab-renovate GitHub App id (drives RENOVATE_APP_ID). Empty until bootstrapped."
+  type        = string
+  default     = ""
+}
+
+variable "renovate_app_private_key" {
+  description = "homelab-renovate GitHub App PEM private key (durable copy: Infisical RENOVATE_GH_APP_PRIVATE_KEY)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+# homelab-reviewer App — REUSED (not a new App) for the reviewer-approves-Renovate reflex
+# (sleep-tracking .github/workflows/renovate-approve.yaml). id → REVIEWER_APP_ID, key →
+# REVIEWER_APP_PRIVATE_KEY, both scoped to sleep-tracking. The reviewer bot posts an approving review on
+# Renovate's automerge PRs, SATISFYING required-approval (distinct identity) so auto-merge completes.
+# Injected by scripts/github-tf.sh from ~/.claude/homelab-github-reviewer.
+variable "reviewer_app_id" {
+  description = "homelab-reviewer GitHub App id (drives REVIEWER_APP_ID for the renovate-approve reflex). Empty until wired."
+  type        = string
+  default     = ""
+}
+
+variable "reviewer_app_private_key" {
+  description = "homelab-reviewer GitHub App PEM private key (durable copy: Infisical REVIEWER_GH_APP_PRIVATE_KEY)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

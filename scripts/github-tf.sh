@@ -43,7 +43,25 @@ if [ -f "$DEPLOY_DIR/app-id" ] && [ -f "$DEPLOY_DIR/private-key.pem" ]; then
   TF_VAR_deploy_app_id="$(cat "$DEPLOY_DIR/app-id")"
   TF_VAR_deploy_app_private_key="$(cat "$DEPLOY_DIR/private-key.pem")"
   export TF_VAR_deploy_app_id TF_VAR_deploy_app_private_key
-  echo "github-tf: homelab-deploy App id=$TF_VAR_deploy_app_id loaded (sleep-iac bypass + DEPLOY_APP_* secrets)" >&2
+  echo "github-tf: homelab-deploy App id=$TF_VAR_deploy_app_id loaded (DEPLOY_APP_* secrets)" >&2
+fi
+
+# 2c. homelab-renovate App (OPTIONAL) → RENOVATE_APP_* secrets for the self-hosted Renovate runner.
+RENOVATE_DIR="${RENOVATE_CRED_DIR:-$CRED/homelab-github-renovate}"
+if [ -f "$RENOVATE_DIR/app-id" ] && [ -f "$RENOVATE_DIR/private-key.pem" ]; then
+  TF_VAR_renovate_app_id="$(cat "$RENOVATE_DIR/app-id")"
+  TF_VAR_renovate_app_private_key="$(cat "$RENOVATE_DIR/private-key.pem")"
+  export TF_VAR_renovate_app_id TF_VAR_renovate_app_private_key
+  echo "github-tf: homelab-renovate App id=$TF_VAR_renovate_app_id loaded (RENOVATE_APP_* secrets)" >&2
+fi
+
+# 2d. homelab-reviewer App (OPTIONAL, REUSED) → REVIEWER_APP_* secrets for the renovate-approve reflex.
+REVIEWER_DIR="${REVIEWER_CRED_DIR:-$CRED/homelab-github-reviewer}"
+if [ -f "$REVIEWER_DIR/app-id" ] && [ -f "$REVIEWER_DIR/private-key.pem" ]; then
+  TF_VAR_reviewer_app_id="$(cat "$REVIEWER_DIR/app-id")"
+  TF_VAR_reviewer_app_private_key="$(cat "$REVIEWER_DIR/private-key.pem")"
+  export TF_VAR_reviewer_app_id TF_VAR_reviewer_app_private_key
+  echo "github-tf: homelab-reviewer App id=$TF_VAR_reviewer_app_id loaded (REVIEWER_APP_* secrets)" >&2
 fi
 
 # 3. org admin token → GITHUB_TOKEN (unless already exported). Read from the separate KeePass wallet.

@@ -66,3 +66,67 @@ resource "github_actions_organization_secret_repositories" "deploy_app_private_k
   secret_name             = github_actions_organization_secret.deploy_app_private_key[0].secret_name
   selected_repository_ids = [github_repository.sleep_tracking.repo_id]
 }
+
+# homelab isn't managed as a github_repository here (only the app/stack repos are) — read its id so we
+# can scope the RENOVATE_APP_* secrets to the repo that runs the Renovate workflow.
+data "github_repository" "homelab" {
+  full_name = "${var.org}/homelab"
+}
+
+# homelab-renovate App creds → the self-hosted Renovate runner (homelab .github/workflows/renovate.yaml)
+# mints a token to open dependency PRs (FU-014). Scoped to the HOMELAB repo only — the key grants
+# contents+PR+issues+workflows write on the repos Renovate manages, so it must not be readable elsewhere.
+resource "github_actions_organization_secret" "renovate_app_id" {
+  count       = var.renovate_app_id != "" ? 1 : 0
+  secret_name = "RENOVATE_APP_ID"
+  visibility  = "selected"
+  value       = var.renovate_app_id
+}
+
+resource "github_actions_organization_secret" "renovate_app_private_key" {
+  count       = var.renovate_app_private_key != "" ? 1 : 0
+  secret_name = "RENOVATE_APP_PRIVATE_KEY"
+  visibility  = "selected"
+  value       = var.renovate_app_private_key
+}
+
+resource "github_actions_organization_secret_repositories" "renovate_app_id" {
+  count                   = var.renovate_app_id != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.renovate_app_id[0].secret_name
+  selected_repository_ids = [data.github_repository.homelab.repo_id]
+}
+
+resource "github_actions_organization_secret_repositories" "renovate_app_private_key" {
+  count                   = var.renovate_app_private_key != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.renovate_app_private_key[0].secret_name
+  selected_repository_ids = [data.github_repository.homelab.repo_id]
+}
+
+# homelab-reviewer App creds → the reviewer-approves-Renovate reflex (sleep-tracking
+# renovate-approve.yaml) posts an approving review on Renovate's automerge PRs, satisfying
+# required-approval so auto-merge completes. Scoped to sleep-tracking only.
+resource "github_actions_organization_secret" "reviewer_app_id" {
+  count       = var.reviewer_app_id != "" ? 1 : 0
+  secret_name = "REVIEWER_APP_ID"
+  visibility  = "selected"
+  value       = var.reviewer_app_id
+}
+
+resource "github_actions_organization_secret" "reviewer_app_private_key" {
+  count       = var.reviewer_app_private_key != "" ? 1 : 0
+  secret_name = "REVIEWER_APP_PRIVATE_KEY"
+  visibility  = "selected"
+  value       = var.reviewer_app_private_key
+}
+
+resource "github_actions_organization_secret_repositories" "reviewer_app_id" {
+  count                   = var.reviewer_app_id != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.reviewer_app_id[0].secret_name
+  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+}
+
+resource "github_actions_organization_secret_repositories" "reviewer_app_private_key" {
+  count                   = var.reviewer_app_private_key != "" ? 1 : 0
+  secret_name             = github_actions_organization_secret.reviewer_app_private_key[0].secret_name
+  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+}

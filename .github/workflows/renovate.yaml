@@ -1,0 +1,48 @@
+# renovate.yaml — SELF-HOSTED Renovate runner (FU-014). Runs on the homelab ARC tier as the
+# `homelab-renovate` App and AUTODISCOVERS the repos that App is installed on (start: sleep-tracking),
+# reading each repo's own renovate.json. "Add a repo to Renovate" == install the App on it — no change
+# here. Not the Mend hosted App: keeps the supply chain self-hosted (slsa-supply-chain direction).
+#
+# Per-repo behaviour (e.g. sleep-tracking/renovate.json): dev-dep/actions/pre-commit bumps are
+# `automerge` (the reviewer bot auto-approves the labelled PR → GitHub merges on CI-green → auto-deploy);
+# runtime-dep/docker/devbox bumps are manual review. Bootstrap: scripts/github-renovate-app-bootstrap.sh.
+name: renovate
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6h
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "dry run (log only, no PRs)"
+        type: boolean
+        default: false
+      logLevel:
+        description: "log level"
+        default: "info"
+
+permissions: {} # Renovate authenticates as the App token minted below, not GITHUB_TOKEN
+
+jobs:
+  renovate:
+    runs-on: homelab-ephemeral
+    steps:
+      # No `repositories:` → the installation token spans every repo the App is installed on, which is
+      # exactly what RENOVATE_AUTODISCOVER should walk.
+      - name: Mint homelab-renovate token
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+
+      - name: Renovate
+        uses: renovatebot/github-action@v46.1.17
+        with:
+          token: ${{ steps.app.outputs.token }}
+        env:
+          RENOVATE_PLATFORM: github
+          RENOVATE_AUTODISCOVER: "true"
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}

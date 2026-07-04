@@ -64,10 +64,18 @@ _Last updated: 2026-07-02._
 
 ## CI & dependency automation
 
-- [ ] **FU-014** — **Renovate (auto-update PRs) — not set up anywhere yet**, though `ROADMAP.md`
-      (agent P2), `docs/ci.md` and `docs/agents/README.md` all assume it. Scope: image/chart/action
-      bumps on the app repos + homelab, gated by the existing CI (later the full-stack gate,
-      ADR-082).
+- [ ] **FU-014** — **Renovate (auto-update PRs).** **BUILT (2026-07-04), pending operator bootstrap.**
+      **Self-hosted** (not the Mend App): a scheduled runner `.github/workflows/renovate.yaml` on the ARC
+      tier runs as a dedicated **`homelab-renovate` App** and autodiscovers the repos it's installed on,
+      reading each repo's `renovate.json` (sleep-tracking's is trimmed to the live model — python/docker/
+      devbox/pre-commit/actions; the stale helm/terraform rules removed). **Hands-off dev-dep bumps** work
+      via **reviewer-approves-Renovate**: Renovate labels automerge PRs, `sleep-tracking/.github/workflows/
+      renovate-approve.yaml` has the **homelab-reviewer** App post an approving review (a distinct identity
+      → *satisfies* required-approval; not a bypass, ADR-084), GitHub merges on CI-green, and the `uv.lock`
+      change flows through the automated deploy. Runtime-dep/docker/devbox bumps stay manual review.
+      **Operator steps (out-of-jail):** `scripts/github-renovate-app-bootstrap.sh` (create + install on
+      sleep-tracking + `secrets`) → `devbox run github-tofu apply` (publishes RENOVATE_APP_* + REVIEWER_APP_*
+      secrets) → `gh workflow run renovate.yaml`. Then extend to more repos by installing the App on them.
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
