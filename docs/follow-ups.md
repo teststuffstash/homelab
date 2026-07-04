@@ -208,21 +208,25 @@ _Last updated: 2026-07-02._
       rather than one homelab-wide. Mostly matters as stacks multiply; today the coordinator doesn't
       need the `-iac` repo in-context because deploys are automatic (it never touches them). Relates to
       FU-026 (durable engine), FU-039 (platform self-service), and the three-layer topology.
-- [ ] **FU-046** — **Agentic dependency upgrades: NO manual dep review — the LLM reviews, an agent
-      fixes.** Renovate's non-automerge bumps (major versions, runtime deps) should NOT be assigned to a
-      human; instead route them into the agent platform (docs/renovate.md + FU-014). Vision: a dep PR
-      (with Renovate's embedded changelog/release-notes as context) triggers the **LLM reviewer** — if
-      CI is green + the bump is benign it approves + merges (no human); if CI breaks OR the reviewer
-      surfaces a real issue (deprecation, API/behaviour change) the **coordinator dispatches a worker to
-      FIX the code in the SAME renovate branch**, loop to green, then merge. So **major upgrades get done
-      by LLMs without human intervention.** Phasing: **P1** reviewer *reviews* dep PRs (assess + approve/
-      flag, reuses reviewer-session.sh; needs the coordinator to pick up `deps-review`-labelled PRs, not
-      just agent-fix issues); **P2** worker *fixes* on the renovate branch (the hard part — Renovate must
-      not clobber the worker's commits: it stops auto-rebasing a manually-edited branch, verify/configure;
-      worker checks out `renovate/*` instead of creating `agent/*`); **P3** a longer cooldown on majors so
-      a human CAN opt into an interactive LLM session for the riskiest. Cost-gate: only non-automerge
-      (major/runtime) bumps, and only when there's actually something to review. Relates to FU-041
-      (deterministic merge path), FU-044 (LLM oversight), and the agent-platform direction.
+- [ ] **FU-046** — **Agentic dependency upgrades: reviewable dep bumps flow through the merge path, no
+      human, no coordinator tick.** Renovate's reviewable bumps (major versions, runtime deps) should NOT
+      be assigned to a human; they **arm auto-merge** and get a `deps-review` label, so the existing
+      **merge-path review reflex** (`docs/agents/merge-path.md` §Scenario S — a deterministic CronJob,
+      NOT a coordinator LLM tick) picks them up like any agent PR and dispatches the **LLM reviewer**.
+      The reviewer's verdict drives everything (context = Renovate's embedded changelog/release-notes):
+      **harmless → APPROVE → auto-merge** (major upgrade lands, no human); **needs adaptation →
+      CHANGES_REQUESTED**, which is the merge path's `changes-requested → round N+1` transition — it
+      spawns a **worker to adapt the code on the same renovate branch** → loop → merge. The **coordinator
+      only tie-breaks** exceptions (flip-flop / rounds exhausted), per the escalation table. This
+      **resolves the merge-path open question** ("review dep PRs or CI-only?") as a *split*: trivial/digest
+      → mechanical CI-only approval (the `renovate-approve` reflex, FU-014); reviewable → LLM reviewer.
+      **Integration work:** (1) the review reflex must review `deps-review` PRs but **skip
+      `automerge`-labelled** ones (those are the mechanical path — else it burns a reviewer run on a digest
+      bump); (2) the changes-requested worker must fix on a `renovate/*` branch, and **Renovate must not
+      clobber its commits** — set `rebaseWhen: conflicted` (done) so the updater owns freshness and
+      Renovate only rebases its own conflicts; verify Renovate leaves a manually-edited branch alone.
+      **P3 (later):** a longer cooldown on majors so a human CAN opt into an interactive LLM session for
+      the riskiest. Prereq: FU-041 review reflex wired. Relates to FU-041, FU-044, FU-014.
 
 ## Monitoring & storage
 

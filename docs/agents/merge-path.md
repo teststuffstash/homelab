@@ -476,7 +476,14 @@ you're back to today's coordinator-driven flow).
 
 ## Open questions
 
-- Review dep-bump PRs with the LLM reviewer, or CI-only? (See scenario L. Default: review.)
+- ~~Review dep-bump PRs with the LLM reviewer, or CI-only?~~ **Resolved (FU-046): a *split by class.***
+  Trivial/digest/dev-dep bumps (Renovate `automerge` label) get **mechanical CI-only approval** (the
+  `renovate-approve` reflex, no reviewer run); **reviewable** bumps (major versions, runtime deps;
+  `deps-review` label) **arm auto-merge** and flow through **this** review reflex (§Scenario S) — the LLM
+  reviewer approves the harmless ones and requests changes on the rest, which spawns a worker to adapt
+  the code (agentic major upgrades). The review reflex must therefore **skip `automerge`-labelled PRs**
+  (they're the mechanical path). This keeps the burst-day reviewer count off the digest noise while still
+  reviewing supply-chain-shaped changes. See [`../renovate.md`](../renovate.md).
 - Squash vs merge for auto-merge: squash keeps master linear and is what the worker arms today —
   any reason for merge commits on agent PRs? (Default: squash.)
 - Review reflex as in-cluster CronJob vs a GitHub Actions cron: CronJob chosen because the reviewer
