@@ -1,0 +1,74 @@
+# renovate-approve.reusable.yml — the "reviewer approves Renovate" reflex, as a REUSABLE org workflow
+# (FU-014/FU-041). One implementation for every agent repo; a repo carries only a 3-line caller:
+#
+#   # .github/workflows/renovate-approve.yml
+#   name: renovate-approve
+#   on:
+#     pull_request_target:
+#       types: [opened, reopened, synchronize, labeled]
+#   permissions: {}
+#   jobs:
+#     approve:
+#       uses: teststuffstash/homelab/.github/workflows/renovate-approve.reusable.yml@master
+#       secrets: inherit
+#
+# Renovate's `automerge`-labelled PRs arm GitHub auto-merge but the repo's required-approval ruleset
+# needs a DISTINCT approving review (Renovate can't self-approve). The homelab-reviewer App posts it — a
+# separate identity SATISFIES the rule (not a bypass; a GitHub App bypass can't waive an approval on a
+# merge anyway, ADR-084). CI (the tests) is the real gate; this is the mechanical rubber-stamp.
+#
+# In a called workflow the `github` context = the CALLER's repo + PR event, so this is repo-agnostic:
+# it approves the caller repo's PR. `secrets: inherit` passes the org REVIEWER_APP_* secrets.
+# pull_request_target (set by the caller) runs base-branch code with secrets and checks out NO head code.
+name: renovate-approve-reusable
+
+on:
+  workflow_call: {}
+
+permissions: {} # uses the reviewer App token, not GITHUB_TOKEN
+
+jobs:
+  approve:
+    if: >-
+      github.event.pull_request.user.type == 'Bot' &&
+      contains(github.event.pull_request.labels.*.name, 'automerge') &&
+      contains(github.event.pull_request.labels.*.name, 'dependencies')
+    runs-on: homelab-ephemeral
+    steps:
+      # Skip gracefully (don't hard-fail every dep PR) if the reviewer secrets aren't wired yet — a red
+      # job here becomes a failed check that (require_passed_checks) blocks the FU-041 updater. Never gate
+      # the merge path on this auxiliary reflex.
+      - name: Reviewer secret present?
+        id: gate
+        env:
+          RID: ${{ secrets.REVIEWER_APP_ID }}
+        run: |
+          if [ -n "$RID" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else
+            echo "::warning::REVIEWER_APP_ID not set — run 'devbox run github-tofu apply'. Skipping auto-approve; the dep PR just waits."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mint homelab-reviewer token (scoped to the caller repo)
+        if: steps.gate.outputs.ok == 'true'
+        id: rev
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Approve (distinct identity → satisfies required-approval)
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          TOKEN: ${{ steps.rev.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          code=$(curl -sS -o /tmp/resp -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pulls/$PR/reviews" \
+            -d '{"event":"APPROVE","body":"Auto-approved: Renovate automerge dep bump — CI is the gate."}')
+          echo "review API → HTTP $code"; cat /tmp/resp 2>/dev/null; echo
+          [ "$code" = "200" ] || echo "::warning::approve returned $code — PR left unapproved (will retry); not failing so the merge path isn't blocked"

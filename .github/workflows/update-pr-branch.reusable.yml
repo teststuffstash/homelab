@@ -1,0 +1,71 @@
+# update-pr-branch.reusable.yml — the merge-path UPDATER (FU-041), as a REUSABLE org workflow. One
+# implementation for every agent repo; a repo carries only a caller:
+#
+#   # .github/workflows/update-pr-branch.yml
+#   name: update-pr-branch
+#   on:
+#     push: { branches: [master] }
+#     workflow_run: { workflows: [CI], types: [completed] }
+#     schedule: [{ cron: "*/15 * * * *" }]
+#     workflow_dispatch: {}
+#   concurrency: { group: update-pr-branch, cancel-in-progress: false }
+#   jobs:
+#     update:
+#       uses: teststuffstash/homelab/.github/workflows/update-pr-branch.reusable.yml@master
+#       secrets: inherit
+#
+# Keeps exactly ONE PR current with master so GitHub auto-merge can fire (the ruleset requires an
+# up-to-date branch). `adRise/update-pr-branch` merges master into the oldest green + auto-merge-armed +
+# behind PR (FIFO, one per run, update-BEFORE-review). MUST use the homelab-merge App token, not
+# GITHUB_TOKEN (a GITHUB_TOKEN push doesn't re-trigger `ci`, so a strict branch never sees green). In a
+# called workflow `github.repository`/`$GITHUB_REPOSITORY` = the CALLER repo, so this is repo-agnostic.
+# See docs/agents/merge-path.md §Chosen design ▸2 + §Updater token.
+name: update-pr-branch-reusable
+
+on:
+  workflow_call: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write # label conflicted PRs (Phase 3)
+
+jobs:
+  update:
+    runs-on: ubuntu-latest # GitHub-hosted: the merge path must not depend on the self-hosted tier being awake (API-only, seconds)
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.MERGE_GH_APP_ID }}
+          private-key: ${{ secrets.MERGE_GH_APP_PRIVATE_KEY }}
+
+      - name: Update the oldest behind, green, auto-merge-armed PR
+        uses: adRise/update-pr-branch@v0.10
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: master
+          required_approval_count: 0 # update BEFORE review
+          require_passed_checks: true # only update green PRs
+          require_auto_merge_enabled: true # only PRs actually queued to land (arming is the boundary)
+          sort: created
+          direction: asc # FIFO
+
+      - name: Flag conflicted PRs (updater can't auto-resolve these)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,mergeStateStatus,autoMergeRequest,labels \
+          | jq -c '.[]' | while read -r pr; do
+              n=$(printf '%s' "$pr" | jq -r '.number')
+              armed=$(printf '%s' "$pr" | jq -r '.autoMergeRequest != null')
+              dirty=$(printf '%s' "$pr" | jq -r '.mergeStateStatus == "DIRTY"')
+              has=$(printf '%s' "$pr" | jq -r '[.labels[].name] | index("merge-conflict") != null')
+              if [ "$armed" = "true" ] && [ "$dirty" = "true" ]; then
+                [ "$has" = "true" ] || gh pr edit "$n" --repo "$GITHUB_REPOSITORY" --add-label merge-conflict
+              elif [ "$has" = "true" ]; then
+                gh pr edit "$n" --repo "$GITHUB_REPOSITORY" --remove-label merge-conflict || true
+              fi
+            done

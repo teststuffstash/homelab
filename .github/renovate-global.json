@@ -1,15 +1,22 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline enforced on EVERY repo the homelab-renovate App autodiscovers. Per-repo renovate.json only chooses automerge preferences on top of this. Implements the S2C2F (consumer) leg of docs/slsa.md.",
+  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes are FU-014/FU-041/FU-046/FU-047.",
 
-  "extends": ["helpers:pinGitHubActionDigests"],
+  "extends": ["config:recommended", ":dependencyDashboard", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
 
+  "onboarding": false,
+  "requireConfig": "optional",
+
+  "labels": ["dependencies"],
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",
+  "separateMinorPatch": true,
+  "platformAutomerge": true,
+  "rebaseWhen": "conflicted",
 
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). Labelled `automerge` so the reviewer reflex approves them; auto-merged so exposure is minimal.",
+    "description": "Security fixes are the exception to the cooldown — get them in fast (CI still gates). `automerge` label → the renovate-approve reflex approves; auto-merged so exposure is minimal.",
     "minimumReleaseAge": null,
     "labels": ["security", "automerge"],
     "addLabels": ["automerge"],
@@ -19,9 +26,58 @@
 
   "packageRules": [
     {
-      "description": "Flag EVERY major version bump with a `major` label (all repos, all managers) — the riskiest class. Makes them easy to find/filter (`gh pr list --label major`) and a stable hook for tooling (the review reflex / coordinator can key on it). To give majors a longer human-review window later (FU-046 P3), add `\"minimumReleaseAge\": \"30 days\"` to this same rule.",
+      "description": "Digest / pin bumps (any manager) — a human can't review a hash → mechanical `automerge` lane (org cooldown + CI gate + renovate-approve reflex).",
+      "matchUpdateTypes": ["digest", "pin", "pinDigest"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions patch/minor — SHA-pinned org-wide (pinGitHubActionDigests already defeats tag-repointing) → mechanical automerge.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "pre-commit hooks patch/minor — mechanical automerge.",
+      "matchManagers": ["pre-commit"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "Python DEV deps (pytest/ruff/…) patch/minor — mechanical automerge.",
+      "matchManagers": ["pep621", "uv"],
+      "matchDepTypes": ["devDependencies", "dev-dependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["automerge"],
+      "automerge": true
+    },
+    {
+      "description": "Python RUNTIME deps (boto3/…) patch/minor — meaningful (runs in prod, changelogs exist) → the LLM `deps-review` lane: armed, reviewed by the merge-path review reflex, worker adapts on CHANGES_REQUESTED (FU-046).",
+      "matchManagers": ["pep621", "uv"],
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "Dockerfile base-image VERSION minor (e.g. python 3.11→3.12) — behavior change → `deps-review`.",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor"],
+      "addLabels": ["deps-review"],
+      "automerge": true
+    },
+    {
+      "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (FU-022).",
+      "matchManagers": ["nix", "devbox"],
+      "enabled": false
+    },
+    {
+      "description": "EVERY major bump (all repos, all managers) → the HUMAN-GATED coordinator lane: `major` label + NOT armed. The coordinator investigates the migration (dispatch reviewer while red), a worker adapts if in-budget, a human merges — same lane as devbox majors (FU-047). Un-armed = invisible to the review reflex (arming is the boundary); coordinator-scan owns it. Placed LAST so it overrides any manager rule's automerge for a major.",
       "matchUpdateTypes": ["major"],
-      "addLabels": ["major"]
+      "addLabels": ["major"],
+      "automerge": false
     }
   ]
 }

@@ -39,8 +39,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # gh's built-in --jq keeps this to one repo-read scope — no statusCheckRollup (checks:read) needed.
     iss="$(gh issue list --repo "$slug" --state open --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
-    prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision \
-      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("major")) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
+    # UN-ARMED — an armed PR is the review reflex's, never the coordinator's (arming is the boundary).
+    prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
+      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     # BACKSTOP: a dependency PR that is un-armed AND carries NO lane label (automerge/deps-review/major)
     # is owned by NOBODY — not the renovate-approve reflex (needs `automerge`), not the review reflex
     # (needs armed), not the coordinator (needs `major`). Renovate is meant to classify+arm every bump, so

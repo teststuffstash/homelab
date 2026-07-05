@@ -76,6 +76,20 @@ _Last updated: 2026-07-05._
       **Operator steps (out-of-jail):** `scripts/github-renovate-app-bootstrap.sh` (create + install on
       sleep-tracking + `secrets`) → `devbox run github-tofu apply` (publishes RENOVATE_APP_* + REVIEWER_APP_*
       secrets) → `gh workflow run renovate.yaml`. Then extend to more repos by installing the App on them.
+      **Rollout to all agent repos (2026-07-05):** App installed on 7 (homelab, sleep-tracking, snore-recorder,
+      openrouter-operator, agent-runtime, agent-coordinator, sleep-iac). **Shared classification** now lives
+      in `.github/renovate-global.json` (`onboarding:false` + `requireConfig:optional` → a repo needs NO
+      renovate.json to be classified, killing the orphan class): digest/actions/pre-commit/dev-deps →
+      `automerge` (renovate-approve); runtime-deps/docker-minor → `deps-review` (review reflex); nix/devbox
+      disabled; **every major → `major`, un-armed → the coordinator lane** (unifies with the devbox major
+      gate — FU-047). The two merge-path workflows are extracted to **reusable org workflows**
+      (`.github/workflows/{renovate-approve,update-pr-branch}.reusable.yml`) → each repo carries a ~3-line
+      caller. **Remaining:** (1) tofu-manage the 3 (openrouter-operator/agent-runtime/agent-coordinator) via
+      `new-agent-repo.sh` + apply; (2) add the caller workflows + trim per-repo renovate.json to overrides
+      (drop agent-runtime's legacy human-review `reviewers`, set `rebaseWhen:conflicted`); (3) **each repo
+      needs a deploy pipeline so an auto-merged bump reaches prod** (sleep-tracking→sleep-iac today; image
+      repos deploy via ghcr rebuild; per-project responsibility). homelab stays OUT of the agentic flow
+      (base-infra dep policy unresolved — hard to test; already org-ruleset-protected).
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
