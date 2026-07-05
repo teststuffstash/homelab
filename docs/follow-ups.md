@@ -111,17 +111,22 @@ _Last updated: 2026-07-05._
       the lock's per-package `version` (leading integer) — a MAJOR bump (e.g. helm 3→4) is labelled
       `major` and does **not** arm auto-merge, so CI + the reviewer/coordinator pipeline still run but a
       human makes the final merge call. Deliberately NOT pinning majors away (keeps `@latest` +
-      alignment); the human lands *after* the pipeline has done its work, not before the bump. Reviewer
-      investigate-the-migration behavior is FU-047.
-- [ ] **FU-047** — **Reviewer: investigate MAJOR devbox bumps, don't just approve/block.** When a
-      devbox-update PR carries the `major` label (helm 3→4 etc.), the LLM reviewer should research the
-      migration (fetch the upstream release/migration notes, e.g. the helm-4 guide), extract the parts
-      relevant to *this* repo's usage, and comment concretely what must change (e.g. `--verify=false` on
-      plugin install) — plus flag worthwhile new features as its own follow-ups. Turns the `major` gate
-      from "a human reads the diff cold" into "a human reviews a documented migration". Reviewer-prompt
-      change (`agents/`), pairs with the FU-022 major gate. Also: **unpin `kubernetes-helm@3` back to
-      `@latest` in sleep-tracking** (a prior-session pin that pre-empted this gate) and re-open the
-      helm-4 path there.
+      alignment); the human lands *after* the pipeline has done its work, not before the bump. The
+      `major` PR is **coordinator-owned** (un-armed → outside the review reflex; arming is the boundary) —
+      see FU-047.
+- [ ] **FU-047** — **`major` devbox bumps are coordinator-owned (not the review reflex); reviewer
+      investigates the migration.** DONE (2026-07-05): (a) the generic reviewer prompt
+      (`reviewer-session.sh`) + `sleep-tracking/.agents/review.md` gained a **migration-investigation**
+      mode — on a `major` PR it reads the tool's upstream breaking-changes, maps them onto this repo's
+      usage, and comments concretely (e.g. helm-4 needs `--verify=false` on `helm plugin install`);
+      (b) the **coordinator brief** (`agents/coordinator/README.md` §"Dependency major bumps") + escalation
+      table (`docs/agents/merge-path.md`) now put the un-armed `major` PR in the coordinator's lane:
+      investigate (dispatch reviewer *while red*) → worker fixes if in-budget → green+approved →
+      `major/awaiting-human` → a human merges. The review reflex stays armed-only (arming is the wall, so
+      the two never contend for one PR). (c) sleep-tracking `kubernetes-helm@3` **unpinned** → helm 4 via
+      **sleep-tracking#18**. **Remaining/verify:** first live run — confirm the coordinator picks up a
+      `major` PR, and that the reviewer pod has the egress to `WebFetch` third-party migration notes (it
+      degrades to model knowledge if not). Then this can close.
 - [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
       cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,

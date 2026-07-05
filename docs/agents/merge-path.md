@@ -119,6 +119,7 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 | rounds exhausted (`workflow.md` §Hazards: bounded rounds) or worker↔reviewer flip-flop | reflex labels → **coordinator tie-breaks** | reads the diff + review thread (discovery), rules: re-dispatch with clarified instructions, close as not-mergeable, or escalate to the human |
 | CI red beyond T hours | reflex labels → **coordinator decides** | re-dispatch, park, or escalate |
 | PR merged (issue auto-closed via `Fixes #N`) | **coordinator closes the loop** | next tick: verify the outcome actually holds; comment; reopen + re-dispatch if it doesn't |
+| un-armed `major` devbox bump PR opens (FU-022 gate) | **coordinator owns end-to-end** (never the reflex — it's un-armed) | investigate (dispatch reviewer *even while red* — the review explains the break) → worker fixes breakage if within budget → green + approved → relabel `major/awaiting-human`; a **human** merges. See `agents/coordinator/README.md` §"Dependency major bumps". |
 
 Two properties fall out. First, the merge path stays fully deterministic (constraint 1): every
 box on the mechanical rows is a workflow or a CronJob. Second, nothing ever leaves the
@@ -126,6 +127,17 @@ coordinator's authority: the reflexes are *its* machinery (they live in its name
 into its label vocabulary), so from the issue's point of view there is one owner from triage to
 close — the coordinator just isn't billed an LLM turn for the trivial 90 %. Its brief loses the
 *mechanical* "trigger the reviewer" step and gains the exception plays in the table.
+
+**Arming is the boundary between the two.** The review reflex only ever selects auto-merge-**armed**
+PRs; everything un-armed is outside its world. The FU-022 major-devbox gate leans on exactly this: a
+**`major`** bump is deliberately left **un-armed** (a human merges a major crossing, not the bot), so it
+is invisible to the reflex and falls to the **coordinator**, which owns it end-to-end (investigate →
+fix-if-in-budget → `major/awaiting-human` → human merge — the new escalation-table row). This keeps the
+split collision-free *by construction*: no PR is ever both armed and `major`, so the reflex and the
+coordinator can never contend for the same PR. Crucially the coordinator dispatches the major's
+investigation review **directly, while the PR is still red** — the review's job there is to *explain* the
+break — which is precisely why a major can't ride the reflex (green-only, decision-free) path. Non-major
+devbox bumps stay armed and ride the reflex like any other PR.
 
 ### Why update-before-review, and why reviews serialize per repo
 

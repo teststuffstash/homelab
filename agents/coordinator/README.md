@@ -25,6 +25,8 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 | `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) | coordinator |
 | `agent/done` | merged | coordinator |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
+| `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
+| `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3, then `agent/blocked`);
 idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-spawns.
@@ -159,6 +161,46 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    So a merged fix reaches prod on its own. At most, *confirm* the rollout went Healthy — post-deploy
    health/rollback is FU-044, handled in-cluster. See homelab `docs/sleep-iac.md` §"Deploy pipeline".
 8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
+
+## Dependency major bumps (coordinator-owned, NOT the review reflex)
+
+The weekly `devbox update` (FU-022) opens a bump PR per repo. A **non-major** bump arms auto-merge and
+rides the normal reflex track — you never see it. A **MAJOR** bump (e.g. `kubernetes-helm 3 → 4`) is
+different: `devbox-update.sh` labels it **`major`** and **deliberately does NOT arm auto-merge**, because
+a major crossing needs a human to merge *after* the machine has done its homework. **Arming is the
+boundary** — the review reflex only touches armed PRs, so an un-armed `major` PR is invisible to it and
+lands squarely in your lap. Own it end-to-end; do **not** hand-dispatch it through the reflex path.
+
+The PR is typically **red at birth** (the major breaks CI — that's the point, CI caught it). Drive it
+like an `agent-fix` issue, but PR-first and keyed on the `major` label:
+
+1. **List** open PRs labelled `major` (across your stack's repos) that are not yet `major/awaiting-human`.
+2. **Claim + investigate.** Relabel `agent/in-progress`, comment a one-line plan, and dispatch the
+   **reviewer directly** — even while red (the reflex won't, but you can; a major review is an
+   *investigation* whose whole job is to explain the red):
+   ```sh
+   bash agents/reviewer-session.sh <project> <PR>
+   ```
+   The reviewer reads the tool's upstream migration notes, maps them onto this repo's usage, and comments
+   exactly what must change (e.g. helm-4 needs `--verify=false` on `helm plugin install`).
+3. **Fix, if within budget.** On `CHANGES_REQUESTED`, estimate the adaptation
+   (`estimate_budget.py`); if it's within the cap, dispatch a **worker** to apply it **on the PR branch**
+   (not a new branch), feeding it the reviewer's comments — same round mechanics as steps 3–5 above. If
+   the estimator says `⚠ ESCALATE` → `agent/blocked` + comment, stop.
+4. **Loop to green.** Worker pushes → CI re-runs → re-dispatch the reviewer. Repeat within the round
+   bound (max 3). Green + `APPROVED` is the target.
+5. **Hand off to the human — do NOT merge.** The PR is un-armed by design; your approval does not merge
+   it. Relabel **`major/awaiting-human`** and comment "migration documented, CI green, reviewer-approved —
+   ready for a human to merge" (link the reviewer's summary). A human reads the documented trail and
+   clicks merge. Optionally the reviewer's non-blocking follow-up comments (new major features worth
+   adopting) become fresh `agent-fix` issues.
+
+Why this is yours and not the reflex's: a major bump is a **judgment** call (is the fix within budget?
+is the breakage worth adopting now? is a human happy to merge?), and reviews for it must run **while red**
+— both are outside the reflex's decision-free, green-only mandate. Keeping `major` un-armed makes the
+split automatic: reflex = armed track (auto-merge), coordinator = un-armed `major` (human-merge). They
+never fight over the same PR because no PR is ever both armed and `major`. See
+[`../../docs/agents/merge-path.md`](../../docs/agents/merge-path.md) §"Reflexes vs judgment".
 
 ## Runtime
 
