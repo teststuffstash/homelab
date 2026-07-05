@@ -137,7 +137,9 @@ split collision-free *by construction*: no PR is ever both armed and `major`, so
 coordinator can never contend for the same PR. Crucially the coordinator dispatches the major's
 investigation review **directly, while the PR is still red** — the review's job there is to *explain* the
 break — which is precisely why a major can't ride the reflex (green-only, decision-free) path. Non-major
-devbox bumps stay armed and ride the reflex like any other PR.
+devbox bumps stay armed and ride the reflex like any other PR. **Proven E2E (2026-07-05):** an opus
+coordinator drove sleep-tracking#18 (helm 3→4) through this exact lane — investigate-while-red → worker
+applied `--verify=false` → green → `major/awaiting-human` → human merged (FU-047).
 
 ### Why update-before-review, and why reviews serialize per repo
 
@@ -417,6 +419,15 @@ contract-versioning discipline), not a merge-path mechanism.
   Abandon an upgrade via a **Renovate config change** (`ignoreDeps` / pin), and handle changes-requested by
   dispatching a **worker to fix on the `renovate/*` branch**, never a close. See [`../renovate.md`](../renovate.md)
   §"Coordinator × Renovate PRs" (FU-046).
+- **Orphaned dep PR — owned by nobody.** A dep PR that ends up **un-armed AND unclassified** (no
+  `automerge`/`deps-review`/`major` label) matches no owner: not the `renovate-approve` reflex (needs
+  `automerge`), not the review reflex (needs armed), not the coordinator (needs `major`). Causes: a
+  disabled Renovate manager's leftover PRs (disabling a manager doesn't close them), or a PR created before
+  a classification rule existed (Renovate arms via `platformAutomerge` at *creation* and won't retroactively
+  arm). Both seen live (sleep-tracking#15 = a devbox-manager gitleaks *downgrade*; #14 = stale digest never
+  re-armed). **`coordinator-scan` surfaces these** (report-only ⚠). Remediation: classify+arm (→ the
+  mechanical/review track picks it up) or close if bogus. Discipline: **close a manager's open PRs when you
+  disable it.**
 - **Reviewer requests changes** — auto-merge stays blocked (changes-requested is a hard block
   independent of approvals). Worker pushes a fix → that push dismisses nothing (there's no
   approval) but re-triggers CI → PR re-enters the queue. The *request-changes review itself*

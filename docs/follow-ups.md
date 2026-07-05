@@ -113,20 +113,24 @@ _Last updated: 2026-07-05._
       human makes the final merge call. Deliberately NOT pinning majors away (keeps `@latest` +
       alignment); the human lands *after* the pipeline has done its work, not before the bump. The
       `major` PR is **coordinator-owned** (un-armed → outside the review reflex; arming is the boundary) —
-      see FU-047.
-- [ ] **FU-047** — **`major` devbox bumps are coordinator-owned (not the review reflex); reviewer
-      investigates the migration.** DONE (2026-07-05): (a) the generic reviewer prompt
+      see FU-047 (the gate detection uses base-name keying so a pin change like `@3`→`@latest` still
+      registers as 3.x→4.x). **The gate + the whole major lane are PROVEN E2E** (helm 3→4 merged via
+      sleep-tracking#18, FU-047). What's still open for FU-022 itself: the operator App install on the
+      matrix repos + the first weekly *synchronized* run across all repos.
+- [x] **FU-047 — DONE (2026-07-05, proven E2E)** — **`major` devbox bumps are coordinator-owned (not
+      the review reflex); reviewer investigates the migration.** (a) the generic reviewer prompt
       (`reviewer-session.sh`) + `sleep-tracking/.agents/review.md` gained a **migration-investigation**
       mode — on a `major` PR it reads the tool's upstream breaking-changes, maps them onto this repo's
-      usage, and comments concretely (e.g. helm-4 needs `--verify=false` on `helm plugin install`);
-      (b) the **coordinator brief** (`agents/coordinator/README.md` §"Dependency major bumps") + escalation
-      table (`docs/agents/merge-path.md`) now put the un-armed `major` PR in the coordinator's lane:
-      investigate (dispatch reviewer *while red*) → worker fixes if in-budget → green+approved →
-      `major/awaiting-human` → a human merges. The review reflex stays armed-only (arming is the wall, so
-      the two never contend for one PR). (c) sleep-tracking `kubernetes-helm@3` **unpinned** → helm 4 via
-      **sleep-tracking#18**. **Remaining/verify:** first live run — confirm the coordinator picks up a
-      `major` PR, and that the reviewer pod has the egress to `WebFetch` third-party migration notes (it
-      degrades to model knowledge if not). Then this can close.
+      usage, and comments concretely; (b) the **coordinator brief** (`agents/coordinator/README.md`
+      §"Dependency major bumps") + escalation table (`docs/agents/merge-path.md`) put the un-armed `major`
+      PR in the coordinator's lane: investigate (dispatch reviewer *while red*) → worker fixes if in-budget
+      → green+approved → `major/awaiting-human` → a human merges. The review reflex stays armed-only (arming
+      is the wall, so the two never contend). (c) sleep-tracking `kubernetes-helm@3` **unpinned** → helm 4.
+      **PROVEN LIVE E2E:** an **opus** coordinator (`--tick`, scoped to the `sleep` stack) picked up
+      **sleep-tracking#18**, claimed it, dispatched the reviewer *while red* → it read the Helm 4 migration
+      and pinned the exact fix (`--verify=false` on `helm plugin install`, `scripts/test-chart.sh:8`);
+      a worker applied it → CI green → relabel `major/awaiting-human` → **human merged #18**. WebFetch
+      egress was sufficient (reviewer produced the correct migration finding).
 - [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
       cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
@@ -242,7 +246,11 @@ _Last updated: 2026-07-05._
       issues/PRs, applies the coordinator actionability predicate, and only spawns the LLM when there's work
       (no empty wakes) + `coordinator-session.sh --stack/--repos` scoping. The stack SOURCE is one swap-point
       (`stacks_json()` → later `kubectl get agentstacks`). Design + target ownership: **FU-048** and
-      [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md).
+      [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md). **Ran live (2026-07-05):**
+      the gate found sleep-tracking#18, printed the scoped `--tick` command, and the scoped opus coordinator
+      drove the FU-047 major lane E2E. Also added an **orphan backstop** (gate reports un-armed/unclassified
+      dep PRs — caught sleep-tracking#14/#15). Remaining for full FU-045: cloning the `-iac` repo into
+      context + one-coordinator-per-stack are the **FU-048** (XRD) scope; the scheduled tick is **FU-050**.
 - [ ] **FU-048** — **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
       their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
       gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
