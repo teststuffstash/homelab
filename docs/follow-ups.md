@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-047**.
+  Next free id: **FU-048**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -17,7 +17,7 @@ tracker.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
 
-_Last updated: 2026-07-02._
+_Last updated: 2026-07-05._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -107,7 +107,21 @@ _Last updated: 2026-07-02._
       image rebuilds with the aligned lock. Opens an auto-merging PR per repo. **Operator step:** install
       the `homelab-renovate` App on the matrix repos (homelab, snore-recorder, openrouter-operator,
       agent-runtime — sleep-tracking/-iac already have it) so the token mint succeeds; then
-      `gh workflow run devbox-update.yaml`.
+      `gh workflow run devbox-update.yaml`. **Major gate (2026-07-05):** `devbox-update.sh` now diffs
+      the lock's per-package `version` (leading integer) — a MAJOR bump (e.g. helm 3→4) is labelled
+      `major` and does **not** arm auto-merge, so CI + the reviewer/coordinator pipeline still run but a
+      human makes the final merge call. Deliberately NOT pinning majors away (keeps `@latest` +
+      alignment); the human lands *after* the pipeline has done its work, not before the bump. Reviewer
+      investigate-the-migration behavior is FU-047.
+- [ ] **FU-047** — **Reviewer: investigate MAJOR devbox bumps, don't just approve/block.** When a
+      devbox-update PR carries the `major` label (helm 3→4 etc.), the LLM reviewer should research the
+      migration (fetch the upstream release/migration notes, e.g. the helm-4 guide), extract the parts
+      relevant to *this* repo's usage, and comment concretely what must change (e.g. `--verify=false` on
+      plugin install) — plus flag worthwhile new features as its own follow-ups. Turns the `major` gate
+      from "a human reads the diff cold" into "a human reviews a documented migration". Reviewer-prompt
+      change (`agents/`), pairs with the FU-022 major gate. Also: **unpin `kubernetes-helm@3` back to
+      `@latest` in sleep-tracking** (a prior-session pin that pre-empted this gate) and re-open the
+      helm-4 path there.
 - [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
       cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,

@@ -68,10 +68,10 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: teststuffstash/${{ matrix.repo }}
           DEVBOX_DIR: ${{ matrix.dir }}
-        # gh via devbox (consistent with deploy-pin.sh's `devbox run` — no raw GraphQL, no pinned binary);
-        # `devbox global add` is light (just gh, not a whole project toolchain). devbox (for `devbox
-        # update`) stays on PATH from the install step above.
+        # gh + jq via devbox (consistent with deploy-pin.sh's `devbox run` — no raw GraphQL, no pinned
+        # binary); `devbox global add` is light (gh + jq, not a whole project toolchain). jq is for the
+        # script's major-bump lock diff. devbox (for `devbox update`) stays on PATH from the install above.
         run: |
-          devbox global add gh
+          devbox global add gh jq
           eval "$(devbox global shellenv)"
           bash scripts/devbox-update.sh

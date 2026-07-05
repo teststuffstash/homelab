@@ -60,14 +60,17 @@ for repo in $REPOS; do
   fi
   rm -f "$errfile"
 
-  # Reviewable = armed ∧ not-behind ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
-  #              ∧ NOT `automerge`-labelled.
+  # Reviewable = (armed ∨ `major`-labelled) ∧ not-behind ∧ not-conflicted ∧ GREEN
+  #              ∧ ( unreviewed OR changes-requested-with-new-commits ) ∧ NOT `automerge`-labelled.
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
   #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
   #   `automerge` label = the MECHANICAL path (Renovate trivial/digest/dev-dep bumps auto-approved by the
   #   renovate-approve reflex, CI-only, no LLM). Skip them so the reviewer isn't burned on digest noise.
   #   Renovate's REVIEWABLE bumps carry `deps-review` (not `automerge`) → they fall through here and get
   #   the LLM reviewer like any agent PR (FU-046; docs/renovate.md + docs/agents/merge-path.md).
+  #   `major` label (devbox-update.sh major gate, FU-022) = a HUMAN-GATED bump: deliberately NOT armed
+  #   (a human merges), but it STILL needs the reviewer's migration investigation → we accept it here even
+  #   un-armed. Its review documents the migration; approval does NOT merge it (no auto-merge armed).
   pick="$(printf '%s' "$prs" | jq -r '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
@@ -82,7 +85,7 @@ for repo in $REPOS; do
     [ .[]
       | select(.isDraft | not)
       | select(([ .labels[]?.name ] | index("automerge")) | not)
-      | select(.autoMergeRequest != null)
+      | select(.autoMergeRequest != null or (([ .labels[]?.name ] | index("major")) != null))
       | select(.mergeStateStatus != "BEHIND" and .mergeStateStatus != "DIRTY")
       | select(green)
       | select((.reviewDecision // "") != "APPROVED")

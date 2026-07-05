@@ -34,8 +34,11 @@
 #
 # The project-specific review rubric lives IN THE PROJECT REPO at .agents/review.md (versioned with
 # the code, visible to PR authors) and is appended as Claude's system prompt — the same mechanism the
-# coordinator uses for its own brief. The GENERIC "how to review" behavior is /code-review itself
-# (built into the image's Claude Code). Absent .agents/review.md, we just run the generic reviewer.
+# coordinator uses for its own brief. The GENERIC "how to review" behavior is the PROMPT below: a code
+# PR runs /code-review (built into the image's Claude Code); a DEPENDENCY/MAJOR bump (label major /
+# deps-review, or a lockfile-only diff crossing a major) instead triggers a MIGRATION INVESTIGATION —
+# read the tool's upstream breaking-changes, map them onto this repo's usage, comment concretely, and
+# leave the merge to a human. Absent .agents/review.md, we just run the generic reviewer.
 #
 # Operator-side, ONCE (see docs/github-setup.md §2/§5):
 #   • homelab-reviewer App + reviewer-git Secret:  scripts/github-reviewer-app-bootstrap.sh
@@ -88,7 +91,20 @@ gh pr checkout ${PR}
 RUBRIC_FLAG=""
 [ -f "${RUBRIC}" ] && RUBRIC_FLAG="--append-system-prompt-file ${RUBRIC}"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
-PROMPT='Review pull request #${PR} on the checked-out branch. Run /code-review to find correctness bugs and post them as inline PR comments. Then submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve if you found no blocking correctness bugs, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the blockers. Do NOT merge and do NOT push — auto-merge completes the PR once your review and CI pass.'
+PROMPT='Review pull request #${PR} on the checked-out branch.
+
+STEP 0 — classify the PR: run  gh pr view ${PR} --json labels,title,files  and decide which kind it is.
+
+If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-review, or it changes only devbox.lock / devbox.json / a lockfile AND crosses a MAJOR version — then a diff skim is NOT enough. Do a MIGRATION INVESTIGATION:
+  1. List each tool whose MAJOR version changed, old -> new (read it from the lockfile diff).
+  2. Fetch that tool major-version upstream release / migration notes with WebFetch and read the breaking-changes section. If egress blocks the fetch, reason from your own knowledge of that major and say so explicitly.
+  3. Map every breaking change onto THIS repo actual usage: grep how the tool is invoked under scripts/, .github/, chart/, Makefile, and the devbox scripts in devbox.json. For each spot that must change, post an INLINE PR comment naming the exact change and citing the migration note.
+  4. Note genuinely useful NEW capabilities of the major as ONE short, non-blocking follow-up comment.
+  Verdict: --request-changes if ANY adaptation is required (a worker will fix it on this branch and you re-review); --approve only once every breaking change is either N/A or already handled in the diff. A major bump is HUMAN-GATED (not auto-merged): your review DOCUMENTS the migration so a human can merge with confidence — do not expect auto-merge.
+
+Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments.
+
+STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve if nothing blocks, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the blockers (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
 exec claude -p "\$PROMPT" --model ${MODEL} \$RUBRIC_FLAG --permission-mode ${PERM_MODE} --output-format json
 PREP
 )
