@@ -160,7 +160,7 @@ _Last updated: 2026-07-05._
       it's a mechanical swap.
 - [ ] **FU-027** — One fresh-issue live run to demo the PR stats comment end-to-end (both halves
       are validated separately).
-- [ ] **FU-041** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
+- [x] **FU-041 — DONE (2026-07-05, proven E2E)** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
       up-to-date branch (`strict_required_status_checks_policy`, `tofu/github/repo_rulesets.tf`)
       but nothing updates PR branches (`allow_update_branch=false`), so auto-merge never fires on
       a behind PR. **Deterministic CI serializer — no LLM in the merge path.** Full design (options
@@ -174,24 +174,16 @@ _Last updated: 2026-07-05._
       process), coordinator-LLM merging, `allonsy-studio/actions-pr-auto-update` (hard-skips bot PRs).
       **BUILT 2026-07-03 (phases 1–3 committed):** updater workflow in both agent repos, review-reflex
       `.sh` + CronJob (`agents/review-reflex.sh`, `agents/coordinator/review-reflex.yaml`), auto-merge
-      arming in `agent-session.sh`, `merge-conflict` label in `labels.tf`. **Remaining = operator
-      one-time wiring** (all outside the jail unless noted):
-      1. Bootstrap the **dedicated `homelab-merge` App** (minimal grant: contents:write + PR/checks/statuses
-         read — see docs/github-setup.md §2) — the ONLY blocker for Phase 1:
-         `bash scripts/github-merge-app-bootstrap.sh manifest|catch|secrets` (create + install on the agent
-         repos + push key to Infisical). Kept separate from homelab-agents so its CI-exposed key stays
-         least-privilege (docs/agents/merge-path.md §Updater token).
-      2. `devbox run github-tofu apply` (outside jail — the wrapper loads the org admin token + the merge
-         id/key, no growing export list) — creates the `MERGE_GH_APP_*` org Actions secrets
-         (`actions_secrets.tf`), the `merge-conflict` label (import first if it pre-exists), and, if not
-         already applied, `allow_auto_merge=true` on repos.tf. (Set the wrapper's org-admin wallet knobs
-         once — `GH_ADMIN_KP_DB`/`GH_ADMIN_KP_KEY`/`GH_ADMIN_KP_ENTRY`, see `scripts/github-tf.sh`.)
-      3. `kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/review-reflex.yaml` (Phase 2;
-         needs the coordinator bootstrap already done — rbac + coordinator-git + coordinator-claude +
-         reviewer-git). Verify: `kubectl -n agent-coordinator create job --from=cronjob/review-reflex reflex-test`.
-      4. Optional Phase 4 later (edge-triggers, Renovate levers per FU-014/FU-015) — see the doc's Rollout.
-      Then close this item. Phase-3 done also unblocks the stalled live PRs (e.g. sleep-tracking#8 is
-      BEHIND+APPROVED+armed today) once the updater's org secrets land.
+      arming in `agent-session.sh`, `merge-conflict` label in `labels.tf`. **Operator wiring DONE +
+      PROVEN E2E (2026-07-05):** the dedicated `homelab-merge` App is bootstrapped (its token re-triggers
+      CI — a `GITHUB_TOKEN` push wouldn't), the `MERGE_GH_APP_*` org Actions secrets + `allow_auto_merge`
+      are applied, and the review-reflex CronJob is live in ns `agent-coordinator` (every 5m). The whole
+      serializer proved out on **sleep-tracking#14**: it was BEHIND → `update-pr-branch` merged master in
+      (App token → fresh CI) → CI green → `renovate-approve` approved → **GitHub auto-merge landed it** —
+      exactly "a behind PR no longer stalls," no human, no LLM in the mechanics. (The review-reflex's LLM
+      auto-dispatch on an *armed agent* PR is deployed + was validated on #9; it rides the same gate. The
+      un-armed *major* variant runs via the coordinator — FU-047, also proven.) Phase-4 edge-triggers +
+      Renovate levers remain optional polish (FU-014/FU-015/FU-050), not blockers.
 - [ ] **FU-042** — **Coordinator double-dispatches an already-in-progress issue** (no deterministic
       idempotency). The dispatch guard is soft LLM-judgment in the brief (`agents/coordinator/README.md`
       step 1: "pick one labelled `agent/queued`"), enforced by nothing. Live failure 2026-07-03:
@@ -288,6 +280,13 @@ _Last updated: 2026-07-05._
       **verify on the first real major bump** that Renovate leaves a manually-edited branch alone and the
       worker pushes to `renovate/*` (not a new `agent/*`). **P3 (later):** a longer cooldown on majors so a
       human CAN opt into an interactive LLM session for the riskiest. Relates to FU-041, FU-044, FU-014.
+      **Status (2026-07-05):** the MECHANICAL sibling leg is proven live — sleep-tracking#14 (docker digest,
+      `automerge`) rode `renovate-approve` → auto-merge with no LLM (that's the FU-014 half). The
+      *analogous* reviewable-with-a-worker pattern is proven via the **coordinator major lane** (FU-047,
+      #18: reviewer investigates → worker adapts → merge). **STILL UNPROVEN — the FU-046-specific path:** an
+      armed `deps-review` Renovate PR flowing through the **review reflex** (not the coordinator) →
+      CHANGES_REQUESTED → a worker adapting on the **`renovate/*` branch** (verify Renovate doesn't clobber
+      its commits) → loop → merge. Awaits a real reviewable Renovate bump; keep open until one flies.
 
 ## Monitoring & storage
 
