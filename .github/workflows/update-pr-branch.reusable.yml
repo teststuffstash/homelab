@@ -56,6 +56,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Defensive: `gh pr edit --add-label` FAILS on a missing label, so create it idempotently
+          # first (labels.tf provisions it via tofu, but this survives a not-yet-applied repo or a
+          # deleted label — the reflex must never hard-fail and block the merge path).
+          gh label create merge-conflict --repo "$GITHUB_REPOSITORY" --color e11d21 \
+            --description "PR branch conflicts with master — updater can't auto-resolve" --force >/dev/null 2>&1 || true
           gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
             --json number,mergeStateStatus,autoMergeRequest,labels \
           | jq -c '.[]' | while read -r pr; do

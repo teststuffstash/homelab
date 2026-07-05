@@ -39,9 +39,11 @@ locals {
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
   }
 
-  # Only the fixer-target repos get the state labels — a repo can be managed in repos.tf (auto-merge etc.)
-  # without carrying the agent label taxonomy, so this list is separate from the repos.tf resources.
-  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac"]
+  # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in
+  # repos.tf (auto-merge etc.) without them, so this list is separate from the repos.tf resources.
+  # (openrouter-operator/agent-runtime/agent-coordinator currently have 0 issues → 0 existing labels, so
+  # the first apply CREATEs them clean — nothing to import.)
+  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "openrouter-operator", "agent-runtime", "agent-coordinator"]
 
   repo_labels = {
     for pair in setproduct(local.label_repos, keys(local.agent_labels)) :
