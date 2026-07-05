@@ -208,12 +208,25 @@ The coordinator runs as **Claude Code in a scoped pod**, the sibling of the work
 `coordinator-session.sh` (`devbox run coordinator-session`):
 
 ```sh
-# interactive: clone homelab, drop into `claude` loaded with this brief (supervised)
+# interactive, SEEDED with the canonical reconcile-tick prompt — supervise the first runs
+devbox run coordinator-session -- --tick
+
+# interactive, no seed (you type the first turn yourself)
 devbox run coordinator-session
 
-# headless: run one reconcile pass and self-terminate
-devbox run coordinator-session -- --run "Do one reconcile pass over open agent-fix issues."
+# scope a first run to one item
+devbox run coordinator-session -- --seed "Work PR #18 on sleep-tracking to major/awaiting-human."
+
+# headless one tick — the exact call a future coordinator reflex (CronJob) will make
+devbox run coordinator-session -- --run-tick
 ```
+
+> **Tick prompt = one source of truth.** The reconcile instruction lives once in
+> `coordinator-session.sh` as `TICK_PROMPT`; `--tick` (interactive) and `--run-tick` (headless) inject
+> the *same* string. So the first runs are hand-supervised with exactly the prompt the eventual
+> autonomous **coordinator reflex** (the LLM sibling of `review-reflex`, a CronJob doing `--run-tick` on
+> a schedule) will use — graduating to autonomy is a **scheduler swap, not a behavior change**. Edit the
+> wording in one place and both follow.
 
 > **Scope note (evolving — FU-045).** The pod clones *homelab* today, but a coordinator instance is
 > really scoped to a **stack**: the platform (homelab) **plus that stack's repos**. Since FU-025 a

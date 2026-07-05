@@ -9,8 +9,15 @@
 #
 #   bash agents/coordinator-session.sh
 #       → interactive: clone homelab, drop you into `claude` loaded with the coordinator brief.
+#   bash agents/coordinator-session.sh --tick
+#       → interactive, but SEEDED with the canonical reconcile-tick prompt (the exact instruction a
+#         future coordinator reflex would inject) as the first turn — supervise the first runs.
+#   bash agents/coordinator-session.sh --seed "Work PR #18 on sleep-tracking to major/awaiting-human."
+#       → interactive, seeded with YOUR prompt (scope a first run to one item).
 #   bash agents/coordinator-session.sh --run "Do one reconcile pass over open agent-fix issues."
 #       → headless: `claude -p` runs one pass and the pod self-terminates.
+#   bash agents/coordinator-session.sh --run-tick
+#       → headless one tick with the canonical prompt — what the eventual reflex CronJob calls.
 #
 # Bootstrap once (see agents/coordinator/README.md §Bootstrap):
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
@@ -26,11 +33,20 @@ KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
 
-RUN_CMD=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
+# The canonical reconcile-TICK prompt — the exact instruction a future coordinator reflex (a CronJob,
+# the LLM sibling of review-reflex.sh) would inject each tick. Kept here as ONE source of truth so an
+# interactive first-run (--tick) and the eventual headless reflex (--run-tick) use identical wording.
+# Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
+TICK_PROMPT="Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
+
+RUN_CMD=""; SEED=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)             RUN_CMD="$2"; shift 2;;
+    --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
+    --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
+    --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
     --ref)             BASE_REF="$2"; shift 2;;
     --repo)            REPO_URL="$2"; shift 2;;
     --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Pro ⇒ sonnet.
@@ -56,6 +72,17 @@ COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF} --permission
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 PREP="set -e; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab; cd /work/homelab"
+
+# Interactive seed (--tick/--seed): drop the prompt into a pod file at clone time, then attach with it
+# as claude's initial positional arg (`claude … "$(cat /work/coord-seed)"` = interactive, seeded). The
+# file indirection keeps the (possibly long, quote-bearing) prompt out of the exec command line — the
+# value is base64'd through PREP so ANY prompt is quote-safe. RUN_CMD (headless) ignores SEED.
+SEED_SUFFIX=""
+if [ -z "$RUN_CMD" ] && [ -n "$SEED" ]; then
+  SEED_B64="$(printf '%s' "$SEED" | base64 | tr -d '\n')"
+  PREP="${PREP}; printf %s '${SEED_B64}' | base64 -d > /work/coord-seed"
+  SEED_SUFFIX=' "$(cat /work/coord-seed)"'
+fi
 
 if [ -n "$RUN_CMD" ]; then
   WRAPPED="${PREP}; exec claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .)"
@@ -136,14 +163,14 @@ else
   # attach is a separate exec that can outrun the clone). Poll for the brief file so we never attach
   # `claude --append-system-prompt-file ${BRIEF}` before the clone has written it.
   "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "until [ -f /work/homelab/${BRIEF} ]; do sleep 0.5; done" 2>/dev/null || true
-  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/homelab; exec claude ${COMMON_FLAGS}'"
-  echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL})."
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/homelab; exec claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
+  echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL}${SEED:+; seeded})."
   if [ -n "$NO_ATTACH" ]; then
     echo "→ attach the interactive coordinator from a real terminal:"
     echo "    ${ATTACH}"
     echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
   else
     echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
-    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/homelab; exec claude '"${COMMON_FLAGS}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/homelab; exec claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
   fi
 fi
