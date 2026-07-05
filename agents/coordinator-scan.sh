@@ -33,7 +33,7 @@ stacks_json() { cat "$STACKS_FILE"; }
 any_work=""
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
-  items=""
+  items=""; orphans=""
   for repo in $repos; do
     slug="$ORG/$repo"
     # gh's built-in --jq keeps this to one repo-read scope — no statusCheckRollup (checks:read) needed.
@@ -41,9 +41,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision \
       --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("major")) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
-    [ -n "$iss" ] && items="${items}[$repo]\n${iss}\n"
-    [ -n "$prs" ] && items="${items}[$repo]\n${prs}\n"
+    # BACKSTOP: a dependency PR that is un-armed AND carries NO lane label (automerge/deps-review/major)
+    # is owned by NOBODY — not the renovate-approve reflex (needs `automerge`), not the review reflex
+    # (needs armed), not the coordinator (needs `major`). Renovate is meant to classify+arm every bump, so
+    # this catches its escapes: a disabled-manager leftover, a stale pre-classification PR, or a human's
+    # dep PR. Report-only (NOT a spawn — the coordinator doesn't own dep classification, Renovate does).
+    orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,autoMergeRequest \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("dependencies")) and (.autoMergeRequest==null) and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major")]|length)==0))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
+    [ -n "$prs" ]  && items="${items}[$repo]\n${prs}\n"
+    [ -n "$orph" ] && orphans="${orphans}[$repo]\n${orph}\n"
   done
+
+  [ -n "$orphans" ] && { echo "stack ${name}: ⚠ ORPHANED dep PRs (un-armed + unclassified — classify or close; Renovate didn't lane them):"; printf '%b' "$orphans"; }
 
   if [ -z "$items" ]; then
     echo "stack ${name}: nothing actionable"
