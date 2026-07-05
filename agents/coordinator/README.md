@@ -31,6 +31,13 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 Invariants: **one active worker per PR**; **bounded rounds** (max 3, then `agent/blocked`);
 idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-spawns.
 
+> **Labels are provisioned as code** in [`tofu/github/labels.tf`](../../tofu/github/labels.tf) (this
+> table = its source of truth — add any new state label there too, or it won't exist on the repos).
+> **Never leave a relabel half-applied.** `gh issue edit --add-label X --remove-label Y` is *not* atomic:
+> if `X` doesn't exist the add fails but the remove still lands, corrupting state (learned live on #18).
+> So: ensure the label exists first (`gh label create <name> --force`), and **add the new label before
+> removing the old** — verify the end-state labels after.
+
 > **Be visible; never stall silently.** Your state lives in **GitHub**, not your head. The moment you
 > pick up an issue, **claim it** (relabel + a one-line plan comment) — do this *before* investigating,
 > not after. Keep narrating progress as issue comments. If you get stuck — ambiguous issue, repeated

@@ -31,6 +31,12 @@ locals {
     # Set by the updater workflow (FU-041) when an auto-merge-armed PR's branch conflicts with master —
     # the update-branch API can't resolve it (422), so it's flagged for the coordinator to decide.
     "merge-conflict" = { color = "e11d21", description = "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase" }
+    # The devbox MAJOR-bump lane (FU-022/FU-047): `major` set by devbox-update.sh (also self-created there
+    # with --force); `major/awaiting-human` set by the coordinator once the migration is documented + CI is
+    # green — a HUMAN merges. Declared here so provisioning does NOT depend on an in-session `gh` call: a
+    # missing label makes a relabel HALF-APPLY and corrupt state (learned live on sleep-tracking#18).
+    "major"                = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
+    "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
   }
 
   # Only the fixer-target repos get the state labels — a repo can be managed in repos.tf (auto-merge etc.)
