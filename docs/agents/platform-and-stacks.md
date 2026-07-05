@@ -1,0 +1,88 @@
+# Platform ⟷ stack separation — the agents framework as a platform capability
+
+**Status: direction set (2026-07-05), first cut built in homelab.** Tracked as FU-045/FU-048/FU-049/FU-050.
+This doc records where the agents framework and service discovery are heading; the code that exists today
+is the pragmatic first cut, deliberately shaped so the migration is a *lift, not a rewrite*.
+
+## The theory
+
+homelab is a **platform**, not the owner of every stack's configuration. Like a cloud provider, it should
+**publish its capabilities as an API and let stacks self-serve** — the same lens as boot-from-git and the
+per-stack `-iac` model (FU-025, ADR-084). Two moves fall out:
+
+1. **The agents framework becomes a platform capability, published as a Crossplane XRD.** homelab owns the
+   *mechanism* (how a scoped coordinator/reviewer/worker pod is spawned, the deterministic gate + reflex
+   loop, RBAC, secret wiring). Each stack owns its *policy* (which repos, which model tiers, which tools,
+   its git workflow, its review rubric). A stack declares `kind: AgentStack` in its own `-iac` repo;
+   homelab's Composition renders the control plane for it. **Mechanism = platform; policy = stack.**
+
+2. **Platform services are published as XRDs too — superseding `SERVICES.md` as the source of truth.**
+   Today apps discover services by grepping a hand-maintained markdown catalog. The target: the platform's
+   provisionable capabilities are typed Crossplane XRDs (S3 bucket, Postgres, …); discovery is a cluster
+   query (`kubectl get xrd` / `kubectl explain`), and the human-readable catalog is *generated* from the
+   XRDs rather than curated by hand. The XRD is catalog + schema + provisioning API in one.
+
+## Ownership, target state
+
+```
+homelab (platform)                         <stack>-iac (e.g. sleep-iac)          the platform surface
+──────────────────                         ────────────────────────────         ───────────────────
+publishes:                                 declares (its POLICY):               consumes via the k8s API
+  • AgentStack XRD + Composition             kind: AgentStack                    kubectl get agentstacks
+    → coordinator gate/CronJob                 spec: repos, modelTiers,          kubectl get xrd
+    → review-reflex                                  tools, gitWorkflow,          (no more grep SERVICES.md)
+    → RBAC + ESO secret wiring                       reviewRubric
+  • service XRDs (S3/Postgres/…)            kind: Bucket / PostgresInstance
+    → supersede SERVICES.md                  (already app-owned, ADR-076)
+```
+
+The agents *framework code* (`agents/coordinator-session.sh`, `reviewer-session.sh`, `review-reflex.sh`,
+the briefs) is then packaged by the platform for consumption — a stack pins a version and gets the control
+plane, without copying scripts into its repo. What the stack writes is the **claim**, not the machinery.
+
+## First cut (today, homelab-side)
+
+Pragmatic stand-ins that already run, structured to become the above:
+
+- **`agents/stacks.json`** — a claim-shaped list of stacks (`{name, repos, coordinatorModel, workerModel}`).
+  This is the temporary home of what will become one `AgentStack` claim per stack, living in each `-iac`
+  repo. Header comment says so.
+- **`agents/coordinator-scan.sh`** (`devbox run coordinator-scan`) — the **deterministic gate** in front of
+  the LLM coordinator: per stack, list open issues/PRs and answer "is there anything a coordinator tick
+  would act on?" (predicate in the script header, mirrors `coordinator/README.md` §State machine). Reports
+  the actionable items + the scoped launch command; `--spawn` launches a headless tick. **No subscription
+  tokens are spent to discover "nothing to do"** — the cheap sibling of `review-reflex.sh`.
+- **`coordinator-session.sh --stack/--repos`** — scope a session to a stack (prepends the stack context to
+  the tick prompt, sets `STACK`/`AGENT_REPOS` pod env).
+
+**The one swap-point:** `coordinator-scan.sh`'s `stacks_json()` reads `stacks.json` today; the FU-045 target
+is `kubectl get agentstacks -o json`. Everything downstream (the per-stack loop, the gate, the spawn) is
+already source-agnostic, so flipping the source is the migration.
+
+## Why per-stack is the coordinator's context (not per-issue, not global)
+
+The coordinator is a level-triggered reconciler whose value is *cross-repo sequencing* (an app PR that
+triggers an `-iac` bump; land provider before consumer; a `major` bump spanning repos). Per-issue loses
+that and multiplies LLM sessions; global couples unrelated stacks and bloats context. A **stack** — its
+`-iac` repo + app repos — is the coherent unit of ownership, budget, platform-facts, and the deploy chain.
+
+## Migration path
+
+1. **Now:** `stacks.json` + `coordinator-scan` (report) + `--stack` scoping. Supervised interactive ticks.
+2. **coordinator-reflex** CronJob running `coordinator-scan --spawn` per schedule (FU-050) — the gate keeps
+   the LLM off empty wakes. Graduating to autonomy is a scheduler swap, not a behavior change.
+3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack (`sleep`) to a claim in
+   `sleep-iac`; `stacks_json()` → `kubectl get agentstacks` (FU-048).
+4. **Service XRDs** become the discovery source of truth; generate a catalog, retire/auto-generate
+   `SERVICES.md` (FU-049).
+
+## Open questions
+
+- **Build-time discovery.** XRD discovery is a cluster query; an app repo's CI may have no cluster creds at
+  build time. Provisioning-discovery (in `-iac`, which reconciles against the cluster) fits XRDs cleanly;
+  documentation-discovery for a human/CI without cluster access may still want a generated static catalog.
+- **How much policy is a claim vs a Composition default?** Model tiers, budget caps, git-workflow and the
+  review rubric are stack policy — but sensible platform defaults keep a minimal claim minimal. Draw the
+  line when writing the XRD (FU-048).
+- **One coordinator per stack vs one that iterates stacks.** The gate already iterates; whether each stack
+  gets its own long-lived control plane or shares one is a Composition decision (FU-048).

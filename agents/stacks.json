@@ -1,0 +1,11 @@
+{
+  "_comment": "TEMPORARY platform-side stand-in for a per-stack AgentStack claim. TARGET (FU-045/FU-048, docs/agents/platform-and-stacks.md): each stack's -iac repo OWNS this as a Crossplane `AgentStack` claim (its repos + model tiers + tools + git workflow + review rubric = the stack's POLICY); homelab publishes the XRD/Composition that renders the coordinator gate/CronJob + review-reflex + RBAC (the MECHANISM). Kept claim-shaped so the migration is a lift, not a rewrite — coordinator-scan.sh reads this via one swap-point function that later becomes `kubectl get agentstacks`.",
+  "stacks": [
+    {
+      "name": "sleep",
+      "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
+      "coordinatorModel": "sonnet",
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+    }
+  ]
+}

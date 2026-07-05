@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-048**.
+  Next free id: **FU-051**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -237,6 +237,29 @@ _Last updated: 2026-07-05._
       rather than one homelab-wide. Mostly matters as stacks multiply; today the coordinator doesn't
       need the `-iac` repo in-context because deploys are automatic (it never touches them). Relates to
       FU-026 (durable engine), FU-039 (platform self-service), and the three-layer topology.
+      **First cut (2026-07-05):** `agents/stacks.json` (claim-shaped stack→repos list) + a **deterministic
+      gate** `agents/coordinator-scan.sh` (`devbox run coordinator-scan`) that per-stack lists open
+      issues/PRs, applies the coordinator actionability predicate, and only spawns the LLM when there's work
+      (no empty wakes) + `coordinator-session.sh --stack/--repos` scoping. The stack SOURCE is one swap-point
+      (`stacks_json()` → later `kubectl get agentstacks`). Design + target ownership: **FU-048** and
+      [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md).
+- [ ] **FU-048** — **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
+      their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
+      gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
+      `kind: AgentStack` (its repos, model tiers, tools, git workflow, review rubric = the POLICY). Migrate
+      `agents/stacks.json` → a per-stack claim in the `-iac` repo and flip `coordinator-scan.sh`'s
+      `stacks_json()` to `kubectl get agentstacks`. Mechanism=platform, policy=stack — same lens as ADR-084.
+      Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md), ADR-085. Relates FU-045/039.
+- [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
+      Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
+      (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
+      build-time discovery for an app repo with no cluster creds may still want a generated static catalog.
+      Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
+      [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
+- [ ] **FU-050** — **`coordinator-reflex` CronJob + scan v2.** Run `coordinator-scan --spawn` on a schedule
+      (the LLM sibling of `review-reflex`, gated so it never wakes emptily). Plus the v2 predicate that needs
+      pod/checks access: `agent/in-progress`+worker-done (round finished / worker failed) and red-beyond-T.
+      Relates FU-045/FU-026.
 - [ ] **FU-046** — **Agentic dependency upgrades: reviewable dep bumps flow through the merge path, no
       human, no coordinator tick.** Renovate's reviewable bumps (major versions, runtime deps) should NOT
       be assigned to a human; they **arm auto-merge** and get a `deps-review` label, so the existing

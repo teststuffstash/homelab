@@ -88,6 +88,9 @@
       "coordinator-session": [
         "bash agents/coordinator-session.sh \"$@\""
       ],
+      "coordinator-scan": [
+        "bash agents/coordinator-scan.sh \"$@\""
+      ],
       "coordinator-logs": [
         "bash scripts/coordinator-logs.sh \"$@\""
       ],

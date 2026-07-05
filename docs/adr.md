@@ -545,6 +545,26 @@ scheduled cleanup workflow (GitHub has no packages-retention API, so *not* tofu)
 health/rollback is deferred (**FU-044**, in-cluster off ArgoCD events); the coordinator's context becomes
 per-stack (**FU-045**). Full design + runbook: [`sleep-iac.md`](sleep-iac.md).
 
+### ADR-085 — Agents framework & platform services published as Crossplane XRDs; stacks own their policy
+**Status:** Open (direction set 2026-07-05). **Decision (direction):** homelab is a *platform*, not the
+owner of each stack's agent config — it **publishes** its capabilities as Crossplane XRDs and stacks
+self-serve. (1) An **`AgentStack` XRD + Composition** renders a stack's control plane (coordinator
+gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
+`kind: AgentStack` with its repos, model tiers, tools, git workflow and review rubric (the POLICY). The
+framework *code* lives in homelab and is packaged for consumption; a stack writes a **claim**, not
+machinery. (2) **Platform-service XRDs** (S3/Postgres/…) become the discovery **source of truth**,
+superseding hand-maintained [`SERVICES.md`](../SERVICES.md) — discovery is a cluster query and the human
+catalog is generated from the XRDs. **Considered:** keep the agents framework homelab-owned + per-stack
+config files (rejected — every stack would copy scripts + config drifts; doesn't scale past ~2 stacks);
+keep `SERVICES.md` as the catalog (rejected long-term — untyped, not discoverable, hand-curated).
+**Why:** the boot-from-git / platform-as-API lens (ADR-084, FU-025/FU-039) — mechanism=platform,
+policy=stack. **First cut (homelab-side stand-in):** `agents/stacks.json` + `agents/coordinator-scan.sh`
++ `coordinator-session.sh --stack`, with one `stacks_json()` swap-point → `kubectl get agentstacks`.
+**Consequences:** a new stack = a claim in its `-iac` repo, not a homelab change; build-time service
+discovery without cluster creds may still want a generated static catalog (open). Tracked: **FU-048**
+(AgentStack XRD), **FU-049** (service XRDs vs SERVICES.md), **FU-045/FU-050** (per-stack coordinator +
+gate). Design: [`agents/platform-and-stacks.md`](agents/platform-and-stacks.md).
+
 ---
 
 ## Open / undecided

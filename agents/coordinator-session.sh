@@ -39,7 +39,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,6 +47,8 @@ while [ $# -gt 0 ]; do
     --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
     --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
     --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
+    --stack)           STACK="$2"; shift 2;;              # scope this session to a stack (agents/stacks.json)
+    --repos)           STACK_REPOS="$2"; shift 2;;        # the stack's repos, space-separated
     --ref)             BASE_REF="$2"; shift 2;;
     --repo)            REPO_URL="$2"; shift 2;;
     --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Pro ⇒ sonnet.
@@ -55,6 +57,16 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+
+# Per-stack scope (FU-045): prepend the stack context to the prompt so the coordinator knows exactly
+# which repos are its world this session, and expose it as pod env for forward-compat. Policy will move
+# to a Crossplane AgentStack claim in the stack's -iac repo (docs/agents/platform-and-stacks.md); for
+# now coordinator-scan.sh passes --stack/--repos from agents/stacks.json.
+if [ -n "$STACK" ]; then
+  SCOPE="You are the coordinator for the ${STACK} stack; its repos are: ${STACK_REPOS:-see agents/stacks.json}. "
+  [ -n "$RUN_CMD" ] && RUN_CMD="${SCOPE}${RUN_CMD}"
+  [ -n "$SEED" ]    && SEED="${SCOPE}${SEED}"
+fi
 
 NS="agent-coordinator"
 IMAGE="${COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}"
@@ -108,6 +120,11 @@ spec:
       env:
         - name: HOME
           value: "/home/node"
+        # Per-stack scope (FU-045): which stack + repos this coordinator owns this session.
+        - name: STACK
+          value: "${STACK}"
+        - name: AGENT_REPOS
+          value: "${STACK_REPOS}"
         # Subscription auth (Pro/Max): a ~1y token from \`claude setup-token\`, kept in a Secret.
         # NB: do NOT also set ANTHROPIC_API_KEY here — it would take auth precedence over this.
         - name: CLAUDE_CODE_OAUTH_TOKEN
