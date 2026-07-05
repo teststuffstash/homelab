@@ -39,7 +39,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; BASE_REF="master"; MODEL="sonnet"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,7 +51,7 @@ while [ $# -gt 0 ]; do
     --repos)           STACK_REPOS="$2"; shift 2;;        # the stack's repos, space-separated
     --ref)             BASE_REF="$2"; shift 2;;
     --repo)            REPO_URL="$2"; shift 2;;
-    --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Pro ⇒ sonnet.
+    --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Default opus (needs Max); --model sonnet to save.
     --permission-mode) PERM_MODE="$2"; shift 2;;   # default|acceptEdits|plan|auto|dontAsk|bypassPermissions
     --no-attach)       NO_ATTACH=1; shift;;
     *) echo "unknown arg: $1" >&2; exit 2;;

@@ -242,7 +242,9 @@ worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and
 **skipped by default** (`--permission-mode bypassPermissions`) for both interactive and headless —
 the security boundary is the pod (scoped tokens + RBAC + pre-trusted `/work/homelab`), not
 per-command approval, exactly like the jail. Pass `--permission-mode default` for a supervised
-session. Model defaults to `sonnet` (a Pro plan); pass `--model opus` on Max.
+session. Model defaults to **`opus`** (needs a Max plan) — coordination is judgment-heavy and the tasks
+have gotten messier, so it runs on the strong reasoning model; pass `--model sonnet` to economize (or on
+Pro). The reviewer stays on `sonnet` by design (decorrelated from the worker; see `reviewer-session.sh`).
 
 **In-pod, call the scripts directly** (the image has no devbox): `python3 agents/estimate_budget.py …`
 and `bash agents/agent-session.sh …` (it falls back to the pod's in-cluster ServiceAccount). Mint the
