@@ -37,8 +37,12 @@ variable "protected_repos" {
     require_approval = optional(bool, true)
   }))
   default = {
-    sleep-iac      = { required_checks = ["ci"], require_approval = false }
-    sleep-tracking = { required_checks = ["ci"] }
+    homelab             = { required_checks = ["ci"], require_approval = false } # CI-gated only (like sleep-iac): deploy-pin bumps auto-merge on ci-green, no approver; not a fixer-target
+    agent-coordinator   = { required_checks = ["ci"] }
+    agent-runtime       = { required_checks = ["ci"] }
+    openrouter-operator = { required_checks = ["ci"] }
+    sleep-iac           = { required_checks = ["ci"], require_approval = false }
+    sleep-tracking      = { required_checks = ["ci"] }
     # snore-recorder = { required_checks = ["ci"] }   # enable once its PR `ci` check is confirmed
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
   }
