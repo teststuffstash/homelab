@@ -1,0 +1,15 @@
+# Per-project OpenRouter budget key for openrouter-operator's coding agent — minted + capped by the
+# in-cluster openrouter-operator itself (it reconciles OpenRouterKey CRs), which writes the
+# `openrouter-operator-openrouter` Secret (OPENROUTER_API_KEY) in this namespace for the worker pod.
+# GitOps-managed by the `agent-fixer-openrouter-operator` ArgoCD app (unlike sleep-tracking's, which is
+# kubectl-applied). FU-052 fixer-flow onboarding.
+apiVersion: openrouter.teststuff.net/v1alpha1
+kind: OpenRouterKey
+metadata:
+  name: openrouter-operator
+  namespace: openrouter-operator
+spec:
+  project: openrouter-operator
+  budgetUSD: 5 # USD/week — caps a runaway agent
+  resetInterval: weekly
+  guardrail: only-free

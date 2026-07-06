@@ -22,6 +22,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
              wave 4  crossplane-providers · github-runner-secrets
              wave 5  arc-runners · openrouter-operator · agent-coordinator
              wave 6  logging            → argocd/resources/loki/    (Loki + Alloy)
+             wave 6  agent-fixer        (ApplicationSet → one app per agents/fixer/<repo>/)
           "sleep" ──► github.com/teststuffstash/sleep-iac//apps  (the sleep stack, EXTRACTED to its
                       own public IaC repo — app infra Workspaces/ESO + the OCI-chart ingester, each
                       project: sleep. FU-025. The `sleep` AppProject + its namespaces live here in
