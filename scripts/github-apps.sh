@@ -16,8 +16,10 @@ OUT="${OUT:-docs/github-apps.md}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"; OUT="${HERE}/${OUT}"
 
 command -v gh >/dev/null || { echo "need gh on PATH (devbox run github-apps, or a shell with gh)"; exit 1; }
+# Org-admin token from the KeePass wallet (same path github-tofu uses), unless one's already exported.
+GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-$(sh "${HERE}/scripts/gh-admin-token.sh")}}"; export GH_TOKEN
 gh api "/orgs/${ORG}/installations" >/dev/null 2>&1 || {
-  echo "ERROR: can't read /orgs/${ORG}/installations — this needs an ADMIN PAT (admin:org), run OUTSIDE the jail." >&2; exit 1; }
+  echo "ERROR: can't read /orgs/${ORG}/installations — the token needs admin:org (run OUTSIDE the jail)." >&2; exit 1; }
 
 # all org repos = the columns (sorted)
 mapfile -t REPOS < <(gh api "/orgs/${ORG}/repos" --paginate --jq '.[].name' | sort)
