@@ -57,6 +57,14 @@ Pragmatic stand-ins that already run, structured to become the above:
 - **`coordinator-session.sh --stack/--repos`** — scope a session to a stack (prepends the stack context to
   the tick prompt, sets `STACK`/`AGENT_REPOS` pod env). `--tick`/`--run-tick` share one `TICK_PROMPT` so an
   interactive first run == the future reflex's call.
+- **`agents/fixer/<repo>/` + the `agent-fixer` ApplicationSet** — the per-repo *fixer infra* (the
+  project's `OpenRouterKey` budget key + the `agent-git-token` ESO `GithubAccessToken`, namespace ==
+  repo). One `argocd/platform/agent-fixer.yaml` ApplicationSet (git **directory generator** over
+  `agents/fixer/*`) emits an Application per subdir, so **onboarding a repo's fixer infra is just adding
+  its `agents/fixer/<repo>/` dir** — no per-repo Application file, no shell (the "yaml way", FU-052). The
+  per-repo `.agents/fix.yaml`+`review.md` recipes and the GitHub-side (repo/labels/rulesets/callers, still
+  `tofu/github` + reusable workflows) are the parts *not* yet folded in; the `AgentStack` XRD (FU-048)
+  collapses both into one claim.
 - **Orphan backstop** in `coordinator-scan` — reports any open `dependencies` PR that is un-armed AND
   carries no lane label (`automerge`/`deps-review`/`major`), i.e. owned by nobody (Renovate is meant to
   classify+arm every bump; escapes rot silently otherwise — a disabled manager's leftovers, stale PRs, a

@@ -122,10 +122,15 @@ _Last updated: 2026-07-05._
       **(2) fixer flow** (only sleep-tracking has it today): the `homelab-agents` App installed, an
       `agent-git-token` ExternalSecret, an **OpenRouterKey CR** (per-project budget key → `<project>-openrouter`
       Secret), `.agents/{fix.yaml,review.md}` recipes, a worker namespace, and the repo in
-      `agents/stacks.json` (so `coordinator-scan` sees it). **Make it repeatable:** extend `new-agent-repo.sh`
-      (or a companion) to scaffold layer 2 → onboarding = one command + the App-install click.
-      **To onboard:** snore-recorder, openrouter-operator, agent-runtime, agent-coordinator (sleep-tracking =
-      reference/done). **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
+      `agents/stacks.json` (so `coordinator-scan` sees it). **Make it repeatable — DONE for layer-2 k8s
+      infra (2026-07-06):** the `agent-fixer` ApplicationSet (git directory generator over
+      `agents/fixer/*`, `argocd/platform/agent-fixer.yaml`) auto-emits the per-repo Application, so that
+      part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml`. Still
+      per-repo shell/manual: the `.agents/` recipes, the `stacks.json` entry, and the GitHub-side
+      (`new-agent-repo.sh` merge-path + the App-install click) — the `AgentStack` XRD (FU-048) is the full
+      collapse. **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer infra +
+      `.agents` PR #5). **Still to onboard:** snore-recorder, agent-runtime, agent-coordinator.
+      **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
       fixer) and homelab (platform/base-infra, dep policy unresolved). Unattended running still needs the
       per-stack reflex (FU-050). Relates FU-014/FU-045/FU-050.
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
