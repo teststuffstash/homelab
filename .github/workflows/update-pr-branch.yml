@@ -1,0 +1,15 @@
+# Keeps the oldest armed+green PR on homelab current with master so auto-merge can fire — homelab is a
+# deploy TARGET (openrouter-operator chart bump + the agent-image images.env bumps land here) and its own
+# weekly devbox-lock bump (FU-022). homelab is require_approval=false, so armed + ci-green + current
+# auto-merges with no reviewer. Same-repo caller of the reusable workflow that lives here.
+name: update-pr-branch
+on:
+  push: { branches: [master] }
+  workflow_run: { workflows: [CI], types: [completed] }
+  schedule: [{ cron: "*/15 * * * *" }]
+  workflow_dispatch: {}
+concurrency: { group: update-pr-branch, cancel-in-progress: false }
+jobs:
+  update:
+    uses: ./.github/workflows/update-pr-branch.reusable.yml
+    secrets: inherit
