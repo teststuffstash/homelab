@@ -43,7 +43,7 @@ spec:
           # (public repo — no token needed), exactly like coordinator-session.sh does for the brief.
           initContainers:
             - name: clone-homelab
-              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g1a3b1dff3889
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g24480c99a3ea
               command: ["bash", "-lc"]
               args: ["set -e; rm -rf /work/homelab; git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab"]
               volumeMounts:
@@ -60,7 +60,7 @@ spec:
                 limits:   { cpu: "1",    memory: "512Mi" }
           containers:
             - name: reflex
-              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g1a3b1dff3889
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g24480c99a3ea
               command: ["bash", "-lc"]
               args: ["exec bash /work/homelab/agents/review-reflex.sh"]
               env:
