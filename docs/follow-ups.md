@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-052**.
+  Next free id: **FU-053**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -114,6 +114,20 @@ _Last updated: 2026-07-05._
       `homelab-deploy` App installed on homelab, `DEPLOY_APP_*` scoped to the deploy-opening repos.
       **Remaining:** merge agent-runtime#5 / agent-coordinator#4; prove one dep bump flows E2E per shape.
       Relates FU-014/FU-025/FU-041.
+- [ ] **FU-052** — **Onboard every APP repo to the agentic loop by DEFAULT** (direction 2026-07-06: the
+      full flow — merge-path auto-merge **and** fixer (NL issue → worker → PR → review → merge) — should be
+      the default for all app repos, not bespoke per-repo). A repo needs two layers: **(1) merge-path**
+      (mostly covered by `new-agent-repo.sh`): managed `github_repository` (allow_auto_merge), agent labels,
+      required-checks `ci`, the renovate-approve + update-pr-branch callers, a PR-triggered `ci`.
+      **(2) fixer flow** (only sleep-tracking has it today): the `homelab-agents` App installed, an
+      `agent-git-token` ExternalSecret, an **OpenRouterKey CR** (per-project budget key → `<project>-openrouter`
+      Secret), `.agents/{fix.yaml,review.md}` recipes, a worker namespace, and the repo in
+      `agents/stacks.json` (so `coordinator-scan` sees it). **Make it repeatable:** extend `new-agent-repo.sh`
+      (or a companion) to scaffold layer 2 → onboarding = one command + the App-install click.
+      **To onboard:** snore-recorder, openrouter-operator, agent-runtime, agent-coordinator (sleep-tracking =
+      reference/done). **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
+      fixer) and homelab (platform/base-infra, dep policy unresolved). Unattended running still needs the
+      per-stack reflex (FU-050). Relates FU-014/FU-045/FU-050.
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
