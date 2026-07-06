@@ -52,6 +52,9 @@
       "github-apps": [
         "bash scripts/github-apps.sh"
       ],
+      "argocd-validate-pins": [
+        "bash scripts/argocd-validate-pins.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],

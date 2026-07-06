@@ -1,0 +1,38 @@
+# homelab CI — the required status check `ci` (tofu/github protected_repos → required-checks ruleset).
+# Focused, not a whole-repo lint: it proves every ArgoCD Application that pins an OCI Helm chart RENDERS
+# at its pinned version with this repo's values (scripts/argocd-validate-pins.sh). That's the gate that
+# stops a deploy-pin bump to a chart version whose new REQUIRED value is missing here from auto-merging
+# and only failing at ArgoCD sync. Thin: all logic is `devbox run argocd-validate-pins` (pinned helm/yq),
+# so the same gate runs locally. Mirrors sleep-iac's CI.
+#
+# NO path filter: the required check must REPORT on every PR (a filtered job that doesn't run leaves the
+# `ci` context absent → strict ruleset blocks the merge forever). Cheap when no OCI pin changed.
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  ci:
+    runs-on: homelab-ephemeral
+    steps:
+      - uses: actions/checkout@v4
+
+      # single-user Nix + devbox (the ARC runner has no systemd; slim image lacks xz) — same as sleep-iac.
+      - name: Install xz (missing from the ARC runner image)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils
+      - name: Install Nix (single-user)
+        uses: cachix/install-nix-action@v31
+        with:
+          install_options: --no-daemon
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Install devbox (reuse the single-user Nix)
+        uses: jetify-com/devbox-install-action@v0.13.0
+        with:
+          skip-nix-installation: "true"
+
+      - name: Validate ArgoCD OCI chart pins (devbox run argocd-validate-pins)
+        run: devbox run argocd-validate-pins
