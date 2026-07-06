@@ -127,9 +127,10 @@ _Last updated: 2026-07-05._
       `agents/fixer/*`, `argocd/platform/agent-fixer.yaml`) auto-emits the per-repo Application, so that
       part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml`. Still
       per-repo shell/manual: the `.agents/` recipes, the `stacks.json` entry, and the GitHub-side
-      (`new-agent-repo.sh` merge-path + the App-install click) — the `AgentStack` XRD (FU-048) is the full
-      collapse. **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer infra +
-      `.agents` PR #5). **Still to onboard:** snore-recorder, agent-runtime, agent-coordinator.
+      (`new-agent-repo.sh` merge-path) — the `AgentStack` XRD (FU-048) is the full collapse. The
+      `homelab-agents` App is already installed on all four to-onboard repos (matrix in
+      `docs/github-apps.md`). **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer
+      infra + `.agents` PR #5). **Still to onboard:** snore-recorder, agent-runtime, agent-coordinator.
       **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
       fixer) and homelab (platform/base-infra, dep policy unresolved). Unattended running still needs the
       per-stack reflex (FU-050). Relates FU-014/FU-045/FU-050.

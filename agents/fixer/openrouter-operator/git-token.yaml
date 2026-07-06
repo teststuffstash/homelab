@@ -1,8 +1,8 @@
 # Per-project git token for openrouter-operator's coding agent (homelab ADR-081). The low-privilege
 # `homelab-agents` App mints a ~1h installation token scoped to THIS repo, contents+PR write only. Same
 # 3-resource shape as sleep-tracking's, but GitOps-managed (the agent-fixer app) rather than kubectl.
-# ⚠ Prereq: the homelab-agents App must be INSTALLED on openrouter-operator (add it to the App's selected
-# repos — one click). appID/installID are the org-wide values (the token's `repositories:` does the scoping).
+# Prereq: the homelab-agents App is INSTALLED on openrouter-operator (see the matrix in docs/github-apps.md).
+# appID/installID are the org-wide values (the token's `repositories:` does the scoping).
 ---
 # 1) App private key: Infisical → a k8s Secret the generator reads.
 apiVersion: external-secrets.io/v1
