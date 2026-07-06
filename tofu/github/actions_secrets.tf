@@ -57,18 +57,12 @@ resource "github_actions_organization_secret" "deploy_app_private_key" {
 # openrouter-operator + agent-runtime + agent-coordinator (→ homelab: chart pin / agents/images.env).
 # Keep TIGHT — the key can deploy (contents+PR write on homelab / sleep-iac), so only repos that open a
 # deploy PR read it (not every CI plane).
-# Only sleep-tracking/snore-recorder/sleep-iac are managed github_repository RESOURCES; the rest are read
-# via data sources — we just need the repo_id to scope a secret (no need to adopt the repo into tofu).
-data "github_repository" "openrouter_operator" { full_name = "${var.org}/openrouter-operator" }
-data "github_repository" "agent_runtime" { full_name = "${var.org}/agent-runtime" }
-data "github_repository" "agent_coordinator" { full_name = "${var.org}/agent-coordinator" }
-
 locals {
   deploy_repos = [
     github_repository.sleep_tracking.repo_id,
-    data.github_repository.openrouter_operator.repo_id,
-    data.github_repository.agent_runtime.repo_id,
-    data.github_repository.agent_coordinator.repo_id,
+    github_repository.openrouter_operator.repo_id,
+    github_repository.agent_runtime.repo_id,
+    github_repository.agent_coordinator.repo_id,
   ]
 }
 
@@ -82,12 +76,6 @@ resource "github_actions_organization_secret_repositories" "deploy_app_private_k
   count                   = var.deploy_app_private_key != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.deploy_app_private_key[0].secret_name
   selected_repository_ids = local.deploy_repos
-}
-
-# homelab isn't managed as a github_repository here (only the app/stack repos are) — read its id so we
-# can scope the RENOVATE_APP_* secrets to the repo that runs the Renovate workflow.
-data "github_repository" "homelab" {
-  full_name = "${var.org}/homelab"
 }
 
 # homelab-renovate App creds → the self-hosted Renovate runner (homelab .github/workflows/renovate.yaml)
@@ -110,13 +98,13 @@ resource "github_actions_organization_secret" "renovate_app_private_key" {
 resource "github_actions_organization_secret_repositories" "renovate_app_id" {
   count                   = var.renovate_app_id != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.renovate_app_id[0].secret_name
-  selected_repository_ids = [data.github_repository.homelab.repo_id]
+  selected_repository_ids = [github_repository.homelab.repo_id]
 }
 
 resource "github_actions_organization_secret_repositories" "renovate_app_private_key" {
   count                   = var.renovate_app_private_key != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.renovate_app_private_key[0].secret_name
-  selected_repository_ids = [data.github_repository.homelab.repo_id]
+  selected_repository_ids = [github_repository.homelab.repo_id]
 }
 
 # homelab-reviewer App creds → the reviewer-approves-Renovate reflex (sleep-tracking
@@ -143,9 +131,9 @@ locals {
   reviewer_repos = [
     github_repository.sleep_tracking.repo_id,
     github_repository.snore_recorder.repo_id,
-    data.github_repository.openrouter_operator.repo_id,
-    data.github_repository.agent_runtime.repo_id,
-    data.github_repository.agent_coordinator.repo_id,
+    github_repository.openrouter_operator.repo_id,
+    github_repository.agent_runtime.repo_id,
+    github_repository.agent_coordinator.repo_id,
   ]
 }
 

@@ -152,3 +152,206 @@ resource "github_repository" "sleep_iac" {
     ignore_changes = [has_downloads]
   }
 }
+
+import {
+  to = github_repository.openrouter_operator
+  id = "openrouter-operator"
+}
+
+resource "github_repository" "openrouter_operator" {
+  name         = "openrouter-operator"
+  description  = ""
+  homepage_url = ""
+  topics       = []
+  visibility   = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = false
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = true
+  delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
+    ignore_changes = [has_downloads]
+  }
+}
+
+import {
+  to = github_repository.agent_runtime
+  id = "agent-runtime"
+}
+
+resource "github_repository" "agent_runtime" {
+  name         = "agent-runtime"
+  description  = ""
+  homepage_url = ""
+  topics       = []
+  visibility   = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = false
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = true
+  delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
+    ignore_changes = [has_downloads]
+  }
+}
+
+import {
+  to = github_repository.agent_coordinator
+  id = "agent-coordinator"
+}
+
+resource "github_repository" "agent_coordinator" {
+  name         = "agent-coordinator"
+  description  = ""
+  homepage_url = ""
+  topics       = []
+  visibility   = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = false
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = true
+  delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
+    ignore_changes = [has_downloads]
+  }
+}
+
+import {
+  to = github_repository.homelab
+  id = "homelab"
+}
+
+resource "github_repository" "homelab" {
+  name         = "homelab"
+  description  = "Infrastructure-as-code home network — Talos Kubernetes (Proxmox + bare-metal), OPNsense, Cilium BGP, Longhorn, Home Assistant. Boot-from-git, no click-ops."
+  homepage_url = ""
+  topics = [
+    "ansible",
+    "bare-metal",
+    "cilium",
+    "cloudflare-tunnel",
+    "esphome",
+    "gitops",
+    "home-assistant",
+    "homelab",
+    "infrastructure-as-code",
+    "kubernetes",
+    "longhorn",
+    "matchbox",
+    "opentofu",
+    "opnsense",
+    "proxmox",
+    "pxe",
+    "self-hosted",
+    "talos-linux",
+  ]
+  visibility = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = true
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = true
+  delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    # has_downloads is a deprecated no-op attribute: declaring it warns, omitting it perpetually
+    # diffs true->false. So we neither set nor reconcile it (see the header repos in this file).
+    ignore_changes = [has_downloads]
+  }
+}
