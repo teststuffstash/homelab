@@ -1,7 +1,14 @@
 # openrouter-operator (kopf) — manages OpenRouter API keys/budgets/guardrails as OpenRouterKey CRs.
-# Reconciled from the openrouter-operator repo's deploy/ (CRD + RBAC + ESO + Deployment). Wave 5 —
-# after platform (ESO/Infisical/ClusterSecretStore) so the management-key ExternalSecret resolves.
-# Replaces the buggy cloudopsworks TF provider path (issue #20) with a typed, tested controller.
+# Multi-source: the Helm CHART comes from ghcr as an OCI artifact, the VALUES live in THIS repo
+# (homelab, argocd/platform/values/openrouter-operator.yaml — supplies the Infisical secret store, which
+# the generic chart deliberately leaves empty). Wave 5 — after platform (ESO/ClusterSecretStore) so the
+# management-key ExternalSecret resolves.
+#
+# **A deploy = bump `targetRevision` below — the ONLY knob.** The image tag defaults to the chart
+# appVersion (chart version == appVersion == image tag), so the pin is one number. The operator's
+# `deploy.yaml` builds the chart+image on a master push and opens the bump PR HERE automatically
+# (deploy-pin, narrow homelab bump); homelab's `ci` (argocd-validate-pins) proves the pinned chart
+# renders with the values below before it auto-merges. Version is CalVer + git sha, e.g. 2026.7.6-g<sha>.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -11,11 +18,18 @@ metadata:
     argocd.argoproj.io/sync-wave: "5"
 spec:
   project: default
-  source:
-    repoURL: https://github.com/teststuffstash/openrouter-operator.git
-    targetRevision: master
-    path: deploy
-    directory: { recurse: false }
+  sources:
+    # 1) the chart from ghcr (OCI). Public package → no repo credential. Bump targetRevision per release.
+    - repoURL: ghcr.io/teststuffstash/charts
+      chart: openrouter-operator
+      targetRevision: 0.0.0 # ⚠ PLACEHOLDER — set to the first version openrouter-operator's deploy.yaml publishes, then it's bumped automatically
+      helm:
+        valueFiles:
+          - $values/argocd/platform/values/openrouter-operator.yaml
+    # 2) THIS repo (homelab), referenced as $values — supplies the values file above.
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      ref: values
   destination:
     server: https://kubernetes.default.svc
     namespace: openrouter-operator
