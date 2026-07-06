@@ -1,0 +1,35 @@
+# agent-coordinator subsystem — the coordinator's RBAC + Namespace + review-reflex CronJob + transcripts
+# PVC + the git-token/reviewer-git ExternalSecrets, GitOps-managed. Was `kubectl apply`-ed by hand (the
+# FU-041 bootstrap step), which is why a review-reflex change (e.g. the deploy-pin's image bump) needed a
+# manual re-apply. Now ArgoCD reconciles agents/coordinator/ from master, so those changes auto-apply.
+#
+# Wave 5 — after ESO (wave 0) + Infisical (2) + the ClusterSecretStore (3): the git-token/reviewer-git
+# ExternalSecrets (GithubAccessToken generators) need ESO + the store + the App keys in Infisical.
+#
+# NB: NOT everything in ns agent-coordinator is managed here — the `coordinator-claude` Secret (the ~1y
+# `claude setup-token` subscription token) is kubectl-created and NOT in git, so ArgoCD never touches it.
+# The Namespace itself is declared in rbac.yaml (CreateNamespace stays off).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-coordinator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: agents/coordinator
+    directory: { recurse: false } # README.md + non-yaml are ignored
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-coordinator
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
