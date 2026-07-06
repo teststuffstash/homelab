@@ -84,23 +84,36 @@ _Last updated: 2026-07-05._
       disabled; **every major → `major`, un-armed → the coordinator lane** (unifies with the devbox major
       gate — FU-047). The two merge-path workflows are extracted to **reusable org workflows**
       (`.github/workflows/{renovate-approve,update-pr-branch}.reusable.yml`) → each repo carries a ~3-line
-      caller. **Remaining:** (1) tofu-manage the 3 (openrouter-operator/agent-runtime/agent-coordinator) via
-      `new-agent-repo.sh` + apply; (2) add the caller workflows + trim per-repo renovate.json to overrides
-      (drop agent-runtime's legacy human-review `reviewers`, set `rebaseWhen:conflicted`); (3) **each repo
-      needs a deploy pipeline so an auto-merged bump reaches prod** (sleep-tracking→sleep-iac today; image
-      repos deploy via ghcr rebuild; per-project responsibility). homelab stays OUT of the agentic flow
-      (base-infra dep policy unresolved — hard to test; already org-ruleset-protected).
-- [ ] **FU-051** — **Deploy path per repo so an auto-merged bump actually reaches prod** (the "each
-      project owns its test+CI+deploy" requirement; auto-merging a bump that never deploys is a footgun).
-      Per repo shape: **app + chart** → the FU-025 `-iac` bump-PR pipeline (sleep-tracking → sleep-iac,
-      readable CalVer version==image==chart). **Single controller** → digest-pin: ArgoCD tracks the repo's
-      master, Renovate pins+bumps the image DIGEST in `deploy/` → automerge → rolls (openrouter-operator,
-      **PR #4** — kills `:latest`; paper trail + rollback per commit). **Image consumed by pods**
-      (agent-runtime `agent-base`, agent-coordinator) → ghcr `:latest`, picked up **on next pod spawn**
-      (ephemeral agent/coordinator pods pull fresh) — acceptable + lazy; if a long-running consumer needs
-      it *now*, digest-pin its manifest like openrouter-operator. **homelab** → deferred (base-infra dep
-      policy). Not-yet-done: openrouter-operator PR #4's operator prereqs (tofu + secrets); a readable-CalVer
-      option (deploy pipeline à la sleep-tracking) if the opaque digest ever grates. Relates FU-014/FU-025/FU-041.
+      caller. **Rollout DONE (2026-07-06):** (1) all 7 repos are now managed `github_repository` resources
+      (`repos.tf`, applied — sets `allow_auto_merge`); (2) the renovate-approve + update-pr-branch **callers**
+      are in openrouter-operator/agent-runtime/agent-coordinator, per-repo renovate.json dropped (global owns
+      classification; agent-runtime's legacy human-review gone); (3) the **deploy paths** are built per shape
+      — **FU-051**. homelab is IN the flow as a **CI-gated deploy target** (`require_approval=false`,
+      `ci`=argocd-validate-pins), not the fixer flow. **Remaining:** merge the agent-runtime#5 /
+      agent-coordinator#4 caller PRs; watch the first real Renovate bumps flow (approve → merge → deploy).
+- [ ] **FU-051** — **Deploy path per repo so an auto-merged bump reaches prod** (each project owns its
+      test+CI+deploy; auto-merging a bump that never deploys is a footgun). BUILT per shape (2026-07-06),
+      each via a first-party **deploy-pin PR** — CI-opened, NOT Renovate (Renovate = external deps only) —
+      that auto-merges on a CI gate. All use the same readable **`2026.<m>.<d>-g<sha>`** version:
+      • **app + chart** → the FU-025 `-iac` bump (sleep-tracking → sleep-iac).
+      • **operator / controller** → **Helm chart to ghcr OCI** (ADR-084 shape, NOT the raw-manifest digest-pin
+        that was first tried): openrouter-operator packages a chart (version==appVersion==image) to
+        `oci://ghcr.io/teststuffstash/charts`; `deploy.yaml` opens a bump PR in **homelab/argocd** (the app
+        is multi-source: OCI chart + homelab `$values` for the Infisical store, since the chart is generic).
+        homelab `ci` = **`argocd-validate-pins`** proves the pinned chart renders with the values before
+        auto-merge. LIVE (`argocd/platform/openrouter-operator.yaml`).
+      • **image consumed by pods** (agent-base, agent-coordinator) → pinned by version in
+        **`agents/images.env`** (sourced by the session scripts) + `review-reflex.yaml`, off `:latest`
+        (no pullAlways, cacheable, traceable); each build's deploy-pin bumps images.env → pods use it on next
+        spawn (the review-reflex CronJob rolls via the `agent-coordinator` ArgoCD app). PRs: agent-runtime#5,
+        agent-coordinator#4.
+      • **snore-recorder** → rides the Renovate flow but its ansible→Pi deploy stays MANUAL (a dep reaches
+        the Pi only on the next playbook run; repo split + deploy automation is a separate cleanup task).
+      • **homelab** → a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`).
+      Prereqs (done): all agent repos are `github_repository` resources (→ `allow_auto_merge=true`), the
+      `homelab-deploy` App installed on homelab, `DEPLOY_APP_*` scoped to the deploy-opening repos.
+      **Remaining:** merge agent-runtime#5 / agent-coordinator#4; prove one dep bump flows E2E per shape.
+      Relates FU-014/FU-025/FU-041.
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".

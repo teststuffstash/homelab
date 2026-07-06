@@ -1,13 +1,15 @@
 # Deterministic merge path — serialized auto-update + auto-merge (FU-041)
 
-**Status: built (2026-07-03), phases 1–3 committed, pending operator wiring.** Tracked as FU-041 in
-[`../follow-ups.md`](../follow-ups.md). The pieces below are landed as code; what remains is one-time
-operator setup (org secrets, `tofu -chdir=tofu/github apply`, `kubectl apply` the CronJob) — see
-[`../follow-ups.md`](../follow-ups.md) FU-041 for the exact checklist. Artifacts:
-`{sleep-tracking,snore-recorder}/.github/workflows/update-pr-branch.yml` (updater),
-[`../../agents/review-reflex.sh`](../../agents/review-reflex.sh) +
-[`../../agents/coordinator/review-reflex.yaml`](../../agents/coordinator/review-reflex.yaml) (review reflex),
-and the `gh pr merge --auto --squash` arming step in [`../../agents/agent-session.sh`](../../agents/agent-session.sh).
+**Status: DONE + operational (FU-041, proven E2E 2026-07-05; rolled out 2026-07-06).** Tracked in
+[`../follow-ups.md`](../follow-ups.md). Artifacts: the updater + renovate-approve are now **reusable org
+workflows** — [`../../.github/workflows/update-pr-branch.reusable.yml`](../../.github/workflows/update-pr-branch.reusable.yml)
++ [`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml) — with ~3-line
+callers in each agent repo (sleep-tracking, snore-recorder, openrouter-operator, agent-runtime,
+agent-coordinator); the **review reflex** ([`../../agents/review-reflex.sh`](../../agents/review-reflex.sh)
++ [`../../agents/coordinator/review-reflex.yaml`](../../agents/coordinator/review-reflex.yaml)) is now
+**GitOps-managed** by the `agent-coordinator` ArgoCD app (no more `kubectl apply`); the `gh pr merge --auto
+--squash` arming lives in [`../../agents/agent-session.sh`](../../agents/agent-session.sh). Renovate's shared
+classification is in [`../../.github/renovate-global.json`](../../.github/renovate-global.json) (FU-014).
 
 The last leg of the NL→auto-merged pipeline ([`workflow.md`](workflow.md)): how an approved, green
 agent PR actually lands on master — **without an LLM making any merge decision**. LLMs author code

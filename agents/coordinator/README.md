@@ -261,26 +261,31 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 
 ## Bootstrap (one-time)
 
+> **Now GitOps-managed (2026-07-06).** The subsystem manifests — `rbac.yaml` (Namespace + SA + roles),
+> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and
+> `review-reflex.yaml` (the CronJob) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
+> ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a review-reflex
+> image bump) auto-applies — **no manual `kubectl apply`**. The `kubectl apply` commands below are only the
+> pre-ArgoCD / disaster-recovery path. **Only `coordinator-claude` stays imperative** (below) — it's not in
+> git.
+
 ```sh
-# 1. scoped identity (creates the agent-coordinator namespace) + the durable transcript store
-kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
+# ArgoCD applies these (agent-coordinator app); run by hand only for pre-ArgoCD bootstrap / recovery.
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml          # ns + SA + roles
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/transcripts-pvc.yaml
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml     # ESO → coordinator-git
 
-# 2. git token — ESO mints it from the homelab-agents App (needs issues:write granted on the App).
-#    Writes the coordinator-git Secret (key GH_TOKEN), auto-refreshed ~hourly. See §Git token.
-kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml
-
-# 3. subscription token (~1y) — paste-a-code flow works in the jail; still imperative for now
+# subscription token (~1y) — NOT in git, always imperative: paste-a-code flow works in the jail.
 kubectl -n agent-coordinator create secret generic coordinator-claude \
     --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
 ```
 
-The image is built + pushed to `ghcr.io/teststuffstash/agent-coordinator:latest` by CI in the
-[`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo (every push to master,
-à la `agent-base` in `agent-runtime`) — **no manual `docker build`**. After the first build, make that
-ghcr package public (or add an imagePullSecret). `coordinator-git` is now GitOps'd via ESO
-(`git-token.yaml`); only `coordinator-claude` stays imperative — fold it into Infisical/ESO later
-(FU-001).
+The image is built + pushed by CI in the
+[`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
+(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + `review-reflex.yaml`
+(the CronJob, ArgoCD-synced); the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
+is public. `coordinator-git` is GitOps'd via ESO (`git-token.yaml`); only `coordinator-claude` stays
+imperative — fold it into Infisical/ESO later (FU-001).
 
 ## Logs & behaviour analysis
 
