@@ -24,14 +24,15 @@
 #
 # Subcommands:  check | manifest | catch | convert <code> | install | secrets | verify
 #   catch — listens on REDIRECT_PORT, captures the redirect 'code' byte-exact + converts (no copy-paste).
-# Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder"
+# Env (defaults): ORG=teststuffstash  REPOS="sleep-tracking snore-recorder openrouter-operator homelab"
 #   APP_NAME=homelab-merge  CRED_DIR=~/.claude/homelab-github-merge  REDIRECT_PORT=8768
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export GH_PAGER=cat
 
 ORG="${ORG:-teststuffstash}"
-REPOS="${REPOS:-sleep-tracking snore-recorder}"
+# homelab is a deploy TARGET (chart/image bump PRs land here), so its updater needs the App too
+REPOS="${REPOS:-sleep-tracking snore-recorder openrouter-operator homelab}"
 APP_NAME="${APP_NAME:-homelab-merge}"
 CRED_DIR="${CRED_DIR:-$HOME/.claude/homelab-github-merge}"
 REDIRECT_PORT="${REDIRECT_PORT:-8768}"   # differs from agents(8766)/reviewer(8767) so flows coexist
