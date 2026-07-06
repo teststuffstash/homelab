@@ -6,6 +6,12 @@
       "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "platform",
+      "repos": ["openrouter-operator"],
+      "coordinatorModel": "opus",
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
     }
   ]
 }

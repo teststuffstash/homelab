@@ -1,0 +1,31 @@
+# openrouter-operator's FIXER-FLOW infra — the per-project OpenRouterKey (budget key) + agent-git-token
+# (ESO GithubAccessToken) that let the coordinator dispatch a worker to fix an issue in this repo (FU-052).
+# GitOps-managed (sleep-tracking's equivalent is kubectl-applied). Wave 6 — after openrouter-operator
+# (wave 5) provides the OpenRouterKey CRD + ESO/Infisical/ClusterSecretStore are up.
+#
+# NB: per-repo Application. Onboarding a 2nd repo means a 2nd near-identical file — the exact hodge-podge
+# to replace with a declarative "yaml way" (ApplicationSet over agents/fixer/* or the FU-048 AgentStack XRD).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-fixer-openrouter-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: agents/fixer/openrouter-operator
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openrouter-operator
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

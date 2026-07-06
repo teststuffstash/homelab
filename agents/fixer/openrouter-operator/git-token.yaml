@@ -1,0 +1,60 @@
+# Per-project git token for openrouter-operator's coding agent (homelab ADR-081). The low-privilege
+# `homelab-agents` App mints a ~1h installation token scoped to THIS repo, contents+PR write only. Same
+# 3-resource shape as sleep-tracking's, but GitOps-managed (the agent-fixer app) rather than kubectl.
+# ⚠ Prereq: the homelab-agents App must be INSTALLED on openrouter-operator (add it to the App's selected
+# repos — one click). appID/installID are the org-wide values (the token's `repositories:` does the scoping).
+---
+# 1) App private key: Infisical → a k8s Secret the generator reads.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agents-github-app
+  namespace: openrouter-operator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: agents-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}' # un-escape Infisical's literal \n → byte-exact PEM
+  data:
+    - secretKey: pem
+      remoteRef: { key: AGENTS_GH_APP_PRIVATE_KEY }
+---
+# 2) The generator: mint an installation token scoped to THIS repo + contents/PR write + issues read.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: agent-git-token-gen
+  namespace: openrouter-operator
+spec:
+  appID: "4150968" # homelab-agents App id (same as sleep-tracking — org-wide App)
+  installID: "142724430" # the teststuffstash org installation
+  auth:
+    privateKey:
+      secretRef: { name: agents-github-app, key: privateKey }
+  permissions:
+    contents: write
+    pull_requests: write
+    issues: read # the fixer recipe MUST `gh issue view <n>` first
+  repositories:
+    - openrouter-operator # the token can ONLY touch this repo
+---
+# 3) Drive the generator → write the token into the Secret the agent pod reads (key: token).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: agent-git-token
+  namespace: openrouter-operator
+spec:
+  refreshInterval: 45m # token lives ~1h; refresh before expiry
+  target: { name: agent-git-token, creationPolicy: Owner }
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: agent-git-token-gen
