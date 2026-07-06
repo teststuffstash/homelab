@@ -53,18 +53,23 @@ resource "github_actions_organization_secret" "deploy_app_private_key" {
   value       = var.deploy_app_private_key
 }
 
-# Scope both secrets to sleep-tracking ONLY (the non-deprecated way to manage a selected-visibility
-# org secret's allow-list).
+# Which repos' deploy.yaml mints a deploy-App token: sleep-tracking (→ sleep-iac bump PR) and
+# openrouter-operator (→ homelab bump PR). Keep this list TIGHT — the key can deploy (contents+PR write
+# on homelab / sleep-iac), so only repos that actually open a deploy PR should read it (not every CI plane).
+locals {
+  deploy_repos = [github_repository.sleep_tracking.repo_id, github_repository.openrouter_operator.repo_id]
+}
+
 resource "github_actions_organization_secret_repositories" "deploy_app_id" {
   count                   = var.deploy_app_id != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.deploy_app_id[0].secret_name
-  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  selected_repository_ids = local.deploy_repos
 }
 
 resource "github_actions_organization_secret_repositories" "deploy_app_private_key" {
   count                   = var.deploy_app_private_key != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.deploy_app_private_key[0].secret_name
-  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  selected_repository_ids = local.deploy_repos
 }
 
 # homelab isn't managed as a github_repository here (only the app/stack repos are) — read its id so we
@@ -119,14 +124,27 @@ resource "github_actions_organization_secret" "reviewer_app_private_key" {
   value       = var.reviewer_app_private_key
 }
 
+# The renovate-approve reflex runs on every repo that requires an approving review (require_approval=true
+# in var.protected_repos) — the reviewer bot's approval is what lets a Renovate automerge PR complete
+# there. sleep-iac/homelab opt out (CI-only), so they're excluded.
+locals {
+  reviewer_repos = [
+    github_repository.sleep_tracking.repo_id,
+    github_repository.snore_recorder.repo_id,
+    github_repository.openrouter_operator.repo_id,
+    github_repository.agent_runtime.repo_id,
+    github_repository.agent_coordinator.repo_id,
+  ]
+}
+
 resource "github_actions_organization_secret_repositories" "reviewer_app_id" {
   count                   = var.reviewer_app_id != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.reviewer_app_id[0].secret_name
-  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  selected_repository_ids = local.reviewer_repos
 }
 
 resource "github_actions_organization_secret_repositories" "reviewer_app_private_key" {
   count                   = var.reviewer_app_private_key != "" ? 1 : 0
   secret_name             = github_actions_organization_secret.reviewer_app_private_key[0].secret_name
-  selected_repository_ids = [github_repository.sleep_tracking.repo_id]
+  selected_repository_ids = local.reviewer_repos
 }
