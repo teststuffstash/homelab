@@ -1,0 +1,12 @@
+# homelab values for the (generic) openrouter-operator chart. The chart ships secret-store-agnostic
+# defaults (managementSecret.create=false); homelab supplies its Infisical ClusterSecretStore here so the
+# chart renders the ExternalSecret that delivers the OpenRouter MANAGEMENT key. Referenced as
+# $values/argocd/platform/values/openrouter-operator.yaml by argocd/platform/openrouter-operator.yaml.
+managementSecret:
+  create: true
+  name: openrouter-management
+  key: OPENROUTER_MANAGEMENT_KEY
+  externalSecret:
+    refreshInterval: 1h
+    storeRef: { name: infisical, kind: ClusterSecretStore }
+    remoteRef: { key: OPENROUTER_MANAGEMENT_KEY }

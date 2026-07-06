@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# argocd-validate-pins.sh — homelab CI gate. For every ArgoCD Application that pins an OCI Helm chart,
+# argocd-validate-pins.sh — homelab CI gate. For every ArgoCD Application that pins one of OUR OWN OCI
+# Helm charts (ghcr.io/teststuffstash/charts — the deploy-pin targets),
 # prove the pinned version actually RENDERS with the values in this repo. Catches a deploy-pin bump to a
 # chart version whose new REQUIRED value isn't set here — otherwise that deploy PR auto-merges and ArgoCD
 # only fails at sync. Mirrors sleep-iac/scripts/ci.sh. Needs helm + yq (both in homelab's devbox.json).
@@ -34,11 +35,12 @@ while IFS= read -r f; do
       || { echo "   ✗ render FAILED — a required value is likely missing from this repo's values"; exit 1; }
     echo "   ✓ renders"
     rm -rf "$tmp"; trap - EXIT
-  done < <(yq -r '
-      [ (.spec.source // empty) ] + (.spec.sources // [])
-      | map(select(.chart != null and (.repoURL | test("ghcr.io/|^oci://"))))
+  done < <(yq -o=json "$f" | jq -r '
+      select(.kind == "Application")
+      | [ (.spec.source // empty) ] + (.spec.sources // [])
+      | map(select(.chart != null and (.repoURL | test("ghcr.io/teststuffstash/charts"))))
       | .[] | [.repoURL, .chart, .targetRevision, ((.helm.valueFiles // []) | join(","))] | @tsv
-    ' "$f" 2>/dev/null)
+    ')
 done < <(grep -rl 'kind: Application' argocd --include='*.yaml' --include='*.yml' 2>/dev/null || true)
 
 echo "✓ argocd-validate-pins: ${checked} OCI-chart pin(s) render cleanly"
