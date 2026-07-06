@@ -69,7 +69,8 @@ if [ -n "$STACK" ]; then
 fi
 
 NS="agent-coordinator"
-IMAGE="${COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}"
+[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
+IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"
 POD="coordinator-$(date -u +%H%M%S)"
 BRIEF="agents/coordinator/README.md"   # loaded as Claude's appended system prompt
 

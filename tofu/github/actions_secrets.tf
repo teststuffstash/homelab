@@ -53,11 +53,17 @@ resource "github_actions_organization_secret" "deploy_app_private_key" {
   value       = var.deploy_app_private_key
 }
 
-# Which repos' deploy.yaml mints a deploy-App token: sleep-tracking (→ sleep-iac bump PR) and
-# openrouter-operator (→ homelab bump PR). Keep this list TIGHT — the key can deploy (contents+PR write
-# on homelab / sleep-iac), so only repos that actually open a deploy PR should read it (not every CI plane).
+# Which repos' build/deploy mints a deploy-App token to open a bump PR: sleep-tracking (→ sleep-iac),
+# openrouter-operator + agent-runtime + agent-coordinator (→ homelab: chart pin / agents/images.env).
+# Keep TIGHT — the key can deploy (contents+PR write on homelab / sleep-iac), so only repos that open a
+# deploy PR read it (not every CI plane).
 locals {
-  deploy_repos = [github_repository.sleep_tracking.repo_id, github_repository.openrouter_operator.repo_id]
+  deploy_repos = [
+    github_repository.sleep_tracking.repo_id,
+    github_repository.openrouter_operator.repo_id,
+    github_repository.agent_runtime.repo_id,
+    github_repository.agent_coordinator.repo_id,
+  ]
 }
 
 resource "github_actions_organization_secret_repositories" "deploy_app_id" {

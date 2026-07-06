@@ -47,7 +47,8 @@ while [ $# -gt 0 ]; do
 done
 
 NS="$PROJECT"
-IMAGE="${HARNESS_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}"
+[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
+IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 POD="agent-${PROJECT}-$(date -u +%H%M%S)"

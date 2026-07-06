@@ -73,7 +73,8 @@ while [ $# -gt 0 ]; do
 done
 
 NS="agent-coordinator"
-IMAGE="${COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}"   # ships Claude Code + gh wrapper
+[ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
+IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"
 REVIEWER_GIT="${REVIEWER_GIT:-reviewer-git}"   # Secret w/ the review-bot App token — MUST differ from the PR author's App
 POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
