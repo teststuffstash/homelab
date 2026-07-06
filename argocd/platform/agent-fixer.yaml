@@ -1,0 +1,45 @@
+# agent-fixer ApplicationSet — GitOps-manages every repo's FIXER-FLOW infra (per-project OpenRouterKey
+# budget key + agent-git-token ESO GithubAccessToken) from ONE templated set, replacing the per-repo
+# Applications (the "yaml way", FU-052). A **git directory generator** over `agents/fixer/*` emits one
+# Application per repo subdir → onboarding a repo is just adding `agents/fixer/<repo>/` (a dir named for
+# the repo; its manifests declare namespace <repo>). No new per-repo Application file, no shell.
+#
+# Wave 6 (child apps) — after openrouter-operator (wave 5) provides the OpenRouterKey CRD + ESO/Infisical/
+# ClusterSecretStore are up. Registered by the platform root app-of-apps (argocd/README.md).
+# Fuller endgame folds the GitHub-side (repos/labels/rulesets/callers) in too → FU-048 AgentStack XRD.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: agent-fixer
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: https://github.com/teststuffstash/homelab.git
+        revision: master
+        directories:
+          - path: agents/fixer/* # one dir per repo (basename == repo == namespace)
+  template:
+    metadata:
+      name: "agent-fixer-{{.path.basename}}"
+      annotations:
+        argocd.argoproj.io/sync-wave: "6"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/teststuffstash/homelab.git
+        targetRevision: master
+        path: "{{.path.path}}"
+        directory: { recurse: false }
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{.path.basename}}"
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        syncOptions:
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff: { duration: 15s, factor: 2, maxDuration: 5m }
