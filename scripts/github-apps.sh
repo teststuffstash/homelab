@@ -1,58 +1,75 @@
 #!/usr/bin/env bash
 # github-apps.sh — generate docs/github-apps.md: which GitHub Apps are installed on which org repos.
+# App installs are CLICK-ONLY (not tofu), so this discovers the live state. Run OUTSIDE the jail.
 #
-# GitHub App installs are CLICK-ONLY (not managed by tofu/github — see new-agent-repo.sh), so there's no
-# git source of truth for "which app is on which repo". This DISCOVERS the live state from the GitHub API
-# and writes a markdown matrix, so the click-only state is at least documented + diffable.
-#
-# Run OUTSIDE the jail with an ADMIN PAT (needs `admin:org` read — the jail token 403s on
-# /orgs/*/installations). The per-repo enumeration for `selected` installs uses
-# /user/installations/{id}/repositories, which works when the caller is the org owner who installed them.
-#
-#   GH_TOKEN=<admin-pat> ORG=teststuffstash bash scripts/github-apps.sh   # or: devbox run github-apps
+# Auth is two-layer, because a plain admin PAT can list installations but NOT a `selected` install's
+# repos (that needs an installation token):
+#   • org-admin token (KeePass, via gh-admin-token.sh)  → /orgs/{org}/installations + /repos
+#   • per-app INSTALLATION token, minted from the App's private key (JWT), keyed by the installation's
+#     app_id → the cred dir's app-id (the same homelab-github-* dirs github-tf.sh resolves). /installation/
+#     repositories then lists exactly the selected repos. Apps whose key isn't local show "(no local key)".
 set -euo pipefail
 ORG="${ORG:-teststuffstash}"
-OUT="${OUT:-docs/github-apps.md}"
-HERE="$(cd "$(dirname "$0")/.." && pwd)"; OUT="${HERE}/${OUT}"
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="${OUT:-${HERE}/docs/github-apps.md}"
+API="https://api.github.com"
 
-command -v gh >/dev/null || { echo "need gh on PATH (devbox run github-apps, or a shell with gh)"; exit 1; }
-# Org-admin token from the KeePass wallet (same path github-tofu uses), unless one's already exported.
-GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-$(sh "${HERE}/scripts/gh-admin-token.sh")}}"; export GH_TOKEN
-gh api "/orgs/${ORG}/installations" >/dev/null 2>&1 || {
-  echo "ERROR: can't read /orgs/${ORG}/installations — the token needs admin:org (run OUTSIDE the jail)." >&2; exit 1; }
+command -v gh >/dev/null && command -v openssl >/dev/null && command -v jq >/dev/null && command -v curl >/dev/null \
+  || { echo "need gh + openssl + jq + curl (devbox run github-apps)"; exit 1; }
+ADMIN="$(GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" sh "${HERE}/scripts/gh-admin-token.sh")"
+gha() { GH_TOKEN="$ADMIN" gh "$@"; }
+gha api "/orgs/${ORG}/installations" >/dev/null 2>&1 || { echo "ERROR: admin token can't read installations (needs admin:org, run outside the jail)"; exit 1; }
 
-# all org repos = the columns (sorted)
-mapfile -t REPOS < <(gh api "/orgs/${ORG}/repos" --paginate --jq '.[].name' | sort)
+mapfile -t REPOS < <(gha api "/orgs/${ORG}/repos" --paginate --jq '.[].name' | sort)
 
-# installations = the rows:  id \t app_slug \t repository_selection
-INSTALLS="$(gh api "/orgs/${ORG}/installations" --paginate --jq '.installations[] | [.id, .app_slug, .repository_selection] | @tsv')"
+# app_id -> private-key path, from the cred dirs (same roots as github-tf.sh)
+declare -A KEY
+for d in "${CLAUDE_CRED_DIR:-}" "$HOME/.claude" "$HOME/Projects/.claude-data"; do
+  [ -n "$d" ] && [ -d "$d" ] || continue
+  for sub in "$d"/homelab-github-*; do
+    [ -f "$sub/app-id" ] && [ -f "$sub/private-key.pem" ] || continue
+    aid="$(cat "$sub/app-id")"; : "${KEY[$aid]:=$sub/private-key.pem}"
+  done
+done
+
+b64() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+app_jwt() { # $1=app_id $2=keyfile → short-lived RS256 JWT
+  local now h p si; now=$(date +%s)
+  h="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64)"
+  p="$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now-60))" "$((now+300))" "$1" | b64)"; si="$h.$p"
+  printf '%s.%s' "$si" "$(printf '%s' "$si" | openssl dgst -sha256 -sign "$2" -binary | b64)"
+}
 
 declare -A CELL SEL
 APPS=()
-while IFS=$'\t' read -r id slug selection; do
+while IFS=$'\t' read -r id app_id slug selection; do
   [ -n "${slug:-}" ] || continue
   APPS+=("$slug"); SEL["$slug"]="$selection"
   if [ "$selection" = "all" ]; then
-    for r in "${REPOS[@]}"; do CELL["$slug|$r"]=1; done
-  else
-    # best-effort: the org owner running this can usually list a selected install's repos
-    while read -r r; do [ -n "$r" ] && CELL["$slug|$r"]=1; done \
-      < <(gh api "/user/installations/${id}/repositories" --paginate --jq '.repositories[].name' 2>/dev/null || true)
+    for r in "${REPOS[@]}"; do CELL["$slug|$r"]=1; done; continue
   fi
-done <<< "$INSTALLS"
+  if [ -n "${KEY[$app_id]:-}" ]; then
+    jwt="$(app_jwt "$app_id" "${KEY[$app_id]}")"
+    itok="$(curl -sS -X POST -H "Authorization: Bearer $jwt" -H "Accept: application/vnd.github+json" \
+      "${API}/app/installations/${id}/access_tokens" | jq -r '.token // empty')"
+    if [ -n "$itok" ]; then
+      while read -r r; do [ -n "$r" ] && CELL["$slug|$r"]=1; done < <(
+        curl -sS -H "Authorization: Bearer $itok" -H "Accept: application/vnd.github+json" \
+          "${API}/installation/repositories?per_page=100" | jq -r '.repositories[].name')
+    else SEL["$slug"]="selected · token failed"; fi
+  else
+    SEL["$slug"]="selected · no local key"
+  fi
+done < <(gha api "/orgs/${ORG}/installations" --paginate --jq '.installations[] | [.id, .app_id, .app_slug, .repository_selection] | @tsv')
 
 {
-  echo "# GitHub App installations"
-  echo
-  echo "_Generated by \`scripts/github-apps.sh\` on $(date -u +%Y-%m-%d). App installs are click-only (NOT tofu), so this is discovered live — regenerate after installing/removing an App. ✓ = installed; a \`selected\` row with no ✓ means the admin PAT couldn't enumerate its repos (run as the org owner)._"
-  echo
+  echo "# GitHub App installations"; echo
+  echo "_Generated by \`scripts/github-apps.sh\` on $(date -u +%Y-%m-%d) — click-only (not tofu), regenerate after any install/removal. ✓ = installed. \`selected · no local key\` = the App's private key isn't in a homelab-github-* cred dir here, so its repos couldn't be enumerated (run where the key lives)._"; echo
   printf '| App (scope) |'; for r in "${REPOS[@]}"; do printf ' %s |' "$r"; done; printf '\n'
   printf '%s' '|---|'; for _ in "${REPOS[@]}"; do printf '%s' '---|'; done; printf '\n'
-  # sort app rows for a stable diff
   while read -r a; do
     printf '| `%s` (%s) |' "$a" "${SEL[$a]}"
-    for r in "${REPOS[@]}"; do [ -n "${CELL[$a|$r]:-}" ] && printf ' ✓ |' || printf '  |'; done
-    printf '\n'
+    for r in "${REPOS[@]}"; do [ -n "${CELL[$a|$r]:-}" ] && printf ' ✓ |' || printf '  |'; done; printf '\n'
   done < <(printf '%s\n' "${APPS[@]}" | sort -u)
 } > "$OUT"
 echo "→ wrote ${OUT} (${#APPS[@]} apps × ${#REPOS[@]} repos)"

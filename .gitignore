@@ -17,3 +17,6 @@
 /esphome/.flash-venv/
 /esphome/.platformio/
 /.obsidian/
+
+# Generated live from the GitHub API (click-only app installs) — not a git artifact.
+/docs/github-apps.md
