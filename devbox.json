@@ -49,6 +49,9 @@
         "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""
       ],
+      "github-apps": [
+        "bash scripts/github-apps.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
