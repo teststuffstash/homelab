@@ -57,12 +57,18 @@ resource "github_actions_organization_secret" "deploy_app_private_key" {
 # openrouter-operator + agent-runtime + agent-coordinator (→ homelab: chart pin / agents/images.env).
 # Keep TIGHT — the key can deploy (contents+PR write on homelab / sleep-iac), so only repos that open a
 # deploy PR read it (not every CI plane).
+# Only sleep-tracking/snore-recorder/sleep-iac are managed github_repository RESOURCES; the rest are read
+# via data sources — we just need the repo_id to scope a secret (no need to adopt the repo into tofu).
+data "github_repository" "openrouter_operator" { full_name = "${var.org}/openrouter-operator" }
+data "github_repository" "agent_runtime" { full_name = "${var.org}/agent-runtime" }
+data "github_repository" "agent_coordinator" { full_name = "${var.org}/agent-coordinator" }
+
 locals {
   deploy_repos = [
     github_repository.sleep_tracking.repo_id,
-    github_repository.openrouter_operator.repo_id,
-    github_repository.agent_runtime.repo_id,
-    github_repository.agent_coordinator.repo_id,
+    data.github_repository.openrouter_operator.repo_id,
+    data.github_repository.agent_runtime.repo_id,
+    data.github_repository.agent_coordinator.repo_id,
   ]
 }
 
@@ -137,9 +143,9 @@ locals {
   reviewer_repos = [
     github_repository.sleep_tracking.repo_id,
     github_repository.snore_recorder.repo_id,
-    github_repository.openrouter_operator.repo_id,
-    github_repository.agent_runtime.repo_id,
-    github_repository.agent_coordinator.repo_id,
+    data.github_repository.openrouter_operator.repo_id,
+    data.github_repository.agent_runtime.repo_id,
+    data.github_repository.agent_coordinator.repo_id,
   ]
 }
 
