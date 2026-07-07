@@ -64,13 +64,6 @@ _Last updated: 2026-07-07._
 
 ## CI & dependency automation
 
-- [ ] **FU-054** — **ci-runner VM has pending-replace drift**: the committed cloud-init template
-      (`tofu/templates/ci-runner-cloud-init.yaml.tftpl`, adds `qemu-guest-agent`) was never
-      applied — `tofu plan` wants to replace `proxmox_virtual_environment_vm.ci_runner[0]` + its
-      snippet (surfaced 2026-07-07 during the github-exporter apply, which was `-target`ed around
-      it). Replacing the VM is fine (stateless by design, ADR-082) — do it deliberately, not as a
-      side effect of an unrelated apply.
-
 - [ ] **FU-014** — **Renovate (auto-update PRs).** **BUILT (2026-07-04), pending operator bootstrap.**
       **Self-hosted** (not the Mend App): a scheduled runner `.github/workflows/renovate.yaml` on the ARC
       tier runs as a dedicated **`homelab-renovate` App** and autodiscovers the repos it's installed on,
