@@ -150,7 +150,9 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
     file_id      = proxmox_download_file.debian_cloud[0].id
     interface    = "scsi0"
     size         = var.ci_runner_disk_gb
-    file_format  = "qcow2"
+    # local-lvm is LVM-thin → raw is the ONLY format; Proxmox silently ignores qcow2 here,
+    # so declaring it drifts forever (surfaced closing FU-054).
+    file_format  = "raw"
   }
 
   network_device {
