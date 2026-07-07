@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-054**.
+  Next free id: **FU-055**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -63,6 +63,13 @@ _Last updated: 2026-07-07._
       seam. Prereq for the FU-025 per-stack IaC-repo model.
 
 ## CI & dependency automation
+
+- [ ] **FU-054** — **ci-runner VM has pending-replace drift**: the committed cloud-init template
+      (`tofu/templates/ci-runner-cloud-init.yaml.tftpl`, adds `qemu-guest-agent`) was never
+      applied — `tofu plan` wants to replace `proxmox_virtual_environment_vm.ci_runner[0]` + its
+      snippet (surfaced 2026-07-07 during the github-exporter apply, which was `-target`ed around
+      it). Replacing the VM is fine (stateless by design, ADR-082) — do it deliberately, not as a
+      side effect of an unrelated apply.
 
 - [ ] **FU-014** — **Renovate (auto-update PRs).** **BUILT (2026-07-04), pending operator bootstrap.**
       **Self-hosted** (not the Mend App): a scheduled runner `.github/workflows/renovate.yaml` on the ARC
