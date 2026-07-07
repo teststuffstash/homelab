@@ -1,0 +1,16 @@
+# Prometheus picks up ServiceMonitors cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false
+# in tofu/monitoring.tf). As an ArgoCD-applied CR this has no CRD-at-plan-time problem — the
+# reason the tofu iteration used a static scrape config instead.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: github-exporter
+  labels:
+    app: github-exporter
+spec:
+  selector:
+    matchLabels:
+      app: github-exporter
+  endpoints:
+    - port: http-metrics
+      interval: 60s

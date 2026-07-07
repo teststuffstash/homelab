@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github-exporter-pat-bootstrap.sh — mint + wire the token for the in-cluster GitHub poller
-# (tofu/github-exporter.tf → tofu/templates/github-exporter.py), which feeds workflow-run
+# (argocd/resources/github-exporter/ — ArgoCD-managed), which feeds workflow-run
 # conclusions + enhanced-billing usage into Prometheus (alerts replace GitHub's failure emails).
 #
 # Unlike its App-bootstrap siblings (github-{agents,reviewer,merge}-app-bootstrap.sh) this is a
@@ -43,7 +43,7 @@ cmd_check() {
                   ($INFISICAL_KEY). ESO then materialises monitoring/github-exporter-token
                   within its 1h refreshInterval (kick it: kubectl annotate externalsecret ...).
   3. 'verify'  -> exercises the token against both APIs, then checks the in-cluster pod.
-  Deploy order doesn't matter: tofu apply first just parks the pod on the missing Secret.
+  Deploy order doesn't matter: syncing the app first just parks the pod on the missing Secret.
 EOF
 }
 
@@ -112,7 +112,7 @@ cmd_verify() {
     -o jsonpath='ExternalSecret: {.status.conditions[?(@.type=="Ready")].status}{"\n"}' || true
   devbox run --quiet -- kubectl "${KC[@]}" -n monitoring get deploy github-exporter \
     -o jsonpath='Deployment ready: {.status.readyReplicas}/{.spec.replicas}{"\n"}' || true
-  echo "  Green ⇒ Prometheus target 'github-exporter' turns up within ~2 min; alerts: monitoring.tf ▸ github group."
+  echo "  Green ⇒ Prometheus target 'github-exporter' turns up within ~2 min; alerts: argocd/resources/github-exporter/prometheusrule.yaml."
 }
 
 case "${1:-check}" in

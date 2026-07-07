@@ -1,0 +1,15 @@
+# Scraped via the ServiceMonitor next to this file; the Service name becomes the Prometheus
+# job label ("github-exporter") — the alert exprs in prometheusrule.yaml depend on it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-exporter
+  labels:
+    app: github-exporter
+spec:
+  selector:
+    app: github-exporter
+  ports:
+    - name: http-metrics
+      port: 9504
+      targetPort: 9504

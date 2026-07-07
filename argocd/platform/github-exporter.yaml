@@ -1,0 +1,29 @@
+# github-exporter — the ONE GitHub polling mechanism (workflow-run conclusions + billing →
+# Prometheus; alerts replace GitHub's failure emails). Kustomize app (configMapGenerator
+# hash-rolls the poller pod on script edits). Wave 6: needs the ESO ClusterSecretStore (wave 3)
+# for the PAT ExternalSecret; the monitoring CRDs/namespace come from tofu's
+# kube-prometheus-stack, outside ArgoCD. Deliberately NOT its own repo: no image/chart to
+# release — the deployable unit is a ConfigMap, so this repo's sync IS the deploy pipeline.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: github-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/github-exporter
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

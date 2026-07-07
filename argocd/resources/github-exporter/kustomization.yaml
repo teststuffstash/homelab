@@ -1,0 +1,25 @@
+# github-exporter — the ONE GitHub polling mechanism (CI conclusions + billing → Prometheus).
+# Migrated from tofu (2026-07-07, minimize-tofu direction): plain k8s resources with no
+# bootstrap-order role, so ArgoCD owns them. configMapGenerator hash-names roll the exporter
+# pod on script edits (what the tofu checksum annotation used to do) and version the dashboard.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - externalsecret.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
+
+configMapGenerator:
+  - name: github-exporter-script
+    files:
+      - github-exporter.py
+  - name: grafana-dashboard-github
+    files:
+      - github.json=dashboard-github.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces

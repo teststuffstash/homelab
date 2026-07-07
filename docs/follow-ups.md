@@ -363,9 +363,6 @@ _Last updated: 2026-07-07._
       to a Prometheus `ALERTS{alertname=~"Longhorn.*"}` query.
 - [ ] **FU-030** — Loki 7-day retention: revisit after watching usage
       (`argocd/resources/loki/loki-config.yaml`).
-- [ ] **FU-053** — Grafana dashboard for the GitHub poller (`tofu/github-exporter.tf`): CI
-      pass/fail + duration by repo/runner-tier, billing quantity/net by SKU. Alerts are live;
-      the dashboard is the missing "me"-facing view.
 
 ## Hardware & nodes
 

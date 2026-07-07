@@ -9,15 +9,15 @@ webhook receiver (rejected: docs/agents/workflow.md, polling-first) and Labbs/
 github-actions-exporter bills via the pre-enhanced-platform endpoints GitHub removed. Adding
 future GitHub data = one more collect_*() here, not another deployment/token.
 
-Runs from a ConfigMap on a stock python image (see tofu/github-exporter.tf) — stdlib only, no
-state (each poll re-reads the full window; a restart just re-polls). Repos are discovered from
+Runs from a ConfigMap on a stock python image (deployment.yaml next to this file; ArgoCD-managed,
+kustomize's configMapGenerator hash rolls the pod on edits) — stdlib only, no state (each poll
+re-reads the full window; a restart just re-polls). Repos are discovered from
 the org each poll, so new repos need no config. Budget: (repos + 2) requests per poll ≈ a few
 hundred/hour against the 5000/h PAT limit.
 
 Config (env): GITHUB_TOKEN (fine-grained PAT: org Administration:read for billing + repo
 Actions:read + Metadata:read, all repos — scripts/github-exporter-pat-bootstrap.sh), GITHUB_ORG,
-POLL_INTERVAL_SECONDS
-(120), RUN_WINDOW_HOURS (24 — also bounds series cardinality: one series per run in window).
+POLL_INTERVAL_SECONDS (120), RUN_WINDOW_HOURS (24 — also bounds series cardinality: one series per run in window).
 """
 
 import json
