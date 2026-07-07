@@ -48,6 +48,19 @@ spec:
             summary: "GitHub Actions hosted minutes at 80% of included quota"
             description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
 
+        # Held Actions/Packages storage, derived: GB-hr is cumulative month-to-date, so its
+        # 24h increase ÷ 24 = average GB currently held. Quota is 2 GB (the UI's "used" is the
+        # month AVERAGE, so a spike shows there far too late — 2026-07-07 case: 6.2 GB of dead
+        # image artifacts read as "1.2 GB used" while tripling the quota pace). Alert at 1.6 GB.
+        - alert: GithubStorageHeldHigh
+          expr: sum(increase(github_billing_usage{unit=~"(?i)gigabytehour.*"}[24h])) / 24 > 1.6
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitHub Actions/Packages storage at 80% of quota pace"
+            description: '~{{ $value | printf "%.1f" }} GB held over the last day (2 GB included as a monthly average). Find it: per-repo github_billing_usage{unit=~"(?i)gigabytehour.*"}, then the repo''s /actions/artifacts — usually forgotten upload-artifact output (set retention-days, or push images to ghcr instead).'
+
         - alert: GithubExporterDown
           expr: up{job="github-exporter"} == 0
           for: 15m
