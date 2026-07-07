@@ -93,6 +93,7 @@ Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuf
 - `scripts/` — wrappers + one-shots: `tf.sh` / `keepass-{env,init}.sh` (secret vars for tofu),
   `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`,
   `github-{runner,agents,reviewer,merge,deploy}-*bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
+  `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
   `coordinator-logs.sh`/`render-transcript.py`, `follow-ups-lint.sh`, `aws-*.sh` (one-shot audit/cleanup).

@@ -100,18 +100,26 @@ resource "helm_release" "kube_prometheus_stack" {
         }]
         # Mount the HA token secret at /etc/prometheus/secrets/ha-token/token.
         secrets = [kubernetes_secret.ha_token.metadata[0].name]
-        # The ONE extra scrape job: Home Assistant's Prometheus endpoint.
-        additionalScrapeConfigs = [{
-          job_name        = "home-assistant"
-          scrape_interval = "60s"
-          metrics_path    = "/api/prometheus"
-          scheme          = "http"
-          authorization = {
-            type             = "Bearer"
-            credentials_file = "/etc/prometheus/secrets/ha-token/token"
-          }
-          static_configs = [{ targets = ["${local.ha_lb_ip}:8123"] }]
-        }]
+        # Extra scrape jobs: Home Assistant's Prometheus endpoint + the in-cluster GitHub
+        # poller (github-exporter.tf) — static configs, not ServiceMonitors, so a from-scratch
+        # boot needs no monitoring CRDs at plan time.
+        additionalScrapeConfigs = [
+          {
+            job_name        = "home-assistant"
+            scrape_interval = "60s"
+            metrics_path    = "/api/prometheus"
+            scheme          = "http"
+            authorization = {
+              type             = "Bearer"
+              credentials_file = "/etc/prometheus/secrets/ha-token/token"
+            }
+            static_configs = [{ targets = ["${local.ha_lb_ip}:8123"] }]
+          },
+          {
+            job_name       = "github-exporter"
+            static_configs = [{ targets = ["github-exporter.monitoring.svc:9504"] }]
+          },
+        ]
         storageSpec = {
           volumeClaimTemplate = {
             spec = {
@@ -343,6 +351,62 @@ resource "helm_release" "kube_prometheus_stack" {
               "for"         = "30m"
               "labels"      = { severity = "warning" }
               "annotations" = { summary = "Longhorn node storage low", description = "{{ $labels.node }} Longhorn storage is over 85% used for 30m — volumes may fail to schedule or rebuild." }
+            }
+          ]
+        }]
+      }
+
+      # GitHub CI + billing (github-exporter.tf) — replaces GitHub's failed-workflow emails.
+      # Only master/main failures alert: PR-branch CI red is the agent breaker/fixer loop's
+      # domain (docs/agents/), and armed PRs can't merge red anyway (require_passed_checks).
+      github = {
+        groups = [{
+          name = "github"
+          rules = [
+            {
+              "alert"       = "GithubWorkflowRunFailed"
+              "expr"        = "(time() - github_workflow_run_updated_timestamp{conclusion=~\"failure|startup_failure|timed_out\", branch=~\"master|main\"}) < 3600"
+              "for"         = "0m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed", description = "Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run." }
+            },
+            {
+              # METERED usage only — the Team-plan seat license ($4/mo) is a subscription and
+              # never shows in the usage API. Metered spend should stay $0 inside included usage
+              # (hosted minutes discounted to $0, self-hosted runners and public ghcr free; the
+              # org's 2026-07 statement: gross $0.54 / billed $0). Net >$1 month-to-date = a
+              # surprise (runaway private-repo cron, storage overage) — catch it pre-invoice.
+              "alert"       = "GithubPaidUsage"
+              "expr"        = "sum(github_billing_net_amount) > 1"
+              "for"         = "1h"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "GitHub is billing real money this month", description = "Month-to-date net spend is $${{ $value | printf \"%.2f\" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount)." }
+            },
+            {
+              # Included-quota burn — the org's plan includes 3000 hosted min/month (UI 2026-07:
+              # "179 min used / 3,000 min included"); alert at 80%. unit=min.* matches the API's
+              # minute unit and excludes the GB-hr storage SKUs under the same actions product.
+              "alert"       = "GithubActionsMinutesHigh"
+              "expr"        = "sum(github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"}) > 2400"
+              "for"         = "1h"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "GitHub Actions hosted minutes at 80% of included quota", description = "{{ $value | printf \"%.0f\" }} hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})." }
+            },
+            {
+              "alert"       = "GithubExporterDown"
+              "expr"        = "up{job=\"github-exporter\"} == 0"
+              "for"         = "15m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "github-exporter is not being scraped", description = "The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed." }
+            },
+            {
+              # Fine-grained PATs expire (≤1y) — this is the rotation reminder. Also catches a
+              # revoked token or a GitHub API outage while the pod itself stays healthy.
+              "alert"       = "GithubExporterStale"
+              "expr"        = "time() - github_exporter_last_success_timestamp > 1800"
+              "for"         = "30m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "github-exporter polls are failing", description = "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)." }
             }
           ]
         }]

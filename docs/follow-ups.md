@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-053**.
+  Next free id: **FU-054**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -17,7 +17,7 @@ tracker.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
 
-_Last updated: 2026-07-05._
+_Last updated: 2026-07-07._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -356,6 +356,9 @@ _Last updated: 2026-07-05._
       to a Prometheus `ALERTS{alertname=~"Longhorn.*"}` query.
 - [ ] **FU-030** — Loki 7-day retention: revisit after watching usage
       (`argocd/resources/loki/loki-config.yaml`).
+- [ ] **FU-053** — Grafana dashboard for the GitHub poller (`tofu/github-exporter.tf`): CI
+      pass/fail + duration by repo/runner-tier, billing quantity/net by SKU. Alerts are live;
+      the dashboard is the missing "me"-facing view.
 
 ## Hardware & nodes
 
