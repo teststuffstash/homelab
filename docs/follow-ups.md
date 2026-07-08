@@ -65,13 +65,6 @@ _Last updated: 2026-07-08._
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
       public repos), applied outside the jail. `oracle-iac` stays private permanently.
-- [ ] **FU-056** — **Oracle stack bring-up** (scaffolded 2026-07-08, sleep-shaped —
-      `docs/oracle-iac.md` has the strict order): ~~github-tofu apply (repos)~~ (done 2026-07-08:
-      repos+rulesets+labels live; hit the known new-private-repo 422 → untainted, see
-      `scripts/new-agent-repo.sh` step 2) → App installs (click-only) → push the seeded
-      `oracle-iac` content → merge homelab (AppProject + ns) → targeted `tofu -chdir=tofu apply`
-      (repo credential + root `oracle` app) → verify Synced. Delete this item when the root app
-      is Synced and the order-sensitive steps are done.
 
 ## CI & dependency automation
 

@@ -31,7 +31,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
           "oracle" ─► github.com/teststuffstash/oracle-iac//apps  (the oracle stack, sleep-shaped
                       from day one — docs/oracle-iac.md. PRIVATE repo → read via the
                       repo-oracle-iac-github credential. AppProject + namespace in
-                      argocd/platform/oracle-{project,namespaces}.yaml. Bring-up: FU-056.)
+                      argocd/platform/oracle-{project,namespaces}.yaml.)
 ```
 
 ## Secret flow

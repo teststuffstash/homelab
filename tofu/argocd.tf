@@ -276,9 +276,9 @@ resource "helm_release" "argocd_apps" {
       # repo-oracle-iac-github credential). Children in oracle-iac/apps/ set `project: oracle`
       # (argocd/platform/oracle-project.yaml). apps/ is a seeded skeleton until the fleet
       # publishes its first chart — an empty directory source syncs clean with zero resources.
-      # ORDER MATTERS on first apply: oracle-iac must exist on GitHub with the seeded content
-      # BEFORE this root app lands (FU-056) — pointing it at a missing repo just errors, but
-      # never flip a root app's source ahead of its content (docs/sleep-iac.md §Risks).
+      # (Bring-up completed 2026-07-08 in the docs/oracle-iac.md order — content pushed before
+      # this root app landed; never flip a root app's source ahead of its content,
+      # docs/sleep-iac.md §Risks.)
       oracle = {
         namespace = "argocd"
         project   = "default"
