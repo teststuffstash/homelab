@@ -11,8 +11,8 @@ there it reconciles this directory from git. Decision background: `docs/secrets.
 
 ```
 tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db, infisical-pg-app,
-       │                     repo-homelab-github, repo-sleep-tracking-github
-       └──applies──► TWO root Applications (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
+       │                     repo-homelab-github, repo-oracle-iac-github
+       └──applies──► THREE root Applications (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
                           │
           "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
              wave 0  cnpg-operator · eso-operator · arc-controller
@@ -28,6 +28,10 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
                       own public IaC repo — app infra Workspaces/ESO + the OCI-chart ingester, each
                       project: sleep. FU-025. The `sleep` AppProject + its namespaces live here in
                       argocd/platform/{sleep-project,sleep-namespaces}.yaml.)
+          "oracle" ─► github.com/teststuffstash/oracle-iac//apps  (the oracle stack, sleep-shaped
+                      from day one — docs/oracle-iac.md. PRIVATE repo → read via the
+                      repo-oracle-iac-github credential. AppProject + namespace in
+                      argocd/platform/oracle-{project,namespaces}.yaml. Bring-up: FU-056.)
 ```
 
 ## Secret flow
@@ -37,6 +41,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 | `infisical-secrets` (ENCRYPTION_KEY, AUTH_SECRET) | tofu ← KeePass | not in git |
 | `infisical-db` (DB_CONNECTION_URI), `infisical-pg-app` | tofu ← KeePass | not in git |
 | `repo-homelab-github` (ArgoCD git cred for the private homelab repo) | tofu ← KeePass | not in git |
+| `repo-oracle-iac-github` (ArgoCD git cred for the private oracle-iac repo) | tofu ← KeePass | not in git |
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
 

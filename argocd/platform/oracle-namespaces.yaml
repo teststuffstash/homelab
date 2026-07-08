@@ -1,0 +1,10 @@
+# Platform-precreated namespace for the oracle tenant (docs/oracle-iac.md; pattern from
+# sleep-namespaces.yaml). homelab owns namespace lifecycle; the `oracle` AppProject only
+# *allowlists* it as a destination, and the child apps run CreateNamespace=false — the tenant
+# cannot spawn arbitrary namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oracle-fleet
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the oracle child apps deploy into it

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-055**.
+  Next free id: **FU-057**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -17,7 +17,7 @@ tracker.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
 
-_Last updated: 2026-07-07._
+_Last updated: 2026-07-08._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -61,6 +61,17 @@ _Last updated: 2026-07-07._
       (`tofu/github/`, admin PAT outside the jail), HTTPS names (OPNsense ansible), or its own
       ArgoCD AppProject/namespace. Decide per resource: Crossplane provider vs a thin homelab PR
       seam. Prereq for the FU-025 per-stack IaC-repo model.
+- [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
+      planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
+      `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
+      public repos), applied outside the jail. `oracle-iac` stays private permanently.
+- [ ] **FU-056** — **Oracle stack bring-up** (scaffolded 2026-07-08, sleep-shaped —
+      `docs/oracle-iac.md` has the strict order): ~~github-tofu apply (repos)~~ (done 2026-07-08:
+      repos+rulesets+labels live; hit the known new-private-repo 422 → untainted, see
+      `scripts/new-agent-repo.sh` step 2) → App installs (click-only) → push the seeded
+      `oracle-iac` content → merge homelab (AppProject + ns) → targeted `tofu -chdir=tofu apply`
+      (repo credential + root `oracle` app) → verify Synced. Delete this item when the root app
+      is Synced and the order-sensitive steps are done.
 
 ## CI & dependency automation
 

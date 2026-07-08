@@ -1,0 +1,34 @@
+# The `oracle` AppProject — the tenancy boundary for the oracle stack (docs/oracle-iac.md), same
+# shape as `sleep` (sleep-project.yaml, the reference: docs/sleep-iac.md). Every child Application
+# in the oracle-iac repo (apps/) sets `project: oracle`. Applied by the `platform` app-of-apps so it
+# exists before the root `oracle` Application (tofu/argocd.tf) points its children here.
+#
+# Delta vs sleep: oracle-iac is PRIVATE (permanently), so ArgoCD reads it via the
+# `repo-oracle-iac-github` credential (tofu/argocd.tf) instead of anonymously.
+#
+# What it allows — deliberately narrow:
+#  - sourceRepos: ONLY the oracle-iac repo + the ghcr OCI chart registry (the fleet's charts land
+#    there once its deploy pipeline exists). The app repo (oracle-fleet) is never an ArgoCD source.
+#  - destinations: ONLY the oracle-fleet namespace, in-cluster.
+#  - clusterResourceWhitelist: ONLY the Crossplane `Workspace` (cluster-scoped; the stack will own
+#    its Garage buckets the ADR-076 way). `Namespace` intentionally absent → the tenant cannot
+#    create namespaces; they're platform-precreated (oracle-namespaces.yaml) and child apps run
+#    CreateNamespace=false.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: oracle
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the child apps that reference it
+spec:
+  description: Oracle stack tenant (oracle-fleet), deployed from the private oracle-iac repo.
+  sourceRepos:
+    - https://github.com/teststuffstash/oracle-iac.git
+    - ghcr.io/teststuffstash/charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: oracle-fleet
+  clusterResourceWhitelist:
+    - group: tf.upbound.io
+      kind: Workspace

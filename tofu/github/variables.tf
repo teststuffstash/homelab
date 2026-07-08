@@ -41,6 +41,8 @@ variable "protected_repos" {
     agent-coordinator   = { required_checks = ["ci"] }
     agent-runtime       = { required_checks = ["ci"] }
     openrouter-operator = { required_checks = ["ci"] }
+    oracle-fleet        = { required_checks = ["ci"] }
+    oracle-iac          = { required_checks = ["ci"], require_approval = false } # same shape as sleep-iac: deploy-bump PRs gate on CI only
     sleep-iac           = { required_checks = ["ci"], require_approval = false }
     sleep-tracking      = { required_checks = ["ci"] }
     # snore-recorder = { required_checks = ["ci"] }   # enable once its PR `ci` check is confirmed

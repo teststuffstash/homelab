@@ -133,6 +133,13 @@ Next (in order):
      (run \`tofu -chdir=tofu/github fmt\` if the spacing needs tidying)
   2. Apply OUTSIDE the jail (admin-PAT wallet):   devbox run github-tofu apply
      → creates/adopts the repo, its ruleset, and (if labels) the agent/* labels.
+     ⚠ Known 422 on CREATING a --private repo: the org disallows private-repo forking, so the
+       provider's create-time PATCH fails ("This organization does not allow private repository
+       forking") AFTER the repo is already fully created+configured — and leaves the resource
+       TAINTED. Do NOT re-apply while tainted (archive_on_destroy would archive it, then the
+       recreate name-collides). Instead:  tofu -chdir=tofu/github untaint github_repository.$RES
+       then re-plan (expect no repo diff; ordinary later updates PATCH fine — seen 2026-07-08 on
+       oracle-fleet/oracle-iac).
   3. CLICK-ONLY — install the Apps on '$NAME' (App scopes need NO change; you only add the repo to
      each installation's repository access). docs/github-setup.md §"click-only":
        https://github.com/organizations/$ORG/settings/installations

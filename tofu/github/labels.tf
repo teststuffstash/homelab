@@ -43,7 +43,7 @@ locals {
   # repos.tf (auto-merge etc.) without them, so this list is separate from the repos.tf resources.
   # (openrouter-operator/agent-runtime/agent-coordinator currently have 0 issues → 0 existing labels, so
   # the first apply CREATEs them clean — nothing to import.)
-  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "openrouter-operator", "agent-runtime", "agent-coordinator", "homelab"]
+  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "openrouter-operator", "agent-runtime", "agent-coordinator", "homelab", "oracle-fleet", "oracle-iac"]
 
   repo_labels = {
     for pair in setproduct(local.label_repos, keys(local.agent_labels)) :

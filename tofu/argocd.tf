@@ -144,6 +144,24 @@ resource "kubernetes_secret" "argocd_repo_snore_recorder" {
 # sleep-iac repo, so ArgoCD no longer reads the private sleep-tracking.git — the child apps source
 # sleep-iac anonymously. The credential is unused; deleted here + from the argocd/README secret table.)
 
+# Read credential for oracle-iac — unlike sleep-iac it is PRIVATE (permanently), so the root
+# `oracle` app + its children can't read it anonymously. Same org PAT as the other credentials;
+# if the PAT is fine-grained/repo-scoped, oracle-iac must be added to its repository list.
+resource "kubernetes_secret" "argocd_repo_oracle_iac" {
+  metadata {
+    name      = "repo-oracle-iac-github"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type     = "git"
+    url      = "https://github.com/teststuffstash/oracle-iac.git"
+    username = "git"
+    password = var.argocd_github_pat
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.
@@ -243,6 +261,29 @@ resource "helm_release" "argocd_apps" {
         project   = "default"
         source = {
           repoURL        = "https://github.com/teststuffstash/sleep-iac.git"
+          targetRevision = "master"
+          path           = "apps"
+          directory      = { recurse = false }
+        }
+        destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+        syncPolicy = {
+          automated   = { prune = true, selfHeal = true }
+          syncOptions = ["CreateNamespace=true", "ApplyOutOfSyncOnly=true"]
+        }
+      }
+      # Root app-of-apps for the oracle stack — same three-layer shape as `sleep` above
+      # (docs/oracle-iac.md), sourced from the PRIVATE oracle-iac repo (read via the
+      # repo-oracle-iac-github credential). Children in oracle-iac/apps/ set `project: oracle`
+      # (argocd/platform/oracle-project.yaml). apps/ is a seeded skeleton until the fleet
+      # publishes its first chart — an empty directory source syncs clean with zero resources.
+      # ORDER MATTERS on first apply: oracle-iac must exist on GitHub with the seeded content
+      # BEFORE this root app lands (FU-056) — pointing it at a missing repo just errors, but
+      # never flip a root app's source ahead of its content (docs/sleep-iac.md §Risks).
+      oracle = {
+        namespace = "argocd"
+        project   = "default"
+        source = {
+          repoURL        = "https://github.com/teststuffstash/oracle-iac.git"
           targetRevision = "master"
           path           = "apps"
           directory      = { recurse = false }
