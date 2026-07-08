@@ -1,0 +1,27 @@
+# otel-collector — OTLP sink for the claude-code agent roles (A0 of
+# docs/agents/observability-and-retro.md): coordinator/reviewer pods export metrics+logs on the
+# OTel GenAI conventions → Loki + Prometheus. Wave 6 like github-exporter: the monitoring
+# CRDs/namespace (ServiceMonitor) come from tofu's kube-prometheus-stack, outside ArgoCD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/otel-collector
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

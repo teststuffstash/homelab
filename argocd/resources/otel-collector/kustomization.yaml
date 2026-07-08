@@ -1,0 +1,16 @@
+# otel-collector — the A0 "standard rail" of the agent observability design
+# (docs/agents/observability-and-retro.md): claude-code roles export OTLP → this collector →
+# Loki (logs) + Prometheus (metrics). configMapGenerator hash-rolls the pod on config edits.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+
+configMapGenerator:
+  - name: otel-collector-config
+    files:
+      - otel-config.yaml

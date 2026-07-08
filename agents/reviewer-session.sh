@@ -61,13 +61,14 @@ shift 2 || true
 
 # Pro/Max subscription ⇒ sonnet (a strong reviewer, free at margin). Override for a high-stakes PR
 # (e.g. --model opus) or a metered run. Rubric path is relative to the project repo root.
-REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"
+REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)            REPO_SLUG="$2"; shift 2;;   # owner/name or full URL; default teststuffstash/<project>
     --model)           MODEL="$2"; shift 2;;
     --rubric)          RUBRIC="$2"; shift 2;;      # project-relative path to the review system prompt
     --permission-mode) PERM_MODE="$2"; shift 2;;
+    --round)           ROUND="$2"; shift 2;;       # review iteration on this PR (transcript prefix reviewer-r<N>)
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -106,10 +107,43 @@ If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-r
 Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments.
 
 STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve if nothing blocks, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the blockers (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
-exec claude -p "\$PROMPT" --model ${MODEL} \$RUBRIC_FLAG --permission-mode ${PERM_MODE} --output-format json
 PREP
 )
-ARGS="[\"bash\",\"-lc\",$(printf '%s' "$PREP" | jq -Rs .)]"
+
+# §A1 transcript capture + run: claude's result JSON goes to a file (not the live stream), the
+# upload runs (its log lines join the "preamble" the launcher passes through), and the result is
+# cat'ed LAST so the launcher's "JSON = from the first ^{ line" parse stays intact. Single-quoted
+# heredoc: pure pod-side — values arrive via pod env (PROJECT/PR_NUMBER/REVIEW_ROUND/MODEL/…), the
+# S3 key via same-ns secretKeyRef (agents/coordinator/garage-workspace.yaml). Upload failures are
+# loud but never fail the review (exit code stays claude's).
+RUNPART=$(cat <<'SNIP'
+upload_transcripts() {
+  [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
+  command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
+  TS=$(date -u +%Y%m%dT%H%M%SZ)
+  P="s3://${AGENT_TS_BUCKET}/${PROJECT}/pr-${PR_NUMBER}/reviewer-r${REVIEW_ROUND}-${TS}"
+  export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
+  jq -n --arg role reviewer --arg project "$PROJECT" --arg task "pr-${PR_NUMBER}" --arg round "$REVIEW_ROUND" \
+        --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg rc "${RC:-}" \
+        '{role:$role, project:$project, task:$task, round:($round|tonumber), model:$model,
+          session_key:$key, pod:$pod, exit_status:($rc|tonumber? // $rc),
+          files:["result.json"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
+  [ -s /tmp/result.json ] && s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/result.json "$P/result.json" || echo "transcripts: result.json upload skipped/FAILED (non-fatal)"
+  find "$HOME/.claude/projects" -name '*.jsonl' 2>/dev/null | while read -r f; do
+    s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "$P/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"
+  done
+  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "$P/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
+  echo "transcripts: uploaded → $P"
+}
+set +e
+claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
+RC=$?
+upload_transcripts
+cat /tmp/result.json
+exit $RC
+SNIP
+)
+ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s' "$PREP" "$RUNPART" | jq -Rs .)]"
 
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
@@ -127,6 +161,42 @@ spec:
       env:
         - name: HOME
           value: "/home/node"
+        # Run context consumed by the in-pod RUNPART (claude flags + the transcript manifest).
+        - name: PROJECT
+          value: "${PROJECT}"
+        - name: PR_NUMBER
+          value: "${PR}"
+        - name: REVIEW_ROUND
+          value: "${ROUND}"
+        - name: MODEL
+          value: "${MODEL}"
+        - name: PERM_MODE
+          value: "${PERM_MODE}"
+        # A0 standard rail: OTLP metrics+logs → the in-cluster collector (Loki/Prometheus).
+        - name: CLAUDE_CODE_ENABLE_TELEMETRY
+          value: "1"
+        - name: OTEL_METRICS_EXPORTER
+          value: "otlp"
+        - name: OTEL_LOGS_EXPORTER
+          value: "otlp"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "${OTLP_ENDPOINT:-http://otel-collector.monitoring.svc.cluster.local:4318}"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=claude-code,role=reviewer,project=${PROJECT},pr=${PR}"
+        # §A1 transcript capture: write-only key for the agent-transcripts bucket (same-ns Secret,
+        # written by the Crossplane Workspace). optional:true → reviews run before it exists.
+        - name: AGENT_TS_ENDPOINT
+          value: "http://garage.garage.svc.cluster.local:3900"
+        - name: AGENT_TS_BUCKET
+          value: "agent-transcripts"
+        - name: AGENT_TS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true }
+        - name: AGENT_TS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
         # Operator subscription (Pro/Max): the ~1y token from \`claude setup-token\`. Do NOT also set
         # ANTHROPIC_API_KEY — it would take auth precedence over the subscription.
         - name: CLAUDE_CODE_OAUTH_TOKEN

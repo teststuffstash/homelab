@@ -1,0 +1,16 @@
+# Prometheus picks up ServiceMonitors cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false
+# in tofu/monitoring.tf — same as github-exporter). This surfaces the claude-code GenAI metrics
+# (tokens, cost, latency) that agent pods push over OTLP.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otel-collector
+  labels:
+    app: otel-collector
+spec:
+  selector:
+    matchLabels:
+      app: otel-collector
+  endpoints:
+    - port: http-metrics
+      interval: 60s

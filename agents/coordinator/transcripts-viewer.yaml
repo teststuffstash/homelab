@@ -1,0 +1,122 @@
+# Transcript browser (docs/agents/observability-and-retro.md §A2, P1):
+# claude-code-history-viewer in server mode (upstream: https://github.com/jhlee0409/claude-code-history-viewer
+# — no published image, so we build+push ghcr.io/teststuffstash/cchv-server from the upstream tag via
+# agent-runtime .github/workflows/build-viewer-image.yaml; PIN the tag here, never :latest).
+#
+# INTERNAL ONLY: transcripts contain repo content (some repos private). Reached at
+# https://transcripts.local.teststuff.net via the standard internal path — OPNsense HAProxy VIP →
+# this Service's BGP LoadBalancer VIP (ansible/group_vars/opnsense.yml). --no-auth: the LAN boundary
+# is the auth boundary, same as other internal UIs; nothing here is ever exposed via the tunnel.
+#
+# The sync sidecar mirrors the bucket and maps CLAUDE-FORMAT JSONL (coordinator + reviewer sessions)
+# into the ~/.claude/projects/<dir>/ layout the viewer scans, one <project>--<task> dir per task.
+# GOOSE worker sessions are a different format and are NOT converted in v1 — for those, use the
+# manifest's Grafana query + the raw run.log in the bucket (a goose→claude converter is a later
+# nice-to-have, not a blocker).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transcripts-viewer
+  namespace: agent-coordinator
+  labels:
+    app: transcripts-viewer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: transcripts-viewer
+  template:
+    metadata:
+      labels:
+        app: transcripts-viewer
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: viewer
+          image: ghcr.io/teststuffstash/cchv-server:v1.18.0
+          command: ["cchv-server"]
+          args: ["--serve", "--host", "0.0.0.0", "--port", "3727", "--no-auth"]
+          ports:
+            - { name: http, containerPort: 3727 }
+          volumeMounts:
+            # The viewer scans ~/.claude/projects (its Docker user is `cchv`).
+            - { name: claude-data, mountPath: /home/cchv/.claude }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits:   { cpu: "1",   memory: "512Mi" }
+        - name: bucket-sync
+          # Coordinator image: bash + s5cmd. Keep the tag in lockstep with images.env.
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -u
+              command -v s5cmd >/dev/null 2>&1 || { echo "s5cmd not in this image — bump the tag"; exit 1; }
+              export AWS_ACCESS_KEY_ID="$READER_ID" AWS_SECRET_ACCESS_KEY="$READER_SECRET" AWS_REGION=garage
+              mkdir -p /data/claude/projects /mirror
+              while true; do
+                s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" sync "s3://agent-transcripts/*" /mirror/ \
+                  || echo "bucket sync failed (retrying next tick)"
+                # <proj>/<task>/<role>-rN-<ts>/<session>.jsonl → projects/<proj>--<task>/<session>.jsonl
+                find /mirror -name '*.jsonl' \( -path '*/coordinator-*' -o -path '*/reviewer-*' \) | while read -r f; do
+                  rel="${f#/mirror/}"
+                  proj="${rel%%/*}"; rest="${rel#*/}"; task="${rest%%/*}"
+                  d="/data/claude/projects/${proj}--${task}"
+                  mkdir -p "$d" && cp -u "$f" "$d/" || echo "map failed: $f"
+                done
+                sleep 300
+              done
+          env:
+            - name: HOME
+              value: "/home/node"
+            - name: AGENT_TS_ENDPOINT
+              value: "http://garage.garage.svc.cluster.local:3900"
+            # Read-only bucket key (Workspace conn secret). Not optional — parks until it exists.
+            - name: READER_ID
+              valueFrom:
+                secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id }
+            - name: READER_SECRET
+              valueFrom:
+                secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key }
+          volumeMounts:
+            - { name: claude-data, mountPath: /data/claude }
+            - { name: mirror, mountPath: /mirror }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits:   { cpu: "500m", memory: "256Mi" }
+      volumes:
+        - name: claude-data
+          emptyDir: {}
+        - name: mirror
+          emptyDir: {}
+---
+# LAN VIP for the viewer (BGP-advertised; HAProxy terminates TLS for transcripts.local.teststuff.net
+# and proxies here — the VIP/hostname pair is registered in SERVICES.md).
+apiVersion: v1
+kind: Service
+metadata:
+  name: transcripts-viewer
+  namespace: agent-coordinator
+  labels:
+    app: transcripts-viewer
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.19"
+spec:
+  type: LoadBalancer
+  selector:
+    app: transcripts-viewer
+  ports:
+    - { name: http, port: 3727, targetPort: 3727 }
