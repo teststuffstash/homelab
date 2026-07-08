@@ -99,8 +99,40 @@ if [ -z "$RUN_CMD" ] && [ -n "$SEED" ]; then
   SEED_SUFFIX=' "$(cat /work/coord-seed)"'
 fi
 
+# §A1 transcript capture (docs/agents/observability-and-retro.md): mirror the session's NEW
+# transcript JSONL (vs the /work/session-start marker) from the transcripts PVC to the
+# agent-transcripts bucket. Defined as a FUNCTION snippet used two ways: headless pods run it
+# in-pod after claude (the pod runs to completion — an exec from outside can't reach it anymore);
+# interactive pods stay up (sleep infinity), so the launcher's exit trap execs it. Best-effort by
+# design: a failed upload never fails the session; the nightly transcripts-sync CronJob is the
+# crash net. Single-quoted heredoc: everything resolves from POD env at upload time.
+UPLOAD_FN=$(cat <<'SNIP'
+upload_transcripts() {
+  [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
+  command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
+  FILES=$(find /home/node/.claude/projects -name '*.jsonl' -newer /work/session-start 2>/dev/null)
+  [ -n "$FILES" ] || { echo "transcripts: no new session files — nothing to upload"; return 0; }
+  TS=$(date -u +%Y%m%dT%H%M%SZ)
+  PREFIX="s3://${AGENT_TS_BUCKET}/${STACK:-homelab}/tick-${TS}/coordinator-r1-${TS}"
+  export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
+  jq -n --arg role coordinator --arg project "${STACK:-homelab}" --arg task "tick-${TS}" \
+        --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg files "$FILES" \
+        '{role:$role, project:$project, task:$task, round:1, model:$model, session_key:$key, pod:$pod,
+          files:($files|split("\n")|map(sub(".*/";""))), grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
+  for f in $FILES; do
+    s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "${PREFIX}/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"
+  done
+  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "${PREFIX}/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
+  echo "transcripts: uploaded → ${PREFIX}"
+}
+SNIP
+)
+
 if [ -n "$RUN_CMD" ]; then
-  WRAPPED="${PREP}; exec claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .)"
+  # Headless: claude runs to completion, then the pod itself uploads (no exec window afterwards).
+  WRAPPED="${PREP}
+${UPLOAD_FN}
+set +e; claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .); RC=\$?; upload_transcripts; exit \$RC"
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
@@ -205,38 +237,18 @@ EOF
 echo "→ waiting for ${POD} (clone)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=180s || true
 
-# §A1 transcript capture (docs/agents/observability-and-retro.md): when this launcher exits, mirror
-# the session's NEW transcript JSONL (vs the /work/session-start marker) from the transcripts PVC to
-# the agent-transcripts bucket — from inside the pod, which holds the write-only key + s5cmd.
-# Best-effort by design: a failed upload never fails the session, and a crashed/killed launcher is
-# covered by the nightly transcripts-sync CronJob (agents/coordinator/transcripts-sync.yaml).
-# Single-quoted heredoc: everything resolves from POD env at upload time, not launcher env.
-UPLOAD_SNIPPET=$(cat <<'SNIP'
-set -u
-[ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; exit 0; }
-command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; exit 0; }
-FILES=$(find /home/node/.claude/projects -name '*.jsonl' -newer /work/session-start 2>/dev/null)
-[ -n "$FILES" ] || { echo "transcripts: no new session files — nothing to upload"; exit 0; }
-TS=$(date -u +%Y%m%dT%H%M%SZ)
-PREFIX="s3://${AGENT_TS_BUCKET}/${STACK:-homelab}/tick-${TS}/coordinator-r1-${TS}"
-export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
-jq -n --arg role coordinator --arg project "${STACK:-homelab}" --arg task "tick-${TS}" \
-      --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg files "$FILES" \
-      '{role:$role, project:$project, task:$task, round:1, model:$model, session_key:$key, pod:$pod,
-        files:($files|split("\n")|map(sub(".*/";""))), grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
-for f in $FILES; do
-  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "${PREFIX}/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"
-done
-s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "${PREFIX}/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
-echo "transcripts: uploaded → ${PREFIX}"
-SNIP
-)
-upload_transcripts() {
-  "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "$UPLOAD_SNIPPET" \
-    || echo "→ transcript upload skipped (pod gone or upload failed — the nightly sync covers it)"
-}
-trap 'exit 130' INT TERM   # convert signals to a normal exit so the EXIT trap below still runs
-trap upload_transcripts EXIT
+# Interactive sessions: the pod stays up (sleep infinity), so when THIS launcher exits (user left
+# claude / detached), exec the upload function in the pod. Headless pods upload in-pod instead —
+# their container has already run to completion by the time the launcher exits.
+if [ -z "$RUN_CMD" ]; then
+  upload_transcripts_via_exec() {
+    "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "${UPLOAD_FN}
+upload_transcripts" \
+      || echo "→ transcript upload skipped (pod gone or upload failed — the nightly sync covers it)"
+  }
+  trap 'exit 130' INT TERM   # convert signals to a normal exit so the EXIT trap below still runs
+  trap upload_transcripts_via_exec EXIT
+fi
 
 if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true

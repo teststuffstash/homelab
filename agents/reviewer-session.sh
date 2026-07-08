@@ -110,40 +110,49 @@ STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh p
 PREP
 )
 
-# §A1 transcript capture + run: claude's result JSON goes to a file (not the live stream), the
-# upload runs (its log lines join the "preamble" the launcher passes through), and the result is
-# cat'ed LAST so the launcher's "JSON = from the first ^{ line" parse stays intact. Single-quoted
-# heredoc: pure pod-side — values arrive via pod env (PROJECT/PR_NUMBER/REVIEW_ROUND/MODEL/…), the
-# S3 key via same-ns secretKeyRef (agents/coordinator/garage-workspace.yaml). Upload failures are
-# loud but never fail the review (exit code stays claude's).
-RUNPART=$(cat <<'SNIP'
+# §A1 transcript capture: the upload function + an EXIT trap are installed BEFORE the prep — so a
+# failed clone/checkout (set -e) still uploads a manifest recording the attempt (the design's
+# "trap, so failures upload too"). Single-quoted heredoc: pure pod-side — values arrive via pod env
+# (PROJECT/PR_NUMBER/REVIEW_ROUND/MODEL/…), the S3 key via same-ns secretKeyRef
+# (agents/coordinator/garage-workspace.yaml). Upload failures are loud but never fail the review.
+UPLOADER=$(cat <<'SNIP'
 upload_transcripts() {
   [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
   command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
   TS=$(date -u +%Y%m%dT%H%M%SZ)
   P="s3://${AGENT_TS_BUCKET}/${PROJECT}/pr-${PR_NUMBER}/reviewer-r${REVIEW_ROUND}-${TS}"
+  RC_VAL="$(cat /tmp/rc 2>/dev/null || true)"
   export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
   jq -n --arg role reviewer --arg project "$PROJECT" --arg task "pr-${PR_NUMBER}" --arg round "$REVIEW_ROUND" \
-        --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg rc "${RC:-}" \
+        --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg rc "${RC_VAL}" \
         '{role:$role, project:$project, task:$task, round:($round|tonumber), model:$model,
           session_key:$key, pod:$pod, exit_status:($rc|tonumber? // $rc),
           files:["result.json"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
-  [ -s /tmp/result.json ] && s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/result.json "$P/result.json" || echo "transcripts: result.json upload skipped/FAILED (non-fatal)"
+  [ -s /tmp/result.json ] && { s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/result.json "$P/result.json" || echo "transcripts: result.json upload FAILED (non-fatal)"; }
   find "$HOME/.claude/projects" -name '*.jsonl' 2>/dev/null | while read -r f; do
     s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "$P/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"
   done
   s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "$P/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
   echo "transcripts: uploaded → $P"
 }
+trap upload_transcripts EXIT
+SNIP
+)
+# The run tail: claude's result JSON goes to a file (not the live stream), the upload runs (its log
+# lines join the "preamble" the launcher passes through), and the result is cat'ed LAST so the
+# launcher's "JSON = from the first ^{ line" parse stays intact. Exit code stays claude's.
+RUNPART=$(cat <<'SNIP'
 set +e
 claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
 RC=$?
+echo "$RC" > /tmp/rc
+trap - EXIT
 upload_transcripts
 cat /tmp/result.json
 exit $RC
 SNIP
 )
-ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s' "$PREP" "$RUNPART" | jq -Rs .)]"
+ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s' "$UPLOADER" "$PREP" "$RUNPART" | jq -Rs .)]"
 
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
