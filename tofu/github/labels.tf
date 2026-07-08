@@ -37,13 +37,6 @@ locals {
     # missing label makes a relabel HALF-APPLY and corrupt state (learned live on sleep-tracking#18).
     "major"                = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
-    # Track lanes (oracle-fleet specs/TRACKS.md): exclusive directory ownership per coordinator
-    # track. Single-coordinator mode today; the labels future-proof parallel coordinators.
-    # Pre-created by hand on oracle-fleet/oracle-iac 2026-07-08 — import before apply (see header).
-    "track/chassis" = { color = "1d76db", description = "Lane: chassis/, scripts/, deps, ci.yaml — the shared-file service lane" }
-    "track/ingest"  = { color = "0e8a16", description = "Lane: mcps/*/ingest + fixture growth" }
-    "track/server"  = { color = "5319e7", description = "Lane: mcps/*/server + gateway" }
-    "track/deploy"  = { color = "fbca04", description = "Lane: chart/, deploy workflow, oracle-iac" }
   }
 
   # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in
@@ -52,15 +45,40 @@ locals {
   # the first apply CREATEs them clean — nothing to import.)
   label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "openrouter-operator", "agent-runtime", "agent-coordinator", "homelab", "oracle-fleet", "oracle-iac"]
 
-  repo_labels = {
-    for pair in setproduct(local.label_repos, keys(local.agent_labels)) :
-    "${pair[0]}::${pair[1]}" => {
-      repo        = pair[0]
-      name        = pair[1]
-      color       = local.agent_labels[pair[1]].color
-      description = local.agent_labels[pair[1]].description
-    }
+  # Track-lane labels are per-STACK, not global (oracle-fleet specs/TRACKS.md): exclusive
+  # directory ownership per coordinator track — meaningless on repos outside the stack, so scoped.
+  # Pre-created by hand on both oracle repos 2026-07-08 — import before apply (see header):
+  #   for r in oracle-fleet oracle-iac; do for l in chassis ingest server deploy; do
+  #     tofu -chdir=tofu/github import "github_issue_label.agent[\"$r::track/$l\"]" "$r:track/$l"
+  #   done; done
+  track_labels = {
+    "track/chassis" = { color = "1d76db", description = "Lane: chassis/, scripts/, deps, ci.yaml — the shared-file service lane" }
+    "track/ingest"  = { color = "0e8a16", description = "Lane: mcps/*/ingest + fixture growth" }
+    "track/server"  = { color = "5319e7", description = "Lane: mcps/*/server + gateway" }
+    "track/deploy"  = { color = "fbca04", description = "Lane: chart/, deploy workflow, oracle-iac" }
   }
+  track_label_repos = ["oracle-fleet", "oracle-iac"]
+
+  repo_labels = merge(
+    {
+      for pair in setproduct(local.label_repos, keys(local.agent_labels)) :
+      "${pair[0]}::${pair[1]}" => {
+        repo        = pair[0]
+        name        = pair[1]
+        color       = local.agent_labels[pair[1]].color
+        description = local.agent_labels[pair[1]].description
+      }
+    },
+    {
+      for pair in setproduct(local.track_label_repos, keys(local.track_labels)) :
+      "${pair[0]}::${pair[1]}" => {
+        repo        = pair[0]
+        name        = pair[1]
+        color       = local.track_labels[pair[1]].color
+        description = local.track_labels[pair[1]].description
+      }
+    }
+  )
 }
 
 resource "github_issue_label" "agent" {
