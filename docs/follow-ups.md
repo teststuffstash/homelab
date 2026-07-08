@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-060**.
+  Next free id: **FU-061**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -210,6 +210,17 @@ _Last updated: 2026-07-08._
       dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
+- [ ] **FU-060** — **`coordinator-git` token scope + `homelab-agents` App installation must cover ALL
+      stack repos.** Discovered live proving FU-045 (PR #11): the coordinator-git `GithubAccessToken`
+      (`agents/coordinator/git-token.yaml` `repositories:`) is scoped to only `sleep-tracking` +
+      `snore-recorder`, so the coordinator pod's `GH_TOKEN` (`homelab-agents[bot]`) **cannot resolve** the
+      private `oracle-iac`/`oracle-fleet` repos — the FU-045 clones fail non-fatally and, more importantly,
+      the coordinator can't list/label/merge any oracle work at all. Two halves: **(external, operator)**
+      install the `homelab-agents` App on the private `oracle-*` repos (org-admin — the jail PAT gets 403
+      listing installations); **(in-repo)** THEN add `oracle-iac`, `oracle-fleet` (and the other stack repos
+      the coordinator iterates but is missing: `sleep-iac`, `openrouter-operator`) to `git-token.yaml`
+      `repositories:`. Order matters — adding a repo the installation lacks makes ESO's token generation 422
+      and breaks the LIVE coordinator token, so the App-install must land first. Relates FU-045/FU-048.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
       not enforced).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was

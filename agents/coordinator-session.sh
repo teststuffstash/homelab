@@ -111,7 +111,9 @@ done
 if [ -n "$CLONE_STEPS" ]; then
   PREP="${PREP}; echo '→ gh auth (for private stack repos):'; gh auth status 2>&1 | head -3 || echo '⚠ gh not authed — private stack repos may fail to clone'${CLONE_STEPS}"
 fi
-PREP="${PREP}; cd /work/${MAIN_REPO}"
+# cd into the stack's main repo — but if its clone FAILED (private repo the token can't reach yet),
+# fall back to /work/homelab rather than dying under `set -e`: a missing repo must never kill the tick.
+PREP="${PREP}; cd /work/${MAIN_REPO} 2>/dev/null || { echo \"⚠ main repo ${MAIN_REPO} not cloned — falling back to cwd /work/homelab\"; cd /work/homelab; }"
 
 # Interactive seed (--tick/--seed): drop the prompt into a pod file at clone time, then attach with it
 # as claude's initial positional arg (`claude … "$(cat /work/coord-seed)"` = interactive, seeded). The
@@ -289,7 +291,7 @@ else
   # attach is a separate exec that can outrun the clone). Poll for the brief file so we never attach
   # `claude --append-system-prompt-file ${BRIEF}` before the clone has written it.
   "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "until [ -f ${BRIEF_PATH} ]; do sleep 0.5; done" 2>/dev/null || true
-  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO}; exec claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
+  ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -lc 'cd /work/${MAIN_REPO} 2>/dev/null || cd /work/homelab; exec claude ${COMMON_FLAGS}${SEED_SUFFIX}'"
   echo "→ coordinator pod ${POD} ready (brief: ${BRIEF}; model: ${MODEL}${SEED:+; seeded})."
   if [ -n "$NO_ATTACH" ]; then
     echo "→ attach the interactive coordinator from a real terminal:"
@@ -297,6 +299,6 @@ else
     echo "  remove when done:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
   else
     echo "  exit leaves the pod up; remove with:  kubectl -n ${NS} delete pod ${POD}"
-    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"'; exec claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
+    "$KUBECTL" $KUBE -n "$NS" exec -it "${POD}" -- bash -lc 'cd /work/'"${MAIN_REPO}"' 2>/dev/null || cd /work/homelab; exec claude '"${COMMON_FLAGS}${SEED_SUFFIX}"
   fi
 fi
