@@ -51,7 +51,7 @@ spec:
             limits:   { cpu: "1",   memory: "512Mi" }
         - name: bucket-sync
           # Coordinator image: bash + s5cmd. Keep the tag in lockstep with images.env.
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g24480c99a3ea
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
           command: ["bash", "-lc"]
           args:
             - |
