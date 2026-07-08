@@ -37,6 +37,13 @@ locals {
     # missing label makes a relabel HALF-APPLY and corrupt state (learned live on sleep-tracking#18).
     "major"                = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
+    # Track lanes (oracle-fleet specs/TRACKS.md): exclusive directory ownership per coordinator
+    # track. Single-coordinator mode today; the labels future-proof parallel coordinators.
+    # Pre-created by hand on oracle-fleet/oracle-iac 2026-07-08 — import before apply (see header).
+    "track/chassis" = { color = "1d76db", description = "Lane: chassis/, scripts/, deps, ci.yaml — the shared-file service lane" }
+    "track/ingest"  = { color = "0e8a16", description = "Lane: mcps/*/ingest + fixture growth" }
+    "track/server"  = { color = "5319e7", description = "Lane: mcps/*/server + gateway" }
+    "track/deploy"  = { color = "fbca04", description = "Lane: chart/, deploy workflow, oracle-iac" }
   }
 
   # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in
