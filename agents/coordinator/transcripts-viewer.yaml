@@ -36,7 +36,9 @@ spec:
         - name: viewer
           image: ghcr.io/teststuffstash/cchv-server:v1.18.0
           command: ["cchv-server"]
-          args: ["--serve", "--host", "0.0.0.0", "--port", "3727", "--no-auth"]
+          # --allow-unsafe-no-auth: cchv refuses --no-auth on a non-loopback bind without it. The
+          # unauthenticated bind is intentional — the LAN is the auth boundary (never tunneled).
+          args: ["--serve", "--host", "0.0.0.0", "--port", "3727", "--no-auth", "--allow-unsafe-no-auth"]
           ports:
             - { name: http, containerPort: 3727 }
           volumeMounts:
