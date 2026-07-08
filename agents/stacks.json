@@ -12,6 +12,12 @@
       "repos": ["openrouter-operator"],
       "coordinatorModel": "opus",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+    },
+    {
+      "name": "oracle",
+      "repos": ["oracle-iac", "oracle-fleet"],
+      "coordinatorModel": "sonnet",
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
     }
   ]
 }
