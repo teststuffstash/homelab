@@ -50,7 +50,8 @@ locals {
   # Pre-created by hand on both oracle repos 2026-07-08 — import before apply (see header):
   # (via the wrapper — bare `tofu` misses the TF_VAR_*/admin-token assembly of scripts/github-tf.sh):
   #   for r in oracle-fleet oracle-iac; do for l in chassis ingest server deploy; do
-  #     devbox run github-tofu import "github_issue_label.agent[\"$r::track/$l\"]" "$r:track/$l"
+  #     devbox run github-tofu import "github_issue_label.agent[\"${r}::track/${l}\"]" "${r}:track/${l}"
+  #   (braces matter: in zsh, unbraced `$r:track` parses `:t` as a csh modifier and eats it)
   #   done; done
   track_labels = {
     "track/chassis" = { color = "1d76db", description = "Lane: chassis/, scripts/, deps, ci.yaml — the shared-file service lane" }
