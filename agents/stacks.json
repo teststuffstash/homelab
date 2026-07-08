@@ -1,21 +1,24 @@
 {
-  "_comment": "TEMPORARY platform-side stand-in for a per-stack AgentStack claim. TARGET (FU-045/FU-048, docs/agents/platform-and-stacks.md): each stack's -iac repo OWNS this as a Crossplane `AgentStack` claim (its repos + model tiers + tools + git workflow + review rubric = the stack's POLICY); homelab publishes the XRD/Composition that renders the coordinator gate/CronJob + review-reflex + RBAC (the MECHANISM). Kept claim-shaped so the migration is a lift, not a rewrite — coordinator-scan.sh reads this via one swap-point function that later becomes `kubectl get agentstacks`.",
+  "_comment": "TEMPORARY platform-side stand-in for a per-stack AgentStack claim. TARGET (FU-045/FU-048, docs/agents/platform-and-stacks.md): each stack's -iac repo OWNS this as a Crossplane `AgentStack` claim (its repos + mainRepo + model tiers + tools + git workflow + review rubric = the stack's POLICY); homelab publishes the XRD/Composition that renders the coordinator gate/CronJob + review-reflex + RBAC (the MECHANISM). Kept claim-shaped so the migration is a lift, not a rewrite — coordinator-scan.sh reads this via one swap-point function that later becomes `kubectl get agentstacks`. `mainRepo` is stack POLICY too: the coordinator clones ALL `repos` into /work/<repo> and runs with its cwd in `mainRepo`, so that repo's CLAUDE.md + specs load naturally (the platform MECHANISM — the brief — is still loaded from /work/homelab). Defaults to \"homelab\" when a stack's deploy/agent knowledge still lives in homelab docs.",
   "stacks": [
     {
       "name": "sleep",
       "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
+      "mainRepo": "homelab",
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash"
     },
     {
       "name": "platform",
       "repos": ["openrouter-operator"],
+      "mainRepo": "homelab",
       "coordinatorModel": "opus",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash"
     },
     {
       "name": "oracle",
       "repos": ["oracle-iac", "oracle-fleet"],
+      "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash"
     }

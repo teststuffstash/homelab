@@ -238,13 +238,17 @@ devbox run coordinator-session -- --run-tick
 > a schedule) will use — graduating to autonomy is a **scheduler swap, not a behavior change**. Edit the
 > wording in one place and both follow.
 
-> **Scope note (evolving — FU-045).** The pod clones *homelab* today, but a coordinator instance is
-> really scoped to a **stack**: the platform (homelab) **plus that stack's repos**. Since FU-025 a
-> stack's deploy truth lives in its own `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator"
-> context is homelab + sleep-iac + the app repos — and a *different* stack (e.g. `idp`) is a different
-> context (homelab + idp's repos). "The coordinator runs on cloned homelab" is thus no longer the whole
-> story; generalizing the single homelab clone into a per-stack context (possibly one coordinator per
-> stack) is **FU-045**.
+> **Scope note (partially landed — FU-045).** A coordinator instance is scoped to a **stack**: the
+> platform (homelab) **plus that stack's repos**. Since FU-025 a stack's deploy truth lives in its own
+> `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is homelab + sleep-iac + the
+> app repos — and a *different* stack is a different context. **Landed:** `coordinator-session.sh`
+> **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its **cwd in the stack's
+> `--main-repo`** (`agents/stacks.json` `mainRepo`: oracle → `oracle-fleet`, sleep/platform → `homelab`),
+> so that repo's `CLAUDE.md` + specs load as natural cwd context while the brief (this file, the platform
+> *mechanism*) is still loaded by absolute path from `/work/homelab`. The clones are **read-only
+> reference** — the coordinator's only writes stay labels/comments/merge-state via `gh`; a write-tiers
+> model (touch a stack repo directly) needs its own ADR (**FU-059**). **Still deferred:** folding this
+> into the `AgentStack` CRD + running one coordinator per stack is **FU-045/FU-048**.
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
 worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via

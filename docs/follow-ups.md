@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-059**.
+  Next free id: **FU-060**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -203,6 +203,13 @@ _Last updated: 2026-07-08._
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. Needs FU-057's ledger; first run hand-supervised.
+- [ ] **FU-059** — **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
+      stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
+      only writes are labels/comments/merge-state via `gh`. A future tier could let the coordinator write
+      *directly* to a stack repo (open a PR from the clone, push a trivial fix, seed a spec) instead of always
+      dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
+      budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
+      FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
       not enforced).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
@@ -311,8 +318,13 @@ _Last updated: 2026-07-08._
       [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md). **Ran live (2026-07-05):**
       the gate found sleep-tracking#18, printed the scoped `--tick` command, and the scoped opus coordinator
       drove the FU-047 major lane E2E. Also added an **orphan backstop** (gate reports un-armed/unclassified
-      dep PRs — caught sleep-tracking#14/#15). Remaining for full FU-045: cloning the `-iac` repo into
-      context + one-coordinator-per-stack are the **FU-048** (XRD) scope; the scheduled tick is **FU-050**.
+      dep PRs — caught sleep-tracking#14/#15). **Second brick (2026-07-08):** `coordinator-session.sh` now
+      **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its cwd in the stack's
+      `--main-repo` (`stacks.json` `mainRepo`: oracle → `oracle-fleet`, sleep/platform → `homelab`), so the
+      main repo's `CLAUDE.md` + specs load as natural cwd context (brief still absolute-pathed from
+      `/work/homelab`); `coordinator-scan.sh` passes `--main-repo`. Clones are read-only reference (a direct
+      write tier is **FU-059**). Remaining for full FU-045: one-coordinator-per-stack + the `AgentStack` claim
+      are the **FU-048** (XRD) scope; the scheduled tick is **FU-050**.
 - [ ] **FU-048** — **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
       their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
       gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
