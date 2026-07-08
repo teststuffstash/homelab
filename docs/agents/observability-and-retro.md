@@ -35,9 +35,10 @@ The irreplaceable artifact is the transcript. Everything else (dashboards, retro
 - **Session replay is a product category** (AgentOps time-travel replay; Laminar transcript view +
   SQL-over-traces; **Langfuse** = the leading MIT self-hosted option: sessions, traces, scores,
   evals). Considered and **deliberately not adopted now**: self-hosted Langfuse needs
-  Postgres + ClickHouse + Redis — three stateful platform services for a one-person fleet,
-  against ADR-080's "durable = git+S3". Bucket + viewer + Grafana covers the need; revisit only
-  if analysis outgrows Grafana.
+  Postgres + ClickHouse + Redis. Postgres is a non-issue (CNPG is LIVE — a per-app `Cluster` CR,
+  SERVICES.md/ADR-046), but **ClickHouse + Redis are two new stateful platform services** for a
+  one-person fleet, and transcripts' durable home should stay git+S3 (ADR-080). Bucket + viewer +
+  Grafana covers the need; revisit only if analysis outgrows Grafana.
 - **Devin productized exactly our Part B**: *Session Insights* (analyzes completed sessions →
   actionable recommendations) + *Knowledge* (org-wide lessons, **user-approved before they
   persist**) + *Playbooks* (successful sessions distilled into reusable procedures). Their
