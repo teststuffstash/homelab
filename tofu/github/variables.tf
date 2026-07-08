@@ -35,13 +35,19 @@ variable "protected_repos" {
     # approvals" rule on a merge (only OrganizationAdmin does), so a bypass can't make the App's merge
     # go through — dropping the requirement is the correct fix, and matches "gate the bump with CI".
     require_approval = optional(bool, true)
+    # require_code_owner_review=true → PRs touching CODEOWNERS-matched paths additionally need a
+    # review from a code OWNER. The reviewer bot's approval is NOT a code-owner review (the bot isn't
+    # in CODEOWNERS), so such PRs block on the human — the intended spec gate. PRs touching NO owned
+    # path are unaffected: bot approval + green CI still auto-merge. Only meaningful where
+    # require_approval=true (the rule rides the required-approval ruleset's pull_request block).
+    require_code_owner_review = optional(bool, false)
   }))
   default = {
     homelab             = { required_checks = ["ci"], require_approval = false } # CI-gated only (like sleep-iac): deploy-pin bumps auto-merge on ci-green, no approver; not a fixer-target
     agent-coordinator   = { required_checks = ["ci"] }
     agent-runtime       = { required_checks = ["ci"] }
     openrouter-operator = { required_checks = ["ci"] }
-    oracle-fleet        = { required_checks = ["ci"] }
+    oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true } # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
     oracle-iac          = { required_checks = ["ci"], require_approval = false } # same shape as sleep-iac: deploy-bump PRs gate on CI only
     sleep-iac           = { required_checks = ["ci"], require_approval = false }
     sleep-tracking      = { required_checks = ["ci"] }

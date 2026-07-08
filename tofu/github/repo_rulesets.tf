@@ -81,6 +81,9 @@ resource "github_repository_ruleset" "required_approval" {
       dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
       require_last_push_approval        = false
       required_review_thread_resolution = false
+      # Per-repo opt-in (oracle-fleet): PRs touching CODEOWNERS paths (/specs/, /.agents/) block on a
+      # code-owner (human) review — the bot's approval doesn't satisfy it. No-owned-path PRs unaffected.
+      require_code_owner_review = each.value.require_code_owner_review
     }
   }
 }
