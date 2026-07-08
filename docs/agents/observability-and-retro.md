@@ -26,7 +26,32 @@ Two needs, one substrate:
 The irreplaceable artifact is the transcript. Everything else (dashboards, retros) can be built
 *later* over captured data — **capture is the only blocker before firing more coordinators.**
 
+## Prior art (searched 2026-07-08) — what the field converged on
+
+- **OTel GenAI semantic conventions are the industry rail.** Claude Code itself exports
+  metrics/logs via OTLP (traces in beta); Copilot/VS Code emit GenAI spans; Daytona v0.190.0
+  ships an `otel-collector` app + audit logs + log streaming as its whole observability story.
+  Standard spans/metrics land in any backend — for us, the existing Grafana stack.
+- **Session replay is a product category** (AgentOps time-travel replay; Laminar transcript view +
+  SQL-over-traces; **Langfuse** = the leading MIT self-hosted option: sessions, traces, scores,
+  evals). Considered and **deliberately not adopted now**: self-hosted Langfuse needs
+  Postgres + ClickHouse + Redis — three stateful platform services for a one-person fleet,
+  against ADR-080's "durable = git+S3". Bucket + viewer + Grafana covers the need; revisit only
+  if analysis outgrows Grafana.
+- **Devin productized exactly our Part B**: *Session Insights* (analyzes completed sessions →
+  actionable recommendations) + *Knowledge* (org-wide lessons, **user-approved before they
+  persist**) + *Playbooks* (successful sessions distilled into reusable procedures). Their
+  approval flow = our PR-gate; their playbook idea is adopted below (B2.5).
+
 ## Part A — one durable session store + a browser
+
+### A0. Turn on the standard rail (cheap, do with P0)
+
+Claude-code roles (coordinator, reviewer, jail sessions) get **OTLP export enabled** →
+an in-cluster collector → Loki/Prometheus now (Tempo when traces GA). This gives cross-run
+token/cost/latency metrics on the standard schema for free and feeds the B1 ledger; it does NOT
+replace transcripts (replay + LLM root-cause need the raw JSONL). Goose workers stay
+manifest-only until goose grows OTel.
 
 ### A1. Capture (P0 — the blocker)
 
@@ -97,6 +122,10 @@ A budget-capped scheduled session (weekly, or every N terminal tasks) with a see
 4. **Score the previous retro first**: each report opens by checking the ledger KPIs across its
    predecessor's merged changes (did rounds/issue actually drop?). Self-improvement that measures
    itself; no vibes.
+5. **Distill wins, not just failures (the Devin-playbook move).** When a run lands notably under
+   estimate / first-round-approved, the retro may extract the reusable procedure into the recipe
+   or a skill file — same PR gate. Codifying what worked compounds faster than only patching what
+   broke.
 
 Guardrails: own budget-capped OpenRouterKey; read-only everywhere + PR-only writes; max-K
 transcripts per run; may touch **process files only** — never product repos' `specs/` (spec
