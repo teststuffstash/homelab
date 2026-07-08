@@ -1,0 +1,48 @@
+# Minimal OTLP collector for the claude-code agent roles (coordinator/reviewer launchers set
+# OTEL_EXPORTER_OTLP_ENDPOINT to this Service). One replica is fine: OTLP export is fire-and-forget
+# telemetry, a dropped batch during a reroll costs nothing (transcripts are the durable record —
+# the agent-transcripts bucket, not this).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.116.1
+          args: ["--config=/etc/otelcol/config.yaml"]
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: prom, containerPort: 8889 }
+          volumeMounts:
+            - { name: config, mountPath: /etc/otelcol, readOnly: true }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+            items:
+              - { key: otel-config.yaml, path: config.yaml }

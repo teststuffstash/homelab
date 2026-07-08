@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-057**.
+  Next free id: **FU-059**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -193,8 +193,16 @@ _Last updated: 2026-07-08._
       and pinned the exact fix (`--verify=false` on `helm plugin install`, `scripts/test-chart.sh:8`);
       a worker applied it → CI green → relabel `major/awaiting-human` → **human merged #18**. WebFetch
       egress was sufficient (reviewer produced the correct migration finding).
-- [ ] **FU-023** — Stats v2: per-request token breakdown via the OpenRouter *activity* API + a
-      cross-run Grafana dashboard over the `AGENT_RUN_STATS` Loki lines.
+- [ ] **FU-057** — **Retro P2: the retro-facts reflex + cross-run dashboard**
+      (`docs/agents/observability-and-retro.md` §B1; absorbs the old FU-023 "stats v2"). On a task's
+      terminal label, deterministically append one line to `agent-transcripts/_ledger.jsonl` (cost vs
+      estimator band, rounds, retry storms, CI red/green, wall time, cache-hit %, tokens/request —
+      per-request splits via the OpenRouter *activity* API) + a Grafana dashboard over the ledger.
+      P0/P1 (capture + viewer) are LIVE — the manifests this computes from already accumulate.
+- [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
+      §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
+      MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
+      (human-gated), scores its predecessor first. Needs FU-057's ledger; first run hand-supervised.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
       not enforced).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was

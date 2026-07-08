@@ -1,10 +1,12 @@
 # Agent observability & the retro loop — see every session, improve the process from evidence
 
-> **Status: design (2026-07-08), pre-implementation.** Written before scaling coordinator use to
-> the oracle stack. Companion to [`workflow.md`](workflow.md) (control flow) and
-> [`../../agents/README.md`](../../agents/README.md) (launcher + stats). Absorbs **FU-023**
-> (stats v2 / cross-run dashboard). New FU ids: assign in [`../follow-ups.md`](../follow-ups.md)
-> when picked up.
+> **Status: P0 + P1 LIVE (built 2026-07-08).** A0 (OTLP → `argocd/resources/otel-collector/`), the
+> `agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), all three capture hooks
+> (worker `agent-finalize`, reviewer/coordinator launcher traps, nightly `transcripts-sync`
+> CronJob) and the viewer (`transcripts.local.teststuff.net`,
+> `agents/coordinator/transcripts-viewer.yaml`) are deployed. **P2 = FU-057, P3 = FU-058** (both
+> absorb the old FU-023 stats-v2 scope). Companion to [`workflow.md`](workflow.md) (control flow)
+> and [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 
 Two needs, one substrate:
 
@@ -101,7 +103,7 @@ No LLM turn. When a task reaches a terminal label (`agent/done`/`agent/blocked`)
 manifests + stats and append one line to a durable ledger (`agent-transcripts/_ledger.jsonl`):
 cost vs estimator band (**calibration error**), rounds used, retry storms (the 812×-403 class),
 CI red/green sequence, review flip-flops, wall time, cache-hit %, requests, tokens/request.
-Grafana dashboard over the ledger = the long-promised **FU-023 stats v2**. These numbers are also
+Grafana dashboard over the ledger = the long-promised stats v2 (**FU-057**). These numbers are also
 the KPI set the retro measures itself against: cost/issue, rounds/issue, blocked rate, estimator
 error.
 
@@ -140,5 +142,5 @@ transcripts. The per-task hook is only the deterministic B1 reflex.
 
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —
   everything later can analyze retroactively *because* P0 captured the raw material.
-- **P1**: viewer Deployment + PR-comment task link. **P2**: facts reflex + dashboard (FU-023).
-- **P3**: retro brief + first hand-supervised run, then a CronJob sibling of the review reflex.
+- **P1**: viewer Deployment + PR-comment task link. **P2**: facts reflex + dashboard (FU-057).
+- **P3**: retro brief + first hand-supervised run, then a CronJob sibling of the review reflex (FU-058).

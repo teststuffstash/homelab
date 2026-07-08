@@ -32,7 +32,7 @@ shift || true
 
 # Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap — NOT a
 # `:free` tier (≈8 rpm, chokes a tool loop) and NOT a cloaked model (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -41,10 +41,14 @@ while [ $# -gt 0 ]; do
     --harness)   HARNESS="$2"; shift 2;;
     --model)     MODEL="$2"; shift 2;;
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
+    --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
+    --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+# Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
+TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 NS="$PROJECT"
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
@@ -65,11 +69,23 @@ if [ -n "$RUN_CMD" ]; then
   # Run the harness, tee its output to a file, then emit the AGENT_RUN_STATS line (agent-finalize
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
-  WRAPPED="set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; agent-finalize /tmp/run.log"
+  # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
+  WRAPPED="set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"sleep\",\"infinity\"]"       # idle after prep; you exec in below
 fi
+
+# §A1 transcript capture (docs/agents/observability-and-retro.md): fetch the WRITE-ONLY key for the
+# agent-transcripts bucket and inject it as env VALUES below — a secretKeyRef can't cross namespaces
+# (workers run in the project ns; the key lives in agent-coordinator, written by the Crossplane
+# Workspace agents/coordinator/garage-workspace.yaml). Best-effort: without the key the run proceeds
+# and agent-finalize skips the upload loudly. Jail kubeconfig reads it as admin; the coordinator SA
+# has a resourceNames-scoped get on exactly this Secret (agents/coordinator/rbac.yaml).
+TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
+TS_KEY_ID="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_access_key_id}' 2>/dev/null | base64 -d || true)"
+TS_KEY_SECRET="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_secret_access_key}' 2>/dev/null | base64 -d || true)"
+[ -n "$TS_KEY_ID" ] || echo "→ transcript-capture key unavailable (agent-transcripts-s3 in agent-coordinator) — run proceeds, upload will be skipped"
 
 # Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox
@@ -125,6 +141,23 @@ ${AFFINITY}
         - name: NODE_NAME
           valueFrom:
             fieldRef: { fieldPath: spec.nodeName }
+        # §A1 transcript capture context: agent-finalize uploads run.log + the goose session dir +
+        # manifest.json to s3://agent-transcripts/<project>/<task>/worker-r<round>-<ts>/. The key is
+        # write-only (append-only exhaust; no list/get) and injected as VALUES — see the fetch above.
+        - name: AGENT_TASK
+          value: "${TASK}"
+        - name: AGENT_ROUND
+          value: "${ROUND}"
+        - name: AGENT_SESSION_KEY
+          value: "${SECRET}"
+        - name: AGENT_TS_ENDPOINT
+          value: "${TS_ENDPOINT}"
+        - name: AGENT_TS_BUCKET
+          value: "${TS_BUCKET}"
+        - name: AGENT_TS_ACCESS_KEY_ID
+          value: "${TS_KEY_ID}"
+        - name: AGENT_TS_SECRET_ACCESS_KEY
+          value: "${TS_KEY_SECRET}"
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
         # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
         - name: GOOSE_PROVIDER
@@ -192,7 +225,7 @@ if [ -n "$RUN_CMD" ]; then
       GRAFANA_URL="${GRAFANA_URL:-https://grafana.teststuff.net}"
       PANES="$(jq -cn --arg pod "$POD" '{ag:{datasource:"loki",queries:[{refId:"A",expr:("{pod=\""+$pod+"\"}"),datasource:{type:"loki",uid:"loki"}}],range:{from:"now-6h",to:"now"}}}')"
       LOGS_URL="${GRAFANA_URL}/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$PANES" '$p|@uri')"
-      BODY="$(printf '%s' "$STATS" | jq -r --arg logs "$LOGS_URL" '
+      BODY="$(printf '%s' "$STATS" | jq -r --arg logs "$LOGS_URL" --arg task "$TASK" '
         "🤖 **Agent run stats**\n\n" +
         "| metric | value |\n|---|---|\n" +
         "| model | `\(.model // "?")` (\(.harness // "?")) |\n" +
@@ -202,7 +235,8 @@ if [ -n "$RUN_CMD" ]; then
         "| ci_passed | \(.ci_passed // "?") |\n" +
         "| coverage | \(.coverage_pct // "?")% |\n" +
         "| node / pod | `\(.node // "?")` / `\(.pod // "?")` |\n\n" +
-        "[📜 run logs in Grafana](\($logs))"')"
+        "[📜 run logs in Grafana](\($logs))\n" +
+        "🗂 transcripts: `s3://agent-transcripts/\(.project // "?")/\($task)/` · [viewer](https://transcripts.local.teststuff.net)"')"
       echo "→ posting stats comment to ${PR_URL}"
       gh pr comment "$PR_URL" --body "$BODY" 2>&1 | tail -1 || echo "  (comment failed — non-fatal)"
     fi

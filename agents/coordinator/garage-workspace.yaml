@@ -1,0 +1,68 @@
+# Garage bucket + keys for agent session transcripts (docs/agents/observability-and-retro.md §A1):
+# every agent session (worker/reviewer/coordinator) persists its transcript + manifest to
+# s3://agent-transcripts/<project>/<task>/<role>-r<round>-<ts>/ before pod exit.
+#
+# Reconciled by Crossplane provider-terraform (ADR-076), CREATE-pattern like the loki workspace
+# (argocd/resources/loki/garage-workspace.yaml): Terraform holds the key secrets and Crossplane
+# writes them into the `agent-transcripts-s3` Secret in agent-coordinator — the single consumer
+# surface (no Infisical round-trip: nothing outside the cluster consumes these keys, and Crossplane
+# can re-mint them any time).
+#
+# Two keys, least-privilege per consumer:
+#   • writer — WRITE-ONLY (put, no list/get). Held by agent pods; it's the bucket's only exposure
+#     to the risky side, and all it can do is append exhaust. Injected into worker pods as env
+#     values by agents/agent-session.sh (a worker's data-cred story stays "none" — this bucket is
+#     its own exhaust, not platform data).
+#   • reader — READ-ONLY. Platform-side only: the transcripts viewer's sync sidecar + the nightly
+#     PVC sync's "what's already uploaded" listing (agents/coordinator/transcripts-sync.yaml).
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: agent-transcripts-garage
+  namespace: agent-coordinator
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "transcripts" { global_alias = "agent-transcripts" }
+
+      resource "garage_key" "writer" { name = "agent-transcripts-writer" }
+      resource "garage_key" "reader" { name = "agent-transcripts-reader" }
+
+      resource "garage_bucket_permission" "writer_write" {
+        bucket_id     = garage_bucket.transcripts.id
+        access_key_id = garage_key.writer.id
+        read  = false
+        write = true
+        owner = false
+      }
+      resource "garage_bucket_permission" "reader_read" {
+        bucket_id     = garage_bucket.transcripts.id
+        access_key_id = garage_key.reader.id
+        read  = true
+        write = false
+        owner = false
+      }
+
+      output "bucket" {
+        value = garage_bucket.transcripts.global_alias
+      }
+      output "writer_access_key_id" {
+        value = garage_key.writer.id
+      }
+      output "writer_secret_access_key" {
+        value     = garage_key.writer.secret_access_key
+        sensitive = true
+      }
+      output "reader_access_key_id" {
+        value = garage_key.reader.id
+      }
+      output "reader_secret_access_key" {
+        value     = garage_key.reader.secret_access_key
+        sensitive = true
+      }
+  writeConnectionSecretToRef:
+    namespace: agent-coordinator
+    name: agent-transcripts-s3

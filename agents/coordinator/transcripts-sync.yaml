@@ -1,0 +1,97 @@
+# Nightly transcripts crash-net (docs/agents/observability-and-retro.md §A1) — the exit trap in
+# agents/coordinator-session.sh uploads a session's JSONL at launcher exit; this CronJob covers the
+# sessions that trap never saw (crashed launcher, killed jail, node reboot). It lists what's already
+# in the agent-transcripts bucket (reader key — the session basenames are UUIDs, so presence-by-
+# basename is prefix-agnostic) and uploads any PVC session file still missing (writer key), under a
+# tick-<mtime> prefix with a minimal manifest (source: pvc-nightly-sync — task attribution is only
+# known to the live exit trap).
+#
+# Sibling of review-reflex.yaml: same namespace, GitOps'd by the agent-coordinator platform app.
+# Image = the coordinator image (bash + jq + s5cmd) — keep the tag in lockstep with images.env.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: transcripts-sync
+  namespace: agent-coordinator
+spec:
+  schedule: "40 3 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels: { app: transcripts-sync }
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 5
+          securityContext:
+            fsGroup: 1000
+          containers:
+            - name: sync
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.6-g24480c99a3ea
+              command: ["bash", "-lc"]
+              args:
+                - |
+                  set -u
+                  command -v s5cmd >/dev/null 2>&1 || { echo "s5cmd not in this image — bump the tag to a build that ships it"; exit 1; }
+                  export AWS_REGION=garage
+                  EP="$AGENT_TS_ENDPOINT"
+                  HAVE=$(AWS_ACCESS_KEY_ID="$READER_ID" AWS_SECRET_ACCESS_KEY="$READER_SECRET" \
+                         s5cmd --endpoint-url "$EP" ls "s3://agent-transcripts/*" 2>/dev/null | awk '{print $NF}' | xargs -rn1 basename | sort -u)
+                  N=0
+                  while read -r f; do
+                    b=$(basename "$f")
+                    printf '%s\n' "$HAVE" | grep -qxF "$b" && continue
+                    MT=$(date -u -r "$f" +%Y%m%dT%H%M%SZ)
+                    P="s3://agent-transcripts/homelab/tick-${MT}/coordinator-crashsync-${MT}"
+                    jq -n --arg task "tick-${MT}" --arg f "$b" \
+                      '{role:"coordinator", project:"homelab", task:$task, round:1, source:"pvc-nightly-sync",
+                        session_key:"coordinator-claude", files:[$f]}' > /tmp/manifest.json
+                    AWS_ACCESS_KEY_ID="$WRITER_ID" AWS_SECRET_ACCESS_KEY="$WRITER_SECRET" \
+                      s5cmd --endpoint-url "$EP" cp "$f" "${P}/${b}" || { echo "upload FAILED: $f"; continue; }
+                    AWS_ACCESS_KEY_ID="$WRITER_ID" AWS_SECRET_ACCESS_KEY="$WRITER_SECRET" \
+                      s5cmd --endpoint-url "$EP" cp /tmp/manifest.json "${P}/manifest.json" || echo "manifest upload FAILED for $b"
+                    echo "synced ${b} → ${P}"
+                    N=$((N+1))
+                  done < <(find /transcripts -name '*.jsonl' 2>/dev/null)
+                  echo "transcripts-sync: ${N} session file(s) uploaded"
+              env:
+                - name: HOME
+                  value: "/home/node"
+                - name: AGENT_TS_ENDPOINT
+                  value: "http://garage.garage.svc.cluster.local:3900"
+                # Both keys from the Workspace conn secret: reader lists what exists, writer uploads.
+                # Not optional — the pod parks in CreateContainerConfigError until the Workspace has
+                # reconciled the Secret (same pattern as github-exporter's PAT).
+                - name: READER_ID
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id }
+                - name: READER_SECRET
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key }
+                - name: WRITER_ID
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id }
+                - name: WRITER_SECRET
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key }
+              volumeMounts:
+                - { name: transcripts, mountPath: /transcripts, readOnly: true }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+                seccompProfile: { type: RuntimeDefault }
+              resources:
+                requests: { cpu: "50m", memory: "128Mi" }
+                limits:   { cpu: "1",   memory: "512Mi" }
+          volumes:
+            - name: transcripts
+              persistentVolumeClaim: { claimName: coordinator-transcripts, readOnly: true }

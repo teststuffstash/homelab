@@ -148,10 +148,10 @@ The standing project key stays as the **funding ceiling**; the session key is th
   *caching* provider over blind `sort:"price"` (cheapest is often 0% cache). Biggest cost lever.
 - **Recipe `gh issue view` + incremental push** — landed in `sleep-tracking/.agents/fix.yaml`;
   replicate when other repos get a fixer recipe.
-- **FU-023 — Stats v2** — token breakdown (prompt/completion/cached/requests) needs the OpenRouter
-  *activity* API (the in-pod inference key can self-report cost but not the per-request token
-  split). The `AGENT_RUN_STATS` lines in Loki also enable a cross-run Grafana dashboard
-  (`{app="agent-session"} | json`) — not built yet.
+- **FU-057 — Retro P2 (facts ledger + cross-run dashboard)** — token breakdown
+  (prompt/completion/cached/requests) needs the OpenRouter *activity* API (the in-pod inference key
+  can self-report cost but not the per-request token split). Computes over the captured manifests
+  (`docs/agents/observability-and-retro.md` §B1) + a Grafana dashboard over the ledger.
 - **FU-021 — goose retry policy** — it retried a budget-exhausted `403` 812×; configure it to
   hard-stop on auth/limit errors.
 - **FU-022 — Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain

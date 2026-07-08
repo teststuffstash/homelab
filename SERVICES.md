@@ -38,6 +38,8 @@ truth.
 | **CI runner — Proxmox VM** | 🟢 LIVE | Real-kernel runner for image builds (arm64 emulation, k3d/Docker) | `ci-runner-01` @ 192.168.2.55 | `runs-on: [self-hosted, proxmox-vm]`; ADR-082 — builds needing Docker/binfmt |
 | **OpenRouter keys (operator)** | 🟢 LIVE | Mints per-project, budget-capped OpenRouter API keys → writes them to a Secret | in-cluster (`openrouter-operator`, kopf) | declare an `OpenRouterKey` CR ([repo](https://github.com/teststuffstash/openrouter-operator)); replaces the cloudopsworks TF provider (issue #20) — see app-owned-resources.md |
 | **Nix cache (pull-through)** | 🟢 LIVE | nginx mirror of `cache.nixos.org` on a Longhorn PVC — speeds agent-sandbox `devbox install` | in-cluster `nixcache.nix-cache.svc` | agent-base entrypoint sets it as a nix substituter; `argocd/resources/nix-cache/` |
+| **OTel collector (OTLP sink)** | 🟢 LIVE | OTLP metrics+logs → Prometheus + Loki (the claude-code agent roles' telemetry rail) | in-cluster `otel-collector.monitoring.svc:4317` (grpc) / `:4318` (http) | `argocd/resources/otel-collector/`; [`docs/agents/observability-and-retro.md`](docs/agents/observability-and-retro.md) §A0 |
+| **Agent transcripts** | 🟢 LIVE | Every agent session persisted to S3 (`<project>/<task>/<role>-r<n>-<ts>/` + manifest) + a browse UI (LAN-only — transcripts carry repo content) | bucket `agent-transcripts` (Garage) · `https://transcripts.local.teststuff.net` | [`docs/agents/observability-and-retro.md`](docs/agents/observability-and-retro.md) §A1/§A2; `agents/coordinator/{garage-workspace,transcripts-viewer,transcripts-sync}.yaml` |
 | **OIDC IDP** | 🔴 PLANNED | Auth for "Others" | — not deployed | ADR-055 |
 
 ## Consuming a LIVE service

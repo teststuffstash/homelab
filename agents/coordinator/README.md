@@ -99,8 +99,11 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model openrouter/deepseek/deepseek-v4-flash \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
+       --task issue-<N> --round <r> \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
+   `--task`/`--round` key the transcript capture (docs/agents/observability-and-retro.md §A1): the
+   run's log + goose session land at `s3://agent-transcripts/<project>/issue-<N>/worker-r<r>-<ts>/`.
    `--openrouter-secret` binds the worker to the per-session key (not the shared standing one). Use
    the **exact** name `--emit-cr` printed to stderr (`→ session Secret: …`) — it's the CR's
    `spec.secretName` (`<project>-session-<session>-openrouter`, with the `-session-` infix). **Do NOT

@@ -1,5 +1,6 @@
 # agent-coordinator subsystem — the coordinator's RBAC + Namespace + review-reflex CronJob + transcripts
-# PVC + the git-token/reviewer-git ExternalSecrets, GitOps-managed. Was `kubectl apply`-ed by hand (the
+# PVC + the git-token/reviewer-git ExternalSecrets + the transcript-capture pieces (garage-workspace,
+# transcripts-sync CronJob, transcripts-viewer — docs/agents/observability-and-retro.md), GitOps-managed. Was `kubectl apply`-ed by hand (the
 # FU-041 bootstrap step), which is why a review-reflex change (e.g. the deploy-pin's image bump) needed a
 # manual re-apply. Now ArgoCD reconciles agents/coordinator/ from master, so those changes auto-apply.
 #

@@ -84,7 +84,9 @@ BRIEF="agents/coordinator/README.md"   # loaded as Claude's appended system prom
 COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF} --permission-mode ${PERM_MODE}"
 
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
-PREP="set -e; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab; cd /work/homelab"
+# The /work/session-start marker is the "what did THIS session write" baseline the exit-trap upload
+# diffs the transcripts PVC against (the PVC accumulates across sessions).
+PREP="set -e; touch /work/session-start; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab; cd /work/homelab"
 
 # Interactive seed (--tick/--seed): drop the prompt into a pod file at clone time, then attach with it
 # as claude's initial positional arg (`claude … "$(cat /work/coord-seed)"` = interactive, seeded). The
@@ -126,6 +128,37 @@ spec:
           value: "${STACK}"
         - name: AGENT_REPOS
           value: "${STACK_REPOS}"
+        # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
+        - name: MODEL
+          value: "${MODEL}"
+        # A0 standard rail: Claude Code exports OTLP metrics+logs (GenAI conventions) to the
+        # in-cluster collector (argocd/resources/otel-collector/) → Loki + Prometheus. Telemetry
+        # only — transcripts stay the durable record. Override endpoint with OTLP_ENDPOINT.
+        - name: CLAUDE_CODE_ENABLE_TELEMETRY
+          value: "1"
+        - name: OTEL_METRICS_EXPORTER
+          value: "otlp"
+        - name: OTEL_LOGS_EXPORTER
+          value: "otlp"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "${OTLP_ENDPOINT:-http://otel-collector.monitoring.svc.cluster.local:4318}"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=claude-code,role=coordinator,stack=${STACK:-none}"
+        # Transcript capture (§A1): the WRITE-ONLY key for the agent-transcripts bucket, same-ns
+        # Secret written by the Crossplane Workspace (agents/coordinator/garage-workspace.yaml).
+        # optional:true → sessions still run before the Workspace has reconciled (upload skips).
+        - name: AGENT_TS_ENDPOINT
+          value: "http://garage.garage.svc.cluster.local:3900"
+        - name: AGENT_TS_BUCKET
+          value: "agent-transcripts"
+        - name: AGENT_TS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true }
+        - name: AGENT_TS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
         # Subscription auth (Pro/Max): a ~1y token from \`claude setup-token\`, kept in a Secret.
         # NB: do NOT also set ANTHROPIC_API_KEY here — it would take auth precedence over this.
         - name: CLAUDE_CODE_OAUTH_TOKEN
@@ -171,6 +204,39 @@ EOF
 
 echo "→ waiting for ${POD} (clone)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=180s || true
+
+# §A1 transcript capture (docs/agents/observability-and-retro.md): when this launcher exits, mirror
+# the session's NEW transcript JSONL (vs the /work/session-start marker) from the transcripts PVC to
+# the agent-transcripts bucket — from inside the pod, which holds the write-only key + s5cmd.
+# Best-effort by design: a failed upload never fails the session, and a crashed/killed launcher is
+# covered by the nightly transcripts-sync CronJob (agents/coordinator/transcripts-sync.yaml).
+# Single-quoted heredoc: everything resolves from POD env at upload time, not launcher env.
+UPLOAD_SNIPPET=$(cat <<'SNIP'
+set -u
+[ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; exit 0; }
+command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; exit 0; }
+FILES=$(find /home/node/.claude/projects -name '*.jsonl' -newer /work/session-start 2>/dev/null)
+[ -n "$FILES" ] || { echo "transcripts: no new session files — nothing to upload"; exit 0; }
+TS=$(date -u +%Y%m%dT%H%M%SZ)
+PREFIX="s3://${AGENT_TS_BUCKET}/${STACK:-homelab}/tick-${TS}/coordinator-r1-${TS}"
+export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
+jq -n --arg role coordinator --arg project "${STACK:-homelab}" --arg task "tick-${TS}" \
+      --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg files "$FILES" \
+      '{role:$role, project:$project, task:$task, round:1, model:$model, session_key:$key, pod:$pod,
+        files:($files|split("\n")|map(sub(".*/";""))), grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
+for f in $FILES; do
+  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "${PREFIX}/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"
+done
+s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "${PREFIX}/manifest.json" || echo "transcripts: manifest upload FAILED (non-fatal)"
+echo "transcripts: uploaded → ${PREFIX}"
+SNIP
+)
+upload_transcripts() {
+  "$KUBECTL" $KUBE -n "$NS" exec "${POD}" -- bash -lc "$UPLOAD_SNIPPET" \
+    || echo "→ transcript upload skipped (pod gone or upload failed — the nightly sync covers it)"
+}
+trap 'exit 130' INT TERM   # convert signals to a normal exit so the EXIT trap below still runs
+trap upload_transcripts EXIT
 
 if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
