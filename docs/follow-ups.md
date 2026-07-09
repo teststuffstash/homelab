@@ -169,12 +169,14 @@ _Last updated: 2026-07-08._
       final-output continuation → a fresh request on the dead key, bounded only by
       `GOOSE_MAX_TURNS` (default 1000). **No env/recipe per-error-class stop exists**, so the real
       fix is a runtime storm watchdog —
-      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8)**;
-      **fix built same day: agent-runtime#11** (`agent-storm-watchdog`, two-poll-confirmed harness
-      kill preserving the finalize pipeline), shipping to workers once merged + the #10 deploy-pin
-      bumps `agents/images.env`. Interim: `agent-session.sh` pins `GOOSE_MAX_TURNS=200`
-      (env-overridable). Resolve after a live acceptance run on the pinned image (then also drop
-      the interim comment marker in the launcher).
+      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8),
+      fixed + MERGED same day (agent-runtime#11)**: `agent-storm-watchdog`, two-poll-confirmed
+      harness kill preserving the finalize pipeline. Ships to workers via the #10 deploy-pin
+      (auto-merging `agents/images.env` bump PRs — proven live on homelab#16). Interim belt kept:
+      `agent-session.sh` pins `GOOSE_MAX_TURNS=200` (env-overridable). Resolve after a live
+      acceptance run on the pinned image — revoke/exhaust a session key mid-run, expect the kill
+      within ~2 polls + an `AGENT_STRIKE: … error_class=auth-storm` comment (then also drop the
+      interim comment marker in the launcher).
 - [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
       pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
       (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
@@ -320,8 +322,9 @@ _Last updated: 2026-07-08._
       no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim;
       **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
       (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
-      graceful 429 fallback). OPEN: scout first supervised run + unsuspend, FU-021 pending
-      agent-runtime#8, ADR-081 cred-injection remainder (FU-018) + egress lockdown (FU-020).
+      graceful 429 fallback). OPEN: scout first supervised run + unsuspend, FU-021 live acceptance
+      on the pinned image (#8 fix merged), ADR-081 cred-injection remainder (FU-018) + egress
+      lockdown (FU-020).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
