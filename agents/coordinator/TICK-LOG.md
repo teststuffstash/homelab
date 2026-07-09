@@ -183,3 +183,24 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - Coordinator correctly read the spec-first master move as the BEHIND cause, cited spec lines in
   the fixer directive, minted `issue-1-round-3`, dispatched `agent-oracle-fleet-101337`, and
   pre-announced the round-bound consequence. Nothing to correct.
+
+### 2026-07-09 10:26 — round 3 died (triple failure) → agent/blocked (round bound) → HUMAN
+- **r3 = zero artifact, $0.036**: (a) SAME truncation as r1 (14781 vs 15267 chars — model's ~15k
+  tool-output ceiling) DESPITE the post-r1 recipe rule → **instruction guardrails don't bind this
+  model on file-recreation**; (b) 401 "User not found" auth STORM (dozens of fatal retries — FU-021
+  class, scoped to budget-403, must extend to auth-401); (c) died on the throwaway `agent/<ts>`
+  branch before checking out the PR branch → even success wouldn't have touched PR #5.
+- **Round budget spent on infra, not the task.** r2 succeeded; the task is small + fully spec'd.
+  Blocking reason is precise: systematic harness/model limitation, NOT task/reviewer.
+- **Terminal action**: `agent/blocked` + diagnostic issue comment; did NOT re-dispatch (round 4
+  into the same wall = negative-EV — the bound working as designed). Handed to Rasmus.
+
+## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
+Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
+cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
+scope; #6 probe must fail-loud not fail-into-trigger.
+Platform/recipe findings (need decisions): (A) model truncation on file-recreation — recipe rule
+insufficient, needs model/harness change; (B) retry hard-stop on 401/403; (C) deterministic PR-
+branch checkout (not LLM-dependent); (D) reviewer methodology "execute the engine" worth promoting
+into review.md; (E) autonomy-as-dial (Turnstone) for P3; (F) bucket prefix stack-vs-project;
+(G) direct-push-bypass on this log — decide gate-exempt or PR-flow.
