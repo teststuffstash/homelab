@@ -199,6 +199,15 @@ _Last updated: 2026-07-08._
       estimator band, rounds, retry storms, CI red/green, wall time, cache-hit %, tokens/request —
       per-request splits via the OpenRouter *activity* API) + a Grafana dashboard over the ledger.
       P0/P1 (capture + viewer) are LIVE — the manifests this computes from already accumulate.
+      **Scope sharpened (2026-07-09 measurement, docs/agents/observability-and-retro.md §A′/§B1):**
+      add `exit_status`+`error_class` to AGENT_RUN_STATS (clean/ci-failed/harness-death/auth-storm/
+      budget-403/timeout); dashboards = (a) **model-health** pivot (model × success-rate/
+      harness-death/$-per-successful-issue → the blacklist signal — deepseek-v4-flash died 2/4),
+      (b) **running-agents** (pods by role×phase, kube-state-metrics), (c) **cost** (push worker
+      cost_usd to Prometheus; coordinator/reviewer already via A0 OTLP). Highest-leverage speed
+      work: this makes invisible stalls (the 2.5h reviewer block) visible — caching (FU-022) did
+      NOT help the measured runs (warm nix). Also: upload goose sessions.db so the viewer renders
+      worker sessions natively (no converter — it reads goose+opencode formats).
 - [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only

@@ -96,15 +96,45 @@ Hook points (all existing seams, small diffs):
   **server-mode WebUI** as one in-cluster Deployment behind internal ingress
   (`transcripts.local.teststuff.net` — transcripts contain repo content; never public). A small
   sync container mirrors the bucket's *claude-format* JSONL into the directory layout it expects.
-  Coordinator + reviewer sessions render natively. **Goose worker sessions are a different
-  format** — v1 keeps the existing Grafana deep-link + the raw `run.log` in the bucket (linked
-  from the manifest); a goose→claude-jsonl converter is a later nice-to-have, not a blocker.
+  Coordinator + reviewer sessions render natively. **Goose workers ARE renderable (corrected
+  2026-07-09)** — the viewer natively reads Goose's
+  `~/.local/share/goose/sessions/sessions.db` (SQLite sessions+messages) and OpenCode's
+  `~/.local/share/opencode/`. The earlier "converter needed" caveat was wrong: the fix is to
+  **upload the goose `sessions.db` alongside run.log** (agent-finalize) and register the goose
+  source in the viewer sync — then worker sessions render turn-by-turn like the rest. This is the
+  direct answer to "the loop was hard to follow" (the #1 pain from the first hand-driven runs).
 - **Task-centric entry**: the bucket prefix *is* the "all sessions for issue #N" view; add the
   prefix URL to the existing PR stats comment (one line next to the Grafana link).
 - **LLM access**: an MCP toolset on the homelab Type-1 MCP —
   `list_sessions(project, task)` · `get_manifest(session)` · `grep_transcript(session, pattern)` ·
   `fetch_segment(session, from, to)` — so an analysis session pulls *slices*, never whole
   transcripts into context.
+
+## Part A′ — what actually took time (measured from the first oracle runs, 2026-07-09)
+
+Before optimizing, measured issue #1's ~4 wall-clock hours (Loki timestamps + AGENT_RUN_STATS +
+pod lifetimes). **The assumed bottleneck — docker/nix cold-start — was NOT it**: `/nix` is
+bind-mounted and warm on the node, so clone + `devbox install` was **~6s** every round after the
+first. Ranked reality:
+
+1. **Broken reflexes stalling invisibly — ~2h23m** (reviewer blocked 07:13→09:36 by the
+   sleep-hardcoded repo list + reviewer-token scope, both fixed live). The single biggest sink,
+   and the reason the loop was un-followable — *nothing visibly happened*. **This is why monitoring
+   IS the speed fix**: a "reviewer idle N min with a green PR waiting" panel turns a 2.5h silent
+   stall into a glance. Highest-leverage speed work = FU-057, not caching.
+2. **Orchestration latency — ~50 min** (5-min review-reflex cron + manual meta-ticks + CI cycles).
+   The documented levers apply: hot-tick + CI-green→coordinator ping + webhook edge-trigger
+   ([workflow.md](workflow.md) §Triggers). Real but second-order.
+3. **The model — ~48 min of pod compute** (deepseek-v4-flash: 400–1170s LLM loops, and 2 of 4
+   rounds *died* to truncation/retry-storms). Cheap per token but slow (many round-trips) and
+   error-prone → slow AND wasteful per *successful* issue. The model-health dashboard (below) makes
+   the blacklist call data-driven; FU-021 (retry hard-stop) stops the storms.
+4. **Cold-start — ~0** (warm nix). The docker-image caching backlog item would not have helped
+   these runs; deprioritize it relative to 1–3.
+
+**One-line takeaway:** the loop wasn't slow because of infrastructure — it was slow because it was
+*invisible* (stalls) and *dispatched to a weak model*. Both are monitoring/model problems, not
+caching problems.
 
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
@@ -117,6 +147,19 @@ CI red/green sequence, review flip-flops, wall time, cache-hit %, requests, toke
 Grafana dashboard over the ledger = the long-promised stats v2 (**FU-057**). These numbers are also
 the KPI set the retro measures itself against: cost/issue, rounds/issue, blocked rate, estimator
 error.
+
+**Two additions from the 2026-07-09 runs (extend the AGENT_RUN_STATS schema, feed FU-057):**
+- **`exit_status` + `error_class`** per run — clean / ci-failed / **harness-death** (goose
+  `-32602` truncation) / **auth-storm** (401/403) / budget-403 / timeout. Without this the ledger
+  sees cost+duration but not *why a run failed*, and the model-blacklist call is blind.
+- **The model-health dashboard** is then a pivot over the ledger: **rows = model, columns =
+  {success-rate, harness-death-rate, avg-duration, $/successful-issue}**. deepseek-v4-flash's 2/4
+  death rate becomes one red cell — the blacklist signal, evidence not vibes. Pair with the
+  live **running-agents** panel (pods by role×phase, from kube-state-metrics — already scraped) so
+  "what's active + is anything stalled" is one screen.
+- Worker **`cost_usd` must reach Prometheus** (today only in the Loki stats line) — cheapest path:
+  agent-finalize pushes a labelled metric to the pushgateway, or the collector scrapes a textfile.
+  Coordinator/reviewer cost is already in Prometheus via A0's OTLP `claude_code_cost` metrics.
 
 ### B2. retro session (LLM, batched async — P3; NOT per-tick)
 
