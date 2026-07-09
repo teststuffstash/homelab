@@ -56,8 +56,20 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - **Action**: recipe hardening committed to `.agents/fix.yaml` (CODEOWNERS path — Rasmus's
   standing review), then tick 2.
 
-### 2026-07-09 ~06:5x — tick 2 (C4)
+### 2026-07-09 06:49 — tick 2 (C4) — the most instructive one yet
 - **Command**: same tick command as tick 1.
-- **Expected**: coordinator sees #1 `agent/in-progress`, no pod, no PR → round 2, fresh worker,
-  new session key `issue-1-round-2`.
-- **Outcome**: _pending_
+- **Outcome**: coordinator found #1 `in-progress`, no pod, no PR — and concluded the prior round
+  **"died before dispatch"** (it re-used the round-1 key name and dispatched
+  `agent-oracle-fleet-065344`, now Running WITH the hardened recipe). Correct reconciler behavior
+  on the evidence it had — but the history reading was wrong: round 1 DID run and die.
+- **Why it couldn't know — two lessons:**
+  1. **Meta-coordinator error (mine): never delete terminal pods before the next tick has read
+     them.** Pod deletion destroyed the only kubectl-visible record. New meta-rule: pods are
+     cleaned up only AFTER the following tick's world-read.
+  2. **Platform gap (the real one): a worker that dies without opening a PR leaves ZERO GitHub
+     trace** — stats post as PR comments, so no-PR deaths are invisible to "state lives in
+     GitHub". Fix for the launcher: on terminal-without-PR, post AGENT_RUN_STATS + failure tail
+     as an ISSUE comment (then round accounting stays truthful too — this round is really r2,
+     but the coordinator had no way to count r1).
+- **Also**: coordinator transcripts land under `oracle/tick-…` (stack) while worker used
+  `oracle-fleet/issue-1/…` (project) — prefix inconsistency confirmed twice now.
