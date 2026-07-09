@@ -42,7 +42,7 @@
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
       "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "background", "graphMode": "none" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=\"success\", draft=\"false\"}) or vector(0)" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)" } ]
     },
     {
       "id": 5, "type": "stat", "title": "Oldest waiting PR (age)",
@@ -51,7 +51,7 @@
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 900 }, { "color": "red", "value": 3600 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "none" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=\"success\", draft=\"false\"})" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"})" } ]
     },
     {
       "id": 6, "type": "timeseries", "title": "Agent pods by role (running)",
@@ -73,7 +73,7 @@
       "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull", "max" ] }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=\"success\", draft=\"false\"}) or vector(0)", "legendFormat": "green PRs waiting" },
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "legendFormat": "green PRs waiting" },
         { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"reviewer-.*\"}) or vector(0)", "legendFormat": "reviewers running" }
       ]
     },
