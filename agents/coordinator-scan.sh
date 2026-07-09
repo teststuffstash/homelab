@@ -51,8 +51,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   for repo in $repos; do
     slug="$ORG/$repo"
     # gh's built-in --jq keeps this to one repo-read scope — no statusCheckRollup (checks:read) needed.
+    # `direction-change` (C10): a human reversed direction (language/architecture) — every carrying
+    # item needs a human SWEEP (re-scope the issue / close the PR + delete its branch) BEFORE any
+    # dispatch, or the tick works a dead assumption (live 2026-07-09: the TS→Python flip left a
+    # CHANGES_REQUESTED PR the scan would happily have burned a round on). Excluded + reported.
     iss="$(gh issue list --repo "$slug" --state open --json number,title,labels \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+      --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
     # UN-ARMED — an armed PR is the review reflex's, never the coordinator's (arming is the boundary).
     prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
@@ -87,6 +94,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
     fi
+    # BACKSTOP (C10 leftover class): an agent-pattern branch (fix/*, feat/*, agent/*) with NO open
+    # PR is a closed-PR leftover — a same-named future round dies non-fast-forward on it (live
+    # 2026-07-09, defused by hand). Report-only; the fix is `gh pr close --delete-branch` hygiene.
+    heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null || echo '[]')"
+    prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null || echo '[]')"
+    stale="$(jq -rn --argjson h "$heads" --argjson p "$prheads" '$h - $p | .[] | "  branch \(.) — no open PR (stale; delete or resume)"')"
+    [ -n "$stale" ] && orphans="${orphans}[$repo] ⚠ stale agent branches:\n${stale}\n"
     [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
     [ -n "$v2" ]   && items="${items}[$repo]\n${v2}\n"
     [ -n "$prs" ]  && items="${items}[$repo]\n${prs}\n"

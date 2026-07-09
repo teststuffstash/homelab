@@ -1,0 +1,42 @@
+# Nudge ArgoCD after a homelab master push — same in-cluster native-webhook pattern as sleep-iac's
+# sync.yaml (ADR-084: POST a GitHub-style push event to /api/webhook FROM the in-cluster runner, so
+# argocd-server stays LAN-only). Without this, homelab-sourced apps (openrouter-proxy, agent-
+# coordinator, agent-fixer, platform resources…) wait on the ~3-min reconciliation poll — measured
+# live 2026-07-09: a proxy hotfix sat unsynced >4 min mid-incident until a manual refresh annotation.
+#
+# UNSIGNED on purpose (same argument as sleep-iac): in-cluster-only endpoint, a webhook can at most
+# trigger an idempotent refresh-to-git-state. Sign it if /api/webhook is ever exposed publicly.
+name: sync
+
+on:
+  push:
+    branches: [master]
+    # only nudge when something ArgoCD actually reconciles changed — argocd/ covers the app-of-apps,
+    # all platform Applications and every resources/ ConfigMap-generated workload; agents/coordinator
+    # is the agent-coordinator app's source dir.
+    paths:
+      - "argocd/**"
+      - "agents/coordinator/**"
+      - "agents/fixer/**"
+
+jobs:
+  argocd-refresh:
+    runs-on: homelab-ephemeral
+    steps:
+      - name: Nudge ArgoCD to sync (native webhook, in-cluster)
+        env:
+          ARGOCD_WEBHOOK: http://argocd-server.argocd.svc/api/webhook
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          payload=$(printf '{"ref":"refs/heads/master","after":"%s","repository":{"html_url":"https://github.com/%s","default_branch":"master"}}' "$SHA" "$REPO")
+          code=$(curl -sS -m 15 -o /tmp/resp -w '%{http_code}' \
+            -X POST "$ARGOCD_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -H 'X-GitHub-Event: push' \
+            --data "$payload")
+          echo "POST $ARGOCD_WEBHOOK -> HTTP $code"; cat /tmp/resp 2>/dev/null; echo
+          case "$code" in
+            200) echo "✓ ArgoCD accepted the push event — homelab-sourced apps refreshed" ;;
+            *)   echo "::error::ArgoCD webhook POST failed (HTTP $code) — reachability (arc-runners→argocd) or endpoint?"; exit 1 ;;
+          esac

@@ -148,7 +148,9 @@ _Last updated: 2026-07-09._
 
 ## Agents
 
-- [ ] **FU-064** — **Slow-cheap models break every freshness assumption at once — two deterministic
+- [ ] **FU-064** — **BUILT 2026-07-09 night (agent-runtime 09cd3e0 → pinned 2026.7.9-g09cd3e0d6542;
+      homelab af8e2e1) — pending the acceptance round on oracle-fleet#1, then resolve.** Original scope:
+      **Slow-cheap models break every freshness assumption at once — two deterministic
       fixes before FU-018's endgame.** Live evidence (2026-07-09 meta-session 2, oracle-fleet#1: THREE
       attempts, three different walls — git-token 60-min TTL, key-expiry PATCH bug openrouter-operator#6,
       $0.50 session budget at 65 min — zero model/task failures, ~2.5h of green work lost unpushed;
@@ -407,7 +409,9 @@ _Last updated: 2026-07-09._
       auto-dispatch on an *armed agent* PR is deployed + was validated on #9; it rides the same gate. The
       un-armed *major* variant runs via the coordinator — FU-047, also proven.) Phase-4 edge-triggers +
       Renovate levers remain optional polish (FU-014/FU-015/FU-050), not blockers.
-- [ ] **FU-042** — **Coordinator double-dispatches an already-in-progress issue** (no deterministic
+- [ ] **FU-042** — **BUILT 2026-07-09 night (af8e2e1): hard launcher pre-flight refuses dispatch on
+      open-linked-PR / Running worker / near-dead key — resolve after the acceptance round exercises
+      it.** Original: **Coordinator double-dispatches an already-in-progress issue** (no deterministic
       idempotency). The dispatch guard is soft LLM-judgment in the brief (`agents/coordinator/README.md`
       step 1: "pick one labelled `agent/queued`"), enforced by nothing. Live failure 2026-07-03:
       sleep-tracking#10 was claimed correctly (`agent/queued`→`agent/in-progress`, PR #11 opened), then
@@ -484,7 +488,10 @@ _Last updated: 2026-07-09._
       build-time discovery for an app repo with no cluster creds may still want a generated static catalog.
       Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
-- [ ] **FU-050** — **`coordinator-reflex` CronJob + scan v2.** Run `coordinator-scan --spawn` on a schedule
+- [ ] **FU-050** — **BUILT 2026-07-09 night (98d42f3): CronJob deployed SUSPENDED (unsuspend = the
+      autonomy switch, after a clean supervised acceptance round) + scan v2 C4/C5 predicate (verified
+      live on oracle-fleet#1's real stall). Red-beyond-T stays open (needs checks:read).** Original:
+      **`coordinator-reflex` CronJob + scan v2.** Run `coordinator-scan --spawn` on a schedule
       (the LLM sibling of `review-reflex`, gated so it never wakes emptily). Plus the v2 predicate that needs
       pod/checks access: `agent/in-progress`+worker-done (round finished / worker failed) and red-beyond-T.
       Relates FU-045/FU-026.

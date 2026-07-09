@@ -36,6 +36,11 @@ locals {
     # green — a HUMAN merges. Declared here so provisioning does NOT depend on an in-session `gh` call: a
     # missing label makes a relabel HALF-APPLY and corrupt state (learned live on sleep-tracking#18).
     "major"                = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
+    # C10 (TICK-LOG meta-2): a human direction reversal (language/architecture) invalidates open agent
+    # PRs + queued scopes — carrying items are EXCLUDED from coordinator-scan's actionable set and
+    # reported for a human sweep (re-scope / close PR + delete branch). Created imperatively via gh
+    # 2026-07-09 on the six agent repos; declared here so provisioning owns it from the next apply.
+    "direction-change" = { color = "b60205", description = "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)" }
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
   }
 

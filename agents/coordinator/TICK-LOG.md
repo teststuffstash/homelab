@@ -5,6 +5,13 @@ _Started 2026-07-09. Purpose: run the coordinator "by hand" (one tick per world-
 future coordinator reflex (the CronJob sibling of review-reflex) is specified from evidence, not
 guesses. Kept in-repo because this file IS the reflex's requirements draft._
 
+**Process-file push policy (finding G, decided 2026-07-09):** this log, `docs/follow-ups.md`, and
+⚖ spec pins landed by the meta-coordinator during a live session are **gate-exempt** (direct push,
+bypass) — they are the session's flight recorder and blocking them on PR flow would decouple the
+record from the events. Everything else — recipes (`.agents/`), reflex scripts, launchers, platform
+code — goes through the normal gates (CI + review where configured). The exemption is the FILE LIST
+above, not the author.
+
 ## The emerging reflex pattern (condition → action)
 
 | # | Condition (level-triggered, from labels/pods/PRs) | Action | Owner today |
@@ -17,7 +24,8 @@ guesses. Kept in-repo because this file IS the reflex's requirements draft._
 | C6 | PR merged (`agent/done` due) | fire a tick (bookkeeping + queue-release decision for the next dependency-ordered issue) | meta |
 | C7 | `agent/blocked` | escalate to Rasmus; no tick | human |
 | C8 | systematic failure pattern in run.log | retro-grade fix as PR to process files (recipe/rubric), THEN re-tick | meta→human gate |
-| C9 | PR open ∧ auto-merge NOT armed | arm it (`gh pr merge --auto --squash`) — decision-free; unarmed PRs are invisible to the review reflex | meta (reflex candidate) |
+| C9 | PR open ∧ auto-merge NOT armed | arm it (`gh pr merge --auto --squash`) — decision-free; unarmed PRs are invisible to the review reflex | agent-finalize (in-pod) + meta backstop |
+| C10 | human direction reversal (`direction-change` label) | SWEEP before any dispatch: re-scope carrying issues, close invalidated PRs **with `--delete-branch`** (a stale same-named branch non-fast-forwards the next round), re-queue; scan excludes + reports carriers | human (scan reports) |
 
 Queue-release rule (single-active mode): only ONE issue carries `agent/queued` at a time; the
 next is queued at C6 per the dependency order (TRACKS/gantt: #1 → {#2, #3} → #4).
@@ -322,6 +330,31 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - Ops note: the ArgoCD webhook did not fire for the `openrouter-proxy` app (synced rev lagged
   HEAD); refresh-annotation nudge required — check webhook coverage for platform child apps.
 
+### 2026-07-09 ~21:00–22:00 — meta-session 3: the clean-slate build night (Rasmus-authorized, direct-push)
+Experiment stopped on operator decision; every P0 root cause from meta-2 got its mechanism fix:
+- **agent-runtime 09cd3e0** (pinned live as agent-base `2026.7.9-g09cd3e0d6542` via deploy-pin #18):
+  salvage-push at terminal (FU-064a), in-pod bookkeeping (arm + stats + strike with `*_by_pod`
+  flags, FU-043 decoupling), honest classification (`no-artifact`/`token-expiry`; `key limit
+  exceeded` → budget-403), cost truth (#12: None-on-failure, `cost_unknown`, no zero-push),
+  live-token credential helper + gh wrapper (GIT_TOKEN_FILE), deterministic WORK_BRANCH resume.
+- **homelab af8e2e1/98d42f3**: launcher pre-flight (FU-042 open-PR + WIP=1 + key-life refusals),
+  git-token volume mount, `--work-branch`, launcher demoted to bookkeeping FALLBACK, oracle chain
+  paid-first, registration lint in CI, coordinator-reflex CronJob (SUSPENDED — unsuspend = the
+  autonomy switch), scan v2 (C4/C5 predicate — flagged #1's real stall on first run), C10 clauses
+  (`direction-change` label on all six repos + tofu; stale-branch backstop).
+- **openrouter-operator af04086** (fixes #6): expiry drift → Rotate (mint→swap→delete; 120s
+  tolerance for OpenRouter's storage rounding; drift outranks cap drift), live `expires_at` in
+  status + LiveExpires column. 23 decision-table rows green, 100% coverage.
+- **oracle-fleet ae87906**: execute-the-engine promoted to review rubric row 7 (finding D).
+- **homelab sync.yaml**: in-cluster ArgoCD webhook nudge for homelab-sourced apps (the >4-min
+  proxy-hotfix sync lag, measured live) — same ADR-084 pattern as sleep-iac.
+- **Meta-lesson (rule #6 on myself)**: a `git push | grep` pipe swallowed a credential failure and
+  I reported the operator push as landed when remote never moved — probes must surface exit codes,
+  not filtered stdout. Re-landed verified (cherry-pick onto fresh master; stale local branch was
+  also silently checked out — jail clones need a state check before committing).
+Pending: acceptance round on #1 (deepseek through the max_tokens-floored proxy + all the above);
+operator chart bump auto-merge; FU-064/FU-042/FU-050 items updated in follow-ups.
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
@@ -330,4 +363,5 @@ Platform/recipe findings (need decisions): (A) model truncation on file-recreati
 insufficient, needs model/harness change; (B) retry hard-stop on 401/403; (C) deterministic PR-
 branch checkout (not LLM-dependent); (D) reviewer methodology "execute the engine" worth promoting
 into review.md; (E) autonomy-as-dial (Turnstone) for P3; (F) bucket prefix stack-vs-project;
-(G) direct-push-bypass on this log — decide gate-exempt or PR-flow.
+(G) direct-push-bypass on this log — DECIDED 2026-07-09 (meta-3): gate-exempt, see the
+policy block in the header.
