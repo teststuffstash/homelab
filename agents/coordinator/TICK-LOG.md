@@ -148,3 +148,16 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   estimated (md/$0.54), minted `issue-1-round-2`, dispatched `agent-oracle-fleet-094358`.
 - Round accounting note: coordinator calls this round 2 (it can't count the invisible first
   death — the gap-#1 launcher fix will make future counts truthful).
+
+### 2026-07-09 09:55 — round 2 complete; reflex self-healed a CI race; meta-probe false positive
+- **Worker r2** (405s, $0.054): all 5 review items fixed on the rebased PR branch, +1 TOC test
+  (30 green), correctly reported "No specs/ edits — behavior now matches the ⚖ requirement".
+  Push landed (`5b27604`), CI green 09:50:00.
+- **Reflex race, handled by design**: the 09:50:03 tick saw a not-yet-green rollup ("nothing to
+  review"); the 09:55 tick dispatched `reviewer-oracle-fleet-5-095506`. Level-triggered wins —
+  no fix needed. (Also verified: review-reflex.sh line 96 `reviewable_again` covers
+  CHANGES_REQUESTED+new-commits, since GitHub's dismiss-stale only clears APPROVALS.)
+- **Meta-tooling lesson (mine)**: the watch probe fired "PR unchanged" because a gh error
+  defaulted INTO the trigger (`${PUSHED:-1} -le 1`). Probes must fail loud, not fail into a
+  condition. Reflex-design rule #6: any automated condition check distinguishes
+  "true" / "false" / "probe failed" — the third is never an action trigger.
