@@ -57,9 +57,13 @@ spec:
     actions: read                  #     + `gh --json statusCheckRollup`'s fixed fragment also reaches
                                    #       checkSuite.workflowRun (an Actions resource); without this the
                                    #       whole GraphQL query 403s and gh returns empty. Read-only.
-  repositories:                    # only the repos where agent-fix work lives
-    - sleep-tracking
-    - snore-recorder
+  repositories:                    # ALL stack repos the coordinator lists/labels/merges/clones
+    - sleep-tracking               # (FU-045 clones + FU-060; the homelab-agents App installation
+    - snore-recorder               #  must cover each — verify docs/github-apps.md BEFORE adding,
+    - sleep-iac                    #  or ESO token generation 422s and breaks the live token)
+    - openrouter-operator
+    - oracle-fleet
+    - oracle-iac
 ---
 # 3) Drive the generator → write the Secret the coordinator pod reads as GH_TOKEN. The generator
 # yields key `token`; remap it to GH_TOKEN (what coordinator-session.sh's secretKeyRef expects).
