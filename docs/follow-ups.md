@@ -294,8 +294,12 @@ _Last updated: 2026-07-08._
       verdict, static table kept as the offline fallback; **strike bookkeeping in the launcher
       (2026-07-09)** — a PR-less run posts `AGENT_STRIKE: model=… error_class=… round=… session=…`
       + the log tail to the ISSUE (the comment is the strike store; brief reads it to walk the
-      chain), PR runs get `error_class` in the stats comment. OPEN: scout CronJob, goose provider
-      injection (FU-018/ADR-081).
+      chain), PR runs get `error_class` in the stats comment; **model-scout reflex v1 (2026-07-09,
+      REPORT-ONLY)** — weekly CronJob (`agents/model-scout.sh` + `coordinator/model-scout.yaml`,
+      deployed `suspend: true` pending the first supervised run) diffs /models vs the bucket
+      snapshot and posts a digest issue; canary dispatch + key minting stay TODO in the script,
+      gated on FU-024. OPEN: scout first supervised run + unsuspend, goose provider injection
+      (FU-018/ADR-081).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
