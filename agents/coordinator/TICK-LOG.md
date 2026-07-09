@@ -212,6 +212,47 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   "human-invalidation sweep" (close/re-scope before the next C1), or the scan will happily
   dispatch against stale scope. This session's manual sweep is the specification of it.
 
+### 2026-07-09 16:37 — meta-2 tick 1 (C1) — textbook, two platform checks passed live
+- Coordinator claimed #1, estimated (xs, $0.25 cap, est $0 — free model), minted, dispatched
+  `agent-oracle-fleet-164034` on `tencent/hy3:free`. **FU-060 remaining check ✓** (token resolved
+  both oracle clones); **FU-061 ✓ live** (tick transcript keyed `oracle-fleet/_ticks/…` — the
+  stack-vs-project split is gone).
+- **Mid-run meta-fix**: deleted stale remote branch `fix/issue-1-chassis-scaffold` (closed PR #5's
+  head) — a same-named push from any future round would die non-fast-forward. **C10 sweep item:
+  closing a PR deletes its head branch.**
+
+### 2026-07-09 18:10 — round 1 terminal: work SUCCEEDED, platform lost it (token-expiry, new class)
+- **The task side was flawless**: full Python chassis, 32 spec-row tests (incl. every ⚖ pin),
+  `devbox run ci` GREEN in-pod, scan-secrets clean, incremental writes held, and the model
+  **refused to storm the 401** citing the issue history — the recipe lesson bound this time.
+- **The infra side lost the artifact**: 2917s on the free model outlived the **60-min GitHub App
+  token TTL** → push + PR both 401'd → green code stranded in the dead pod. New error class
+  **`token-expiry`** (not auth-storm — no storm happened; the watchdog correctly stayed quiet).
+- **Three platform gaps confirmed/found:**
+  1. **Strike/stats bookkeeping is still dispatcher-lifetime-coupled on the coordinator path**
+     (FU-043 class): the coordinator pod exits ~1 min after dispatch, so the launcher's
+     PR-less-death AGENT_STRIKE never posted. Meta posted it by hand. The e45f575 fix covered slow
+     pod STARTS, not the dispatcher exiting before worker END. Ownership must move in-pod
+     (agent-finalize already runs there and posted stats to the LOG + pushgateway — it just
+     doesn't own the GitHub comment) or to a reflex.
+  2. **Classifier gap**: agent-finalize scored this run `exit_status=clean, error_class=""` —
+     ci_passed=true + no pr_url must NOT be clean (proposal: `no-artifact` or `token-expiry`;
+     the model-health dashboard reads this field — a "clean" that shipped nothing poisons it).
+  3. **Push-early STILL doesn't bind** (2nd model it fails on): first push attempted only at the
+     end. An early push at scaffold time (~30 min in) was inside the token window and would have
+     left a resumable branch. Recipe wording alone is insufficient across models — candidates: a
+     deterministic post-scaffold push hook in the harness, or the reviewer/finalize flagging
+     "no push before minute N" as an error class.
+- **Chain semantics honored**: no round consumed; strike walks dispatch to `tencent/hy3` (paid,
+  fast enough to finish inside the TTL). Token-TTL root fix belongs to FU-018's cred-injection leg
+  (mid-run token refresh at the egress proxy) — noted there.
+- **Meta policy update (Rasmus)**: when the loop is proven this session and tempo is slow, run a
+  SECOND track-scoped coordinator in parallel (TRACKS.md seed line). Sequencing decision: the
+  parallel point is AFTER #1 merges — #2/#3 both hard-depend on #1's pyproject/package layout
+  (shared file, chassis lane); queueing them earlier would force a lane trespass. #2's body swept
+  for Python-era accuracy (TS reference marked approach-only; entry-point + shared-file rule made
+  explicit; seed-format contract path added).
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
