@@ -253,6 +253,26 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   for Python-era accuracy (TS reference marked approach-only; entry-point + shared-file rule made
   explicit; seed-format contract path added).
 
+### 2026-07-09 18:19 — tick 2 (C4 via strike): clean chain walk; then attempt 2 died at 18:40 — OPERATOR BUG
+- Tick 2 was textbook: read the strike, walked to paid `tencent/hy3`, re-minted, dispatched
+  `agent-oracle-fleet-181942` (est $0.30/cap $0.50). Worker ran healthily ~20 min, then a 401
+  "User not found" storm — **caught properly this time**: turn-bound stopped the loop,
+  agent-finalize classified `auth-storm/http-401-storm`, metrics pushed. FU-021 machinery ✓.
+- **Root cause (diagnosed from the OpenRouter API, to the second): key re-mint PATCH does not
+  extend `expires_at`.** The reused CR `…issue-1-round-1` was PATCHed at 18:19 (spec expiry
+  20:19:22Z) but the live key kept its creation-time deadline 16:40+2h = **18:40:08Z** — the
+  worker died at the key's real expiry exactly. Model innocent; strike record corrected on the
+  issue (hy3 stays active; only hy3:free stays struck). **Load-bearing interaction: strike
+  semantics reuse the round → same CR name → always the PATCH path → every infra-death
+  re-dispatch inherits a near-dead key.** Filed **openrouter-operator#6** (rotate-on-expiry-drift
+  + surface `expires_at` in status for a dispatch-time pre-flight). Workaround: meta deletes the
+  stale CR pre-redispatch (forces the POST path).
+- **Bookkeeping gap re-confirmed** (2nd time this session): no AGENT_STRIKE posted for the
+  attempt-2 death either — dispatcher-lifetime coupling. Meta posted the corrected record.
+- Round still 1/3; two attempts, two DIFFERENT infra walls (git-token TTL 60m; session-key TTL
+  2h-from-first-mint), zero model/task failures. The chassis task itself is proven implementable
+  (attempt 1's in-pod green).
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
