@@ -46,19 +46,27 @@ _REQ_LARGE = 160  # ≥ 2000 tok — a multi-file change
 
 # Effective INPUT price ($/M tokens) for known models. "Effective" = the price of a CACHING, sanely
 # routed provider, NOT the model-page headline (see the routing follow-up). Override with
-# --price-per-mtok when routing/provider differs. `:free` models are ~$0 but rate-limited (≈8 rpm) →
-# unreliable for a tool loop; prefer a cheap PAID model bounded by the per-session cap. NB: avoid
-# *cloaked* models (e.g. the former owl-alpha) for the standing path — OpenRouter rotates them out
-# and they 404 mid-run.
+# --price-per-mtok when routing/provider differs — an UNKNOWN model is unpriced, not forbidden
+# (fetch its price from /api/v1/models/<id>/endpoints and override; FU-062 replaces this table with
+# that live registry). A model failing mid-run costs one infra STRIKE (chain re-dispatch,
+# docs/agents/model-routing.md), so free/new models are fair chain entries; the per-session cap is
+# the guardrail. NB: still avoid *cloaked* models (the former owl-alpha) as PRIMARY — OpenRouter
+# rotates them out and they 404 mid-run. (The old "free ≈ 8 rpm" note here was a dated 2026-06-30
+# measurement — free-tier limits are account-dependent; measure, don't repeat it.)
 _MODEL_PRICE: dict[str, float] = {
     "qwen/qwen3-coder:free": 0.0,
     "openrouter/qwen/qwen3-coder:free": 0.0,
     "qwen/qwen3-coder": 0.30,  # DeepInfra effective input (the cheap caching provider)
     "openrouter/qwen/qwen3-coder": 0.30,
-    # The default worker model: cheap + many cached providers @ 99%+ uptime (≈$0.09–0.10/M in,
-    # ~$0.02/M cached), so it's reliable AND inexpensive — no cloaked-model 404s.
+    # The long-standing default: cheap + many cached providers @ 99%+ uptime (≈$0.09–0.10/M in,
+    # ~$0.02/M cached) — but 2/4 harness-deaths on file-recreation (oracle #1); chain, don't pin.
     "deepseek/deepseek-v4-flash": 0.10,
     "openrouter/deepseek/deepseek-v4-flash": 0.10,
+    # tencent/hy3: tool-capable, $0.14/M headline (2026-07-09); :free tier = $0.
+    "tencent/hy3:free": 0.0,
+    "openrouter/tencent/hy3:free": 0.0,
+    "tencent/hy3": 0.14,
+    "openrouter/tencent/hy3": 0.14,
 }
 _DEFAULT_PRICE = 1.0  # conservative fallback for an unknown paid model
 

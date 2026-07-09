@@ -6,21 +6,24 @@
       "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
       "mainRepo": "homelab",
       "coordinatorModel": "sonnet",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
+      "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"]
     },
     {
       "name": "platform",
       "repos": ["openrouter-operator"],
       "mainRepo": "homelab",
       "coordinatorModel": "opus",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
+      "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"]
     },
     {
       "name": "oracle",
       "repos": ["oracle-iac", "oracle-fleet"],
       "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash"
+      "workerModel": "tencent/hy3:free",
+      "workerModelFallbacks": ["tencent/hy3", "openrouter/deepseek/deepseek-v4-flash"]
     }
   ]
 }

@@ -270,7 +270,24 @@ _Last updated: 2026-07-08._
       declaring external ones. Remaining check: confirm the regenerated token resolves the oracle repos on
       the next coordinator tick.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
-      not enforced).
+      not enforced). Now load-bearing for the FU-062 model scout (free canary keys must be
+      honor-system no longer).
+- [ ] **FU-062** — **Model routing: chains + strikes + a live registry** — the umbrella that binds
+      FU-018/FU-021/FU-024/FU-057 into one design (they don't work separately). Full doc:
+      [`docs/agents/model-routing.md`](agents/model-routing.md). Core: (1) **rounds ≠ strikes** —
+      infra failures (harness-death/auth-storm/timeout) consume NO round; they blacklist the model
+      *for that task only* and re-dispatch same-tick on the next `workerModelFallbacks` chain entry
+      (`agents/stacks.json`, additive field → the AgentStack "model tiers" slot, FU-048); global
+      blacklists come only from the FU-057 model-health ledger. (2) `estimate_budget.py`'s static
+      price table → a **live registry** (`/api/v1/models` + `/models/:id/endpoints`; effective price
+      = cache-aware per-provider min; interim: the `--price-per-mtok` override recipe now in the
+      coordinator brief). (3) **provider pinning per session** (cache lives at the provider —
+      FU-018's injection leg). (4) a weekly **model-scout reflex** (new free/cheap tool-capable
+      models → canary task → ledger). Routers verified 2026-07-09: `pareto-code`/`fusion` advertise
+      no `tools` (park); `openrouter/auto` = paid lottery (last-resort only); `openrouter/free` =
+      free router WITH tools (scout candidate). DONE today: brief policy block, stacks.json chains,
+      tencent/hy3 priced in the estimator. OPEN: registry code, strike bookkeeping in the launcher
+      (post strike-count to the issue), scout CronJob, goose provider injection (FU-018/ADR-081).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
