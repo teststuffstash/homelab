@@ -62,7 +62,9 @@ haproxy_proxied_services:
   - { name: argocd, cert_domain: argocd.teststuff.net, vip: 192.168.2.2, backend_ip: 192.168.40.17, backend_port: 80 }
   - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.2.10, backend_ip: 192.168.40.18, backend_port: 80 }
   # Agent transcripts viewer — INTERNAL ONLY (transcripts carry repo content; never tunneled).
-  - { name: transcripts, cert_domain: transcripts.local.teststuff.net, vip: 192.168.2.11, backend_ip: 192.168.40.19, backend_port: 3727 }
+  # VIP is .2.30, NOT the .11–.26 band: that band holds statically-addressed UniFi/IoT gear
+  # (.11 USW-Lite-8-PoE, .12/.14/.63 APs, .16/.26 roborock) — .11 collided with the switch.
+  - { name: transcripts, cert_domain: transcripts.local.teststuff.net, vip: 192.168.2.30, backend_ip: 192.168.40.19, backend_port: 3727 }
 
 # TCP passthrough (no TLS) — Forgejo SSH clone on forgejo.teststuff.net:22 -> cluster VIP.
 # Reuses the forgejo HTTPS VIP (.2.9, created above), so one hostname serves HTTPS:443 + SSH:22.
