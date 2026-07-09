@@ -195,6 +195,23 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - **Terminal action**: `agent/blocked` + diagnostic issue comment; did NOT re-dispatch (round 4
   into the same wall = negative-EV — the bound working as designed). Handed to Rasmus.
 
+### 2026-07-09 ~17:00 — meta-session 2 begins (unattended, Rasmus-authorized; budget cap $8.52 OpenRouter)
+- **World reset after the language reversal** (oracle-fleet 0662af7, Python/uv): PR #5 (TS scaffold,
+  CHANGES_REQUESTED, armed) would have been picked up by the scan's CHANGES_REQUESTED clause and
+  burned a round fixing code the repo now forbids — the stale-task-state trap after a human
+  direction change. **Meta actions**: closed PR #5 (spec pins it produced are already on master);
+  re-scoped issue #1 to Python/uv (body rewritten, seed-format contract + FTS5 pre-flight guard
+  added); `agent/blocked` → `agent/queued`; **round counter reset to 1** (task materially changed);
+  TRACKS.md chassis lane shared-files updated to pyproject/uv.lock.
+- **Platform deltas in effect this session**: FU-021 watchdog live-accepted (in the pinned
+  agent-base); strike bookkeeping (PR-less deaths → AGENT_STRIKE issue comments); model chain
+  tencent/hy3:free → hy3 → deepseek-v4-flash (infra deaths burn no round); egress-proxy provider
+  pin; review-reflex + tokens stack-derived (gaps #4/#5 fixed).
+- **Reflex-spec note (new condition class)**: a human direction change (language/architecture
+  reversal) invalidates open agent PRs + queued issue scopes — the reflex table needs a C10
+  "human-invalidation sweep" (close/re-scope before the next C1), or the scan will happily
+  dispatch against stale scope. This session's manual sweep is the specification of it.
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
