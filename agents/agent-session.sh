@@ -30,8 +30,10 @@ KUBECTL="$(command -v kubectl || true)"
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode] [--model provider/model]}"
 shift || true
 
-# Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap — NOT a
-# `:free` tier (≈8 rpm, chokes a tool loop) and NOT a cloaked model (rotated out → 404s mid-run).
+# Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap. The
+# per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
+# STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
+# docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
 RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -65,13 +67,58 @@ case "$_stripped" in
   *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/<cloaked-codename> → keep (it's in the openrouter/ ns)
 esac
 
+# ADR-081 v1 (FU-062 §M4, GOOSE ONLY): goose cannot carry OpenRouter `provider` prefs, so its
+# OpenRouter traffic rides the in-cluster egress proxy, which injects the per-model provider pin
+# into chat/completions bodies (argocd/resources/openrouter-proxy/ — provider-injection only in
+# v1; cred injection + Cilium lockdown stay FU-018/FU-020). Opt out with
+# AGENT_OPENROUTER_PROXY="" for direct egress (e.g. the proxy is down and it's striking runs).
+GOOSE_PROXY_ENV=""
+if [ "$HARNESS" = "goose" ]; then
+  PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+  if [ -n "$PROXY_URL" ]; then
+    GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
+  fi
+fi
+
+# FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
+# provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
+# effective-cheapest cache-supporting tools-capable provider. Rendered as a per-session opencode
+# config (OPENCODE_CONFIG merges under the repo's own opencode.json, so a project override wins);
+# allow_fallbacks:true keeps the run alive if the pin is down, and max_price (2× the pinned
+# provider's headline prompt $/M) blocks the expensive-lottery fallback (the $5.79 qwen incident).
+# goose deliberately gets NOTHING here — it cannot carry provider prefs; that's the ADR-081 proxy.
+OC_SETUP=""; OC_ENV=""
+if [ "$HARNESS" = "opencode" ]; then
+  PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
+  # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
+  OC_CONFIG="$(printf '%s' "$PIN_JSON" | jq -c --arg m "$GOOSE_MODEL" '
+    select(.pinned_provider != null) |
+    {"$schema": "https://opencode.ai/config.json",
+     provider: {openrouter: {models: {($m): {options: {provider: {
+       order: [.pinned_provider.slug // .pinned_provider.provider],
+       allow_fallbacks: true,
+       max_price: {prompt: ((.pinned_provider.prompt * 2 * 10000 | ceil) / 10000)}
+     }}}}}}}' 2>/dev/null || true)"
+  if [ -n "$OC_CONFIG" ]; then
+    echo "→ opencode session pin: $(printf '%s' "$PIN_JSON" | jq -r '"\(.pinned_provider.provider) (effective $\(.pinned_provider.effective_per_mtok)/M in)"')"
+    # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
+    OC_SETUP="printf '%s' '$(printf '%s' "$OC_CONFIG" | base64 -w0)' | base64 -d > /tmp/opencode-session.json; "
+    OC_ENV=$'        - name: OPENCODE_CONFIG\n          value: "/tmp/opencode-session.json"'
+  else
+    echo "→ opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned"
+  fi
+fi
+
 if [ -n "$RUN_CMD" ]; then
   # Run the harness, tee its output to a file, then emit the AGENT_RUN_STATS line (agent-finalize
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
-  WRAPPED="set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
+  WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
+elif [ -n "$OC_SETUP" ]; then
+  # Interactive opencode session: write the pin config, then idle for the exec below.
+  ARGS="[\"bash\",\"-c\",$(printf '%s' "${OC_SETUP}exec sleep infinity" | jq -Rs .)]"
 else
   ARGS="[\"sleep\",\"infinity\"]"       # idle after prep; you exec in below
 fi
@@ -168,8 +215,13 @@ ${AFFINITY}
           value: "openrouter"
         - name: GOOSE_MODEL
           value: "${GOOSE_MODEL}"
+        # goose→OpenRouter via the ADR-081 egress proxy (emitted only for goose, see above).
+${GOOSE_PROXY_ENV}
         - name: MODEL
           value: "${MODEL}"
+        # Per-session opencode provider pin (FU-018 interim, emitted ONLY when the pin config is
+        # written by the command prefix above — same couple-the-two rule as UV_ENV below).
+${OC_ENV}
         # Persistent uv wheel cache: env emitted ONLY when the agent-uv-cache PVC is mounted (UV_ENV),
         # so an unmounted /uv-cache never gets set as the cache dir. See the UV_ENV note above.
 ${UV_ENV}
@@ -177,6 +229,13 @@ ${UV_ENV}
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
           value: "auto"
+        # FU-021 interim bound: on a dead key (budget-403/revoked 401) goose's final-output
+        # continuation loops fresh requests until max_turns — default 1000 (measured: 530 auth
+        # failures, exit 0, no PR). goose v1.28 has NO per-error-class stop, so cap the loop; 200
+        # clears every legit run measured (owl 72, the pathological qwen loop 187). The real
+        # storm hard-stop is agent-runtime#8.
+        - name: GOOSE_MAX_TURNS
+          value: "${GOOSE_MAX_TURNS:-200}"
         - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }
@@ -215,6 +274,7 @@ if [ -n "$RUN_CMD" ]; then
   # from both the stats and the full run logs (no more guessing the pod name). Posted from here (the
   # jail GH_TOKEN can comment) rather than the pod (scoped agent token may lack issues:write).
   STATS="$(grep -ao 'AGENT_RUN_STATS .*' "$RUNLOG" | tail -1 | sed 's/^AGENT_RUN_STATS //')"
+  PR_URL=""
   if [ -n "$STATS" ]; then
     echo "→ stats: $STATS"
     PR_URL="$(printf '%s' "$STATS" | jq -r '.pr_url // empty' 2>/dev/null)"
@@ -237,12 +297,61 @@ if [ -n "$RUN_CMD" ]; then
         "| duration | \(.duration_s // 0)s |\n" +
         "| reproduced | \(.reproduced // "?") |\n" +
         "| ci_passed | \(.ci_passed // "?") |\n" +
+        "| error_class | `\(if ((.error_class // "") == "") then "clean" else .error_class end)` |\n" +
         "| coverage | \(.coverage_pct // "?")% |\n" +
         "| node / pod | `\(.node // "?")` / `\(.pod // "?")` |\n\n" +
         "[📜 run logs in Grafana](\($logs))\n" +
         "🗂 transcripts: `s3://agent-transcripts/\(.project // "?")/\($task)/` · [viewer](https://transcripts.local.teststuff.net)"')"
       echo "→ posting stats comment to ${PR_URL}"
       gh pr comment "$PR_URL" --body "$BODY" 2>&1 | tail -1 || echo "  (comment failed — non-fatal)"
+    fi
+  fi
+
+  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates WITHOUT an
+  # open PR is an infra strike candidate — classify it and post ONE structured comment to the ISSUE
+  # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
+  # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
+  # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
+  if [ -z "$PR_URL" ]; then
+    if [ -n "$STATS" ]; then
+      # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
+      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
+      # without a PR) is "unknown" — still a strike, just an unclassified one.
+      ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
+        (.exit_status // "") as $s
+        | if (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s else "unknown" end' \
+        2>/dev/null || echo unknown)"
+    else
+      # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
+      # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
+      # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
+      if grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
+        ERR_CLASS="harness-death"
+      elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
+        ERR_CLASS="budget-403"
+      elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
+        ERR_CLASS="auth-storm"
+      elif grep -qiE 'context deadline exceeded|request timed out|operation timed out' "$RUNLOG"; then
+        ERR_CLASS="timeout"
+      else
+        ERR_CLASS="unknown"
+      fi
+    fi
+    STRIKE_LINE="AGENT_STRIKE: model=${MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    echo "→ no PR opened — ${STRIKE_LINE}"
+    ISSUE_N=""
+    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+    SLUG=""
+    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+    if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
+      STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+        "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+      echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
+      gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
+        || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
+    else
+      echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
     fi
   fi
   rm -f "$RUNLOG"

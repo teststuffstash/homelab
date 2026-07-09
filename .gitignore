@@ -20,3 +20,6 @@
 
 # Generated live from the GitHub API (click-only app installs) — not a git artifact.
 /docs/github-apps.md
+
+# OpenRouter model-registry cache (estimate_budget.py --registry-cache; refetched, 24h TTL).
+/agents/.openrouter-registry.json

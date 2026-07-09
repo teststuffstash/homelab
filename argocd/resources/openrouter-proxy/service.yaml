@@ -1,0 +1,16 @@
+# In-cluster only — workers reach it cross-namespace at
+#   http://openrouter-proxy.agent-egress.svc.cluster.local:8080
+# (wired as goose's OPENROUTER_HOST by homelab agents/agent-session.sh).
+apiVersion: v1
+kind: Service
+metadata:
+  name: openrouter-proxy
+  labels:
+    app: openrouter-proxy
+spec:
+  selector:
+    app: openrouter-proxy
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

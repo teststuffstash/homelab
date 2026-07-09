@@ -1,0 +1,29 @@
+# openrouter-proxy — the ADR-081 egress proxy for worker pods, v1 slice: inject the per-model
+# OpenRouter `provider` pin (effective-cheapest cached tools-capable provider + max_price guard)
+# into goose's chat/completions bodies — goose cannot carry provider prefs itself (FU-018 /
+# FU-062 §M4). Kustomize app (configMapGenerator hash-rolls the pod on script edits). No secrets,
+# no dependencies — wave 1 is plenty. Deliberately NOT its own repo: the deployable unit is a
+# ConfigMap, so this repo's sync IS the deploy pipeline (github-exporter precedent).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openrouter-proxy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/openrouter-proxy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-egress
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

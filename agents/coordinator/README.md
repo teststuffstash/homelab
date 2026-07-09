@@ -69,15 +69,19 @@ double-spawns.
 > [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
 > - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
 >   max 3). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
->   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. Blacklist that model **for
->   this task only**, comment the strike on the issue (model + error class), and **re-dispatch the
->   same round immediately** on the next chain model with a fresh session key. Never label
->   `agent/blocked` for a pure infra failure while chain entries remain; only a fully-struck chain
->   escalates (comment the strike list — that IS a human's problem).
-> - **Pricing an off-table model:** a `$1.0/M` in the estimator verdict means *unpriced*, not
->   *forbidden*. Fetch the real headline price and override:
->   `curl -s https://openrouter.ai/api/v1/models/<vendor>/<model>/endpoints | jq '[.data.endpoints[].pricing.prompt | tonumber] | min * 1e6'`
->   → pass as `--price-per-mtok`. `:free` models are $0 → smallest tier by design.
+>   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. The launcher posts the
+>   strike FOR you: a PR-less run gets one structured issue comment —
+>   `AGENT_STRIKE: model=<m> error_class=<c> round=<r> session=<pod>` (+ the log tail). That comment
+>   IS the strike store (state lives in GitHub, not your head). To pick the model for any
+>   (re-)dispatch, grep the issue's comments for `AGENT_STRIKE:` and take the first chain entry not
+>   yet struck **for this task**, then **re-dispatch the same round immediately** with a fresh
+>   session key. Never label `agent/blocked` for a pure infra failure while chain entries remain;
+>   only a fully-struck chain escalates (comment the strike list — that IS a human's problem).
+> - **Pricing:** the estimator prices ANY model live (the OpenRouter registry, cache-aware effective
+>   $/M — FU-062 §M3); `python3 agents/estimate_budget.py --model <m> --lookup` shows the verdict +
+>   provider pin. A `$1.0/M (source: default)` price means the model is *unpriced/unknown to the
+>   registry* (typo? rotated out?) — fix the model id, or pass `--price-per-mtok` if you truly know
+>   better. `:free` models are $0 → smallest tier by design.
 > - Do **not** swap in models you happen to know outside the chain (especially **reasoning** models
 >   like `deepseek-r1*` — slow, verbose, pricier). Changing the chain itself is the human's call
 >   (stacks.json is policy).

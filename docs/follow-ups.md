@@ -150,14 +150,33 @@ _Last updated: 2026-07-08._
 
 - [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
-      providers) — the biggest cost lever. Interim: `opencode.json` `options.provider`. Cost
-      autopsy: `agents/README.md` → Operational findings.
+      providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
+      `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
+      per-model pin into goose's chat/completions (`OPENROUTER_HOST` wired in `agent-session.sh`,
+      opt-out `AGENT_OPENROUTER_PROXY=""`); opencode carries the same pin itself via per-session
+      `OPENCODE_CONFIG`. ⚠ `provider.order` matches endpoint-tag base SLUGS (`atlas-cloud`), not
+      display names. REMAINING here: credential minting/injection (the pod still holds its
+      OpenRouter key + GH_TOKEN) — then FU-020's Cilium lockdown makes the proxy the only exit.
+      Cost autopsy: `agents/README.md` → Operational findings.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-020** — Cilium egress lockdown for worker pods (deny-all + allow the proxy and the nix
       cache — without the nix allowance `devbox install` hangs).
 - [ ] **FU-021** — goose retry policy: hard-stop on auth/limit errors (it retried a
-      budget-exhausted 403 812×).
+      budget-exhausted 403 812×). **Investigated 2026-07-09 (FU-062 leg):** goose v1.28.0's
+      provider-retry layer already never retries 401/403 (`Authentication`); the storm is the
+      *agent reply loop* — with a recipe `final_output`, every provider error triggers the
+      final-output continuation → a fresh request on the dead key, bounded only by
+      `GOOSE_MAX_TURNS` (default 1000). **No env/recipe per-error-class stop exists**, so the real
+      fix is a runtime storm watchdog —
+      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8),
+      fixed + MERGED same day (agent-runtime#11)**: `agent-storm-watchdog`, two-poll-confirmed
+      harness kill preserving the finalize pipeline. Ships to workers via the #10 deploy-pin
+      (auto-merging `agents/images.env` bump PRs — proven live on homelab#16). Interim belt kept:
+      `agent-session.sh` pins `GOOSE_MAX_TURNS=200` (env-overridable). Resolve after a live
+      acceptance run on the pinned image — revoke/exhaust a session key mid-run, expect the kill
+      within ~2 polls + an `AGENT_STRIKE: … error_class=auth-storm` comment (then also drop the
+      interim comment marker in the launcher).
 - [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
       pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
       (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
@@ -288,9 +307,24 @@ _Last updated: 2026-07-08._
       FU-018's injection leg). (4) a weekly **model-scout reflex** (new free/cheap tool-capable
       models → canary task → ledger). Routers verified 2026-07-09: `pareto-code`/`fusion` advertise
       no `tools` (park); `openrouter/auto` = paid lottery (last-resort only); `openrouter/free` =
-      free router WITH tools (scout candidate). DONE today: brief policy block, stacks.json chains,
-      tencent/hy3 priced in the estimator. OPEN: registry code, strike bookkeeping in the launcher
-      (post strike-count to the issue), scout CronJob, goose provider injection (FU-018/ADR-081).
+      free router WITH tools (scout candidate). DONE: brief policy block, stacks.json chains,
+      tencent/hy3 priced in the estimator; **live registry in `estimate_budget.py` (2026-07-09)** —
+      cached /models + per-model /endpoints, cache-aware effective price, `--lookup` provider-pin
+      verdict, static table kept as the offline fallback; **strike bookkeeping in the launcher
+      (2026-07-09)** — a PR-less run posts `AGENT_STRIKE: model=… error_class=… round=… session=…`
+      + the log tail to the ISSUE (the comment is the strike store; brief reads it to walk the
+      chain), PR runs get `error_class` in the stats comment; **model-scout reflex v1 (2026-07-09,
+      REPORT-ONLY)** — weekly CronJob (`agents/model-scout.sh` + `coordinator/model-scout.yaml`,
+      deployed `suspend: true` pending the first supervised run) diffs /models vs the bucket
+      snapshot and posts a digest issue; canary dispatch + key minting stay TODO in the script,
+      gated on FU-024; **opencode session provider pin (2026-07-09)** — the FU-018 interim leg,
+      per-session `OPENCODE_CONFIG` from the registry's `--lookup` pin; **FU-021 investigated** —
+      no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim;
+      **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
+      (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
+      graceful 429 fallback). OPEN: scout first supervised run + unsuspend, FU-021 live acceptance
+      on the pinned image (#8 fix merged), ADR-081 cred-injection remainder (FU-018) + egress
+      lockdown (FU-020).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
