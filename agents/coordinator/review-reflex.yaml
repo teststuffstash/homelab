@@ -66,8 +66,6 @@ spec:
               env:
                 - name: HOME
                   value: "/home/node"
-                - name: AGENT_REPOS
-                  value: "sleep-tracking snore-recorder"
                 - name: ORG
                   value: "teststuffstash"
                 - name: REVIEW_CONCURRENCY      # K — global cap on concurrent reviewer pods (subscription quota)

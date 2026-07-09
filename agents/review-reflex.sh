@@ -24,7 +24,18 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 ORG="${ORG:-teststuffstash}"
-REPOS="${AGENT_REPOS:-sleep-tracking snore-recorder}"
+# Repos: explicit AGENT_REPOS wins; else derive ALL stack repos from agents/stacks.json —
+# the reflex runs from a fresh homelab clone each tick, so the stack list is always current
+# (found live: PR oracle-fleet#5 sat green+armed+unapproved for 90min because this list was
+# hardcoded to the sleep repos; TICK-LOG 2026-07-09).
+if [ -n "${AGENT_REPOS:-}" ]; then
+  REPOS="$AGENT_REPOS"
+else
+  _HERE=$(cd "$(dirname "$0")" && pwd)
+  REPOS=$(jq -r '.stacks[].repos[]' "$_HERE/stacks.json" 2>/dev/null | sort -u | tr '
+' ' ')
+  REPOS="${REPOS:-sleep-tracking snore-recorder}"
+fi
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-agent-coordinator}"
 KUBECTL="$(command -v kubectl || echo kubectl)"
