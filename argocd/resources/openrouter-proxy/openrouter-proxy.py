@@ -38,6 +38,12 @@ PIN_TTL_S = int(os.environ.get("PIN_TTL_S", "3600"))  # pin cache; providers/pri
 PIN_FAIL_TTL_S = int(os.environ.get("PIN_FAIL_TTL_S", "300"))  # don't hammer a failing endpoint
 MAX_PRICE_FACTOR = float(os.environ.get("MAX_PRICE_FACTOR", "2.0"))  # guard vs fallback lottery
 READ_TIMEOUT_S = int(os.environ.get("READ_TIMEOUT_S", "300"))  # idle timeout per upstream read
+# Completion floor (0 = off). Three worker runs died to goose -32602 tool-call truncation at
+# 14781/15267/16322 chars — all ≈4k tokens: a max_tokens=4096 default somewhere goose-side caps
+# any file-write tool call above ~4k tokens mid-JSON (oracle-fleet#1 autopsies, TICK-LOG 2026-07-09).
+# The proxy raises max_tokens to this floor (clamped to the pinned endpoint's max_completion_tokens
+# when known); an explicit request value ABOVE the floor always wins.
+MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 
 # Hop-by-hop (and framing) headers never forwarded either way. accept-encoding is stripped so the
 # upstream answers identity — we re-frame the response as stream-until-close.
@@ -94,6 +100,7 @@ def compute_pin(model: str) -> dict | None:
                 "cache_read": _mtok(pricing, "input_cache_read"),
                 "uptime": e.get("uptime_last_30m"),
                 "tools": "tools" in (e.get("supported_parameters") or []),
+                "max_completion": e.get("max_completion_tokens"),
             }
         )
 
@@ -115,14 +122,19 @@ def compute_pin(model: str) -> dict | None:
             if best["completion"] is not None:
                 max_price["completion"] = round(best["completion"] * MAX_PRICE_FACTOR, 4)
             return {
-                "order": [best["slug"] or best["provider"]],
-                "allow_fallbacks": True,
-                "max_price": max_price,
+                "provider": {
+                    "order": [best["slug"] or best["provider"]],
+                    "allow_fallbacks": True,
+                    "max_price": max_price,
+                },
+                "max_completion": best["max_completion"],
             }
     return None
 
 
 def pin_for(model: str) -> dict | None:
+    """{"provider": <routing block>, "max_completion": int|None} for the model, or None
+    (free model / no eligible endpoint / fetch failure)."""
     model = normalize_model(model)
     if model.endswith(":free"):
         return None  # $0 either way — free models sidestep M4 (model-routing.md)
@@ -207,14 +219,27 @@ class Proxy(BaseHTTPRequestHandler):
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
-                # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
-                # hand-crafted request) always wins — never overwrite policy already in the body.
-                if isinstance(payload, dict) and "provider" not in payload and payload.get("model"):
+                if isinstance(payload, dict) and payload.get("model"):
+                    notes = []
                     pin = pin_for(str(payload["model"]))
-                    if pin:
-                        payload["provider"] = pin
+                    # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
+                    # hand-crafted request) always wins — never overwrite policy already in the body.
+                    if pin and "provider" not in payload:
+                        payload["provider"] = pin["provider"]
+                        notes.append(f"injected:{pin['provider']['order'][0]}")
+                    # max_tokens floor (goose -32602 truncation class): raise a missing/low
+                    # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
+                    # max_completion_tokens when known. An explicit value ABOVE the floor wins.
+                    floor = MAX_TOKENS_FLOOR
+                    if pin and isinstance(pin.get("max_completion"), int):
+                        floor = min(floor, pin["max_completion"])
+                    current = payload.get("max_tokens")
+                    if floor > 0 and (not isinstance(current, int) or current < floor):
+                        payload["max_tokens"] = floor
+                        notes.append(f"max_tokens:{floor}")
+                    if notes:
                         body = json.dumps(payload).encode()
-                        note = f"injected:{pin['order'][0]}"
+                        note = "+".join(notes)
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note)
