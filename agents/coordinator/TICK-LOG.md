@@ -100,3 +100,21 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - **Reflex-design lesson #4**: every reflex's scope must come from the ONE stack registry, never
   its own list. (Same lesson as coordinator-scan's `stacks_json()` swap-point — the reflexes
   predate it.)
+
+### 2026-07-09 09:25 — event: reflex-gap #5 — reviewer token sleep-scoped (C8)
+- **Good news first**: the #4 fix worked — the reflex dispatched `reviewer-oracle-fleet-5` on its
+  first tick with the derived repo list. And P0 capture held on failure: the dying reviewer still
+  uploaded its manifest+transcript to the bucket.
+- **Symptom**: reviewer died on `GraphQL: Could not resolve to a Repository` — its
+  `reviewer-git.yaml` `repositories:` was sleep-only (the App installation already covered the
+  oracle repos, per docs/github-apps.md).
+- **Fix**: widened to the coordinator-git set (pushed, bypass); Argo synced; ESO force-re-minted
+  (refresh 09:28); Error pod deleted AFTER evidence capture (log excerpt here + transcript in
+  bucket — the meta-rule is satisfied by capture, not by pod hoarding).
+- **Count: 5 gaps, ALL stale registrations.** Three are per-identity token repo lists
+  (coordinator FU-060, reviewer here, worker's was wired correctly by luck of being new). Until
+  the AgentStack claim renders these from one object (FU-048), add the deterministic
+  reconciliation gate: homelab CI asserts every stacks.json repo appears in coordinator-git +
+  reviewer-git lists — the monitoring-over-testing principle applied to the platform itself.
+- **Next**: reflex re-dispatches on its next tick (level-triggered — PR #5 still
+  green+armed+unapproved).
