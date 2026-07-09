@@ -41,6 +41,17 @@ The irreplaceable artifact is the transcript. Everything else (dashboards, retro
   SERVICES.md/ADR-046), but **ClickHouse + Redis are two new stateful platform services** for a
   one-person fleet, and transcripts' durable home should stay git+S3 (ADR-080). Bucket + viewer +
   Grafana covers the need; revisit only if analysis outgrows Grafana.
+- **Turnstone** (self-hosted orchestration, Apache-2.0; assessed 2026-07-09): philosophical cousin
+  (data-local, audit-in-own-DB). Adopted ideas: (1) **graduated autonomy** — advisory verdicts with
+  auto-action only above a confidence threshold (their `smart_approvals`, 0.95 default) → the P3
+  autonomous-merge flip becomes a dial (reviewer emits recommendation+confidence; auto-merge ≥
+  threshold, low-confidence approvals route to the human); (2) **verdicts as persisted structured
+  objects** stamped with the final human decision (their `intent_verdicts`) → the FU-057 ledger
+  schema, incl. `llm_fallback`-style "failed judge still emits a marked verdict"; (3) their
+  critical/high **heuristic rule pack** as a PreToolUse hook for bypassPermissions contexts
+  (coordinator + meta-sessions), NOT workers (pod scope is the boundary). Rejected: judge-is-the-
+  session-model self-consistency (weaker than our decorrelated reviewer); HRW workstream routing
+  (track labels already assign deterministically, with semantics).
 - **Devin productized exactly our Part B**: *Session Insights* (analyzes completed sessions →
   actionable recommendations) + *Knowledge* (org-wide lessons, **user-approved before they
   persist**) + *Playbooks* (successful sessions distilled into reusable procedures). Their
