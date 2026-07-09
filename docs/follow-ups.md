@@ -169,9 +169,12 @@ _Last updated: 2026-07-08._
       final-output continuation → a fresh request on the dead key, bounded only by
       `GOOSE_MAX_TURNS` (default 1000). **No env/recipe per-error-class stop exists**, so the real
       fix is a runtime storm watchdog —
-      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8)**.
-      Interim: `agent-session.sh` pins `GOOSE_MAX_TURNS=200` (env-overridable). Resolve when #8
-      lands (then also drop the interim comment marker in the launcher).
+      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8)**;
+      **fix built same day: agent-runtime#11** (`agent-storm-watchdog`, two-poll-confirmed harness
+      kill preserving the finalize pipeline), shipping to workers once merged + the #10 deploy-pin
+      bumps `agents/images.env`. Interim: `agent-session.sh` pins `GOOSE_MAX_TURNS=200`
+      (env-overridable). Resolve after a live acceptance run on the pinned image (then also drop
+      the interim comment marker in the launcher).
 - [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
       pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
       (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
