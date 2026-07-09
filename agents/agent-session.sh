@@ -34,7 +34,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -45,6 +45,7 @@ while [ $# -gt 0 ]; do
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
+    --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -58,6 +59,47 @@ IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:la
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
 POD="agent-${PROJECT}-$(date -u +%H%M%S)"
+
+# ── Dispatch pre-flight: deterministic guards (FU-042 + the TTL walls, TICK-LOG meta-2 2026-07-09) ──
+# The brief's soft judgment failed each of these live: a second coordinator pass double-dispatched an
+# in-progress issue (sleep-tracking#10 → conflicting PR #12), and three runs died on stale key/token
+# deadlines. Headless task runs only; AGENT_PREFLIGHT=0 to bypass (e.g. deliberate parallel tracks).
+if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
+  case "$TASK" in issue-[0-9]*)
+    PF_ISSUE="${TASK#issue-}"
+    PF_SLUG="${REPO_URL#https://github.com/}"; PF_SLUG="${PF_SLUG%.git}"
+    # (a) FU-042: an issue with an OPEN agent PR is alive in the merge path — dispatching a fresh
+    # round would fork the work. Fix rounds resume THAT PR's branch via --work-branch instead.
+    if command -v gh >/dev/null 2>&1; then
+      PF_PR="$(gh pr list --repo "$PF_SLUG" --state open --json number,body \
+        --jq "[.[] | select(.body | test(\"#${PF_ISSUE}\\\\b\"))][0].number // empty" 2>/dev/null || true)"
+      if [ -n "$PF_PR" ]; then
+        echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} already has open PR #${PF_PR} (${PF_SLUG}) — resume it with --work-branch, don't fork it (FU-042)." >&2
+        exit 3
+      fi
+    fi
+    # (b) one live worker per project: WIP=1 (a Running agent pod = an active round).
+    PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
+      --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${PF_LIVE:-0}" -gt 0 ]; then
+      echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) already Running in ns ${NS} — WIP=1 per project (FU-042)." >&2
+      exit 3
+    fi
+  ;; esac
+  # (c) session-key freshness: post openrouter-operator#6 the CR surfaces the LIVE key expiry in
+  # .status.openrouter.expires_at (the PATCH re-mint bug killed a healthy run at its STALE deadline —
+  # the CR spec claimed 20:19, the real key died 18:40). <30 min of real life → refuse; the fix is
+  # delete the CR + re-mint (the POST path). Operators without the field → check skipped.
+  PF_EXP="$("$KUBECTL" $KUBE -n "$NS" get openrouterkeys -o json 2>/dev/null \
+    | jq -r --arg s "$SECRET" '[.items[] | select((.spec.secretName // (.metadata.name + "-openrouter")) == $s)][0].status.openrouter.expires_at // empty')"
+  if [ -n "$PF_EXP" ]; then
+    PF_EXP_S="$(date -d "$PF_EXP" +%s 2>/dev/null || echo 0)"
+    if [ "$PF_EXP_S" -gt 0 ] && [ "$PF_EXP_S" -lt $(( $(date +%s) + 1800 )) ]; then
+      echo "PREFLIGHT REFUSED: session key ${SECRET} expires at ${PF_EXP} (<30 min real life) — delete the OpenRouterKey CR and re-mint before dispatch (openrouter-operator#6)." >&2
+      exit 3
+    fi
+  fi
+fi
 # goose's provider is GOOSE_PROVIDER, so drop the conventional openrouter/ prefix from the model id —
 # BUT OpenRouter's own *cloaked* models (e.g. a bare `openrouter/<codename>`) genuinely live UNDER
 # that namespace, so only strip when a vendor/model slug remains (still has a '/'); otherwise keep it.
@@ -72,6 +114,11 @@ esac
 # into chat/completions bodies (argocd/resources/openrouter-proxy/ — provider-injection only in
 # v1; cred injection + Cilium lockdown stay FU-018/FU-020). Opt out with
 # AGENT_OPENROUTER_PROXY="" for direct egress (e.g. the proxy is down and it's striking runs).
+WORK_BRANCH_ENV=""
+if [ -n "$WORK_BRANCH" ]; then
+  WORK_BRANCH_ENV=$'        - name: WORK_BRANCH\n          value: "'"$WORK_BRANCH"'"'
+fi
+
 GOOSE_PROXY_ENV=""
 if [ "$HARNESS" = "goose" ]; then
   PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
@@ -140,8 +187,8 @@ TS_KEY_SECRET="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcri
 # agent pods can share it; fsGroup below makes it writable for the non-root user.
 UV_MOUNT=""; UV_VOLUME=""; UV_ENV=""
 if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
-  UV_MOUNT=$'      volumeMounts:\n        - { name: uv-cache, mountPath: /uv-cache }'
-  UV_VOLUME=$'  volumes:\n    - name: uv-cache\n      persistentVolumeClaim: { claimName: agent-uv-cache }'
+  UV_MOUNT=$'\n        - { name: uv-cache, mountPath: /uv-cache }'
+  UV_VOLUME=$'\n    - name: uv-cache\n      persistentVolumeClaim: { claimName: agent-uv-cache }'
   # Point uv at the shared cache ONLY when it's actually mounted. Setting UV_CACHE_DIR=/uv-cache
   # without the mount makes uv `mkdir /uv-cache` at `/`, which the non-root (1000) user can't write —
   # "failed to create directory /uv-cache: Permission denied". Absent the mount, leaving UV_CACHE_DIR
@@ -239,12 +286,21 @@ ${UV_ENV}
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }
         # Scoped ~1h GitHub token minted by the ESO GithubAccessToken generator (per-project,
-        # sleep-iac/<project>/agent/git-token.yaml) → clone private repos + push branch + open PR.
+        # <stack>-iac/<project>/agent/git-token.yaml) → clone private repos + push branch + open PR.
         # optional:true so sessions still work (public clone) before the agents App exists.
-        # v2/ADR-081: injected by the egress proxy instead of held in the pod.
+        # FU-064b: the token is ALSO volume-mounted below — kubelet rewrites the mounted file on ESO
+        # rotation, so the entrypoint's credential helper + gh wrapper read a LIVE token at use time
+        # (the env var is frozen at pod start; a >60-min run's env token is dead at push time —
+        # oracle-fleet#1 attempts 1+3). Env stays as the fallback for pre-mount images.
+        # v2/ADR-081 FU-018: injected by the egress proxy instead of held in the pod at all.
         - name: GH_TOKEN
           valueFrom:
             secretKeyRef: { name: agent-git-token, key: token, optional: true }
+        - name: GIT_TOKEN_FILE
+          value: "/secrets/git/token"
+        # Resume an existing remote branch deterministically (fix rounds / salvaged WIP — finding C).
+        # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
+${WORK_BRANCH_ENV}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000           # jetpackio/devbox 'devbox' user; numeric so k8s can verify non-root
@@ -255,8 +311,11 @@ ${UV_ENV}
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   { cpu: "6",    memory: "4Gi" }   # install is partly CPU-bound; allow burst past 2
-${UV_MOUNT}
-${UV_VOLUME}
+      volumeMounts:
+        - { name: git-token, mountPath: /secrets/git, readOnly: true }${UV_MOUNT}
+  volumes:
+    - name: git-token
+      secret: { secretName: agent-git-token, optional: true }${UV_VOLUME}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
@@ -299,7 +358,19 @@ if [ -n "$RUN_CMD" ]; then
   if [ -n "$STATS" ]; then
     echo "→ stats: $STATS"
     PR_URL="$(printf '%s' "$STATS" | jq -r '.pr_url // empty' 2>/dev/null)"
-    if [ -n "$PR_URL" ] && [ -n "${GH_TOKEN:-}" ]; then
+    # FU-064/FU-043: bookkeeping now runs IN-POD (agent-finalize) so it survives this launcher
+    # exiting early (the coordinator path). Everything below is the FALLBACK for pre-mount images /
+    # in-pod failures — the *_by_pod flags on the stats line say what already happened.
+    ARMED_BY_POD="$(printf '%s' "$STATS" | jq -r '.armed_by_pod // false' 2>/dev/null)"
+    COMMENT_BY_POD="$(printf '%s' "$STATS" | jq -r '.stats_comment_by_pod // false' 2>/dev/null)"
+    STRIKE_BY_POD="$(printf '%s' "$STATS" | jq -r '.strike_by_pod // false' 2>/dev/null)"
+    if [ "$ARMED_BY_POD" = "true" ] && [ "$COMMENT_BY_POD" = "true" ]; then
+      echo "→ PR bookkeeping done in-pod (armed + stats comment) — launcher fallback skipped"
+      PR_BOOKKEEPING_DONE=1
+    else
+      PR_BOOKKEEPING_DONE=""
+    fi
+    if [ -n "$PR_URL" ] && [ -z "$PR_BOOKKEEPING_DONE" ] && [ -n "${GH_TOKEN:-}" ]; then
       # ARM AUTO-MERGE — mandatory post-PR step (FU-041, docs/agents/merge-path.md §Chosen design ▸1).
       # The deterministic merge path only ever touches auto-merge-armed PRs: the updater keeps armed PRs
       # current, the review reflex only reviews armed PRs, and GitHub completes an armed PR the moment
@@ -333,14 +404,16 @@ if [ -n "$RUN_CMD" ]; then
   # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
   # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
   # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
-  if [ -z "$PR_URL" ]; then
+  if [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
     if [ -n "$STATS" ]; then
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
       # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
       # without a PR) is "unknown" — still a strike, just an unclassified one.
       ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
         (.exit_status // "") as $s
-        | if (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s else "unknown" end' \
+        | if $s == "no-artifact" then (.error_class // "no-pr")
+          elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
+          else "unknown" end' \
         2>/dev/null || echo unknown)"
     else
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —

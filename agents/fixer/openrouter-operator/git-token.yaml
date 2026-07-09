@@ -39,7 +39,10 @@ spec:
   permissions:
     contents: write
     pull_requests: write
-    issues: read # the fixer recipe MUST `gh issue view <n>` first
+    issues: write # read: the fixer recipe MUST `gh issue view <n>` first; write: agent-finalize
+      # posts AGENT_STRIKE / stats comments IN-POD (FU-064/FU-043 — the dispatcher may be gone at
+      # terminal time). Subset of the App-level grant (which already carries issues:write for the
+      # coordinator token), so the mint stays valid.
   repositories:
     - openrouter-operator # the token can ONLY touch this repo
 ---

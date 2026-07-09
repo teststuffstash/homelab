@@ -247,7 +247,8 @@ class Proxy(BaseHTTPRequestHandler):
 
 def main() -> int:
     log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
-        f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR})")
+        f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
+        f"max_tokens_floor={MAX_TOKENS_FLOOR})")
     ThreadingHTTPServer(("", PORT), Proxy).serve_forever()
     return 0
 

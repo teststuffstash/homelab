@@ -18,12 +18,13 @@
       "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"]
     },
     {
+      "_chain_policy": "Paid-cached-fast FIRST (agents/README.md model strategy + TICK-LOG meta-2): free tiers rate-limit to a crawl (~8 rpm) and slow models outlive the platform's freshness windows (hy3:free died to the 60-min git-token TTL, paid hy3 to pace/budget at 75+ min). Free tiers are scout-canary material (FU-062 M7), never fix-chain entries.",
       "name": "oracle",
       "repos": ["oracle-iac", "oracle-fleet"],
       "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
-      "workerModel": "tencent/hy3:free",
-      "workerModelFallbacks": ["tencent/hy3", "openrouter/deepseek/deepseek-v4-flash"]
+      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
+      "workerModelFallbacks": ["qwen/qwen3-coder", "tencent/hy3"]
     }
   ]
 }

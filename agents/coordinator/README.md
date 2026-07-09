@@ -109,11 +109,14 @@ double-spawns.
    no reset, ~2h `expiresAt`. The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
    read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
-   returns non-empty once minted. The operator **self-heals** — if a prior key expired/was revoked,
-   applying the CR (with its fresh `expiresAt`) re-mints a live one (it no longer NoOps on a dead key).
-   So **always (re)apply right before dispatch** rather than reusing a key minted earlier — a 2h key
-   that sat unused can expire, and a stale `status.hash` does NOT prove the key is still live. This is
-   the real breaker — the worker can't outspend `budgetUSD`.
+   returns non-empty once minted. ⚠ **Re-minting an EXISTING CR name takes the PATCH path, and
+   OpenRouter's PATCH cannot extend a key's real `expires_at`** (openrouter-operator#6, proven live
+   2026-07-09: the CR spec claimed 20:19, the key died at its original 18:40 deadline mid-run). Until
+   the operator's rotate-on-drift fix is deployed AND verified: **`kubectl delete` the old CR first,
+   then apply** — a *created* CR POSTs a genuinely fresh key with a full 2h window. After the fix, the
+   CR's `.status.openrouter.expires_at` shows the LIVE expiry — assert it covers the run
+   (`agent-session.sh` pre-flight refuses keys with <30 min real life). A stale `status.hash` does
+   NOT prove the key is live. This is the real breaker — the worker can't outspend `budgetUSD`.
 5. **Dispatch a fresh worker** for this round (already labelled `agent/in-progress` from step 2):
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
@@ -121,6 +124,15 @@ double-spawns.
        --task issue-<N> --round <r> \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
+   For a **fix round on an existing PR** (or resuming a salvaged WIP branch from a strike comment),
+   add `--work-branch <branch>` — the pod checks that branch out tracking origin deterministically
+   (finding C: never leave "which branch" to the model). The launcher **pre-flight** (FU-042) refuses
+   to dispatch when the issue already has an open agent PR, when a worker pod is already Running in
+   the project, or when the session key has <30 min of real life — a refusal means fix the state
+   (resume the PR / wait / re-mint), not retry. Terminal bookkeeping (auto-merge arming, the stats
+   comment, the `AGENT_STRIKE` issue comment, and a salvage-push of any committed-but-unpushed work)
+   now runs **in-pod** via agent-finalize — a strike comment mentioning a **resumable branch** means
+   the next round should `--work-branch` it rather than restart.
    `--task`/`--round` key the transcript capture (docs/agents/observability-and-retro.md §A1): the
    run's log + goose session land at `s3://agent-transcripts/<project>/issue-<N>/worker-r<r>-<ts>/`.
    `--openrouter-secret` binds the worker to the per-session key (not the shared standing one). Use
