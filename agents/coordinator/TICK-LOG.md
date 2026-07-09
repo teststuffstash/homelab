@@ -178,3 +178,8 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - **Pattern now twice-proven**: worker ships → reviewer finds → spec was ambiguous → pin spec →
   next round implements rules. The spec is being GROWN by the loop, through the human gate,
   exactly as designed (specs rule 5 / principle 5).
+
+### 2026-07-09 10:16 — tick 4: round 3 (=max) dispatched
+- Coordinator correctly read the spec-first master move as the BEHIND cause, cited spec lines in
+  the fixer directive, minted `issue-1-round-3`, dispatched `agent-oracle-fleet-101337`, and
+  pre-announced the round-bound consequence. Nothing to correct.
