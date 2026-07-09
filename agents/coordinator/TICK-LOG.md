@@ -161,3 +161,20 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   defaulted INTO the trigger (`${PUSHED:-1} -le 1`). Probes must fail loud, not fail into a
   condition. Reflex-design rule #6: any automated condition check distinguishes
   "true" / "false" / "probe failed" — the third is never an action trigger.
+
+### 2026-07-09 10:1x — round-2 review: CHANGES_REQUESTED again; review depth ESCALATED
+- **The reviewer ran the engine against the PR's fixture corpus** (evidence-based review emerged
+  unprompted): caught multi-lõige § with omitted loige returning PARTIAL text under a complete
+  citation — a CITE-invariant breach no static read would find. Second blocker: TOC still
+  lexicographic (inconsistent with the PR's own numeric fix). Four non-blockers incl. a
+  case-sensitivity mismatch between the unique index and the lookup (future-ingest hazard).
+- **Root cause both blockers: spec gaps again** — omitted-loige semantics never defined (every
+  canonical call passes loige); ordering pinned for points but not TOC/sup-numbers. Pinned
+  spec-first (whole-§ concatenation ⚖; glossary "display-number order" 2 < 2¹ < 3 < 10).
+- **Suspected reviewer error, logged for tie-break**: its last non-blocker claims the spec's
+  end-date rule is "boundary-inclusive" — the glossary says EXCLUSIVE. If round 3 flip-flops on
+  this, the coordinator arbitrates FROM THE GLOSSARY, not the review.
+- **Round accounting**: coordinator count r2 of 3 → round 3 is the last before blocked→human.
+- **Pattern now twice-proven**: worker ships → reviewer finds → spec was ambiguous → pin spec →
+  next round implements rules. The spec is being GROWN by the loop, through the human gate,
+  exactly as designed (specs rule 5 / principle 5).
