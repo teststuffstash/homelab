@@ -273,6 +273,37 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   2h-from-first-mint), zero model/task failures. The chassis task itself is proven implementable
   (attempt 1's in-pod green).
 
+### 2026-07-09 19:02–20:11 — attempt 3 (tick 3, fresh key): died on wall #3 — budget-403
+- Tick 3 itself was the best coordinator pass yet: it read the postmortem, **deliberately dodged
+  the PATCH bug** (verified the CR was *created* not *configured* → POST path, real 2h window),
+  cleaned up expired TS-era CRs, and dispatched `agent-oracle-fleet-190248` on paid `tencent/hy3`.
+- Worker ran healthy, real work (FTS query refinement observed live) — then died at 3918s:
+  **`403 Key limit exceeded`, real spend $0.5086 vs the $0.50 cap** (estimator: $0.30/sm-tier).
+  Turn-bound + classifier ✓ (`auth-storm/http-403-storm`); **cost recorded correctly** (key
+  alive-but-limited → the /key read still works; corroborates agent-runtime#12 being specifically
+  about DEAD keys). No push (push-early unbound, 3rd time), zero artifact.
+- **Meta verdict: hy3 struck on PACE, not just budget** — at ~75+ min/task its push lands past
+  the 60-min git-token wall even with a raised cap. Both hy3 tiers are structurally PR-incapable
+  here until mid-run cred refresh (FU-018/FU-064). Chain walks to `deepseek-v4-flash` (405s-class
+  fast, fits every window; truncation risk = the recurrence experiment, recipe hardening now in).
+- **Session pattern named: three attempts, three DIFFERENT TTL/limit walls** (git-token 60m;
+  key-expiry PATCH bug; key budget cap) — every platform assumption is tuned to ≤30–60-min runs
+  while real scaffold-sized runs on cheap models are 50–75 min. The class, not the instances, is
+  the finding: **slow-cheap models break every freshness assumption at once.** Fixes split:
+  FU-064 (deterministic: harness-owned terminal push + git-token volume-mount), FU-018 (proxy
+  cred injection = endgame), FU-019 (persistent per-task workspace = salvage/warm-resume cache,
+  doctrine-compatible per ADR-078 "snapshot=cache"). In-sandbox test clusters: Rasmus pushed back
+  on "unit-scale Gate A suffices" — operator-shaped repos (openrouter-operator: helm install +
+  kyverno chainsaw) need a cluster in the WORKER's inner loop; the CI-push cycle is too slow for
+  that workflow. Tier ladder under discussion: envtest+chainsaw (unprivileged, in-pod, likely
+  sufficient for API-level operators) → vcluster (unprivileged, workloads really run via the host
+  syncer, needs sandbox-ns quotas/NetPol) → remote docker / DinD-on-tainted-node for true kind
+  (kind-in-rootless-podman inside an unprivileged pod is not viable today: nested systemd/kubelet
+  + cgroup delegation + /dev/fuse). Test-cluster tier = a future AgentStack policy field (ADR-085).
+- Meta also: negative-cost dashboard row root-caused (agent-finalize fail-into-0.0 usage probe,
+  rule #6 in the money pipeline) → **agent-runtime#12**; `hy3:free×sleep-tracking $0` row
+  confirmed by Rasmus as the FU-021 acceptance trace (not a bug).
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token

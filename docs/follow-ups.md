@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-064**.
+  Next free id: **FU-065**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -17,7 +17,7 @@ tracker.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
 
-_Last updated: 2026-07-08._
+_Last updated: 2026-07-09._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -148,6 +148,19 @@ _Last updated: 2026-07-08._
 
 ## Agents
 
+- [ ] **FU-064** — **Slow-cheap models break every freshness assumption at once — two deterministic
+      fixes before FU-018's endgame.** Live evidence (2026-07-09 meta-session 2, oracle-fleet#1: THREE
+      attempts, three different walls — git-token 60-min TTL, key-expiry PATCH bug openrouter-operator#6,
+      $0.50 session budget at 65 min — zero model/task failures, ~2.5h of green work lost unpushed;
+      full autopsy in `agents/coordinator/TICK-LOG.md`). (a) **Harness-owned terminal push**: the
+      push-early recipe rule failed to bind on 3 runs / 2 models — `agent-finalize` (already runs
+      post-harness in-pod) must `git push` any local branch with commits at terminal time, so a died
+      run always leaves a resumable branch (kills the "hoping the worker pushes" class). (b) **Git
+      token as volume mount, not env**: `GH_TOKEN` is a `secretKeyRef` env var → frozen at pod start →
+      ESO refreshes can never reach a running pod; mount the Secret and read at use time (credential
+      helper / finalize-time `gh auth`) so pushes always hold a live token. Both are small; FU-018's
+      proxy cred-injection supersedes (b) eventually. Relates FU-019 (persistent workspace = the
+      salvage/warm-resume cache on top), FU-021/FU-062 (strike classes these deaths produce).
 - [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
