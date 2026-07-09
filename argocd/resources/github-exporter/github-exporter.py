@@ -71,9 +71,19 @@ def graphql(query, variables):
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         payload = json.loads(resp.read())
-    if payload.get("errors"):
-        raise RuntimeError(payload["errors"])
-    return payload["data"]
+    data = payload.get("data")
+    errors = payload.get("errors")
+    # Tolerate PARTIAL data: a field the PAT can't read (e.g. statusCheckRollup without Commit
+    # statuses:read) comes back as null with a FORBIDDEN error entry, but the rest of `data` is
+    # valid. Only raise when there's no usable data at all. This lets collect_open_prs work with just
+    # Pull requests:read (ci_state falls back to "none"); CI state auto-populates if the scope is
+    # later granted. A hard/whole-query error (bad token, SAML) still raises.
+    if errors and data is None:
+        raise RuntimeError(errors)
+    if errors:
+        print("graphql: partial data (%d field error(s), e.g. %s) — continuing"
+              % (len(errors), errors[0].get("message", "")), flush=True)
+    return data
 
 
 def gh_paged(path, key):
@@ -176,7 +186,8 @@ def collect_open_prs(lines):
         for repo in repos["nodes"]:
             for pr in repo["pullRequests"]["nodes"]:
                 commits = pr["commits"]["nodes"]
-                rollup = commits[0]["commit"]["statusCheckRollup"] if commits else None
+                commit = commits[0]["commit"] if commits else None
+                rollup = commit.get("statusCheckRollup") if commit else None
                 labels = {
                     "owner": ORG,
                     "repo": repo["name"],
