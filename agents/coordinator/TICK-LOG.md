@@ -118,3 +118,12 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   reviewer-git lists — the monitoring-over-testing principle applied to the platform itself.
 - **Next**: reflex re-dispatches on its next tick (level-triggered — PR #5 still
   green+armed+unapproved).
+
+### 2026-07-09 09:35 — viewer observation (while reviewer 093007 runs)
+- "No reviews visible for oracle-fleet" — correct, not a bug: no oracle review has COMPLETED
+  (the 09:25 attempt died pre-claude → manifest-only upload → invisible to the jsonl-only sync).
+  Sleep's `sleep-tracking--pr-19` renders fine, proving the reviewer pipeline.
+- Two stated properties to document with the viewer: (a) **failed sessions are invisible in the
+  GUI** (manifest-only) — failures belong to the ledger/Grafana lane (FU-057); (b) the
+  stack-vs-project prefix split is user-visible in the flattened listing (`oracle--tick-*` vs
+  `oracle-fleet--pr-5`) — decide the convention before FU-057 keys the ledger.
