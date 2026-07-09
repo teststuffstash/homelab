@@ -52,6 +52,9 @@
       "github-apps": [
         "bash scripts/github-apps.sh"
       ],
+      "agents-registration-lint": [
+        "bash scripts/agents-registration-lint.sh"
+      ],
       "argocd-validate-pins": [
         "bash scripts/argocd-validate-pins.sh"
       ],

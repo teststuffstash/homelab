@@ -36,3 +36,8 @@ jobs:
 
       - name: Validate ArgoCD OCI chart pins (devbox run argocd-validate-pins)
         run: devbox run argocd-validate-pins
+
+      # Stale-registration gate (TICK-LOG meta-1: 5/6 reflex gaps were a stack repo missing from a
+      # per-identity token list). Interim until the AgentStack XRD (FU-048) renders all from one claim.
+      - name: Agents registration lint (stacks.json ⊆ coordinator/reviewer token lists)
+        run: devbox run agents-registration-lint

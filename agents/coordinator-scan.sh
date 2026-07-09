@@ -7,10 +7,15 @@
 # Actionability predicate (MUST track agents/coordinator/README.md §State machine — keep in sync):
 #   issue: open ∧ `agent-fix` ∧ `agent/queued`                        (ready to dispatch)
 #   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED)
+#   v2:    issue open ∧ `agent-fix` ∧ `agent/in-progress` ∧ no Running worker pod ∧ no open PR
+#          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
+#          kubectl, probe failures skip the clause rather than fail into a wake)
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
 # `major/awaiting-human`), done/merged, and everything on the review-reflex's ARMED track — arming is the
-# boundary (docs/agents/merge-path.md). v2 (needs pod/checks access): `agent/in-progress`+worker-done and
-# red-beyond-T; the eventual `coordinator-reflex` CronJob that runs `--spawn` on a schedule (FU-050).
+# boundary (docs/agents/merge-path.md). Still v3 territory: red-beyond-T (needs checks:read). The
+# `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
+# schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
+# -n agent-coordinator -p '{"spec":{"suspend":false}}').
 #
 # STACK SOURCE — `stacks_json()` is the single swap-point: TODAY it reads agents/stacks.json; the FU-045
 # TARGET is the cluster, where each stack's -iac repo owns a Crossplane `AgentStack` claim and this reads
@@ -24,6 +29,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ORG="${ORG:-teststuffstash}"
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
+
+# kubectl for the v2 (C4/C5) predicate — same resolution as agent-session.sh: jail → tofu/kubeconfig;
+# in-cluster (the coordinator-reflex CronJob) → the pod ServiceAccount (KUBE empty).
+if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
+KUBECTL="$(command -v kubectl || true)"
+[ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
 
 # The ONE source of the stack list. TODAY: agents/stacks.json. FUTURE (FU-045/FU-048): the cluster —
 #   kubectl get agentstacks.platform.homelab -o json \
@@ -53,7 +64,31 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # dep PR. Report-only (NOT a spawn — the coordinator doesn't own dep classification, Renovate does).
     orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,autoMergeRequest \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("dependencies")) and (.autoMergeRequest==null) and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major")]|length)==0))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
+    # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
+    # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
+    # open PR means the merge-path reflexes own it, and blocked issues never carry in-progress).
+    # A kubectl probe failure is reported and SKIPS the clause — it never fails INTO a wake
+    # (rule #6); the launcher pre-flight is the double-dispatch belt either way.
+    v2=""
+    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
+    if [ "$(printf '%s' "$inprog" | jq 'length')" -gt 0 ]; then
+      if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+            --field-selector=status.phase=Running --no-headers 2>/dev/null)"; then
+        if [ -z "$PODS" ]; then
+          BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null || echo '[]')"
+          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
+            '.[] | .number as $n
+             | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+             | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
+        fi
+      else
+        echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
+      fi
+    fi
     [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
+    [ -n "$v2" ]   && items="${items}[$repo]\n${v2}\n"
     [ -n "$prs" ]  && items="${items}[$repo]\n${prs}\n"
     [ -n "$orph" ] && orphans="${orphans}[$repo]\n${orph}\n"
   done
