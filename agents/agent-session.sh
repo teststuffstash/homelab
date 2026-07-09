@@ -229,11 +229,10 @@ ${UV_ENV}
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
           value: "auto"
-        # FU-021 interim bound: on a dead key (budget-403/revoked 401) goose's final-output
-        # continuation loops fresh requests until max_turns — default 1000 (measured: 530 auth
-        # failures, exit 0, no PR). goose v1.28 has NO per-error-class stop, so cap the loop; 200
-        # clears every legit run measured (owl 72, the pathological qwen loop 187). The real
-        # storm hard-stop is agent-runtime#8.
+        # Second belt behind the runtime storm watchdog (agent-runtime#8, FU-021 — both proven
+        # live on sleep-tracking#20): on a dead key goose's final-output continuation loops fresh
+        # requests until max_turns (default 1000). 200 clears every legit run measured (owl 72,
+        # the pathological qwen loop 187) and bounds anything the watchdog somehow misses.
         - name: GOOSE_MAX_TURNS
           value: "${GOOSE_MAX_TURNS:-200}"
         - name: OPENROUTER_API_KEY

@@ -152,8 +152,11 @@ The standing project key stays as the **funding ceiling**; the session key is th
   (prompt/completion/cached/requests) needs the OpenRouter *activity* API (the in-pod inference key
   can self-report cost but not the per-request token split). Computes over the captured manifests
   (`docs/agents/observability-and-retro.md` §B1) + a Grafana dashboard over the ledger.
-- **FU-021 — goose retry policy** — it retried a budget-exhausted `403` 812×; configure it to
-  hard-stop on auth/limit errors.
+- **FU-021 — goose retry policy — ✅ RESOLVED (2026-07-09)** — the 812×-retry storm was goose's
+  final-output continuation loop (no config can stop it per error class); fixed by the runtime
+  storm watchdog (agent-runtime#8/#11) + a `GOOSE_MAX_TURNS=200` belt in the launcher, proven by
+  a live invalid-key acceptance run (sleep-tracking#20: kill in ~21s, `error_class=auth-storm`,
+  AGENT_STRIKE posted).
 - **FU-022 — Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain
   cache hits.
 - **FU-027 — Live PR-comment demo** — both halves of the stats collector are validated

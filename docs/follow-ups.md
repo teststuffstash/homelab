@@ -162,21 +162,17 @@ _Last updated: 2026-07-08._
       `agents/agent-session.sh`.
 - [ ] **FU-020** — Cilium egress lockdown for worker pods (deny-all + allow the proxy and the nix
       cache — without the nix allowance `devbox install` hangs).
-- [ ] **FU-021** — goose retry policy: hard-stop on auth/limit errors (it retried a
-      budget-exhausted 403 812×). **Investigated 2026-07-09 (FU-062 leg):** goose v1.28.0's
-      provider-retry layer already never retries 401/403 (`Authentication`); the storm is the
-      *agent reply loop* — with a recipe `final_output`, every provider error triggers the
-      final-output continuation → a fresh request on the dead key, bounded only by
-      `GOOSE_MAX_TURNS` (default 1000). **No env/recipe per-error-class stop exists**, so the real
-      fix is a runtime storm watchdog —
-      **filed as [agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8),
-      fixed + MERGED same day (agent-runtime#11)**: `agent-storm-watchdog`, two-poll-confirmed
-      harness kill preserving the finalize pipeline. Ships to workers via the #10 deploy-pin
-      (auto-merging `agents/images.env` bump PRs — proven live on homelab#16). Interim belt kept:
-      `agent-session.sh` pins `GOOSE_MAX_TURNS=200` (env-overridable). Resolve after a live
-      acceptance run on the pinned image — revoke/exhaust a session key mid-run, expect the kill
-      within ~2 polls + an `AGENT_STRIKE: … error_class=auth-storm` comment (then also drop the
-      interim comment marker in the launcher).
+- [x] **FU-021 — DONE (2026-07-09, live acceptance passed)** — goose retry policy: hard-stop on
+      auth/limit errors (it retried a budget-exhausted 403 812×). Root cause (goose v1.28.0): the
+      provider-retry layer never retries 401/403 — the storm is the *agent reply loop*'s
+      final-output continuation, bounded only by `GOOSE_MAX_TURNS` (1000), with **no env/recipe
+      per-error-class stop**. Fix = the runtime **storm watchdog**
+      ([agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8) → #11, shipped
+      via the #10 deploy-pin) + a `GOOSE_MAX_TURNS=200` second belt in `agent-session.sh`.
+      **Acceptance (sleep-tracking#20, deliberately-invalid key):** 200 auth failures in 21s
+      through the egress proxy → watchdog kill → `error_class=auth-storm` → `AGENT_STRIKE:`
+      comment posted. Left done-marked (not scrubbed) for the FU-021 provenance in
+      agent-runtime's code comments + the design docs.
 - [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
       pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
       (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
@@ -322,9 +318,9 @@ _Last updated: 2026-07-08._
       no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim;
       **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
       (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
-      graceful 429 fallback). OPEN: scout first supervised run + unsuspend, FU-021 live acceptance
-      on the pinned image (#8 fix merged), ADR-081 cred-injection remainder (FU-018) + egress
-      lockdown (FU-020).
+      graceful 429 fallback); **FU-021 RESOLVED** (watchdog live-accepted on sleep-tracking#20).
+      OPEN: scout first supervised run + unsuspend, ADR-081 cred-injection remainder (FU-018) +
+      egress lockdown (FU-020).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
