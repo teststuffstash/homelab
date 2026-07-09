@@ -288,8 +288,10 @@ _Last updated: 2026-07-08._
       FU-018's injection leg). (4) a weekly **model-scout reflex** (new free/cheap tool-capable
       models → canary task → ledger). Routers verified 2026-07-09: `pareto-code`/`fusion` advertise
       no `tools` (park); `openrouter/auto` = paid lottery (last-resort only); `openrouter/free` =
-      free router WITH tools (scout candidate). DONE today: brief policy block, stacks.json chains,
-      tencent/hy3 priced in the estimator. OPEN: registry code, strike bookkeeping in the launcher
+      free router WITH tools (scout candidate). DONE: brief policy block, stacks.json chains,
+      tencent/hy3 priced in the estimator; **live registry in `estimate_budget.py` (2026-07-09)** —
+      cached /models + per-model /endpoints, cache-aware effective price, `--lookup` provider-pin
+      verdict, static table kept as the offline fallback. OPEN: strike bookkeeping in the launcher
       (post strike-count to the issue), scout CronJob, goose provider injection (FU-018/ADR-081).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
