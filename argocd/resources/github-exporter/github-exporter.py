@@ -183,11 +183,18 @@ def collect_open_prs(lines):
     for _ in range(10):  # hard page cap
         data = graphql(_PR_QUERY, {"org": ORG, "cursor": cursor})
         repos = data["organization"]["repositories"]
-        for repo in repos["nodes"]:
-            for pr in repo["pullRequests"]["nodes"]:
-                commits = pr["commits"]["nodes"]
-                commit = commits[0]["commit"] if commits else None
-                rollup = commit.get("statusCheckRollup") if commit else None
+        for repo in repos["nodes"] or []:
+            if not repo:
+                continue
+            for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
+                if not pr:
+                    continue
+                # Null-safe: without Commit statuses:read the forbidden statusCheckRollup nulls the
+                # whole commit list element (bubbles to the nullable list item), so commits[0] can be
+                # None — degrade to ci_state "none" rather than crashing the collector.
+                commits = (pr.get("commits") or {}).get("nodes") or []
+                commit = (commits[0] or {}).get("commit") if commits else None
+                rollup = (commit or {}).get("statusCheckRollup")
                 labels = {
                     "owner": ORG,
                     "repo": repo["name"],
