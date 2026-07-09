@@ -46,17 +46,29 @@ plane, without copying scripts into its repo. What the stack writes is the **cla
 
 Pragmatic stand-ins that already run, structured to become the above:
 
-- **`agents/stacks.json`** — a claim-shaped list of stacks (`{name, repos, coordinatorModel, workerModel}`).
-  This is the temporary home of what will become one `AgentStack` claim per stack, living in each `-iac`
-  repo. Header comment says so.
+- **`agents/stacks.json`** — a claim-shaped list of stacks
+  (`{name, repos, mainRepo, coordinatorModel, workerModel}`). This is the temporary home of what will become
+  one `AgentStack` claim per stack, living in each `-iac` repo. Header comment says so. `mainRepo` (see below)
+  is stack policy: the coordinator's cwd.
 - **`agents/coordinator-scan.sh`** (`devbox run coordinator-scan`) — the **deterministic gate** in front of
   the LLM coordinator: per stack, list open issues/PRs and answer "is there anything a coordinator tick
   would act on?" (predicate in the script header, mirrors `coordinator/README.md` §State machine). Reports
   the actionable items + the scoped launch command; `--spawn` launches a headless tick. **No subscription
   tokens are spent to discover "nothing to do"** — the cheap sibling of `review-reflex.sh`.
-- **`coordinator-session.sh --stack/--repos`** — scope a session to a stack (prepends the stack context to
-  the tick prompt, sets `STACK`/`AGENT_REPOS` pod env). `--tick`/`--run-tick` share one `TICK_PROMPT` so an
-  interactive first run == the future reflex's call.
+- **`coordinator-session.sh --stack/--repos/--main-repo`** — scope a session to a stack (prepends the stack
+  context to the tick prompt, sets `STACK`/`AGENT_REPOS`/`MAIN_REPO` pod env). It **clones every `--repos`
+  entry** shallow into `/work/<repo>` (private oracle-* repos via the pod's `GH_TOKEN`, `gh repo clone`;
+  a failed optional clone is loud-but-non-fatal) and **cd's into `--main-repo`** before launching Claude.
+  `--tick`/`--run-tick` share one `TICK_PROMPT` so an interactive first run == the future reflex's call.
+  - **`mainRepo` (stack policy).** A stack's **main repo** is the coordinator's cwd — the repo whose
+    `CLAUDE.md` + specs should load as the session's natural context. It is the stack's *home of coordination
+    knowledge*: `oracle-fleet` for the oracle stack (its `specs/TRACKS.md` = the lane/WIP rules the
+    coordinator sequences by), and `homelab` for stacks whose coordination knowledge still lives in homelab
+    docs (`sleep`, `platform`) until it migrates out. It is distinct from the platform *mechanism*: the
+    coordinator **brief** (`agents/coordinator/README.md`) is always loaded by absolute path from
+    `/work/homelab`, whatever the cwd. `mainRepo` is a field of the future `AgentStack` claim, defaulting to
+    `homelab`. All the stack's repos are cloned regardless of which is `mainRepo`; the clones are **read-only
+    reference** (coordinator writes stay labels/comments/merge via `gh`; a direct-write tier is FU-059).
 - **`agents/fixer/<repo>/` + the `agent-fixer` ApplicationSet** — the per-repo *fixer infra* (the
   project's `OpenRouterKey` budget key + the `agent-git-token` ESO `GithubAccessToken`, namespace ==
   repo). One `argocd/platform/agent-fixer.yaml` ApplicationSet (git **directory generator** over

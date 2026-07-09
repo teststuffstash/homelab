@@ -33,6 +33,9 @@ stacks_json() { cat "$STACKS_FILE"; }
 any_work=""
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
+  # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
+  # deploy/agent knowledge still lives in homelab docs.
+  mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   items=""; orphans=""
   for repo in $repos; do
     slug="$ORG/$repo"
@@ -67,10 +70,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
 
   if [ -n "$SPAWN" ]; then
     echo "→ spawning headless coordinator tick for ${name}…"
-    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --run-tick
+    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
   else
     echo "  run it (interactive, supervised):"
-    echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --tick"
+    echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
   fi
 done
 
