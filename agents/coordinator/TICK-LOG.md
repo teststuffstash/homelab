@@ -17,6 +17,7 @@ guesses. Kept in-repo because this file IS the reflex's requirements draft._
 | C6 | PR merged (`agent/done` due) | fire a tick (bookkeeping + queue-release decision for the next dependency-ordered issue) | meta |
 | C7 | `agent/blocked` | escalate to Rasmus; no tick | human |
 | C8 | systematic failure pattern in run.log | retro-grade fix as PR to process files (recipe/rubric), THEN re-tick | meta→human gate |
+| C9 | PR open ∧ auto-merge NOT armed | arm it (`gh pr merge --auto --squash`) — decision-free; unarmed PRs are invisible to the review reflex | meta (reflex candidate) |
 
 Queue-release rule (single-active mode): only ONE issue carries `agent/queued` at a time; the
 next is queued at C6 per the dependency order (TRACKS/gantt: #1 → {#2, #3} → #4).
@@ -73,3 +74,16 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
      but the coordinator had no way to count r1).
 - **Also**: coordinator transcripts land under `oracle/tick-…` (stack) while worker used
   `oracle-fleet/issue-1/…` (project) — prefix inconsistency confirmed twice now.
+
+### 2026-07-09 07:15 — event: PR #5 opened, worker Succeeded (C3 + C9)
+- **Stats**: 1168s, $0.1049, ci_passed=true in-pod (Gate A), branch `fix/issue-1-chassis-scaffold`.
+  The hardened recipe held: incremental writes, PR opened properly. 14 files, +3200, 29 tests,
+  seed-format contract consumed from `specs/use-cases/uc-1/expected-seeds/`.
+- **Gap found (C9)**: auto-merge was NOT armed at PR-open (the tick-2 coordinator dispatched
+  manually from the runbook and the launcher's arming step didn't fire) — and the review reflex
+  deliberately ignores unarmed PRs, so the PR would have sat invisible forever. Meta armed it.
+  Reflex spec note: "arm at PR-open" must be guaranteed by exactly one owner (launcher), with C9
+  as the level-triggered repair.
+- **Now**: C3 — reflexes own it (CI on homelab-ephemeral → review reflex → reviewer bot →
+  auto-merge). Meta stands down; watching for terminal state. Pod 065344 NOT deleted (tick-2
+  meta-rule) until the next tick reads the world.
