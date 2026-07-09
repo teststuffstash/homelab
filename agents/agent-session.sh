@@ -30,8 +30,10 @@ KUBECTL="$(command -v kubectl || true)"
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode] [--model provider/model]}"
 shift || true
 
-# Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap — NOT a
-# `:free` tier (≈8 rpm, chokes a tool loop) and NOT a cloaked model (rotated out → 404s mid-run).
+# Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap. The
+# per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
+# STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
+# docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
 RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -215,6 +217,7 @@ if [ -n "$RUN_CMD" ]; then
   # from both the stats and the full run logs (no more guessing the pod name). Posted from here (the
   # jail GH_TOKEN can comment) rather than the pod (scoped agent token may lack issues:write).
   STATS="$(grep -ao 'AGENT_RUN_STATS .*' "$RUNLOG" | tail -1 | sed 's/^AGENT_RUN_STATS //')"
+  PR_URL=""
   if [ -n "$STATS" ]; then
     echo "→ stats: $STATS"
     PR_URL="$(printf '%s' "$STATS" | jq -r '.pr_url // empty' 2>/dev/null)"
@@ -237,12 +240,61 @@ if [ -n "$RUN_CMD" ]; then
         "| duration | \(.duration_s // 0)s |\n" +
         "| reproduced | \(.reproduced // "?") |\n" +
         "| ci_passed | \(.ci_passed // "?") |\n" +
+        "| error_class | `\(if ((.error_class // "") == "") then "clean" else .error_class end)` |\n" +
         "| coverage | \(.coverage_pct // "?")% |\n" +
         "| node / pod | `\(.node // "?")` / `\(.pod // "?")` |\n\n" +
         "[📜 run logs in Grafana](\($logs))\n" +
         "🗂 transcripts: `s3://agent-transcripts/\(.project // "?")/\($task)/` · [viewer](https://transcripts.local.teststuff.net)"')"
       echo "→ posting stats comment to ${PR_URL}"
       gh pr comment "$PR_URL" --body "$BODY" 2>&1 | tail -1 || echo "  (comment failed — non-fatal)"
+    fi
+  fi
+
+  # STRIKE BOOKKEEPING (FU-062, docs/agents/model-routing.md §M1): a run that terminates WITHOUT an
+  # open PR is an infra strike candidate — classify it and post ONE structured comment to the ISSUE
+  # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
+  # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
+  # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
+  if [ -z "$PR_URL" ]; then
+    if [ -n "$STATS" ]; then
+      # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
+      # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
+      # without a PR) is "unknown" — still a strike, just an unclassified one.
+      ERR_CLASS="$(printf '%s' "$STATS" | jq -r '
+        (.exit_status // "") as $s
+        | if (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s else "unknown" end' \
+        2>/dev/null || echo unknown)"
+    else
+      # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
+      # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
+      # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
+      if grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
+        ERR_CLASS="harness-death"
+      elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
+        ERR_CLASS="budget-403"
+      elif [ "$(grep -ciE 'authentication failed|401 unauthorized|403 forbidden|invalid api key|no auth credentials' "$RUNLOG")" -ge 3 ]; then
+        ERR_CLASS="auth-storm"
+      elif grep -qiE 'context deadline exceeded|request timed out|operation timed out' "$RUNLOG"; then
+        ERR_CLASS="timeout"
+      else
+        ERR_CLASS="unknown"
+      fi
+    fi
+    STRIKE_LINE="AGENT_STRIKE: model=${MODEL} error_class=${ERR_CLASS} round=${ROUND} session=${POD}"
+    echo "→ no PR opened — ${STRIKE_LINE}"
+    ISSUE_N=""
+    case "$TASK" in issue-[0-9]*) ISSUE_N="${TASK#issue-}";; esac
+    SLUG=""
+    case "$REPO_URL" in https://github.com/*) SLUG="${REPO_URL#https://github.com/}"; SLUG="${SLUG%.git}";; esac
+    if [ -n "$ISSUE_N" ] && [ -n "$SLUG" ] && [ -n "${GH_TOKEN:-}" ]; then
+      # ~~~ fences (not ```) so backticks inside log lines can't break out of the block.
+      STRIKE_BODY="$(printf '%s\n\n<details><summary>last 15 log lines (%s)</summary>\n\n~~~text\n%s\n~~~\n\n</details>\n' \
+        "$STRIKE_LINE" "$POD" "$(tail -n 15 "$RUNLOG")")"
+      echo "→ posting strike comment to ${SLUG}#${ISSUE_N}"
+      gh issue comment "$ISSUE_N" --repo "$SLUG" --body "$STRIKE_BODY" 2>&1 | tail -1 \
+        || echo "  (strike comment failed — non-fatal; the strike still shows in these logs)"
+    else
+      echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
     fi
   fi
   rm -f "$RUNLOG"

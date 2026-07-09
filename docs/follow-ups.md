@@ -291,8 +291,11 @@ _Last updated: 2026-07-08._
       free router WITH tools (scout candidate). DONE: brief policy block, stacks.json chains,
       tencent/hy3 priced in the estimator; **live registry in `estimate_budget.py` (2026-07-09)** —
       cached /models + per-model /endpoints, cache-aware effective price, `--lookup` provider-pin
-      verdict, static table kept as the offline fallback. OPEN: strike bookkeeping in the launcher
-      (post strike-count to the issue), scout CronJob, goose provider injection (FU-018/ADR-081).
+      verdict, static table kept as the offline fallback; **strike bookkeeping in the launcher
+      (2026-07-09)** — a PR-less run posts `AGENT_STRIKE: model=… error_class=… round=… session=…`
+      + the log tail to the ISSUE (the comment is the strike store; brief reads it to walk the
+      chain), PR runs get `error_class` in the stats comment. OPEN: scout CronJob, goose provider
+      injection (FU-018/ADR-081).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
