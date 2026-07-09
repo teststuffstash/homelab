@@ -304,6 +304,24 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   rule #6 in the money pipeline) → **agent-runtime#12**; `hy3:free×sleep-tracking $0` row
   confirmed by Rasmus as the FU-021 acceptance trace (not a bug).
 
+### 2026-07-09 20:27 — attempt 4 (deepseek, tick 4): truncation recurred at 250s — then ROOT-CAUSED
+- Worker `agent-oracle-fleet-202238` died `-32602 EOF while parsing` on a giant tool call, exactly
+  the r1-old class. Classifier ✓ (`harness-death/goose-32602-truncation`), $0.033. Chain fully
+  struck at that moment (hy3:free/hy3/deepseek). Hardened recipe did NOT bind (2nd model).
+- **Root cause found in the numbers**: all three truncation deaths cut at 14781/15267/16322 chars
+  ≈ **~4k tokens** — a `max_tokens=4096` default in the goose→OpenRouter path, NOT model
+  indiscipline. Any single file-write above ~4k tokens is structurally fatal, and no recipe
+  wording can fix a config ceiling. (Old finding A "instruction guardrails don't bind" gets a
+  kinder reading: they *couldn't*.)
+- **Deterministic fix shipped (C8): egress-proxy `max_tokens` floor** (`fa05517`) — the ADR-081
+  proxy now raises missing/low `max_tokens` to 16384 (env `MAX_TOKENS_FLOOR`), clamped to the
+  pinned endpoint's `max_completion_tokens`; explicit higher values win; provider-pin and floor
+  are independent legs. Verified the dying request DID transit the proxy (`injected:deepseek`
+  20:27) — so the floor will bind future worker traffic. deepseek strike to be annulled for a
+  re-test once the rolled pod is verified (same annul-on-root-cause precedent as hy3/attempt-2).
+- Ops note: the ArgoCD webhook did not fire for the `openrouter-proxy` app (synced rev lagged
+  HEAD); refresh-annotation nudge required — check webhook coverage for platform child apps.
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
