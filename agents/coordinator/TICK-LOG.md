@@ -140,3 +140,11 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   paragraph; caught by reading the diff, repaired — even meta-coordinators need the read-your-diff
   rule.)
 - **Next**: tick #3 → coordinator round 2 with reviewer comments fed to the fixer.
+
+### 2026-07-09 09:44 — tick 3 (review round transition) — clean
+- Coordinator: identified CHANGES_REQUESTED + no live worker as the round transition; **relayed
+  reviewer comments into the issue** (the recipe's context channel — unprompted, correct);
+  noticed master moved due to the spec pins and directed the fixer to **rebase the PR branch**;
+  estimated (md/$0.54), minted `issue-1-round-2`, dispatched `agent-oracle-fleet-094358`.
+- Round accounting note: coordinator calls this round 2 (it can't count the invisible first
+  death — the gap-#1 launcher fix will make future counts truthful).
