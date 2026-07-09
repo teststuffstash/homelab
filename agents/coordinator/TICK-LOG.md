@@ -87,3 +87,16 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
 - **Now**: C3 — reflexes own it (CI on homelab-ephemeral → review reflex → reviewer bot →
   auto-merge). Meta stands down; watching for terminal state. Pod 065344 NOT deleted (tick-2
   meta-rule) until the next tick reads the world.
+
+### 2026-07-09 08:50 — event: reflex-gap #4 — review reflex was sleep-hardcoded (C8)
+- **Symptom**: PR #5 green (CI success 07:13) + armed + current + unapproved for 90 min; reflex
+  logs every 5 min: only `[sleep-tracking] / [snore-recorder] nothing to review`.
+- **Cause**: `AGENT_REPOS` hardcoded in `review-reflex.yaml` (pre-stacks era).
+- **Fix (pushed, bypass)**: `review-reflex.sh` now derives repos from `agents/stacks.json`
+  (fresh homelab clone each tick ⇒ always current); env removed from the CronJob (ArgoCD syncs).
+  Side-effect accepted & noted: iac repos (`require_approval=false`) may get harmless reviewer
+  dispatches in the short window before green auto-merges them — observe, filter later if it
+  actually burns reviewer quota.
+- **Reflex-design lesson #4**: every reflex's scope must come from the ONE stack registry, never
+  its own list. (Same lesson as coordinator-scan's `stacks_json()` swap-point — the reflexes
+  predate it.)
