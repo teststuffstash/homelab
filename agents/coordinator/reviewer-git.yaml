@@ -46,9 +46,13 @@ spec:
   permissions:
     contents: write          #   clone the PR branch + make the bot a repo WRITER so its approval counts
     pull_requests: write     #   submit the review (approve / request-changes) + inline comments
-  repositories:              #   the repos where agent PRs land (mirror the worker/coordinator set)
-    - sleep-tracking
+  repositories:              #   the repos where agent PRs land (mirror coordinator-git; verify
+    - sleep-tracking         #   docs/github-apps.md covers each BEFORE adding — ESO 422s otherwise)
     - snore-recorder
+    - sleep-iac
+    - openrouter-operator
+    - oracle-fleet
+    - oracle-iac
 ---
 # 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
