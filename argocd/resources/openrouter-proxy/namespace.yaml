@@ -1,0 +1,7 @@
+# agent-egress — the ADR-081 egress path for worker pods. Own namespace (not agent-coordinator):
+# workers in every project namespace consume it, and the coming Cilium lockdown (FU-020) will
+# point "the one allowed egress" at this namespace's Service.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-egress

@@ -251,7 +251,8 @@ def pinned_provider(
     """The M4 session pin: the effective-cheapest provider to put first in `provider.order`.
     Unlike `effective_price`, tools support is REQUIRED here — the pin exists to serve a
     tool-driving worker, and per-endpoint tools support varies (GMICloud serves hy3 without it).
-    Preference order: cached+tools ≥ floor → tools ≥ floor → any tools endpoint."""
+    Preference order: cached+tools ≥ floor → tools ≥ floor → any tools endpoint.
+    Consumers put the entry's `slug` (not `provider`) into OpenRouter's provider.order."""
     tooled = [e for e in endpoints if e.get("tools")]
 
     def eff(e: dict) -> float:
@@ -424,6 +425,11 @@ def ensure_endpoints(registry: dict, model: str, path: str, *, refresh: bool = F
             endpoints.append(
                 {
                     "provider": e.get("provider_name") or e.get("name"),
+                    # The ROUTING id: OpenRouter's provider.order matches the endpoint tag's base
+                    # slug ("deepinfra/fp4" → "deepinfra"), NOT the display provider_name —
+                    # measured 2026-07-09: order:["DeepInfra"] silently no-ops ("No endpoints
+                    # found" with allow_fallbacks:false). Pin with slug, report with provider.
+                    "slug": (e.get("tag") or "").split("/")[0] or None,
                     "prompt": _price_mtok(pricing, "prompt") or 0.0,
                     "input_cache_read": _price_mtok(pricing, "input_cache_read"),
                     "uptime": e.get("uptime_last_30m"),
@@ -679,19 +685,19 @@ def _self_test() -> None:
                 "fetched_at": "2099-01-01T00:00:00Z",
                 "endpoints": [
                     # Venice: headline $0.35 but cache-read $0.035 → effective @ h=0.8 = $0.098 (wins)
-                    {"provider": "Venice", "prompt": 0.35, "input_cache_read": 0.035, "uptime": 99.9, "tools": False},
+                    {"provider": "Venice", "slug": "venice", "prompt": 0.35, "input_cache_read": 0.035, "uptime": 99.9, "tools": False},
                     # DeepInfra: effective 0.2·0.30 + 0.8·0.10 = $0.14
-                    {"provider": "DeepInfra", "prompt": 0.30, "input_cache_read": 0.10, "uptime": 99.0, "tools": True},
+                    {"provider": "DeepInfra", "slug": "deepinfra", "prompt": 0.30, "input_cache_read": 0.10, "uptime": 99.0, "tools": True},
                     # Google: headline-cheapest but NO cache → excluded from the cached min
-                    {"provider": "Google", "prompt": 0.22, "input_cache_read": None, "uptime": 99.9, "tools": True},
+                    {"provider": "Google", "slug": "google-ai-studio", "prompt": 0.22, "input_cache_read": None, "uptime": 99.9, "tools": True},
                     # Vertex: cheapest of all but 37% uptime → the trap the floor exists for
-                    {"provider": "Vertex", "prompt": 0.05, "input_cache_read": 0.01, "uptime": 37.0, "tools": True},
+                    {"provider": "Vertex", "slug": "vertex", "prompt": 0.05, "input_cache_read": 0.01, "uptime": 37.0, "tools": True},
                 ],
             },
             "acme/chatty": {
                 "fetched_at": "2099-01-01T00:00:00Z",
                 "endpoints": [
-                    {"provider": "Solo", "prompt": 0.50, "input_cache_read": None, "uptime": 99.0, "tools": False},
+                    {"provider": "Solo", "slug": "solo", "prompt": 0.50, "input_cache_read": None, "uptime": 99.0, "tools": False},
                 ],
             },
         },
@@ -711,9 +717,11 @@ def _self_test() -> None:
     assert price == 0.30 and "uptime floor" in note
     assert effective_price([], h=0.8) is None
 
-    # the session pin REQUIRES tools: Venice is effective-cheapest but tool-less → DeepInfra pins
+    # the session pin REQUIRES tools: Venice is effective-cheapest but tool-less → DeepInfra pins.
+    # The pin carries the ROUTING slug (provider.order matches tags, not display names).
     pin = pinned_provider(fixture["endpoints"]["acme/coder"]["endpoints"], h=0.8)
     assert pin and pin["provider"] == "DeepInfra" and abs(pin["effective_per_mtok"] - 0.14) < 1e-9
+    assert pin["slug"] == "deepinfra"
     assert pinned_provider(fixture["endpoints"]["acme/chatty"]["endpoints"], h=0.8) is None
 
     # registry price via endpoints; model-level fallback when endpoints are missing

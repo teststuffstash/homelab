@@ -1,0 +1,61 @@
+# The proxy pod. Stock python image + the script from the generated ConfigMap — no custom image
+# pipeline (github-exporter pattern). Holds NO secrets in v1: the workers' Authorization header
+# passes through unread (credential injection is the remaining ADR-081 leg, homelab FU-018).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openrouter-proxy
+  labels:
+    app: openrouter-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openrouter-proxy
+  template:
+    metadata:
+      labels:
+        app: openrouter-proxy
+    spec:
+      containers:
+        - name: proxy
+          image: python:3.13-slim
+          command: ["python3", "/app/openrouter-proxy.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 60
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: openrouter-proxy-script # kustomize rewrites to the hashed name

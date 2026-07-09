@@ -67,6 +67,19 @@ case "$_stripped" in
   *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/<cloaked-codename> → keep (it's in the openrouter/ ns)
 esac
 
+# ADR-081 v1 (FU-062 §M4, GOOSE ONLY): goose cannot carry OpenRouter `provider` prefs, so its
+# OpenRouter traffic rides the in-cluster egress proxy, which injects the per-model provider pin
+# into chat/completions bodies (argocd/resources/openrouter-proxy/ — provider-injection only in
+# v1; cred injection + Cilium lockdown stay FU-018/FU-020). Opt out with
+# AGENT_OPENROUTER_PROXY="" for direct egress (e.g. the proxy is down and it's striking runs).
+GOOSE_PROXY_ENV=""
+if [ "$HARNESS" = "goose" ]; then
+  PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+  if [ -n "$PROXY_URL" ]; then
+    GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
+  fi
+fi
+
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
 # provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
 # effective-cheapest cache-supporting tools-capable provider. Rendered as a per-session opencode
@@ -77,11 +90,12 @@ esac
 OC_SETUP=""; OC_ENV=""
 if [ "$HARNESS" = "opencode" ]; then
   PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
+  # order carries the ROUTING slug — OpenRouter matches tags ("deepinfra"), display names no-op.
   OC_CONFIG="$(printf '%s' "$PIN_JSON" | jq -c --arg m "$GOOSE_MODEL" '
     select(.pinned_provider != null) |
     {"$schema": "https://opencode.ai/config.json",
      provider: {openrouter: {models: {($m): {options: {provider: {
-       order: [.pinned_provider.provider],
+       order: [.pinned_provider.slug // .pinned_provider.provider],
        allow_fallbacks: true,
        max_price: {prompt: ((.pinned_provider.prompt * 2 * 10000 | ceil) / 10000)}
      }}}}}}}' 2>/dev/null || true)"
@@ -201,6 +215,8 @@ ${AFFINITY}
           value: "openrouter"
         - name: GOOSE_MODEL
           value: "${GOOSE_MODEL}"
+        # goose→OpenRouter via the ADR-081 egress proxy (emitted only for goose, see above).
+${GOOSE_PROXY_ENV}
         - name: MODEL
           value: "${MODEL}"
         # Per-session opencode provider pin (FU-018 interim, emitted ONLY when the pin config is

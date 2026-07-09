@@ -150,11 +150,14 @@ _Last updated: 2026-07-08._
 
 - [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
-      providers) — the biggest cost lever. **Interim BUILT for opencode (2026-07-09, FU-062 §M4):**
-      `agent-session.sh` renders a per-session `OPENCODE_CONFIG` pinning the registry's
-      effective-cheapest cached tools-capable provider (`order` + `allow_fallbacks:true` +
-      `max_price` 2× headline). goose cannot carry provider prefs — the proxy remains ITS only
-      path (and the universal home). Cost autopsy: `agents/README.md` → Operational findings.
+      providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
+      `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
+      per-model pin into goose's chat/completions (`OPENROUTER_HOST` wired in `agent-session.sh`,
+      opt-out `AGENT_OPENROUTER_PROXY=""`); opencode carries the same pin itself via per-session
+      `OPENCODE_CONFIG`. ⚠ `provider.order` matches endpoint-tag base SLUGS (`atlas-cloud`), not
+      display names. REMAINING here: credential minting/injection (the pod still holds its
+      OpenRouter key + GH_TOKEN) — then FU-020's Cilium lockdown makes the proxy the only exit.
+      Cost autopsy: `agents/README.md` → Operational findings.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-020** — Cilium egress lockdown for worker pods (deny-all + allow the proxy and the nix
@@ -311,9 +314,11 @@ _Last updated: 2026-07-08._
       snapshot and posts a digest issue; canary dispatch + key minting stay TODO in the script,
       gated on FU-024; **opencode session provider pin (2026-07-09)** — the FU-018 interim leg,
       per-session `OPENCODE_CONFIG` from the registry's `--lookup` pin; **FU-021 investigated** —
-      no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim.
-      OPEN: scout first supervised run + unsuspend, goose provider injection (FU-018/ADR-081 —
-      the proxy), FU-021 pending agent-runtime#8.
+      no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim;
+      **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
+      (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
+      graceful 429 fallback). OPEN: scout first supervised run + unsuspend, FU-021 pending
+      agent-runtime#8, ADR-081 cred-injection remainder (FU-018) + egress lockdown (FU-020).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):

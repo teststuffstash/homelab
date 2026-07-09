@@ -101,7 +101,10 @@ uptime floor — Google Vertex at 37% uptime is a trap) and pins `provider: {ord
 allow_fallbacks: true, max_price: {...}}`. Ranked levers from the autopsy stand: **caching provider >
 cheaper provider > fewer requests**. Where to inject (unchanged from FU-018, now load-bearing):
 opencode = `opencode.json` `options.provider` (works today); **goose cannot carry provider prefs** →
-the ADR-081 egress proxy rewriting the request body is the universal home. Free models sidestep M4
+the ADR-081 egress proxy rewriting the request body is the universal home (**v1 LIVE 2026-07-09**,
+provider-injection only: `argocd/resources/openrouter-proxy/`, wired as goose's `OPENROUTER_HOST`;
+creds + Cilium stay FU-018/FU-020). ⚠ Measured: `provider.order` matches the endpoint **tag's base
+slug** (`atlas-cloud`, `deepinfra`) — display names (`AtlasCloud`) silently no-op. Free models sidestep M4
 entirely ($0 either way) — one more reason they front the chains for small tasks.
 
 ### M5. Attribution (the FU-057 tie-in)
