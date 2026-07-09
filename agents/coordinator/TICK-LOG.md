@@ -127,3 +127,16 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   GUI** (manifest-only) — failures belong to the ledger/Grafana lane (FU-057); (b) the
   stack-vs-project prefix split is user-visible in the flattened listing (`oracle--tick-*` vs
   `oracle-fleet--pr-5`) — decide the convention before FU-057 keys the ledger.
+
+### 2026-07-09 09:5x — event: PR #5 CHANGES_REQUESTED (C-table: review round)
+- **Review quality: high.** Two blockers (UTC-vs-Tallinn "today" — a real domain defect; the
+  omitted-paragraph TOC path shipped as a bare title, untested and unflagged against the ⚖ spec
+  line) + three follow-ups (lexicographic points ordering, unclosed WAL DB, unused imports).
+  Citation invariant verified held. The reviewer also independently caught the worker's unflagged
+  spec gap — the flagged-spec-changes rubric works.
+- **Spec-first repair BEFORE dispatch**: both review-found ambiguities pinned into
+  specs/tools/statute.md as ⚖ rows ("today = Europe/Tallinn"; numeric points ordering) — the fix
+  round implements rules, not review opinions. (Meta note: my line-based edit briefly mangled the
+  paragraph; caught by reading the diff, repaired — even meta-coordinators need the read-your-diff
+  rule.)
+- **Next**: tick #3 → coordinator round 2 with reviewer comments fed to the fixer.
