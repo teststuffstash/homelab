@@ -295,7 +295,7 @@ becoming a self-feeding loop; ALL must hold in the automated reflex later:
   doctrine-compatible per ADR-078 "snapshot=cache"). In-sandbox test clusters: Rasmus pushed back
   on "unit-scale Gate A suffices" — operator-shaped repos (openrouter-operator: helm install +
   kyverno chainsaw) need a cluster in the WORKER's inner loop; the CI-push cycle is too slow for
-  that workflow. Tier ladder under discussion: envtest+chainsaw (unprivileged, in-pod, likely
+  that workflow. Tier ladder — DECIDED 2026-07-09 (Rasmus): rungs 1+2 (FU-065); claude+haiku worker = subscription-only, FU-018 hard prereq (FU-066). Ladder: envtest+chainsaw (unprivileged, in-pod, likely
   sufficient for API-level operators) → vcluster (unprivileged, workloads really run via the host
   syncer, needs sandbox-ns quotas/NetPol) → remote docker / DinD-on-tainted-node for true kind
   (kind-in-rootless-podman inside an unprivileged pod is not viable today: nested systemd/kubelet

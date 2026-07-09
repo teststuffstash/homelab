@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-065**.
+  Next free id: **FU-067**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -161,6 +161,30 @@ _Last updated: 2026-07-09._
       helper / finalize-time `gh auth`) so pushes always hold a live token. Both are small; FU-018's
       proxy cred-injection supersedes (b) eventually. Relates FU-019 (persistent workspace = the
       salvage/warm-resume cache on top), FU-021/FU-062 (strike classes these deaths produce).
+- [ ] **FU-065** — **In-sandbox test clusters for operator-shaped repos (decided 2026-07-09: rungs 1+2).**
+      Operator repos (openrouter-operator: helm install + kyverno chainsaw) need a cluster in the WORKER's
+      inner loop — the CI-push cycle is too slow for writing/iterating those tests. Rung 1: **envtest +
+      chainsaw** (etcd+apiserver as plain processes, unprivileged, in-pod; chainsaw takes any kubeconfig;
+      covers API-level operators fully — openrouter-operator's world is CRs/Secrets/HTTPS). Rung 2:
+      **vcluster** when test workloads must actually run (unprivileged; syncer runs them on the HOST
+      cluster → needs a quota'd + NetworkPolicy-fenced sandbox ns per worker; FU-019-adjacent). Ruled
+      out for now: kind-in-rootless-podman in an unprivileged pod (nested systemd/kubelet + cgroup
+      delegation + /dev/fuse); remote-docker DinD only if node semantics ever genuinely needed.
+      Test-cluster tier = a per-stack `AgentStack` policy field (ADR-085/FU-048). First consumer:
+      openrouter-operator's fixer onboarding (FU-052).
+- [ ] **FU-066** — **claude-code + Haiku worker tier — SUBSCRIPTION ONLY, gated on FU-018 (decided
+      2026-07-09).** Add `--harness claude` to `agent-session.sh` (coordinator/reviewer plumbing already
+      runs Claude Code in-pod) with Haiku as the model, on the Claude subscription (explicitly NOT
+      API/OpenRouter pay-per-token). Value, mapped to the meta-session-2 failure classes: Edit/Write
+      tools chunk writes structurally (kills the 15k single-tool-call truncation class), fast enough for
+      every TTL window, OAuth doesn't die mid-run like minted keys, ~$0 marginal cost. Chain position:
+      the RELIABLE tier before `agent/blocked`, not the default (the cheap-model experiment continues
+      ahead of it). **Hard prereq: FU-018 cred injection** — the subscription OAuth token is an unscoped
+      whole-subscription credential and must never sit in a worker pod env; the proxy injects it per
+      request. Also needs: recipe translation (`.agents/fix.yaml` → `--append-system-prompt`), a
+      subscription-usage stand-in for `cost_usd` in AGENT_RUN_STATS (tokens/turns, not $), and turn caps
+      as the budget-ceiling substitute (no per-task $ cap exists on subscription — loop-safety breaker
+      #2 must be re-derived from rate-limit + turn bounds).
 - [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
