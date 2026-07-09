@@ -260,12 +260,34 @@ ${UV_MOUNT}
 ${UV_VOLUME}
 EOF
 
-echo "→ waiting for ${POD} (clone + project devbox install can be slow on a cold nix store)…"
-"$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=300s || true
+echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
+"$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=600s || true
 
 if [ -n "$RUN_CMD" ]; then
+  # Follow logs to termination — resiliently. `logs -f` FAILS while the container is still
+  # ContainerCreating (slow image pull), and under set -e + pipefail that used to kill the launcher
+  # before ANY post-run bookkeeping — i.e. exactly the runs the strike path exists for died
+  # untracked (found live: the FU-021 acceptance run, 2026-07-09). Retry while the pod is
+  # Pending/Running; a clean `logs -f` exit means the container terminated. Each attempt restreams
+  # from the start, so plain tee keeps RUNLOG = one complete copy.
   RUNLOG="$(mktemp)"
-  "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" | tee "$RUNLOG"
+  DEADLINE=$(( $(date +%s) + ${AGENT_LOG_DEADLINE_S:-1800} ))
+  while :; do
+    if "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" 2>/dev/null | tee "$RUNLOG"; then break; fi
+    PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "${POD}" -o jsonpath='{.status.phase}' 2>/dev/null || echo Gone)"
+    case "$PHASE" in
+      Pending|Running|Unknown) ;;
+      *) break ;;   # Succeeded/Failed/Gone — grab whatever logs exist below and move on
+    esac
+    if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+      echo "→ gave up following ${POD} after $((${AGENT_LOG_DEADLINE_S:-1800}/60))min (phase: ${PHASE}) — bookkeeping continues on partial logs"
+      break
+    fi
+    sleep 5
+  done
+  # Terminal-but-empty (pod failed before/without streaming): one non-follow dump so the
+  # classification below has something to read.
+  [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
 
   # End-of-session stats: agent-finalize emitted one AGENT_RUN_STATS json line into the logs (cost,
