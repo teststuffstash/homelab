@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-061**.
+  Next free id: **FU-062**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -212,6 +212,21 @@ _Last updated: 2026-07-08._
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. Needs FU-057's ledger; first run hand-supervised.
+- [ ] **FU-061** — **Unify the transcript taxonomy so the viewer groups by issue/project, not cwd.**
+      Live problem (2026-07-09, screenshot): the viewer shows 7× "homelab", N× "oracle-fleet", "repo" —
+      it **derives its label from the jsonl `cwd` field**, ignoring our `<proj>--<task>` sync dir names,
+      AND the bucket keys scatter one issue's work across three top-level names (workers
+      `oracle-fleet/issue-N`, reviewer `oracle-fleet/pr-M`, coordinator `oracle/tick-ts` — the
+      stack-vs-project split, old finding F). Fix, two parts: **(1) one key**
+      `<project>/issue-<N>/<role>-r<round>-<ts>/` everywhere — project = the repo always; reviewer
+      resolves PR→issue via "Fixes #N"; pure-reconcile ticks that dispatch nothing → `<project>/_ticks/`.
+      Manifest carries {project, issue, role, round}. **(2) sync rewrites `cwd`**: since the viewer keys
+      on cwd, the sync sets each synced jsonl's cwd to `/<project>/issue-<N>/<role>-r<round>` (from the
+      sibling manifest) → all of issue N's coordinator+worker+reviewer sessions group under one
+      `oracle-fleet · issue-1` project, each session labelled by role-round. Touches: agent-finalize +
+      reviewer/coordinator launchers (bucket path + manifest fields + PR→issue resolution),
+      transcripts-viewer.yaml sync. Pairs with FU-057's goose-sessions.db upload (same agent-finalize).
+
 - [ ] **FU-059** — **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
       stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
       only writes are labels/comments/merge-state via `gh`. A future tier could let the coordinator write
