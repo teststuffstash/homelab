@@ -4,7 +4,10 @@
 > `agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), all three capture hooks
 > (worker `agent-finalize`, reviewer/coordinator launcher traps, nightly `transcripts-sync`
 > CronJob) and the viewer (`transcripts.local.teststuff.net`,
-> `agents/coordinator/transcripts-viewer.yaml`) are deployed. **P2 = FU-057, P3 = FU-058** (both
+> `agents/coordinator/transcripts-viewer.yaml`) are deployed. **P2 = FU-057 BUILT 2026-07-09**
+> (exit_status/error_class classifier, pushgateway + `agent_run_*` metrics, three Grafana dashboards
+> incl. the stall detector, goose sessions.db rendering in the viewer, and the `_ledger.jsonl` reflex —
+> pending merge+deploy+first-render confirmation), **P3 = FU-058** (both
 > absorb the old FU-023 stats-v2 scope). Companion to [`workflow.md`](workflow.md) (control flow)
 > and [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 

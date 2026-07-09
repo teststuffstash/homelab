@@ -142,11 +142,14 @@ upload_transcripts() {
   FILES=$(find /home/node/.claude/projects -name '*.jsonl' -newer /work/session-start 2>/dev/null)
   [ -n "$FILES" ] || { echo "transcripts: no new session files — nothing to upload"; return 0; }
   TS=$(date -u +%Y%m%dT%H%M%SZ)
-  PREFIX="s3://${AGENT_TS_BUCKET}/${STACK:-homelab}/tick-${TS}/coordinator-r1-${TS}"
+  # FU-061: project = the stack's MAIN repo (not the STACK name — the old oracle/tick-* split
+  # scattered one issue's work across "oracle" vs "oracle-fleet"); task = _ticks (a coordinator tick
+  # is a reconcile pass, not tied to one issue). Bucket key <project>/_ticks/coordinator-r1-<ts>/.
+  PREFIX="s3://${AGENT_TS_BUCKET}/${MAIN_REPO:-homelab}/_ticks/coordinator-r1-${TS}"
   export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
-  jq -n --arg role coordinator --arg project "${STACK:-homelab}" --arg task "tick-${TS}" \
+  jq -n --arg role coordinator --arg project "${MAIN_REPO:-homelab}" --arg task "_ticks" --arg stack "${STACK:-}" \
         --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg files "$FILES" \
-        '{role:$role, project:$project, task:$task, round:1, model:$model, session_key:$key, pod:$pod,
+        '{role:$role, project:$project, task:$task, stack:$stack, round:1, model:$model, session_key:$key, pod:$pod,
           files:($files|split("\n")|map(sub(".*/";""))), grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
   for f in $FILES; do
     s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "${PREFIX}/$(basename "$f")" || echo "transcripts: upload FAILED for $f (non-fatal)"

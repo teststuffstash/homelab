@@ -158,6 +158,10 @@ ${AFFINITY}
           value: "${TS_KEY_ID}"
         - name: AGENT_TS_SECRET_ACCESS_KEY
           value: "${TS_KEY_SECRET}"
+        # FU-057 §B1: agent-finalize PUTs this run's cost/duration/outcome here (goose has no OTLP
+        # rail). Cross-namespace to the monitoring pushgateway; unset it to disable the push.
+        - name: AGENT_PUSHGATEWAY_URL
+          value: "${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
         # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
         - name: GOOSE_PROVIDER

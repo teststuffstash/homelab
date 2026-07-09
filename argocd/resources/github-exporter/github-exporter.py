@@ -16,7 +16,9 @@ the org each poll, so new repos need no config. Budget: (repos + 2) requests per
 hundred/hour against the 5000/h PAT limit.
 
 Config (env): GITHUB_TOKEN (fine-grained PAT: org Administration:read for billing + repo
-Actions:read + Metadata:read, all repos — scripts/github-exporter-pat-bootstrap.sh), GITHUB_ORG,
+Actions:read + Metadata:read + Pull requests:read + Checks:read, all repos —
+scripts/github-exporter-pat-bootstrap.sh; the last two feed collect_open_prs / the stall detector,
+FU-063 — absent them that one collector is skipped, the rest keep flowing), GITHUB_ORG,
 POLL_INTERVAL_SECONDS (120), RUN_WINDOW_HOURS (24 — also bounds series cardinality: one series per run in window).
 """
 
@@ -53,6 +55,24 @@ def gh(path):
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read())
+
+
+def graphql(query, variables):
+    req = urllib.request.Request(
+        API + "/graphql",
+        data=json.dumps({"query": query, "variables": variables}).encode(),
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Content-Type": "application/json",
+            "User-Agent": "homelab-github-exporter",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        payload = json.loads(resp.read())
+    if payload.get("errors"):
+        raise RuntimeError(payload["errors"])
+    return payload["data"]
 
 
 def gh_paged(path, key):
@@ -109,6 +129,68 @@ def collect_workflow_runs(lines):
                 lines.append(metric("github_workflow_run_duration_seconds", labels, updated - epoch(started)))
 
 
+_PR_QUERY = """
+query($org:String!, $cursor:String) {
+  organization(login:$org) {
+    repositories(first:50, after:$cursor, orderBy:{field:PUSHED_AT, direction:DESC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        name
+        pullRequests(states:OPEN, first:40) {
+          nodes {
+            number isDraft updatedAt reviewDecision baseRefName headRefName
+            commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def collect_open_prs(lines):
+    """Emit per-open-PR review + CI state — the input the running-agents dashboard's stall detector
+    needs (a green, unapproved PR with no reviewer acting on it = the 2.5h silent stall measured
+    2026-07-09, docs/agents/observability-and-retro.md §A′). One GraphQL query/poll pulls
+    reviewDecision + statusCheckRollup across every repo, so cost stays ~1 request.
+
+    Token scope: this needs the PAT to also carry `Pull requests:read` (+ `Checks:read` for the CI
+    rollup). If it lacks them the GraphQL call raises and this collector is skipped (the poll's
+    try/except isolates it — billing + workflow-runs keep flowing, github_exporter_errors_total
+    ticks). Grant it via scripts/github-exporter-pat-bootstrap.sh (FU-063)."""
+    lines += [
+        "# TYPE github_pull_request_open gauge",
+        "# HELP github_pull_request_open 1 per open PR; review_decision (approved|changes_requested|"
+        "review_required|none) + ci_state (success|failure|pending|error|none) + draft ride as labels.",
+        "# TYPE github_pull_request_updated_timestamp gauge",
+        "# HELP github_pull_request_updated_timestamp Last-updated epoch of each open PR (age = time()-this).",
+    ]
+    cursor = None
+    for _ in range(10):  # hard page cap
+        data = graphql(_PR_QUERY, {"org": ORG, "cursor": cursor})
+        repos = data["organization"]["repositories"]
+        for repo in repos["nodes"]:
+            for pr in repo["pullRequests"]["nodes"]:
+                commits = pr["commits"]["nodes"]
+                rollup = commits[0]["commit"]["statusCheckRollup"] if commits else None
+                labels = {
+                    "owner": ORG,
+                    "repo": repo["name"],
+                    "number": pr["number"],
+                    "draft": "true" if pr["isDraft"] else "false",
+                    "review_decision": (pr["reviewDecision"] or "none").lower(),
+                    "ci_state": (rollup["state"] if rollup else "none").lower(),
+                    "base": pr["baseRefName"],
+                    "head": pr["headRefName"],
+                }
+                lines.append(metric("github_pull_request_open", labels, 1))
+                lines.append(metric("github_pull_request_updated_timestamp", labels, epoch(pr["updatedAt"])))
+        if not repos["pageInfo"]["hasNextPage"]:
+            return
+        cursor = repos["pageInfo"]["endCursor"]
+
+
 def collect_billing(lines):
     now = datetime.now(timezone.utc)
     usage = gh(f"/organizations/{ORG}/settings/billing/usage?year={now.year}&month={now.month}")
@@ -141,7 +223,7 @@ def poll_forever():
     while True:
         lines = []
         ok = True
-        for collector in (collect_workflow_runs, collect_billing):
+        for collector in (collect_workflow_runs, collect_open_prs, collect_billing):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below

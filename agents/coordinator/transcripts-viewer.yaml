@@ -8,11 +8,13 @@
 # this Service's BGP LoadBalancer VIP (ansible/group_vars/opnsense.yml). --no-auth: the LAN boundary
 # is the auth boundary, same as other internal UIs; nothing here is ever exposed via the tunnel.
 #
-# The sync sidecar mirrors the bucket and maps CLAUDE-FORMAT JSONL (coordinator + reviewer sessions)
-# into the ~/.claude/projects/<dir>/ layout the viewer scans, one <project>--<task> dir per task.
-# GOOSE worker sessions are a different format and are NOT converted in v1 — for those, use the
-# manifest's Grafana query + the raw run.log in the bucket (a goose→claude converter is a later
-# nice-to-have, not a blocker).
+# The sync sidecar mirrors the bucket and runs transcripts-sync-script.yaml's sync.py each tick
+# (FU-061 + FU-057): it maps CLAUDE-FORMAT JSONL (coordinator + reviewer) into ~/.claude/projects/,
+# REWRITING each session's `cwd` to a shared `/<project>--<issue>` so all of one issue's sessions
+# group under ONE project (the viewer labels by cwd), AND merges the uploaded GOOSE worker
+# sessions.db files into one ~/.local/share/goose/sessions/sessions.db that cchv reads natively (no
+# converter — cchv reads goose's SQLite sessions+messages; corrected 2026-07-09). So worker sessions
+# now render turn-by-turn beside coordinator/reviewer, grouped by issue.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,8 +44,10 @@ spec:
           ports:
             - { name: http, containerPort: 3727 }
           volumeMounts:
-            # The viewer scans ~/.claude/projects (its Docker user is `cchv`).
+            # The viewer scans ~/.claude/projects (its Docker user is `cchv`) for claude sessions and
+            # ~/.local/share/goose/sessions/sessions.db for goose worker sessions (fixed path).
             - { name: claude-data, mountPath: /home/cchv/.claude }
+            - { name: goose-data, mountPath: /home/cchv/.local/share/goose }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
@@ -58,19 +62,17 @@ spec:
           args:
             - |
               set -u
-              command -v s5cmd >/dev/null 2>&1 || { echo "s5cmd not in this image — bump the tag"; exit 1; }
+              command -v s5cmd  >/dev/null 2>&1 || { echo "s5cmd not in this image — bump the tag"; exit 1; }
+              command -v python3 >/dev/null 2>&1 || { echo "python3 not in this image — bump the tag"; exit 1; }
               export AWS_ACCESS_KEY_ID="$READER_ID" AWS_SECRET_ACCESS_KEY="$READER_SECRET" AWS_REGION=garage
-              mkdir -p /data/claude/projects /mirror
+              mkdir -p /data/claude/projects /data/goose/sessions /mirror
               while true; do
                 s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" sync "s3://agent-transcripts/*" /mirror/ \
                   || echo "bucket sync failed (retrying next tick)"
-                # <proj>/<task>/<role>-rN-<ts>/<session>.jsonl → projects/<proj>--<task>/<session>.jsonl
-                find /mirror -name '*.jsonl' \( -path '*/coordinator-*' -o -path '*/reviewer-*' \) | while read -r f; do
-                  rel="${f#/mirror/}"
-                  proj="${rel%%/*}"; rest="${rel#*/}"; task="${rest%%/*}"
-                  d="/data/claude/projects/${proj}--${task}"
-                  mkdir -p "$d" && cp -u "$f" "$d/" || echo "map failed: $f"
-                done
+                # Re-exec the mapper each tick so a ConfigMap edit (transcripts-sync-script.yaml) is
+                # picked up without rolling the pod: cwd-rewrite of claude jsonl (FU-061 grouping) +
+                # goose sessions.db merge (FU-057 rendering).
+                python3 /app/sync.py || echo "sync.py failed (retrying next tick)"
                 sleep 300
               done
           env:
@@ -87,7 +89,9 @@ spec:
                 secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key }
           volumeMounts:
             - { name: claude-data, mountPath: /data/claude }
+            - { name: goose-data, mountPath: /data/goose }
             - { name: mirror, mountPath: /mirror }
+            - { name: sync-script, mountPath: /app, readOnly: true }
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
@@ -101,8 +105,12 @@ spec:
       volumes:
         - name: claude-data
           emptyDir: {}
+        - name: goose-data
+          emptyDir: {}
         - name: mirror
           emptyDir: {}
+        - name: sync-script
+          configMap: { name: transcripts-sync-script }
 ---
 # LAN VIP for the viewer (BGP-advertised; HAProxy terminates TLS for transcripts.local.teststuff.net
 # and proxies here — the VIP/hostname pair is registered in SERVICES.md).

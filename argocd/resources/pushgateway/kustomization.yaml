@@ -1,0 +1,11 @@
+# prometheus-pushgateway — worker run-metric sink (FU-057). Plain k8s resources, ArgoCD-owned
+# (minimize-tofu direction, like github-exporter/otel-collector). The monitoring namespace + the
+# ServiceMonitor CRD come from tofu's kube-prometheus-stack, outside ArgoCD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
