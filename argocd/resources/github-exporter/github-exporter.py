@@ -16,9 +16,10 @@ the org each poll, so new repos need no config. Budget: (repos + 2) requests per
 hundred/hour against the 5000/h PAT limit.
 
 Config (env): GITHUB_TOKEN (fine-grained PAT: org Administration:read for billing + repo
-Actions:read + Metadata:read + Pull requests:read + Checks:read, all repos —
-scripts/github-exporter-pat-bootstrap.sh; the last two feed collect_open_prs / the stall detector,
-FU-063 — absent them that one collector is skipped, the rest keep flowing), GITHUB_ORG,
+Actions:read + Metadata:read + Pull requests:read, all repos —
+scripts/github-exporter-pat-bootstrap.sh; Pull requests:read is the one NEW scope feeding
+collect_open_prs / the stall detector, FU-063 — absent it that one collector is skipped, the rest
+keep flowing), GITHUB_ORG,
 POLL_INTERVAL_SECONDS (120), RUN_WINDOW_HOURS (24 — also bounds series cardinality: one series per run in window).
 """
 
@@ -155,10 +156,12 @@ def collect_open_prs(lines):
     2026-07-09, docs/agents/observability-and-retro.md §A′). One GraphQL query/poll pulls
     reviewDecision + statusCheckRollup across every repo, so cost stays ~1 request.
 
-    Token scope: this needs the PAT to also carry `Pull requests:read` (+ `Checks:read` for the CI
-    rollup). If it lacks them the GraphQL call raises and this collector is skipped (the poll's
-    try/except isolates it — billing + workflow-runs keep flowing, github_exporter_errors_total
-    ticks). Grant it via scripts/github-exporter-pat-bootstrap.sh (FU-063)."""
+    Token scope: this needs the PAT to also carry `Pull requests:read` (the PR list + reviewDecision).
+    The CI state in statusCheckRollup rides the exporter's existing `Actions:read` for Actions-based
+    CI (add `Commit statuses:read` only if a repo also uses external status checks). If the PAT lacks
+    Pull requests:read the GraphQL call raises and this collector is skipped (the poll's try/except
+    isolates it — billing + workflow-runs keep flowing, github_exporter_errors_total ticks). Grant it
+    via scripts/github-exporter-pat-bootstrap.sh (FU-063)."""
     lines += [
         "# TYPE github_pull_request_open gauge",
         "# HELP github_pull_request_open 1 per open PR; review_decision (approved|changes_requested|"

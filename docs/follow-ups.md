@@ -245,13 +245,15 @@ _Last updated: 2026-07-08._
       reviewer/coordinator launchers (bucket path + manifest fields + PR→issue resolution),
       transcripts-viewer.yaml sync. Pairs with FU-057's goose-sessions.db upload (same agent-finalize).
 
-- [ ] **FU-063** — **Grant the github-exporter PAT `Pull requests:read` + `Checks:read`** so its new
+- [ ] **FU-063** — **Grant the github-exporter PAT `Pull requests: read`** so its new
       `collect_open_prs()` populates `github_pull_request_open` / `_updated_timestamp` — the data behind
       FU-057's running-agents **stall detector** (green + unapproved PR with no reviewer acting = the 2.5h
       silent stall). Today the exporter PAT carries org Administration:read + Actions:read + Metadata:read
-      only; without the two new scopes that one collector raises and is skipped (billing + workflow-runs
-      keep flowing, `github_exporter_errors_total` ticks), and the stall panels read 0. Add the scopes in
-      `scripts/github-exporter-pat-bootstrap.sh` and re-mint the token (out-of-jail, operator).
+      only; without `Pull requests: read` that one collector raises and is skipped (billing + workflow-runs
+      keep flowing, `github_exporter_errors_total` ticks), and the stall panels read 0. The CI state in the
+      PR's statusCheckRollup rides the existing `Actions: read` for GitHub-Actions CI (there is no separate
+      "Checks: read" needed; add `Commit statuses: read` only if a repo uses external status checks). Add
+      the scope in `scripts/github-exporter-pat-bootstrap.sh` and re-mint the token (out-of-jail, operator).
 
 - [ ] **FU-059** — **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
       stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
