@@ -1,0 +1,67 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "title": "Agents — cost",
+  "uid": "agent-cost",
+  "tags": ["agents", "fu-057"],
+  "schemaVersion": 39,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "1m",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Worker $ (last 24h)",
+      "description": "Sum of agent_run_cost_usd over runs pushed to the gateway in the last 24h (push_time_seconds gating). Workers are OpenRouter-metered — this is the real spend. Coordinator/reviewer run on the subscription (free at margin).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(agent_run_cost_usd and on(job, role, project, issue, round) (time() - push_time_seconds < 86400)) or vector(0)" } ]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Worker $ (last 7d)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(agent_run_cost_usd and on(job, role, project, issue, round) (time() - push_time_seconds < 604800)) or vector(0)" } ]
+    },
+    {
+      "id": 3, "type": "stat", "title": "Coordinator + reviewer $ (range, subscription-equiv)",
+      "description": "claude_code_cost_usage_USD_total is what the subscription usage WOULD cost metered — free at margin, but a useful budget signal. increase() over the dashboard range.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(claude_code_cost_usage_USD_total[$__range])) or vector(0)" } ]
+    },
+    {
+      "id": 4, "type": "bargauge", "title": "Worker $ by project vs weekly ceiling ($5.79)",
+      "description": "Per-project worker spend (runs retained in the gateway) against the weekly project budget ceiling from the cost autopsy (agents/estimate_budget.py: a single mis-routed run once ate the whole $5.79 week). Adjust the threshold if the ceiling changes.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "max": 5.79, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 4 }, { "color": "red", "value": 5.79 } ] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": [ "lastNotNull" ] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (project) (agent_run_cost_usd and on(job, role, project, issue, round) (time() - push_time_seconds < 604800))", "legendFormat": "{{project}}" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Coordinator/reviewer $ over time by role",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "sum" ] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (role) (increase(claude_code_cost_usage_USD_total[$__rate_interval]))", "legendFormat": "{{role}}" } ]
+    },
+    {
+      "id": 6, "type": "table", "title": "Worker $ by project × model (retained in gateway)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "$", "desc": true } ] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (project, model) (agent_run_cost_usd)", "format": "table", "instant": true } ],
+      "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "project": "project", "model": "model", "Value": "$" } } } ],
+      "fieldConfig": { "defaults": {}, "overrides": [ { "matcher": { "id": "byName", "options": "$" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] } ] }
+    }
+  ]
+}

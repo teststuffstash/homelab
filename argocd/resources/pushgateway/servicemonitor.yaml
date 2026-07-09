@@ -1,0 +1,18 @@
+# Scrape the gateway. honorLabels: true is MANDATORY — without it Prometheus overwrites the
+# pushed job/role/project/issue/round with the scrape-target's own labels, collapsing every run
+# into one series. Prometheus discovers ServiceMonitors cluster-wide
+# (serviceMonitorSelectorNilUsesHelmValues=false, tofu/monitoring.tf).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: prometheus-pushgateway
+  labels:
+    app: prometheus-pushgateway
+spec:
+  selector:
+    matchLabels:
+      app: prometheus-pushgateway
+  endpoints:
+    - port: http
+      interval: 30s
+      honorLabels: true

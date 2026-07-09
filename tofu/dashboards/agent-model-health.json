@@ -1,0 +1,71 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "title": "Agents — model health",
+  "uid": "agent-model-health",
+  "tags": ["agents", "fu-057"],
+  "schemaVersion": 39,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "1m",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "table",
+      "title": "Model health — success vs harness-death vs $/successful run",
+      "description": "The blacklist signal (docs/agents/observability-and-retro.md §B1): one row per worker model over the pushgateway agent_run_* series. A high harness-death-rate + low success-rate + high $/successful-run = evidence to drop the model (deepseek-v4-flash died 2/4 on the first oracle runs). Cumulative over the runs currently retained in the pushgateway.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "success-rate", "desc": false } ] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_total)", "format": "table", "instant": true },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_total{exit_status=\"clean\"}) / sum by (model) (agent_run_total)", "format": "table", "instant": true },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_total{exit_status=\"harness-death\"}) / sum by (model) (agent_run_total)", "format": "table", "instant": true },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_total{exit_status=\"auth-storm\"}) / sum by (model) (agent_run_total)", "format": "table", "instant": true },
+        { "refId": "E", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "avg by (model) (agent_run_duration_s)", "format": "table", "instant": true },
+        { "refId": "F", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_cost_usd) / clamp_min(sum by (model) (agent_run_total{exit_status=\"clean\"}), 1)", "format": "table", "instant": true },
+        { "refId": "G", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model) (agent_run_cost_usd)", "format": "table", "instant": true }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": {
+          "model": "model",
+          "Value #A": "runs",
+          "Value #B": "success-rate",
+          "Value #C": "harness-death-rate",
+          "Value #D": "auth-storm-rate",
+          "Value #E": "avg-duration",
+          "Value #F": "$/successful run",
+          "Value #G": "total $"
+        } } }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "success-rate" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 0.5 }, { "color": "green", "value": 0.8 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "harness-death-rate" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.15 }, { "color": "red", "value": 0.4 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "auth-storm-rate" }, "properties": [ { "id": "unit", "value": "percentunit" } ] },
+          { "matcher": { "id": "byName", "options": "avg-duration" }, "properties": [ { "id": "unit", "value": "s" } ] },
+          { "matcher": { "id": "byName", "options": "$/successful run" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "total $" }, "properties": [ { "id": "unit", "value": "currencyUSD" } ] }
+        ]
+      }
+    },
+    {
+      "id": 2, "type": "barchart", "title": "Runs by exit_status × model",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 10 },
+      "options": { "orientation": "horizontal", "stacking": "normal", "legend": { "displayMode": "list", "placement": "bottom" } },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 80 } }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (model, exit_status) (agent_run_total)", "format": "table", "instant": true, "legendFormat": "{{model}} / {{exit_status}}" } ]
+    },
+    {
+      "id": 3, "type": "piechart", "title": "Worker runs by exit_status",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 10 },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": [ "value", "percent" ] }, "reduceOptions": { "calcs": [ "lastNotNull" ] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (exit_status) (agent_run_total)", "legendFormat": "{{exit_status}}" } ]
+    }
+  ]
+}

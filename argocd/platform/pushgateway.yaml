@@ -1,0 +1,28 @@
+# prometheus-pushgateway — the sink for goose-worker run metrics (FU-057 §B1: worker cost+outcome
+# → Prometheus, since goose has no OTLP rail like the claude-code roles). Wave 6, same as
+# otel-collector/github-exporter: the monitoring CRDs/namespace come from tofu's
+# kube-prometheus-stack, outside ArgoCD. No image/chart to release — the deployable unit is these
+# manifests, so this repo's sync IS the deploy.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pushgateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/pushgateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

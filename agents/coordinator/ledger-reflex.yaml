@@ -1,0 +1,108 @@
+# Ledger reflex CronJob — the deterministic B1 half of the retro loop (FU-057,
+# docs/agents/observability-and-retro.md §B1). Sibling of review-reflex: it costs NO LLM turn, lives
+# in the coordinator namespace and reuses the coordinator's identity + secrets. Each tick clones the
+# current homelab and runs agents/ledger.py, which folds the bucket manifests of every terminally-
+# labelled agent-fix issue (agent/done | agent/blocked) into one append-only line in
+# s3://agent-transcripts/_ledger.jsonl — the durable record the scheduled retro (FU-058) consumes.
+# Idempotent + level-triggered: it only appends tasks not already ledgered, so a missed/overlapping
+# tick loses nothing.
+#
+# Cadence is loose (30 min) — the ledger has no latency requirement (retro insight is batched).
+# Prereqs (coordinator bootstrap, README.md §Bootstrap): rbac.yaml SA agent-coordinator, coordinator-git,
+# and the agent-transcripts-s3 Secret (reader + writer keys, garage-workspace.yaml).
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ledger-reflex
+  namespace: agent-coordinator
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels: { app: ledger-reflex }
+        spec:
+          restartPolicy: Never
+          serviceAccountName: agent-coordinator
+          terminationGracePeriodSeconds: 5
+          securityContext:
+            fsGroup: 1000
+          initContainers:
+            - name: clone-homelab
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+              command: ["bash", "-lc"]
+              args: ["set -e; rm -rf /work/homelab; git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab"]
+              volumeMounts:
+                - { name: work, mountPath: /work }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+                seccompProfile: { type: RuntimeDefault }
+              resources:
+                requests: { cpu: "100m", memory: "128Mi" }
+                limits:   { cpu: "1",    memory: "512Mi" }
+          containers:
+            - name: reflex
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+              command: ["bash", "-lc"]
+              args: ["exec python3 /work/homelab/agents/ledger.py"]
+              env:
+                - name: HOME
+                  value: "/home/node"
+                - name: ORG
+                  value: "teststuffstash"
+                # Read-only gh (list terminal-labelled issues across the agent repos). The image's
+                # gh-wrapper reads the LIVE ~1h token from GH_TOKEN_FILE; GH_TOKEN env is the fallback.
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true }
+                - name: GH_TOKEN_FILE
+                  value: "/var/run/coordinator-git/GH_TOKEN"
+                # Bucket: reader (list+get manifests + the current ledger) + writer (put the ledger).
+                # The append is a read-modify-write of the single _ledger.jsonl; a single CronJob runs
+                # it, so no concurrent writer.
+                - name: AGENT_TS_ENDPOINT
+                  value: "http://garage.garage.svc.cluster.local:3900"
+                - name: AGENT_TS_BUCKET
+                  value: "agent-transcripts"
+                - name: AGENT_TS_READER_ID
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true }
+                - name: AGENT_TS_READER_SECRET
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true }
+                - name: AGENT_TS_WRITER_ID
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true }
+                - name: AGENT_TS_WRITER_SECRET
+                  valueFrom:
+                    secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+                seccompProfile: { type: RuntimeDefault }
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits:   { cpu: "1",    memory: "512Mi" }
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: coordinator-git
+              secret: { secretName: coordinator-git, optional: true }

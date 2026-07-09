@@ -28,8 +28,10 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
 
-Invariants: **one active worker per PR**; **bounded rounds** (max 3, then `agent/blocked`);
-idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-spawns.
+Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
+verdicts; infra failures are **strikes** that swap the model instead of consuming a round, see the
+MODEL note in the runbook); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
+double-spawns.
 
 > **Labels are provisioned as code** in [`tofu/github/labels.tf`](../../tofu/github/labels.tf) (this
 > table = its source of truth — add any new state label there too, or it won't exist on the repos).
@@ -61,11 +63,24 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 > and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
 > `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
 
-> **MODEL — do not freelance.** The worker model is **`openrouter/deepseek/deepseek-v4-flash`** (cheap,
-> instruct-tuned, priced in the estimator). Use it for BOTH `--model` flags below. Do **not** swap in a
-> model you happen to know (especially **reasoning** models like `deepseek-r1*` — slow, verbose,
-> pricier) — that produces a bogus $1/M-default estimate and a worse fix. Only change the model if the
-> human tells you to.
+> **MODEL — walk the stack's chain; do not freelance.** The worker model comes from the stack's entry
+> in `agents/stacks.json`: `workerModel` is the primary, `workerModelFallbacks` the ordered fallbacks.
+> Use the CURRENT chain model for BOTH `--model` flags below. Full design:
+> [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
+> - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
+>   max 3). An **infra failure** — harness-death (goose `-32602` truncation), auth-storm (401/403),
+>   provider 404/5xx, timeout — is a **strike**: it consumes **no round**. Blacklist that model **for
+>   this task only**, comment the strike on the issue (model + error class), and **re-dispatch the
+>   same round immediately** on the next chain model with a fresh session key. Never label
+>   `agent/blocked` for a pure infra failure while chain entries remain; only a fully-struck chain
+>   escalates (comment the strike list — that IS a human's problem).
+> - **Pricing an off-table model:** a `$1.0/M` in the estimator verdict means *unpriced*, not
+>   *forbidden*. Fetch the real headline price and override:
+>   `curl -s https://openrouter.ai/api/v1/models/<vendor>/<model>/endpoints | jq '[.data.endpoints[].pricing.prompt | tonumber] | min * 1e6'`
+>   → pass as `--price-per-mtok`. `:free` models are $0 → smallest tier by design.
+> - Do **not** swap in models you happen to know outside the chain (especially **reasoning** models
+>   like `deepseek-r1*` — slow, verbose, pricier). Changing the chain itself is the human's call
+>   (stacks.json is policy).
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
@@ -78,7 +93,7 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
 3. **Read + estimate.** Pipe the issue text into the budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
-     | python3 agents/estimate_budget.py --model openrouter/deepseek/deepseek-v4-flash \
+     | python3 agents/estimate_budget.py --model <chain-model> \
            --project <project> --session issue-<N>-round-<r> --emit-cr
    ```
    **Read the estimator's stderr verdict.** If it prints `⚠ ESCALATE` (estimate exceeds the **top**
@@ -97,7 +112,7 @@ idempotency key `(issue, base-sha, round)` so a re-list/redelivery never double-
    the real breaker — the worker can't outspend `budgetUSD`.
 5. **Dispatch a fresh worker** for this round (already labelled `agent/in-progress` from step 2):
    ```sh
-   bash agents/agent-session.sh <project> --harness goose --model openrouter/deepseek/deepseek-v4-flash \
+   bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --task issue-<N> --round <r> \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"

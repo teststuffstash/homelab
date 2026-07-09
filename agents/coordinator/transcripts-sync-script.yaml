@@ -1,0 +1,154 @@
+# The transcripts-viewer bucket-sync logic (FU-061 grouping + FU-057 goose rendering), kept as a
+# ConfigMap so it edits without a custom image. The sidecar's bash wrapper re-execs `python3
+# /app/sync.py` every tick, so a change here is picked up on the next loop (~5 min) — no pod roll.
+#
+# Two jobs, one pass over the mirrored bucket:
+#  1. claude JSONL (coordinator + reviewer) → ~/.claude/projects/<project>--<taskkey>/, and REWRITE
+#     each line's `cwd` to a single project-qualified segment `/<project>--<taskkey>` (taskkey =
+#     issue-<N> when known, else the raw task). The deployed viewer (cchv v1.18.0) labels a project
+#     by the session's `cwd` (observed 2026-07-09: 7× "homelab" = basename of /work/homelab, "repo" =
+#     /work/repo), so a shared, project-qualified cwd is what collapses all of one issue's sessions
+#     into ONE group. Role-round rides the filename + (for goose) the session name.
+#  2. goose sessions.db (worker) → MERGE every uploaded per-run DB into one
+#     ~/.local/share/goose/sessions/sessions.db that cchv reads natively (no converter — cchv reads
+#     goose's SQLite sessions+messages). Each merged session's `working_dir` is rewritten to the same
+#     `/<project>--<taskkey>` so goose worker sessions group beside the claude ones; the session name
+#     becomes "<label> · <role>-r<round>" so the run is identifiable turn-by-turn.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: transcripts-sync-script
+  namespace: agent-coordinator
+  labels:
+    app: transcripts-viewer
+data:
+  sync.py: |
+    #!/usr/bin/env python3
+    """Map the mirrored agent-transcripts bucket into the layouts cchv scans (FU-061 + FU-057)."""
+    import json, os, sqlite3, sys, traceback
+
+    MIRROR = "/mirror"
+    CLAUDE_PROJECTS = "/data/claude/projects"
+    GOOSE_DB = "/data/goose/sessions/sessions.db"
+
+    def taskkey(m):
+        """Stable per-issue key: issue-<N> when the manifest knows the issue, else the raw task."""
+        issue = str(m.get("issue") or "").strip()
+        if issue:
+            return "issue-%s" % issue
+        task = (m.get("task") or "").strip()
+        return task or "misc"
+
+    def label(m):
+        return "%s--%s" % (m.get("project") or "unknown", taskkey(m))
+
+    def rewrite_claude(src, dst_dir, cwd, prefix):
+        os.makedirs(dst_dir, exist_ok=True)
+        dst = os.path.join(dst_dir, prefix + os.path.basename(src))
+        tmp = dst + ".tmp"
+        with open(src, errors="replace") as f, open(tmp, "w") as o:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                    if isinstance(obj, dict) and "cwd" in obj:
+                        obj["cwd"] = cwd  # FU-061: the viewer groups by cwd
+                    o.write(json.dumps(obj) + "\n")
+                except Exception:
+                    o.write(line + "\n")
+        os.replace(tmp, dst)
+
+    def merge_goose(src_db, con, working_dir, session_name, new_id):
+        """Merge one worker's single-session DB into the shared target. goose reuses the SAME
+        session id across ephemeral pods ("20260709_1"), so a naive id-keyed merge collapses every
+        worker session into one — remap the session to `new_id` (its unique bucket run-dir) and
+        rewrite its messages' session_id FK to match. working_dir + name are rewritten for FU-061
+        grouping/labelling. Idempotent: sessions upsert by new_id; messages dedupe by message_id (a
+        UNIQUE index; the autoincrement `id` is dropped so the target reassigns)."""
+        s = sqlite3.connect(src_db)  # read-write so a present -wal replays on open
+        try:
+            for (ddl,) in s.execute(
+                "SELECT sql FROM sqlite_master WHERE type IN ('table','index') "
+                "AND sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
+            ):
+                con.execute(
+                    ddl.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS")
+                       .replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS")
+                       .replace("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS")
+                )
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_msg_mid ON messages(message_id)")
+            scols = [r[1] for r in s.execute("PRAGMA table_info(sessions)")]
+            for row in s.execute("SELECT %s FROM sessions" % ",".join(scols)):
+                d = dict(zip(scols, row))
+                d["id"] = new_id                        # unique per run (goose reuses one id)
+                d["working_dir"] = working_dir          # FU-061 grouping
+                if "name" in d:
+                    d["name"] = session_name
+                if "user_set_name" in d:
+                    d["user_set_name"] = 1
+                cols = list(d.keys())
+                con.execute(
+                    "INSERT OR REPLACE INTO sessions (%s) VALUES (%s)"
+                    % (",".join(cols), ",".join("?" * len(cols))),
+                    [d[c] for c in cols],
+                )
+            mcols = [r[1] for r in s.execute("PRAGMA table_info(messages)")]
+            ins = [c for c in mcols if c != "id"]
+            sid_i = ins.index("session_id")
+            for row in s.execute("SELECT %s FROM messages" % ",".join(ins)):
+                vals = list(row)
+                vals[sid_i] = new_id                    # repoint FK to the remapped session
+                con.execute(
+                    "INSERT OR IGNORE INTO messages (%s) VALUES (%s)"
+                    % (",".join(ins), ",".join("?" * len(ins))),
+                    vals,
+                )
+            con.commit()
+        finally:
+            s.close()
+
+    def main():
+        os.makedirs(os.path.dirname(GOOSE_DB), exist_ok=True)
+        goose = sqlite3.connect(GOOSE_DB)
+        goose.execute("PRAGMA journal_mode=DELETE")  # single-file DB for the viewer (no lingering -wal)
+        claude_n = goose_n = 0
+        for root, _, files in os.walk(MIRROR):
+            if "manifest.json" not in files:
+                continue
+            try:
+                m = json.load(open(os.path.join(root, "manifest.json")))
+            except Exception:
+                continue
+            lbl = label(m)
+            cwd = "/" + lbl
+            role = m.get("role") or "agent"
+            rnd = m.get("round")
+            prefix = "%s-r%s--" % (role, rnd)
+            # 1) claude JSONL (coordinator/reviewer, + any reviewer subagent-*.jsonl)
+            for fn in files:
+                if fn.endswith(".jsonl"):
+                    try:
+                        rewrite_claude(os.path.join(root, fn), os.path.join(CLAUDE_PROJECTS, lbl), cwd, prefix)
+                        claude_n += 1
+                    except Exception:
+                        traceback.print_exc()
+            # 2) goose worker sessions.db
+            gdb = os.path.join(root, "goose-sessions", "sessions.db")
+            if os.path.exists(gdb):
+                try:
+                    # the bucket run-dir (e.g. worker-r3-20260709T102555Z) is unique + stable per run
+                    merge_goose(gdb, goose, cwd, "%s · %s-r%s" % (lbl, role, rnd), os.path.basename(root))
+                    goose_n += 1
+                except Exception:
+                    traceback.print_exc()
+        goose.close()
+        print("sync: mapped %d claude jsonl, merged %d goose session db(s)" % (claude_n, goose_n), flush=True)
+
+    if __name__ == "__main__":
+        try:
+            main()
+        except Exception:
+            traceback.print_exc()
+            sys.exit(0)  # never crash the sidecar loop

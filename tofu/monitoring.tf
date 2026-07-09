@@ -475,6 +475,22 @@ resource "kubernetes_config_map" "cnpg_dashboard" {
   data = { "cnpg.json" = file("${path.module}/dashboards/cnpg.json") }
 }
 
+# Agent-platform dashboards (FU-057, docs/agents/observability-and-retro.md §B1). Three views over
+# the pushgateway agent_run_* series (worker cost/outcome), the OTLP claude_code_* series
+# (coordinator/reviewer), kube-state-metrics (pods by role×phase) and github_pull_request_* (the
+# stall detector): running-agents (what's active + the 2.5h-stall panel), model-health (the
+# blacklist pivot: success/harness-death/$-per-successful-run per model) and cost ($/day vs the
+# weekly ceiling). Datasource uid "prometheus" (provisioned); sidecar discovers the label.
+resource "kubernetes_config_map" "agent_dashboards" {
+  for_each = toset(["agent-running", "agent-model-health", "agent-cost"])
+  metadata {
+    name      = "grafana-dashboard-${each.key}"
+    namespace = kubernetes_namespace.monitoring.metadata[0].name
+    labels    = { grafana_dashboard = "1" }
+  }
+  data = { "${each.key}.json" = file("${path.module}/dashboards/${each.key}.json") }
+}
+
 # Component dashboards (Cilium agent metrics 21431, Cilium/Hubble network 24056, Longhorn 16888) —
 # community dashboards from grafana.com, with ${DS_PROMETHEUS} rewritten to the provisioned
 # Prometheus datasource uid ("prometheus") so they render via the sidecar without an import step.

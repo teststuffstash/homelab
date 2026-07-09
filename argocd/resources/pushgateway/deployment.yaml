@@ -1,0 +1,55 @@
+# Prometheus Pushgateway — the sink for goose-WORKER run metrics (FU-057 §B1). Workers are
+# ephemeral batch pods with no OTLP rail (goose ≠ claude-code), so agent-finalize PUTs
+# agent_run_cost_usd / _duration_s / _total to this gateway at end-of-run; Prometheus scrapes it
+# (honorLabels, so the pushed job/role/project/issue/round survive). Coordinator/reviewer cost
+# already reaches Prometheus via A0's OTLP claude_code_* — this is only the worker equivalent.
+#
+# Grouping key per run = job/role/project/issue/round (PUT replaces that group), so re-runs of an
+# issue/round overwrite rather than pile up stale series — cardinality stays ~one series per
+# (project,issue,round). The durable record is the _ledger.jsonl in the bucket, not this: the
+# gateway is the live dashboard feed, so an emptyDir + persistence file (survives container
+# restart, not reschedule) is deliberate — no PVC / new stateful service for exhaust.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-pushgateway
+  labels:
+    app: prometheus-pushgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-pushgateway
+  template:
+    metadata:
+      labels:
+        app: prometheus-pushgateway
+    spec:
+      containers:
+        - name: pushgateway
+          image: prom/pushgateway:v1.11.1
+          args:
+            - --persistence.file=/data/pushgateway.store
+            - --persistence.interval=5m
+          ports:
+            - name: http
+              containerPort: 9091
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9091 }
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          emptyDir: {}

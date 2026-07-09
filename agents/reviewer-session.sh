@@ -90,6 +90,13 @@ set -e
 gh repo clone ${REPO_SLUG} /work/repo -- --quiet
 cd /work/repo
 gh pr checkout ${PR}
+# FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
+# the worker rounds + coordinator ticks for the same issue. Resolve via GitHub's closing-issue
+# reference ("Fixes #N"); fall back to pr-<N> when the PR closes no issue.
+ISSUE=\$(gh pr view ${PR} --json closingIssuesReferences -q '.closingIssuesReferences[0].number' 2>/dev/null || true)
+if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
+export TASK_KEY ISSUE
+echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
 RUBRIC_FLAG=""
 [ -f "${RUBRIC}" ] && RUBRIC_FLAG="--append-system-prompt-file ${RUBRIC}"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
@@ -120,12 +127,16 @@ upload_transcripts() {
   [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
   command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
   TS=$(date -u +%Y%m%dT%H%M%SZ)
-  P="s3://${AGENT_TS_BUCKET}/${PROJECT}/pr-${PR_NUMBER}/reviewer-r${REVIEW_ROUND}-${TS}"
+  # FU-061: TASK_KEY = issue-<N> (PR→issue resolved in PREP), falling back to pr-<N> if the clone
+  # failed before it was set. Bucket key is <project>/<TASK_KEY>/reviewer-r<round>-<ts>/.
+  TASK_KEY="${TASK_KEY:-pr-${PR_NUMBER}}"
+  P="s3://${AGENT_TS_BUCKET}/${PROJECT}/${TASK_KEY}/reviewer-r${REVIEW_ROUND}-${TS}"
   RC_VAL="$(cat /tmp/rc 2>/dev/null || true)"
   export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
-  jq -n --arg role reviewer --arg project "$PROJECT" --arg task "pr-${PR_NUMBER}" --arg round "$REVIEW_ROUND" \
+  jq -n --arg role reviewer --arg project "$PROJECT" --arg task "$TASK_KEY" --arg issue "${ISSUE:-}" \
+        --arg pr "$PR_NUMBER" --arg round "$REVIEW_ROUND" \
         --arg model "${MODEL:-}" --arg key coordinator-claude --arg pod "${HOSTNAME:-}" --arg rc "${RC_VAL}" \
-        '{role:$role, project:$project, task:$task, round:($round|tonumber), model:$model,
+        '{role:$role, project:$project, issue:$issue, pr:$pr, task:$task, round:($round|tonumber), model:$model,
           session_key:$key, pod:$pod, exit_status:($rc|tonumber? // $rc),
           files:["result.json"], grafana_query:("{pod=\""+$pod+"\"}")}' > /tmp/manifest.json
   [ -s /tmp/result.json ] && { s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/result.json "$P/result.json" || echo "transcripts: result.json upload FAILED (non-fatal)"; }

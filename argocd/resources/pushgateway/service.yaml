@@ -1,0 +1,14 @@
+# Cluster-internal only. Worker pods (any namespace) PUT to
+# http://prometheus-pushgateway.monitoring.svc.cluster.local:9091 (agent-finalize's
+# AGENT_PUSHGATEWAY_URL default). Never BGP-advertised — this is internal exhaust plumbing.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-pushgateway
+  labels:
+    app: prometheus-pushgateway
+spec:
+  selector:
+    app: prometheus-pushgateway
+  ports:
+    - { name: http, port: 9091, targetPort: 9091 }

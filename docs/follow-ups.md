@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-062**.
+  Next free id: **FU-064**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -194,6 +194,15 @@ _Last updated: 2026-07-08._
       a worker applied it → CI green → relabel `major/awaiting-human` → **human merged #18**. WebFetch
       egress was sufficient (reviewer produced the correct migration finding).
 - [ ] **FU-057** — **Retro P2: the retro-facts reflex + cross-run dashboard**
+      **BUILT 2026-07-09 (agent-runtime `fu057-exit-status-metrics` + homelab `fu057-fu061-observability`) —
+      pending merge + deploy (agent-base image build/pin, ArgoCD sync of pushgateway/dashboards/viewer)
+      + a post-deploy first-render confirmation; delete this item + refs once green.** Delivered:
+      `exit_status`+`error_class` classifier (validated against the 4 real oracle-fleet runs → 2 clean,
+      1 harness-death, 1 auth-storm), pushgateway + `agent_run_*` metrics push, the three dashboards
+      (running-agents incl. the stall detector, model-health, cost), goose sessions.db merge in the
+      viewer sync (worker sessions render turn-by-turn, verified on real data), and `agents/ledger.py` +
+      `ledger-reflex` CronJob (`_ledger.jsonl`, tested against issue #1 → 4 rounds/$0.248/~3.8h). The
+      stall detector's PR-state source needs FU-063 (PAT scope). Original scope below.
       (`docs/agents/observability-and-retro.md` §B1; absorbs the old FU-023 "stats v2"). On a task's
       terminal label, deterministically append one line to `agent-transcripts/_ledger.jsonl` (cost vs
       estimator band, rounds, retry storms, CI red/green, wall time, cache-hit %, tokens/request —
@@ -213,6 +222,15 @@ _Last updated: 2026-07-08._
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. Needs FU-057's ledger; first run hand-supervised.
 - [ ] **FU-061** — **Unify the transcript taxonomy so the viewer groups by issue/project, not cwd.**
+      **BUILT 2026-07-09 (homelab `fu057-fu061-observability`, alongside FU-057) — pending merge + deploy.**
+      Delivered: reviewer resolves PR→issue via `closingIssuesReferences` (verified PR#5→#1), coordinator
+      keys `<mainRepo>/_ticks/`, agent-finalize adds `issue`, and the sync rewrites each jsonl `cwd` +
+      each goose session's `working_dir` to a single project-qualified segment `/<project>--issue-<N>`
+      so all of an issue's sessions collapse into one group (verified on the real issue-1 slice: 4 goose
+      worker sessions + the reviewer's claude jsonl regroup correctly). NB deviation from the original
+      cwd string below: the deployed cchv labels by cwd *basename*, so the leaf is `<project>--issue-<N>`
+      (grouping) with role-round in the filename + goose session name, not `/<project>/issue-<N>/<role>-rN`
+      (which would scatter under basename-labelling). Original spec below.
       Live problem (2026-07-09, screenshot): the viewer shows 7× "homelab", N× "oracle-fleet", "repo" —
       it **derives its label from the jsonl `cwd` field**, ignoring our `<proj>--<task>` sync dir names,
       AND the bucket keys scatter one issue's work across three top-level names (workers
@@ -226,6 +244,16 @@ _Last updated: 2026-07-08._
       `oracle-fleet · issue-1` project, each session labelled by role-round. Touches: agent-finalize +
       reviewer/coordinator launchers (bucket path + manifest fields + PR→issue resolution),
       transcripts-viewer.yaml sync. Pairs with FU-057's goose-sessions.db upload (same agent-finalize).
+
+- [ ] **FU-063** — **Grant the github-exporter PAT `Pull requests: read`** so its new
+      `collect_open_prs()` populates `github_pull_request_open` / `_updated_timestamp` — the data behind
+      FU-057's running-agents **stall detector** (green + unapproved PR with no reviewer acting = the 2.5h
+      silent stall). Today the exporter PAT carries org Administration:read + Actions:read + Metadata:read
+      only; without `Pull requests: read` that one collector raises and is skipped (billing + workflow-runs
+      keep flowing, `github_exporter_errors_total` ticks), and the stall panels read 0. The CI state in the
+      PR's statusCheckRollup rides the existing `Actions: read` for GitHub-Actions CI (there is no separate
+      "Checks: read" needed; add `Commit statuses: read` only if a repo uses external status checks). Add
+      the scope in `scripts/github-exporter-pat-bootstrap.sh` and re-mint the token (out-of-jail, operator).
 
 - [ ] **FU-059** — **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
       stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
@@ -244,7 +272,24 @@ _Last updated: 2026-07-08._
       declaring external ones. Remaining check: confirm the regenerated token resolves the oracle repos on
       the next coordinator tick.
 - [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
-      not enforced).
+      not enforced). Now load-bearing for the FU-062 model scout (free canary keys must be
+      honor-system no longer).
+- [ ] **FU-062** — **Model routing: chains + strikes + a live registry** — the umbrella that binds
+      FU-018/FU-021/FU-024/FU-057 into one design (they don't work separately). Full doc:
+      [`docs/agents/model-routing.md`](agents/model-routing.md). Core: (1) **rounds ≠ strikes** —
+      infra failures (harness-death/auth-storm/timeout) consume NO round; they blacklist the model
+      *for that task only* and re-dispatch same-tick on the next `workerModelFallbacks` chain entry
+      (`agents/stacks.json`, additive field → the AgentStack "model tiers" slot, FU-048); global
+      blacklists come only from the FU-057 model-health ledger. (2) `estimate_budget.py`'s static
+      price table → a **live registry** (`/api/v1/models` + `/models/:id/endpoints`; effective price
+      = cache-aware per-provider min; interim: the `--price-per-mtok` override recipe now in the
+      coordinator brief). (3) **provider pinning per session** (cache lives at the provider —
+      FU-018's injection leg). (4) a weekly **model-scout reflex** (new free/cheap tool-capable
+      models → canary task → ledger). Routers verified 2026-07-09: `pareto-code`/`fusion` advertise
+      no `tools` (park); `openrouter/auto` = paid lottery (last-resort only); `openrouter/free` =
+      free router WITH tools (scout candidate). DONE today: brief policy block, stacks.json chains,
+      tencent/hy3 priced in the estimator. OPEN: registry code, strike bookkeeping in the launcher
+      (post strike-count to the issue), scout CronJob, goose provider injection (FU-018/ADR-081).
 - [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
       manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
       automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
