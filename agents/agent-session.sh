@@ -67,13 +67,44 @@ case "$_stripped" in
   *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/<cloaked-codename> → keep (it's in the openrouter/ ns)
 esac
 
+# FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
+# provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
+# effective-cheapest cache-supporting tools-capable provider. Rendered as a per-session opencode
+# config (OPENCODE_CONFIG merges under the repo's own opencode.json, so a project override wins);
+# allow_fallbacks:true keeps the run alive if the pin is down, and max_price (2× the pinned
+# provider's headline prompt $/M) blocks the expensive-lottery fallback (the $5.79 qwen incident).
+# goose deliberately gets NOTHING here — it cannot carry provider prefs; that's the ADR-081 proxy.
+OC_SETUP=""; OC_ENV=""
+if [ "$HARNESS" = "opencode" ]; then
+  PIN_JSON="$(python3 "$HERE/estimate_budget.py" --model "$MODEL" --lookup 2>/dev/null || true)"
+  OC_CONFIG="$(printf '%s' "$PIN_JSON" | jq -c --arg m "$GOOSE_MODEL" '
+    select(.pinned_provider != null) |
+    {"$schema": "https://opencode.ai/config.json",
+     provider: {openrouter: {models: {($m): {options: {provider: {
+       order: [.pinned_provider.provider],
+       allow_fallbacks: true,
+       max_price: {prompt: ((.pinned_provider.prompt * 2 * 10000 | ceil) / 10000)}
+     }}}}}}}' 2>/dev/null || true)"
+  if [ -n "$OC_CONFIG" ]; then
+    echo "→ opencode session pin: $(printf '%s' "$PIN_JSON" | jq -r '"\(.pinned_provider.provider) (effective $\(.pinned_provider.effective_per_mtok)/M in)"')"
+    # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
+    OC_SETUP="printf '%s' '$(printf '%s' "$OC_CONFIG" | base64 -w0)' | base64 -d > /tmp/opencode-session.json; "
+    OC_ENV=$'        - name: OPENCODE_CONFIG\n          value: "/tmp/opencode-session.json"'
+  else
+    echo "→ opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned"
+  fi
+fi
+
 if [ -n "$RUN_CMD" ]; then
   # Run the harness, tee its output to a file, then emit the AGENT_RUN_STATS line (agent-finalize
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
-  WRAPPED="set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
+  WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
+elif [ -n "$OC_SETUP" ]; then
+  # Interactive opencode session: write the pin config, then idle for the exec below.
+  ARGS="[\"bash\",\"-c\",$(printf '%s' "${OC_SETUP}exec sleep infinity" | jq -Rs .)]"
 else
   ARGS="[\"sleep\",\"infinity\"]"       # idle after prep; you exec in below
 fi
@@ -172,6 +203,9 @@ ${AFFINITY}
           value: "${GOOSE_MODEL}"
         - name: MODEL
           value: "${MODEL}"
+        # Per-session opencode provider pin (FU-018 interim, emitted ONLY when the pin config is
+        # written by the command prefix above — same couple-the-two rule as UV_ENV below).
+${OC_ENV}
         # Persistent uv wheel cache: env emitted ONLY when the agent-uv-cache PVC is mounted (UV_ENV),
         # so an unmounted /uv-cache never gets set as the cache dir. See the UV_ENV note above.
 ${UV_ENV}
