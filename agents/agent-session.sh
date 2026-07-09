@@ -69,13 +69,23 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     PF_ISSUE="${TASK#issue-}"
     PF_SLUG="${REPO_URL#https://github.com/}"; PF_SLUG="${PF_SLUG%.git}"
     # (a) FU-042: an issue with an OPEN agent PR is alive in the merge path — dispatching a fresh
-    # round would fork the work. Fix rounds resume THAT PR's branch via --work-branch instead.
+    # round would fork the work. The legitimate exception is a FIX ROUND resuming that PR's own
+    # branch (--work-branch == the PR's headRef); resuming onto any OTHER branch is still a fork.
+    # (Gap found live by the round-2 coordinator, 2026-07-09: the first cut refused unconditionally
+    # and forced an AGENT_PREFLIGHT=0 workaround.)
     if command -v gh >/dev/null 2>&1; then
-      PF_PR="$(gh pr list --repo "$PF_SLUG" --state open --json number,body \
-        --jq "[.[] | select(.body | test(\"#${PF_ISSUE}\\\\b\"))][0].number // empty" 2>/dev/null || true)"
-      if [ -n "$PF_PR" ]; then
-        echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} already has open PR #${PF_PR} (${PF_SLUG}) — resume it with --work-branch, don't fork it (FU-042)." >&2
-        exit 3
+      PF_PR_LINE="$(gh pr list --repo "$PF_SLUG" --state open --json number,body,headRefName \
+        --jq "[.[] | select(.body | test(\"#${PF_ISSUE}\\\\b\"))][0] | select(.) | \"\(.number) \(.headRefName)\"" 2>/dev/null || true)"
+      if [ -n "$PF_PR_LINE" ]; then
+        PF_PR="${PF_PR_LINE%% *}"; PF_HEAD="${PF_PR_LINE#* }"
+        if [ -z "$WORK_BRANCH" ]; then
+          echo "PREFLIGHT REFUSED: issue #${PF_ISSUE} already has open PR #${PF_PR} (${PF_SLUG}, branch ${PF_HEAD}) — resume it with --work-branch ${PF_HEAD}, don't fork it (FU-042)." >&2
+          exit 3
+        elif [ "$WORK_BRANCH" != "$PF_HEAD" ]; then
+          echo "PREFLIGHT REFUSED: --work-branch ${WORK_BRANCH} does not match open PR #${PF_PR}'s branch ${PF_HEAD} — a resume must land on the PR's own branch (FU-042)." >&2
+          exit 3
+        fi
+        echo "→ pre-flight: resuming open PR #${PF_PR} on its branch ${PF_HEAD} (fix round)"
       fi
     fi
     # (b) one live worker per project: WIP=1 (a Running agent pod = an active round).
