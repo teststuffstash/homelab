@@ -16,6 +16,11 @@ tracker.
   exist here.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
+- **Single-writer contract (2026-07-10):** this file is operator/meta-edited ONLY — agents never
+  append here. The sequential ids + the counter line make it a guaranteed merge conflict under
+  parallel writers, and it doesn't scale past platform loose-ends anyway. Agent-discovered
+  shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
+  ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
 _Last updated: 2026-07-09._
 
