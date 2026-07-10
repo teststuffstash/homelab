@@ -310,7 +310,10 @@ _Last updated: 2026-07-09._
       the UI for this) upgrades it to true CI-green with no code change. Out-of-jail, operator; then the
       `ci_state="failure"/"pending"` rows populate.
 
-- [ ] **FU-059** — **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
+- [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags
+      to open agent PR branches during merge-forward arbitration (record-in-git; issues = work
+      pointers only). Remaining scope = W2+ (direct fixes/seeds), still needs design.** Original:
+      **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
       stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
       only writes are labels/comments/merge-state via `gh`. A future tier could let the coordinator write
       *directly* to a stack repo (open a PR from the clone, push a trivial fix, seed a spec) instead of always

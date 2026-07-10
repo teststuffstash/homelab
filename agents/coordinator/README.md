@@ -197,12 +197,20 @@ double-spawns.
      the repo's `.agents/review.md` maturity policy and classify the blocking findings yourself:
      - If the findings are **follow-up-class under the policy** (pre-prod repo, PR better than
        master, findings are edge semantics / spec ambiguity / new-code corners): do NOT dispatch a
-       fix round. Instead: **file each finding as its own backlog issue** (`agent-fix` + track
-       label, NOT `agent/queued` — a human queues), flag spec ambiguities on the issue as proposed
-       ⚖ rows, comment the arbitration on the PR ("merge-forward per policy; findings filed as
-       #N, #M"), and **re-dispatch the reviewer** with the arbitration note — expect
-       approve-with-follow-ups, then the gate + auto-merge complete it. The spirit of the task
-       being right outweighs one ambiguity in the spec.
+       fix round. Instead, in THIS order (ADR-086, W1 write tier):
+       1. **Flag each shortfall in `specs/` on the requirement it violates** — a `⚑ gap
+          (YYYY-MM-DD, PR #N → work #M): <one line>` line (spec rule 10) — **committed and pushed
+          to the PR BRANCH** (your token has contents:write; W1 scope = spec gap-flag lines on
+          open agent PR branches ONLY — never master, never code). The flag merges WITH the code
+          carrying the gap; the fixing PR deletes it; the spec file's git history is the audit
+          record. Spec AMBIGUITIES additionally get a proposed ⚖ row in the same commit.
+       2. Optionally open work-queue issues for the fixes (`agent-fix` + track label, NOT
+          `agent/queued`) — issues manage WORK; the RECORD lives in the spec flag, which cites
+          them as `work #M`.
+       3. Comment the arbitration on the PR, then **re-dispatch the reviewer** — AFTER the flag
+          push (dismiss-stale-on-push voids any approval landed before it). Expect
+          approve-with-follow-ups; the gate + auto-merge complete it. The spirit of the task
+          being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
        **step 3** with a fresh pod + fresh session key, **passing the reviewer's comments to the

@@ -565,6 +565,27 @@ discovery without cluster creds may still want a generated static catalog (open)
 (AgentStack XRD), **FU-049** (service XRDs vs SERVICES.md), **FU-045/FU-050** (per-stack coordinator +
 gate). Design: [`agents/platform-and-stacks.md`](agents/platform-and-stacks.md).
 
+### ADR-086 — Coordinator write tier W1: spec gap-flags on open agent PR branches
+**Status:** Accepted (2026-07-10, operator-directed). **Decision:** the coordinator gains its first
+DIRECT-write capability (FU-059 tier W1): during a merge-forward arbitration it commits **⚑ gap
+flags into `specs/`** — on the requirement the shortfall violates — **pushed to the open agent PR
+branch only**, so the flag merges WITH the code that carries the gap and the fixing PR deletes it.
+`git log` on the spec file becomes the audit trail of every known shortfall and its resolution.
+**Scope is the whole point:** W1 = spec gap-flag lines on open agent PR branches. Never master
+directly, never code, never `.agents/`/CI — those stay label/comment/merge-only (ADR-079) or
+human-gated. Order matters operationally: flag FIRST, then dispatch the re-review
+(dismiss-stale-on-push would void an approval landed before the flag). **Considered:** GitHub
+issues as the arbitration record (rejected — issues are ephemeral work pointers with no audit
+value; an auditor must never dig through closed issues to learn why code is the way it is);
+homelab `follow-ups.md` (rejected for product requirements — one file does not scale to thousands
+of per-requirement records; it stays the PLATFORM loose-ends tracker); a separate KNOWN-GAPS.md
+(rejected — the flag belongs AT the requirement it qualifies, or it rots). **Why:** the specs are
+already "always master" with incompleteness rendered (oracle-fleet rule 10: 🚧 WIP = spec ahead of
+code); ⚑ gap is its dual (code behind spec). The coordinator token already held `contents:write` —
+this ADR is the missing POLICY, not a permission change. **Consequences:** W2+ (coordinator
+pushing fixes/seeds directly) remains undesigned and needs its own ADR; the reviewer treats a
+⚑-flagged shortfall as already-arbitrated (no re-litigation); FU-059 narrows to the W2+ question.
+
 ---
 
 ## Open / undecided
