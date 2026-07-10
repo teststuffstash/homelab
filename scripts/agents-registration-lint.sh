@@ -41,6 +41,14 @@ CALLERS_EXEMPT="oracle-iac sleep-iac"
 if command -v gh >/dev/null 2>&1; then
   for repo in $stack_repos; do
     case " $CALLERS_EXEMPT " in *" $repo "*) continue;; esac
+    # PROBE first, per rule #6: in homelab CI the Actions token is HOMELAB-scoped, so reads of the
+    # other (private) repos 404 — that is "cannot see", never "missing" (it failed INTO six false
+    # MISSINGs and blocked the deploy-pin auto-merge on PR #21, 2026-07-10). Authenticated contexts
+    # (jail, coordinator) still enforce the real check.
+    if ! gh api "repos/${ORG:-teststuffstash}/${repo}" --jq .name >/dev/null 2>&1; then
+      echo "agents-registration-lint: cannot read ${repo} with this token — callers check SKIPPED for it (probe failure ≠ missing)" >&2
+      continue
+    fi
     for wf in update-pr-branch renovate-approve; do
       if ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yml" --jq .name >/dev/null 2>&1 \
          && ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yaml" --jq .name >/dev/null 2>&1; then
