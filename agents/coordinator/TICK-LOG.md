@@ -385,6 +385,30 @@ operator chart bump auto-merge; FU-064/FU-042/FU-050 items updated in follow-ups
   committing; the operator fix initially landed on a dead merged branch.)
 - **Session spend**: ~$0.83 total across all attempts/rounds today; $7.69 of the $8.52 remains.
 
+### 2026-07-10 morning — meta-4: THE HIGHER-LEVEL PROCESS FIX (operator directive)
+Rasmus, reviewing the #1 round-bound block: **the process is broken above the mechanics** — the
+review loop has depth but no merge JUDGMENT. A human author answers a nitting reviewer with
+"better than master, merge now, nits to the backlog"; our loop had no such move, so a scaffold
+that beat empty master burned 3 rounds and blocked on residual edge semantics — in a repo with
+zero prod consumers, where no "good enough" judgment even applies. The coordinator never
+exercised its tie-breaker mandate; the reviewer verdict was binary; scaffold tasks weren't scoped
+for what scaffold quality means (structure/libraries/seams, NOT edge completeness).
+**Encoded as mechanism (the "hard to put in markdown" attempt):**
+- Reviewer doctrine (reviewer-session.sh): verdict question = "is master better off WITH this
+  PR"; findings classify BLOCKING (secrets/blobs/CI-red/breaks-master/prod-invariants) vs
+  FOLLOW-UP (approve + `Follow-ups:` section, each bullet issue-ready; spec ambiguities = ⚖
+  proposals, never blockers). Pre-prod repos bias hard to approve-with-follow-ups.
+- Repo maturity knob (.agents/review.md, oracle-fleet 93ccb50): PRE-PROD merge-forward declared;
+  flips to invariant-blocking when the stack first serves consumers — operator-edited only.
+- Coordinator tie-breaker play (brief step 7): on CHANGES_REQUESTED, ARBITRATE before relaying —
+  follow-up-class findings → file as backlog issues + re-dispatch reviewer with the arbitration
+  note; agent/blocked is reserved for "master would be worse off", never for imperfect progress.
+- Scaffold scoping note in the brief; scaffold quality bar in the rubric.
+- Economic argument recorded: N follow-up issues × 3 rounds each converges faster + cheaper than
+  one PR × unbounded rounds — measured on PR #6 (3 rounds, 3 disjoint bug sets, no convergence).
+**Live application to #1/PR #6**: filing the two residual findings as backlog issues, un-blocking,
+updating the PR branch, re-dispatching the reviewer under the new policy → expect merge.
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token

@@ -49,6 +49,9 @@ double-spawns.
 
 > **Issues must be self-contained — the issue is the context channel.** The worker pod clones ONLY
 > the project repo: no `../homelab` checkout, no `SERVICES.md`, no kubeconfig. App repos deliberately
+> Scoping note for SCAFFOLD issues: state the quality bar explicitly — structure, current library
+> versions, clean seams; edge-case semantics are follow-up issues by design. A scaffold issue that
+> demands exhaustive edge coverage sets the review loop up to never converge.
 > don't duplicate platform docs, so before dispatching, make sure the issue carries every platform
 > fact the task needs (service endpoints/status from `SERVICES.md`, bucket names + key/Secret names,
 > the relevant runbook/pattern excerpt) — add a comment with the missing facts if the reporter didn't.
@@ -189,12 +192,24 @@ double-spawns.
    - **`APPROVED`** → hands off. The gate + auto-merge (armed in step 6) complete the PR on their own;
      do **not** merge manually. When GitHub reports it merged → relabel `agent/done`, clean up (step 8),
      then deploy (step 7a).
-   - **`CHANGES_REQUESTED`** and `round < max` → bump the round and go to **step 3** with a fresh pod +
-     fresh session key, **passing the reviewer's comments to the fixer** so it addresses them (feed
-     `gh pr view <PR> --repo teststuffstash/<project> --json reviews -q '.reviews[-1].body'` into the
-     fixer's context). New commits re-open the gate (`dismiss_stale_reviews_on_push`), so the bot must
-     re-approve — re-run this step after the next round's PR update.
-   - `round == max` or ambiguous → `agent/blocked` + comment the blockers.
+   - **`CHANGES_REQUESTED`** → **ARBITRATE FIRST — this is your tie-breaker duty, not a relay job**
+     (operator directive 2026-07-10, after PR #6 burned 3 rounds while beating empty master). Read
+     the repo's `.agents/review.md` maturity policy and classify the blocking findings yourself:
+     - If the findings are **follow-up-class under the policy** (pre-prod repo, PR better than
+       master, findings are edge semantics / spec ambiguity / new-code corners): do NOT dispatch a
+       fix round. Instead: **file each finding as its own backlog issue** (`agent-fix` + track
+       label, NOT `agent/queued` — a human queues), flag spec ambiguities on the issue as proposed
+       ⚖ rows, comment the arbitration on the PR ("merge-forward per policy; findings filed as
+       #N, #M"), and **re-dispatch the reviewer** with the arbitration note — expect
+       approve-with-follow-ups, then the gate + auto-merge complete it. The spirit of the task
+       being right outweighs one ambiguity in the spec.
+     - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
+       invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
+       **step 3** with a fresh pod + fresh session key, **passing the reviewer's comments to the
+       fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
+   - `round == max` with a genuinely blocking finding, or ambiguous → `agent/blocked` + comment.
+     **`agent/blocked` is for "master would be worse off with this PR" — never for an imperfect
+     PR that moves the repo forward.**
 7a. **Deploy — automatic, nothing to do.** The deploy path is fully automated now and the coordinator
    **never touches it** (and never touches homelab). Merging the fix PR fires the app repo's `deploy`
    workflow → it builds the image + chart at `<calver>-g<sha>` and opens an **auto-merging** version-bump

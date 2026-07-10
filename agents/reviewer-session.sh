@@ -111,9 +111,13 @@ If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-r
   4. Note genuinely useful NEW capabilities of the major as ONE short, non-blocking follow-up comment.
   Verdict: --request-changes if ANY adaptation is required (a worker will fix it on this branch and you re-review); --approve only once every breaking change is either N/A or already handled in the diff. A major bump is HUMAN-GATED (not auto-merged): your review DOCUMENTS the migration so a human can merge with confidence — do not expect auto-merge.
 
-Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments.
+Otherwise (a normal code PR): run /code-review to find correctness bugs and post them as inline PR comments — then apply the MERGE-FORWARD VERDICT DOCTRINE:
+  The verdict question is NOT "is this perfect?" — it is "is master better off WITH this PR than without it?" Classify every finding you made:
+    BLOCKING (--request-changes): the diff makes master WORSE or lands something unrecoverable — leaked secrets/credentials, committed binary blobs, CI red, breaking/deleting behavior that already worked on master, or (only in a repo whose rubric declares it PROD-SERVING) violating a pinned invariant in a way real consumers would ingest. The project rubric (.agents/review.md) may tighten or relax this set — the rubric wins.
+    FOLLOW-UP (approve anyway): everything else — correctness edges in NEW code, unhandled input shapes you constructed, spec ambiguities you uncovered, dead code, style, missing tests. List each under a "Follow-ups:" heading in the review body, one concrete bullet each, written so it can become a backlog issue verbatim. A spec ambiguity is a proposed AMBIGUITY row for specs/, never a blocker.
+  A greenfield / pre-prod repo (the rubric says which) biases HARD toward approve-with-follow-ups: with no consumers there is no "good enough" judgment to fail — forward progress merges NOW, and each residual finding becomes its own issue with its own round budget (which is cheaper and converges faster than piling rounds onto one PR). This is what a human author would negotiate: "better than master, merge it, backlog the nits." Do NOT re-litigate follow-ups already filed from earlier reviews of this same PR.
 
-STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve if nothing blocks, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the blockers (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
+STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve --body with the Follow-ups: section (when non-empty) if the diff moves master forward, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the BLOCKING findings only (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
 PREP
 )
 
