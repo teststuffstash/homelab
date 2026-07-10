@@ -25,22 +25,22 @@ spec:
         revision: master
         directories:
           - path: agents/fixer/*
-      values:
-        repoURL: https://github.com/teststuffstash/homelab.git
+        values:
+          repoURL: https://github.com/teststuffstash/homelab.git
     - git:
         repoURL: https://github.com/teststuffstash/oracle-iac.git
         revision: master
         directories:
           - path: "*/agent"
-      values:
-        repoURL: https://github.com/teststuffstash/oracle-iac.git
+        values:
+          repoURL: https://github.com/teststuffstash/oracle-iac.git
     - git:
         repoURL: https://github.com/teststuffstash/sleep-iac.git
         revision: master
         directories:
           - path: "*/agent"
-      values:
-        repoURL: https://github.com/teststuffstash/sleep-iac.git
+        values:
+          repoURL: https://github.com/teststuffstash/sleep-iac.git
   template:
     metadata:
       name: 'agent-fixer-{{if eq .path.basename "agent"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}'
