@@ -1,0 +1,31 @@
+# Agent-run data-quality + stall alerts (FU-057 polish, 2026-07-10). Prometheus picks up
+# PrometheusRules cluster-wide; Alertmanager routes to the HA webhook (tofu/monitoring.tf).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: agent-runs
+  labels:
+    app: pushgateway
+spec:
+  groups:
+    - name: agent-runs
+      rules:
+        # A negative cost is a DATA-QUALITY bug, never a discount — the probe-fails-into-a-value
+        # class (agent-runtime#12 fixed the known instance; this alert catches regressions and any
+        # new path that subtracts against a failed read).
+        - alert: AgentRunNegativeCost
+          expr: agent_run_cost_usd < 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Agent run reported NEGATIVE cost ({{ $labels.project }} issue {{ $labels.issue }})"
+            description: "agent_run_cost_usd={{ $value }} for pod-pushed run (model {{ $labels.model }}, round {{ $labels.round }}) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class."
+        # An infra-death burst: ≥3 non-clean terminal runs in an hour on one project means a wall,
+        # not bad luck — the meta-2 pattern (three attempts, three walls) as an alert.
+        - alert: AgentRunInfraDeathBurst
+          expr: sum by (project) (count_over_time(agent_run_total{exit_status!~"clean|ci-failed"}[1h])) >= 3
+          labels:
+            severity: warning
+          annotations:
+            summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
+            description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns."
