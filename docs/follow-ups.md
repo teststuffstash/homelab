@@ -217,7 +217,8 @@ _Last updated: 2026-07-09._
       through the egress proxy → watchdog kill → `error_class=auth-storm` → `AGENT_STRIKE:`
       comment posted. Left done-marked (not scrubbed) for the FU-021 provenance in
       agent-runtime's code comments + the design docs.
-- [ ] **FU-022** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
+- [x] **FU-022 — DONE (2026-07-10, operator-run: "messy — not all projects had automerge/ci wired,
+      but all resulting PRs merged"; residual polish belongs to FU-052's onboarding-completeness lint)** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
       pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
       (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
       install:** rather than pin every version (the original plan — still drifts between per-repo
