@@ -140,16 +140,17 @@ if [ "$HARNESS" = "goose" ]; then
   fi
 fi
 
-# ADR-087 / FU-018 leg A (opt-in, goose+proxy only in v1): AGENT_CRED_INJECT=1 gives the pod an
-# OPAQUE REF instead of the real OpenRouter key — the egress proxy resolves ref→key (label-checked,
-# per-namespace RBAC) and injects upstream. The ref is worthless outside the cluster; a stolen pod
-# env leaks nothing. opencode goes upstream directly (no proxy hop), so it keeps the real key until
-# it too rides the proxy. Default stays the secretKeyRef until acceptance runs prove the leg.
+# ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
+# oracle-fleet#7/PR#12: full cycle incl. salvage-push + PR-open with zero pod credentials;
+# AGENT_CRED_INJECT=0 opts out): the pod gets an OPAQUE REF instead of the real OpenRouter key —
+# the egress proxy resolves ref→key (label-checked, per-namespace RBAC) and injects upstream. The
+# ref is worthless outside the cluster. opencode still goes upstream directly with the real key
+# until it too rides the proxy.
 OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
 CRED_BROKER_ENV=""
-if [ "${AGENT_CRED_INJECT:-0}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
+if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           value: \"ref:${NS}/${SECRET}\""
