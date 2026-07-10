@@ -355,6 +355,36 @@ Experiment stopped on operator decision; every P0 root cause from meta-2 got its
 Pending: acceptance round on #1 (deepseek through the max_tokens-floored proxy + all the above);
 operator chart bump auto-merge; FU-064/FU-042/FU-050 items updated in follow-ups.
 
+### 2026-07-10 ~21:40–04:00 — meta-3 acceptance: three clean rounds, one new deadlock found+fixed, blocked at bound
+**The P0 machinery passed acceptance across three full rounds on oracle-fleet#1 / PR #6:**
+- **Truncation class DEAD**: every completion `injected:deepseek+max_tokens:16384`; deepseek
+  finished the twice-fatal scaffold in 534s, then two fix rounds at 364s/330s. $0.06/round.
+- **In-pod bookkeeping perfect 3/3**: armed_by_pod + stats_comment_by_pod on every round; zero
+  manual meta bookkeeping the entire night (vs 3 hand-posted strikes in meta-2).
+- **Deterministic resume proven**: rounds 2+3 landed on the PR branch via --work-branch; the
+  round-2 coordinator FOUND a pre-flight gap (resume refused unconditionally), safely bypassed
+  with justification, flagged it → fixed (f86079c) → round-3 coordinator confirmed clean pass.
+- **Reviewer depth escalating by round** (execute-the-engine rubric row 7 binding): r1 ran the
+  engine on the fixture corpus (2 bugs + gitignore regression); r2 CONSTRUCTED new edge-case
+  seeds (points-only lõige family); r3 caught the r-3 fix applied point-wise not family-wise +
+  the alampunkt-ambiguity spec pin left unimplemented. Three rounds, three DISJOINT genuine bug
+  sets — not flip-flop; the bound fired correctly → `agent/blocked`, human decides (grant round 4
+  with the precise 2-bug list, or wait for the FU-066 claude+haiku tier).
+- **NEW DEADLOCK found + fixed (FU-041 hole)**: the adRise updater refuses PRs with
+  changesRequestedReviews>0; the reflex refused BEHIND PRs → CHANGES_REQUESTED + fix pushed +
+  master moved (routine here: spec pins move master mid-review) wedged the whole serializer.
+  Fix (d381a3a): BEHIND re-review exception in review-reflex.sh — re-approval clears the
+  updater's gate. Proven live: re-reviews at 01:04 and 02:20 ran on BEHIND heads.
+- **Merge-path onboarding gap**: oracle-fleet had NO update-pr-branch/renovate-approve callers
+  (the FU-052 layer-1 checklist skipped) — added (ae87906 side); the registration-lint class
+  should grow a workflow-callers check (FU-048's claim renders these eventually).
+- **Meta-lesson ×2 (rule #6, my own shell)**: `git push | grep`/`grep -c "master -> master"`
+  both read REJECTED pushes as success — two fixes sat stranded local while I watched them
+  "not work" in-cluster. Push verification = compare `git ls-remote` to local HEAD, never parse
+  filtered push output. (Also: a jail clone may sit on a stale non-master branch — check before
+  committing; the operator fix initially landed on a dead merged branch.)
+- **Session spend**: ~$0.83 total across all attempts/rounds today; $7.69 of the $8.52 remains.
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token
