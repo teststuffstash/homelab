@@ -1,11 +1,15 @@
 # agent-fixer ApplicationSet — GitOps-manages every repo's FIXER-FLOW infra (per-project OpenRouterKey
-# budget key + agent-git-token ESO GithubAccessToken) from ONE templated set, replacing the per-repo
-# Applications (the "yaml way", FU-052). A **git directory generator** over `agents/fixer/*` emits one
-# Application per repo subdir → onboarding a repo is just adding `agents/fixer/<repo>/` (a dir named for
-# the repo; its manifests declare namespace <repo>). No new per-repo Application file, no shell.
+# budget key + agent-git-token ESO GithubAccessToken + worker NetworkPolicies) from ONE templated set
+# (the "yaml way", FU-052). Two dir shapes feed it:
+#   homelab  agents/fixer/<repo>/   (platform-side repos)       → repo = path basename
+#   <stack>-iac  <repo>/agent/      (stack policy in the stack — ADR-084/FU-025; GitOps-orphaned
+#                                    until 2026-07-10, TICK-LOG meta-3) → repo = path segment 0
+# ⚠ Generator-level template overrides do NOT reliably beat the spec template (duplicate-name
+# incident, meta-5) — so ONE uniform spec template derives repo/namespace from the dir shape, and
+# only the repoURL varies via generator `values`.
 #
-# Wave 6 (child apps) — after openrouter-operator (wave 5) provides the OpenRouterKey CRD + ESO/Infisical/
-# ClusterSecretStore are up. Registered by the platform root app-of-apps (argocd/README.md).
+# Wave 6 (child apps) — after openrouter-operator (wave 5) provides the OpenRouterKey CRD + ESO/
+# Infisical/ClusterSecretStore are up. Registered by the platform root app-of-apps (argocd/README.md).
 # Fuller endgame folds the GitHub-side (repos/labels/rulesets/callers) in too → FU-048 AgentStack XRD.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -20,14 +24,9 @@ spec:
         repoURL: https://github.com/teststuffstash/homelab.git
         revision: master
         directories:
-          - path: agents/fixer/* # one dir per repo (basename == repo == namespace)
+          - path: agents/fixer/*
       values:
         repoURL: https://github.com/teststuffstash/homelab.git
-    # Per-stack -iac repos own their fixer infra at <repo>/agent/ (stack policy lives in the stack —
-    # ADR-084/FU-025; GitOps-orphaned until 2026-07-10, TICK-LOG meta-3). NB generator-level
-    # template overrides do NOT reliably beat the spec template (duplicate-name incident, meta-5) —
-    # so ONE uniform spec template below derives repo/namespace from the dir shape, and only the
-    # repoURL varies via generator `values`.
     - git:
         repoURL: https://github.com/teststuffstash/oracle-iac.git
         revision: master
@@ -42,45 +41,9 @@ spec:
           - path: "*/agent"
       values:
         repoURL: https://github.com/teststuffstash/sleep-iac.git
-  template:
-        metadata:
-          name: "agent-fixer-{{index .path.segments 0}}"
-          annotations:
-            argocd.argoproj.io/sync-wave: "6"
-        spec:
-          project: default
-          source:
-            repoURL: https://github.com/teststuffstash/oracle-iac.git
-            targetRevision: master
-            path: "{{.path.path}}"
-            directory: { recurse: false }
-          destination:
-            server: https://kubernetes.default.svc
-            namespace: "{{index .path.segments 0}}"
-    - git:
-        repoURL: https://github.com/teststuffstash/sleep-iac.git
-        revision: master
-        directories:
-          - path: "*/agent"
-      template:
-        metadata:
-          name: "agent-fixer-{{index .path.segments 0}}"
-          annotations:
-            argocd.argoproj.io/sync-wave: "6"
-        spec:
-          project: default
-          source:
-            repoURL: https://github.com/teststuffstash/sleep-iac.git
-            targetRevision: master
-            path: "{{.path.path}}"
-            directory: { recurse: false }
-          destination:
-            server: https://kubernetes.default.svc
-            namespace: "{{index .path.segments 0}}"
   template:
     metadata:
-      # repo name: `agents/fixer/<repo>` → basename; `<repo>/agent` → first segment.
-      name: "agent-fixer-{{if eq .path.basename \"agent\"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}"
+      name: 'agent-fixer-{{if eq .path.basename "agent"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}'
       annotations:
         argocd.argoproj.io/sync-wave: "6"
     spec:
@@ -92,7 +55,7 @@ spec:
         directory: { recurse: false }
       destination:
         server: https://kubernetes.default.svc
-        namespace: "{{if eq .path.basename \"agent\"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}"
+        namespace: '{{if eq .path.basename "agent"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}'
       syncPolicy:
         automated: { prune: true, selfHeal: true }
         syncOptions:
