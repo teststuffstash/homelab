@@ -145,7 +145,9 @@ fi
 # per-namespace RBAC) and injects upstream. The ref is worthless outside the cluster; a stolen pod
 # env leaks nothing. opencode goes upstream directly (no proxy hop), so it keeps the real key until
 # it too rides the proxy. Default stays the secretKeyRef until acceptance runs prove the leg.
-OR_KEY_ENV="${OR_KEY_ENV}"
+OR_KEY_ENV="        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
 CRED_BROKER_ENV=""
 if [ "${AGENT_CRED_INJECT:-0}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
