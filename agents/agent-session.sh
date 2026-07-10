@@ -146,10 +146,15 @@ fi
 # env leaks nothing. opencode goes upstream directly (no proxy hop), so it keeps the real key until
 # it too rides the proxy. Default stays the secretKeyRef until acceptance runs prove the leg.
 OR_KEY_ENV="${OR_KEY_ENV}"
+CRED_BROKER_ENV=""
 if [ "${AGENT_CRED_INJECT:-0}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
-  echo "→ cred-inject: pod holds ref:${NS}/${SECRET} (proxy resolves; ADR-087)"
+  echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           value: \"ref:${NS}/${SECRET}\""
+  # leg B: the entrypoint's credential helper + gh wrapper fetch the live token per operation from
+  # the proxy's /git-token endpoint — the env/mount below stay as fallback until FU-020 removes them.
+  CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
+          value: \"${PROXY_URL}/git-token?ns=${NS}\""
 fi
 
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
@@ -321,6 +326,7 @@ ${OR_KEY_ENV}
             secretKeyRef: { name: agent-git-token, key: token, optional: true }
         - name: GIT_TOKEN_FILE
           value: "/secrets/git/token"
+${CRED_BROKER_ENV}
         # Resume an existing remote branch deterministically (fix rounds / salvaged WIP — finding C).
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}

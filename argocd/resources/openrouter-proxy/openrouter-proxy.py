@@ -87,6 +87,42 @@ def _resolve_ref(ref: str) -> str | None:
     return key
 
 
+GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
+
+
+def _resolve_git_token(ns: str) -> str | None:
+    """ADR-087 leg B: serve the ESO-minted `agent-git-token` for a worker namespace — the pod
+    stops mounting the Secret entirely and fetches per git operation (ESO keeps it fresh, so run
+    duration is unbounded by token TTL). Honors only Secrets carrying GIT_TOKEN_LABEL; the same
+    per-namespace RBAC as session keys. Cached briefly like refs."""
+    ref = f"{ns}/agent-git-token#git"
+    now = time.time()
+    with _refs_lock:
+        hit = _refs.get(ref)
+        if hit and hit[0] > now:
+            return hit[1]
+    token_value = None
+    try:
+        sa_token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        req = urllib.request.Request(
+            f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/agent-git-token",
+            headers={"Authorization": "Bearer " + sa_token},
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            secret = json.load(resp)
+        if (secret.get("metadata", {}).get("labels") or {}).get(GIT_TOKEN_LABEL) == "true":
+            b64 = (secret.get("data") or {}).get("token", "")
+            token_value = base64.b64decode(b64).decode() if b64 else None
+        else:
+            log(f"git-token: {ns} secret lacks {GIT_TOKEN_LABEL} — refusing")
+    except Exception as e:  # noqa: BLE001
+        log(f"git-token: resolve failed for {ns}: {e}")
+    with _refs_lock:
+        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+    return token_value
+
+
 def _inject_ref_auth(headers: dict) -> str:
     """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix."""
     auth = next((k for k in headers if k.lower() == "authorization"), None)
@@ -261,6 +297,24 @@ class Proxy(BaseHTTPRequestHandler):
         if self.path == "/healthz":
             payload = b"ok"
             self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path.startswith("/git-token"):
+            # ADR-087 leg B — GET /git-token?ns=<worker-namespace> → the live App token, plaintext
+            # body. In-cluster only; FU-020's NetworkPolicy narrows callers to worker pods.
+            from urllib.parse import parse_qs, urlparse
+            ns = (parse_qs(urlparse(self.path).query).get("ns") or [""])[0]
+            token_value = _resolve_git_token(ns) if ns else None
+            if token_value:
+                payload = token_value.encode()
+                self.send_response(200)
+                log(f"GET /git-token ns={ns} → served")
+            else:
+                payload = b"unresolvable"
+                self.send_response(404)
+                log(f"GET /git-token ns={ns} → 404")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)

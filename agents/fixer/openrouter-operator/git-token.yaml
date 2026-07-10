@@ -54,7 +54,14 @@ metadata:
   namespace: openrouter-operator
 spec:
   refreshInterval: 45m # token lives ~1h; refresh before expiry
-  target: { name: agent-git-token, creationPolicy: Owner }
+  target:
+    name: agent-git-token
+    creationPolicy: Owner
+    template:
+      metadata:
+        labels:
+          # ADR-087 leg B: proxy /git-token serves this to worker pods (label-checked).
+          homelab.teststuff.net/agent-git-token: "true"
   dataFrom:
     - sourceRef:
         generatorRef:
