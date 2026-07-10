@@ -21,16 +21,28 @@ spec:
         revision: master
         directories:
           - path: agents/fixer/* # one dir per repo (basename == repo == namespace)
+      values:
+        repoURL: https://github.com/teststuffstash/homelab.git
     # Per-stack -iac repos own their fixer infra at <repo>/agent/ (stack policy lives in the stack —
-    # ADR-084/FU-025). These were GitOps-ORPHANED until 2026-07-10 (kubectl-applied at bootstrap;
-    # a permissions widening silently didn't deploy — TICK-LOG meta-3). Generator templates override
-    # the homelab-shaped defaults: namespace/name come from path segment 0 (the repo), not basename.
+    # ADR-084/FU-025; GitOps-orphaned until 2026-07-10, TICK-LOG meta-3). NB generator-level
+    # template overrides do NOT reliably beat the spec template (duplicate-name incident, meta-5) —
+    # so ONE uniform spec template below derives repo/namespace from the dir shape, and only the
+    # repoURL varies via generator `values`.
     - git:
         repoURL: https://github.com/teststuffstash/oracle-iac.git
         revision: master
         directories:
           - path: "*/agent"
-      template:
+      values:
+        repoURL: https://github.com/teststuffstash/oracle-iac.git
+    - git:
+        repoURL: https://github.com/teststuffstash/sleep-iac.git
+        revision: master
+        directories:
+          - path: "*/agent"
+      values:
+        repoURL: https://github.com/teststuffstash/sleep-iac.git
+  template:
         metadata:
           name: "agent-fixer-{{index .path.segments 0}}"
           annotations:
@@ -67,19 +79,20 @@ spec:
             namespace: "{{index .path.segments 0}}"
   template:
     metadata:
-      name: "agent-fixer-{{.path.basename}}"
+      # repo name: `agents/fixer/<repo>` → basename; `<repo>/agent` → first segment.
+      name: "agent-fixer-{{if eq .path.basename \"agent\"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}"
       annotations:
         argocd.argoproj.io/sync-wave: "6"
     spec:
       project: default
       source:
-        repoURL: https://github.com/teststuffstash/homelab.git
+        repoURL: "{{.values.repoURL}}"
         targetRevision: master
         path: "{{.path.path}}"
         directory: { recurse: false }
       destination:
         server: https://kubernetes.default.svc
-        namespace: "{{.path.basename}}"
+        namespace: "{{if eq .path.basename \"agent\"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}"
       syncPolicy:
         automated: { prune: true, selfHeal: true }
         syncOptions:
