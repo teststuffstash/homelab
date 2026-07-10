@@ -53,18 +53,19 @@ MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
 REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
 _SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
-_refs: dict[str, tuple[float, str | None]] = {}  # "ns/name" -> (expires_epoch, key|None)
+_refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch, {key,guardrail}|None)
 _refs_lock = threading.Lock()
 
 
-def _resolve_ref(ref: str) -> str | None:
-    """`ns/name` -> the secret's OPENROUTER_API_KEY, or None (missing/unlabeled/unreadable)."""
+def _resolve_ref(ref: str) -> dict | None:
+    """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ...}, or None
+    (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement."""
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
         if hit and hit[0] > now:
             return hit[1]
-    key = None
+    resolved = None
     try:
         ns, name = ref.split("/", 1)
         token = open(f"{_SA_DIR}/token").read().strip()
@@ -76,15 +77,20 @@ def _resolve_ref(ref: str) -> str | None:
         with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
             secret = json.load(resp)
         if (secret.get("metadata", {}).get("labels") or {}).get(SESSION_KEY_LABEL) == "true":
-            b64 = (secret.get("data") or {}).get("OPENROUTER_API_KEY", "")
-            key = base64.b64decode(b64).decode() if b64 else None
+            data = secret.get("data") or {}
+            b64 = data.get("OPENROUTER_API_KEY", "")
+            if b64:
+                resolved = {
+                    "key": base64.b64decode(b64).decode(),
+                    "guardrail": base64.b64decode(data.get("GUARDRAIL", "")).decode(),
+                }
         else:
             log(f"ref: {ref} exists but lacks {SESSION_KEY_LABEL} — refusing (not a session key)")
     except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
         log(f"ref: resolve failed for {ref}: {e}")
     with _refs_lock:
-        _refs[ref] = (now + REF_CACHE_TTL_S, key)
-    return key
+        _refs[ref] = (now + REF_CACHE_TTL_S, resolved)
+    return resolved
 
 
 GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
@@ -129,11 +135,29 @@ def _inject_ref_auth(headers: dict) -> str:
     if not auth or not headers[auth].startswith("Bearer ref:"):
         return ""
     ref = headers[auth][len("Bearer ref:"):].strip()
-    key = _resolve_ref(ref)
-    if key:
-        headers[auth] = "Bearer " + key
+    resolved = _resolve_ref(ref)
+    if resolved:
+        headers[auth] = "Bearer " + resolved["key"]
         return "+cred"
     return "+cred-unresolved"  # forwarded as-is; upstream will 401 loudly (never fail silently)
+
+
+def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
+    """FU-024: a `only-free` session may complete ONLY on :free model variants. Enforced here
+    because the proxy already resolves the session (injection rails); direct-key sessions are
+    out of scope by design — guardrailed keys are issued injected (model-scout canaries)."""
+    resolved = _resolve_ref(self_ref)
+    if not resolved or resolved.get("guardrail") != "only-free":
+        return None
+    if normalize_model(model).endswith(":free"):
+        return None
+    return json.dumps({
+        "error": {
+            "code": 403,
+            "message": f"guardrail only-free: model '{model}' is not a :free variant — "
+                       "this session key is restricted to free-tier models (FU-024)",
+        }
+    }).encode()
 
 # Hop-by-hop (and framing) headers never forwarded either way. accept-encoding is stripped so the
 # upstream answers identity — we re-frame the response as stream-until-close.
@@ -329,6 +353,21 @@ class Proxy(BaseHTTPRequestHandler):
             try:
                 payload = json.loads(body)
                 if isinstance(payload, dict) and payload.get("model"):
+                    # FU-024 only-free enforcement (before any forwarding spend)
+                    auth_hdr = self.headers.get("Authorization", "")
+                    if auth_hdr.startswith("Bearer ref:"):
+                        reject = _guardrail_reject(
+                            auth_hdr[len("Bearer ref:"):].strip(), str(payload["model"]))
+                        if reject:
+                            log(f"POST {self.path} → 403 [guardrail only-free] model={payload['model']}")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(reject)))
+                            self.send_header("Connection", "close")
+                            self.end_headers()
+                            self.wfile.write(reject)
+                            self.close_connection = True
+                            return
                     notes = []
                     pin = pin_for(str(payload["model"]))
                     # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
