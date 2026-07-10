@@ -46,7 +46,11 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           base: master
           required_approval_count: 0 # update BEFORE review
-          require_passed_checks: true # only update green PRs
+          # false (2026-07-10): 'true' wedges — a base-side CI fix can only reach a PR through an
+          # update, but this gate refused updates while the PR's checks were red FROM the base-side
+          # bug (deploy-pins #20/#21 stuck after the lint fix; same shape as the changesRequested
+          # deadlock). Updating a red PR is harmless: strict checks re-run and still gate the merge.
+          require_passed_checks: 'false' # only update green PRs
           require_auto_merge_enabled: true # only PRs actually queued to land (arming is the boundary)
           sort: created
           direction: asc # FIFO
