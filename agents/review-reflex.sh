@@ -71,10 +71,15 @@ for repo in $REPOS; do
   fi
   rm -f "$errfile"
 
-  # Reviewable = armed ∧ not-behind ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
-  #              ∧ NOT `automerge`-labelled.
+  # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
+  #              ∧ NOT `automerge`-labelled ∧ ( not-BEHIND unless it's a RE-review ).
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
   #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   BEHIND *re-review* exception (deadlock found live on oracle-fleet#6, 2026-07-09): the adRise
+  #   updater refuses any PR with a changes-requested review, so CHANGES_REQUESTED + fix pushed +
+  #   master moved = updater waits for the review, reflex waited for the updater — forever. A
+  #   re-review may proceed on a BEHIND branch (the verdict is about the fix, not currency);
+  #   approval clears changesRequestedReviews → updater updates → fresh CI → auto-merge.
   #   `automerge` label = the MECHANICAL path (Renovate trivial/digest/dev-dep bumps auto-approved by the
   #   renovate-approve reflex, CI-only, no LLM). Skip them so the reviewer isn't burned on digest noise.
   #   Renovate's REVIEWABLE bumps carry `deps-review` (not `automerge`) → they fall through here and get
@@ -98,7 +103,8 @@ for repo in $REPOS; do
       | select(.isDraft | not)
       | select(([ .labels[]?.name ] | index("automerge")) | not)
       | select(.autoMergeRequest != null)
-      | select(.mergeStateStatus != "BEHIND" and .mergeStateStatus != "DIRTY")
+      | select(.mergeStateStatus != "DIRTY")
+      | select((.mergeStateStatus != "BEHIND") or reviewable_again)
       | select(green)
       | select((.reviewDecision // "") != "APPROVED")
       | select(((.reviewDecision // "") != "CHANGES_REQUESTED") or reviewable_again)
