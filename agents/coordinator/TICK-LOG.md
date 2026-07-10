@@ -409,6 +409,35 @@ for what scaffold quality means (structure/libraries/seams, NOT edge completenes
 **Live application to #1/PR #6**: filing the two residual findings as backlog issues, un-blocking,
 updating the PR branch, re-dispatching the reviewer under the new policy → expect merge.
 
+### 2026-07-10 day — meta-5: the solo P2 run (FU-018 shipped + accepted; new classes harvested)
+- **FU-018/ADR-087 BUILT + ACCEPTED under fire**: opaque-ref LLM creds (`+cred` on every
+  completion), broker git tokens (`/git-token`, label-checked, per-ns RBAC — split across the
+  proxy app + coordinator app because kustomize's namespace transformer can't host cross-ns
+  RBAC), launcher `AGENT_CRED_INJECT=1`, broker-aware entrypoint (mock-tested fallback chain),
+  `or_usage` via proxy. Acceptance on oracle-fleet#7: salvage-push fired IN ANGER through broker
+  creds (FU-064a's first live rescue), in-pod strike with resumable branch, honest $0.078 cost,
+  and the resume round (--work-branch) opened PR #12 end-to-end with no credential in the pod.
+- **New failure class: degenerate REPETITION loop** (deepseek repeating one sentence to the
+  max_tokens ceiling, 500KB completions, goose grinding minutes/turn). Root cause was a RECIPE
+  TRAP: RED-first ceremony applied retroactively ("revert the fix, commit RED, re-apply" ×∞) —
+  fixed in fix.yaml (evidence over ceremony, never revert working code); detector filed as
+  agent-runtime#13 (watchdog shape); proxy hard-deadline + in-flight gauge filed as homelab#22.
+  NB the max_tokens floor gives this class 4× the old rope — the two mitigations trade off.
+- **FU-024 ENFORCED**: operator writes GUARDRAIL into session Secrets; the proxy 403s paid-model
+  completions on only-free sessions BEFORE spend (unit-verified 3 shapes). Guardrailed keys are
+  issued injected by design — the scout canary path unblocks.
+- **FU-057 polish**: AgentRunNegativeCost + AgentRunInfraDeathBurst PrometheusRules;
+  KEY_HASH now durable (operator→Secret→launcher env→finalize stats) for ledger backfill.
+- **Meta-lesson ×2 MORE (pipe-masking)**: `devbox run ci | tail` swallowed a red CI (pushed a
+  red operator master for ~3 min — ruff format only); the registration lint's gh probes 404'd
+  into false MISSINGs blocking a deploy-pin. FIVE instances of fail-into-a-value in 36h across
+  three layers. PROMOTED TO PLATFORM PRINCIPLE: every probe is true/false/PROBE-FAILED, and
+  probe-failed triggers nothing (in either direction); exit codes are read from $?, never
+  through pipes; pushes verify via ls-remote-vs-HEAD.
+- Updater gate finding: require_passed_checks was the SECOND wedge flavor of the same gate
+  (a base-side CI fix can only reach a PR through an update) — dropped in the reusable workflow;
+  named rule: **every updater precondition beyond armed+behind is a potential wedge.**
+
 ## Systematic findings for the reflex/platform (harvested from this issue's 4 ticks + 3 rounds)
 Reflex gaps (stale-registration class, all fixed): #1 PR-less death invisible in GitHub; #2 pod
 cleanup before next-read; #3 C9 arm-at-PR-open; #4 review-reflex repo list; #5 reviewer token

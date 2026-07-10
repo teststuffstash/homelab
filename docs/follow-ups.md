@@ -192,7 +192,10 @@ _Last updated: 2026-07-09._
       subscription-usage stand-in for `cost_usd` in AGENT_RUN_STATS (tokens/turns, not $), and turn caps
       as the budget-ceiling substitute (no per-task $ cap exists on subscription — loop-safety breaker
       #2 must be re-derived from rate-limit + turn bounds).
-- [ ] **FU-018** — **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
+- [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
+      opt-in via AGENT_CRED_INJECT=1, acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push +
+      PR-open with zero pod credentials). REMAINING: flip the goose default on, drop the env/mount
+      fallbacks with FU-020's deny-all, opencode leg.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
       `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
@@ -335,8 +338,10 @@ _Last updated: 2026-07-09._
       *verified* facts from *inferences* when reporting blockers, and check in-repo sources of truth before
       declaring external ones. Remaining check: confirm the regenerated token resolves the oracle repos on
       the next coordinator tick.
-- [ ] **FU-024** — Wire `guardrail: only-free` enforcement in the openrouter-operator (declared,
-      not enforced). Now load-bearing for the FU-062 model scout (free canary keys must be
+- [ ] **FU-024** — **ENFORCED 2026-07-10 at the egress proxy** (operator writes GUARDRAIL into session
+      Secrets; proxy 403s paid models on only-free INJECTED sessions before spend; unit-verified).
+      Remaining: one live-fire canary (the scout's first supervised run is it). Original: Wire
+      `guardrail: only-free` enforcement in the openrouter-operator (declared, not enforced). Now load-bearing for the FU-062 model scout (free canary keys must be
       honor-system no longer).
 - [ ] **FU-062** — **Model routing: chains + strikes + a live registry** — the umbrella that binds
       FU-018/FU-021/FU-024/FU-057 into one design (they don't work separately). Full doc:
