@@ -132,12 +132,24 @@ if [ -n "$WORK_BRANCH" ]; then
   WORK_BRANCH_ENV=$'        - name: WORK_BRANCH\n          value: "'"$WORK_BRANCH"'"'
 fi
 
-GOOSE_PROXY_ENV=""
+GOOSE_PROXY_ENV=""; PROXY_URL=""
 if [ "$HARNESS" = "goose" ]; then
   PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
   if [ -n "$PROXY_URL" ]; then
     GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
   fi
+fi
+
+# ADR-087 / FU-018 leg A (opt-in, goose+proxy only in v1): AGENT_CRED_INJECT=1 gives the pod an
+# OPAQUE REF instead of the real OpenRouter key — the egress proxy resolves ref→key (label-checked,
+# per-namespace RBAC) and injects upstream. The ref is worthless outside the cluster; a stolen pod
+# env leaks nothing. opencode goes upstream directly (no proxy hop), so it keeps the real key until
+# it too rides the proxy. Default stays the secretKeyRef until acceptance runs prove the leg.
+OR_KEY_ENV="${OR_KEY_ENV}"
+if [ "${AGENT_CRED_INJECT:-0}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
+  echo "→ cred-inject: pod holds ref:${NS}/${SECRET} (proxy resolves; ADR-087)"
+  OR_KEY_ENV="        - name: OPENROUTER_API_KEY
+          value: \"ref:${NS}/${SECRET}\""
 fi
 
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
@@ -295,9 +307,7 @@ ${UV_ENV}
         # the pathological qwen loop 187) and bounds anything the watchdog somehow misses.
         - name: GOOSE_MAX_TURNS
           value: "${GOOSE_MAX_TURNS:-200}"
-        - name: OPENROUTER_API_KEY
-          valueFrom:
-            secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }
+${OR_KEY_ENV}
         # Scoped ~1h GitHub token minted by the ESO GithubAccessToken generator (per-project,
         # <stack>-iac/<project>/agent/git-token.yaml) → clone private repos + push branch + open PR.
         # optional:true so sessions still work (public clone) before the agents App exists.

@@ -17,6 +17,8 @@ spec:
       labels:
         app: openrouter-proxy
     spec:
+      # ADR-087: the SA whose per-namespace Roles let _resolve_ref read labeled session keys.
+      serviceAccountName: openrouter-proxy
       containers:
         - name: proxy
           image: python:3.13-slim

@@ -21,8 +21,10 @@ cached+tools+uptime → tools+uptime → tools.
 Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter pattern).
 """
 
+import base64
 import json
 import os
+import ssl
 import sys
 import threading
 import time
@@ -44,6 +46,58 @@ READ_TIMEOUT_S = int(os.environ.get("READ_TIMEOUT_S", "300"))  # idle timeout pe
 # The proxy raises max_tokens to this floor (clamped to the pinned endpoint's max_completion_tokens
 # when known); an explicit request value ABOVE the floor always wins.
 MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
+# ADR-087 / FU-018 leg A: pods hold an OPAQUE REF (`ref:<ns>/<secret>`) instead of the real
+# OpenRouter key; this proxy resolves the ref via the K8s API and injects the real key upstream.
+# Only Secrets carrying SESSION_KEY_LABEL are honored — the label check keeps the proxy's
+# get-secret RBAC from becoming a generic secret oracle. Short cache = revocation latency.
+SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
+REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
+_SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+_refs: dict[str, tuple[float, str | None]] = {}  # "ns/name" -> (expires_epoch, key|None)
+_refs_lock = threading.Lock()
+
+
+def _resolve_ref(ref: str) -> str | None:
+    """`ns/name` -> the secret's OPENROUTER_API_KEY, or None (missing/unlabeled/unreadable)."""
+    now = time.time()
+    with _refs_lock:
+        hit = _refs.get(ref)
+        if hit and hit[0] > now:
+            return hit[1]
+    key = None
+    try:
+        ns, name = ref.split("/", 1)
+        token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        req = urllib.request.Request(
+            f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/{name}",
+            headers={"Authorization": "Bearer " + token},
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            secret = json.load(resp)
+        if (secret.get("metadata", {}).get("labels") or {}).get(SESSION_KEY_LABEL) == "true":
+            b64 = (secret.get("data") or {}).get("OPENROUTER_API_KEY", "")
+            key = base64.b64decode(b64).decode() if b64 else None
+        else:
+            log(f"ref: {ref} exists but lacks {SESSION_KEY_LABEL} — refusing (not a session key)")
+    except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
+        log(f"ref: resolve failed for {ref}: {e}")
+    with _refs_lock:
+        _refs[ref] = (now + REF_CACHE_TTL_S, key)
+    return key
+
+
+def _inject_ref_auth(headers: dict) -> str:
+    """Rewrite `Authorization: Bearer ref:<ns>/<name>` to the real key. Returns a note suffix."""
+    auth = next((k for k in headers if k.lower() == "authorization"), None)
+    if not auth or not headers[auth].startswith("Bearer ref:"):
+        return ""
+    ref = headers[auth][len("Bearer ref:"):].strip()
+    key = _resolve_ref(ref)
+    if key:
+        headers[auth] = "Bearer " + key
+        return "+cred"
+    return "+cred-unresolved"  # forwarded as-is; upstream will 401 loudly (never fail silently)
 
 # Hop-by-hop (and framing) headers never forwarded either way. accept-encoding is stripped so the
 # upstream answers identity — we re-frame the response as stream-until-close.
@@ -165,6 +219,7 @@ class Proxy(BaseHTTPRequestHandler):
         started = time.time()
         url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
+        note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
         req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
         try:
             resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT_S)

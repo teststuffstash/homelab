@@ -1,0 +1,15 @@
+# ADR-087 / FU-018 leg A: the proxy resolves `ref:<ns>/<secret>` session-key references via the
+# K8s API. RBAC is deliberately NARROW: a get-secrets Role bound in EACH worker project namespace
+# (never cluster-wide), and the proxy code additionally honors only Secrets labeled
+# `openrouter.teststuff.net/session-key` — RBAC bounds the blast radius, the label check stops the
+# proxy being a generic secret oracle even within it.
+#
+# The per-project Roles/RoleBindings live in agents/coordinator/openrouter-proxy-rbac.yaml (the
+# agent-coordinator app) — this kustomization's namespace transformer would squash their
+# cross-namespace placement. Only the SA lives here.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openrouter-proxy
+  namespace: agent-egress
