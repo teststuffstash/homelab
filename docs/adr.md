@@ -586,6 +586,32 @@ this ADR is the missing POLICY, not a permission change. **Consequences:** W2+ (
 pushing fixes/seeds directly) remains undesigned and needs its own ADR; the reviewer treats a
 ⚑-flagged shortfall as already-arbitrated (no re-litigation); FU-059 narrows to the W2+ question.
 
+### ADR-087 — FU-018 credential injection: opaque refs + egress proxy (LLM) and a git-cred broker (GitHub)
+**Status:** Accepted (2026-07-10; staged rollout, opt-in first). **Decision:** worker pods stop
+holding real credentials; both credential classes resolve at the egress boundary, per leg:
+**(A) OpenRouter** — the operator labels session Secrets (`openrouter.teststuff.net/session-key`),
+the launcher sets `OPENROUTER_API_KEY` to an opaque reference `ref:<ns>/<secret>` (worthless
+outside the cluster), and the egress proxy resolves ref→key via the K8s API (honoring ONLY
+labeled session secrets — the label check stops the proxy being a generic secret oracle), caches
+~60s (revocation latency), and injects the real key into the upstream Authorization header. Proxy
+RBAC = get-secrets Role per PROJECT namespace (rendered from stacks.json; the AgentStack XRD owns
+it later), never cluster-wide. **(B) GitHub** — git speaks TLS directly to github.com, so header
+injection can't work; instead a `git-cred-broker` (agent-egress, ConfigMap-python like the proxy)
+mints a fresh ~1h installation token per request via the `agents-github-app` key (Infisical→ESO),
+scoped to the single requested repo (allowlist = stacks.json), reachable only from worker pods
+(NetworkPolicy, the FU-020 counterpart); the agent-base credential helper / gh wrapper call it at
+use time — freshly minted per operation ⇒ run duration becomes unbounded by token TTL, retiring
+the FU-064b volume-mount interim. **Rollout:** `AGENT_CRED_INJECT=1` opt-in per dispatch →
+acceptance rounds on the live oracle queue → default-on → drop the env/mount fallbacks with
+FU-020's deny-all. **Considered:** TLS-intercepting proxy for github.com (rejected — MITM CA in
+every pod, brittle); pod ServiceAccount tokens as caller identity for the broker (deferred to v2 —
+NetworkPolicy + single-repo scoping bounds v1 blast radius); dual-writing session keys into
+agent-egress (rejected — two sources of truth). **Why:** three TTL/credential walls in one day of
+measured runs (TICK-LOG meta-2); FU-066's subscription token must NEVER sit in a worker pod.
+**Consequences:** the proxy becomes stateful-ish (secret cache) and RBAC-bearing; reviewer/
+coordinator keep their ESO tokens (scope = workers first); FU-064b marked interim-superseded once
+default-on; FU-066 unblocks after acceptance.
+
 ---
 
 ## Open / undecided
