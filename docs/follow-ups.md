@@ -207,8 +207,13 @@ _Last updated: 2026-07-09._
       Cost autopsy: `agents/README.md` → Operational findings.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
-- [ ] **FU-020** — Cilium egress lockdown for worker pods (deny-all + allow the proxy and the nix
-      cache — without the nix allowance `devbox install` hangs).
+- [ ] **FU-020** — **FIRST STACK LIVE 2026-07-10**: oracle-fleet worker pods under deny-all
+      (CiliumNetworkPolicy `agent-worker-egress`, GitOps-owned in oracle-iac/oracle-fleet/agent/ —
+      allow: dns, agent-egress proxy+broker, nix-cache, garage, monitoring, GitHub/PyPI/nix FQDNs;
+      NO direct openrouter.ai). Gated on ADR-087 inject default-on. Remaining: validate on the next
+      worker run (issue #8, auto-unblocks on PR #12 merge), then roll to the other stacks + drop the
+      env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
+      allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
 - [x] **FU-021 — DONE (2026-07-09, live acceptance passed)** — goose retry policy: hard-stop on
       auth/limit errors (it retried a budget-exhausted 403 812×). Root cause (goose v1.28.0): the
       provider-retry layer never retries 401/403 — the storm is the *agent reply loop*'s
