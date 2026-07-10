@@ -383,8 +383,6 @@ _Last updated: 2026-07-09._
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.
-- [ ] **FU-027** — One fresh-issue live run to demo the PR stats comment end-to-end (both halves
-      are validated separately).
 - [x] **FU-041 — DONE (2026-07-05, proven E2E)** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
       up-to-date branch (`strict_required_status_checks_policy`, `tofu/github/repo_rulesets.tf`)
       but nothing updates PR branches (`allow_update_branch=false`), so auto-merge never fires on

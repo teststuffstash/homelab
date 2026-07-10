@@ -159,7 +159,5 @@ The standing project key stays as the **funding ceiling**; the session key is th
   AGENT_STRIKE posted).
 - **FU-022 — Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain
   cache hits.
-- **FU-027 — Live PR-comment demo** — both halves of the stats collector are validated
-  independently; a real comment on a real PR still needs one fresh-issue run.
 - **FU-024 — Wire `guardrail` in the openrouter-operator** so `only-free` is enforced, not just
   declared.
