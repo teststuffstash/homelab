@@ -32,6 +32,27 @@ for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.
     fi
   done
 done
+# v2 (2026-07-10): merge-path CALLERS check — oracle-fleet ran with no update-pr-branch caller and
+# an armed PR deadlocked BEHIND (TICK-LOG meta-3). Every stack repo must carry both callers.
+# Requires gh (CI has it); skipped loudly when absent so the lint stays runnable offline.
+# -iac repos are CI-gated deploy TARGETS (require_approval=false; FU-052 excludes them from the
+# fixer flow) — their pin PRs merge on CI alone, so the armed-PR-stall class doesn't apply.
+CALLERS_EXEMPT="oracle-iac sleep-iac"
+if command -v gh >/dev/null 2>&1; then
+  for repo in $stack_repos; do
+    case " $CALLERS_EXEMPT " in *" $repo "*) continue;; esac
+    for wf in update-pr-branch renovate-approve; do
+      if ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yml" --jq .name >/dev/null 2>&1 \
+         && ! gh api "repos/${ORG:-teststuffstash}/${repo}/contents/.github/workflows/${wf}.yaml" --jq .name >/dev/null 2>&1; then
+        echo "MISSING: ${repo} has no .github/workflows/${wf}.y(a)ml (merge-path caller — armed PRs stall without it)" >&2
+        fail=1
+      fi
+    done
+  done
+else
+  echo "agents-registration-lint: gh unavailable — merge-path callers check SKIPPED (not a pass)" >&2
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "agents-registration-lint: FAILED — a stack repo is invisible to the coordinator/reviewer" >&2
   echo "token (the stale-registration class; add it to the list AND verify docs/github-apps.md" >&2
