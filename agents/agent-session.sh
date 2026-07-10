@@ -88,11 +88,14 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
         echo "→ pre-flight: resuming open PR #${PF_PR} on its branch ${PF_HEAD} (fix round)"
       fi
     fi
-    # (b) one live worker per project: WIP=1 (a Running agent pod = an active round).
+    # (b) live-worker cap per project: default WIP=1; a repo with independent TRACK lanes
+    # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
+    # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
+    PF_LIMIT="${AGENT_WIP_LIMIT:-1}"
     PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
       --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
-    if [ "${PF_LIVE:-0}" -gt 0 ]; then
-      echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) already Running in ns ${NS} — WIP=1 per project (FU-042)." >&2
+    if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
+      echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
     fi
   ;; esac

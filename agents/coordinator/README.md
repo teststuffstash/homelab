@@ -127,6 +127,10 @@ double-spawns.
        --task issue-<N> --round <r> \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
+   **Parallel track lanes:** when dispatching a SECOND worker into a repo whose open issues sit on
+   independent `track/*` lanes (TRACKS.md — disjoint path ownership), prefix the dispatch with
+   `AGENT_WIP_LIMIT=<number of lanes>`; the default cap is 1 worker per project. Never run two
+   workers on the SAME lane.
    For a **fix round on an existing PR** (or resuming a salvaged WIP branch from a strike comment),
    add `--work-branch <branch>` — the pod checks that branch out tracking origin deterministically
    (finding C: never leave "which branch" to the model). The launcher **pre-flight** (FU-042) refuses
