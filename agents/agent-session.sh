@@ -329,6 +329,11 @@ ${OR_KEY_ENV}
         - name: GIT_TOKEN_FILE
           value: "/secrets/git/token"
 ${CRED_BROKER_ENV}
+        # Ledger-backfill anchor (FU-057): the operator writes the OpenRouter key HASH into the
+        # session Secret; finalize surfaces it in stats so cost_unknown runs stay accountable.
+        - name: OPENROUTER_KEY_HASH
+          valueFrom:
+            secretKeyRef: { name: ${SECRET}, key: KEY_HASH, optional: true }
         # Resume an existing remote branch deterministically (fix rounds / salvaged WIP — finding C).
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}
