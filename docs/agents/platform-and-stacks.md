@@ -111,8 +111,10 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 1. **Now:** `stacks.json` + `coordinator-scan` (report) + `--stack` scoping. Supervised interactive ticks.
 2. **coordinator-reflex** CronJob running `coordinator-scan --spawn` per schedule (FU-050) — the gate keeps
    the LLM off empty wakes. Graduating to autonomy is a scheduler swap, not a behavior change.
-3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack (`sleep`) to a claim in
-   `sleep-iac`; `stacks_json()` → `kubectl get agentstacks` (FU-048).
+3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack to a claim in its `-iac`;
+   `stacks_json()` → `kubectl get agentstacks` (FU-048). **✅ DONE 2026-07-12 — first claim = oracle
+   (not sleep: oracle's `-iac` agent dir was already GitOps-owned). See
+   [`agentstack.md`](agentstack.md); `stacks_json()` now merges cluster claims over stacks.json.**
 4. **Service XRDs** become the discovery source of truth; generate a catalog, retire/auto-generate
    `SERVICES.md` (FU-049).
 

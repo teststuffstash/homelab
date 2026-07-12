@@ -1,0 +1,245 @@
+# AgentStack Composition (FU-048 / ADR-085) — renders the per-repo fixer MECHANISM from a stack's
+# AgentStack POLICY. For every spec.repos[] entry with a `fixer` block, into namespace <repo.name>
+# (which must already exist — the repo's own deployment owns it, never this XR):
+#   1. agents-github-app ExternalSecret        — the GitHub App private key, Infisical → Secret
+#   2. agent-git-token-gen GithubAccessToken   — ESO generator: ~1h installation token, THIS repo only
+#   3. agent-git-token ExternalSecret          — drives the generator; broker-label on the Secret
+#                                                (ADR-087 leg B: proxy /git-token serves it to workers)
+#   4. OpenRouterKey <repo>                    — standing budget key; operator writes <repo>-openrouter
+#   5. agent-worker-egress CiliumNetworkPolicy — FU-020 lockdown, baseline+profile+extraFQDNs, with the
+#                                                monitor→enforce dial (enableDefaultDeny.egress)
+#   6. agentstack-proxy-session-keys Role+Binding — ADR-087 leg A: the egress proxy resolves opaque
+#                                                refs by reading LABELED session Secrets in this ns.
+#                                                Named agentstack-* (NOT openrouter-proxy-session-keys)
+#                                                so migration never collides with the hand-list in
+#                                                agents/coordinator/openrouter-proxy-rbac.yaml.
+# Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: agentstack
+  annotations:
+    platform.teststuff.net/docs-url: https://github.com/teststuffstash/homelab/blob/master/docs/agents/agentstack.md
+    platform.teststuff.net/docs-configmap: crossplane-system/agentstack-docs
+spec:
+  compositeTypeRef:
+    apiVersion: platform.teststuff.net/v1alpha1
+    kind: AgentStack
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $profileFQDNs := dict
+                  "python" (list "pypi.org" "files.pythonhosted.org")
+                  "node"   (list "registry.npmjs.org")
+                  "none"   (list) }}
+            {{- range $r := $xr.spec.repos }}
+            {{- if $r.fixer }}
+            {{- $fx := $r.fixer }}
+            {{- /* nested schema defaults only apply when the parent key exists — re-default here */}}
+            {{- $eg := default (dict) $fx.egress }}
+            {{- $profile := default "none" (get $eg "profile") }}
+            {{- $extra := default (list) (get $eg "extraFQDNs") }}
+            {{- $enforce := default false (get $eg "enforce") }}
+            ---
+            # GitHub App private key, Infisical → Secret (the generator below reads it).
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agents-github-app
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-github-app-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+              target:
+                name: agents-github-app
+                creationPolicy: Owner
+                template:
+                  engineVersion: v2
+                  data:
+                    # un-escape Infisical's literal \n → byte-exact PEM
+                    privateKey: {{ `'{{ .pem | replace "\\n" "\n" }}'` }}
+              data:
+                - secretKey: pem
+                  remoteRef: { key: AGENTS_GH_APP_PRIVATE_KEY }
+            ---
+            # Mint a ~1h installation token scoped to THIS repo. appID/installID are the org-wide
+            # homelab-agents App constants (platform mechanism; the repositories list does the scoping).
+            apiVersion: generators.external-secrets.io/v1alpha1
+            kind: GithubAccessToken
+            metadata:
+              name: agent-git-token-gen
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-gen
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              appID: "4150968"
+              installID: "142724430"
+              auth:
+                privateKey:
+                  secretRef: { name: agents-github-app, key: privateKey }
+              permissions:
+                contents: write
+                pull_requests: write
+                issues: write # fixer reads the issue; agent-finalize posts strike/stats IN-POD (FU-064/043)
+              repositories:
+                - {{ $r.name }}
+            ---
+            # Drive the generator → the Secret the broker serves (key: token). refresh < the ~1h TTL.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agent-git-token
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-es
+            spec:
+              refreshInterval: 45m
+              target:
+                name: agent-git-token
+                creationPolicy: Owner
+                template:
+                  metadata:
+                    labels:
+                      # ADR-087 leg B: proxy /git-token serves this to worker pods (label-checked).
+                      homelab.teststuff.net/agent-git-token: "true"
+              dataFrom:
+                - sourceRef:
+                    generatorRef:
+                      apiVersion: generators.external-secrets.io/v1alpha1
+                      kind: GithubAccessToken
+                      name: agent-git-token-gen
+            ---
+            # Standing funding ceiling — the operator mints the key and writes Secret <repo>-openrouter;
+            # per-session ephemeral keys budget underneath it.
+            apiVersion: openrouter.teststuff.net/v1alpha1
+            kind: OpenRouterKey
+            metadata:
+              name: {{ $r.name }}
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-openrouter-key
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              project: {{ $r.name }}
+              budgetUSD: {{ default 5.0 (get $fx "budgetUSD") }}
+              resetInterval: {{ default "weekly" (get $fx "resetInterval") }}
+              {{- $guardrail := default "only-free" (get $fx "guardrail") }}
+              {{- if ne $guardrail "none" }}
+              guardrail: {{ $guardrail }}
+              {{- end }}
+            ---
+            # FU-020/ADR-081 worker egress. Selector hits ONLY agent pods; the app's own workloads are
+            # untouched. enforce=false → monitor (allowlist evaluated + DNS visibility, nothing blocked).
+            apiVersion: cilium.io/v2
+            kind: CiliumNetworkPolicy
+            metadata:
+              name: agent-worker-egress
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-egress-cnp
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              endpointSelector:
+                matchLabels:
+                  app: agent-session
+              {{- if not $enforce }}
+              # MONITOR phase: rules attach (DNS visibility for the Hubble harvest) but the default
+              # deny does not. Flip spec...egress.enforce=true in the AgentStack after clean rides.
+              enableDefaultDeny:
+                egress: false
+              {{- end }}
+              egress:
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: kube-system
+                        k8s-app: kube-dns
+                  toPorts:
+                    - ports:
+                        - { port: "53", protocol: UDP }
+                        - { port: "53", protocol: TCP }
+                      rules:
+                        dns:
+                          - matchPattern: "*"
+                - toEndpoints: # the proxy + git-cred broker: the ONLY LLM/credential exit
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: agent-egress
+                - toEndpoints: # devbox installs via the in-cluster pull-through cache (ADR-083)
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: nix-cache
+                - toEndpoints: # transcript uploads (agent-finalize)
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: garage
+                - toEndpoints: # pushgateway run metrics (FU-057)
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: monitoring
+                - toFQDNs:
+                    # baseline: git over TLS + nix upstream fallback. NO openrouter.ai — direct LLM
+                    # egress is the thing this policy forbids.
+                    - { matchName: github.com }
+                    - { matchName: api.github.com }
+                    - { matchName: codeload.github.com }
+                    - { matchPattern: "*.githubusercontent.com" }
+                    - { matchName: cache.nixos.org }
+                    {{- range $f := get $profileFQDNs $profile }}
+                    - { matchName: {{ $f }} } # profile: {{ $profile }}
+                    {{- end }}
+                    {{- range $f := $extra }}
+                    - { matchName: {{ $f }} } # extraFQDNs (earned from a monitor-phase harvest)
+                    {{- end }}
+                  toPorts:
+                    - ports:
+                        - { port: "443", protocol: TCP }
+            ---
+            # ADR-087 leg A: the egress proxy resolves ref:<ns>/<secret> by reading LABELED session
+            # Secrets here. Verb is get only; the proxy code additionally checks the session-key label.
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-proxy-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: [secrets]
+                verbs: [get]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-proxy-session-keys
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-proxy-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-proxy-session-keys }
+            subjects:
+              - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
+            {{- end }}
+            {{- end }}
+            ---
+            # Mirror the watched-repo list into status for quick kubectl reads.
+            apiVersion: platform.teststuff.net/v1alpha1
+            kind: AgentStack
+            status:
+              repos:
+                {{- range $r := $xr.spec.repos }}
+                - {{ $r.name }}
+                {{- end }}
+    - step: ready
+      functionRef:
+        name: function-auto-ready

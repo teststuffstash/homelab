@@ -509,7 +509,16 @@ _Last updated: 2026-07-12._
       `kind: AgentStack` (its repos, model tiers, tools, git workflow, review rubric = the POLICY). Migrate
       `agents/stacks.json` → a per-stack claim in the `-iac` repo and flip `coordinator-scan.sh`'s
       `stacks_json()` to `kubectl get agentstacks`. Mechanism=platform, policy=stack — same lens as ADR-084.
-      Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md), ADR-085. Relates FU-045/039.
+      **Egress requirement (2026-07-12, the FU-020 rollout design):** the Composition renders each fixer
+      repo's worker CiliumNetworkPolicy from *baseline + ecosystem profile + extraFQDNs* with an
+      **`enforce` dial** — `false` = monitor (`enableDefaultDeny.egress: false`: DNS visibility + the
+      allowlist evaluated, nothing blocked; harvest Hubble flows over real rides, diff three-valued
+      ALLOWED/WOULD-DROP/PROBE-FAILED per the meta-5 probe principle), `true` = deny-all. A new stack
+      onboards in monitor and flips the field after K clean rides; a
+      `hubble_drop_total{reason=POLICY_DENIED}` alert on agent namespaces makes enforcement drops loud
+      (a missing allowance manifests as a HANG, per the FU-020 nix-cache finding). Enabling
+      `hubble.relay` is the harvest prereq (flows are per-node + ring-buffered without it).
+      Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md), ADR-085. Relates FU-045/039/020.
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:

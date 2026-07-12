@@ -1,0 +1,94 @@
+# The AgentStack usage doc, IN the cluster — so an agent whose only tool is kubectl can go from
+# "there is an XRD called agentstacks" to a working claim without leaving the API. Discovery chain:
+#   kubectl get xrd                                        → agentstacks.platform.teststuff.net
+#   kubectl get xrd agentstacks.platform.teststuff.net -o jsonpath='{.metadata.annotations}'
+#     → platform.teststuff.net/docs-configmap: crossplane-system/agentstack-docs   (this file)
+#   kubectl get cm -n crossplane-system agentstack-docs -o jsonpath='{.data.USAGE\.md}'
+# Keep this file and docs/agents/agentstack.md telling the same story (this one is the
+# kubectl-shaped quickstart; the repo doc carries design + migration context).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agentstack-docs
+  namespace: crossplane-system
+  labels:
+    platform.teststuff.net/docs: "true" # convention: `kubectl get cm -A -l platform.teststuff.net/docs=true` lists every platform capability's usage doc
+data:
+  USAGE.md: |
+    # AgentStack — agentic delivery for a stack, as one cluster resource
+
+    An `AgentStack` (cluster-scoped, group `platform.teststuff.net`) declares a stack's agent
+    POLICY: the repos its coordinator watches, the models its workers run, and per-repo fixer
+    infrastructure. The platform renders the MECHANISM from it — you never create the pieces
+    below by hand.
+
+    ## Read the API
+
+        kubectl get agentstacks                                  # what stacks exist
+        kubectl explain agentstacks.spec --recursive             # the full schema, described
+        kubectl get agentstack <name> -o yaml                    # one stack's policy + status
+
+    ## What one claim renders (per spec.repos[] entry that has a `fixer` block)
+
+    Into the namespace named after the repo (the namespace itself must already exist — it is
+    owned by the repo's own deployment, never by the AgentStack):
+
+    | Resource | Name | What it is |
+    |---|---|---|
+    | ExternalSecret | `agents-github-app` | GitHub App private key, Infisical → Secret |
+    | GithubAccessToken (ESO generator) | `agent-git-token-gen` | ~1h installation token, scoped to that ONE repo |
+    | ExternalSecret | `agent-git-token` | the token Secret; broker-labeled — the egress proxy's `/git-token` serves it to worker pods |
+    | OpenRouterKey | `<repo>` | standing budget key; the operator writes Secret `<repo>-openrouter` |
+    | CiliumNetworkPolicy | `agent-worker-egress` | worker egress lockdown with a monitor→enforce dial |
+    | Role + RoleBinding | `agentstack-proxy-session-keys` | lets the egress proxy resolve opaque-ref session keys here |
+
+    A repo entry WITHOUT `fixer` is context-only (the coordinator watches it; agents never run
+    pods in it — e.g. an `-iac` deploy target).
+
+    ## Minimal claim
+
+        apiVersion: platform.teststuff.net/v1alpha1
+        kind: AgentStack
+        metadata:
+          name: mystack
+        spec:
+          mainRepo: my-app            # the coordinator's cwd (its CLAUDE.md/specs = session context)
+          workerModel: openrouter/deepseek/deepseek-v4-flash
+          workerModelFallbacks: [qwen/qwen3-coder]
+          repos:
+            - name: my-iac            # context-only: no fixer block
+            - name: my-app
+              fixer:
+                budgetUSD: 5          # USD per resetInterval, the standing ceiling
+                egress:
+                  profile: python     # + pypi.org, files.pythonhosted.org
+                  enforce: false      # START HERE — monitor mode
+
+    Declare it in the stack's `-iac` repo (GitOps-applied); do not `kubectl apply` by hand.
+
+    ## Egress rollout (the enforce dial)
+
+    1. Create the claim with `egress.enforce: false` — MONITOR: the allowlist and DNS visibility
+       attach, nothing is blocked.
+    2. Run real worker rides; harvest Hubble flows for the namespace and diff them against the
+       allowlist. Verdicts are three-valued: ALLOWED / WOULD-DROP / PROBE-FAILED — an empty
+       harvest is a failed probe (github.com flows MUST appear; every ride clones), never "no
+       misses". Add missing legit destinations to `egress.extraFQDNs`.
+    3. After ~3 consecutive clean rides, flip `enforce: true` (one-line PR in the -iac repo).
+       A blocked flow under enforcement manifests as a worker HANG, not an error — watch
+       `hubble_drop_total{reason=POLICY_DENIED}` for the namespace.
+
+    ## Prerequisites for a fixer repo
+
+    - The namespace `<repo>` exists (the repo's deployment creates it).
+    - The `homelab-agents` GitHub App is installed on the repo (token minting fails otherwise).
+    - The repo carries `.agents/fix.yaml` + `.agents/review.md` recipes and the merge-path
+      callers (still per-repo, outside this XR — see the registration lint).
+
+    ## Who consumes the claim
+
+    `coordinator-scan` (the deterministic gate in front of the LLM coordinator) reads
+    `kubectl get agentstacks -o json` as the stack-list source of truth, merged over the
+    legacy `agents/stacks.json` (cluster claims win per stack name).
+
+    More context (design, migration state): homelab `docs/agents/agentstack.md`.

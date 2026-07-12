@@ -1,0 +1,172 @@
+# AgentStack XRD (FU-048 / ADR-085) — the agents framework published as a platform capability.
+# A stack declares ONE cluster-scoped `AgentStack` in its -iac repo (its POLICY: repos, models,
+# budgets, egress); homelab's Composition (composition.yaml) renders the per-repo fixer infra
+# (the MECHANISM). The schema descriptions below ARE the in-cluster documentation — they render
+# through `kubectl explain agentstacks.spec --recursive`; the quickstart for kubectl-only agents
+# lives in the `agentstack-docs` ConfigMap (crossplane-system), pointed at by the annotations.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: agentstacks.platform.teststuff.net
+  annotations:
+    platform.teststuff.net/docs-url: https://github.com/teststuffstash/homelab/blob/master/docs/agents/agentstack.md
+    platform.teststuff.net/docs-configmap: crossplane-system/agentstack-docs
+spec:
+  scope: Cluster # a stack spans repo namespaces, so the XR itself is cluster-scoped (no claim — v2 style)
+  group: platform.teststuff.net
+  names:
+    kind: AgentStack
+    plural: agentstacks
+    singular: agentstack
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: MAIN-REPO
+          type: string
+          jsonPath: .spec.mainRepo
+        - name: WORKER-MODEL
+          type: string
+          jsonPath: .spec.workerModel
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            AgentStack declares one stack's agentic-delivery policy: which repos its coordinator
+            watches, which models its workers run, and per-repo fixer infrastructure (budget key,
+            git token, worker egress policy). The platform Composition renders the mechanism from
+            it. Start here: kubectl get configmap -n crossplane-system agentstack-docs
+            -o jsonpath='{.data.USAGE\.md}'. Owned by the stack's -iac repo, GitOps-applied.
+          properties:
+            spec:
+              type: object
+              required: [repos, workerModel]
+              properties:
+                mainRepo:
+                  type: string
+                  default: homelab
+                  description: >-
+                    The coordinator's cwd — the repo whose CLAUDE.md and specs load as the
+                    session's natural context (the stack's home of coordination knowledge).
+                    Default homelab, for stacks whose coordination knowledge has not migrated
+                    out of the platform docs yet.
+                coordinatorModel:
+                  type: string
+                  default: sonnet
+                  description: >-
+                    Claude model alias for the stack's coordinator sessions (sonnet/opus).
+                    The coordinator is subscription-run; workers use OpenRouter (workerModel).
+                workerModel:
+                  type: string
+                  description: >-
+                    Primary OpenRouter model for worker (fixer) sessions, e.g.
+                    "openrouter/deepseek/deepseek-v4-flash". Chain policy: paid-cached-fast
+                    first — free tiers rate-limit below the platform's freshness windows
+                    (git-token TTL, budget pacing); they are scout-canary material.
+                workerModelFallbacks:
+                  type: array
+                  items:
+                    type: string
+                  default: []
+                  description: >-
+                    Ordered fallback models tried when the primary fails a round. Same
+                    format as workerModel without the "openrouter/" prefix requirement.
+                repos:
+                  type: array
+                  description: >-
+                    Every repo the stack's coordinator watches (issues/PRs), in scan order.
+                    A repo WITH a `fixer` block also gets worker infrastructure rendered into
+                    the namespace named after it (namespace must already exist — it is owned
+                    by the repo's own deployment, never by this XR). A repo without `fixer`
+                    is context-only (e.g. an -iac deploy target: CI deploys it, agents never
+                    run pods in it).
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name:
+                        type: string
+                        description: >-
+                          GitHub repo name in the teststuffstash org; doubles as the worker
+                          namespace name for fixer-enabled repos.
+                      fixer:
+                        type: object
+                        description: >-
+                          Present = render fixer-flow infra into namespace <name>: the
+                          OpenRouterKey standing budget key (the operator mints it and writes
+                          Secret <name>-openrouter), the agent-git-token ExternalSecret trio
+                          (repo-scoped ~1h GitHub App installation token, label-served by the
+                          egress broker per ADR-087 leg B), the worker egress
+                          CiliumNetworkPolicy (see egress), and the openrouter-proxy
+                          session-key RBAC (ADR-087 leg A). Omit for context-only repos.
+                        properties:
+                          budgetUSD:
+                            type: number
+                            default: 5
+                            description: >-
+                              Standing weekly/monthly funding ceiling (USD) for the repo's
+                              agents — the per-session ephemeral keys budget underneath it.
+                          resetInterval:
+                            type: string
+                            default: weekly
+                            enum: [daily, weekly, monthly]
+                            description: Budget reset cadence for budgetUSD.
+                          guardrail:
+                            type: string
+                            default: only-free
+                            enum: [only-free, none]
+                            description: >-
+                              only-free = the egress proxy 403s paid-model completions on
+                              this key BEFORE spend (FU-024). Ephemeral session keys carry
+                              their own guardrail; this is the standing key's.
+                          egress:
+                            type: object
+                            description: >-
+                              Worker-pod egress lockdown (FU-020/ADR-081): a
+                              CiliumNetworkPolicy allowing only DNS, the agent-egress
+                              proxy+broker (the ONLY LLM/credential exit), the nix cache,
+                              garage (transcripts), monitoring (run metrics), and the
+                              baseline FQDNs (github.com + *.githubusercontent.com +
+                              cache.nixos.org) plus profile/extraFQDNs. Rollout: create
+                              with enforce=false (monitor), harvest Hubble flows over real
+                              rides, flip enforce=true after clean rides.
+                            properties:
+                              profile:
+                                type: string
+                                default: none
+                                enum: [none, python, node]
+                                description: >-
+                                  Ecosystem FQDN set added to the baseline. python =
+                                  pypi.org + files.pythonhosted.org (uv/pip); node =
+                                  registry.npmjs.org; none = baseline only.
+                              extraFQDNs:
+                                type: array
+                                items:
+                                  type: string
+                                default: []
+                                description: >-
+                                  Stack-specific additional FQDNs (port 443), exact names
+                                  (no wildcards; a wildcard need = extend the Composition).
+                                  Earn each entry from a monitor-phase harvest, not
+                                  speculation.
+                              enforce:
+                                type: boolean
+                                default: false
+                                description: >-
+                                  false = MONITOR: the policy attaches with
+                                  enableDefaultDeny.egress=false — DNS visibility + the
+                                  allowlist evaluated, nothing blocked; diff Hubble flows
+                                  against the allowlist (verdicts three-valued:
+                                  ALLOWED/WOULD-DROP/PROBE-FAILED). true = deny-all
+                                  ENFORCED. Flip only after clean monitored rides; drops
+                                  manifest as worker HANGS, watch
+                                  hubble_drop_total{reason=POLICY_DENIED}.
+            status:
+              type: object
+              properties:
+                repos:
+                  type: array
+                  items:
+                    type: string
+                  description: Names of the repos this stack watches (mirror for quick kubectl reads).

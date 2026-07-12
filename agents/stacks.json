@@ -1,5 +1,5 @@
 {
-  "_comment": "TEMPORARY platform-side stand-in for a per-stack AgentStack claim. TARGET (FU-045/FU-048, docs/agents/platform-and-stacks.md): each stack's -iac repo OWNS this as a Crossplane `AgentStack` claim (its repos + mainRepo + model tiers + tools + git workflow + review rubric = the stack's POLICY); homelab publishes the XRD/Composition that renders the coordinator gate/CronJob + review-reflex + RBAC (the MECHANISM). Kept claim-shaped so the migration is a lift, not a rewrite — coordinator-scan.sh reads this via one swap-point function that later becomes `kubectl get agentstacks`. `mainRepo` is stack POLICY too: the coordinator clones ALL `repos` into /work/<repo> and runs with its cwd in `mainRepo`, so that repo's CLAUDE.md + specs load naturally (the platform MECHANISM — the brief — is still loaded from /work/homelab). Defaults to \"homelab\" when a stack's deploy/agent knowledge still lives in homelab docs.",
+  "_comment": "MIGRATING to per-stack AgentStack claims (FU-048 BUILT 2026-07-12; docs/agents/agentstack.md): each stack's -iac repo owns a Crossplane `AgentStack` claim; coordinator-scan.sh reads `kubectl get agentstacks` MERGED over this file (cluster wins per stack name; a PROBE-FAILED kubectl read falls back to this file alone). A migrated stack's entry here is the probe-failed BELT — keep it in sync with the claim until the in-cluster reflex path is verified reading claims, then delete it. `mainRepo` is stack POLICY: the coordinator clones ALL `repos` into /work/<repo> and runs with its cwd in `mainRepo`, so that repo's CLAUDE.md + specs load naturally (the platform MECHANISM — the brief — is still loaded from /work/homelab). Defaults to \"homelab\".",
   "stacks": [
     {
       "name": "sleep",
@@ -19,6 +19,7 @@
     },
     {
       "_chain_policy": "Paid-cached-fast FIRST (agents/README.md model strategy + TICK-LOG meta-2): free tiers rate-limit to a crawl (~8 rpm) and slow models outlive the platform's freshness windows (hy3:free died to the 60-min git-token TTL, paid hy3 to pace/budget at 75+ min). Free tiers are scout-canary material (FU-062 M7), never fix-chain entries.",
+      "_migrated": "OWNED by the AgentStack claim in oracle-iac//oracle-fleet/agent/agentstack.yaml (FU-048) — the cluster claim wins in coordinator-scan's merge; this entry is the probe-failed belt. Delete it once the coordinator-reflex path is verified reading claims.",
       "name": "oracle",
       "repos": ["oracle-iac", "oracle-fleet"],
       "mainRepo": "oracle-fleet",

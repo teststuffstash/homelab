@@ -1,0 +1,28 @@
+# AgentStack XRD + Composition + in-cluster usage doc (argocd/resources/agentstack/) — the agents
+# framework published as a platform capability (FU-048/ADR-085). Wave 5: after Crossplane core
+# (wave 1) and the composition functions (crossplane-providers, wave 4); claims arrive later from
+# each stack's -iac repo (the agent-fixer ApplicationSet syncs their */agent dirs, wave 6).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agentstack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/agentstack
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system # the docs ConfigMap; XRD/Composition are cluster-scoped
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 10 # tolerate the v2 XRD API not being established yet on a fresh boot
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

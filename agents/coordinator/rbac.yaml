@@ -45,6 +45,11 @@ rules:
   - apiGroups: [openrouter.teststuff.net]
     resources: [openrouterkeys, openrouterkeys/status]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-048: coordinator-scan reads AgentStack claims — the stack-list source of truth (a failed
+  # read PROBE-FAILS back to agents/stacks.json; grant this or the reflex runs on the belt forever).
+  - apiGroups: [platform.teststuff.net]
+    resources: [agentstacks]
+    verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

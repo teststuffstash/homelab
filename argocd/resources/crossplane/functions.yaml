@@ -1,0 +1,18 @@
+# Composition functions — Crossplane v2 Compositions are function-pipeline ONLY (no native P&T),
+# so any XRD the platform publishes needs these installed. First consumer: the AgentStack
+# Composition (argocd/resources/agentstack/, FU-048). Same wave as the providers (4): needs only
+# Crossplane core.
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-go-templating
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.2
+---
+# Aggregates composed-resource readiness into the XR's Ready condition.
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-auto-ready
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0

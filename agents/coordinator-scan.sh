@@ -36,10 +36,37 @@ if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
 
-# The ONE source of the stack list. TODAY: agents/stacks.json. FUTURE (FU-045/FU-048): the cluster —
-#   kubectl get agentstacks.platform.homelab -o json \
-#     | jq '{stacks:[.items[]|{name:.metadata.name,repos:.spec.repos}]}'
-stacks_json() { cat "$STACKS_FILE"; }
+# The ONE source of the stack list (FU-048): cluster `AgentStack` claims first, stacks.json for
+# stacks not yet migrated (cluster wins per stack name). PROBE-FIRST (meta-5 principle): a failed
+# kubectl read is PROBE-FAILED — warn loudly + fall back to the file, never silently drop a
+# migrated stack (migrated entries stay in stacks.json as the belt until the in-cluster reflex
+# path is verified reading claims). Cached: one cluster read per scan.
+STACKS_CACHE=""
+stacks_json() {
+  [ -n "$STACKS_CACHE" ] && { printf '%s' "$STACKS_CACHE"; return; }
+  local file cluster
+  file="$(cat "$STACKS_FILE")"
+  if cluster="$($KUBECTL $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
+    STACKS_CACHE="$(jq -n --argjson c "$cluster" --argjson f "$file" '
+      (($c.items // []) | map({
+        name: .metadata.name,
+        repos: [.spec.repos[].name],
+        mainRepo: (.spec.mainRepo // "homelab"),
+        coordinatorModel: (.spec.coordinatorModel // "sonnet"),
+        workerModel: .spec.workerModel,
+        workerModelFallbacks: (.spec.workerModelFallbacks // [])
+      })) as $claims
+      | {stacks: ($claims + [$f.stacks[] | select(.name as $n | $claims | all(.name != $n))])}
+    ')"
+  else
+    echo "WARN coordinator-scan: agentstacks read PROBE-FAILED — stack list from ${STACKS_FILE} only" >&2
+    STACKS_CACHE="$file"
+  fi
+  printf '%s' "$STACKS_CACHE"
+}
+# Populate the cache HERE, in the main shell — every later call sites inside $(…) subshells, where
+# an assignment would not survive. One cluster read per scan, not one per jq lookup.
+STACKS_CACHE="$(stacks_json)"
 
 any_work=""
 for name in $(stacks_json | jq -r '.stacks[].name'); do
