@@ -42,6 +42,12 @@ locals {
     # 2026-07-09 on the six agent repos; declared here so provisioning owns it from the next apply.
     "direction-change" = { color = "b60205", description = "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)" }
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
+    # Automation circuit breaker (born 2026-07-12: a review-reflex predicate bug re-dispatched the
+    # reviewer every tick — 12 duplicate approvals on oracle-fleet#13). Tripped by the reflex breakers
+    # (docs/agents/merge-path.md) or applied by any human/agent that spots an anomaly; ALL agent
+    # automation skips an item carrying it until a human removes it. Pre-created via gh on the
+    # label_repos 2026-07-12 — import before apply (see header).
+    "agent/error" = { color = "b60205", description = "Automation anomaly — circuit breaker; agents skip this item until a human clears it" }
   }
 
   # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in

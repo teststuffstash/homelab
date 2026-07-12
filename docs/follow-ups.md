@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-069**.
+  Next free id: **FU-070**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -137,6 +137,18 @@ _Last updated: 2026-07-12._
       — both need only org self-hosted-runners R/W. `docs/github-setup.md` §2.
 
 ## Agents
+
+- [ ] **FU-069** — **Propagate the anomaly protocol beyond the review path.** The `agent/error`
+      circuit-breaker label + `AGENT_ERROR:` comment convention went live for reviews 2026-07-12
+      (reflex breakers + reviewer self-guard + exporter `AgentReviewLoop`/`AgentErrorFlagged`
+      alerts — `docs/agents/merge-path.md` §Runaway dispatch, born from the oracle-fleet#13
+      12-duplicate-approval loop). Remaining: (a) workers + coordinator honor and emit the same
+      signal — worker recipes live in the app repos' `.agents/`, and `coordinator-scan` should
+      report `agent/error` items as human-first instead of actionable; (b) grant the
+      homelab-reviewer App `issues:write` so the reviewer can apply the label itself instead of
+      only commenting; (c) adopt the pre-created label into tofu (outside the jail):
+      `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
+      apply.
 
 - [ ] **FU-064** — **BUILT 2026-07-09 night (agent-runtime 09cd3e0 → pinned 2026.7.9-g09cd3e0d6542;
       homelab af8e2e1) — pending the acceptance round on oracle-fleet#1, then resolve.** Original scope:

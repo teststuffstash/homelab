@@ -556,3 +556,10 @@ policy block in the header.
 - Reflex CronJob was suspended during diagnosis; un-suspended after the fix reached master (the
   tick clones master, so push = deploy). Cost of the incident: ~12 burned reviewer sessions +
   ~20 duplicate review comments on #13 (left in place; read the newest approval only).
+- **Operator verdict: the predicate fix cures the instance, not the class** — nothing watched for
+  the loop and nothing bounded it. Hardening shipped same-day (merge-path.md §Runaway dispatch):
+  `agent/error` circuit-breaker label (reflex skips + self-trips it on impossible verdict counts,
+  humans can add it as a kill switch), reviewer STEP-0 self-guard (`AGENT_ERROR:` comment, no
+  duplicate verdict), and independent github-exporter metrics + `AgentReviewLoop`/
+  `AgentErrorFlagged` alerts. Propagation to workers/coordinator + reviewer App issues:write =
+  FU-069.

@@ -18,8 +18,15 @@
 # reviewer-session.sh). We skip a PR that already has a live reviewer pod, and reviewer Jobs are the
 # unit of at-most-once dispatch (concurrencyPolicy: Forbid on the CronJob prevents overlapping ticks).
 #
+# Circuit breaker (2026-07-12, after the oracle-fleet#13 loop): PRs labelled `agent/error` are
+# invisible to the reflex, and the reflex itself trips that label (+ an AGENT_ERROR comment) when a
+# picked PR carries verdict counts no legitimate pick can have — see the breaker block below. A
+# human removes the label to resume. Independent backstop: the github-exporter's AgentReviewLoop /
+# AgentErrorFlagged Prometheus alerts (argocd/resources/github-exporter/).
+#
 #   Env (all optional): AGENT_REPOS="sleep-tracking snore-recorder"  ORG=teststuffstash
 #                       REVIEW_CONCURRENCY=2  REVIEWER_NS=agent-coordinator  REVIEWER_LOGIN=homelab-reviewer
+#                       REVIEW_ROUNDS_MAX=8
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -39,6 +46,7 @@ fi
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-agent-coordinator}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
+ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per PR, ever
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
@@ -115,6 +123,7 @@ for repo in $REPOS; do
     [ .[]
       | select(.isDraft | not)
       | select(([ .labels[]?.name ] | index("automerge")) | not)
+      | select(([ .labels[]?.name ] | index("agent/error")) | not)
       | select(.autoMergeRequest != null)
       | select(.mergeStateStatus != "DIRTY")
       | select((.mergeStateStatus != "BEHIND") or reviewable_again)
@@ -122,10 +131,40 @@ for repo in $REPOS; do
       | select((.reviewDecision // "") != "APPROVED")
       | select(((.reviewDecision // "") != "CHANGES_REQUESTED") or reviewable_again)
       | select(bot_approved_head | not)
-    ] | sort_by(.createdAt) | (.[0].number // empty)
+    ] | sort_by(.createdAt) | .[0] // empty
+    # CIRCUIT-BREAKER TELEMETRY rides along with the pick: the bot verdict counts, recomputed from
+    # the RAW fields on purpose — the breaker must not share code (or bugs) with the defs above.
+    # A stateless level-triggered reflex turns any predicate bug into an infinite dispatcher (the
+    # 2026-07-12 oracle-fleet#13 loop: 12 duplicate approvals), so the shell trips agent/error
+    # instead of dispatching when the counts are impossible for a legitimate pick.
+    | ([ .commits[]?.committedDate ] | max // "") as $head
+    | ([ .reviews[]?
+         | select((.author.login // "") | startswith($bot))
+         | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts
+    | ($verdicts | map(select(.submittedAt > $head))) as $at_head
+    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length)"
   ')"
 
   [ -n "$pick" ] || { log "[$repo] nothing to review"; continue; }
+  read -r pick v_total v_head v_head_approved <<<"$pick"
+
+  # Breaker: a legit pick has ZERO bot approvals at head (the predicate filters those), <2 bot
+  # verdicts at head, and fewer than ROUNDS_MAX verdicts ever (beyond that it's a worker↔reviewer
+  # flip-flop — merge-path.md escalation table). Any of these ⇒ label agent/error + one AGENT_ERROR
+  # comment, never dispatch. Labelled PRs are filtered before the pick, so this fires ONCE; a human
+  # removes the label to resume automation. Label add failing (missing label/scope) is logged loud
+  # every tick on purpose — the dispatch is still skipped, and the exporter's AgentReviewLoop alert
+  # (github_pull_request_reviews_since_head) is the independent backstop.
+  if [ "$v_head_approved" -ge 1 ] || [ "$v_head" -ge 2 ] || [ "$v_total" -ge "$ROUNDS_MAX" ]; then
+    log "[$repo] BREAKER on #$pick (verdicts: total=$v_total at-head=$v_head approved-at-head=$v_head_approved, max=$ROUNDS_MAX) — agent/error, NOT dispatching"
+    if gh pr edit "$pick" --repo "$slug" --add-label "agent/error" >/dev/null 2>&1; then
+      gh pr comment "$pick" --repo "$slug" --body "AGENT_ERROR: review-reflex circuit breaker tripped — this PR was selected for review with an impossible state (bot verdicts: ${v_total} total, ${v_head} since the newest commit, ${v_head_approved} of those approvals; rounds cap ${ROUNDS_MAX}). Automation now skips this PR. A human: inspect the review thread + reflex logic, then remove the \`agent/error\` label to resume." >/dev/null 2>&1 \
+        || log "[$repo] WARN: breaker comment on #$pick failed"
+    else
+      log "[$repo] WARN: could not add agent/error to #$pick (label missing on repo? token scope?) — dispatch still skipped"
+    fi
+    continue
+  fi
 
   if "$KUBECTL" -n "$NS" get pods -l "app=agent-reviewer,project=${repo},pr=${pick}" \
         --no-headers 2>/dev/null | grep -q .; then

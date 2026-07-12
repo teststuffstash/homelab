@@ -102,7 +102,9 @@ RUBRIC_FLAG=""
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
 
-STEP 0 — classify the PR: run  gh pr view ${PR} --json labels,title,files  and decide which kind it is.
+STEP 0 — SELF-GUARD (anomaly breaker; you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,commits,labels  and check your OWN bot identity (gh api user --jq .login) against the review history. If you have ALREADY submitted an APPROVED or CHANGES_REQUESTED verdict NEWER than the newest commit, the machinery that dispatched you is looping — do NOT submit another review and do NOT re-litigate the diff. Post exactly one comment starting with AGENT_ERROR: stating the verdict you already gave, its timestamp, and the newest commit timestamp, then stop. Do the same — one AGENT_ERROR: comment, no review, stop — whenever anything else smells like automation gone wrong: a pile of near-identical bot reviews or comments, an agent/error label already present, contradictory labels, a PR that plainly should not have reached you. A burned session that produces a single anomaly report is a GOOD outcome; a duplicate verdict is not.
+
+STEP 1 — classify the PR: run  gh pr view ${PR} --json labels,title,files  and decide which kind it is.
 
 If it is a DEPENDENCY / TOOLCHAIN bump — it carries a label of major or deps-review, or it changes only devbox.lock / devbox.json / a lockfile AND crosses a MAJOR version — then a diff skim is NOT enough. Do a MIGRATION INVESTIGATION:
   1. List each tool whose MAJOR version changed, old -> new (read it from the lockfile diff).

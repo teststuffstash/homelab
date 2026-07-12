@@ -150,7 +150,9 @@ query($org:String!, $cursor:String) {
         pullRequests(states:OPEN, first:40) {
           nodes {
             number isDraft updatedAt reviewDecision baseRefName headRefName
-            commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
+            labels(first:15){ nodes { name } }
+            reviews(last:30){ nodes { author { login } state submittedAt } }
+            commits(last:1){ nodes { commit { committedDate statusCheckRollup { state } } } }
           }
         }
       }
@@ -178,6 +180,14 @@ def collect_open_prs(lines):
         "review_required|none) + ci_state (success|failure|pending|error|none) + draft ride as labels.",
         "# TYPE github_pull_request_updated_timestamp gauge",
         "# HELP github_pull_request_updated_timestamp Last-updated epoch of each open PR (age = time()-this).",
+        # Agent-loop guards (docs/agents/merge-path.md §Runaway dispatch): this is the detection
+        # path INDEPENDENT of the review-reflex's own breaker — different code, different token —
+        # born from the 2026-07-12 oracle-fleet#13 loop (12 duplicate reviewer approvals before the
+        # subscription session limit stopped it, nothing alerted).
+        "# TYPE github_pull_request_label gauge",
+        "# HELP github_pull_request_label 1 per label on each open PR (agent/error = automation circuit breaker — alerted).",
+        "# TYPE github_pull_request_reviews_since_head gauge",
+        "# HELP github_pull_request_reviews_since_head APPROVED/CHANGES_REQUESTED reviews per author SINCE the newest commit — one is normal, more = a review loop.",
     ]
     cursor = None
     for _ in range(10):  # hard page cap
@@ -207,6 +217,22 @@ def collect_open_prs(lines):
                 }
                 lines.append(metric("github_pull_request_open", labels, 1))
                 lines.append(metric("github_pull_request_updated_timestamp", labels, epoch(pr["updatedAt"])))
+                ident = {"owner": ORG, "repo": repo["name"], "number": pr["number"]}
+                for lab in (pr.get("labels") or {}).get("nodes") or []:
+                    if lab:
+                        lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
+                # ISO-8601 UTC strings compare correctly as strings; head_at "" (no commit data)
+                # disables the count rather than inventing one.
+                head_at = (commit or {}).get("committedDate") or ""
+                verdicts = {}
+                for rv in (pr.get("reviews") or {}).get("nodes") or []:
+                    if not rv or rv.get("state") not in ("APPROVED", "CHANGES_REQUESTED"):
+                        continue
+                    if head_at and (rv.get("submittedAt") or "") > head_at:
+                        login = (rv.get("author") or {}).get("login") or "unknown"
+                        verdicts[login] = verdicts.get(login, 0) + 1
+                for login, count in verdicts.items():
+                    lines.append(metric("github_pull_request_reviews_since_head", {**ident, "author": login}, count))
         if not repos["pageInfo"]["hasNextPage"]:
             return
         cursor = repos["pageInfo"]["endCursor"]

@@ -446,6 +446,28 @@ contract-versioning discipline), not a merge-path mechanism.
   it off. The reflex therefore tests "reviewer-bot approval newer than the newest commit"
   directly: the bot approves once, then the PR parks awaiting the code owner (auto-merge fires on
   their approval). Dismissing the bot's review forces a re-review; a new push does too.
+- **Runaway dispatch — the layered breakers** (hardening after the loop above; propagation to
+  workers/coordinator = FU-069). A stateless, level-triggered reflex turns ANY predicate bug into
+  an infinite dispatcher, and the #13 loop showed nothing watches for that — so no single check is
+  trusted; three independent layers, in escalating distance from the bug:
+  1. *In-band circuit breaker (reflex):* the reflex skips any PR labelled **`agent/error`**, and
+     trips that label itself (+ one `AGENT_ERROR:` comment) when its picked PR carries verdict
+     counts no legitimate pick can have — a bot approval at head, ≥2 bot verdicts at head, or
+     ≥`REVIEW_ROUNDS_MAX` (8) verdicts ever (the escalation table's rounds-exhausted row).
+     Deliberately recomputed from raw fields, NOT the pick predicate's defs — shared code is a
+     shared bug.
+  2. *Agent self-guard (reviewer prompt STEP 0):* if the reviewer finds its own verdict already
+     covering the head — or anything else that smells like automation gone wrong — it posts one
+     `AGENT_ERROR:` comment and submits nothing (it can't label: the reviewer App has no
+     issues:write, FU-069). One burned no-op session, no duplicate verdict.
+  3. *Out-of-band detection (github-exporter):* per-PR `github_pull_request_reviews_since_head`
+     (per author) and `github_pull_request_label` metrics feed the **AgentReviewLoop** (>2
+     verdicts on one head) and **AgentErrorFlagged** Prometheus alerts — different code and
+     different token than the reflex, so it fires even when layer 1 is the buggy layer.
+  `agent/error` is also the HUMAN kill switch: anyone can add it to halt agent automation on that
+  PR; removing it resumes. Budget framing: workers are cost-capped by their per-round OpenRouter
+  keys, but reviewer/coordinator sessions ride the flat-rate subscription where no $-cap exists —
+  there the budget IS a dispatch bound, which is what the breakers enforce.
 - **Flaky CI** — a flaky red steals the PR's queue slot (next PR gets updated first). Acceptable:
   FIFO is a fairness preference, not a correctness requirement.
 - **Concurrent triggers / locking** — cron tick + wake-up ping firing together must never

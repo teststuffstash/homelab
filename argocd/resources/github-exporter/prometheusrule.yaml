@@ -61,6 +61,27 @@ spec:
             summary: "GitHub Actions/Packages storage at 80% of quota pace"
             description: '~{{ $value | printf "%.1f" }} GB held over the last day (2 GB included as a monthly average). Find it: per-repo github_billing_usage{unit=~"(?i)gigabytehour.*"}, then the repo''s /actions/artifacts — usually forgotten upload-artifact output (set retention-days, or push images to ghcr instead).'
 
+        # Agent-loop guards (docs/agents/merge-path.md §Runaway dispatch). The detection layer
+        # INDEPENDENT of the review-reflex's in-band circuit breaker: the 2026-07-12 oracle-fleet#13
+        # loop posted 12 duplicate approvals over 90 min and NOTHING alerted — the operator noticed a
+        # failed pod by hand. Threshold >2 (not >1): a human may legitimately post two verdicts on
+        # one head (request-changes, then approve without a new push); three is a machine.
+        - alert: AgentReviewLoop
+          expr: github_pull_request_reviews_since_head > 2
+          labels:
+            severity: warning
+          annotations:
+            summary: "Review loop on {{ $labels.repo }}#{{ $labels.number }}"
+            description: "{{ $labels.author }} has posted {{ $value }} verdict reviews since the newest commit of https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }} — one is normal, this is a dispatch loop. Halt it: add the agent/error label (all agent automation skips it), then check the review-reflex breaker (agents/review-reflex.sh)."
+
+        - alert: AgentErrorFlagged
+          expr: github_pull_request_label{label="agent/error"} == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "agent/error on {{ $labels.repo }}#{{ $labels.number }} — automation halted"
+            description: "A circuit breaker tripped or an agent flagged an anomaly on https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}; agent automation skips it until a human removes the label. Read the AGENT_ERROR comment(s) on the PR for what was observed."
+
         - alert: GithubExporterDown
           expr: up{job="github-exporter"} == 0
           for: 15m
