@@ -19,5 +19,6 @@ spec:
         guardrail: only-free
         egress:
           profile: python # kopf operator, uv/pip toolchain
+          extraFQDNs: [] # explicit (server default) — earned from a harvest, currently none; also keeps ArgoCD diff clean
           # MONITOR (FU-020 rollout ring 1) — flip to true after clean harvested rides.
           enforce: false

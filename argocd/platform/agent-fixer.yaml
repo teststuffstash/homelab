@@ -64,10 +64,15 @@ spec:
         retry:
           limit: 5
           backoff: { duration: 15s, factor: 2, maxDuration: 5m }
-      # Crossplane injects its bookkeeping INTO the claim's spec (compositionRef/resourceRefs under
-      # spec.crossplane) — without this the AgentStack diffs OutOfSync forever and selfHeal churns.
+      # Crossplane MUTATES the claim it reconciles: bookkeeping into the spec (compositionRef/
+      # resourceRefs under spec.crossplane), a composite label, and a finalizer — without ignoring
+      # all three the AgentStack diffs OutOfSync forever and selfHeal churns against the injector.
+      # (Server-side schema DEFAULTS inside spec.repos[] can't be pointer-ignored — claims must
+      # write defaulted array fields explicitly, e.g. extraFQDNs: [].)
       ignoreDifferences:
         - group: platform.teststuff.net
           kind: AgentStack
           jsonPointers:
             - /spec/crossplane
+            - /metadata/labels/crossplane.io~1composite
+            - /metadata/finalizers
