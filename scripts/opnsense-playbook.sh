@@ -10,7 +10,9 @@
 # Usage:
 #   bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml [extra ansible args]
 #
-# Creds live outside the repo at ~/.claude/homelab-opnsense/{key,secret}.
+# Creds come from the Tier-0 KeePass wallet (entries opnsense-api-{key,secret} — FU-001,
+# byte-identical migration verified 2026-07-12), falling back to the legacy
+# ~/.claude/homelab-opnsense/{key,secret} flat files if the wallet is missing.
 set -euo pipefail
 
 [ $# -ge 1 ] || { echo "usage: $0 ansible/opnsense-<play>.yml [extra ansible-playbook args]" >&2; exit 2; }
@@ -19,8 +21,18 @@ cd "$(dirname "$0")/.."   # repo root (nix build path:./... and ansible/ are rel
 
 export NIX_CONFIG="experimental-features = nix-command flakes"
 export ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg"   # inventory + roles_path (paths are repo-root-relative)
-export OPN_API_KEY="$(cat "$HOME/.claude/homelab-opnsense/key")"
-export OPN_API_SECRET="$(cat "$HOME/.claude/homelab-opnsense/secret")"
+
+_kp_db="$HOME/.claude/homelab-keepass/homelab.kdbx"
+if [ -f "$_kp_db" ]; then
+  _kp_get() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
+                -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password "$_kp_db" "$1" 2>/dev/null; }
+  export OPN_API_KEY="$(_kp_get opnsense-api-key)"
+  export OPN_API_SECRET="$(_kp_get opnsense-api-secret)"
+else
+  export OPN_API_KEY="$(cat "$HOME/.claude/homelab-opnsense/key")"
+  export OPN_API_SECRET="$(cat "$HOME/.claude/homelab-opnsense/secret")"
+fi
+[ -n "$OPN_API_KEY" ] && [ -n "$OPN_API_SECRET" ] || { echo "empty OPNsense API creds (wallet entry missing? run scripts/keepass-init.sh)" >&2; exit 1; }
 
 PYBIN="$(nix build --no-link --print-out-paths path:./ansible/controller-env)/bin/python3"
 

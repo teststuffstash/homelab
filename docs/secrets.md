@@ -19,7 +19,13 @@ the operational how-to. _(SOPS+age is **not used** anywhere — see "Why no SOPS
 jail reads it unattended; copy both to a laptop to open in KeePassXC. Seed/refresh with
 `bash scripts/keepass-init.sh`; load into a tofu session with `source scripts/keepass-env.sh` (exports
 the `TF_VAR_*` the main root needs). Holds: Infisical encryption/auth keys + admin creds, the ArgoCD
-git PAT, Postgres app passwords, the Grafana/HA creds. **This is the only ring you decrypt by hand.**
+git PAT, Postgres app passwords, the Grafana/HA creds — and, since 2026-07-12 (FU-001), **every
+former `~/.claude/homelab-*` flat-file secret** (OPNsense/Proxmox/Matchbox/Cloudflare/Garage/
+Forgejo/AWS/droplet/GitHub-App creds; multi-line key/cert material as entry *attachments*, e.g.
+`keepassxc-cli attachment-export … matchbox-grpc client.key <out>` — note `--stdout` mangles binary
+attachments like the `.p12`, export to a file). The wallet is **authoritative**; the flat files are
+a legacy read path that shrinks as consumers convert (checklist in FU-001) — don't add new ones.
+**This is the only ring you decrypt by hand.**
 
 **Tier 1·2 (Infisical → ESO).** Infisical (`infisical.teststuff.net`, on CloudNativePG, ADR-046) is the
 store; **External Secrets Operator** pulls from it via the `infisical` `ClusterSecretStore` and writes a

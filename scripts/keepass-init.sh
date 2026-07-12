@@ -73,9 +73,66 @@ gh_pat="$(git -C "$(dirname "$0")/.." remote get-url origin 2>/dev/null | sed -n
 add_secret argocd-github-pat "${gh_pat:-REPLACE_with_github_pat}"
 
 # --- migrate existing plaintext cred files into the wallet ---------------------
+# (FU-001: the wallet is the authoritative Tier-0 store as of 2026-07-12; the ~/.claude flat
+# files are a legacy READ path that shrinks as each consumer converts — checklist in FU-001.
+# add_secret only adds MISSING entries, so re-running never clobbers a rotated wallet value.)
 add_secret grafana-admin-password "$(file_or "$HOME/.claude/homelab-ha/grafana_admin_password" REPLACE)"
 add_secret ha-prometheus-token    "$(file_or "$HOME/.claude/homelab-ha/prometheus_llat" REPLACE)"
 add_secret forgejo-runner-token   "$(file_or "$HOME/.claude/homelab-forgejo/runner-token" REPLACE)"
+
+add_secret opnsense-api-key     "$(file_or "$HOME/.claude/homelab-opnsense/key" REPLACE)"
+add_secret opnsense-api-secret  "$(file_or "$HOME/.claude/homelab-opnsense/secret" REPLACE)"
+add_secret pve-api-token-matchbox "$(file_or "$HOME/.claude/homelab-pve-ssh/api_token_matchbox" REPLACE)"
+add_secret ha-access-token      "$(file_or "$HOME/.claude/homelab-ha/access_token" REPLACE)"
+add_secret ha-refresh-token     "$(file_or "$HOME/.claude/homelab-ha/refresh_token" REPLACE)"
+add_secret ha-owner-password    "$(file_or "$HOME/.claude/homelab-ha/owner_password" REPLACE)"
+add_secret droplet-api-encryption-key "$(file_or "$HOME/.claude/homelab-droplet/api_encryption_key" REPLACE)"
+add_secret droplet-ota-password "$(file_or "$HOME/.claude/homelab-droplet/ota_password" REPLACE)"
+add_secret aws-audit-key-id     "$(file_or "$HOME/.claude/homelab-aws/audit-key" REPLACE)"
+add_secret aws-audit-secret     "$(file_or "$HOME/.claude/homelab-aws/audit-secret" REPLACE)"
+add_secret cloudflare-acme-token "$(file_or "$HOME/.claude/cloudflare/acme-token" REPLACE)"
+add_secret cloudflare-read-key   "$(file_or "$HOME/.claude/cloudflare/read-key" REPLACE)"
+add_secret cloudflare-write-key  "$(file_or "$HOME/.claude/cloudflare/write-key" REPLACE)"
+add_secret cloudflare-ha-client-p12-password "$(file_or "$HOME/.claude/cloudflare/ha-client.p12.password" REPLACE)"
+add_secret forgejo-api-token     "$(file_or "$HOME/.claude/homelab-forgejo/api-token" REPLACE)"
+add_secret forgejo-rasmus-password "$(file_or "$HOME/.claude/homelab-forgejo/rasmus-password" REPLACE)"
+add_secret forgejo-gpg-keyid     "$(file_or "$HOME/.claude/homelab-forgejo/gpg-keyid" REPLACE)"
+add_secret garage-admin-token    "$(file_or "$HOME/.claude/homelab-garage/admin-token" REPLACE)"
+add_secret garage-browse-key-id  "$(file_or "$HOME/.claude/homelab-garage/browse-key-id" REPLACE)"
+add_secret garage-browse-secret  "$(file_or "$HOME/.claude/homelab-garage/browse-secret" REPLACE)"
+add_secret github-reviewer-app-id "$(file_or "$HOME/.claude/homelab-github-reviewer/app-id" REPLACE)"
+add_secret github-reviewer-installation-id "$(file_or "$HOME/.claude/homelab-github-reviewer/installation-id" REPLACE)"
+add_secret github-reviewer-slug  "$(file_or "$HOME/.claude/homelab-github-reviewer/slug" REPLACE)"
+add_secret snore-recorder-key    "$(file_or "$HOME/.claude/homelab-snore-recorder/key.txt" REPLACE)"
+# (homelab-ha/{auth_code,esphome_flow_id} are expired one-time OAuth/flow artifacts — not migrated.)
+
+# add_attachment <entry> <name> <file> — multi-line material (keys/certs/p12) rides as an
+# attachment on its entry (created empty if missing). Import only when absent, like add_secret.
+add_attachment() {
+  local title="$1" name="$2" file="$3"
+  [ -f "$file" ] || { echo "  ! $title/$name (source $file missing, skipped)"; return 0; }
+  has_entry "$title" || printf '\n' | kp add -q --no-password -k "$KEY" --password-prompt "$DB" "$title" >/dev/null
+  if kp attachment-export -q --no-password -k "$KEY" --stdout "$DB" "$title" "$name" >/dev/null 2>&1; then
+    echo "  = $title/$name (exists, kept)"
+  else
+    kp attachment-import -q --no-password -k "$KEY" "$DB" "$title" "$name" "$file" >/dev/null
+    echo "  + $title/$name"
+  fi
+}
+
+add_attachment pve-ssh-seed        id_ed25519     "$HOME/.claude/homelab-pve-ssh/id_ed25519"
+add_attachment pve-ssh-seed        id_ed25519.pub "$HOME/.claude/homelab-pve-ssh/id_ed25519.pub"
+add_attachment matchbox-grpc       ca.crt         "$HOME/.claude/homelab-matchbox/ca.crt"
+add_attachment matchbox-grpc       client.crt     "$HOME/.claude/homelab-matchbox/client.crt"
+add_attachment matchbox-grpc       client.key     "$HOME/.claude/homelab-matchbox/client.key"
+add_attachment cloudflare-ha-client ha-client.p12 "$HOME/.claude/cloudflare/ha-client.p12"
+add_attachment cloudflare-ha-client ha-client.cert.pem "$HOME/.claude/cloudflare/ha-client.cert.pem"
+add_attachment forgejo-keys        id_ed25519     "$HOME/.claude/homelab-forgejo/id_ed25519"
+add_attachment forgejo-keys        id_ed25519.pub "$HOME/.claude/homelab-forgejo/id_ed25519.pub"
+add_attachment forgejo-keys        gpg-private.asc "$HOME/.claude/homelab-forgejo/gpg-private.asc"
+add_attachment forgejo-keys        gpg-public.asc "$HOME/.claude/homelab-forgejo/gpg-public.asc"
+add_attachment github-reviewer-app private-key.pem "$HOME/.claude/homelab-github-reviewer/private-key.pem"
+add_attachment github-runner-app   private-key.pem "$HOME/.claude/homelab-runner-app/private-key.pem"
 
 echo
 echo "Done. Inspect with:"

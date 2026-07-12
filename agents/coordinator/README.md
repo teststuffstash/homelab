@@ -331,26 +331,27 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 > `review-reflex.yaml` (the CronJob) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
 > ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a review-reflex
 > image bump) auto-applies — **no manual `kubectl apply`**. The `kubectl apply` commands below are only the
-> pre-ArgoCD / disaster-recovery path. **Only `coordinator-claude` stays imperative** (below) — it's not in
-> git.
+> pre-ArgoCD / disaster-recovery path. Since 2026-07-12 (FU-001 leg A) **nothing here is imperative**:
+> `coordinator-claude` is ESO-materialized too (`claude-token.yaml` ← Infisical
+> `COORDINATOR_CLAUDE_OAUTH_TOKEN`).
 
 ```sh
 # ArgoCD applies these (agent-coordinator app); run by hand only for pre-ArgoCD bootstrap / recovery.
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml          # ns + SA + roles
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/transcripts-pvc.yaml
 kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml     # ESO → coordinator-git
+kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/claude-token.yaml  # ESO → coordinator-claude
 
-# subscription token (~1y) — NOT in git, always imperative: paste-a-code flow works in the jail.
-kubectl -n agent-coordinator create secret generic coordinator-claude \
-    --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"
+# subscription token (~1y) rotation — value goes to Infisical, ESO does the rest (claude-token.yaml):
+devbox run infisical-secret COORDINATOR_CLAUDE_OAUTH_TOKEN="$(claude setup-token)" >/dev/null
 ```
 
 The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
 (`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + `review-reflex.yaml`
 (the CronJob, ArgoCD-synced); the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
-is public. `coordinator-git` is GitOps'd via ESO (`git-token.yaml`); only `coordinator-claude` stays
-imperative — fold it into Infisical/ESO later (FU-001).
+is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
+`claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 
 ## Logs & behaviour analysis
 

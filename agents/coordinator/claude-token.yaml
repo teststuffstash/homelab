@@ -1,0 +1,28 @@
+# Coordinator/reviewer Claude auth (FU-001 leg A, 2026-07-12): the operator-subscription OAuth
+# token (`claude setup-token`, ~1y) as `coordinator-claude` — mounted by coordinator ticks,
+# reviewer sessions and the review-reflex's children (CLAUDE_CODE_OAUTH_TOKEN). Formerly the ONE
+# imperative `kubectl create secret` in this namespace (README §Bootstrap); now Infisical is the
+# store and ESO materializes it like every other platform secret.
+#
+# Rotation: mint a fresh token (`claude setup-token`, operator laptop) →
+#   devbox run infisical-secret COORDINATOR_CLAUDE_OAUTH_TOKEN=<token> >/dev/null
+#   (silence stdout: the infisical CLI ECHOES the value in its result table)
+# ESO refreshes the Secret within refreshInterval; sessions pick it up on next pod spawn.
+#
+# Applied with kubectl (not ArgoCD), AFTER rbac.yaml — same lifecycle as its siblings:
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/claude-token.yaml
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: coordinator-claude
+  namespace: agent-coordinator
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: coordinator-claude
+    creationPolicy: Owner
+  data:
+    - secretKey: CLAUDE_CODE_OAUTH_TOKEN
+      remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }
