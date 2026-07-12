@@ -64,15 +64,17 @@ spec:
         # Agent-loop guards (docs/agents/merge-path.md §Runaway dispatch). The detection layer
         # INDEPENDENT of the review-reflex's in-band circuit breaker: the 2026-07-12 oracle-fleet#13
         # loop posted 12 duplicate approvals over 90 min and NOTHING alerted — the operator noticed a
-        # failed pod by hand. Threshold >2 (not >1): a human may legitimately post two verdicts on
-        # one head (request-changes, then approve without a new push); three is a machine.
+        # failed pod by hand. Trailing-1h per-author count (the PAT can't see commit objects, so
+        # since-head isn't computable): a healthy worker↔reviewer iteration tops ~3 verdicts/h
+        # (CI ~5min + reflex tick 5min + review ~6min per cycle); the incident ran ~8/h. >3 splits
+        # the two with margin, and the series vanishing when the PR goes quiet self-resolves it.
         - alert: AgentReviewLoop
-          expr: github_pull_request_reviews_since_head > 2
+          expr: github_pull_request_reviews_recent > 3
           labels:
             severity: warning
           annotations:
             summary: "Review loop on {{ $labels.repo }}#{{ $labels.number }}"
-            description: "{{ $labels.author }} has posted {{ $value }} verdict reviews since the newest commit of https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }} — one is normal, this is a dispatch loop. Halt it: add the agent/error label (all agent automation skips it), then check the review-reflex breaker (agents/review-reflex.sh)."
+            description: "{{ $labels.author }} has posted {{ $value }} verdict reviews in the last hour on https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }} — that cadence is a dispatch loop, not iteration. Halt it: add the agent/error label (all agent automation skips it), then check the review-reflex breaker (agents/review-reflex.sh)."
 
         - alert: AgentErrorFlagged
           expr: github_pull_request_label{label="agent/error"} == 1

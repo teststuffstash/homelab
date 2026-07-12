@@ -154,7 +154,7 @@ for repo in $REPOS; do
   # comment, never dispatch. Labelled PRs are filtered before the pick, so this fires ONCE; a human
   # removes the label to resume automation. Label add failing (missing label/scope) is logged loud
   # every tick on purpose — the dispatch is still skipped, and the exporter's AgentReviewLoop alert
-  # (github_pull_request_reviews_since_head) is the independent backstop.
+  # (github_pull_request_reviews_recent) is the independent backstop.
   if [ "$v_head_approved" -ge 1 ] || [ "$v_head" -ge 2 ] || [ "$v_total" -ge "$ROUNDS_MAX" ]; then
     log "[$repo] BREAKER on #$pick (verdicts: total=$v_total at-head=$v_head approved-at-head=$v_head_approved, max=$ROUNDS_MAX) — agent/error, NOT dispatching"
     if gh pr edit "$pick" --repo "$slug" --add-label "agent/error" >/dev/null 2>&1; then

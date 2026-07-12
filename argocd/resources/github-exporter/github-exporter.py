@@ -152,8 +152,7 @@ query($org:String!, $cursor:String) {
             number isDraft updatedAt reviewDecision baseRefName headRefName
             labels(first:15){ nodes { name } }
             reviews(last:30){ nodes { author { login } state submittedAt } }
-            commits(last:1){ nodes { commit { committedDate statusCheckRollup { state } } } }
-            headCommits: commits(last:1){ nodes { commit { committedDate } } }
+            commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
           }
         }
       }
@@ -187,8 +186,8 @@ def collect_open_prs(lines):
         # subscription session limit stopped it, nothing alerted).
         "# TYPE github_pull_request_label gauge",
         "# HELP github_pull_request_label 1 per label on each open PR (agent/error = automation circuit breaker — alerted).",
-        "# TYPE github_pull_request_reviews_since_head gauge",
-        "# HELP github_pull_request_reviews_since_head APPROVED/CHANGES_REQUESTED reviews per author SINCE the newest commit — one is normal, more = a review loop.",
+        "# TYPE github_pull_request_reviews_recent gauge",
+        "# HELP github_pull_request_reviews_recent APPROVED/CHANGES_REQUESTED reviews per author in the trailing hour — a healthy worker↔reviewer iteration tops ~3, a dispatch loop runs 8+.",
     ]
     cursor = None
     for _ in range(10):  # hard page cap
@@ -222,24 +221,22 @@ def collect_open_prs(lines):
                 for lab in (pr.get("labels") or {}).get("nodes") or []:
                     if lab:
                         lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
-                # ISO-8601 UTC strings compare correctly as strings; head_at "" (no commit data)
-                # disables the count rather than inventing one. Read committedDate from the
-                # ALIASED headCommits selection: without Commit statuses:read the FORBIDDEN
-                # statusCheckRollup nulls the whole shared commits element (committedDate dies
-                # with it — found live 2026-07-12: zero reviews_since_head in-cluster while the
-                # broader-scoped jail token emitted fine); the alias carries no forbidden field.
-                head_commits = (pr.get("headCommits") or {}).get("nodes") or []
-                head_commit = (head_commits[0] or {}).get("commit") if head_commits else None
-                head_at = (head_commit or {}).get("committedDate") or ""
+                # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
+                # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
+                # commits node nulls regardless of which sub-fields are selected), and a dispatch
+                # loop is time-clustered anyway. ISO-8601 UTC strings compare correctly as
+                # strings; the series disappears when the PR goes quiet, so the alert
+                # self-resolves without any staleness handling.
+                cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
                 verdicts = {}
                 for rv in (pr.get("reviews") or {}).get("nodes") or []:
                     if not rv or rv.get("state") not in ("APPROVED", "CHANGES_REQUESTED"):
                         continue
-                    if head_at and (rv.get("submittedAt") or "") > head_at:
+                    if (rv.get("submittedAt") or "") > cutoff:
                         login = (rv.get("author") or {}).get("login") or "unknown"
                         verdicts[login] = verdicts.get(login, 0) + 1
                 for login, count in verdicts.items():
-                    lines.append(metric("github_pull_request_reviews_since_head", {**ident, "author": login}, count))
+                    lines.append(metric("github_pull_request_reviews_recent", {**ident, "author": login}, count))
         if not repos["pageInfo"]["hasNextPage"]:
             return
         cursor = repos["pageInfo"]["endCursor"]

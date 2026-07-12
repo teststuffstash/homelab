@@ -460,10 +460,11 @@ contract-versioning discipline), not a merge-path mechanism.
      covering the head — or anything else that smells like automation gone wrong — it posts one
      `AGENT_ERROR:` comment and submits nothing (it can't label: the reviewer App has no
      issues:write, FU-069). One burned no-op session, no duplicate verdict.
-  3. *Out-of-band detection (github-exporter):* per-PR `github_pull_request_reviews_since_head`
-     (per author) and `github_pull_request_label` metrics feed the **AgentReviewLoop** (>2
-     verdicts on one head) and **AgentErrorFlagged** Prometheus alerts — different code and
-     different token than the reflex, so it fires even when layer 1 is the buggy layer.
+  3. *Out-of-band detection (github-exporter):* per-PR `github_pull_request_reviews_recent`
+     (verdicts per author in the trailing hour — the exporter PAT can't see commit objects, so
+     since-head isn't computable there) and `github_pull_request_label` metrics feed the
+     **AgentReviewLoop** (>3 verdicts/h) and **AgentErrorFlagged** Prometheus alerts — different
+     code and different token than the reflex, so it fires even when layer 1 is the buggy layer.
   `agent/error` is also the HUMAN kill switch: anyone can add it to halt agent automation on that
   PR; removing it resumes. Budget framing: workers are cost-capped by their per-round OpenRouter
   keys, but reviewer/coordinator sessions ride the flat-rate subscription where no $-cap exists —
