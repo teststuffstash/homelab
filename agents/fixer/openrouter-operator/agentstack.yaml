@@ -1,0 +1,23 @@
+# The platform stack's AgentStack claim (FU-048/ADR-085) — openrouter-operator's agent POLICY in
+# one CR; the XRD+Composition render the fixer MECHANISM that openrouter-key.yaml + git-token.yaml
+# in this dir carried by hand. The platform stack has no -iac repo, so its claim lives here
+# (homelab IS its deployment truth); applied by the same agent-fixer ApplicationSet dir generator.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: AgentStack
+metadata:
+  name: platform
+spec:
+  mainRepo: homelab
+  coordinatorModel: opus # platform coordination = highest-stakes arbitration (stacks.json carry-over)
+  workerModel: openrouter/deepseek/deepseek-v4-flash
+  workerModelFallbacks: [tencent/hy3, qwen/qwen3-coder]
+  repos:
+    - name: openrouter-operator
+      fixer:
+        budgetUSD: 5 # USD/week standing ceiling (carried over)
+        resetInterval: weekly
+        guardrail: only-free
+        egress:
+          profile: python # kopf operator, uv/pip toolchain
+          # MONITOR (FU-020 rollout ring 1) — flip to true after clean harvested rides.
+          enforce: false
