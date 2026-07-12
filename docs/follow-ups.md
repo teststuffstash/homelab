@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-070**.
+  Next free id: **FU-071**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -128,6 +128,13 @@ _Last updated: 2026-07-12._
       **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
       fixer) and homelab (platform/base-infra, dep policy unresolved). Unattended running still needs the
       per-stack reflex (FU-050). Relates FU-014/FU-045/FU-050.
+- [ ] **FU-070** — **`stack-template` org repo — collapse new-stack's step E (main-repo content).**
+      The one onboarding step still done by copying oracle-fleet's shapes by hand: CLAUDE.md
+      skeleton (read order / gate / invariants / related-repos-as-GitHub-URLs), `.agents/` recipe
+      skeletons, devbox `ci`+`scan-secrets`, merge-path caller workflows. Make it a template repo
+      (`is_template = true` in repos.tf), instantiate via `gh repo create --template` before
+      `new-agent-repo.sh` (which then emits the adopt-import). stack-lint's REPO-03/04/05 already
+      verify the result. Relates FU-052.
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
