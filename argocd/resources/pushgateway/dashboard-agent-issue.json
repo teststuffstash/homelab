@@ -153,11 +153,41 @@
       ]
     },
     {
+      "id": 11,
+      "type": "table",
+      "title": "DENIED destinations from $project (dashboard range)",
+      "description": "What the netpol is blocking, by name: hubble drop metric runs destinationContext=dns|ip, so the DNS-proxy-known FQDN (or raw IP) labels every POLICY_DENIED drop. A legit destination goes into the claim's egress.extraFQDNs; openrouter.ai here = the policy doing its job.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "targets": [
+        { "expr": "topk(15, sum by (destination) (increase(hubble_drop_total{reason=\"POLICY_DENIED\", source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "drops" } } },
+        { "id": "sortBy", "options": { "sort": [ { "field": "drops", "desc": true } ] } }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "DNS queries from $project (dashboard range)",
+      "description": "Everything the namespace TRIED to resolve (hubble dns metric, query names per source namespace) — the intent signal that pairs with the denied-destinations table.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "targets": [
+        { "expr": "topk(20, sum by (query) (increase(hubble_dns_queries_total{source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "queries" } } },
+        { "id": "sortBy", "options": { "sort": [ { "field": "queries", "desc": true } ] } }
+      ]
+    },
+    {
       "id": 10,
       "type": "logs",
       "title": "Worker pod logs — $project (all issues; grep the AGENT_RUN_STATS line for issue/pod mapping)",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 27 },
       "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [
         { "expr": "{namespace=\"$project\", pod=~\"agent-.*\"}", "refId": "A" }

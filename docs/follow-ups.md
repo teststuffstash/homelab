@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-067**.
+  Next free id: **FU-068**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -216,6 +216,16 @@ _Last updated: 2026-07-12._
       Cost autopsy: `agents/README.md` → Operational findings.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
+- [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
+      the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
+      ~150 POLICY_DENIED drops were unclassifiable post-hoc (flow ring buffer rotates in minutes);
+      fixed at the METRIC level (`drop:…destinationContext=dns|ip` + `dns:query` — Prometheus now
+      names denied destinations and attempted lookups, panels on the `agent-issue` dashboard). If
+      per-flow detail (pod/port/timing) is ever needed durably: Hubble's built-in
+      `hubble.export` (static filter verdict=DROPPED → node file) tailed by the existing Alloy
+      DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
+      OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
+      no supported native OTel emitter. Relates FU-020.
 - [ ] **FU-020** — **FIRST STACK LIVE 2026-07-10**: oracle-fleet worker pods under deny-all
       (CiliumNetworkPolicy `agent-worker-egress`, now rendered by the oracle AgentStack claim —
       allow: dns, agent-egress proxy+broker, nix-cache, garage, monitoring, GitHub/PyPI/nix FQDNs;

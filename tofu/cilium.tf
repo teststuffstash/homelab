@@ -43,7 +43,16 @@ resource "helm_release" "cilium" {
     hubble = {
       enabled = true
       metrics = {
-        enabled        = ["dns", "drop:sourceContext=namespace", "tcp", "flow", "icmp", "port-distribution"]
+        # drop: destination=FQDN when the DNS proxy knows the name (worker namespaces run L7 DNS
+        # visibility via their CNPs), else IP — this is what turns "150 POLICY_DENIED from
+        # oracle-fleet" into "150 × api.smith.langchain.com:443" without a live flow capture.
+        # dns: query names per source namespace — what a namespace is TRYING to resolve.
+        # Cardinality: bounded at homelab scale (denied destinations + unique lookups).
+        enabled = [
+          "dns:query;sourceContext=namespace",
+          "drop:sourceContext=namespace;destinationContext=dns|ip",
+          "tcp", "flow", "icmp", "port-distribution",
+        ]
         serviceMonitor = { enabled = true }
       }
       relay = { enabled = true }

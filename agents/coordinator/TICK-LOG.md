@@ -530,3 +530,14 @@ policy block in the header.
   project/issue rounds table (cost/duration/exit_status/model), cost-per-round, POLICY_DENIED
   stat, project-scoped OTLP control-plane cost/tokens, Loki worker logs; links to the
   transcripts viewer (the trace substitute until Tempo + CC traces GA).
+
+### 2026-07-12 — meta-6 (cont. 3): the ~150 drops — instrumented at the metric, classification pending the next ride
+- Post-hoc classification impossible: flow buffer rotates in minutes, worker logged NO network
+  errors (silent retry loop), dns metric carried no query names. IDLE goose (agent-base image,
+  labeled pod, CLI + no-provider run) produces ZERO drops → the traffic is SESSION-specific.
+- Fixed at the source: hubble metrics now run `drop:sourceContext=namespace;destinationContext=dns|ip`
+  (denied destinations BY NAME in Prometheus) + `dns:query;sourceContext=namespace` (attempted
+  lookups per ns). Dashboard `agent-issue` gained both tables. Next real ride self-classifies.
+- OTel question (operator): Cilium/Hubble have NO supported OTel emitter; the circulating
+  hubble-otel adapter is archived/unmaintained → rejected. Maintained flow-event path if ever
+  needed = hubble.export → Alloy → Loki, filed as FU-067.
