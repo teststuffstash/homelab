@@ -22,7 +22,7 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-07-09._
+_Last updated: 2026-07-12._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -134,8 +134,15 @@ _Last updated: 2026-07-09._
       `agents/stacks.json` (so `coordinator-scan` sees it). **Make it repeatable — DONE for layer-2 k8s
       infra (2026-07-06):** the `agent-fixer` ApplicationSet (git directory generator over
       `agents/fixer/*`, `argocd/platform/agent-fixer.yaml`) auto-emits the per-repo Application, so that
-      part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml`. Still
-      per-repo shell/manual: the `.agents/` recipes, the `stacks.json` entry, and the GitHub-side
+      part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml`.
+      **Expanded 2026-07-10 (1b4fa54 + agent-fixer fixes):** the *-iac* fixer dirs (`oracle-iac//*/agent`,
+      `sleep-iac//*/agent`) are GitOps-owned via per-repo git generators (NB: generator `values` must
+      nest INSIDE the git generator block — sibling placement is CRD-pruned; generator-template
+      precedence doesn't bind, use uniform spec template + values); registration-lint v2 requires both
+      merge-path callers per stack repo (probe-first: repo-visibility check before the callers check,
+      -iac deploy targets exempt) — found + fixed snore-recorder's missing renovate-approve caller
+      (snore-recorder e8bb33b) on first run. Still per-repo shell/manual: the `.agents/` recipes, the
+      `stacks.json` entry, and the GitHub-side
       (`new-agent-repo.sh` merge-path) — the `AgentStack` XRD (FU-048) is the full collapse. The
       `homelab-agents` App is already installed on all four to-onboard repos (matrix in
       `docs/github-apps.md`). **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer
@@ -193,9 +200,9 @@ _Last updated: 2026-07-09._
       as the budget-ceiling substitute (no per-task $ cap exists on subscription — loop-safety breaker
       #2 must be re-derived from rate-limit + turn bounds).
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
-      opt-in via AGENT_CRED_INJECT=1, acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push +
-      PR-open with zero pod credentials). REMAINING: flip the goose default on, drop the env/mount
-      fallbacks with FU-020's deny-all, opencode leg.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
+      acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
+      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). REMAINING:
+      drop the env/mount fallbacks with FU-020's deny-all, opencode leg.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
       `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
@@ -264,7 +271,11 @@ _Last updated: 2026-07-09._
 - [ ] **FU-057** — **Retro P2: the retro-facts reflex + cross-run dashboard**
       **BUILT 2026-07-09 (agent-runtime `fu057-exit-status-metrics` + homelab `fu057-fu061-observability`) —
       pending merge + deploy (agent-base image build/pin, ArgoCD sync of pushgateway/dashboards/viewer)
-      + a post-deploy first-render confirmation; delete this item + refs once green.** Delivered:
+      + a post-deploy first-render confirmation; delete this item + refs once green.**
+      **Polish 2026-07-10:** AgentRunNegativeCost + AgentRunInfraDeathBurst PrometheusRules (524c331);
+      KEY_HASH durable end-to-end operator→Secret→launcher env→finalize stats (7224d20, operator
+      3510362, runtime bd6b84b) — first live appearance in oracle-fleet#8's run stats. REMAINING small:
+      ledger-reflex actually consuming `key_hash` for the OpenRouter activity-API backfill. Delivered:
       `exit_status`+`error_class` classifier (validated against the 4 real oracle-fleet runs → 2 clean,
       1 harness-death, 1 auth-storm), pushgateway + `agent_run_*` metrics push, the three dashboards
       (running-agents incl. the stall detector, model-health, cost), goose sessions.db merge in the
