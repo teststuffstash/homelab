@@ -1,0 +1,27 @@
+# Crossplane core composes ARBITRARY k8s kinds (v2), but its SA only holds RBAC for kinds it
+# defines itself — every kind the AgentStack Composition renders must be granted explicitly.
+# Aggregated into the core `crossplane` ClusterRole via the label (the supported extension point).
+# Includes /status: composed-resource readiness reads it. NB roles/rolebindings creation passes
+# the escalation check because the core role already holds secrets access cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-agentstack-composed
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: [cilium.io]
+    resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets, externalsecrets/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [generators.external-secrets.io]
+    resources: [githubaccesstokens, githubaccesstokens/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [openrouter.teststuff.net]
+    resources: [openrouterkeys, openrouterkeys/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings]
+    verbs: [get, list, watch, create, update, patch, delete]

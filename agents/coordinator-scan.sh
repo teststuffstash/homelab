@@ -124,8 +124,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # BACKSTOP (C10 leftover class): an agent-pattern branch (fix/*, feat/*, agent/*) with NO open
     # PR is a closed-PR leftover — a same-named future round dies non-fast-forward on it (live
     # 2026-07-09, defused by hand). Report-only; the fix is `gh pr close --delete-branch` hygiene.
-    heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null || echo '[]')"
-    prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null || echo '[]')"
+    # NB the fallback must live OUTSIDE the $() — `gh api` prints the error BODY to stdout on a 404,
+    # so `$(gh … || echo '[]')` concatenates body+[] (live crash 2026-07-12, a nonexistent claim repo).
+    # Meta-5 probe rule: a failed probe's stdout is NOT a value — validate or zero it.
+    heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null)" || heads='[]'
+    prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
+    jq -e . >/dev/null 2>&1 <<<"$heads" || heads='[]'
+    jq -e . >/dev/null 2>&1 <<<"$prheads" || prheads='[]'
     stale="$(jq -rn --argjson h "$heads" --argjson p "$prheads" '$h - $p | .[] | "  branch \(.) — no open PR (stale; delete or resume)"')"
     [ -n "$stale" ] && orphans="${orphans}[$repo] ⚠ stale agent branches:\n${stale}\n"
     [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
