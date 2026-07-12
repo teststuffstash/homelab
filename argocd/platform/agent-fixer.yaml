@@ -60,6 +60,14 @@ spec:
         automated: { prune: true, selfHeal: true }
         syncOptions:
           - ServerSideApply=true
+          - RespectIgnoreDifferences=true # or selfHeal strips what ignoreDifferences hides
         retry:
           limit: 5
           backoff: { duration: 15s, factor: 2, maxDuration: 5m }
+      # Crossplane injects its bookkeeping INTO the claim's spec (compositionRef/resourceRefs under
+      # spec.crossplane) — without this the AgentStack diffs OutOfSync forever and selfHeal churns.
+      ignoreDifferences:
+        - group: platform.teststuff.net
+          kind: AgentStack
+          jsonPointers:
+            - /spec/crossplane
