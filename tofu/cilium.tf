@@ -36,12 +36,17 @@ resource "helm_release" "cilium" {
     # the relaxed serviceMonitorSelector in monitoring.tf.
     prometheus = { enabled = true, serviceMonitor = { enabled = true } }
     # Hubble flow metrics (drop/dns/tcp/flow/icmp) — network-level observability ≈ continuous tests.
+    # drop carries sourceContext=namespace (label `source`) so the POLICY_DENIED alert can scope to
+    # agent namespaces (FU-020 enforcement: a netpol miss manifests as a worker HANG — the alert
+    # names the cause). relay = the FU-020 harvest prereq: cluster-wide `hubble observe` for the
+    # monitor-phase flow diff (without it flows are per-node + ring-buffered).
     hubble = {
       enabled = true
       metrics = {
-        enabled        = ["dns", "drop", "tcp", "flow", "icmp", "port-distribution"]
+        enabled        = ["dns", "drop:sourceContext=namespace", "tcp", "flow", "icmp", "port-distribution"]
         serviceMonitor = { enabled = true }
       }
+      relay = { enabled = true }
     }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.

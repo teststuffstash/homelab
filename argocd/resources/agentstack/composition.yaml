@@ -11,8 +11,8 @@
 #   6. agentstack-proxy-session-keys Role+Binding — ADR-087 leg A: the egress proxy resolves opaque
 #                                                refs by reading LABELED session Secrets in this ns.
 #                                                Named agentstack-* (NOT openrouter-proxy-session-keys)
-#                                                so migration never collides with the hand-list in
-#                                                agents/coordinator/openrouter-proxy-rbac.yaml.
+#                                                so migration never collided with the retired
+#                                                hand-list's same-named Roles (gapless handoff).
 # Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition

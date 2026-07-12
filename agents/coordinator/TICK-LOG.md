@@ -480,3 +480,26 @@ policy block in the header.
   expected). sleep/platform still stacks.json + fixer dirs; oracle's stacks.json entry stays as
   the probe-failed BELT until the in-cluster reflex is verified reading claims (RBAC granted).
   Scan merge: cluster claims WIN per stack name.
+
+### 2026-07-12 — meta-6 (cont.): FU-048 completed — all stacks on claims; FU-020 rollout ring live
+- **sleep + platform migrated** (sleep-iac claim / fixer-dir claim): both gained worker egress
+  CNPs in MONITOR (`enforce: false` — their first netpols ever, ring 1 of the rollout). Gapless
+  proxy-RBAC handoffs; the openrouter-proxy-rbac.yaml hand-list is GONE (composed per-claim now).
+- **FU-020 alert chain live WITH a positive control**: hubble.relay + drop:sourceContext=namespace
+  (tofu targeted apply + cilium ds rolled — helm alone does NOT restart agents; the ConfigMap was
+  updated but June-vintage pods still exported old labels until the roll). Then a deliberate
+  forbidden egress from an `app=agent-session`-labeled pod in oracle-fleet: curl HUNG (the
+  predicted failure shape), the DROPPED flows were visible cluster-wide via relay, and
+  `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}=16` landed in Prometheus —
+  the exact expr AgentWorkerEgressDropped matches. Extend the alert's ns regex on onboarding.
+- **In-cluster reflex path VERIFIED, zero LLM spend**: a one-off report-only Job (same SA/image/
+  clone as coordinator-reflex, no --spawn) listed all three stacks FROM claims, no fallback warn.
+- **stacks.json NOT deleted — redefined as the committed MIRROR of the claims.** Discovered
+  dependency: the registration lint's repo universe is stacks.json and CI has no cluster access —
+  ADR-085's build-time-discovery question, answered: keep a committed mirror (cluster claims win
+  at runtime; the lint doubles as the mirror's freshness incentive; generating it FROM claims is
+  FU-049's catalog problem).
+- **Decisions recorded** (agentstack.md §Decisions): ONE global coordinator-reflex (per-stack
+  CronJobs only if cadence/isolation diverges — a Composition addition, not a redesign);
+  GitHub-side + `.agents/` recipes stay OUTSIDE the claim (in-cluster GitHub-admin credentials
+  deserve their own ADR; recipes are repo content, versioned with the code they steer).

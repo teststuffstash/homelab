@@ -1,7 +1,8 @@
 {
-  "_comment": "MIGRATING to per-stack AgentStack claims (FU-048 BUILT 2026-07-12; docs/agents/agentstack.md): each stack's -iac repo owns a Crossplane `AgentStack` claim; coordinator-scan.sh reads `kubectl get agentstacks` MERGED over this file (cluster wins per stack name; a PROBE-FAILED kubectl read falls back to this file alone). A migrated stack's entry here is the probe-failed BELT — keep it in sync with the claim until the in-cluster reflex path is verified reading claims, then delete it. `mainRepo` is stack POLICY: the coordinator clones ALL `repos` into /work/<repo> and runs with its cwd in `mainRepo`, so that repo's CLAUDE.md + specs load naturally (the platform MECHANISM — the brief — is still loaded from /work/homelab). Defaults to \"homelab\".",
+  "_comment": "COMMITTED MIRROR of the per-stack AgentStack claims (FU-048, docs/agents/agentstack.md; all three stacks migrated 2026-07-12). The CLUSTER claims are runtime-authoritative: coordinator-scan.sh reads `kubectl get agentstacks` merged over this file (cluster wins per stack name; verified on the reflex path 2026-07-12). This file persists for the two consumers a claim can't serve: (1) BUILD-TIME — agents-registration-lint's repo universe in CI, which has no cluster access (the ADR-085 static-catalog question, resolved as: keep the mirror); (2) the PROBE-FAILED belt when the cluster read fails. Keep entries in sync when a claim changes (generating this file FROM claims is FU-049's catalog problem). `mainRepo` is stack POLICY: the coordinator clones ALL `repos` into /work/<repo> and runs with its cwd in `mainRepo`. Defaults to \"homelab\".",
   "stacks": [
     {
+      "_migrated": "MIRROR of the claim in sleep-iac//sleep-tracking/agent/agentstack.yaml (see _comment).",
       "name": "sleep",
       "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
       "mainRepo": "homelab",
@@ -10,6 +11,7 @@
       "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"]
     },
     {
+      "_migrated": "MIRROR of the claim in agents/fixer/openrouter-operator/agentstack.yaml (see _comment).",
       "name": "platform",
       "repos": ["openrouter-operator"],
       "mainRepo": "homelab",
@@ -19,7 +21,7 @@
     },
     {
       "_chain_policy": "Paid-cached-fast FIRST (agents/README.md model strategy + TICK-LOG meta-2): free tiers rate-limit to a crawl (~8 rpm) and slow models outlive the platform's freshness windows (hy3:free died to the 60-min git-token TTL, paid hy3 to pace/budget at 75+ min). Free tiers are scout-canary material (FU-062 M7), never fix-chain entries.",
-      "_migrated": "OWNED by the AgentStack claim in oracle-iac//oracle-fleet/agent/agentstack.yaml (FU-048) — the cluster claim wins in coordinator-scan's merge; this entry is the probe-failed belt. Delete it once the coordinator-reflex path is verified reading claims.",
+      "_migrated": "MIRROR of the claim in oracle-iac//oracle-fleet/agent/agentstack.yaml — the cluster claim wins at runtime; this entry serves the CI lint + the probe-failed belt (see _comment). Sync on claim changes.",
       "name": "oracle",
       "repos": ["oracle-iac", "oracle-fleet"],
       "mainRepo": "oracle-fleet",

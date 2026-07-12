@@ -134,7 +134,9 @@ _Last updated: 2026-07-12._
       `agents/stacks.json` (so `coordinator-scan` sees it). **Make it repeatable — DONE for layer-2 k8s
       infra (2026-07-06):** the `agent-fixer` ApplicationSet (git directory generator over
       `agents/fixer/*`, `argocd/platform/agent-fixer.yaml`) auto-emits the per-repo Application, so that
-      part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml`.
+      part of onboarding is just adding `agents/fixer/<repo>/{openrouter-key,git-token}.yaml` —
+      **since 2026-07-12 (FU-048): ONE AgentStack claim per stack instead (fixer block per repo);
+      see docs/agents/agentstack.md.**
       **Expanded 2026-07-10 (1b4fa54 + agent-fixer fixes):** the *-iac* fixer dirs (`oracle-iac//*/agent`,
       `sleep-iac//*/agent`) are GitOps-owned via per-repo git generators (NB: generator `values` must
       nest INSIDE the git generator block — sibling placement is CRD-pruned; generator-template
@@ -215,11 +217,16 @@ _Last updated: 2026-07-12._
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-020** — **FIRST STACK LIVE 2026-07-10**: oracle-fleet worker pods under deny-all
-      (CiliumNetworkPolicy `agent-worker-egress`, GitOps-owned in oracle-iac/oracle-fleet/agent/ —
+      (CiliumNetworkPolicy `agent-worker-egress`, now rendered by the oracle AgentStack claim —
       allow: dns, agent-egress proxy+broker, nix-cache, garage, monitoring, GitHub/PyPI/nix FQDNs;
-      NO direct openrouter.ai). Gated on ADR-087 inject default-on. Remaining: validate on the next
-      worker run (issue #8, auto-unblocks on PR #12 merge), then roll to the other stacks + drop the
-      env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
+      NO direct openrouter.ai). Gated on ADR-087 inject default-on. **Rollout progressed
+      2026-07-12 (FU-048 claims):** sleep-tracking + openrouter-operator worker CNPs LIVE in
+      MONITOR (`egress.enforce: false`); `hubble.relay` + `drop:sourceContext=namespace` live
+      (tofu/cilium.tf, agents rolled); `AgentWorkerEgressDropped` alert live WITH a positive
+      control (deliberate forbidden egress from a labeled pod → the predicted hang →
+      `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in Prometheus).
+      Remaining: the issue #8 validation ride (enforced oracle), harvest+flip the two monitor
+      stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
       allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
 - [x] **FU-021 — DONE (2026-07-09, live acceptance passed)** — goose retry policy: hard-stop on
       auth/limit errors (it retried a budget-exhausted 403 812×). Root cause (goose v1.28.0): the
@@ -502,7 +509,9 @@ _Last updated: 2026-07-12._
       main repo's `CLAUDE.md` + specs load as natural cwd context (brief still absolute-pathed from
       `/work/homelab`); `coordinator-scan.sh` passes `--main-repo`. Clones are read-only reference (a direct
       write tier is **FU-059**). Remaining for full FU-045: one-coordinator-per-stack + the `AgentStack` claim
-      are the **FU-048** (XRD) scope; the scheduled tick is **FU-050**.
+      are the **FU-048** (XRD) scope — **both resolved 2026-07-12**: claims live for all three stacks,
+      the swap-point reads them (merge over the stacks.json mirror), and one GLOBAL reflex was decided
+      over per-stack coordinators (agentstack.md §Decisions); the scheduled tick is **FU-050**.
 - [ ] **FU-048** — **BUILT 2026-07-12, first claim = oracle (live).** XRD
       `agentstacks.platform.teststuff.net` + go-templating Composition (`argocd/resources/agentstack/`,
       functions with the providers): per fixer repo renders the git-token trio, the standing
@@ -516,9 +525,17 @@ _Last updated: 2026-07-12._
       (`rbac.crossplane.io/aggregate-to-crossplane`, agentstack/rbac.yaml). Acceptance: throwaway claim
       rendered all 7 kinds + cascade-GC'd; oracle cutover live (hand files deleted from oracle-iac, CNP
       AgentStack-owned + still enforced, token minted, key re-minted, scan sources oracle from the
-      cluster). REMAINING: migrate sleep/platform claims, fold in the GitHub-side + `.agents/` recipes,
-      per-stack coordinator (Composition decision), delete the stacks.json belt entry after the
-      in-cluster reflex verifies, FU-065's test-cluster tier as a policy field. Original:
+      cluster). **COMPLETED 2026-07-12 (second pass):** ALL THREE stacks on claims (sleep →
+      sleep-iac, platform → the fixer dir; hand-list `openrouter-proxy-rbac.yaml` DELETED after
+      gapless per-stack handoffs); in-cluster reflex path VERIFIED (report-only Job, same
+      SA/image/clone — three stacks from claims, no fallback); stacks.json REDEFINED as the
+      committed MIRROR of the claims, not deleted (CI's registration-lint universe + the
+      probe-failed belt — ADR-085's build-time question resolved; generating it FROM claims is
+      FU-049's catalog problem). DECIDED: one GLOBAL coordinator-reflex (per-stack CronJobs only
+      if cadence/isolation ever diverges — a Composition addition); GitHub-side + `.agents/`
+      recipes stay OUTSIDE the claim (in-cluster GitHub-admin creds need their own ADR; recipes
+      are repo content — see agentstack.md §Decisions). REMAINING: FU-065's test-cluster tier as
+      a policy field when rung 2 lands. Original:
       **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
       their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
       gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares

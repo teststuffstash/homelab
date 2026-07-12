@@ -4,9 +4,11 @@
 # `openrouter.teststuff.net/session-key` — RBAC bounds the blast radius, the label check stops the
 # proxy being a generic secret oracle even within it.
 #
-# The per-project Roles/RoleBindings live in agents/coordinator/openrouter-proxy-rbac.yaml (the
-# agent-coordinator app) — this kustomization's namespace transformer would squash their
-# cross-namespace placement. Only the SA lives here.
+# The per-project Roles/RoleBindings (`agentstack-proxy-session-keys`) are COMPOSED by each
+# stack's AgentStack claim (FU-048, argocd/resources/agentstack/composition.yaml) — the hand-list
+# that used to live in agents/coordinator/openrouter-proxy-rbac.yaml is gone (all stacks on
+# claims 2026-07-12). Only the SA lives here (this kustomization's namespace transformer would
+# squash cross-namespace RBAC anyway).
 ---
 apiVersion: v1
 kind: ServiceAccount

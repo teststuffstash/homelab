@@ -14,8 +14,9 @@
 # and the launcher pre-flight (FU-042) refuses double-dispatch — all four breakers hold unattended.
 #
 # Same identity/shape as review-reflex.yaml (the coordinator subsystem's other reflex): SA
-# agent-coordinator, fresh homelab clone each tick (reflex scope ALWAYS derives from the committed
-# stacks.json — reflex-design lesson #4), coordinator image (gh/kubectl/claude baked).
+# agent-coordinator, fresh homelab clone each tick (reflex scope derives from COMMITTED state —
+# reflex-design lesson #4: cluster AgentStack claims merged over the committed stacks.json mirror;
+# verified on this path 2026-07-12, FU-048), coordinator image (gh/kubectl/claude baked).
 ---
 apiVersion: batch/v1
 kind: CronJob

@@ -38,11 +38,11 @@ exist — it belongs to the repo's own deployment, never to the XR):
 | `agents-github-app` ExternalSecret + `agent-git-token-gen` GithubAccessToken + `agent-git-token` ExternalSecret (broker-labeled, ADR-087 leg B) | `agents/fixer/<repo>/git-token.yaml` / `<stack>-iac//<repo>/agent/git-token.yaml` |
 | `OpenRouterKey <repo>` (standing budget key) | `<stack>-iac//<repo>/infra/openrouter-key.yaml` |
 | `agent-worker-egress` CiliumNetworkPolicy with the **monitor→enforce dial** | `<stack>-iac//<repo>/agent/netpol.yaml` (FU-020) |
-| `agentstack-proxy-session-keys` Role+RoleBinding (ADR-087 leg A) | the hand-list in `agents/coordinator/openrouter-proxy-rbac.yaml` |
+| `agentstack-proxy-session-keys` Role+RoleBinding (ADR-087 leg A) | the hand-list that lived in `agents/coordinator/openrouter-proxy-rbac.yaml` (deleted 2026-07-12 — all stacks on claims) |
 
-The composed Role is deliberately named `agentstack-*` (not `openrouter-proxy-session-keys`) so a
-stack's migration never collides with the hand-list's same-named Role — the hand-list entry is
-deleted *after* the claim is Ready, with no RBAC gap.
+The composed Role is deliberately named `agentstack-*` (not `openrouter-proxy-session-keys`) so
+migration never collided with the hand-list's same-named Role — each hand-list entry was deleted
+*after* its claim went Ready, with no RBAC gap.
 
 A repo entry **without** `fixer` is context-only: the coordinator watches/clones it, agents never
 run pods in it (the `-iac` deploy targets, per the FU-052 exclusion).
@@ -62,28 +62,55 @@ Rollout per stack: monitor → harvest flows over ~3 real rides → diff against
 (three-valued: ALLOWED / WOULD-DROP / **PROBE-FAILED** — an empty harvest is a failed probe, not
 "no misses"; github.com flows must appear since every ride clones) → flip `enforce: true` in a
 one-line `-iac` PR. Under enforcement a miss manifests as a worker **hang** (the FU-020 nix-cache
-finding), so watch `hubble_drop_total{reason=POLICY_DENIED}` for the namespace. Harvest prereq
-still open: `hubble.relay` is not enabled (flows are per-node + ring-buffered) — one line in
-`tofu/cilium.tf` when the second stack onboards.
+finding), so the `AgentWorkerEgressDropped` alert
+([`argocd/resources/pushgateway/prometheusrule.yaml`](../../argocd/resources/pushgateway/prometheusrule.yaml))
+names the cause within minutes — extend its namespace regex when onboarding a stack. Both harvest
+prereqs are LIVE (2026-07-12, `tofu/cilium.tf`): `hubble.relay` (cluster-wide
+`hubble observe -n <ns> --verdict DROPPED`, e.g. via
+`kubectl exec -n kube-system ds/cilium -- hubble observe --server <relay-clusterip>:80 …`) and
+`drop:sourceContext=namespace` (the metric's `source` label). The whole chain carries a live
+positive control: a deliberate forbidden egress from a labeled pod in oracle-fleet hung exactly
+as predicted and landed as `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in
+Prometheus.
 
 ## Consumption + migration state
 
-`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point, FU-045) now reads
+`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point, FU-045) reads
 `kubectl get agentstacks -o json` **merged over** `agents/stacks.json` — cluster claims win per
-stack name; a PROBE-FAILED read warns and falls back to the file alone. A migrated stack keeps a
-belt entry in stacks.json (marked `_migrated`) until the in-cluster coordinator-reflex path is
-verified reading claims; the reflex SA has `agentstacks` get/list
-([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml)).
+stack name; a PROBE-FAILED read warns and falls back to the file alone. The reflex SA has
+`agentstacks` get/list ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml));
+the in-cluster path was **verified 2026-07-12** (report-only Job, same SA/image/clone as
+coordinator-reflex: all three stacks listed from claims, no fallback warning).
 
-| Stack | State |
+**All three stacks are on claims (2026-07-12):**
+
+| Stack | Claim |
 |---|---|
-| oracle | **claim** — `oracle-iac//oracle-fleet/agent/agentstack.yaml` (reference); hand files deleted |
-| sleep, platform | stacks.json + `agents/fixer/` / ApplicationSet dirs (migrate = write a claim, delete the dirs) |
+| oracle | `oracle-iac//oracle-fleet/agent/agentstack.yaml` (reference; egress ENFORCED) |
+| sleep | `sleep-iac//sleep-tracking/agent/agentstack.yaml` (egress MONITOR) |
+| platform | `agents/fixer/openrouter-operator/agentstack.yaml` (no `-iac` repo — homelab IS its deployment truth; egress MONITOR) |
 
-Still per-repo, OUTSIDE the XR (the fuller FU-048 endgame): `.agents/` recipes, the GitHub side
-(repos/labels/rulesets/merge-path callers — `tofu/github` + the registration lint), namespaces.
-Not rendered per-stack yet: the coordinator CronJob (one global reflex iterates claims; a
-per-stack control plane is a Composition decision deferred until a second coordinator is needed).
+**stacks.json is NOT deleted — it is the committed MIRROR of the claims.** Two consumers a
+cluster claim cannot serve keep it alive: the registration lint's repo universe in CI (no cluster
+access — ADR-085's build-time-discovery question, resolved as "keep the mirror") and the
+probe-failed belt. Sync it when a claim changes; generating it *from* the claims is FU-049's
+catalog problem.
+
+## Decisions (2026-07-12)
+
+- **One global coordinator-reflex, not per-stack control planes.** The gate already iterates all
+  claims for cents (deterministic, no LLM until work exists) and spawns *scoped* ticks; per-stack
+  CronJobs would multiply idle wakes and pod churn while changing nothing about scoping. Revisit
+  only if one stack's tick cadence must diverge or a stack needs isolation from another's queue —
+  then it's a Composition addition (render a per-stack CronJob from the claim), not a redesign.
+- **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided).** The
+  GitHub side (repo settings/labels/rulesets/callers) lives in `tofu/github` + reusable workflows,
+  applied by a human `tofu apply` with org-admin credentials; folding it in means composing
+  provider-terraform `Workspace`s with a GitHub-App admin credential in-cluster — a real security
+  boundary move that needs its own ADR, not a side effect of FU-048. `.agents/` recipes are repo
+  CONTENT (versioned with the code they steer) — a cluster resource referencing them would only
+  duplicate git. The registration lint + FU-052 checklist remain the stitch across the three
+  surfaces (claim / tofu-github / repo content).
 
 ## Operational notes
 

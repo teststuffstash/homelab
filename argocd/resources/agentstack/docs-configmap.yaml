@@ -88,7 +88,8 @@ data:
     ## Who consumes the claim
 
     `coordinator-scan` (the deterministic gate in front of the LLM coordinator) reads
-    `kubectl get agentstacks -o json` as the stack-list source of truth, merged over the
-    legacy `agents/stacks.json` (cluster claims win per stack name).
+    `kubectl get agentstacks -o json` as the stack-list source of truth, merged over homelab's
+    `agents/stacks.json` (cluster claims win per stack name; the file persists as the committed
+    MIRROR for CI's registration lint + the probe-failed belt — keep it in sync with your claim).
 
     More context (design, migration state): homelab `docs/agents/agentstack.md`.

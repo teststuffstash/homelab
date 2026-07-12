@@ -2,8 +2,9 @@
 # agents-registration-lint — the stale-registration gate (TICK-LOG meta-session 1: FIVE of six
 # reflex gaps in one day were this class — a repo in the stack registry missing from some
 # per-identity token list). Deterministic check: every repo in agents/stacks.json appears in the
-# coordinator-git AND reviewer-git `repositories:` lists. Interim until the AgentStack XRD (FU-048)
-# renders all of these from one claim; runs in CI next to argocd-validate-pins.
+# coordinator-git AND reviewer-git `repositories:` lists. stacks.json is the committed MIRROR of
+# the AgentStack claims (FU-048; CI has no cluster access — the ADR-085 build-time question), so
+# this lint doubles as the mirror's freshness incentive; runs in CI next to argocd-validate-pins.
 #
 #   devbox run agents-registration-lint
 set -euo pipefail

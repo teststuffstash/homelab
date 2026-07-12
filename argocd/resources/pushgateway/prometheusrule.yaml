@@ -29,3 +29,17 @@ spec:
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns."
+        # FU-020 enforcement made loud: a worker egress miss under deny-all manifests as a HANG
+        # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
+        # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
+        # the namespace (hubble drop metric runs sourceContext=namespace, tofu/cilium.tf); scoped to
+        # worker namespaces via the AgentStack-claim convention ns==repo — extend the regex when a
+        # new stack's fixer repo onboards (or it enforces before its alert exists).
+        - alert: AgentWorkerEgressDropped
+          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator"}[5m])) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
+            description: "Sustained POLICY_DENIED drops from namespace {{ $labels.source }} — an agent-worker-egress allowlist miss (or an attempted forbidden exit). If a ride is in flight it is probably HUNG on this. Diff the flows: hubble observe -n {{ $labels.source }} --verdict DROPPED (relay). Legit destination → add to the claim's egress.extraFQDNs."
