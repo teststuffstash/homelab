@@ -22,8 +22,19 @@ spec:
             description: "agent_run_cost_usd={{ $value }} for pod-pushed run (model {{ $labels.model }}, round {{ $labels.round }}) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class."
         # An infra-death burst: ≥3 non-clean terminal runs in an hour on one project means a wall,
         # not bad luck — the meta-2 pattern (three attempts, three walls) as an alert.
+        # Pushgateway serves every pushed group FOREVER, so the rule must gate on push freshness:
+        # the old count_over_time form counted SCRAPES of stale gauges (~120/h each), and one
+        # 3-day-old auth-storm residue (sleep-tracking#20, the FU-021 acceptance test) kept it
+        # firing for 2+ days (found 2026-07-12). A run-group is keyed (project, issue, role,
+        # round) and holds one agent_run_total series, so "runs in the last hour" = groups whose
+        # push_time_seconds is <1h old.
         - alert: AgentRunInfraDeathBurst
-          expr: sum by (project) (count_over_time(agent_run_total{exit_status!~"clean|ci-failed"}[1h])) >= 3
+          expr: |
+            count by (project) (
+                agent_run_total{exit_status!~"clean|ci-failed"}
+              and on (project, issue, role, round)
+                (time() - push_time_seconds{job="agent_run"}) < 3600
+            ) >= 3
           labels:
             severity: warning
           annotations:

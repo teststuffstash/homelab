@@ -153,6 +153,7 @@ query($org:String!, $cursor:String) {
             labels(first:15){ nodes { name } }
             reviews(last:30){ nodes { author { login } state submittedAt } }
             commits(last:1){ nodes { commit { committedDate statusCheckRollup { state } } } }
+            headCommits: commits(last:1){ nodes { commit { committedDate } } }
           }
         }
       }
@@ -222,8 +223,14 @@ def collect_open_prs(lines):
                     if lab:
                         lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
                 # ISO-8601 UTC strings compare correctly as strings; head_at "" (no commit data)
-                # disables the count rather than inventing one.
-                head_at = (commit or {}).get("committedDate") or ""
+                # disables the count rather than inventing one. Read committedDate from the
+                # ALIASED headCommits selection: without Commit statuses:read the FORBIDDEN
+                # statusCheckRollup nulls the whole shared commits element (committedDate dies
+                # with it — found live 2026-07-12: zero reviews_since_head in-cluster while the
+                # broader-scoped jail token emitted fine); the alias carries no forbidden field.
+                head_commits = (pr.get("headCommits") or {}).get("nodes") or []
+                head_commit = (head_commits[0] or {}).get("commit") if head_commits else None
+                head_at = (head_commit or {}).get("committedDate") or ""
                 verdicts = {}
                 for rv in (pr.get("reviews") or {}).get("nodes") or []:
                     if not rv or rv.get("state") not in ("APPROVED", "CHANGES_REQUESTED"):

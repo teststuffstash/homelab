@@ -101,7 +101,9 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           resources:
             requests: { cpu: "25m", memory: "64Mi" }
-            limits:   { cpu: "500m", memory: "256Mi" }
+            # cpu 500m → 1: the per-tick s5cmd sync + sync.py burst ran 81% CPU-throttled
+            # (CPUThrottlingHigh, 2026-07-12) — slow mirrors, no benefit from the tight cap.
+            limits:   { cpu: "1", memory: "256Mi" }
       volumes:
         - name: claude-data
           emptyDir: {}
