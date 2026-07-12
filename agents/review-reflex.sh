@@ -19,7 +19,7 @@
 # unit of at-most-once dispatch (concurrencyPolicy: Forbid on the CronJob prevents overlapping ticks).
 #
 #   Env (all optional): AGENT_REPOS="sleep-tracking snore-recorder"  ORG=teststuffstash
-#                       REVIEW_CONCURRENCY=2  REVIEWER_NS=agent-coordinator
+#                       REVIEW_CONCURRENCY=2  REVIEWER_NS=agent-coordinator  REVIEWER_LOGIN=homelab-reviewer
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -38,6 +38,7 @@ else
 fi
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-agent-coordinator}"
+REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
@@ -75,6 +76,13 @@ for repo in $REPOS; do
   #              ∧ NOT `automerge`-labelled ∧ ( not-BEHIND unless it's a RE-review ).
   #   green: every check present is a success-equivalent AND at least one check ran (never rubber-stamp a no-CI PR).
   #   BEHIND → updater's job; DIRTY → conflict (coordinator's job); APPROVED → already merging.
+  #   "unreviewed" means THE REVIEWER BOT hasn't approved the current head — NOT reviewDecision !=
+  #   APPROVED. On code-owner-gated repos (oracle-fleet: /specs/ + /.agents/ gate on Rasmus,
+  #   tofu/github/variables.tf) reviewDecision stays REVIEW_REQUIRED after a bot approval, waiting
+  #   for the human; conflating the two re-dispatched a reviewer EVERY tick — 12 duplicate approvals
+  #   in 90 min on oracle-fleet#13 until the subscription session limit cut it off (2026-07-12).
+  #   A bot approval OLDER than the newest commit doesn't count (new push → genuine re-review), and
+  #   a DISMISSED approval doesn't either — so a human can dismiss the bot's review to force one.
   #   BEHIND *re-review* exception (deadlock found live on oracle-fleet#6, 2026-07-09): the adRise
   #   updater refuses any PR with a changes-requested review, so CHANGES_REQUESTED + fix pushed +
   #   master moved = updater waits for the review, reflex waited for the updater — forever. A
@@ -88,7 +96,7 @@ for repo in $REPOS; do
   #   bumps (devbox-update.sh gate, FU-022) are HUMAN-GATED and COORDINATOR-owned — the coordinator
   #   dispatches their investigation review directly (even while red) and hands off to a human; the reflex
   #   must NOT reach across the arming wall for them, or the two would fight over one PR. See merge-path.md.
-  pick="$(printf '%s' "$prs" | jq -r '
+  pick="$(printf '%s' "$prs" | jq -r --arg bot "$REVIEWER_LOGIN" '
     def green:
       ([ .statusCheckRollup[]? | (.conclusion // .state // "") ]) as $c
       | ($c | length) > 0
@@ -99,6 +107,11 @@ for repo in $REPOS; do
       ([ .commits[]?.committedDate ] | max) // "";
     def reviewable_again:
       (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
+    def bot_approved_head:
+      ([ .reviews[]?
+         | select(((.author.login // "") | sub("\\[bot\\]$"; "")) == $bot)
+         | select(.state == "APPROVED")
+         | .submittedAt ] | max // "") > newest_commit_at;
     [ .[]
       | select(.isDraft | not)
       | select(([ .labels[]?.name ] | index("automerge")) | not)
@@ -108,6 +121,7 @@ for repo in $REPOS; do
       | select(green)
       | select((.reviewDecision // "") != "APPROVED")
       | select(((.reviewDecision // "") != "CHANGES_REQUESTED") or reviewable_again)
+      | select(bot_approved_head | not)
     ] | sort_by(.createdAt) | (.[0].number // empty)
   ')"
 

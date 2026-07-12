@@ -541,3 +541,18 @@ policy block in the header.
 - OTel question (operator): Cilium/Hubble have NO supported OTel emitter; the circulating
   hubble-otel adapter is archived/unmaintained → rejected. Maintained flow-event path if ever
   needed = hubble.export → Alloy → Loki, filed as FU-067.
+
+### 2026-07-12 — meta-6 (cont. 4): the review-reflex looped on #13's human gate — predicate fixed
+- Cont. 2 called #13's CODEOWNERS wait "a HUMAN GATE, not a stall" but missed the corollary: the
+  reflex read `reviewDecision != APPROVED` as *unreviewed*, and on a code-owner-gated repo a bot
+  approval never flips that field. Every 5-min tick re-dispatched the reviewer → **12 duplicate
+  approvals 15:16Z–16:39Z** until the operator subscription session limit killed the 13th
+  (`reviewer-oracle-fleet-13-190506`, the error the operator spotted). Sleep repos never hit this
+  — there the bot approval satisfies the 1-approval rule and `reviewDecision` goes `APPROVED`.
+- Fix (this commit): "unreviewed" = the reviewer bot has no APPROVED review newer than the newest
+  commit (`bot_approved_head` in `agents/review-reflex.sh`), independent of `reviewDecision`.
+  Verified against live PR data: #13 old-pick=true → new-pick=false; all other repos unchanged.
+  Dismissing the bot's review or pushing new commits still forces a re-review.
+- Reflex CronJob was suspended during diagnosis; un-suspended after the fix reached master (the
+  tick clones master, so push = deploy). Cost of the incident: ~12 burned reviewer sessions +
+  ~20 duplicate review comments on #13 (left in place; read the newest approval only).

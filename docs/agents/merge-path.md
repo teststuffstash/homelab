@@ -81,7 +81,10 @@ Four deterministic pieces around the existing gates:
 3. **Review reflex** — the *coordinator subsystem's* deterministic half: a CronJob in ns
    `agent-coordinator` (it holds both reviewer secrets), pure bash + `gh`, every ~5 min: across
    the agent repos, list open PRs; filter **green AND up-to-date AND auto-merge-armed AND
-   unapproved AND no changes-requested**; pick the oldest **one per repo** (within a repo, reviews
+   unapproved AND no changes-requested** (*unapproved* = the reviewer bot has no approval at the
+   current head — NOT GitHub's `reviewDecision`, which on code-owner-gated repos stays
+   `REVIEW_REQUIRED` until the human owner approves; see the edge case below); pick the oldest
+   **one per repo** (within a repo, reviews
    must serialize — see below); run `agents/reviewer-session.sh <repo> <pr>` for each, **capped at
    K concurrent reviewer pods globally** (start K=2). Cross-repo reviews can't invalidate each
    other (masters move independently), so the per-repo serialization that protects review
@@ -435,6 +438,14 @@ contract-versioning discipline), not a merge-path mechanism.
   approval) but re-triggers CI → PR re-enters the queue. The *request-changes review itself*
   survives new pushes; the reviewer must re-review and approve — the reflex must treat
   "changes-requested by reviewer-bot + new commits since" as reviewable again.
+- **Code-owner-gated repo — bot approval never flips `reviewDecision`** (found live:
+  oracle-fleet#13, 2026-07-12). With `require_code_owner_review` (oracle-fleet gates `/specs/` +
+  `/.agents/` on Rasmus), `reviewDecision` stays `REVIEW_REQUIRED` after the reviewer approves —
+  it waits for the human. Reading `reviewDecision != APPROVED` as "unreviewed" re-dispatched a
+  reviewer every tick: 12 duplicate approvals in 90 min until the subscription session limit cut
+  it off. The reflex therefore tests "reviewer-bot approval newer than the newest commit"
+  directly: the bot approves once, then the PR parks awaiting the code owner (auto-merge fires on
+  their approval). Dismissing the bot's review forces a re-review; a new push does too.
 - **Flaky CI** — a flaky red steals the PR's queue slot (next PR gets updated first). Acceptable:
   FIFO is a fairness preference, not a correctness requirement.
 - **Concurrent triggers / locking** — cron tick + wake-up ping firing together must never
