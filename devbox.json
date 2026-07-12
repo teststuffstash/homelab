@@ -124,6 +124,9 @@
       ],
       "stack-lint": [
         "bash scripts/stack-lint.sh \"$@\""
+      ],
+      "new-stack": [
+        "bash scripts/new-stack.sh \"$@\""
       ]
     }
   }
