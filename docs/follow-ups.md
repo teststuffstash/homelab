@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-068**.
+  Next free id: **FU-069**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -483,6 +483,18 @@ _Last updated: 2026-07-12._
       **verify on the first real major bump** that Renovate leaves a manually-edited branch alone and the
       worker pushes to `renovate/*` (not a new `agent/*`). **P3 (later):** a longer cooldown on majors so a
       human CAN opt into an interactive LLM session for the riskiest. Relates to FU-041, FU-044, FU-014.
+- [ ] **FU-068** — **Labels move into the AgentStack claim via `provider-upjet-github` (the
+      GitHub-side permission-tier split).** Administration tier (repos/rulesets/org secrets) stays in
+      out-of-jail `tofu/github` permanently — that credential never enters jail or cluster. Issues
+      tier (labels, `Issues:R/W` only) becomes stack self-service: `spec.repos[].labels` on the
+      claim; the Composition renders the composed label set (platform taxonomy + stack extras) per
+      repo. Steps: dedicated labels GitHub App (Issues:R/W, org-wide install — the one click) →
+      PEM into Infisical/ESO → ProviderConfig → install `provider-upjet-github` (v0.19.x, wraps
+      terraform-provider-github v6.6.0) → extend XRD+Composition → migrate per repo *claim-first*
+      (composed `IssueLabels` synced, THEN drop the repo from `label_repos` — the generated resource
+      is AUTHORITATIVE `github_issue_labels`, it deletes unmanaged labels; two managers fight).
+      Design: [`docs/agents/agentstack.md`](agents/agentstack.md) §"The GitHub side". Relates
+      FU-048, ADR-085.
       **Status (2026-07-05):** the MECHANICAL sibling leg is proven live — sleep-tracking#14 (docker digest,
       `automerge`) rode `renovate-approve` → auto-merge with no LLM (that's the FU-014 half). The
       *analogous* reviewable-with-a-worker pattern is proven via the **coordinator major lane** (FU-047,

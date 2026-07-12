@@ -103,14 +103,59 @@ catalog problem.
   CronJobs would multiply idle wakes and pod churn while changing nothing about scoping. Revisit
   only if one stack's tick cadence must diverge or a stack needs isolation from another's queue —
   then it's a Composition addition (render a per-stack CronJob from the claim), not a redesign.
-- **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided).** The
-  GitHub side (repo settings/labels/rulesets/callers) lives in `tofu/github` + reusable workflows,
-  applied by a human `tofu apply` with org-admin credentials; folding it in means composing
-  provider-terraform `Workspace`s with a GitHub-App admin credential in-cluster — a real security
-  boundary move that needs its own ADR, not a side effect of FU-048. `.agents/` recipes are repo
-  CONTENT (versioned with the code they steer) — a cluster resource referencing them would only
-  duplicate git. The registration lint + FU-052 checklist remain the stitch across the three
-  surfaces (claim / tofu-github / repo content).
+- **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided) — refined
+  same day by the permission-tier split below (FU-068):** the *Issues-tier* slice (labels) has a
+  designed in-cluster path via `provider-upjet-github`; the *Administration-tier* slice
+  (repos/rulesets/org secrets) stays in `tofu/github` deliberately, not as a deferral. `.agents/`
+  recipes are repo CONTENT (versioned with the code they steer) — a cluster resource referencing
+  them would only duplicate git. The registration lint + FU-052 checklist remain the stitch across
+  the three surfaces (claim / tofu-github / repo content).
+
+## The GitHub side: split by permission tier, not migrated wholesale (FU-068)
+
+**Design set 2026-07-12.** `tofu/github` is not one thing — it spans two GitHub permission tiers,
+and they belong on different sides of the cluster boundary:
+
+- **Administration tier stays in out-of-jail tofu, permanently.** Repos (`repos.tf`), rulesets
+  (org + per-repo), org Actions secrets — all need `Administration:write`, and the whole security
+  model of the agent platform is that this credential exists only in the operator's hands, never
+  in a jail or the cluster (the bypass asymmetry: owner pushes bypass rulesets, the agents App
+  can't reach master). Moving this tier in-cluster would put an org-admin credential where agents
+  run; that's an ADR-scale boundary change, and the default answer is no.
+- **Issues tier (labels) moves into the claim.** Labels need only `Issues:R/W` — small blast
+  radius (can vandalize issues/labels org-wide; can't touch code, settings, or protection). This
+  is the slice where stacks get self-service: `spec.repos[].labels` on the `AgentStack` claim, and
+  the Composition renders the label set per repo = **platform taxonomy (`agent-fix`, `agent/*`,
+  `agent-budget/*`) merged with the stack's extras**. Stacks write claims, never raw GitHub
+  managed resources — MRs are cluster-scoped, so a raw MR could target another stack's repo; the
+  Composition keeps scoping by construction (`repository:` comes from `spec.repos[].name`).
+
+**Mechanism: [`provider-upjet-github`](https://github.com/crossplane-contrib/provider-upjet-github)**
+(crossplane-contrib community extension; v0.19.1 2026-05-23; wraps terraform-provider-github
+**v6.6.0**). Checked 2026-07-12: the generated `repo` group includes `IssueLabels`, `Repository`,
+`RepositoryRuleset`, `BranchProtection`; the ProviderConfig supports **GitHub App auth**
+(`app_auth` with id + installation id + PEM as a `\n`-escaped single line). Not provider-terraform
+`Workspace`s — those need a state backend, drift at workspace granularity, and can't be composed
+per-repo from the claim.
+
+⚠ **The authoritative-labels gotcha.** The provider generates `IssueLabels` (=
+`github_issue_labels`, plural) — it **owns the repo's entire label set and deletes unmanaged
+labels**. `labels.tf` deliberately uses the singular, non-authoritative `github_issue_label`
+("other labels are left alone"). So this is not "add a second manager": label ownership moves
+**wholesale per repo** — add labels to the claim → verify the composed `IssueLabels` synced →
+remove the repo from `label_repos` in `tofu/github` (claim first, tofu second, same discipline as
+the proxy-RBAC hand-list migration). Two managers on one repo will fight, and the authoritative
+one wins by deleting.
+
+**Credential:** a dedicated **labels GitHub App** — `Issues:R/W` only, installed org-wide on *All
+repositories* (new repos covered without a click; the install itself is the one click ever, per
+the "only App installations are click-only" goal). Bootstrap like the other apps
+(`scripts/github-*-app-bootstrap.sh` pattern), PEM → Infisical → ESO → the ProviderConfig
+credential Secret. Do **not** widen the agents App with `Issues:write` — credentials stay
+per-purpose.
+
+**End state:** Administration tier = out-of-jail tofu with the fine-grained admin PAT; Issues tier
+= claim-rendered via provider-upjet-github; clicks = App installations only.
 
 ## Operational notes
 
