@@ -503,3 +503,30 @@ policy block in the header.
   CronJobs only if cadence/isolation diverges — a Composition addition, not a redesign);
   GitHub-side + `.agents/` recipes stay OUTSIDE the claim (in-cluster GitHub-admin credentials
   deserve their own ADR; recipes are repo content, versioned with the code they steer).
+
+### 2026-07-12 — meta-6 (cont. 2): the #8 stall broken by one supervised gate firing; FU-020 ride validated
+- **The stall the operator flagged**: PR #13 CHANGES_REQUESTED for 2 days — round-2 dispatch is
+  the coordinator's move and the reflex is SUSPENDED. Resolution: ONE manual
+  `coordinator-scan --spawn` (the designed middle path — no autonomy flip). The tick arbitrated
+  per meta-4 (blocking = the unflagged specs/ edit, by repo rule 2; three findings scoped out as
+  follow-ups), minted round-2 key ($0.25 cap), dispatched on the PR branch.
+- **FU-020 VALIDATION RIDE — CLEAN**: round 2 under enforced deny-all + broker creds +
+  claim-composed infra: 441s, $0.0347, ci green, exit clean, key_hash in stats, armed_by_pod.
+  Review-reflex re-dispatched the reviewer automatically → APPROVED 15:16Z.
+- **PR #13's terminal state is a HUMAN GATE, not a stall**: it touches specs/, and CODEOWNERS
+  (/specs/ @RasmusSoot) + require_code_owner_review route the spec diff to the operator BY
+  DESIGN. Auto-merge armed; merges on his approval. (Round 1's blocking finding was exactly
+  this diff unflagged — the loop worked end-to-end.)
+- **Unclassified: ~150 POLICY_DENIED drops from oracle-fleet DURING the clean ride** — something
+  non-essential retried against the allowlist the whole run (candidates: goose telemetry, a
+  direct openrouter.ai attempt — the latter is the policy doing its job). The flow ring buffer
+  rotated before I queried it: **the harvest must run LIVE (`hubble observe --follow`) during a
+  ride** — binding lesson for the monitor-stack harvests.
+- **FU-050 unsuspend precondition MET**: this was the clean supervised acceptance round. The
+  switch stays the operator's.
+- **Probe instance EIGHT**: my PR-poll wrapped gh's --jq in the wrong quoting layer → 11 polls
+  of PROBE-FAILED (labeled correctly at least — the loop design held, the probe itself was bad).
+- **New dashboard: "Agents — issue drill-down"** (uid agent-issue, pushgateway app): per
+  project/issue rounds table (cost/duration/exit_status/model), cost-per-round, POLICY_DENIED
+  stat, project-scoped OTLP control-plane cost/tokens, Loki worker logs; links to the
+  transcripts viewer (the trace substitute until Tempo + CC traces GA).

@@ -10,3 +10,14 @@ resources:
   - service.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
+
+# Per-issue drill-down over the agent_run_* labels this pushgateway carries (project/issue/round/
+# role) + the OTLP claude_code_* metrics + Loki worker logs. Same sidecar-discovery pattern as
+# github-exporter's dashboard; the three aggregate agent dashboards live in tofu/dashboards/.
+configMapGenerator:
+  - name: grafana-dashboard-agent-issue
+    files:
+      - agent-issue.json=dashboard-agent-issue.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces

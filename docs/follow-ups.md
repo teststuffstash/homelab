@@ -225,8 +225,14 @@ _Last updated: 2026-07-12._
       (tofu/cilium.tf, agents rolled); `AgentWorkerEgressDropped` alert live WITH a positive
       control (deliberate forbidden egress from a labeled pod → the predicted hang →
       `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in Prometheus).
-      Remaining: the issue #8 validation ride (enforced oracle), harvest+flip the two monitor
-      stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
+      **VALIDATION RIDE DONE 2026-07-12**: issue #8 round 2 ran CLEAN under enforced deny-all +
+      broker creds + claim-composed infra (441s, $0.0347, exit clean, key_hash in stats).
+      Unclassified tail: ~150 POLICY_DENIED drops from the namespace DURING the clean ride
+      (something non-essential retried against the allowlist — likely goose telemetry or a direct
+      openrouter.ai attempt, which the policy exists to stop); the flow buffer rotated before
+      classification — **harvest must run LIVE during a ride** (`hubble observe --follow`), noted
+      for the monitor-stack harvests. Remaining: live-classify the drop source on the next ride,
+      harvest+flip the two monitor stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
       allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
 - [x] **FU-021 — DONE (2026-07-09, live acceptance passed)** — goose retry policy: hard-stop on
       auth/limit errors (it retried a budget-exhausted 403 812×). Root cause (goose v1.28.0): the
@@ -560,7 +566,13 @@ _Last updated: 2026-07-12._
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 - [ ] **FU-050** — **BUILT 2026-07-09 night (98d42f3): CronJob deployed SUSPENDED (unsuspend = the
       autonomy switch, after a clean supervised acceptance round) + scan v2 C4/C5 predicate (verified
-      live on oracle-fleet#1's real stall). Red-beyond-T stays open (needs checks:read).** Original:
+      live on oracle-fleet#1's real stall). Red-beyond-T stays open (needs checks:read).**
+      **The supervised acceptance round RAN CLEAN 2026-07-12** (manual `coordinator-scan --spawn`,
+      one firing): tick arbitrated #8/PR#13 per the meta-4 doctrine (one blocking finding, three
+      follow-ups scoped out), dispatched round 2, worker clean, reviewer re-approved — the PR now
+      waits only on the CODEOWNERS spec gate (human, by design). The unsuspend precondition is met;
+      flipping it is the operator's call:
+      `kubectl -n agent-coordinator patch cronjob coordinator-reflex -p '{"spec":{"suspend":false}}'` Original:
       **`coordinator-reflex` CronJob + scan v2.** Run `coordinator-scan --spawn` on a schedule
       (the LLM sibling of `review-reflex`, gated so it never wakes emptily). Plus the v2 predicate that needs
       pod/checks access: `agent/in-progress`+worker-done (round finished / worker failed) and red-beyond-T.

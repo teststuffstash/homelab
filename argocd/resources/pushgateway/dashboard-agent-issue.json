@@ -1,0 +1,167 @@
+{
+  "title": "Agents — issue drill-down",
+  "uid": "agent-issue",
+  "tags": ["agents", "fu-057"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "links": [
+    {
+      "title": "Transcripts viewer (turn-by-turn, grouped by issue — the trace substitute until Tempo)",
+      "type": "link",
+      "url": "https://transcripts.local.teststuff.net",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(agent_run_total, project)",
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "issue",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(agent_run_total{project=\"$project\"}, issue)",
+        "refresh": 2,
+        "sort": 3
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Issue cost (worker rounds)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(agent_run_cost_usd{project=\"$project\", issue=\"$issue\"}) or vector(0)", "instant": true }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Rounds pushed",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "count(agent_run_total{project=\"$project\", issue=\"$issue\"}) or vector(0)", "instant": true }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Worker wall time (all rounds)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(agent_run_duration_s{project=\"$project\", issue=\"$issue\"}) or vector(0)", "instant": true }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Egress policy drops in $project (1h)",
+      "description": "POLICY_DENIED from the project namespace (FU-020). Non-zero during a ride = a netpol allowlist miss or a forbidden exit attempt — the worker is probably HUNG on it (AgentWorkerEgressDropped alert).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(increase(hubble_drop_total{reason=\"POLICY_DENIED\", source=\"$project\"}[1h])) or vector(0)", "instant": true }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Rounds — cost / duration / outcome",
+      "description": "One row per pushed round (pushgateway keeps the LAST push per project/issue/round/role group). Worker pod names live in the Loki panel below and the AGENT_RUN_STATS line; per-turn detail is the transcripts viewer (dashboard link).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "agent_run_cost_usd{project=\"$project\", issue=\"$issue\"}", "instant": true, "format": "table", "refId": "A" },
+        { "expr": "agent_run_duration_s{project=\"$project\", issue=\"$issue\"}", "instant": true, "format": "table", "refId": "B" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true, "__name__": true, "container": true, "endpoint": true, "instance": true,
+              "job": true, "namespace": true, "pod": true, "service": true, "project": true, "issue": true
+            },
+            "renameByName": { "Value #A": "cost USD", "Value #B": "duration s" }
+          }
+        },
+        { "id": "sortBy", "options": { "sort": [ { "field": "round" } ] } }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "Cost per round",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 4 },
+      "options": { "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (round, role) (agent_run_cost_usd{project=\"$project\", issue=\"$issue\"})", "instant": true, "legendFormat": "round {{round}} ({{role}})" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "bargauge",
+      "title": "Control-plane cost by role — $project (OTLP, ALL issues)",
+      "description": "claude_code_* metrics (coordinator/reviewer via the A0 OTLP rail) carry project and pr but NO issue label — this panel is project-scoped, not issue-scoped.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 12 },
+      "options": { "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (role) (claude_code_cost_usage_USD_total{project=\"$project\"})", "instant": true, "legendFormat": "{{role}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Control-plane tokens by model — $project (ALL issues)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 12 },
+      "options": { "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (model) (claude_code_token_usage_tokens_total{project=\"$project\"})", "instant": true, "legendFormat": "{{model}}" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Worker pods running in $project",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 12 },
+      "targets": [
+        { "expr": "sum(kube_pod_status_phase{phase=\"Running\", namespace=\"$project\", pod=~\"agent-.*\"}) or vector(0)", "legendFormat": "workers" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "Worker pod logs — $project (all issues; grep the AGENT_RUN_STATS line for issue/pod mapping)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
+      "targets": [
+        { "expr": "{namespace=\"$project\", pod=~\"agent-.*\"}", "refId": "A" }
+      ]
+    }
+  ]
+}
