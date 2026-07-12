@@ -448,3 +448,35 @@ branch checkout (not LLM-dependent); (D) reviewer methodology "execute the engin
 into review.md; (E) autonomy-as-dial (Turnstone) for P3; (F) bucket prefix stack-vs-project;
 (G) direct-push-bypass on this log — DECIDED 2026-07-09 (meta-3): gate-exempt, see the
 policy block in the header.
+
+### 2026-07-12 — meta-6: FU-048 AgentStack XRD built; oracle is the first claim (solo meta-session)
+- **FU-048 BUILT + ACCEPTED**: cluster-scoped `AgentStack` XRD + go-templating Composition
+  (Crossplane 2.3.2, function pipeline). One claim per stack renders the fixer MECHANISM per repo:
+  git-token trio, standing OpenRouterKey, worker egress CNP, proxy session-key RBAC. The FU-020
+  rollout strategy is ENCODED AS API: CNP = baseline + ecosystem profile + extraFQDNs with an
+  `egress.enforce` dial — false attaches the allowlist with `enableDefaultDeny.egress:false`
+  (monitor: DNS visibility, nothing blocked; harvest→diff→flip). New stacks onboard in monitor;
+  oracle carried over enforce=true (already live under deny-all). hubble.relay still off — the
+  harvest prereq, enable when the second stack onboards.
+- **Dual-surface documentation convention** (the FU-049 seed): the XRD schema IS the reference
+  (`kubectl explain agentstacks.spec --recursive`); the quickstart is an in-cluster ConfigMap
+  found FROM the XRD (`platform.teststuff.net/docs-configmap` annotation; ConfigMaps labeled
+  `platform.teststuff.net/docs=true` enumerate every capability doc). A kubectl-only agent gets
+  from `kubectl get xrd` to a working claim without leaving the API. Human/design doc:
+  docs/agents/agentstack.md.
+- **Platform gotcha worth keeping**: crossplane core's SA holds NO RBAC for arbitrary composed
+  kinds — first render 403'd on ciliumnetworkpolicies. Fix = aggregated ClusterRole
+  (`rbac.crossplane.io/aggregate-to-crossplane`, argocd/resources/agentstack/rbac.yaml); extend
+  it whenever a Composition grows a new kind.
+- **Probe instances SIX and SEVEN in 4 days**: (6) coordinator-scan's stale-branch check —
+  `$(gh api … || echo '[]')` concatenates the 404 BODY with the fallback (gh prints error bodies
+  to stdout) → --argjson crash killed the whole scan; surfaced by the render-test claim's fake
+  repos; fixed = fallback OUTSIDE the substitution + jq-validate both probe values. (7) my own
+  acceptance poll: zsh does NOT word-split `$KC` → 30 polls read a DEPLOYED XRD as "absent"
+  (the 2>/dev/null ate the real error). The rule compounds: any JSON crossing a boundary gets
+  jq-validated; any poll loop needs one positive-control iteration before trusting "absent".
+- **Migration state**: oracle policy lives in oracle-iac (claim; hand files deleted same-commit —
+  crossplane won't adopt, so prune-then-compose, one transient round; OpenRouterKey re-minted as
+  expected). sleep/platform still stacks.json + fixer dirs; oracle's stacks.json entry stays as
+  the probe-failed BELT until the in-cluster reflex is verified reading claims (RBAC granted).
+  Scan merge: cluster claims WIN per stack name.

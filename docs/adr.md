@@ -546,7 +546,8 @@ health/rollback is deferred (**FU-044**, in-cluster off ArgoCD events); the coor
 per-stack (**FU-045**). Full design + runbook: [`sleep-iac.md`](sleep-iac.md).
 
 ### ADR-085 — Agents framework & platform services published as Crossplane XRDs; stacks own their policy
-**Status:** Open (direction set 2026-07-05; first cut built + ran live). **Decision (direction):** homelab is a *platform*, not the
+**Status:** Open (direction set 2026-07-05; first cut built + ran live; **AgentStack XRD BUILT 2026-07-12,
+oracle on a claim — FU-048, `docs/agents/agentstack.md`; FU-049 service XRDs still open**). **Decision (direction):** homelab is a *platform*, not the
 owner of each stack's agent config — it **publishes** its capabilities as Crossplane XRDs and stacks
 self-serve. (1) An **`AgentStack` XRD + Composition** renders a stack's control plane (coordinator
 gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares

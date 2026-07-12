@@ -503,7 +503,23 @@ _Last updated: 2026-07-12._
       `/work/homelab`); `coordinator-scan.sh` passes `--main-repo`. Clones are read-only reference (a direct
       write tier is **FU-059**). Remaining for full FU-045: one-coordinator-per-stack + the `AgentStack` claim
       are the **FU-048** (XRD) scope; the scheduled tick is **FU-050**.
-- [ ] **FU-048** — **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
+- [ ] **FU-048** — **BUILT 2026-07-12, first claim = oracle (live).** XRD
+      `agentstacks.platform.teststuff.net` + go-templating Composition (`argocd/resources/agentstack/`,
+      functions with the providers): per fixer repo renders the git-token trio, the standing
+      OpenRouterKey, the worker egress CNP (baseline+profile+extraFQDNs with the monitor→enforce dial
+      below), and `agentstack-proxy-session-keys` RBAC (name ≠ the hand-list's — gapless migration).
+      `stacks_json()` FLIPPED: cluster claims merged over stacks.json (probe-first fallback; reflex SA
+      granted agentstacks read). Docs dual-surface: `docs/agents/agentstack.md` + the in-cluster
+      `agentstack-docs` ConfigMap, discoverable from the XRD's `platform.teststuff.net/docs-configmap`
+      annotation + `kubectl explain` (the FU-049 pattern seed). Gotcha for the next XRD: crossplane's
+      SA holds NO RBAC for arbitrary composed kinds — aggregate a ClusterRole
+      (`rbac.crossplane.io/aggregate-to-crossplane`, agentstack/rbac.yaml). Acceptance: throwaway claim
+      rendered all 7 kinds + cascade-GC'd; oracle cutover live (hand files deleted from oracle-iac, CNP
+      AgentStack-owned + still enforced, token minted, key re-minted, scan sources oracle from the
+      cluster). REMAINING: migrate sleep/platform claims, fold in the GitHub-side + `.agents/` recipes,
+      per-stack coordinator (Composition decision), delete the stacks.json belt entry after the
+      in-cluster reflex verifies, FU-065's test-cluster tier as a policy field. Original:
+      **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
       their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
       gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
       `kind: AgentStack` (its repos, model tiers, tools, git workflow, review rubric = the POLICY). Migrate

@@ -2,7 +2,9 @@
 # opaque-ref resolution (SA openrouter-proxy/agent-egress; the SA itself lives in the proxy app —
 # its kustomize namespace transformer can't host cross-namespace RBAC). The proxy code honors
 # only Secrets labeled openrouter.teststuff.net/session-key. Namespace list = fixer-onboarded
-# repos; extend on onboarding (FU-052); the AgentStack XRD renders these eventually (FU-048).
+# repos NOT yet on an AgentStack claim — a migrated stack's claim composes the equivalent
+# `agentstack-proxy-session-keys` Role instead (FU-048; oracle-fleet moved 2026-07-12). Delete a
+# stack's pair here only AFTER its claim is Ready (the different Role name makes the handoff gapless).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -19,25 +21,6 @@ kind: RoleBinding
 metadata:
   name: openrouter-proxy-session-keys
   namespace: sleep-tracking
-roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: openrouter-proxy-session-keys }
-subjects:
-  - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: openrouter-proxy-session-keys
-  namespace: oracle-fleet
-rules:
-  - apiGroups: [""]
-    resources: [secrets]
-    verbs: [get]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: openrouter-proxy-session-keys
-  namespace: oracle-fleet
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: openrouter-proxy-session-keys }
 subjects:
   - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
