@@ -124,10 +124,14 @@ the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later 
 Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item
 (`FU-NNN`, never reused — conventions at the top of that file). The rules that keep it consistent:
 
+- **≲5 minutes with the context in hand? Just do it** — an entry costs more than the fix; file
+  only genuine deferrals.
 - **New deferred work / discovered loose end** → add an `FU-NNN` item there first. Never leave a
   free-floating `TODO` in code or docs — write the comment as `FU-NNN: <context>` instead.
-- **Resolved something?** `git grep FU-NNN` and delete the item **and every reference** in the same
-  commit as the fix. `devbox run follow-ups-lint` catches dangling references.
+- **Resolved something?** Move the item to `docs/follow-ups-archive.md` (trimmed to a few lines,
+  `(archived YYYY-MM-DD)`) in the same commit as the fix. Archive entries expire after ≈a month:
+  delete + scrub remaining refs in living code/docs (TICK-LOG/ADR refs are historical, exempt).
+  `devbox run follow-ups-lint` catches dangling references and stale archive entries.
 - Roadmap-scale parked *features* go to `ROADMAP.md` → Backlog, not here.
 
 ## Safety

@@ -11,9 +11,14 @@ tracker.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
-- **Resolving an item:** `git grep FU-NNN`, then delete the item here **and every reference**, in
-  the same commit as the fix. `devbox run follow-ups-lint` flags references to ids that no longer
-  exist here.
+- **Don't file what's faster to do:** if it takes ≲5 minutes, the context is already in hand, and
+  it's safe to do now — just do it. An entry costs more than the fix; file only genuine deferrals.
+- **Resolving an item:** move it to [`follow-ups-archive.md`](follow-ups-archive.md) in the same
+  commit as the fix, trimmed to the grep residue (what shipped / when / acceptance evidence /
+  gotcha — a few lines) with an *(archived YYYY-MM-DD)* stamp. References elsewhere stay legal
+  while the id is archived; when the entry expires out of the archive (≈a month, once stable),
+  delete it and scrub remaining references in living code/docs — TICK-LOG/ADR references are
+  historical and exempt. `devbox run follow-ups-lint` checks all of this.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
   the counter above.
 - **Single-writer contract (2026-07-10):** this file is operator/meta-edited ONLY — agents never
@@ -39,8 +44,6 @@ _Last updated: 2026-07-12._
       token (`tofu/README.md` has the `pveum` recipe).
 - [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
       super admin today, signups disabled).
-- [ ] **FU-006** — Retire the obsolete `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key (ghcr cutover
-      done 2026-06-25).
 
 ## GitOps & platform
 
@@ -50,8 +53,6 @@ _Last updated: 2026-07-12._
       ESO. Procedure: `argocd/README.md` → "Forgejo cutover".
 - [ ] **FU-008** — Forgejo orgs/mirrors were created imperatively (one-shot token, since deleted).
       Decide: codify via the Forgejo TF provider vs accept the imperative bootstrap.
-- [ ] **FU-009** — Verify the `platform` root app's cosmetic OutOfSync is gone after the
-      `ignoreDifferences` fixes in `tofu/argocd.tf`; drop this item if so, tidy if not.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the
@@ -73,33 +74,6 @@ _Last updated: 2026-07-12._
 
 ## CI & dependency automation
 
-- [ ] **FU-014** — **Renovate (auto-update PRs).** **BUILT (2026-07-04), pending operator bootstrap.**
-      **Self-hosted** (not the Mend App): a scheduled runner `.github/workflows/renovate.yaml` on the ARC
-      tier runs as a dedicated **`homelab-renovate` App** and autodiscovers the repos it's installed on,
-      reading each repo's `renovate.json` (sleep-tracking's is trimmed to the live model — python/docker/
-      devbox/pre-commit/actions; the stale helm/terraform rules removed). **Hands-off dev-dep bumps** work
-      via **reviewer-approves-Renovate**: Renovate labels automerge PRs, `sleep-tracking/.github/workflows/
-      renovate-approve.yaml` has the **homelab-reviewer** App post an approving review (a distinct identity
-      → *satisfies* required-approval; not a bypass, ADR-084), GitHub merges on CI-green, and the `uv.lock`
-      change flows through the automated deploy. Runtime-dep/docker/devbox bumps stay manual review.
-      **Operator steps (out-of-jail):** `scripts/github-renovate-app-bootstrap.sh` (create + install on
-      sleep-tracking + `secrets`) → `devbox run github-tofu apply` (publishes RENOVATE_APP_* + REVIEWER_APP_*
-      secrets) → `gh workflow run renovate.yaml`. Then extend to more repos by installing the App on them.
-      **Rollout to all agent repos (2026-07-05):** App installed on 7 (homelab, sleep-tracking, snore-recorder,
-      openrouter-operator, agent-runtime, agent-coordinator, sleep-iac). **Shared classification** now lives
-      in `.github/renovate-global.json` (`onboarding:false` + `requireConfig:optional` → a repo needs NO
-      renovate.json to be classified, killing the orphan class): digest/actions/pre-commit/dev-deps →
-      `automerge` (renovate-approve); runtime-deps/docker-minor → `deps-review` (review reflex); nix/devbox
-      disabled; **every major → `major`, un-armed → the coordinator lane** (unifies with the devbox major
-      gate — FU-047). The two merge-path workflows are extracted to **reusable org workflows**
-      (`.github/workflows/{renovate-approve,update-pr-branch}.reusable.yml`) → each repo carries a ~3-line
-      caller. **Rollout DONE (2026-07-06):** (1) all 7 repos are now managed `github_repository` resources
-      (`repos.tf`, applied — sets `allow_auto_merge`); (2) the renovate-approve + update-pr-branch **callers**
-      are in openrouter-operator/agent-runtime/agent-coordinator, per-repo renovate.json dropped (global owns
-      classification; agent-runtime's legacy human-review gone); (3) the **deploy paths** are built per shape
-      — **FU-051**. homelab is IN the flow as a **CI-gated deploy target** (`require_approval=false`,
-      `ci`=argocd-validate-pins), not the fixer flow. **Remaining:** merge the agent-runtime#5 /
-      agent-coordinator#4 caller PRs; watch the first real Renovate bumps flow (approve → merge → deploy).
 - [ ] **FU-051** — **Deploy path per repo so an auto-merged bump reaches prod** (each project owns its
       test+CI+deploy; auto-merging a bump that never deploys is a footgun). BUILT per shape (2026-07-06),
       each via a first-party **deploy-pin PR** — CI-opened, NOT Renovate (Renovate = external deps only) —
@@ -121,8 +95,10 @@ _Last updated: 2026-07-12._
       • **homelab** → a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`).
       Prereqs (done): all agent repos are `github_repository` resources (→ `allow_auto_merge=true`), the
       `homelab-deploy` App installed on homelab, `DEPLOY_APP_*` scoped to the deploy-opening repos.
-      **Remaining:** merge agent-runtime#5 / agent-coordinator#4; prove one dep bump flows E2E per shape.
-      Relates FU-014/FU-025/FU-041.
+      **Remaining:** prove a dep bump flows E2E for the operator-chart and pod-image shapes — the
+      app+chart shape is proven (sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
+      auto-merged; caller PRs agent-runtime#5 / agent-coordinator#4 merged 2026-07-06; the Renovate
+      rollout itself is archived as FU-014).
 - [ ] **FU-052** — **Onboard every APP repo to the agentic loop by DEFAULT** (direction 2026-07-06: the
       full flow — merge-path auto-merge **and** fixer (NL issue → worker → PR → review → merge) — should be
       the default for all app repos, not bespoke per-repo). A repo needs two layers: **(1) merge-path**
@@ -244,53 +220,6 @@ _Last updated: 2026-07-12._
       for the monitor-stack harvests. Remaining: live-classify the drop source on the next ride,
       harvest+flip the two monitor stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
       allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
-- [x] **FU-021 — DONE (2026-07-09, live acceptance passed)** — goose retry policy: hard-stop on
-      auth/limit errors (it retried a budget-exhausted 403 812×). Root cause (goose v1.28.0): the
-      provider-retry layer never retries 401/403 — the storm is the *agent reply loop*'s
-      final-output continuation, bounded only by `GOOSE_MAX_TURNS` (1000), with **no env/recipe
-      per-error-class stop**. Fix = the runtime **storm watchdog**
-      ([agent-runtime#8](https://github.com/teststuffstash/agent-runtime/issues/8) → #11, shipped
-      via the #10 deploy-pin) + a `GOOSE_MAX_TURNS=200` second belt in `agent-session.sh`.
-      **Acceptance (sleep-tracking#20, deliberately-invalid key):** 200 auth failures in 21s
-      through the egress proxy → watchdog kill → `error_class=auth-storm` → `AGENT_STRIKE:`
-      comment posted. Left done-marked (not scrubbed) for the FU-021 provenance in
-      agent-runtime's code comments + the design docs.
-- [x] **FU-022 — DONE (2026-07-10, operator-run: "messy — not all projects had automerge/ci wired,
-      but all resulting PRs merged"; residual polish belongs to FU-052's onboarding-completeness lint)** — **Toolchain-lock alignment for nix cache + agent-base bake hits.** `@latest` devbox
-      pins drift vs the baked `agent-base` toolchain and each project's lock → the in-cluster nix cache
-      (ADR-083) + bake miss and re-fetch on every agent-pod start. **BUILT (2026-07-04), pending the App
-      install:** rather than pin every version (the original plan — still drifts between per-repo
-      updates), a **weekly synchronized `devbox update`** (`.github/workflows/devbox-update.yaml` +
-      `scripts/devbox-update.sh`) re-resolves ALL repos' locks *together* in one pass, so shared tools
-      land on ONE version everywhere → cache + bake hits. Keeps `@latest` (Renovate's `nix`/`devbox`
-      manager stays disabled — it mis-resolves `@latest`). Includes `agent-runtime` (agent-base/) so its
-      image rebuilds with the aligned lock. Opens an auto-merging PR per repo. **Operator step:** install
-      the `homelab-renovate` App on the matrix repos (homelab, snore-recorder, openrouter-operator,
-      agent-runtime — sleep-tracking/-iac already have it) so the token mint succeeds; then
-      `gh workflow run devbox-update.yaml`. **Major gate (2026-07-05):** `devbox-update.sh` now diffs
-      the lock's per-package `version` (leading integer) — a MAJOR bump (e.g. helm 3→4) is labelled
-      `major` and does **not** arm auto-merge, so CI + the reviewer/coordinator pipeline still run but a
-      human makes the final merge call. Deliberately NOT pinning majors away (keeps `@latest` +
-      alignment); the human lands *after* the pipeline has done its work, not before the bump. The
-      `major` PR is **coordinator-owned** (un-armed → outside the review reflex; arming is the boundary) —
-      see FU-047 (the gate detection uses base-name keying so a pin change like `@3`→`@latest` still
-      registers as 3.x→4.x). **The gate + the whole major lane are PROVEN E2E** (helm 3→4 merged via
-      sleep-tracking#18, FU-047). What's still open for FU-022 itself: the operator App install on the
-      matrix repos + the first weekly *synchronized* run across all repos.
-- [x] **FU-047 — DONE (2026-07-05, proven E2E)** — **`major` devbox bumps are coordinator-owned (not
-      the review reflex); reviewer investigates the migration.** (a) the generic reviewer prompt
-      (`reviewer-session.sh`) + `sleep-tracking/.agents/review.md` gained a **migration-investigation**
-      mode — on a `major` PR it reads the tool's upstream breaking-changes, maps them onto this repo's
-      usage, and comments concretely; (b) the **coordinator brief** (`agents/coordinator/README.md`
-      §"Dependency major bumps") + escalation table (`docs/agents/merge-path.md`) put the un-armed `major`
-      PR in the coordinator's lane: investigate (dispatch reviewer *while red*) → worker fixes if in-budget
-      → green+approved → `major/awaiting-human` → a human merges. The review reflex stays armed-only (arming
-      is the wall, so the two never contend). (c) sleep-tracking `kubernetes-helm@3` **unpinned** → helm 4.
-      **PROVEN LIVE E2E:** an **opus** coordinator (`--tick`, scoped to the `sleep` stack) picked up
-      **sleep-tracking#18**, claimed it, dispatched the reviewer *while red* → it read the Helm 4 migration
-      and pinned the exact fix (`--verify=false` on `helm plugin install`, `scripts/test-chart.sh:8`);
-      a worker applied it → CI green → relabel `major/awaiting-human` → **human merged #18**. WebFetch
-      egress was sufficient (reviewer produced the correct migration finding).
 - [ ] **FU-057** — **Retro P2: the retro-facts reflex + cross-run dashboard**
       **BUILT 2026-07-09 (agent-runtime `fu057-exit-status-metrics` + homelab `fu057-fu061-observability`) —
       pending merge + deploy (agent-base image build/pin, ArgoCD sync of pushgateway/dashboards/viewer)
@@ -368,15 +297,6 @@ _Last updated: 2026-07-12._
       dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
-- [x] **FU-060 — DONE (2026-07-09; misdiagnosis corrected)** — `coordinator-git` token now covers all
-      stack repos (`agents/coordinator/git-token.yaml` `repositories:` + `sleep-iac`, `openrouter-operator`,
-      `oracle-fleet`, `oracle-iac`; ArgoCD-synced). The original entry claimed the `homelab-agents` App also
-      needed installing on the oracle repos — **wrong**: `docs/github-apps.md` (regenerated 2026-07-08)
-      shows ✓ on both. The pod's 403 listing installations meant "can't verify from here", not "not
-      installed" — the in-repo matrix was the source of truth. Lesson for briefs/rubrics: distinguish
-      *verified* facts from *inferences* when reporting blockers, and check in-repo sources of truth before
-      declaring external ones. Remaining check: confirm the regenerated token resolves the oracle repos on
-      the next coordinator tick.
 - [ ] **FU-024** — **ENFORCED 2026-07-10 at the egress proxy** (operator writes GUARDRAIL into session
       Secrets; proxy 403s paid models on only-free INJECTED sessions before spend; unit-verified).
       Remaining: one live-fire canary (the scout's first supervised run is it). Original: Wire
@@ -413,53 +333,9 @@ _Last updated: 2026-07-12._
       graceful 429 fallback); **FU-021 RESOLVED** (watchdog live-accepted on sleep-tracking#20).
       OPEN: scout first supervised run + unsuspend, ADR-081 cred-injection remainder (FU-018) +
       egress lockdown (FU-020).
-- [x] **FU-025 — DONE (2026-07-04, ADR-084)** — **Deploy-versioning + repo-structure rework**: the release→deploy path was
-      manual and drifty (`Chart.yaml` vs the `v*` tag vs ArgoCD `targetRevision`). Blocks
-      automating coordinator step 7a (`agents/coordinator/README.md`). **Direction (2026-07-02):
-      a per-stack `sleep-iac` repo** — the ArgoCD AppProject + app-of-apps for the sleep stack
-      (today's homelab `argocd/sleep/` + values + the apps' `infra/` CRs move there) — so app
-      repos stay platform-agnostic (standard Helm/Secrets/S3/Postgres, publish image+chart only)
-      and a deploy = a version-bump PR in `sleep-iac` with its own CI gates; homelab keeps just
-      the platform + a root Application pointing at `sleep-iac`. Homelab-as-a-platform, like
-      AWS/Civo. Includes a standalone **Grafana dashboard → GitOps** slice (the Sleep Overview CM
-      leaves `tofu/monitoring.tf` for the sleep-tracking ns; datasource/sidecar stay platform-owned)
-      and a platform-precreated-namespace `sleep` AppProject. **Full extraction blueprint:
-      [`docs/sleep-iac.md`](sleep-iac.md).** **Status (2026-07-04): LIVE** — repo seeded (CI green),
-      AppProject + namespaces applied, root app flipped to `sleep-iac//apps` (children Synced/Healthy,
-      no prune), `argocd/sleep/` deleted, both app repos' `infra/` emptied, credential dropped, and the
-      Grafana dashboard migrated to GitOps. **The deploy path is now fully automated + tested E2E**
-      (app-repo `deploy` workflow → auto-merging bump PR in sleep-iac → ArgoCD, near-instant via an
-      in-cluster webhook; ADR-084). Coordinator step-7a is a no-op (deploys are hands-off); Renovate
-      for our own artifacts was **dropped by decision** (git-sha versions don't order). **Left as a
-      done-marked item** (not scrubbed) to keep the `FU-025` provenance in the code/doc comments that
-      reference it; the follow-on coordinator-per-stack scope is **FU-045**.
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.
-- [x] **FU-041 — DONE (2026-07-05, proven E2E)** — **Agent PRs that fall behind master stall silently**: the ruleset requires an
-      up-to-date branch (`strict_required_status_checks_policy`, `tofu/github/repo_rulesets.tf`)
-      but nothing updates PR branches (`allow_update_branch=false`), so auto-merge never fires on
-      a behind PR. **Deterministic CI serializer — no LLM in the merge path.** Full design (options
-      table, diagrams, S/M/L worked examples, platform-scale extrapolation, rollout phases):
-      **[`docs/agents/merge-path.md`](agents/merge-path.md)**. Shape: worker arms auto-merge;
-      per-repo updater workflow (`adRise/update-pr-branch`, update-before-review) keeps one
-      head-of-line PR current; reviewer dispatched only when green+current+unapproved (one review
-      per PR); GitHub auto-merge completes. Coordinator stays the issue's owner but as a tool-less
-      overseer; the LLM is consulted only at judgment points (conflict, round limit, stale-red).
-      Ruled out (details in the doc): GitHub merge queue (Enterprise-Cloud-only on private + split
-      process), coordinator-LLM merging, `allonsy-studio/actions-pr-auto-update` (hard-skips bot PRs).
-      **BUILT 2026-07-03 (phases 1–3 committed):** updater workflow in both agent repos, review-reflex
-      `.sh` + CronJob (`agents/review-reflex.sh`, `agents/coordinator/review-reflex.yaml`), auto-merge
-      arming in `agent-session.sh`, `merge-conflict` label in `labels.tf`. **Operator wiring DONE +
-      PROVEN E2E (2026-07-05):** the dedicated `homelab-merge` App is bootstrapped (its token re-triggers
-      CI — a `GITHUB_TOKEN` push wouldn't), the `MERGE_GH_APP_*` org Actions secrets + `allow_auto_merge`
-      are applied, and the review-reflex CronJob is live in ns `agent-coordinator` (every 5m). The whole
-      serializer proved out on **sleep-tracking#14**: it was BEHIND → `update-pr-branch` merged master in
-      (App token → fresh CI) → CI green → `renovate-approve` approved → **GitHub auto-merge landed it** —
-      exactly "a behind PR no longer stalls," no human, no LLM in the mechanics. (The review-reflex's LLM
-      auto-dispatch on an *armed agent* PR is deployed + was validated on #9; it rides the same gate. The
-      un-armed *major* variant runs via the coordinator — FU-047, also proven.) Phase-4 edge-triggers +
-      Renovate levers remain optional polish (FU-014/FU-015/FU-050), not blockers.
 - [ ] **FU-042** — **BUILT 2026-07-09 night (af8e2e1): hard launcher pre-flight refuses dispatch on
       open-linked-PR / Running worker / near-dead key — resolve after the acceptance round exercises
       it.** Original: **Coordinator double-dispatches an already-in-progress issue** (no deterministic
@@ -640,14 +516,10 @@ _Last updated: 2026-07-12._
 
 ## One-time ops
 
-- [ ] **FU-035** — Click-op: disable ISC DHCPv4 in the OPNsense UI (stopped but still `enable=1`
-      in config.xml; no API) for reboot-safety. `docs/runbook.md` → LAN DHCP.
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
-- [ ] **FU-037** — Investigate the standing `kubernetes_deployment.ha` tofu plan drift (a manual
-      live change?); reconcile into git or accept it.
 - [ ] **FU-038** — Tuya plugs: drop the cloud dependency for local-API polling; then the `/10`
       power correction can go away (`homeassistant/ha-config/packages/power.yaml`).
 

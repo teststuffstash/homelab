@@ -107,8 +107,8 @@ LAN DHCP was migrated **ISC dhcpd → dnsmasq** (ISC has no settings API). `opns
 rebuilds it idempotently (range .10–.245, gateway/DNS .1, domain `teststuff.net`, static
 reservations incl. the metal nodes). dnsmasq is **DHCP-only** (`port=0`) so Unbound keeps `:53`.
 PXE is NOT served here — it's a separate dnsmasq proxy-DHCP on the Matchbox LXC (see provisioning).
-⚠️ **Pending one-time click-op (FU-035):** ISC dhcpd is stopped but still `enable=1` in config.xml
-(no API to disable) — uncheck *Services → ISC DHCPv4 → [LAN] → Enable* in the UI for reboot-safety.
+ISC DHCPv4 is fully disabled (stopped **and** unchecked in the UI — reboot-safe); dnsmasq is the
+only LAN DHCP.
 
 ## Storage (Longhorn)
 
