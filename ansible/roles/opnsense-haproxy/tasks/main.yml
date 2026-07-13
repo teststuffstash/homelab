@@ -126,6 +126,33 @@
   when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
 
+# Create-if-absent means a VIP change in group_vars silently does NOT rebind the frontend —
+# that trap shipped twice (transcripts .11→.30→.28; found live 2026-07-13 when .30 shadowed the
+# Matchbox LXC). Re-post the full frontend payload keyed by uuid whenever the bind drifts.
+- name: Update HAProxy frontend bind on VIP change
+  oxlorg.opnsense.raw:
+    module: haproxy
+    controller: settings
+    command: "setFrontend/{{ (hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
+    action: post
+    data:
+      frontend:
+        enabled: "1"
+        name: "{{ item.name }}-frontend"
+        bind: "{{ item.vip }}:443"
+        mode: http
+        defaultBackend: "{{ backend_uuid[item.name ~ '-backend'] }}"
+        ssl_enabled: "1"
+        ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
+        http2Enabled: "0"
+        tuning_timeoutClient: 60m
+  loop: "{{ haproxy_proxied_services }}"
+  loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:443" }
+  vars:
+    _existing: "{{ hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
+  when: (_existing | length) > 0 and (_existing | first).bind != (item.vip ~ ':443')
+  notify: reconfigure haproxy
+
 # --- TCP passthrough services (no TLS) — e.g. Forgejo SSH clone on :22 --------
 # Raw TCP from <vip>:<port> to the cluster VIP, no cert/termination (SSH does its own
 # crypto). Reuses an IP-alias VIP already created above (e.g. forgejo's .2.9), so the

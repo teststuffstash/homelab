@@ -60,11 +60,15 @@ haproxy_proxied_services:
   # GitOps + secrets UIs — TLS terminated here; backends serve plain HTTP (argocd-server
   # --insecure, infisical). VIPs from the expanded static range (pool now starts .100).
   - { name: argocd, cert_domain: argocd.teststuff.net, vip: 192.168.2.2, backend_ip: 192.168.40.17, backend_port: 80 }
-  - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.2.10, backend_ip: 192.168.40.18, backend_port: 80 }
+  # ⚠ VIPs must not collide with REAL hosts — OPNsense answers ARP for an IP-alias, shadowing the
+  # owner for any LAN host with a fresh ARP cache. Two live collisions found 2026-07-13:
+  # infisical sat on .10 (= pop-os, the Docker/jail host) and transcripts on .30 (= the Matchbox
+  # LXC — shadowed PXE/matchbox HTTP+gRPC since 2026-07-09; transcripts itself had already
+  # collided once on .11, the USW switch). Check machines/machines.yaml + opnsense/dnsmasq-dhcp.py
+  # statics + an nmap sweep before assigning; .11–.26 is UniFi/IoT gear, .30 Matchbox, .51+ nodes.
+  - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.2.29, backend_ip: 192.168.40.18, backend_port: 80 }
   # Agent transcripts viewer — INTERNAL ONLY (transcripts carry repo content; never tunneled).
-  # VIP is .2.30, NOT the .11–.26 band: that band holds statically-addressed UniFi/IoT gear
-  # (.11 USW-Lite-8-PoE, .12/.14/.63 APs, .16/.26 roborock) — .11 collided with the switch.
-  - { name: transcripts, cert_domain: transcripts.local.teststuff.net, vip: 192.168.2.30, backend_ip: 192.168.40.19, backend_port: 3727 }
+  - { name: transcripts, cert_domain: transcripts.local.teststuff.net, vip: 192.168.2.28, backend_ip: 192.168.40.19, backend_port: 3727 }
 
 # TCP passthrough (no TLS) — Forgejo SSH clone on forgejo.teststuff.net:22 -> cluster VIP.
 # Reuses the forgejo HTTPS VIP (.2.9, created above), so one hostname serves HTTPS:443 + SSH:22.
