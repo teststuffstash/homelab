@@ -48,34 +48,33 @@ acme_cert_specs:                             # name + the service to reload post
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
-# existing objects match. One dedicated LAN IP-alias VIP each (every frontend binds
-# :443; OPNsense's own web UI owns .1:443).
+# existing objects match. One dedicated IP-alias VIP each, **always from 192.168.3.0/24**
+# (docs/ip-plan.md, ADR-088): a VIP inside the 2.0/24 host range makes OPNsense ARP-shadow the
+# real owner (bit three times: transcripts on .11 = USW switch, then .30 = Matchbox LXC;
+# infisical on .10 = pop-os — all migrated to 3.0/24 2026-07-13, FU-071). No real host is
+# allowed in 3.0/24, so collision is impossible. Convention: last octet mirrors the backend's
+# cluster VIP (3.19 ↔ 40.19). A vip change here rebinds the frontend (role rebind-on-drift
+# task), but the OLD IP-alias + Unbound override must be API-deleted (unbound match_fields
+# includes value, so the play appends rather than updates). Every frontend binds :443;
+# OPNsense's own web UI owns 2.1:443.
 haproxy_proxied_services:
-  - { name: ha, cert_domain: homeassistant.teststuff.net, vip: 192.168.2.5, backend_ip: 192.168.40.10, backend_port: 8123 }
-  - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.2.6, backend_ip: 192.168.40.11, backend_port: 80 }
-  - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.2.7, backend_ip: 192.168.40.13, backend_port: 9090 }
-  - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.2.8, backend_ip: 192.168.40.14, backend_port: 9093 }
-  - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.2.9, backend_ip: 192.168.40.15, backend_port: 3000 }
-  - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.2.4, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
+  - { name: ha, cert_domain: homeassistant.teststuff.net, vip: 192.168.3.10, backend_ip: 192.168.40.10, backend_port: 8123 }
+  - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.3.11, backend_ip: 192.168.40.11, backend_port: 80 }
+  - { name: prometheus, cert_domain: prometheus.teststuff.net, vip: 192.168.3.13, backend_ip: 192.168.40.13, backend_port: 9090 }
+  - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.3.14, backend_ip: 192.168.40.14, backend_port: 9093 }
+  - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.3.15, backend_ip: 192.168.40.15, backend_port: 3000 }
+  - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.3.16, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
   # GitOps + secrets UIs — TLS terminated here; backends serve plain HTTP (argocd-server
   # --insecure, infisical). VIPs from the expanded static range (pool now starts .100).
-  - { name: argocd, cert_domain: argocd.teststuff.net, vip: 192.168.2.2, backend_ip: 192.168.40.17, backend_port: 80 }
-  # ⚠ NEW VIPs come from 192.168.3.0/24 ONLY (docs/ip-plan.md, ADR-088): a VIP inside the host
-  # subnet makes OPNsense ARP-shadow whoever owns that address — two live collisions found
-  # 2026-07-13 (infisical on .10 = pop-os; transcripts on .30 = the Matchbox LXC, after already
-  # colliding once on .11 = the USW switch). 3.0/24 can never collide: no real host is allowed
-  # there. Convention: last octet mirrors the backend's cluster VIP (3.19 ↔ 40.19). The .2.x VIPs
-  # below are legacy — migrate opportunistically (FU-071); changing a vip here DOES rebind the
-  # frontend (role task) but the OLD alias + Unbound override must be API-deleted (match_fields
-  # includes value, so the play appends rather than updates).
-  - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.2.29, backend_ip: 192.168.40.18, backend_port: 80 }
+  - { name: argocd, cert_domain: argocd.teststuff.net, vip: 192.168.3.17, backend_ip: 192.168.40.17, backend_port: 80 }
+  - { name: infisical, cert_domain: infisical.teststuff.net, vip: 192.168.3.18, backend_ip: 192.168.40.18, backend_port: 80 }
   # Agent transcripts viewer — INTERNAL ONLY (transcripts carry repo content; never tunneled).
   - { name: transcripts, cert_domain: transcripts.local.teststuff.net, vip: 192.168.3.19, backend_ip: 192.168.40.19, backend_port: 3727 }
 
 # TCP passthrough (no TLS) — Forgejo SSH clone on forgejo.teststuff.net:22 -> cluster VIP.
-# Reuses the forgejo HTTPS VIP (.2.9, created above), so one hostname serves HTTPS:443 + SSH:22.
+# Reuses the forgejo HTTPS VIP (3.15, created above), so one hostname serves HTTPS:443 + SSH:22.
 haproxy_tcp_services:
-  - { name: forgejo-ssh, vip: 192.168.2.9, port: 22, backend_ip: 192.168.40.15, backend_port: 22 }
+  - { name: forgejo-ssh, vip: 192.168.3.15, port: 22, backend_ip: 192.168.40.15, backend_port: 22 }
 
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
 unbound_hosts:

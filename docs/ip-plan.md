@@ -20,8 +20,8 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 
 | Block | CIDR | Size | Purpose |
 |---|---|---|---|
-| `192.168.0.0/24` | /24 | 254 | **Never use** — consumer-router default, collision bait on double-NAT/guest gear. |
-| `192.168.1.0/24` | /24 | 254 | **Reserved, legacy** — the old Telia-router subnet; upstream kit may still assume it. |
+| `192.168.0.0/24` | /24 | 254 | **Avoid** — the most common consumer-router default; guest/double-NAT gear collides here. Free in principle, use last. |
+| `192.168.1.0/24` | /24 | 254 | **Unallocated** — was the Telia-router subnet; all Telia gear removed with the fibre move (2026), so it's free (same consumer-default caveat as `0.0/24`). |
 | `192.168.2.0/24` | /24 | 254 | **Infra LAN (live, frozen map)** — `.1` OPNsense · `.2–.49` legacy static/VIP mix (no NEW VIPs here) · `.51–.99` cluster nodes & servers · `.100–.245` DHCP pool. |
 | `192.168.3.0/24` | /24 | 254 | **Router-owned service VIPs** (OPNsense HAProxy IP aliases). Never a real host, so ARP collision is impossible by construction. Convention: **last octet mirrors the backend's cluster VIP** (`.3.19` → `.40.19`). |
 | `192.168.4.0/22` | /22 | 1022 | **IoT VLAN** — the ESP32-per-radiator/valve endgame (“couple hundred, definitely < 1000”). |

@@ -252,6 +252,32 @@
     - (item.name ~ '-frontend') not in (hap_tcp_frontends.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
 
+# Same rebind-on-drift as the HTTP frontends above (create-if-absent never propagates a VIP change).
+- name: Update HAProxy TCP frontend bind on VIP change
+  oxlorg.opnsense.raw:
+    module: haproxy
+    controller: settings
+    command: "setFrontend/{{ (hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | first).uuid }}"
+    action: post
+    data:
+      frontend:
+        enabled: "1"
+        name: "{{ item.name }}-frontend"
+        bind: "{{ item.vip }}:{{ item.port }}"
+        mode: tcp
+        defaultBackend: "{{ tcp_backend_uuid[item.name ~ '-backend'] }}"
+        ssl_enabled: "0"
+        tuning_timeoutClient: 60m
+  loop: "{{ haproxy_tcp_services }}"
+  loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:{{ item.port }}" }
+  vars:
+    _existing: "{{ hap_tcp_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
+  when:
+    - haproxy_tcp_services | length > 0
+    - (_existing | length) > 0
+    - (_existing | first).bind != (item.vip ~ ':' ~ item.port)
+  notify: reconfigure haproxy
+
 # --- enable + start HAProxy (no enable flag on the general module) -------
 - name: Read HAProxy general settings
   oxlorg.opnsense.raw: { module: haproxy, controller: settings, command: get }
