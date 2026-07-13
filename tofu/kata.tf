@@ -9,8 +9,15 @@
 #
 # The handler exists only on nodes installed with the metal_kata image (metal.tf `kata = true`,
 # BIOS VT-x required); the scheduling block confines kata pods to those nodes and lets them
-# tolerate the compute-tier taint. Overhead reserves headroom for the VM itself (~8G laptops ⇒
-# roughly one ~4G microVM at a time — matches the WIP=1 agent model).
+# tolerate the compute-tier taint. Overhead reserves headroom for the VM itself.
+#
+# ⚠ SIZING CEILING on the 8G laptops (measured 2026-07-13, k3d spike): a 5Gi-limit kata pod
+# WEDGED THE NODE (host memory thrash → NotReady → power-cycle); 6Gi failed outright (hypervisor
+# hotplug rejected). Cap kata pods at ≤4Gi memory limit on 8G nodes — one microVM at a time
+# (matches the WIP=1 agent model). tmpfs-backed emptyDirs count INSIDE the VM budget.
+# ⚠ Cluster-service VIPs (incl. cluster DNS) DON'T resolve from kata guests (FU-072): pod-to-pod
+# and external by IP work; anything needing 10.96.x doesn't. CI-gate pods pin dnsPolicy None +
+# the LAN resolver until fixed.
 # (kubernetes_manifest, not kubernetes_runtime_class_v1 — the typed resource has no
 # scheduling/overhead support.)
 resource "kubernetes_manifest" "runtime_class_kata" {

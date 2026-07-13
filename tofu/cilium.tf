@@ -26,6 +26,12 @@ resource "helm_release" "cilium" {
     # kube-proxy disabled in Talos (cluster.proxy.disabled) → Cilium owns service
     # routing via eBPF. Uses Talos KubePrism on localhost:7445 for the API server.
     kubeProxyReplacement = true
+    # Kata pods (kata.tf): socket-LB translates service VIPs at connect() in the HOST kernel,
+    # which never sees syscalls from inside a kata microVM guest — service traffic (incl. cluster
+    # DNS 10.96.x) black-holed from kata pods (found live 2026-07-13: TCP-by-IP fine, DNS dead).
+    # hostNamespaceOnly keeps socket-LB for host processes and does per-packet translation at the
+    # veth for pod traffic — the Cilium-documented setting for kata/VM runtimes.
+    socketLB = { hostNamespaceOnly = true }
     k8sServiceHost       = "localhost"
     k8sServicePort       = 7445
     # BGP control plane: advertise LoadBalancer service IPs to OPNsense (FRR).

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-072**.
+  Next free id: **FU-073**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -41,6 +41,17 @@ _Last updated: 2026-07-12._
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-072** — **Kata guests can't reach cluster-service VIPs** (Cilium 1.19, kubeProxyReplacement,
+      `bpf-lb-sock=false`). Diagnosed 2026-07-13 on wk-metal-03: from a kata pod, pod-to-pod
+      (incl. cross-node coredns POD IP, UDP+TCP) and external-by-IP all work; ANY 10.96.x service
+      VIP (UDP and TCP) black-holes — per-packet service translation isn't happening for
+      kata-veth traffic even though it works for runc pods on the same node.
+      `socketLB.hostNamespaceOnly=true` applied (tofu/cilium.tf) — no effect (socket LB was
+      already off). Next probes: hubble verdicts on the kata endpoint for 10.96/16 traffic,
+      cilium-dbg bpf lb list from the node agent, upstream cilium+kata issues. Workaround in
+      place: kata CI-gate pods run `dnsPolicy: None` + the LAN resolver (192.168.2.1) — fine for
+      k3d/registry work, blocks in-cluster consumers (garage transcripts upload from kata pods).
 
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
       **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).
