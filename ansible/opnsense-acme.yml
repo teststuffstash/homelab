@@ -1,7 +1,7 @@
 ---
 # OPNsense ACME / Let's Encrypt (DNS-01 via Cloudflare). Thin role-caller — logic in
 # roles/opnsense-acme, config in group_vars/opnsense.yml.
-# Run: export ACME_CF_TOKEN=$(cat ~/.claude/cloudflare/acme-token)  # only on a (re)set
+# Run: source scripts/keepass-env.sh   # exports ACME_CF_TOKEN (wallet: cloudflare-acme-token)  # only on a (re)set
 #      bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml
 - name: OPNsense ACME / Let's Encrypt
   hosts: opnsense

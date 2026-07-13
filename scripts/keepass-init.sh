@@ -133,6 +133,8 @@ add_attachment forgejo-keys        gpg-private.asc "$HOME/.claude/homelab-forgej
 add_attachment forgejo-keys        gpg-public.asc "$HOME/.claude/homelab-forgejo/gpg-public.asc"
 add_attachment github-reviewer-app private-key.pem "$HOME/.claude/homelab-github-reviewer/private-key.pem"
 add_attachment github-runner-app   private-key.pem "$HOME/.claude/homelab-runner-app/private-key.pem"
+# esphome flash secrets (wifi + OTA + api key — the !secret file, gitignored in-repo)
+add_attachment droplet-esphome     secrets.yaml   "$(dirname "$0")/../esphome/config/secrets.yaml"
 
 echo
 echo "Done. Inspect with:"

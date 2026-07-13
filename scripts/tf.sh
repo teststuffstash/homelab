@@ -20,6 +20,9 @@ done
 [ -n "$CRED" ] || { echo "tf.sh: cred dir not found (looked in ~/.claude, ~/Projects/.claude-data; set CLAUDE_CRED_DIR)" >&2; exit 1; }
 
 export KP_DIR="$CRED/homelab-keepass"
+# FU-001: the key FILES below are a cache materialized from the wallet — regenerate any that
+# are missing before pointing tofu at them (never overwrites fresher local files).
+bash "$ROOT/scripts/wallet-files.sh" || exit 1
 # Key FILES whose tofu defaults are baked to the jail path (/home/node/.claude/...) — re-point them
 # at the resolved cred dir so the same run works on the host too. (Don't set these in tfvars, or
 # tfvars overrides these env vars.)

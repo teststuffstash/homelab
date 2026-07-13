@@ -32,7 +32,7 @@ Bare-metal nodes are defined in `tofu/metal.tf` (`metal_nodes` map). Steps:
 1. **Flag the MAC** — add a `matchbox_group` selecting the MAC to the `talos-worker` profile in
    `tofu/provisioning/matchbox.tf`, then
    `devbox run -- tofu -chdir=tofu/provisioning apply -target=matchbox_group.<x>`
-   (`TF_VAR_proxmox_api_token=$(cat ~/.claude/homelab-pve-ssh/api_token_matchbox)`).
+   (`source scripts/keepass-env.sh` exports `TF_VAR_proxmox_api_token`).
 2. **Reserve its IP** in `opnsense/dnsmasq-dhcp.py` (`hwaddr → ip`, maintenance IP == node IP) and
    apply (`python3 opnsense/dnsmasq-dhcp.py` with the OPN creds). Run `dig`/the matchbox curl above
    to confirm 200.

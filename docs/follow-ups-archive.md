@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-001** *(archived 2026-07-13)* — **Secret consolidation into the platform tiers, complete.**
+  `coordinator-claude` → Infisical + ESO (`agents/coordinator/claude-token.yaml`; ns
+  agent-coordinator fully GitOps'd). ALL `~/.claude` flat-file secrets → the KeePass wallet
+  (`keepass-init.sh`, byte-verified) with `scripts/wallet-files.sh` regenerating file-shaped
+  caches (SSH keys/certs/PEMs/p12/esphome `secrets.yaml`); string readers converted
+  (`keepass-env.sh` grew `CLOUDFLARE_API_TOKEN`/`ACME_CF_TOKEN`/`TF_VAR_proxmox_api_token`;
+  opnsense-playbook/garage-s3/tf/github-tf wallet-first). Acceptance: all three tofu roots plan
+  "No changes" on wallet creds; garage + OPNsense verified live. Retired originals parked in
+  `~/.claude/.fu001-retired/` — **operator: `rm -rf` after a soak week**. Out of scope: host-side
+  `homelab-github-{merge,deploy,renovate}` creds (out-of-jail admin tier, FU-068 doctrine).
 - **FU-006** *(archived 2026-07-12)* — Retire the obsolete `SLEEP_FORGEJO_REGISTRY_TOKEN`
   Infisical key (ghcr cutover 2026-06-25). Verified already absent from Infisical (`secrets_v2`
   query via the CNPG pod, 2026-07-12) — had been deleted without closing the item.

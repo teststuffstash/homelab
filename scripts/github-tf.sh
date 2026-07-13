@@ -18,6 +18,10 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
+# FU-001: the reviewer cred dir is a wallet-materialized cache — regenerate missing files first
+# (best-effort; merge/deploy/renovate stay host-side flat files, outside the jail wallet's scope).
+bash "$ROOT/scripts/wallet-files.sh" >/dev/null 2>&1 || true
+
 # 1. Resolve EACH App cred dir independently across the candidate roots. Creds can be SPLIT: an App
 #    bootstrapped on the HOST lands in the host ~/.claude, one bootstrapped in the JAIL lands in
 #    ~/Projects/.claude-data (the jail's ~/.claude, volume-mounted) — the same file may not be under a

@@ -62,3 +62,26 @@ chmod 600 "$DEST"/ha-client.*
 
 echo "wrote $DEST/ha-client.p12  (+ .password, .cert.pem/.der/.txt)"
 echo "diff the cert on https://lapo.it/asn1js -> $DEST/ha-client.cert.der"
+
+# 5. FU-001: upsert the fresh bundle into the KeePass wallet (the store; $DEST is the cache).
+#    Best-effort — a missing wallet only means keepass-init.sh hasn't run here.
+WALLET_DIR=""
+for _d in "${KP_DIR:-}" "$HOME/.claude/homelab-keepass" "$HOME/Projects/.claude-data/homelab-keepass"; do
+  [ -n "$_d" ] && [ -f "$_d/homelab.kdbx" ] && WALLET_DIR="$_d" && break
+done
+if [ -n "$WALLET_DIR" ]; then
+  kpw() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli "$@"; }
+  KDB="$WALLET_DIR/homelab.kdbx"; KKEY="$WALLET_DIR/homelab.keyx"
+  kpw show -q --no-password -k "$KKEY" "$KDB" cloudflare-ha-client >/dev/null 2>&1 \
+    || printf '\n' | kpw add -q --no-password -k "$KKEY" --password-prompt "$KDB" cloudflare-ha-client >/dev/null
+  for f in ha-client.p12 ha-client.cert.pem; do
+    kpw attachment-rm -q --no-password -k "$KKEY" "$KDB" cloudflare-ha-client "$f" >/dev/null 2>&1 || true
+    kpw attachment-import -q --no-password -k "$KKEY" "$KDB" cloudflare-ha-client "$f" "$DEST/$f" >/dev/null
+  done
+  kpw show -q --no-password -k "$KKEY" "$KDB" cloudflare-ha-client-p12-password >/dev/null 2>&1 \
+    && kpw rm -q --no-password -k "$KKEY" "$KDB" cloudflare-ha-client-p12-password >/dev/null 2>&1 || true
+  tr -d '\n' < "$PWFILE" | kpw add -q --no-password -k "$KKEY" --password-prompt "$KDB" cloudflare-ha-client-p12-password >/dev/null
+  echo "wallet: cloudflare-ha-client (p12 + cert.pem + password) updated"
+else
+  echo "wallet not found — bundle NOT stored in KeePass (run scripts/keepass-init.sh)" >&2
+fi

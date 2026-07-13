@@ -17,7 +17,7 @@ The flow is flag → reserve IP → boot to maintenance → read disk → instal
 1. **Flag the MAC** in `tofu/provisioning/matchbox.tf` (a `matchbox_group` → `talos-worker`
    profile), then apply it:
    ```bash
-   export TF_VAR_proxmox_api_token=$(cat ~/.claude/homelab-pve-ssh/api_token_matchbox)
+   source scripts/keepass-env.sh   # exports TF_VAR_proxmox_api_token (wallet: pve-api-token-matchbox)
    export NIX_CONFIG="experimental-features = nix-command flakes"
    devbox run -- tofu -chdir=tofu/provisioning apply -target=matchbox_group.<x>
    ```

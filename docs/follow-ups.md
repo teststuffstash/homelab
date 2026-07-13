@@ -31,21 +31,6 @@ _Last updated: 2026-07-12._
 
 ## Secrets (the "secret cleanup" track)
 
-- [ ] **FU-001** — Consolidate imperative secrets into the platform (`docs/secrets.md` tiers).
-      **2026-07-12 progress:** (a) `coordinator-claude` → Infisical/ESO **DONE** (Infisical
-      `COORDINATOR_CLAUDE_OAUTH_TOKEN` + `agents/coordinator/claude-token.yaml`, ESO adopted the
-      Secret, value verified — zero imperative secrets left in ns agent-coordinator). (b) the
-      entire `~/.claude` flat-file sprawl is **absorbed into the KeePass wallet** (extended
-      `scripts/keepass-init.sh`: 24 new entries + 13 attachments, ALL byte-verified against the
-      source files; wallet is authoritative from now on). **Remaining — convert readers, then
-      delete the flat files** (each: point at the wallet, verify live, rm the legacy dir):
-      ☑ `scripts/opnsense-playbook.sh` (wallet-first, live-verified HTTP 200) ·
-      ☐ `scripts/tf.sh` + `tofu/{providers,variables}.tf` (pve-ssh) · ☐ `tofu/provisioning/`
-      (matchbox certs) · ☐ `tofu/cloudflare/` + `ansible/opnsense-acme.yml` (cloudflare tokens) ·
-      ☐ `scripts/garage-s3.sh` + `tofu/garage.tf` · ☐ `scripts/github-{tf,reviewer-app-bootstrap}.sh`
-      · ☐ `scripts/make-client-p12.sh` (p12) · ☐ aws/droplet/forgejo/ha/snore one-offs.
-      Also: `~/.claude/homelab-ha/{auth_code,esphome_flow_id}` are expired one-time artifacts —
-      just delete.
 - [ ] **FU-002** — The jail GitHub PAT is embedded in the git remote URL (visible in
       `git remote -v`); move it to a git credential helper.
 - [ ] **FU-003** — HA `refresh_token` is dead (`invalid_grant`; falling back to `prometheus_llat`).

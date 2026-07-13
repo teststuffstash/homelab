@@ -32,6 +32,14 @@ fi
 # _kp_get <entry-title>  → prints the Password field (clean stdout)
 _kp_get() { _kp show -q --no-password -k "$_kp_key" -a Password "$_kp_db" "$1" 2>/dev/null; }
 
+# FU-001: non-TF_VAR exports for the other roots/playbooks ride along here — one source-me file.
+# ${VAR:-…} keeps an explicit caller override; each _kp_get is a keepassxc-cli exec (~1s).
+export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-$(_kp_get cloudflare-write-key)}"   # tofu/cloudflare
+export ACME_CF_TOKEN="${ACME_CF_TOKEN:-$(_kp_get cloudflare-acme-token)}"               # ansible/opnsense-acme.yml (re)set
+# tofu/provisioning (matchbox-scoped token). The MAIN root is unaffected: its broader token comes
+# from terraform.tfvars, and tfvars takes precedence over TF_VAR_* env.
+export TF_VAR_proxmox_api_token="${TF_VAR_proxmox_api_token:-$(_kp_get pve-api-token-matchbox)}"
+
 export TF_VAR_grafana_admin_password="$(_kp_get grafana-admin-password)"
 export TF_VAR_ha_prometheus_token="$(_kp_get ha-prometheus-token)"
 export TF_VAR_infisical_encryption_key="$(_kp_get infisical-encryption-key)"

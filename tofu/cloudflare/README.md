@@ -40,7 +40,7 @@ most resources — everything here was validated against the v5 schema.
 ## Apply
 
 ```bash
-export CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/write-key)
+source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)
 devbox run -- tofu -chdir=tofu/cloudflare init
 devbox run -- tofu -chdir=tofu/cloudflare plan      # review first — always
 devbox run -- tofu -chdir=tofu/cloudflare apply

@@ -31,10 +31,12 @@ Gotchas:
 
 ## Secrets (out of repo)
 
-In the jail under `~/.claude/`: `homelab-opnsense/{key,secret}`, `homelab-pve-ssh/{api_token_*,id_ed25519}`,
-`homelab-matchbox/{ca.crt,client.crt,client.key}`, `homelab-ha/{owner_password,prometheus_llat,grafana_admin_password,access_token,refresh_token}`,
-`homelab-droplet/ota_password`, `cloudflare/{read-key,write-key,acme-token,ha-client.p12,...}`,
-`homelab-aws/{audit-key,audit-secret}`. Tofu state/`*.tfvars`/`kubeconfig`/`talosconfig` are gitignored.
+The **KeePass wallet** (`~/.claude/homelab-keepass/`, key-file-only) holds ALL Tier-0 values —
+OPNsense/Proxmox/Cloudflare/Garage/HA/AWS/droplet/GitHub-App creds (FU-001, docs/secrets.md).
+String secrets: `source scripts/keepass-env.sh` (tofu vars + `CLOUDFLARE_API_TOKEN`/`ACME_CF_TOKEN`).
+File-shaped ones (SSH keys, matchbox certs, App PEMs, the `.p12`, esphome `secrets.yaml`):
+`bash scripts/wallet-files.sh` regenerates any missing `~/.claude/<dir>/` cache file from the wallet
+(tf.sh/github-tf.sh call it automatically). Tofu state/`*.tfvars`/`kubeconfig`/`talosconfig` are gitignored.
 
 ## OPNsense as code
 
@@ -195,13 +197,13 @@ reboots:
 
 Deployed in-cluster (`tofu/homeassistant.tf`), VIP `192.168.40.10:8123`, HTTPS at
 `homeassistant.teststuff.net` via OPNsense HAProxy. Config kept in `homeassistant/ha-config/`,
-applied imperatively (`kubectl cp` + restart). Tokens at `~/.claude/homelab-ha/`.
+applied imperatively (`kubectl cp` + restart). Tokens in the wallet (`ha-access-token`, `ha-refresh-token`).
 
 - HAProxy frontend must have **HTTP/2 disabled** or the HA WebSocket fails to upgrade.
 - Integrations are scriptable via the config-flow REST API; **Tuya (plugs/power) is NOT** — needs
   the user's Smart Life QR login in the UI.
 - Token refresh: `POST http://192.168.40.10:8123/auth/token` form `grant_type=refresh_token`,
-  `refresh_token=<~/.claude/homelab-ha/refresh_token>`, `client_id=http://192.168.2.61:30123/`
+  `refresh_token=<wallet: ha-refresh-token>`, `client_id=http://192.168.2.61:30123/`
   (the original onboarding origin — others 401). Minting a long-lived token needs the websocket API
   (`auth/long_lived_access_token`), not REST.
 
@@ -219,7 +221,7 @@ Host setting is under *Device Updates and Settings* in the new UI.
 The Droplet plant-waterer (ESP32 @ .245, ESPHome native API on 6053). Config
 `esphome/config/office-plants-irrigation.yaml`; flash with `devbox run flash-irrigation` (a pip-venv shim — nix
 esphome's PlatformIO can't run under the jail's seccomp). Service docs: `docs/office-plants/`.
-OTA password at `~/.claude/homelab-droplet/ota_password`.
+Flash secrets (wifi/OTA/api key) = `esphome/config/secrets.yaml`, regenerated from the wallet by `scripts/wallet-files.sh`.
 
 ## Cloudflare (live)
 
@@ -228,7 +230,7 @@ Home Assistant is reachable from anywhere at **`https://ha.teststuff.net`** via 
 as code in `tofu/cloudflare/` (infra) + `tofu/cloudflare-token/` (scoped tokens); design + the full
 decision/gotcha record in `docs/cloudflare.md`.
 
-- **Apply (infra):** `export CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/write-key)` then
+- **Apply (infra):** `source scripts/keepass-env.sh   # exports CLOUDFLARE_API_TOKEN (wallet: cloudflare-write-key)` then
   `devbox run -- tofu -chdir=tofu/cloudflare plan/apply`. The scoped write token is minted once by
   `tofu/cloudflare-token/` with an admin token, **outside the jail**.
 - **Phone cert:** `bash scripts/make-client-p12.sh` → `~/.claude/cloudflare/ha-client.p12` (pinned

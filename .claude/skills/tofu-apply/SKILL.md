@@ -26,7 +26,7 @@ devbox run github-tofu plan                           # tofu/github root (repos/
 The `tofu/provisioning/` root (Matchbox) has separate state and only needs one var:
 
 ```bash
-export TF_VAR_proxmox_api_token=$(cat ~/.claude/homelab-pve-ssh/api_token_matchbox)
+source scripts/keepass-env.sh   # exports TF_VAR_proxmox_api_token (wallet: pve-api-token-matchbox)
 devbox run -- tofu -chdir=tofu/provisioning plan
 ```
 
