@@ -27,6 +27,10 @@ variable "metal_nodes" {
     # that has NOT yet been reinstalled with the pinned config — otherwise a plain `tofu apply`
     # would push the hostname change to the *running* node and ghost it (install-time only).
     pin_hostname = optional(bool, true)
+    # Install the metal_kata image (Kata Containers runtime — SLSA Phase-3 / agent-CI microVMs,
+    # image.tf) and label the node kata-capable (the `kata` RuntimeClass in kata.tf selects on
+    # it). Requires VT-x enabled in BIOS. Install-time only, like everything in install.image.
+    kata = optional(bool, false)
   }))
   default = {
     # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
@@ -44,6 +48,12 @@ variable "metal_nodes" {
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
     hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
+    # wk-metal-03 — the kata spike node (STAGED 2026-07-13, uncomment when the box is in
+    # maintenance mode; see the onboarding flow in docs/provisioning.md). Also needs, once the
+    # MAC is known: a dnsmasq static (opnsense/dnsmasq-dhcp.py, .184), a matchbox_group
+    # (tofu/provisioning/matchbox.tf), a machines.yaml row, and the ephemeral taint below.
+    # Confirm install_disk from maintenance mode before the install apply.
+    # wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
   }
 }
 
@@ -74,10 +84,14 @@ data "talos_machine_configuration" "metal" {
       machine = {
         install = {
           disk  = each.value.install_disk
-          image = local.talos_install_image
+          image = each.value.kata ? data.talos_image_factory_urls.metal_kata.urls.installer : local.talos_install_image
         }
       }
     })],
+    # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
+    each.value.kata ? [yamlencode({
+      machine = { nodeLabels = { "homelab.io/kata" = "true" } }
+    })] : [],
     # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). The Haswell/Broadwell
     # ThinkPads have AVX2; hp-01 + thinkcentre do not. Talos applies machine.nodeLabels live.
     contains(local.avx2_nodes, each.key) ? [yamlencode({

@@ -84,6 +84,31 @@ data "talos_image_factory_urls" "metal" {
   architecture  = "amd64"
 }
 
+# Metal + Kata Containers (SLSA Phase-3 / agent-CI microVM primitive, docs/slsa.md convergence
+# note). Same base as `metal` plus the kata runtime — used by metal_nodes entries with
+# kata = true (spike: wk-metal-03). Needs VT-x enabled in BIOS (/dev/kvm). Extra-tier
+# extension: pin expectations accordingly.
+resource "talos_image_factory_schematic" "metal_kata" {
+  schematic = yamlencode({
+    customization = {
+      systemExtensions = {
+        officialExtensions = [
+          "siderolabs/iscsi-tools",
+          "siderolabs/util-linux-tools",
+          "siderolabs/kata-containers",
+        ]
+      }
+    }
+  })
+}
+
+data "talos_image_factory_urls" "metal_kata" {
+  talos_version = var.talos_version
+  schematic_id  = talos_image_factory_schematic.metal_kata.id
+  platform      = "metal"
+  architecture  = "amd64"
+}
+
 resource "proxmox_download_file" "talos_longhorn" {
   content_type            = "iso"
   datastore_id            = var.datastore_images
