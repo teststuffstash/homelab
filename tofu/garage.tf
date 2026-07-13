@@ -66,8 +66,13 @@ resource "helm_release" "garage" {
     # or the volumeClaimTemplates omit storageClassName.
     persistence = {
       enabled = true
-      meta    = { size = "1Gi", storageClass = "longhorn" }
-      data    = { size = "10Gi", storageClass = "longhorn" }
+      meta = { size = "1Gi", storageClass = "longhorn" }
+      # data on the ADR-089 bulk tier (150Gi ≈ the advertised bulk ceiling; Garage takes the
+      # whole grant — it IS the bulk consumer). Garage stays replication_factor=1; redundancy
+      # comes from longhorn-bulk's 2 replicas (MX500 + wk-02). Migrated off 10Gi/longhorn
+      # 2026-07-13 via the PV-rebind dance in docs/garage-bulk-migration.md (STS
+      # volumeClaimTemplates are immutable — that doc is the recipe for any repeat).
+      data = { size = "150Gi", storageClass = "longhorn-bulk" }
     }
 
     # Chart Service stays ClusterIP — that's what the in-cluster CronJob ingester talks to. The LAN
