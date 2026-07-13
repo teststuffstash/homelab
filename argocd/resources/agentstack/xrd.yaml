@@ -90,6 +90,36 @@ spec:
                         description: >-
                           GitHub repo name in the teststuffstash org; doubles as the worker
                           namespace name for fixer-enabled repos.
+                      storage:
+                        type: object
+                        description: >-
+                          Per-tier storage caps for namespace <name> (ADR-089 quota-as-contract).
+                          The platform advertises the tiers + pool ceilings in SERVICES.md; the
+                          claim states what this repo's namespace may provision; a ResourceQuota
+                          enforces it at PVC-creation time — over-cap provisioning fails fast
+                          with a legible quota error instead of wedging unschedulable in
+                          Longhorn. A granted cap is a real promise (the platform keeps the sum
+                          of grants within pool capacity and runs over-provisioning at 100%).
+                          Omit = no quota (legacy-open); prefer declaring even a small cap.
+                        properties:
+                          standard:
+                            type: string
+                            default: "0"
+                            description: >-
+                              Cap for StorageClass `longhorn` (the default; replicated across
+                              the small always-on disks), e.g. "10Gi". "0" = none provisionable.
+                          bulk:
+                            type: string
+                            default: "0"
+                            description: >-
+                              Cap for StorageClass `longhorn-bulk` (large 2-replica volumes on
+                              the big-disk tier; S3 data, backups, datasets), e.g. "150Gi".
+                          fast:
+                            type: string
+                            default: "0"
+                            description: >-
+                              Cap for StorageClass `longhorn-fast` (Optane scratch, replica=1,
+                              pinned to one node), e.g. "5Gi".
                       fixer:
                         type: object
                         description: >-

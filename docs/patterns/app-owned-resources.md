@@ -59,6 +59,11 @@ tenancy boundary: the iac repo can only deploy into its own (platform-precreated
 
 ## Conventions
 
+- **Every bucket claim states its size cap** (ADR-089 quota-as-contract): set `max_size` (bytes)
+  on the `garage_bucket` resource in your Workspace. The platform advertises the S3 pool ceiling
+  in `SERVICES.md`; a granted cap is a real promise, so caps are checked against it. Over-cap
+  writes fail at the S3 API with a quota error — legible, at the consumer. (`max_objects` is
+  also available for object-count-shaped risks.)
 - **Scope keys tightly, per access method.** A device that only `put_object`s gets a **write-only**
   key; a client that must list to sync needs **read+write**. Isolation is by-bucket regardless
   (Garage has no prefix IAM — ADR-031).

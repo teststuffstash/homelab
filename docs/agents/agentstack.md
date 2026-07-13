@@ -39,6 +39,7 @@ exist — it belongs to the repo's own deployment, never to the XR):
 | `OpenRouterKey <repo>` (standing budget key) | `<stack>-iac//<repo>/infra/openrouter-key.yaml` |
 | `agent-worker-egress` CiliumNetworkPolicy with the **monitor→enforce dial** | `<stack>-iac//<repo>/agent/netpol.yaml` (FU-020) |
 | `agentstack-proxy-session-keys` Role+RoleBinding (ADR-087 leg A) | the hand-list that lived in `agents/coordinator/openrouter-proxy-rbac.yaml` (deleted 2026-07-12 — all stacks on claims) |
+| `agentstack-storage` ResourceQuota (per-StorageClass caps from `spec.repos[].storage` — ADR-089 quota-as-contract; rendered for ANY repo with a `storage` block, fixer or not) | nothing — namespaces were quota-less; over-cap PVCs used to wedge unschedulable in Longhorn |
 
 The composed Role is deliberately named `agentstack-*` (not `openrouter-proxy-session-keys`) so
 migration never collided with the hand-list's same-named Role — each hand-list entry was deleted

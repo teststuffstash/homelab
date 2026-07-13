@@ -42,6 +42,26 @@ spec:
                   "node"   (list "registry.npmjs.org")
                   "none"   (list) }}
             {{- range $r := $xr.spec.repos }}
+            {{- if $r.storage }}
+            ---
+            # ADR-089 quota-as-contract: the claim's per-tier caps become a ResourceQuota, so an
+            # over-cap PVC fails at CREATE with a legible error (instead of wedging unschedulable
+            # in Longhorn). Per-StorageClass quota counts PVCs by their RESOLVED class, so
+            # default-class PVCs are counted under `longhorn` too.
+            apiVersion: v1
+            kind: ResourceQuota
+            metadata:
+              name: agentstack-storage
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-storage-quota
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              hard:
+                longhorn.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "standard") | quote }}
+                longhorn-bulk.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "bulk") | quote }}
+                longhorn-fast.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "fast") | quote }}
+            {{- end }}
             {{- if $r.fixer }}
             {{- $fx := $r.fixer }}
             {{- /* nested schema defaults only apply when the parent key exists — re-default here */}}

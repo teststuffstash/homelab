@@ -118,7 +118,10 @@ variable "nodes" {
   default = {
     cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
     wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 12288, disk_gb = 80, longhorn = true }
-    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 80, longhorn = true }
+    # disk 80→240 (ADR-089 bulk tier): pairs with wk-metal-01's 500G MX500 for longhorn-bulk
+    # 2-replica volumes. pve thin pool had 244G free at resize (2026-07-13). Grow-only in place;
+    # Talos grows EPHEMERAL into it on the next reboot.
+    wk-02 = { role = "worker", vm_id = 8112, ip_cidr = "192.168.2.62/24", cores = 4, memory_mb = 12288, disk_gb = 240, longhorn = true }
   }
 
   validation {

@@ -13,7 +13,10 @@ spec:
   forProvider:
     source: Inline
     module: |
-      resource "garage_bucket" "loki" { global_alias = "loki" }
+      resource "garage_bucket" "loki" {
+        global_alias = "loki"
+        max_size     = 42949672960 # 40Gi — ADR-089: generous for 7-day retention; cap, not target
+      }
       resource "garage_key" "loki" { name = "loki" }
       resource "garage_bucket_permission" "loki_rw" {
         bucket_id     = garage_bucket.loki.id

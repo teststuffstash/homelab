@@ -19,7 +19,7 @@ truth.
 | Service | Status | What | Reach (LAN / in-cluster) | Consume / decisions |
 |---|---|---|---|---|
 | **Garage (S3)** | 🟢 LIVE | S3-compatible object store | `https://s3.teststuff.net` (region `garage`, path-style) · `garage.garage.svc:3900` | app-owned buckets → [pattern](docs/patterns/app-owned-resources.md), [`docs/garage.md`]; ADR-031/073/074/075 |
-| **Longhorn** | 🟢 LIVE | Replicated block storage | StorageClasses `longhorn` (default), `longhorn-fast` | PVCs; ADR-030 |
+| **Longhorn** | 🟢 LIVE | Replicated block storage, three tiers (ADR-089): `longhorn` (default, **std** small-disk 2-replica — new-volume ceiling ≈10Gi until the pool grows), `longhorn-bulk` (**bulk** 2-replica on the big disks, ceiling ≈150Gi total), `longhorn-fast` (Optane scratch, replica=1, ≈4Gi) | StorageClasses `longhorn`, `longhorn-bulk`, `longhorn-fast` | PVCs, capped per namespace by the AgentStack claim's `storage` block; ADR-030/089 |
 | **Home Assistant** | 🟢 LIVE | Home automation + state/metrics API | `192.168.40.10:8123` · `homeassistant.teststuff.net` · remote `ha.teststuff.net` (mTLS) | ADR-040; `docs/cloudflare.md` |
 | **Grafana** | 🟢 LIVE | Dashboards | `192.168.40.11` · `grafana.teststuff.net` | ADR-042 |
 | **Prometheus** | 🟢 LIVE | Metrics TSDB (scrapes **only** Home Assistant) | `192.168.40.13:9090` · `prometheus.teststuff.net` | ADR-042 — not a general metrics sink |
@@ -48,7 +48,11 @@ truth.
 - **Object storage (Garage):** your app **owns its buckets** — declare them in your repo's `infra/`
   and consume the key. Full recipe: [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md).
   Reach data at `https://s3.teststuff.net` (region `garage`, path-style) with your key.
-- **Storage (Longhorn):** request a PVC with `storageClassName: longhorn` (or `longhorn-fast`).
+- **Storage (Longhorn):** request a PVC with `storageClassName: longhorn` (small, replicated),
+  `longhorn-bulk` (large volumes: S3 data, backups, datasets) or `longhorn-fast` (Optane scratch).
+  **Your cap comes from your stack's AgentStack claim** (`spec.repos[].storage`, ADR-089) — an
+  over-cap PVC fails at creation with a quota error; ask for a bigger grant via the claim, checked
+  against the advertised tier ceilings above. Buckets: state `max_size` on every `garage_bucket`.
 - **Secrets (Infisical → ESO):** put the value in Infisical (`devbox run infisical-secret K=V`) and
   pull it into your namespace with an `ExternalSecret` against the `infisical` `ClusterSecretStore`.
   Full recipe: [`docs/secrets.md`](docs/secrets.md). Never commit secret values (repos are public).

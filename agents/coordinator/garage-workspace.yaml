@@ -26,7 +26,10 @@ spec:
   forProvider:
     source: Inline
     module: |
-      resource "garage_bucket" "transcripts" { global_alias = "agent-transcripts" }
+      resource "garage_bucket" "transcripts" {
+        global_alias = "agent-transcripts"
+        max_size     = 21474836480 # 20Gi — ADR-089 quota-as-contract: every bucket claim states its cap
+      }
 
       resource "garage_key" "writer" { name = "agent-transcripts-writer" }
       resource "garage_key" "reader" { name = "agent-transcripts-reader" }

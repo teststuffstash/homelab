@@ -35,6 +35,12 @@ locals {
     "thinkcentre" = "thinkcentre"
     "hp-01"       = "hp-01"
   }
+  # Bulk-tier zones (ADR-089): nodes that carry ONLY tagged bulk disks — deliberately NOT in
+  # longhorn_zones (no create-default-disk label; the disk is registered explicitly on the
+  # Longhorn node CR with tags, like the Optane pattern) so no untagged default disk appears.
+  longhorn_bulk_zones = {
+    "wk-metal-01" = "wk-metal-01" # 500G MX500; ephemeral/compute-tier node (tainted, wipe-on-PXE)
+  }
 }
 
 # Label the storage nodes: Longhorn creates a default disk only on create-default-disk
@@ -47,6 +53,17 @@ resource "kubernetes_labels" "longhorn_storage" {
   labels = {
     "node.longhorn.io/create-default-disk" = "true"
     "topology.kubernetes.io/zone"          = each.value
+  }
+}
+
+# Bulk nodes get ONLY the zone label (anti-affinity), never create-default-disk.
+resource "kubernetes_labels" "longhorn_bulk_zone" {
+  for_each    = local.longhorn_bulk_zones
+  api_version = "v1"
+  kind        = "Node"
+  metadata { name = each.key }
+  labels = {
+    "topology.kubernetes.io/zone" = each.value
   }
 }
 
@@ -85,14 +102,34 @@ resource "helm_release" "longhorn" {
       # Let Longhorn read the Metrics Server (metrics-server.tf) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
       kubernetesMetricsServerMetricsEnabled = true
+      # ADR-089: system components (instance-manager, CSI, engine-image DS) must run on the
+      # bulk-tier node wk-metal-01, which carries the compute-tier taint. Format is Longhorn's
+      # own "key=value:Effect" string, not a k8s toleration object.
+      # ⚠ DANGER-ZONE setting: Longhorn saves it but leaves status.applied=false until ALL
+      # volumes are detached — it will not roll the engine-image/CSI DaemonSets on a live
+      # system. Found 2026-07-13: replicas couldn't schedule on wk-metal-01 (no engine image
+      # there); bridged by patching the engine-image DS toleration directly (kubectl patch ds
+      # engine-image-ei-* — same toleration as below). Longhorn applies this setting properly
+      # on the next full-detach window (e.g. a Longhorn upgrade); the manual patch is
+      # equivalent and idempotent until then.
+      taintToleration = "homelab.io/ephemeral=true:NoSchedule"
     }
     persistence = {
       defaultClass             = true # make `longhorn` the default StorageClass
       defaultClassReplicaCount = 2
       defaultDataLocality      = "best-effort"
+      # ADR-089 tier fence: the scheduler picks the EMPTIEST disk, so without this every new
+      # standard replica would land on the (huge, wipe-prone, maybe-powered-off) bulk disks.
+      # All original disks are tagged "std" (see the tagging note below) — the default class
+      # only ever uses those.
+      defaultDiskSelector = { enable = true, selector = "std" }
     }
     # single replica of the UI/manager bits is plenty for a homelab
     longhornUI = { replicas = 1 }
+    # The user-deployed components need the same taint tolerance as defaultSettings.taintToleration
+    # (that setting only covers system-MANAGED pods).
+    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }] }
+    longhornDriver  = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }] }
     # Prometheus ServiceMonitor for longhorn-manager (:9500 longhorn_* metrics: volume
     # robustness/state, node storage, replica counts). Scraped via the relaxed selector
     # (monitoring.tf); alerts on degraded/faulted volumes + low storage live there.
@@ -120,6 +157,33 @@ resource "kubernetes_storage_class" "longhorn_fast" {
     numberOfReplicas    = "1"
     diskSelector        = "fast"
     dataLocality        = "strict-local"
+    staleReplicaTimeout = "30"
+    fsType              = "ext4"
+  }
+  depends_on = [helm_release.longhorn]
+}
+
+# ---- Bulk tier (ADR-089) ---------------------------------------------------
+# Big, cheap, replicated capacity for large volumes (Garage S3 data, backups, datasets):
+# wk-metal-01's 500G MX500 + wk-02's grown 240G virtual disk, both tagged "bulk"
+# (wk-02's disk is dual-tagged "std"+"bulk"; the MX500 is bulk-ONLY so nothing
+# platform-critical lives on the wipe-on-PXE laptop). replica=2 across those two zones —
+# survives the laptop being reprovisioned or powered off. Like the Optane tier, disk
+# registration/tagging is a node-CR patch, not tofu (see scripts/longhorn-tag-disks.sh):
+#   wk-metal-01: explicit default-path disk, tags ["bulk"]
+#   wk-02/thinkcentre/hp-01 default disks: tags ["std"] (+ "bulk" on wk-02)
+# Consumers do NOT pick this class directly — stacks get capacity via their claim's
+# storage caps (ResourceQuota per StorageClass, docs/agents/agentstack.md).
+resource "kubernetes_storage_class" "longhorn_bulk" {
+  metadata { name = "longhorn-bulk" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "Immediate"
+  parameters = {
+    numberOfReplicas    = "2"
+    diskSelector        = "bulk"
+    dataLocality        = "disabled" # consumer pods can't run on the tainted bulk node anyway
     staleReplicaTimeout = "30"
     fsType              = "ext4"
   }

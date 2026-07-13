@@ -677,3 +677,27 @@ VIP on the Docker host — 2026-07-13); physical scale is bounded (~10³, ARP/L2
 is not (routed), so they get differently-sized homes. **Consequences:** legacy `2.0/24` VIPs
 migrate to `3.0/24` opportunistically (FU-071); new exposures land in `3.0/24`/`32.0/19` from day
 one; the wifi-password→VLAN plan slots into the reserved VLAN blocks without touching the table.
+
+### ADR-089 — Storage tiers with quota-as-contract: consumers get caps, the platform keeps promises
+**Status:** Accepted (2026-07-13, operator-directed). **Decision:** Longhorn splits into three
+tag-fenced tiers — **std** (the original small always-on disks; the DEFAULT class is fenced to
+them via `persistence.defaultDiskSelector`), **bulk** (`longhorn-bulk`: wk-metal-01's 500G MX500
++ wk-02's 240G-grown virtual disk, 2 replicas across those zones), **fast** (Optane, unchanged) —
+and capacity becomes a **claim-side contract**: the AgentStack claim's `spec.repos[].storage`
+caps render as a per-namespace ResourceQuota (per-StorageClass `requests.storage`), and every
+`garage_bucket` states `max_size`. The ADR-084 lens: consumers never think about disks — they
+read the advertised tier ceilings (SERVICES.md), ask via their claim, and an over-cap PVC/PUT
+fails fast with a legible error at CREATE time instead of wedging unschedulable in Longhorn.
+The platform's side of the contract: over-provisioning stays 100% and granted caps stay within
+real scheduling headroom (max − reserved − scheduled — NOT free bytes, the 2026-07-13 lesson).
+**The fence is load-bearing:** Longhorn schedules onto the EMPTIEST disk and empty-selector
+volumes match any disk, so an unfenced 450G bulk disk would attract every std replica — onto a
+tainted, wipe-on-PXE, possibly-powered-off laptop. Longhorn system components tolerate the
+`homelab.io/ephemeral` taint (replicas live there; app pods still can't). **Considered:** buying
+disks (nothing spare); onboarding the second laptop (kept as the next increment); growing only
+wk-02 (single-zone bulk = no redundancy). **Why:** the 150G Garage ask against a pool whose
+every disk had 2–9G scheduling headroom; the MX500 was already racked and idle. **Consequences:**
+bulk ≈150Gi grantable at 2 replicas (wk-02-side headroom bounds it); std stays tight (~10Gi new)
+until more always-on disks join; wipe/power-off of wk-metal-01 degrades bulk volumes until
+rebuild — acceptable by tier definition, alert via Longhorn robustness metrics; disk tags +
+bulk-disk registration are node-CR patches (`scripts/longhorn-tag-disks.sh`), not tofu.
