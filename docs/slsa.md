@@ -162,6 +162,18 @@ reproducible OCI images from those packages, on Wolfi). Nix/devbox already gives
 reproducibility — we're ahead here. Banks the reproducibility leg early; useful at any level.
 
 **Phase 3 — Self-hosted Build L3 (the real project).**
+> **Convergence note (2026-07-13):** the Kata-on-metal-KVM primitive below gained a SECOND consumer
+> before Phase 3 started — **agent worker pods need k3d/kind for `devbox run ci` gates** (laptop/CI
+> parity), and a Kata microVM gives them a real Linux box with rootful podman *without* granting
+> node-privileged containers (the FU-020/ADR-087 sandbox survives; Cilium egress still applies at
+> the veth). Hardware verified: `/dev/kvm` present on wk-metal-01/02 (X240/X250); RAM is the
+> constraint (~8G/laptop ⇒ one ~4G microVM at a time — matches the WIP=1 agent model). Sequencing:
+> the agent-CI spike (RuntimeClass `kata` + extension in the metal image schematic, wk-metal-02
+> first — wk-metal-01 also carries longhorn-bulk replicas since ADR-089) proves the primitive;
+> Tekton+Chains later rides the same RuntimeClass. Kata is necessary-not-sufficient for L3 (the
+> provenance non-falsifiability comes from the Chains key split); for the agent gate it is
+> sufficient alone. Phase 4's CoCo is the same primitive again on SEV-SNP hardware — one
+> RuntimeClass, three consumers.
 Stand up **Tekton Pipelines + Tekton Chains**; run build steps in **Kata microVMs on the bare-metal
 KVM nodes**; hold the signing key only in the Chains controller (Vault/KMS) — or go full
 **self-hosted Fulcio + Dex + Rekor** for keyless. Net: a self-hosted equivalent of
