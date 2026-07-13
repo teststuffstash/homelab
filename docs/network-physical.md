@@ -1,7 +1,8 @@
 # Physical network topology
 
 _Part of the [homelab docs](README.md). Logical/IP view: [`/README.md`](../README.md) +
-[`CLAUDE.md`](../CLAUDE.md); service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
+[`CLAUDE.md`](../CLAUDE.md); **IP allocation rules: [`ip-plan.md`](ip-plan.md)** (ADR-088);
+service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
 Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03.
 

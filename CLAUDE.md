@@ -60,9 +60,11 @@ Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-pro
 In-cluster Services get **LoadBalancer VIPs from `192.168.40.0/24`** via Cilium BGP peering
 OPNsense FRR (cluster ASN 64513 ↔ OPNsense 64512). Only Services labelled `bgp=advertise` are
 advertised. L2 auto-discovery does NOT cross this L3/BGP boundary. LAN HTTPS names
-(`<name>.teststuff.net`) ride OPNsense HAProxy IP-alias VIPs (`.2.5`–`.2.9`) + Unbound overrides —
-recipe in `docs/runbook.md`. **The per-service VIP/hostname assignments live in `SERVICES.md`**
-(don't duplicate them here).
+(`<name>.teststuff.net`) ride OPNsense HAProxy IP-alias VIPs + Unbound overrides — recipe in
+`docs/runbook.md`. **The per-service VIP/hostname assignments live in `SERVICES.md`** (don't
+duplicate them here); **which range a NEW address comes from is `docs/ip-plan.md`** (ADR-088:
+HAProxy VIPs from `192.168.3.0/24`, cluster LB VIPs from `192.168.32.0/19` — a VIP never lives
+inside a real-host range).
 
 OPNsense web UI: `https://opnsense.teststuff.net`. Storage is **Longhorn** (default StorageClass,
 replicated) + a `longhorn-fast` node-local tier on the ThinkCentre's Optane.

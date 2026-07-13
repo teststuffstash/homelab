@@ -80,8 +80,11 @@ API/module gotchas:
 
 1. Edit `group_vars/opnsense.yml`: add the hostname to **`acme_cert_specs`** (`restart_action: "reload
    haproxy"`) and a **`haproxy_proxied_services`** entry `{ name, cert_domain, vip, backend_ip,
-   backend_port }`. Each frontend needs its **own LAN IP-alias VIP** (`.5`–`.9` in use — take the next
-   free; OPNsense owns `.1:443`). The haproxy role auto-creates the Unbound override (`name → vip`).
+   backend_port }`. Each frontend needs its **own IP-alias VIP from `192.168.3.0/24`**
+   (`docs/ip-plan.md`, ADR-088 — never inside the `.2.x` host range; convention: last octet mirrors
+   the backend's `40.x` octet). The haproxy role auto-creates the Unbound override (`name → vip`)
+   and rebinds the frontend if a vip changes (stale alias/override cleanup is via API — see the
+   `group_vars/opnsense.yml` header).
 2. Run **in this order** — the sign step in the middle is the trap:
    - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert **spec only; does
      NOT issue it** (the role is create-if-absent; issuance is left to OPNsense's ACME cron).

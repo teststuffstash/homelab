@@ -657,3 +657,23 @@ pulls still hit upstream / rate-limits until decided.
 
 _When a decision here changes, update the block (mark **Superseded** and add the new one) rather than
 deleting history — the record is the point._
+
+### ADR-088 — 192.168.0.0/16 partitioned by address class; VIPs never share a range with real hosts
+**Status:** Accepted (2026-07-13, operator-directed). **Decision:** the full RFC1918 `/16` is
+partitioned by *address class*, not chronology — the table lives in [`ip-plan.md`](ip-plan.md).
+Load-bearing choices: `192.168.2.0/24` stays as-is (frozen map, no renumbering); **router-owned
+HAProxy VIPs get their own `192.168.3.0/24`** where a real host may never exist (OPNsense carries
+the alias, clients route via the gateway — validated live with the transcripts VIP; last octet
+mirrors the backend cluster VIP); **cluster/BGP service space is `192.168.32.0/19`** (contains the
+live `40.0/24` LBIPAM pool; per-stack /24 pools carved from it *when a stack actually needs
+isolation* — not yet); IoT gets a `/22` (ESP32-per-actuator endgame < 1000 devices), wifi-VLAN
+segments get per-VLAN /24s, `128.0/17` stays unallocated. **The rule that outlives the table:**
+virtual IPs only from VIP blocks, real hosts only with an inventory entry first, `git grep` +
+`nmap` before assigning. **Considered:** renumbering the LAN to a /20 (rejected — touches every
+static host/Talos config for zero function); per-stack LB pools now (rejected — reserve the space,
+defer the mechanism until a stack needs its own pool/policy). **Why:** VIPs interleaved with real
+hosts produced two live ARP-shadowing collisions (transcripts VIP on the Matchbox LXC, infisical
+VIP on the Docker host — 2026-07-13); physical scale is bounded (~10³, ARP/L2) while virtual scale
+is not (routed), so they get differently-sized homes. **Consequences:** legacy `2.0/24` VIPs
+migrate to `3.0/24` opportunistically (FU-071); new exposures land in `3.0/24`/`32.0/19` from day
+one; the wifi-password→VLAN plan slots into the reserved VLAN blocks without touching the table.

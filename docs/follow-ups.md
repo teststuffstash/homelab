@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-071**.
+  Next free id: **FU-072**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -41,6 +41,18 @@ _Last updated: 2026-07-12._
       super admin today, signups disabled).
 
 ## GitOps & platform
+
+- [ ] **FU-071** — **Migrate the 8 legacy HAProxy VIPs `192.168.2.x` → `192.168.3.0/24`**
+      (ADR-088 / `docs/ip-plan.md`; transcripts already moved as the validator). Targets mirror
+      the backend octet: ha `.2.5`→`3.10`, grafana `.2.6`→`3.11`, prometheus `.2.7`→`3.13`,
+      alertmanager `.2.8`→`3.14`, forgejo `.2.9`→`3.15` (move the SSH `:22` TCP-passthrough entry
+      together with it), garage-s3 `.2.4`→`3.16`, argocd `.2.2`→`3.17`, infisical `.2.29`→`3.18`.
+      Recipe per service: change `vip` in `ansible/group_vars/opnsense.yml` → haproxy play (role
+      rebinds on drift) → API-delete the stale IP-alias + Unbound override (`match_fields`
+      includes value, the play only appends) → verify dig + curl. ⚠ Measured on the transcripts
+      move (2026-07-13): override TTL is **3600s ⇒ up to 1h stale-client-cache blip** per service
+      — for Home Assistant (phone app) either dual-bind old+new on the frontend for the window or
+      migrate at night.
 
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
       **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).
