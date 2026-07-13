@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Pod
+metadata: { name: k3d-in-kata, namespace: kata-spike }
+spec:
+  runtimeClassName: kata
+  restartPolicy: Never
+  dnsPolicy: "None"
+  dnsConfig:
+    nameservers: ["192.168.2.1"]
+  containers:
+    - name: k3d
+      image: ghcr.io/k3d-io/k3d:5-dind
+      securityContext: { privileged: true }
+      command: ["sh", "-c"]
+      args:
+        - |
+          sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512 >/dev/null || echo SYSCTL-FAILED
+          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2"}' > /etc/docker/daemon.json
+          nohup dockerd-entrypoint.sh >/tmp/dockerd.log 2>&1 &
+          for i in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 2; done
+          docker info 2>/dev/null | grep "Storage Driver" || { echo DOCKERD-FAILED; tail -20 /tmp/dockerd.log; exit 1; }
+          ( while true; do docker logs k3d-spike-server-0 2>/dev/null | tail -12 > /tmp/k3s-tail.log; sleep 10; done ) &
+          if k3d cluster create spike --wait --timeout 420s; then
+            sleep 10
+            if docker exec k3d-spike-server-0 kubectl get nodes; then
+              echo KATA-K3D-ACCEPTANCE-PASSED
+            else
+              echo EXEC-FAILED; free -m; exit 1
+            fi
+          else
+            echo K3D-CREATE-FAILED; free -m; echo "--- k3s tail:"; cat /tmp/k3s-tail.log
+            exit 1
+          fi
+          sleep 60
+      volumeMounts:
+        - { name: dockerlib, mountPath: /var/lib/docker }
+      resources:
+        limits: { memory: "5Gi", cpu: "2" }
+        requests: { memory: "4Gi", cpu: "1" }
+  volumes:
+    - name: dockerlib
+      emptyDir: { medium: Memory, sizeLimit: 2Gi }

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-073**.
+  Next free id: **FU-075**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -42,6 +42,20 @@ _Last updated: 2026-07-12._
 
 ## GitOps & platform
 
+- [ ] **FU-073** — **Pull-through OCI registry mirrors as a platform service** (the nix-cache
+      pattern for images; design in `docs/spikes/kata-ci-gate.md`): `mirror-docker-io` +
+      `mirror-ghcr` (registry:2 proxy mode, or zot for multi-upstream), replica-1 cache PVCs
+      (std pool is crunched — size small), consumed by k3d `--registry-config`, kind
+      `containerdConfigPatches`, agent kata pods' inner dockerd, ARC runners, and ci-runner-01's
+      daemon.json. Goal: `devbox run ci` never hits the internet for images; agent egress
+      allowlists drop registry FQDNs.
+- [ ] **FU-074** — **Finish the k3d/kind-in-kata acceptance** (spike log + attempt matrix in
+      `docs/spikes/kata-ci-gate.md`; manifest `kata-k3d-acceptance.yaml`). Proven viable
+      (attempt 4: cluster up in 36s) but post-reinstall runs hang with the k3s container
+      emitting ZERO log lines — debug live via exec-during-wait, pin the k3d image by digest,
+      try kind; prefer running after FU-073 so pulls are local. Also re-check the reinstall
+      mystery: a maintenance-mode reinstall applied config with the metal_kata installer yet
+      produced the plain-metal schematic (fixed via talosctl upgrade).
 - [ ] **FU-072** — **Kata guests can't reach cluster-service VIPs** (Cilium 1.19, kubeProxyReplacement,
       `bpf-lb-sock=false`). Diagnosed 2026-07-13 on wk-metal-03: from a kata pod, pod-to-pod
       (incl. cross-node coredns POD IP, UDP+TCP) and external-by-IP all work; ANY 10.96.x service
