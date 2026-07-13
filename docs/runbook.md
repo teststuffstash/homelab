@@ -84,7 +84,10 @@ API/module gotchas:
    (`docs/ip-plan.md`, ADR-088 — never inside the `.2.x` host range; convention: last octet mirrors
    the backend's `40.x` octet). The haproxy role auto-creates the Unbound override (`name → vip`)
    and rebinds the frontend if a vip changes (stale alias/override cleanup is via API — see the
-   `group_vars/opnsense.yml` header).
+   `group_vars/opnsense.yml` header). ⚠ **A VIP-alias reconfigure flushes the FRR kernel routes**
+   (all `40.x` black-holes while BGP still shows Established): recover with a real FRR cycle —
+   `api/quagga/service/stop` + `start` (the `restart` endpoint is a no-op) — then confirm
+   `40.x` rows in `api/diagnostics/interface/get_routes`. Full story: `group_vars/opnsense.yml`.
 2. Run **in this order** — the sign step in the middle is the trap:
    - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert **spec only; does
      NOT issue it** (the role is create-if-absent; issuance is left to OPNsense's ACME cron).

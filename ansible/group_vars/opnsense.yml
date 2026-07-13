@@ -57,6 +57,12 @@ acme_cert_specs:                             # name + the service to reload post
 # task), but the OLD IP-alias + Unbound override must be API-deleted (unbound match_fields
 # includes value, so the play appends rather than updates). Every frontend binds :443;
 # OPNsense's own web UI owns 2.1:443.
+# ⚠⚠ AFTER any `interfaces/vip_settings/reconfigure` (alias add/delete): it FLUSHES the FRR/BGP
+# routes from the KERNEL while bgpd still shows Established + zebra thinks they're installed —
+# ALL 192.168.40.x cluster VIPs black-hole (25-min LAN outage, 2026-07-13). Recovery is a REAL
+# FRR cycle: `/api/quagga/service/stop` then `start` — the `restart` endpoint is a NO-OP (returns
+# OK, restarts nothing; verify via `cilium bgp peers` uptime). Check afterwards that
+# `/api/diagnostics/interface/get_routes` lists 192.168.40.x again.
 haproxy_proxied_services:
   - { name: ha, cert_domain: homeassistant.teststuff.net, vip: 192.168.3.10, backend_ip: 192.168.40.10, backend_port: 8123 }
   - { name: grafana, cert_domain: grafana.teststuff.net, vip: 192.168.3.11, backend_ip: 192.168.40.11, backend_port: 80 }

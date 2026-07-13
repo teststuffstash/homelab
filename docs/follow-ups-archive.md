@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-071** *(archived 2026-07-13)* — **All 8 legacy HAProxy VIPs migrated `192.168.2.x` →
+  `192.168.3.0/24`** (ADR-088; last octet mirrors the backend `40.x`). Zero client blip via
+  temporary dual-binds over the 3600s Unbound-TTL window, then trimmed; stale aliases/overrides
+  API-deleted; all 9 services + forgejo SSH verified live on `3.x` only. **Incident during the
+  trim:** the `vip_settings/reconfigure` FLUSHED FRR's kernel routes (all `40.x` black-holed
+  ~25 min; BGP looked Established throughout) — recovery = real FRR stop/start (`restart` API is
+  a no-op); gotcha documented in `group_vars/opnsense.yml` header + runbook.
 - **FU-001** *(archived 2026-07-13)* — **Secret consolidation into the platform tiers, complete.**
   `coordinator-claude` → Infisical + ESO (`agents/coordinator/claude-token.yaml`; ns
   agent-coordinator fully GitOps'd). ALL `~/.claude` flat-file secrets → the KeePass wallet
