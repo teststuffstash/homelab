@@ -85,6 +85,19 @@ machines:
     multicore_bogo_s: null
     notes: Not yet stress-tested — matched-pair candidate vs the X240.
 
+  - name: wk-metal-03
+    role: k8s worker (ephemeral / compute tier, tainted; KATA node — microVM runtime)
+    hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
+    cpu_cores: 2
+    memory_gb: 8
+    ip: 192.168.2.184
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
+
   - name: hp-01
     role: k8s worker (storage tier, WoL-capable)
     hardware: HP desktop

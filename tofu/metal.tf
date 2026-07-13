@@ -48,12 +48,10 @@ variable "metal_nodes" {
     # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
     hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
-    # wk-metal-03 — the kata spike node (STAGED 2026-07-13, uncomment when the box is in
-    # maintenance mode; see the onboarding flow in docs/provisioning.md). Also needs, once the
-    # MAC is known: a dnsmasq static (opnsense/dnsmasq-dhcp.py, .184), a matchbox_group
-    # (tofu/provisioning/matchbox.tf), a machines.yaml row, and the ephemeral taint below.
-    # Confirm install_disk from maintenance mode before the install apply.
-    # wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
+    # Laptop (i5-6200U Skylake: VT-x + AVX2) — 256GB Samsung MZ7LN256 SATA SSD (confirmed via
+    # maintenance-mode `get disks`). THE KATA NODE (kata=true → metal_kata install image +
+    # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs). Compute tier: tainted ephemeral.
+    wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
   }
 }
 
@@ -121,6 +119,16 @@ data "talos_machine_configuration" "metal" {
 # never schedule there; explicitly-tolerating workloads (e.g. future CI runners) still can.
 resource "kubernetes_node_taint" "laptop" {
   metadata { name = "wk-metal-01" }
+  taint {
+    key    = "homelab.io/ephemeral"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+}
+
+# wk-metal-03 — same ephemeral/compute tier. Applied after the node joins (step 7).
+resource "kubernetes_node_taint" "laptop_kata" {
+  metadata { name = "wk-metal-03" }
   taint {
     key    = "homelab.io/ephemeral"
     value  = "true"

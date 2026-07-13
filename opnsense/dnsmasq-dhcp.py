@@ -46,6 +46,7 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "wk-metal-01", "hwaddr": "50:7b:9d:01:b3:54", "ip": "192.168.2.182"},
     # bare-metal Talos worker (ThinkPad X250) — same maintenance==node pinning, adjacent .183.
     {"host": "wk-metal-02", "hwaddr": "68:f7:28:80:84:09", "ip": "192.168.2.183"},
+    {"host": "wk-metal-03", "hwaddr": "c8:5b:76:fa:8e:fb", "ip": "192.168.2.184"},  # kata spike laptop
     # ThinkCentre Edge — storage-tier worker (its "flaky PXE" was a bad NIC cable, fixed 2026-06-11;
     # PXE-onboards fine now).
     {"host": "thinkcentre", "hwaddr": "8c:89:a5:23:49:da", "ip": "192.168.2.53"},

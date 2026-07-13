@@ -19,5 +19,5 @@ locals {
   # without it; see agents/agent-session.sh). Verified via /proc/cpuinfo: the Xeon E5-2680v4 VMs and the
   # Haswell/Broadwell ThinkPads have AVX2; hp-01 + thinkcentre (Pentium G840) do NOT. Keyed by node name,
   # spanning both var.nodes (VMs) and var.metal_nodes — membership-checked in talos.tf/metal.tf patches.
-  avx2_nodes = toset(["wk-01", "wk-02", "wk-metal-01", "wk-metal-02"])
+  avx2_nodes = toset(["wk-01", "wk-02", "wk-metal-01", "wk-metal-02", "wk-metal-03"])
 }

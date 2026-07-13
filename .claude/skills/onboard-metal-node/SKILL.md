@@ -24,7 +24,8 @@ The flow is flag → reserve IP → boot to maintenance → read disk → instal
    Confirm: `devbox run -- curl -s "http://192.168.2.30:8080/ipxe?mac=<aa-bb-..>"` → HTTP 200.
 
 2. **Reserve its IP** in `opnsense/dnsmasq-dhcp.py` (`hwaddr → ip`, maintenance IP == node IP),
-   then `OPN_API_KEY=$(cat ~/.claude/homelab-opnsense/key) OPN_API_SECRET=$(cat ~/.claude/homelab-opnsense/secret) python3 opnsense/dnsmasq-dhcp.py`.
+   then run `opnsense/dnsmasq-dhcp.py` with `OPN_API_KEY`/`OPN_API_SECRET` from the wallet
+   (entries `opnsense-api-{key,secret}` — FU-001; see how `scripts/opnsense-playbook.sh` reads them).
 
 3. **PXE-boot it** (or `devbox run talos-usb` for a USB ISO if PXE firmware is flaky). It comes up
    in Talos maintenance at the reserved IP.
