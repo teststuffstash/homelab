@@ -20,9 +20,12 @@ export DEVBOX_QUIET=1
 export NIX_CONFIG="${NIX_CONFIG:-experimental-features = nix-command flakes}"
 
 GV=ansible/group_vars/opnsense.yml
-KP_DIR="$HOME/.claude/homelab-keepass"
+# Wallet default = the jail path; on the HOST the same files are the .claude-data/
+# bind-mount → override: KP_DIR=~/Projects/.claude-data/homelab-keepass bash scripts/...
+KP_DIR="${KP_DIR:-$HOME/.claude/homelab-keepass}"
 DB="$KP_DIR/homelab.kdbx"; KEYX="$KP_DIR/homelab.keyx"
-OUT_DIR="$HOME/.claude/homelab-wireguard"
+[ -f "$DB" ] || { echo "no wallet at $DB — run inside the jail, or point KP_DIR at the host's .claude-data/homelab-keepass" >&2; exit 1; }
+OUT_DIR="${OUT_DIR:-$(dirname "$KP_DIR")/homelab-wireguard}"
 
 dvb() { devbox run --quiet -- "$@"; }
 kp()  { dvb keepassxc-cli "$@"; }
