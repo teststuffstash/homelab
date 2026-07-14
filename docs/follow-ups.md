@@ -200,19 +200,27 @@ _Last updated: 2026-07-14._
       `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
       apply.
 
-- [ ] **FU-066** — **claude-code + Haiku worker tier — SUBSCRIPTION ONLY, gated on FU-018 (decided
-      2026-07-09).** Add `--harness claude` to `agent-session.sh` (coordinator/reviewer plumbing already
-      runs Claude Code in-pod) with Haiku as the model, on the Claude subscription (explicitly NOT
-      API/OpenRouter pay-per-token). Value, mapped to the meta-session-2 failure classes: Edit/Write
-      tools chunk writes structurally (kills the 15k single-tool-call truncation class), fast enough for
-      every TTL window, OAuth doesn't die mid-run like minted keys, ~$0 marginal cost. Chain position:
-      the RELIABLE tier before `agent/blocked`, not the default (the cheap-model experiment continues
-      ahead of it). **Hard prereq: FU-018 cred injection** — the subscription OAuth token is an unscoped
-      whole-subscription credential and must never sit in a worker pod env; the proxy injects it per
-      request. Also needs: recipe translation (`.agents/fix.yaml` → `--append-system-prompt`), a
-      subscription-usage stand-in for `cost_usd` in AGENT_RUN_STATS (tokens/turns, not $), and turn caps
-      as the budget-ceiling substitute (no per-task $ cap exists on subscription — loop-safety breaker
-      #2 must be re-derived from rate-limit + turn bounds).
+- [ ] **FU-066** — **claude-code + Haiku worker tier — CORE BUILT + E2E 2026-07-14.** The hard
+      prereq (cred injection for the subscription token) is LIVE: the egress proxy grew an
+      `/anthropic/*` upstream on the ADR-087 ref rails (`AUTH_TOKEN` data-key fallback + it
+      restores the oauth beta the `ANTHROPIC_AUTH_TOKEN` gateway path drops), and
+      `agent-session.sh --harness claude` runs workers on the coordinator image with ONLY
+      `ref:<ns>/claude-session` in the pod (Haiku default, no OpenRouter key at all, clone
+      preamble since that image has no prep entrypoint). E2E in oracle-fleet: clone → claude
+      reads the repo with tools → `CLAUDE-WORKER-E2E-OK`, exit clean, minimal AGENT_RUN_STATS.
+      **Remaining:** (a) `claude-session` Secret is operator-imperative in oracle-fleet only —
+      render from the AgentStack claim (a `fixer.claudeTier` field) like the rest of the fixer
+      infra; (b) transcripts/finalize — the coordinator image lacks `agent-finalize`, so claude
+      rides emit a minimal stats line and skip transcript upload; either agent-base ships the
+      claude CLI or the coordinator image ships finalize (agent-runtime/-coordinator repos), plus
+      the tokens/turns stand-in for `cost_usd`; (c) recipe translation (`.agents/fix.yaml` →
+      `--append-system-prompt` + `--max-turns` caps) in the dispatcher brief + chain position =
+      the RELIABLE tier before `agent/blocked` (model-routing.md); (d) **unify coordinator +
+      reviewer onto the same ref rail** — they still hold the raw oauth token in-pod
+      (`CLAUDE_CODE_OAUTH_TOKEN` secretKeyRef); the reviewer especially checks out LLM-authored
+      PR code next to an unscoped ~1y credential. Mechanical once the worker rail has mileage:
+      swap their env to `ANTHROPIC_BASE_URL` + ref, label `coordinator-claude`, grant the proxy
+      SA get on it.
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
       credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). REMAINING:

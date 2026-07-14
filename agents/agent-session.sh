@@ -104,7 +104,9 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
   # .status.openrouter.expires_at (the PATCH re-mint bug killed a healthy run at its STALE deadline —
   # the CR spec claimed 20:19, the real key died 18:40). <30 min of real life → refuse; the fix is
   # delete the CR + re-mint (the POST path). Operators without the field → check skipped.
-  PF_EXP="$("$KUBECTL" $KUBE -n "$NS" get openrouterkeys -o json 2>/dev/null \
+  # claude harness: no OpenRouter key in play — the check would misfire on the standing key.
+  PF_EXP=""
+  [ "$HARNESS" = "claude" ] || PF_EXP="$("$KUBECTL" $KUBE -n "$NS" get openrouterkeys -o json 2>/dev/null \
     | jq -r --arg s "$SECRET" '[.items[] | select((.spec.secretName // (.metadata.name + "-openrouter")) == $s)][0].status.openrouter.expires_at // empty')"
   if [ -n "$PF_EXP" ]; then
     PF_EXP_S="$(date -d "$PF_EXP" +%s 2>/dev/null || echo 0)"
@@ -134,9 +136,9 @@ if [ -n "$WORK_BRANCH" ]; then
 fi
 
 GOOSE_PROXY_ENV=""; PROXY_URL=""
-if [ "$HARNESS" = "goose" ]; then
+if [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "claude" ]; then
   PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-  if [ -n "$PROXY_URL" ]; then
+  if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
     GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
   fi
 fi
@@ -162,6 +164,31 @@ if [ -n "$DOCKER" ]; then
   fi
 fi
 
+# ── claude harness (FU-066): the SUBSCRIPTION worker tier — Haiku by default ──
+# Auth is ADR-087 leg A through the proxy's /anthropic upstream: the pod holds ONLY
+# `ref:<ns>/claude-session` (a session-key-labeled Secret with data key AUTH_TOKEN —
+# operator-created per enabled namespace until it joins the AgentStack claim); the proxy
+# resolves the ref, injects the subscription oauth token + the oauth beta header. The unscoped
+# ~1y token NEVER sits in a worker pod (unlike the trusted coordinator/reviewer roles, which
+# still hold it directly — unify them onto this rail once it has mileage).
+# Image = the coordinator image (ships the claude CLI; agent-base doesn't yet — FU-066
+# remaining). Its entrypoint does NO repo prep, so the args carry a clone preamble below.
+CLAUDE_ENV=""; CLAUDE_PREP=""
+if [ "$HARNESS" = "claude" ]; then
+  IMAGE="${HARNESS_IMAGE:-${AGENT_COORDINATOR_IMAGE:?images.env lacks AGENT_COORDINATOR_IMAGE}}"
+  # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
+  [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ] && MODEL="haiku"
+  GOOSE_MODEL="$MODEL"
+  CLAUDE_ENV=$'        - name: HOME\n          value: "/home/node"\n        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"'
+  CLAUDE_PREP='set -e
+git config --global credential.helper "!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f" >/dev/null 2>&1 || true
+git clone --quiet "$REPO_URL" /work/repo && cd /work/repo
+git checkout --quiet "$BASE_REF"
+if [ -n "${WORK_BRANCH:-}" ]; then git checkout --quiet -B "$WORK_BRANCH" "origin/$WORK_BRANCH"; else git checkout --quiet -b "agent/$(date -u +%Y%m%d-%H%M%S)"; fi
+echo "claude worker: repo=$REPO_URL base=$BASE_REF branch=$(git rev-parse --abbrev-ref HEAD) model=$MODEL"
+'
+fi
+
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
 # oracle-fleet#7/PR#12: full cycle incl. salvage-push + PR-open with zero pod credentials;
 # AGENT_CRED_INJECT=0 opts out): the pod gets an OPAQUE REF instead of the real OpenRouter key —
@@ -172,6 +199,9 @@ OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
 CRED_BROKER_ENV=""
+if [ "$HARNESS" = "claude" ]; then
+  OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
+fi
 if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
@@ -216,8 +246,18 @@ if [ -n "$RUN_CMD" ]; then
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
-  WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
+  # claude harness: the coordinator image may lack agent-finalize — degrade to a minimal
+  # AGENT_RUN_STATS line (subscription tier has no cost_usd anyway; tokens/turns stand-in is
+  # FU-066 remaining) so the launcher's stats/strike parsing keeps working.
+  FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
+  if [ "$HARNESS" = "claude" ]; then
+    FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]}; if command -v agent-finalize >/dev/null 2>&1; then HARNESS_EXIT=\$HARNESS_EXIT agent-finalize /tmp/run.log; else echo \"AGENT_RUN_STATS {\\\"project\\\":\\\"${PROJECT}\\\",\\\"pod\\\":\\\"${POD}\\\",\\\"harness\\\":\\\"claude\\\",\\\"model\\\":\\\"${MODEL}\\\",\\\"cost_unknown\\\":true,\\\"exit_status\\\":\\\"\$([ \$HARNESS_EXIT = 0 ] && echo clean || echo failed)\\\"}\"; fi"
+  fi
+  WRAPPED="${CLAUDE_PREP}${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
+elif [ -n "$CLAUDE_PREP" ]; then
+  # Interactive claude session: clone/prep (the coordinator image's entrypoint does none), then idle.
+  ARGS="[\"bash\",\"-c\",$(printf '%s' "${CLAUDE_PREP}exec sleep infinity" | jq -Rs .)]"
 elif [ -n "$OC_SETUP" ]; then
   # Interactive opencode session: write the pin config, then idle for the exec below.
   ARGS="[\"bash\",\"-c\",$(printf '%s' "${OC_SETUP}exec sleep infinity" | jq -Rs .)]"
@@ -417,6 +457,8 @@ ${CRED_BROKER_ENV}
 ${WORK_BRANCH_ENV}
         # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
 ${DOCKER_ENV}
+        # claude harness only (FU-066): proxy base URL + the opaque session ref — no real creds.
+${CLAUDE_ENV}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000           # jetpackio/devbox 'devbox' user; numeric so k8s can verify non-root
