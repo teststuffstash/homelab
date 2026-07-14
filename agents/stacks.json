@@ -27,7 +27,8 @@
       "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash",
-      "workerModelFallbacks": ["qwen/qwen3-coder", "tencent/hy3"]
+      "workerModelFallbacks": ["qwen/qwen3-coder", "tencent/hy3"],
+      "dockerRepos": ["oracle-fleet"]
     }
   ]
 }

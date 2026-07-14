@@ -8,8 +8,9 @@
 # creds) survives; Cilium policies still apply at the pod's veth.
 #
 # The handler exists only on nodes installed with the metal_kata image (metal.tf `kata = true`,
-# BIOS VT-x required); the scheduling block confines kata pods to those nodes and lets them
-# tolerate the compute-tier taint. Overhead reserves headroom for the VM itself.
+# BIOS VT-x required) — since 2026-07-14 all three laptops (wk-metal-01/02/03); the scheduling
+# block confines kata pods to those nodes and lets them tolerate the compute-tier taint.
+# Overhead reserves headroom for the VM itself.
 #
 # ⚠ SIZING CEILING on the 8G laptops (measured 2026-07-13, k3d spike): a 5Gi-limit kata pod
 # WEDGED THE NODE (host memory thrash → NotReady → power-cycle); 6Gi failed outright (hypervisor

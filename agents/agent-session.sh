@@ -34,7 +34,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -42,6 +42,7 @@ while [ $# -gt 0 ]; do
     --repo)      REPO_URL="$2"; shift 2;;
     --harness)   HARNESS="$2"; shift 2;;
     --model)     MODEL="$2"; shift 2;;
+    --docker)    DOCKER=1; shift;;    # repo needs a real docker daemon (kind/k3d CI gate): kata microVM pod + dind sidecar — stack POLICY, from the AgentStack claim's fixer.docker (counterpart of CI choosing the VM runner)
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
@@ -140,6 +141,27 @@ if [ "$HARNESS" = "goose" ]; then
   fi
 fi
 
+# ── docker mode (kata microVM + dind sidecar; spike: docs/spikes/kata-ci-gate.md) ──
+# Kata guests can't reach cluster-service VIPs (FU-072), so every in-cluster dependency is
+# rewritten to a RESOLVED ENDPOINT (pod) IP at dispatch — pod-to-pod works from kata, and the
+# egress CNP's toEndpoints rules still match (identity-based). A ride outlives no endpoint here
+# in practice (singleton services); when FU-072 lands, delete resolve_ep and the rewrites.
+resolve_ep() { # <ns> <svc> → first endpoint IP, empty on failure
+  "$KUBECTL" $KUBE -n "$1" get endpoints "$2" -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true
+}
+if [ -n "$DOCKER" ]; then
+  if [ -n "$PROXY_URL" ]; then
+    EP="$(resolve_ep agent-egress openrouter-proxy)"
+    if [ -n "$EP" ]; then
+      PROXY_URL="http://${EP}:8080"
+      GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
+      echo "→ docker mode: openrouter-proxy via endpoint IP ${EP} (FU-072 workaround)"
+    else
+      echo "WARN docker mode: openrouter-proxy endpoint unresolvable — goose LLM egress will fail from the kata guest (FU-072)" >&2
+    fi
+  fi
+fi
+
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
 # oracle-fleet#7/PR#12: full cycle incl. salvage-push + PR-open with zero pod credentials;
 # AGENT_CRED_INJECT=0 opts out): the pod gets an OPAQUE REF instead of the real OpenRouter key —
@@ -210,6 +232,11 @@ fi
 # and agent-finalize skips the upload loudly. Jail kubeconfig reads it as admin; the coordinator SA
 # has a resourceNames-scoped get on exactly this Secret (agents/coordinator/rbac.yaml).
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
+PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
+  EP="$(resolve_ep garage garage)";                          [ -n "$EP" ] && TS_ENDPOINT="http://${EP}:3900" || echo "→ docker mode: garage endpoint unresolvable — transcript upload will be skipped"
+  EP="$(resolve_ep monitoring prometheus-pushgateway)";      [ -n "$EP" ] && PGW_URL="http://${EP}:9091" || echo "→ docker mode: pushgateway endpoint unresolvable — run metrics push will fail silently"
+fi
 TS_KEY_ID="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_access_key_id}' 2>/dev/null | base64 -d || true)"
 TS_KEY_SECRET="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_secret_access_key}' 2>/dev/null | base64 -d || true)"
 [ -n "$TS_KEY_ID" ] || echo "→ transcript-capture key unavailable (agent-transcripts-s3 in agent-coordinator) — run proceeds, upload will be skipped"
@@ -239,6 +266,46 @@ if [ "$HARNESS" = "opencode" ]; then
   AFFINITY=$'  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n          - matchExpressions:\n              - { key: homelab.io/cpu-avx2, operator: In, values: ["true"] }'
 fi
 
+# ── docker-mode pod fragments (kata microVM + dind sidecar; every accommodation is a spike
+# finding, docs/spikes/kata-ci-gate.md): RuntimeClass kata schedules onto the kata-labeled
+# laptops + tolerates the compute taint by itself. dnsPolicy None + LAN resolver = the FU-072
+# workaround. The sidecar preamble: inotify sysctls (kubelet watches), mknod /dev/kmsg (kata
+# guests lack it; kubelet/cadvisor hard-requires it — THE spike root cause), MTU clamp 1350,
+# /var/lib/docker on tmpfs (overlayfs can't stack on the virtiofs rootfs). --group=1000 lets the
+# non-root agent use the socket; dockerd-entrypoint.sh (not raw dockerd) keeps the dind cgroup-v2
+# nesting that gives inner containers the memory controller. Memory envelope: agent 2Gi + dind
+# 2560Mi + 2Gi tmpfs ≈ the acceptance-proven ~5Gi VM — the ceiling on the 8G laptops (one
+# docker ride per node; kata.tf).
+KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
+AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
+if [ -n "$DOCKER" ]; then
+  AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
+  KATA_BLOCK=$'  runtimeClassName: kata\n  dnsPolicy: "None"\n  dnsConfig:\n    nameservers: ["192.168.2.1"]'
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"'
+  DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
+  DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      emptyDir: { medium: Memory, sizeLimit: 2Gi }'
+  DIND_CONTAINER="$(cat <<'DIND'
+    - name: dind
+      image: __DIND_IMAGE__
+      securityContext: { privileged: true }   # root in the microVM only, not on the node (kata)
+      command: ["sh", "-c"]
+      args:
+        - |
+          sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512 >/dev/null || true
+          mknod /dev/kmsg c 1 11 2>/dev/null || true
+          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2"}' > /etc/docker/daemon.json
+          exec dockerd-entrypoint.sh dockerd --host=unix:///run/docker.sock --group=1000
+      volumeMounts:
+        - { name: docker-run, mountPath: /run }
+        - { name: docker-lib, mountPath: /var/lib/docker }
+      resources:
+        requests: { cpu: "500m", memory: "1Gi" }
+        limits:   { cpu: "2",    memory: "2560Mi" }
+DIND
+)"
+  DIND_CONTAINER="${DIND_CONTAINER/__DIND_IMAGE__/${AGENT_DIND_IMAGE:-ghcr.io/k3d-io/k3d:5-dind}}"
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod
@@ -249,6 +316,7 @@ spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
 ${AFFINITY}
+${KATA_BLOCK}
   securityContext:
     fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
   containers:
@@ -288,7 +356,7 @@ ${AFFINITY}
         # FU-057 §B1: agent-finalize PUTs this run's cost/duration/outcome here (goose has no OTLP
         # rail). Cross-namespace to the monitoring pushgateway; unset it to disable the push.
         - name: AGENT_PUSHGATEWAY_URL
-          value: "${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+          value: "${PGW_URL}"
         # goose reads provider+model from env; opencode auto-detects OPENROUTER_API_KEY and takes
         # the model via \`-m \${MODEL}\` at run time (e.g. \`opencode run -m \$MODEL "…"\`).
         - name: GOOSE_PROVIDER
@@ -338,6 +406,8 @@ ${CRED_BROKER_ENV}
         # Resume an existing remote branch deterministically (fix rounds / salvaged WIP — finding C).
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}
+        # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
+${DOCKER_ENV}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000           # jetpackio/devbox 'devbox' user; numeric so k8s can verify non-root
@@ -347,12 +417,13 @@ ${WORK_BRANCH_ENV}
         seccompProfile: { type: RuntimeDefault }
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
-        limits:   { cpu: "6",    memory: "4Gi" }   # install is partly CPU-bound; allow burst past 2
+        limits:   ${AGENT_LIMITS}
       volumeMounts:
-        - { name: git-token, mountPath: /secrets/git, readOnly: true }${UV_MOUNT}
+        - { name: git-token, mountPath: /secrets/git, readOnly: true }${UV_MOUNT}${DOCKER_MOUNT}
+${DIND_CONTAINER}
   volumes:
     - name: git-token
-      secret: { secretName: agent-git-token, optional: true }${UV_VOLUME}
+      secret: { secretName: agent-git-token, optional: true }${UV_VOLUME}${DOCKER_VOLUMES}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"

@@ -33,11 +33,15 @@ variable "metal_nodes" {
     kata = optional(bool, false)
   }))
   default = {
-    # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`)
-    wk-metal-01 = { ip = "192.168.2.182", install_disk = "/dev/sda" }
+    # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`).
+    # kata=true 2026-07-14 (docker-capable agent workers on all 3 laptops): the flag's
+    # install.image only matters at (re)install; the RUNNING node was moved to the kata image
+    # via `talosctl upgrade` (safe on metal), which is the same end state.
+    wk-metal-01 = { ip = "192.168.2.182", install_disk = "/dev/sda", kata = true }
     # ThinkPad X250 — 128GB SanDisk SDSSDHP1 SATA SSD (confirmed via `talosctl get disks`).
     # Laptop/compute tier like the X240: tainted ephemeral below, no Longhorn disk.
-    wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda" }
+    # kata=true 2026-07-14, same talosctl-upgrade path as wk-metal-01.
+    wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda", kata = true }
     # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
     # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
     # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
@@ -49,8 +53,9 @@ variable "metal_nodes" {
     # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
     hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
     # Laptop (i5-6200U Skylake: VT-x + AVX2) — 256GB Samsung MZ7LN256 SATA SSD (confirmed via
-    # maintenance-mode `get disks`). THE KATA NODE (kata=true → metal_kata install image +
-    # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs). Compute tier: tainted ephemeral.
+    # maintenance-mode `get disks`). The FIRST kata node (kata=true → metal_kata install image +
+    # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs) — all 3 laptops carry it since
+    # 2026-07-14. Compute tier: tainted ephemeral.
     wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
   }
 }

@@ -48,6 +48,27 @@ migration never collided with the hand-list's same-named Role — each hand-list
 A repo entry **without** `fixer` is context-only: the coordinator watches/clones it, agents never
 run pods in it (the `-iac` deploy targets, per the FU-052 exclusion).
 
+## Docker-capable workers (`fixer.docker`, 2026-07-14)
+
+A repo whose CI gate needs a real Docker daemon (kind/k3d/testcontainers — first claim:
+oracle-fleet's kind gate, oracle-fleet#15) sets `fixer.docker: true`. It is the agent-platform
+**counterpart of a CI workflow choosing the Docker-capable VM runner (ci-runner-01/ADR-082) over
+an ephemeral in-cluster runner** — same policy question, same per-project answer, one knob.
+
+- **Dispatch:** `coordinator-scan.sh` surfaces `dockerRepos` per stack; the coordinator adds
+  `--docker` to `agent-session.sh`, which renders the ride as a **kata microVM pod** (RuntimeClass
+  `kata` → the three kata-labeled laptops, one ~5Gi VM per node — the 8G ceiling) with a
+  **dind sidecar** (image pinned in `agents/images.env`); the agent container gets `DOCKER_HOST`
+  and stays non-root — the repo brings its own docker/kind CLI via devbox.json. Every sidecar
+  accommodation is a spike finding (`docs/spikes/kata-ci-gate.md`): mknod `/dev/kmsg`, cgroup
+  nesting via the dind entrypoint, MTU clamp, tmpfs docker-lib.
+- **Egress:** the composed CNP gains a LAN-resolver DNS leg (kata pods run `dnsPolicy: None`,
+  FU-072) and the registry FQDNs — interim until the FU-073 mirrors land, then that block is
+  deleted and the allowlist tightens back.
+- **In-cluster services** (openrouter-proxy, garage, pushgateway) are rewritten to resolved
+  endpoint IPs at dispatch (`resolve_ep` in agent-session.sh) — kata guests can't reach service
+  VIPs (FU-072); delete the rewrites when that lands.
+
 ## The egress dial (the FU-020 rollout, encoded)
 
 `fixer.egress` renders the worker CNP from **baseline + profile + extraFQDNs**:

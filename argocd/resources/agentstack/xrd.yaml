@@ -150,6 +150,22 @@ spec:
                               only-free = the egress proxy 403s paid-model completions on
                               this key BEFORE spend (FU-024). Ephemeral session keys carry
                               their own guardrail; this is the standing key's.
+                          docker:
+                            type: boolean
+                            default: false
+                            description: >-
+                              true = this repo's workers need a real Docker daemon (its CI
+                              gate runs kind/k3d/testcontainers, e.g. `devbox run ci` with a
+                              nested cluster). Worker rides then run as kata microVM pods
+                              (RuntimeClass kata, the 3 kata-labeled laptops) with a dind
+                              sidecar: DOCKER_HOST is wired for the repo's own docker CLI
+                              (bring it via devbox.json). The counterpart of a CI workflow
+                              choosing the Docker-capable VM runner over an ephemeral
+                              in-cluster runner. Costs: ~5Gi VM per ride (one per node —
+                              the 8G-laptop ceiling), in-cluster services ride resolved
+                              endpoint IPs until FU-072, image pulls hit the internet until
+                              FU-073 mirrors land (the egress policy gains the registry
+                              FQDNs while docker=true).
                           egress:
                             type: object
                             description: >-

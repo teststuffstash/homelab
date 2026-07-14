@@ -69,6 +69,7 @@ spec:
             {{- $profile := default "none" (get $eg "profile") }}
             {{- $extra := default (list) (get $eg "extraFQDNs") }}
             {{- $enforce := default false (get $eg "enforce") }}
+            {{- $docker := default false (get $fx "docker") }}
             ---
             # GitHub App private key, Infisical → Secret (the generator below reads it).
             apiVersion: external-secrets.io/v1
@@ -193,6 +194,20 @@ spec:
                       rules:
                         dns:
                           - matchPattern: "*"
+                {{- if $docker }}
+                # docker=true: kata worker pods run dnsPolicy None + the LAN resolver (the FU-072
+                # service-VIP gap), so DNS leaves to the router — keep the L7 dns rule so toFQDNs
+                # visibility/allowlisting still works on that path.
+                - toCIDR:
+                    - 192.168.2.1/32
+                  toPorts:
+                    - ports:
+                        - { port: "53", protocol: UDP }
+                        - { port: "53", protocol: TCP }
+                      rules:
+                        dns:
+                          - matchPattern: "*"
+                {{- end }}
                 - toEndpoints: # the proxy + git-cred broker: the ONLY LLM/credential exit
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: agent-egress
@@ -218,6 +233,15 @@ spec:
                     {{- end }}
                     {{- range $f := $extra }}
                     - { matchName: {{ $f }} } # extraFQDNs (earned from a monitor-phase harvest)
+                    {{- end }}
+                    {{- if $docker }}
+                    # docker=true: the inner dockerd pulls node/tool images from the internet —
+                    # INTERIM until the FU-073 pull-through mirrors land, then delete this block
+                    # (the allowlist tightens back; that is the point of the mirrors).
+                    - { matchName: registry-1.docker.io }
+                    - { matchName: auth.docker.io }
+                    - { matchName: production.cloudflare.docker.com }
+                    - { matchName: ghcr.io }
                     {{- end }}
                   toPorts:
                     - ports:

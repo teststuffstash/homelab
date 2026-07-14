@@ -54,7 +54,10 @@ stacks_json() {
         mainRepo: (.spec.mainRepo // "homelab"),
         coordinatorModel: (.spec.coordinatorModel // "sonnet"),
         workerModel: .spec.workerModel,
-        workerModelFallbacks: (.spec.workerModelFallbacks // [])
+        workerModelFallbacks: (.spec.workerModelFallbacks // []),
+        # repos whose fixer declared docker=true: dispatch their workers with
+        # agent-session.sh --docker (kata microVM + dind — the CI-gate runtime choice)
+        dockerRepos: [.spec.repos[] | select(.fixer.docker == true) | .name]
       })) as $claims
       | {stacks: ($claims + [$f.stacks[] | select(.name as $n | $claims | all(.name != $n))])}
     ')"

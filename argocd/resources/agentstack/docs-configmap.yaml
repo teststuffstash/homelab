@@ -66,6 +66,16 @@ data:
 
     Declare it in the stack's `-iac` repo (GitOps-applied); do not `kubectl apply` by hand.
 
+    ## Docker-capable workers (`fixer.docker: true`)
+
+    If the repo's CI gate needs a real Docker daemon (kind/k3d/testcontainers), set
+    `fixer.docker: true`. Worker rides then run as kata microVM pods (the kata-labeled laptops)
+    with a dind sidecar; the ride sees `DOCKER_HOST` wired — bring the docker/kind CLI via the
+    repo's own devbox.json. The counterpart of a CI workflow picking the Docker-capable VM
+    runner over an ephemeral in-cluster one. Costs: ~5Gi microVM per ride (one per node),
+    registry FQDNs added to the egress allowlist until the pull-through mirrors land (FU-073),
+    in-cluster services reached via endpoint IPs until FU-072.
+
     ## Egress rollout (the enforce dial)
 
     1. Create the claim with `egress.enforce: false` — MONITOR: the allowlist and DNS visibility
