@@ -1,0 +1,3 @@
+---
+- name: reconfigure dyndns
+  oxlorg.opnsense.raw: { module: dyndns, controller: service, command: reconfigure, action: post }

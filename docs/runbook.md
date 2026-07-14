@@ -268,4 +268,9 @@ Unbound DNS, so `*.teststuff.net` resolves like at home. Tunnel subnet `192.168.
   <server-pubkey>` performs a real Noise handshake (needs a venv with `cryptography` — jail
   pip-venv pattern). `HANDSHAKE_OK` proves port + keys + peer registration end-to-end.
 - **Endpoint freshness:** `wg.teststuff.net` is a DNS-only record in `tofu/cloudflare/dns.tf`;
-  tofu ignores its content (dynamic Telia lease) — who updates it is FU-075 (static IP vs ddclient).
+  tofu owns its existence but ignores its content — **ddclient on OPNsense keeps it on the dynamic
+  Telia WAN IP** (`ansible/opnsense-ddclient.yml`; native backend, `checkip` off the WAN interface,
+  credential = the ACME zone-DNS token; plugin API namespace is `dyndns`, not `ddclient`).
+  ddclient only writes when the WAN IP differs from its cached `current_ip` — to force/E2E-test a
+  write: clear `current_ip` (`accounts/setItem`) then `dyndns/service/reconfigure` and watch the
+  record via the Cloudflare API.

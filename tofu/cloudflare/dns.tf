@@ -12,7 +12,7 @@ resource "cloudflare_dns_record" "ha" {
 # WireGuard road-warrior endpoint (ADR-090) — the home WAN IP. DNS-only: Cloudflare
 # can't proxy WireGuard UDP, and the whole point is a direct tunnel to OPNsense.
 # The IP is a dynamic Telia lease: tofu owns the record's existence, NOT its content —
-# FU-075 decides who keeps it fresh (Telia static-IP fee vs ddclient on OPNsense).
+# ddclient on OPNsense keeps it fresh (ansible/opnsense-ddclient.yml, ADR-090).
 resource "cloudflare_dns_record" "wg" {
   zone_id = var.zone_id
   name    = "wg"
@@ -20,7 +20,7 @@ resource "cloudflare_dns_record" "wg" {
   content = "176.46.101.184"
   proxied = false
   ttl     = 300
-  comment = "WireGuard endpoint (home WAN, dynamic). Content updated out-of-band - FU-075."
+  comment = "WireGuard endpoint (home WAN, dynamic). Content owned by ddclient on OPNsense."
   lifecycle {
     ignore_changes = [content]
   }

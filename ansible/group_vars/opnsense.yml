@@ -92,12 +92,19 @@ wireguard_instance_name: roadwarrior
 wireguard_port: 51820                       # UDP; WAN-inbound rule is part of the role
 wireguard_tunnel_address: 192.168.64.1/24   # router's tunnel IP
 wireguard_tunnel_network: 192.168.64.0/24   # peer pool (keep in sync with the above)
-wireguard_endpoint_host: wg.teststuff.net   # name clients dial — needs public DNS → FU-075 (Telia static IP vs DDNS)
+wireguard_endpoint_host: wg.teststuff.net   # name clients dial — kept on the dynamic WAN IP by opnsense-ddclient
 wireguard_client_dns: 192.168.2.1           # Unbound → *.teststuff.net resolves like on the LAN
 wireguard_client_networks: 192.168.0.0/16   # split tunnel: home ranges only (LAN + 3.0/24 HAProxy VIPs + 32.0/19 BGP VIPs)
 wireguard_peers:
   - { name: laptop, tunnel_ip: 192.168.64.10, pubkey: "anIW3Zjh3JIsA50XB2Ng11nDUuz7jWrGUhvATZ1LByw=" }
   - { name: phone,  tunnel_ip: 192.168.64.11, pubkey: "KHOs7oMM/Mf+d7fVLVBBcLmdM4mvzXAOlQDo/dOPaRg=" }
+
+# --- opnsense-ddclient : dynamic DNS for the WireGuard endpoint (ADR-090) ---
+# Native backend, Cloudflare service; credential = the ACME DNS token (env ACME_CF_TOKEN,
+# needed on first run only). checkip reads the WAN interface directly (public IP, no CGNAT).
+ddclient_zone: teststuff.net
+ddclient_hostname: wg.teststuff.net
+ddclient_account_description: "wg endpoint (ansible)"
 
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
 unbound_hosts:

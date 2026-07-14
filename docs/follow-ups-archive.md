@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-075** *(archived 2026-07-14)* — **WireGuard endpoint freshness: ddclient on OPNsense**
+  (chosen over the Telia static-IP fee). New `opnsense-ddclient` role: os-ddclient plugin
+  (ensure-installed in the play), native backend, Cloudflare service, `checkip: if`/wan (public
+  IP, no external lookup), credential = the SAME zone DNS token ACME holds (no new secret).
+  Acceptance: record broken to `192.0.2.1` via CF API -> cache cleared -> ddclient PATCHed it back
+  to the WAN IP. **Gotchas:** plugin API namespace is `dyndns`, NOT `ddclient`; plugin installs
+  are refused until the base is current ("Installation out of date" -> updated 26.1.8->26.1.11_6,
+  no reboot needed despite the status_msg claiming so); ddclient only writes when the WAN IP
+  differs from its *cached* `current_ip` -- to force a write, clear `current_ip` via
+  `accounts/setItem` then `service/reconfigure` (recipe in runbook).
 - **FU-071** *(archived 2026-07-13)* — **All 8 legacy HAProxy VIPs migrated `192.168.2.x` →
   `192.168.3.0/24`** (ADR-088; last octet mirrors the backend `40.x`). Zero client blip via
   temporary dual-binds over the 3600s Unbound-TTL window, then trimmed; stale aliases/overrides

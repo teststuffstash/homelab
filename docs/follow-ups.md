@@ -573,14 +573,6 @@ _Last updated: 2026-07-12._
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
 - [ ] **FU-038** — Tuya plugs: drop the cloud dependency for local-API polling; then the `/10`
       power correction can go away (`homeassistant/ha-config/packages/power.yaml`).
-- [ ] **FU-075** — **WireGuard endpoint freshness** (`wg.teststuff.net` → the dynamic Telia WAN
-      IP; ADR-090). Rasmus is checking Telia options: **static IP for a monthly fee** (then a
-      one-time record update, done) **vs stay dynamic** → ddclient on OPNsense (os-ddclient
-      speaks the Cloudflare API; needs a DNS-edit-scoped token from `tofu/cloudflare-token/`,
-      as-code via a small ansible role). The tofu record (`tofu/cloudflare/dns.tf`) already
-      `ignore_changes`es content either way. Until resolved: the record points at the IP of
-      2026-07-14 and goes stale on the next lease change. Also still pending: one from-OUTSIDE
-      handshake test (phone on LTE — scan the QR, wifi off, open `grafana.teststuff.net`).
 
 ---
 

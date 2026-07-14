@@ -1,0 +1,88 @@
+---
+# OPNsense ddclient — dynamic DNS for the WireGuard endpoint (ADR-090).
+# Config in group_vars/opnsense.yml (ddclient_*); apply via
+#   source scripts/keepass-env.sh   # first run only: exports ACME_CF_TOKEN
+#   bash scripts/opnsense-playbook.sh ansible/opnsense-ddclient.yml
+#
+# Native (python) backend, Cloudflare service, checkip straight off the WAN
+# interface (the WAN IP is genuinely public — verified no CGNAT, ADR-090 — so no
+# external what's-my-IP dependency). The Cloudflare credential is the SAME
+# zone-scoped DNS token the ACME role uses (wallet: cloudflare-acme-token) — the
+# router already holds it for DNS-01, so ddclient adds no new secret material.
+#
+# NOTE the plugin API namespace is `dyndns` (MVC namespace), NOT `ddclient`.
+# The account is create-if-absent keyed on description; to change/rotate the token,
+# delete the account in the UI/API and re-run with ACME_CF_TOKEN set.
+
+# --- ensure the plugin (boot-from-git: a fresh router gets it from this play) ---
+- name: Read firmware info
+  oxlorg.opnsense.raw: { module: core, controller: firmware, command: info }
+  register: fw_info
+- name: Install os-ddclient (absent)
+  oxlorg.opnsense.raw: { module: core, controller: firmware, command: install/os-ddclient, action: post }
+  when: fw_info.response.plugin | selectattr('name', 'equalto', 'os-ddclient') | map(attribute='installed') | first == "0"
+  register: ddclient_install
+- name: Wait for the plugin install to finish
+  oxlorg.opnsense.raw: { module: core, controller: firmware, command: upgradestatus, action: post }
+  register: fw_status
+  until: fw_status.response.status == "done"
+  retries: 30
+  delay: 5
+  when: ddclient_install is not skipped
+- name: Assert os-ddclient is installed
+  oxlorg.opnsense.raw: { module: core, controller: firmware, command: info }
+  register: fw_info2
+  failed_when: fw_info2.response.plugin | selectattr('name', 'equalto', 'os-ddclient') | map(attribute='installed') | first != "1"
+  # A version-locked mirror refuses plugin installs until the base is updated
+  # ("Installation out of date") — update OPNsense first, then re-run (2026-07-14).
+
+# --- the Cloudflare account (create-if-absent keyed on description) -------------
+- name: Find ddclient accounts
+  oxlorg.opnsense.raw: { module: dyndns, controller: accounts, command: searchItem }
+  register: dd_accounts
+- name: Require the Cloudflare token for first-time account creation
+  ansible.builtin.assert:
+    that: lookup('env', 'ACME_CF_TOKEN') | length > 0
+    fail_msg: "ACME_CF_TOKEN empty — `source scripts/keepass-env.sh` first (wallet: cloudflare-acme-token)."
+  when: ddclient_account_description not in (dd_accounts.response.rows | map(attribute='description') | list)
+- name: Create ddclient Cloudflare account
+  oxlorg.opnsense.raw:
+    module: dyndns
+    controller: accounts
+    command: addItem
+    action: post
+    data:
+      account:
+        enabled: "1"
+        service: cloudflare
+        username: token                      # unused by the CF API; auth is the bearer token below
+        password: "{{ lookup('env', 'ACME_CF_TOKEN') }}"
+        zone: "{{ ddclient_zone }}"
+        hostnames: "{{ ddclient_hostname }}"
+        checkip: if                          # read the IP off the interface — no external service
+        interface: wan
+        force_ssl: "1"
+        ttl: "300"
+        description: "{{ ddclient_account_description }}"
+  when: ddclient_account_description not in (dd_accounts.response.rows | map(attribute='description') | list)
+  notify: reconfigure dyndns
+
+# --- enable the service (native backend) ----------------------------------------
+- name: Read ddclient general settings
+  oxlorg.opnsense.raw: { module: dyndns, controller: settings, command: get }
+  register: dd_general
+- name: Enable ddclient (native backend)
+  oxlorg.opnsense.raw:
+    module: dyndns
+    controller: settings
+    command: set
+    action: post
+    data:
+      ddclient:
+        general:
+          enabled: "1"
+          backend: opnsense
+  when: >
+    dd_general.response.ddclient.general.enabled != "1"
+    or (dd_general.response.ddclient.general.backend | dict2items | selectattr('value.selected', 'equalto', 1) | map(attribute='key') | first) != "opnsense"
+  notify: reconfigure dyndns
