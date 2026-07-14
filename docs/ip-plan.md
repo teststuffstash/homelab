@@ -30,7 +30,7 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 | `192.168.10.0/24`–`15.0/24` | 6×/24 | — | Future VLANs (one subnet per SSID/segment as the wifi-VLAN plan lands). |
 | `192.168.16.0/20` | /20 | 4094 | **Physical expansion** — new machine subnets when `2.0/24` fills; carve /24s from the bottom. |
 | `192.168.32.0/19` | /19 | 8190 | **Cluster BGP service VIPs** (Cilium LBIPAM, routed — this is where “no upper bound” growth belongs). Contains the live `192.168.40.0/24` pool. Per-stack isolation later = one /24 pool per stack carved from here (composable via the agentstack claim); **not yet** — the single shared `40.0/24` stays until a stack actually needs its own pool/policy. |
-| `192.168.64.0/18` | /18 | 16382 | **Routed-virtual overflow** — more BGP pools, VPN client ranges, whatever routes rather than ARPs. |
+| `192.168.64.0/18` | /18 | 16382 | **Routed-virtual overflow** — more BGP pools, VPN client ranges, whatever routes rather than ARPs. Carved: `64.0/24` = WireGuard road-warrior clients (ADR-090; router `.64.1`, peers `.64.10+`). |
 | `192.168.128.0/17` | /17 | 32766 | **Unallocated** — half the /16 untouched on purpose. |
 
 ## Why the shape

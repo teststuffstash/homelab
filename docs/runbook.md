@@ -248,3 +248,24 @@ decision/gotcha record in `docs/cloudflare.md`.
   `127.0.0.1` → 502); HA needs `http.use_x_forwarded_for` + `trusted_proxies` (pod CIDR) or it 400s.
 - The Cloudflare **Docs MCP** is wired into this project (`claude mcp list`) — use it to ground
   Cloudflare work in current docs rather than stale model knowledge (provider v5 renamed resources).
+
+## WireGuard VPN (full-LAN remote access)
+
+Road-warrior WireGuard on OPNsense (ADR-090): laptop/phone dial `wg.teststuff.net:51820/udp` and
+get the whole home network — LAN, HAProxy VIPs (`3.0/24`), BGP service VIPs (`32.0/19`) — with
+Unbound DNS, so `*.teststuff.net` resolves like at home. Tunnel subnet `192.168.64.0/24`
+(router `.1`, peers `.10+`). Split tunnel: only `192.168.0.0/16` rides the VPN.
+
+- **Apply / change:** values in `ansible/group_vars/opnsense.yml` (`wireguard_*`), then
+  `bash scripts/opnsense-playbook.sh ansible/opnsense-wireguard.yml`. Idempotent; re-linking the
+  instance's peer list on drift is handled (same trap-class as the HAProxy frontend rebind).
+- **Add a peer:** `bash scripts/wireguard-client.sh <name>` (generates a privkey into the KeePass
+  wallet as `wireguard-<name>-privkey`, prints the pubkey) → add `{name, tunnel_ip, pubkey}` to
+  `wireguard_peers` → run the playbook → re-run the script to render
+  `~/.claude/homelab-wireguard/<name>.conf` (`--qr` renders a terminal QR for the phone app).
+  Peer privkeys live ONLY in wallet + device; the server's privkey never leaves the router.
+- **Verify without a client:** `scripts/wireguard-handshake-probe.py <host> 51820 <peer-privkey>
+  <server-pubkey>` performs a real Noise handshake (needs a venv with `cryptography` — jail
+  pip-venv pattern). `HANDSHAKE_OK` proves port + keys + peer registration end-to-end.
+- **Endpoint freshness:** `wg.teststuff.net` is a DNS-only record in `tofu/cloudflare/dns.tf`;
+  tofu ignores its content (dynamic Telia lease) — who updates it is FU-075 (static IP vs ddclient).

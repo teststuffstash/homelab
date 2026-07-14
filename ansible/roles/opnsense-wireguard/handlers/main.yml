@@ -1,0 +1,9 @@
+---
+- name: reconfigure wireguard
+  oxlorg.opnsense.raw: { module: wireguard, controller: service, command: reconfigure, action: post }
+
+- name: apply firewall
+  oxlorg.opnsense.raw: { module: firewall, controller: filter, command: apply, action: post }
+
+- name: reconfigure unbound
+  oxlorg.opnsense.raw: { module: unbound, controller: service, command: reconfigure, action: post }

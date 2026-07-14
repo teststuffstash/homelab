@@ -1,0 +1,12 @@
+---
+# OPNsense WireGuard road-warrior VPN (full-LAN remote access, ADR-090). Thin
+# role-caller — logic in roles/opnsense-wireguard, config in group_vars/opnsense.yml.
+# Peer keys: scripts/wireguard-client.sh (privkeys in the KeePass wallet, pubkeys in
+# group_vars). Run: bash scripts/opnsense-playbook.sh ansible/opnsense-wireguard.yml
+- name: OPNsense WireGuard road-warrior VPN
+  hosts: opnsense
+  gather_facts: false
+  module_defaults:
+    oxlorg.opnsense.raw: "{{ opnsense_conn }}"
+  roles:
+    - opnsense-wireguard

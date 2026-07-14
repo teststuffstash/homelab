@@ -1,0 +1,194 @@
+---
+# OPNsense WireGuard — road-warrior VPN for full-LAN remote access (ADR-090).
+# Config in group_vars/opnsense.yml (wireguard_*); apply via
+#   bash scripts/opnsense-playbook.sh ansible/opnsense-wireguard.yml
+#
+# Pieces: peers ("clients" in OPNsense terms, pubkey-only — private keys never touch
+# the router or this repo), one server instance (keypair GENERATED ON the router at
+# first run, privkey never leaves it), WAN inbound rule + a pass rule on the
+# auto-created `wireguard` interface group (both via the firewall-automation API,
+# create-if-absent keyed on description), and an explicit Unbound ACL so VPN clients
+# resolve *.teststuff.net like on the LAN (Unbound already listens on all interfaces).
+#
+# Peer add/remove later: edit wireguard_peers + run scripts/wireguard-client.sh <name>,
+# re-run this play — the setServer drift task re-links the instance's peer list.
+
+# --- peers (OPNsense "clients") -----------------------------------------
+- name: Find WireGuard peers
+  oxlorg.opnsense.raw: { module: wireguard, controller: client, command: searchClient }
+  register: wg_peers
+- name: Create WireGuard peer <name>
+  oxlorg.opnsense.raw:
+    module: wireguard
+    controller: client
+    command: addClient
+    action: post
+    data:
+      client:
+        enabled: "1"
+        name: "{{ item.name }}"
+        pubkey: "{{ item.pubkey }}"
+        tunneladdress: "{{ item.tunnel_ip }}/32"
+  loop: "{{ wireguard_peers }}"
+  loop_control: { label: "{{ item.name }} ({{ item.tunnel_ip }})" }
+  when: item.name not in (wg_peers.response.rows | map(attribute='name') | list)
+  notify: reconfigure wireguard
+- name: Re-read peers (capture uuids)
+  oxlorg.opnsense.raw: { module: wireguard, controller: client, command: searchClient }
+  register: wg_peers2
+- name: Map peer name -> uuid
+  ansible.builtin.set_fact:
+    wg_peer_uuid: "{{ dict(wg_peers2.response.rows | map(attribute='name') | list | zip(wg_peers2.response.rows | map(attribute='uuid') | list)) }}"
+    wg_desired_peer_uuids: "{{ wg_peers2.response.rows | selectattr('name', 'in', wireguard_peers | map(attribute='name') | list) | map(attribute='uuid') | list }}"
+
+# --- server instance (keypair generated on the router, first run only) --
+- name: Find WireGuard instances
+  oxlorg.opnsense.raw: { module: wireguard, controller: server, command: searchServer }
+  register: wg_servers
+- name: Generate server keypair (instance absent — privkey stays on the router)
+  oxlorg.opnsense.raw: { module: wireguard, controller: server, command: keyPair }
+  register: wg_keypair
+  when: wireguard_instance_name not in (wg_servers.response.rows | map(attribute='name') | list)
+- name: Create WireGuard instance {{ wireguard_instance_name }}
+  oxlorg.opnsense.raw:
+    module: wireguard
+    controller: server
+    command: addServer
+    action: post
+    data:
+      server:
+        enabled: "1"
+        name: "{{ wireguard_instance_name }}"
+        instance: "0"
+        pubkey: "{{ wg_keypair.response.pubkey }}"
+        privkey: "{{ wg_keypair.response.privkey }}"
+        port: "{{ wireguard_port }}"
+        tunneladdress: "{{ wireguard_tunnel_address }}"
+        peers: "{{ wg_desired_peer_uuids | join(',') }}"
+        disableroutes: "0"
+  when: wireguard_instance_name not in (wg_servers.response.rows | map(attribute='name') | list)
+  notify: reconfigure wireguard
+
+# Create-if-absent means a peer added later would NOT be linked to the instance —
+# same trap as the HAProxy frontend rebind. Re-post the peer list when it drifts.
+- name: Read instance detail (peer-link drift check)
+  oxlorg.opnsense.raw:
+    module: wireguard
+    controller: server
+    command: "getServer/{{ (wg_servers.response.rows | selectattr('name', 'equalto', wireguard_instance_name) | first).uuid }}"
+  register: wg_server_detail
+  vars:
+    _existing: "{{ wg_servers.response.rows | selectattr('name', 'equalto', wireguard_instance_name) | list }}"
+  when: _existing | length > 0
+- name: Re-link instance peers on drift
+  oxlorg.opnsense.raw:
+    module: wireguard
+    controller: server
+    command: "setServer/{{ (wg_servers.response.rows | selectattr('name', 'equalto', wireguard_instance_name) | first).uuid }}"
+    action: post
+    data:
+      server:
+        enabled: "1"
+        name: "{{ wireguard_instance_name }}"
+        pubkey: "{{ wg_server_detail.response.server.pubkey }}"
+        privkey: "{{ wg_server_detail.response.server.privkey }}"
+        port: "{{ wireguard_port }}"
+        tunneladdress: "{{ wireguard_tunnel_address }}"
+        peers: "{{ wg_desired_peer_uuids | join(',') }}"
+        disableroutes: "0"
+  vars:
+    _linked: "{{ (wg_server_detail.response.server.peers | default({})) | dict2items | selectattr('value.selected', 'equalto', 1) | map(attribute='key') | list }}"
+  when:
+    - wg_server_detail is not skipped
+    - (_linked | sort) != (wg_desired_peer_uuids | sort)
+  notify: reconfigure wireguard
+
+# --- enable the service --------------------------------------------------
+- name: Read WireGuard general settings
+  oxlorg.opnsense.raw: { module: wireguard, controller: general, command: get }
+  register: wg_general
+- name: Enable WireGuard
+  oxlorg.opnsense.raw:
+    module: wireguard
+    controller: general
+    command: set
+    action: post
+    data: { general: { enabled: "1" } }
+  when: wg_general.response.general.enabled != "1"
+  notify: reconfigure wireguard
+
+# The `wireguard` interface GROUP only exists after the service is configured —
+# flush now so the firewall tasks below can bind rules to it on the same run.
+- name: Apply WireGuard before firewall rules
+  ansible.builtin.meta: flush_handlers
+
+# --- firewall (automation API; create-if-absent keyed on description) ----
+- name: Read firewall rule options
+  oxlorg.opnsense.raw: { module: firewall, controller: filter, command: getRule }
+  register: fw_rule_model
+- name: Assert the wireguard interface group exists
+  ansible.builtin.assert:
+    that: "'wireguard' in fw_rule_model.response.rule.interface"
+    fail_msg: "No 'wireguard' group in firewall interface options — is the WireGuard instance up?"
+- name: Find firewall automation rules
+  oxlorg.opnsense.raw: { module: firewall, controller: filter, command: searchRule }
+  register: fw_rules
+- name: Create firewall rule (create-if-absent by description)
+  oxlorg.opnsense.raw:
+    module: firewall
+    controller: filter
+    command: addRule
+    action: post
+    data:
+      rule: "{{ item.rule }}"
+  loop:
+    - desc: "wireguard: WAN inbound {{ wireguard_port }}/udp (ansible)"
+      rule:
+        enabled: "1"
+        sequence: "100"
+        action: pass
+        quick: "1"
+        interface: wan
+        direction: in
+        ipprotocol: inet
+        protocol: UDP
+        source_net: any
+        destination_net: any
+        destination_port: "{{ wireguard_port }}"
+        description: "wireguard: WAN inbound {{ wireguard_port }}/udp (ansible)"
+    - desc: "wireguard: VPN clients to home networks (ansible)"
+      rule:
+        enabled: "1"
+        sequence: "110"
+        action: pass
+        quick: "1"
+        interface: wireguard
+        direction: in
+        ipprotocol: inet
+        protocol: any
+        source_net: "{{ wireguard_tunnel_network }}"
+        destination_net: any
+        description: "wireguard: VPN clients to home networks (ansible)"
+  loop_control: { label: "{{ item.desc }}" }
+  when: item.desc not in (fw_rules.response.rows | map(attribute='description') | list)
+  notify: apply firewall
+
+# --- Unbound: answer VPN clients (listens on all ifaces; ACL the subnet) --
+- name: Find Unbound ACLs
+  oxlorg.opnsense.raw: { module: unbound, controller: settings, command: searchAcl }
+  register: unbound_acls
+- name: Allow VPN subnet in Unbound
+  oxlorg.opnsense.raw:
+    module: unbound
+    controller: settings
+    command: addAcl
+    action: post
+    data:
+      acl:
+        enabled: "1"
+        name: wireguard-clients
+        action: allow
+        networks: "{{ wireguard_tunnel_network }}"
+        description: "WireGuard road-warrior clients (ansible)"
+  when: "'wireguard-clients' not in (unbound_acls.response.rows | map(attribute='name') | list)"
+  notify: reconfigure unbound

@@ -22,6 +22,8 @@
     "openssl@latest",
     "tea@latest",
     "keepassxc@latest",
+    "wireguard-tools@latest",
+    "qrencode@latest",
     "argocd@latest",
     "infisical@latest",
     "gh@latest"

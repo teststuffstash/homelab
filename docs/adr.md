@@ -701,3 +701,24 @@ bulk ≈150Gi grantable at 2 replicas (wk-02-side headroom bounds it); std stays
 until more always-on disks join; wipe/power-off of wk-metal-01 degrades bulk volumes until
 rebuild — acceptable by tier definition, alert via Longhorn robustness metrics; disk tags +
 bulk-disk registration are node-CR patches (`scripts/longhorn-tag-disks.sh`), not tofu.
+
+### ADR-090 — Full-LAN remote access: WireGuard on OPNsense (road-warrior), not Cloudflare Zero-Trust
+**Status:** Accepted (2026-07-14). **Decision:** "work from the summer home like at home" = a
+WireGuard instance ON the router (OPNsense core), road-warrior peers (laptop + phone only), split
+tunnel routing `192.168.0.0/16` with Unbound as client DNS — so LAN names, HAProxy VIPs and the
+BGP service VIPs (`32.0/19`, natively routable per ADR-046) all work exactly as at home. All as
+code: `ansible/opnsense-wireguard.yml` (instance, peers, WAN + wireguard-group firewall rules via
+the firewall-automation API, Unbound ACL), peers listed pubkey-only in `group_vars`.
+**Considered:** Cloudflare WARP→Tunnel private network (rejected: every packet to the own house
+hairpins through the CF edge, proprietary client + Zero-Trust enrollment, and the useful knobs
+were already found Enterprise-gated in ADR-051 — violates local-first for the *private* tier);
+Tailscale/Headscale (rejected: NAT-traversal SaaS/extra coordination service solves a problem we
+verified we don't have). **Why:** the WAN IP is genuinely public (WAN iface IP == egress IP,
+checked 2026-07-14 — **no CGNAT**), the router is already config-as-code, and ADR-050 scoped the
+Tunnel as the *per-app public* edge with WireGuard explicitly "replaceable" for the private tier.
+**Consequences:** `192.168.64.0/24` carved from the routed-virtual overflow block (ip-plan);
+server privkey generated on and never leaves the router; peer privkeys only in wallet + device
+(`scripts/wireguard-client.sh` renders configs/QR); endpoint `wg.teststuff.net` is a DNS-only
+record whose *content* is out-of-band (dynamic Telia lease → FU-075: static-IP fee vs ddclient);
+LAN-side Noise handshake E2E-verified (`scripts/wireguard-handshake-probe.py`); from-outside
+verification pending (phone on LTE). Port 51820/udp — Telia's port filtering (53/25) doesn't touch it.

@@ -1350,6 +1350,106 @@
         }
       }
     },
+    "qrencode@latest": {
+      "last_modified": "2026-07-05T01:29:37Z",
+      "resolved": "github:NixOS/nixpkgs/6edbf1a6a03e75886a6609c088801a0856449e88#qrencode",
+      "source": "devbox-search",
+      "version": "4.1.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/40g7liv4pdgmn252zxqhffndz207fsak-qrencode-4.1.1-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/0ycnwq19by50k2mw2y56pmsgjd4ag8bw-qrencode-4.1.1-man",
+              "default": true
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/xck1lwr1kqc8vpr8mwmlv7w320hmab55-qrencode-4.1.1"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/k1sjd7154rzl11kwjvcgkh4q1rhhbcvq-qrencode-4.1.1-dev"
+            }
+          ],
+          "store_path": "/nix/store/40g7liv4pdgmn252zxqhffndz207fsak-qrencode-4.1.1-bin"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/6d0jh8mgn8f1gc8j6d5pxkyk2dydwq3p-qrencode-4.1.1-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/984z0nn98088sa28by268d06dfhm32c7-qrencode-4.1.1-man",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/az1d2p5xvhpi3m74x986rqpa9c1vn715-qrencode-4.1.1-dev"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/3kas7fb3xryxs6r0lvszwmlj5gkff4cw-qrencode-4.1.1"
+            }
+          ],
+          "store_path": "/nix/store/6d0jh8mgn8f1gc8j6d5pxkyk2dydwq3p-qrencode-4.1.1-bin"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/irpryqzb46z8nfrzrm8vvaf7cwycajin-qrencode-4.1.1-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/isih4g6vmvk5pxfy37nyz03hiwakzflb-qrencode-4.1.1-man",
+              "default": true
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/0ssjz4x4akh0czk5qdiimbbd65immd2x-qrencode-4.1.1"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/anwigvmwwm6g01cy8hhxj76l6f9fqhal-qrencode-4.1.1-dev"
+            }
+          ],
+          "store_path": "/nix/store/irpryqzb46z8nfrzrm8vvaf7cwycajin-qrencode-4.1.1-bin"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "bin",
+              "path": "/nix/store/1s7217099qn3c681zgz1111957qz09pl-qrencode-4.1.1-bin",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/imgcmr14mnrbkm01ca8xswn5jzlii8pn-qrencode-4.1.1-man",
+              "default": true
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/zd15pk5wfmsy19kxw6acmhy49nxyrv15-qrencode-4.1.1-dev"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/viqr1b2gsdgs7fh6qfmkil026nsx3n3z-qrencode-4.1.1"
+            }
+          ],
+          "store_path": "/nix/store/1s7217099qn3c681zgz1111957qz09pl-qrencode-4.1.1-bin"
+        }
+      }
+    },
     "sops@latest": {
       "last_modified": "2026-06-27T07:37:20Z",
       "resolved": "github:NixOS/nixpkgs/3d46470bb3030020f7e1361f33514854f5bfa86d#sops",
@@ -1491,6 +1591,74 @@
             }
           ],
           "store_path": "/nix/store/4b18lpvjf07hk9c3iyf6nsw739dsbcrf-tea-0.14.0"
+        }
+      }
+    },
+    "wireguard-tools@latest": {
+      "last_modified": "2026-06-27T07:37:20Z",
+      "resolved": "github:NixOS/nixpkgs/3d46470bb3030020f7e1361f33514854f5bfa86d#wireguard-tools",
+      "source": "devbox-search",
+      "version": "1.0.20260223",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vq4irwr9khki992yk9m2m0q2fc1yj26d-wireguard-tools-1.0.20260223",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/js61p2rrz48gixkjl7lc11xpsq736n95-wireguard-tools-1.0.20260223-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vq4irwr9khki992yk9m2m0q2fc1yj26d-wireguard-tools-1.0.20260223"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qi1p44gl9ic6b7048lac255ncygm5nx2-wireguard-tools-1.0.20260223",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/ymfrqi11didby7r5h2yiplgvh8k1jvn2-wireguard-tools-1.0.20260223-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qi1p44gl9ic6b7048lac255ncygm5nx2-wireguard-tools-1.0.20260223"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ngmk9j5jqr8hswczkg5qxyfd3cvnzv3x-wireguard-tools-1.0.20260223",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/00g48crl8lvcw3912ncz79ih111pfjih-wireguard-tools-1.0.20260223-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/ngmk9j5jqr8hswczkg5qxyfd3cvnzv3x-wireguard-tools-1.0.20260223"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/3a0kbhb40infx25b84fkpp1w81w9s89y-wireguard-tools-1.0.20260223",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/959mjzhpbagk333zfki23cs7g87f6pv9-wireguard-tools-1.0.20260223-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/3a0kbhb40infx25b84fkpp1w81w9s89y-wireguard-tools-1.0.20260223"
         }
       }
     },

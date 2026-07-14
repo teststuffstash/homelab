@@ -74,6 +74,9 @@ via a **Cloudflare Tunnel** (`cloudflared` in-cluster) gated by **client-certifi
 `tofu/cloudflare/` + `docs/cloudflare.md`. The `teststuff.net` zone now lives on **Cloudflare**
 (moved off Route53), so OPNsense **ACME is DNS-01 via Cloudflare** (`ansible/opnsense-acme.yml`), not
 Route53. LAN HTTPS names above stay on the local HAProxy path; only `ha.teststuff.net` is public.
+**Full-LAN remote access** is WireGuard on OPNsense (`wg.teststuff.net:51820/udp`, ADR-090,
+`ansible/opnsense-wireguard.yml`) — VPN clients (`192.168.64.0/24`) see LAN + VIPs + Unbound DNS
+as if at home; recipe in `docs/runbook.md`.
 
 ## Repo layout
 

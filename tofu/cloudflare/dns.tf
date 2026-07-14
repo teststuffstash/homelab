@@ -9,6 +9,23 @@ resource "cloudflare_dns_record" "ha" {
   ttl     = 1 # automatic (required to be 1 when proxied)
 }
 
+# WireGuard road-warrior endpoint (ADR-090) — the home WAN IP. DNS-only: Cloudflare
+# can't proxy WireGuard UDP, and the whole point is a direct tunnel to OPNsense.
+# The IP is a dynamic Telia lease: tofu owns the record's existence, NOT its content —
+# FU-075 decides who keeps it fresh (Telia static-IP fee vs ddclient on OPNsense).
+resource "cloudflare_dns_record" "wg" {
+  zone_id = var.zone_id
+  name    = "wg"
+  type    = "A"
+  content = "176.46.101.184"
+  proxied = false
+  ttl     = 300
+  comment = "WireGuard endpoint (home WAN, dynamic). Content updated out-of-band - FU-075."
+  lifecycle {
+    ignore_changes = [content]
+  }
+}
+
 # Work projects resolve *.local.teststuff.net -> 127.0.0.1 for local self-signed TLS envs.
 # DNS-only (grey cloud): must NOT be proxied, and the edge mTLS/WAF must not touch it.
 resource "cloudflare_dns_record" "wildcard_local" {
