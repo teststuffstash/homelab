@@ -8,6 +8,30 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-042** *(archived 2026-07-14)* — **Deterministic dispatch pre-flight** (af8e2e1, 2026-07-09):
+  `agent-session.sh` refuses dispatch on open-linked-PR (unless `--work-branch` resumes that PR's
+  own branch), Running-worker ≥ WIP limit, or a <30-min session key. Exercised in anger: the
+  refuse path fired live 2026-07-09 (and got the work-branch refinement); the resume path carried
+  issue #8 round 2 clean through the 2026-07-12 supervised acceptance round.
+
+- **FU-043** *(archived 2026-07-14)* — **Auto-merge arming decoupled from the dispatcher**: in-pod
+  `agent-finalize` arms + posts stats (`armed_by_pod`/`stats_comment_by_pod`), launcher path kept
+  as fallback. TICK-LOG: "in-pod bookkeeping perfect 3/3" — armed on every round regardless of
+  dispatcher lifetime.
+
+- **FU-064** *(archived 2026-07-14)* — **Freshness-wall fixes**: (a) harness-owned terminal push —
+  `agent-finalize` pushes any committed branch at terminal time; fired IN ANGER through the broker
+  on oracle-fleet#7 (TICK-LOG). (b) git token as live volume mount — shipped (agent-runtime
+  09cd3e0), then superseded by ADR-087 broker tokens default-on. Acceptance rounds ran on
+  oracle-fleet#7/#8 (not #1 as originally planned — #1's walls were the evidence, not the venue).
+
+- **FU-065** *(archived 2026-07-14)* — **In-sandbox test clusters: SUPERSEDED by `fixer.docker`**
+  (2026-07-14). The item's endgame — "test-cluster tier as a per-stack AgentStack policy field" —
+  shipped as the docker knob: kind/k3d inside a kata microVM ride, proven on all 3 laptops
+  (docs/spikes/kata-ci-gate.md). The kata runtime made the originally-ruled-out
+  kind-in-a-pod path the winner; rung 1 (envtest+chainsaw, unprivileged in-pod) stays available
+  repo-side for API-only operators without any platform work; rung 2 (vcluster) dropped.
+
 - **FU-074** *(archived 2026-07-14)* — **k3d/kind-in-kata acceptance: SOLVED, repeatable.**
   Root cause of all post-reinstall hangs: kata guests lack `/dev/kmsg` and kubelet (cadvisor)
   hard-requires it — k3s died *after* its apiserver was up, so k3d saw only a silent log-stream

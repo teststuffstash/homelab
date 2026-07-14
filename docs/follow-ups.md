@@ -182,32 +182,6 @@ _Last updated: 2026-07-14._
       `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
       apply.
 
-- [ ] **FU-064** — **BUILT 2026-07-09 night (agent-runtime 09cd3e0 → pinned 2026.7.9-g09cd3e0d6542;
-      homelab af8e2e1) — pending the acceptance round on oracle-fleet#1, then resolve.** Original scope:
-      **Slow-cheap models break every freshness assumption at once — two deterministic
-      fixes before FU-018's endgame.** Live evidence (2026-07-09 meta-session 2, oracle-fleet#1: THREE
-      attempts, three different walls — git-token 60-min TTL, key-expiry PATCH bug openrouter-operator#6,
-      $0.50 session budget at 65 min — zero model/task failures, ~2.5h of green work lost unpushed;
-      full autopsy in `agents/coordinator/TICK-LOG.md`). (a) **Harness-owned terminal push**: the
-      push-early recipe rule failed to bind on 3 runs / 2 models — `agent-finalize` (already runs
-      post-harness in-pod) must `git push` any local branch with commits at terminal time, so a died
-      run always leaves a resumable branch (kills the "hoping the worker pushes" class). (b) **Git
-      token as volume mount, not env**: `GH_TOKEN` is a `secretKeyRef` env var → frozen at pod start →
-      ESO refreshes can never reach a running pod; mount the Secret and read at use time (credential
-      helper / finalize-time `gh auth`) so pushes always hold a live token. Both are small; FU-018's
-      proxy cred-injection supersedes (b) eventually. Relates FU-019 (persistent workspace = the
-      salvage/warm-resume cache on top), FU-021/FU-062 (strike classes these deaths produce).
-- [ ] **FU-065** — **In-sandbox test clusters for operator-shaped repos (decided 2026-07-09: rungs 1+2).**
-      Operator repos (openrouter-operator: helm install + kyverno chainsaw) need a cluster in the WORKER's
-      inner loop — the CI-push cycle is too slow for writing/iterating those tests. Rung 1: **envtest +
-      chainsaw** (etcd+apiserver as plain processes, unprivileged, in-pod; chainsaw takes any kubeconfig;
-      covers API-level operators fully — openrouter-operator's world is CRs/Secrets/HTTPS). Rung 2:
-      **vcluster** when test workloads must actually run (unprivileged; syncer runs them on the HOST
-      cluster → needs a quota'd + NetworkPolicy-fenced sandbox ns per worker; FU-019-adjacent). Ruled
-      out for now: kind-in-rootless-podman in an unprivileged pod (nested systemd/kubelet + cgroup
-      delegation + /dev/fuse); remote-docker DinD only if node semantics ever genuinely needed.
-      Test-cluster tier = a per-stack `AgentStack` policy field (ADR-085/FU-048). First consumer:
-      openrouter-operator's fixer onboarding (FU-052).
 - [ ] **FU-066** — **claude-code + Haiku worker tier — SUBSCRIPTION ONLY, gated on FU-018 (decided
       2026-07-09).** Add `--harness claude` to `agent-session.sh` (coordinator/reviewer plumbing already
       runs Claude Code in-pod) with Haiku as the model, on the Claude subscription (explicitly NOT
@@ -380,33 +354,6 @@ _Last updated: 2026-07-14._
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.
-- [ ] **FU-042** — **BUILT 2026-07-09 night (af8e2e1): hard launcher pre-flight refuses dispatch on
-      open-linked-PR / Running worker / near-dead key — resolve after the acceptance round exercises
-      it.** Original: **Coordinator double-dispatches an already-in-progress issue** (no deterministic
-      idempotency). The dispatch guard is soft LLM-judgment in the brief (`agents/coordinator/README.md`
-      step 1: "pick one labelled `agent/queued`"), enforced by nothing. Live failure 2026-07-03:
-      sleep-tracking#10 was claimed correctly (`agent/queued`→`agent/in-progress`, PR #11 opened), then
-      a second coordinator pass ~3h later re-picked the same **`agent/in-progress`** issue, commented a
-      fresh "round 1" unaware of #11, and opened a conflicting **PR #12** (both edit
-      `tests/integration/fixtures/nights.yaml`). Closed #12, kept #11. The brief *states* the invariant
-      "idempotency key `(issue, base-sha, round)` so a re-list never double-spawns" but a stateless LLM
-      ignored it. **Fix: make dispatch idempotent deterministically** — refuse to dispatch if the issue
-      already has an open linked agent PR **or** carries `agent/in-progress` (a hard pre-flight in
-      `agent-session.sh`, or fold dispatch into a reflex like the review path — same philosophy as
-      FU-041). Tightening the brief wording alone is insufficient (that's the guard that just failed).
-- [ ] **FU-043** — **Auto-merge arming (+ stats comment) is coupled to the dispatcher's lifetime**, so
-      an interactively-dispatched PR can be born un-armed and stall silently. `agent-session.sh`'s
-      post-run block (arm auto-merge + post the `AGENT_RUN_STATS` PR comment) runs **in the dispatching
-      process and blocks until the worker pod finishes (~5 min)**. A **headless** coordinator pass
-      (`--run …`) runs it to completion; an **interactive** dispatch that detaches before the worker
-      ends skips it entirely. Live proof 2026-07-03: sleep-tracking#11 (dispatched interactively) got
-      **no** stats comment and **no** auto-merge (armed by hand at 19:41), while #12 (headless pass) got
-      both. Arming is the load-bearing one — an un-armed PR is invisible to the entire merge path
-      (updater/reflex/auto-merge) and stalls with no signal. **Fix: make arming independent of the
-      dispatcher** — e.g. arm from a reflex/CronJob (arm any open agent PR that isn't armed), or have
-      the worker arm its own PR at open (it already has `pull_requests:write`), so it never depends on
-      the interactive session surviving. Relates to FU-041 (deterministic merge path) and the
-      dispatch-idempotency gap in FU-042.
 - [ ] **FU-044** — **LLM oversight of the deploy path: auto-rollback / roll-forward on a broken
       deploy.** The FU-025 deploy pipeline (app-repo build → chart+image at `<calver>-g<sha>` →
       auto-bump PR in `sleep-iac` → ArgoCD sync, see `docs/sleep-iac.md` §Deploy pipeline) merges on
