@@ -94,8 +94,6 @@ _Last updated: 2026-07-14._
       **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).
       Then flip `var.argocd_repo_url` + child-app `repoURL`s and deliver the Forgejo read cred via
       ESO. Procedure: `argocd/README.md` → "Forgejo cutover".
-- [ ] **FU-008** — Forgejo orgs/mirrors were created imperatively (one-shot token, since deleted).
-      Decide: codify via the Forgejo TF provider vs accept the imperative bootstrap.
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the

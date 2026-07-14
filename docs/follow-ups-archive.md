@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-008** *(archived 2026-07-14)* — **Forgejo repo/org bootstrap: decided → keep imperative.**
+  Forgejo is deliberately *not* in homelab's GitHub IaC — the standing mechanism is `new-project.md`
+  Kind 3 (org via API, repo via `tea`, push over SSH with the dedicated `~/.claude/homelab-forgejo/`
+  key; this is how `sleep-lab` was made). FU-008's "one-shot token, since deleted" premise is stale:
+  the creds are now durable in KeePass — `forgejo-api-token`, `forgejo-rasmus-password`,
+  `forgejo-gpg-keyid` (`scripts/keepass-init.sh`) + the `forgejo-keys` SSH/GPG attachments
+  (`scripts/wallet-files.sh`). No gitea/forgejo TF provider (would duplicate the recipe + contradict
+  the design). Exercised: moved `rasmus/{therapy,car-fleet,presentations}` onto Forgejo this way.
+
 - **FU-042** *(archived 2026-07-14)* — **Deterministic dispatch pre-flight** (af8e2e1, 2026-07-09):
   `agent-session.sh` refuses dispatch on open-linked-PR (unless `--work-branch` resumes that PR's
   own branch), Running-worker ≥ WIP limit, or a <30-min session key. Exercised in anger: the
