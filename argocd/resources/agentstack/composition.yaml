@@ -240,6 +240,9 @@ spec:
                     # (the allowlist tightens back; that is the point of the mirrors).
                     - { matchName: registry-1.docker.io }
                     - { matchName: auth.docker.io }
+                    # blob CDN, HARVESTED from a live ride's Hubble DNS (2026-07-14) — hub blobs
+                    # redirect to CloudFront now; the cloudflare name kept as belt (CDN flapping)
+                    - { matchName: production.cloudfront.docker.com }
                     - { matchName: production.cloudflare.docker.com }
                     - { matchName: ghcr.io }
                     {{- end }}
