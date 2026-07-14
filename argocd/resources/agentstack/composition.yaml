@@ -207,6 +207,15 @@ spec:
                       rules:
                         dns:
                           - matchPattern: "*"
+                # docker=true: the pull-through registry mirrors (FU-073, registry-cache ns) by
+                # their BGP VIPs — kata egress to an LB VIP is policy-evaluated pre-translation,
+                # so a CIDR rule (not toEndpoints) is what matches. Git-pinned addresses.
+                - toCIDR:
+                    - 192.168.40.20/32
+                    - 192.168.40.21/32
+                  toPorts:
+                    - ports:
+                        - { port: "80", protocol: TCP }
                 {{- end }}
                 - toEndpoints: # the proxy + git-cred broker: the ONLY LLM/credential exit
                     - matchLabels:
@@ -235,15 +244,12 @@ spec:
                     - { matchName: {{ $f }} } # extraFQDNs (earned from a monitor-phase harvest)
                     {{- end }}
                     {{- if $docker }}
-                    # docker=true: the inner dockerd pulls node/tool images from the internet —
-                    # INTERIM until the FU-073 pull-through mirrors land, then delete this block
-                    # (the allowlist tightens back; that is the point of the mirrors).
-                    - { matchName: registry-1.docker.io }
-                    - { matchName: auth.docker.io }
-                    # blob CDN, HARVESTED from a live ride's Hubble DNS (2026-07-14) — hub blobs
-                    # redirect to CloudFront now; the cloudflare name kept as belt (CDN flapping)
-                    - { matchName: production.cloudfront.docker.com }
-                    - { matchName: production.cloudflare.docker.com }
+                    # docker=true: docker.io pulls ride the FU-073 mirror (toCIDR above) since
+                    # 2026-07-14 — the registry-1/auth/CDN FQDNs are gone (that tightening is the
+                    # point of the mirrors; mirror down ⇒ pulls drop loudly, not fall back).
+                    # ghcr.io stays: dockerd's registry-mirrors is Hub-only, so the dind's own
+                    # pulls of ghcr images (k3d-proxy/k3d-tools) go direct until the gate configs
+                    # route ghcr through the mirror per-tool.
                     - { matchName: ghcr.io }
                     {{- end }}
                   toPorts:

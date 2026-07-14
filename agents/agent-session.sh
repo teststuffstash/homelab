@@ -281,7 +281,14 @@ AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; a
 if [ -n "$DOCKER" ]; then
   AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
   KATA_BLOCK=$'  runtimeClassName: kata\n  dnsPolicy: "None"\n  dnsConfig:\n    nameservers: ["192.168.2.1"]'
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"'
+  # Pull-through mirrors (FU-073, argocd/resources/registry-cache/): docker.io rides the mirror
+  # via dockerd registry-mirrors (Hub-only by dockerd design); the ghcr mirror is exported for
+  # gate scripts (k3d --registry-config / kind containerdConfigPatches). BGP VIPs, git-pinned —
+  # reachable from kata guests where ClusterIPs are not (FU-072). NO upstream fallback once the
+  # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
+  MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
+  MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      emptyDir: { medium: Memory, sizeLimit: 2Gi }'
   DIND_CONTAINER="$(cat <<'DIND'
@@ -293,7 +300,7 @@ if [ -n "$DOCKER" ]; then
         - |
           sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512 >/dev/null || true
           mknod /dev/kmsg c 1 11 2>/dev/null || true
-          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2"}' > /etc/docker/daemon.json
+          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2", "registry-mirrors": ["__MIRROR_DOCKER_IO__"], "insecure-registries": ["__MIRROR_HOST__"]}' > /etc/docker/daemon.json
           exec dockerd-entrypoint.sh dockerd --host=unix:///run/docker.sock --group=1000
       volumeMounts:
         - { name: docker-run, mountPath: /run }
@@ -304,6 +311,8 @@ if [ -n "$DOCKER" ]; then
 DIND
 )"
   DIND_CONTAINER="${DIND_CONTAINER/__DIND_IMAGE__/${AGENT_DIND_IMAGE:-ghcr.io/k3d-io/k3d:5-dind}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_DOCKER_IO__/${MIRROR_DOCKER_IO}}"
+  DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_HOST__/${MIRROR_DOCKER_IO#http://}}"
 fi
 
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -

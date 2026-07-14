@@ -19,7 +19,9 @@ spec:
           # kata guests lack /dev/kmsg and kubelet (cadvisor) hard-requires it -- without
           # this, k3s dies AFTER its apiserver is up and k3d times out on a silent log stream
           mknod /dev/kmsg c 1 11 2>/dev/null || true
-          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2"}' > /etc/docker/daemon.json
+          # docker.io via the FU-073 pull-through mirror (registry-cache ns, BGP VIP — reachable
+          # from kata guests unlike ClusterIPs/FU-072); rancher/k3s is the bulk of the gate pull
+          mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2", "registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20"]}' > /etc/docker/daemon.json
           nohup dockerd-entrypoint.sh >/tmp/dockerd.log 2>&1 &
           for i in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 2; done
           docker info 2>/dev/null | grep "Storage Driver" || { echo DOCKERD-FAILED; tail -20 /tmp/dockerd.log; exit 1; }
