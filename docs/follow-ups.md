@@ -42,13 +42,18 @@ _Last updated: 2026-07-14._
 
 ## GitOps & platform
 
-- [ ] **FU-073** — **Pull-through OCI registry mirrors as a platform service** (the nix-cache
-      pattern for images; design in `docs/spikes/kata-ci-gate.md`): `mirror-docker-io` +
-      `mirror-ghcr` (registry:2 proxy mode, or zot for multi-upstream), replica-1 cache PVCs
-      (std pool is crunched — size small), consumed by k3d `--registry-config`, kind
-      `containerdConfigPatches`, agent kata pods' inner dockerd, ARC runners, and ci-runner-01's
-      daemon.json. Goal: `devbox run ci` never hits the internet for images; agent egress
-      allowlists drop registry FQDNs.
+- [ ] **FU-073** — **Pull-through OCI registry mirrors — CORE LIVE 2026-07-14 (ADR-091):**
+      `registry-cache` ns, registry:3 pair (docker.io + ghcr), longhorn-bulk cache PVCs, BGP
+      VIPs `.40.20/.21`; docker-mode agent rides wired (dind `registry-mirrors` + the
+      `REGISTRY_MIRROR_*` env contract) and the docker.io FQDNs dropped from the agentstack
+      egress (E2E under enforced deny-all: alpine 2s cold / 1s warm from a kata ride).
+      **Remaining consumers:** (a) Talos node-level `machine.registries.mirrors` (all cluster
+      pulls — apply from home, verify restart semantics); (b) ci-runner-01 `daemon.json`;
+      (c) ARC runner pods; (d) gate scripts actually consuming `REGISTRY_MIRROR_*` (first:
+      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`); (e) nix-cache for
+      kata rides — give `nixcache` an LB VIP + an agent-base substituter override (agent-runtime
+      repo) to erase the ~4-min cold `devbox install` observed 2026-07-14 (ClusterIP unreachable
+      per FU-072).
 - [ ] **FU-077** — **PodSecurity runtimeClass exemption for kata** (apiserver
       `admissionControl` patch on cp-01, Talos `cluster.apiServer`): privileged-inside-a-microVM
       is root in the guest only, but PSS can't see runtime classes — docker-mode worker

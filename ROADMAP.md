@@ -152,13 +152,16 @@ auto-merged fix. Full design + trust model + the worked sleep-tracker example:
 `homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **CI runners are
 Tofu-defined Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC (ADR-082).
 
-## Caching tier (partially decided)
+## Caching tier (nix + images LIVE)
 
 The **nix** leg is LIVE — an in-cluster pull-through cache (`argocd/resources/nix-cache/`,
-`SERVICES.md`) feeding agent-sandbox `devbox install`s. Still open (**ADR-070**): a
-**container-image** pull-through mirror (Zot / Harbor / `distribution`, consumed declaratively via
-Talos `machine.registries.mirrors`) and possibly apt-cacher-ng — decide weight-vs-benefit and the
-host when image-pull pain or rate limits make it real.
+`SERVICES.md`) feeding agent-sandbox `devbox install`s. The **images** leg is LIVE too
+(2026-07-14, **ADR-091**): two `registry:3` pull-through mirrors
+(`argocd/resources/registry-cache/`, docker.io + ghcr, BGP VIPs `.40.20/.21`) feeding docker-mode
+agent rides and the k3d/kind CI gates — Harbor/zot and the out-of-cluster box were rejected for
+nginx-grade simplicity. Remaining consumers tracked in FU-073 (Talos node-level
+`machine.registries.mirrors`, ci-runner-01, ARC runners). Still open (ADR-070): apt-cacher-ng,
+when apt pain is real.
 
 ## Risks & gotchas (from the build — still true)
 

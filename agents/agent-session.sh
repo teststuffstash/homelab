@@ -288,7 +288,7 @@ if [ -n "$DOCKER" ]; then
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"
   MIRROR_GHCR="${AGENT_MIRROR_GHCR-http://192.168.40.21}"
-  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"'"'
+  DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      emptyDir: { medium: Memory, sizeLimit: 2Gi }'
   DIND_CONTAINER="$(cat <<'DIND'

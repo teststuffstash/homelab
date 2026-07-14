@@ -642,16 +642,17 @@ flavoured + a live surface). **Why pending:** the IDP (ADR-055) and public tier 
 until then, sharing is a **static export** (v1) or manual; when live, the page + IDP get a Cilium
 NetworkPolicy and an ADR supersede.
 
-### ADR-070 — Local caching tier (images / nix / apt): partially resolved
-**Status:** Open (2026-05-24; nix leg resolved 2026-06). **Decision (images/apt):** none yet —
-leaning to an out-of-cluster, always-on LAN box running **Zot or Harbor** as a pull-through image
-cache (consumed via Talos `registries.mirrors`), plus maybe apt-cacher-ng. **Considered:** Harbor,
+### ADR-070 — Local caching tier (images / nix / apt): images leg resolved → ADR-091
+**Status:** Superseded for images (2026-07-14, ADR-091); nix leg resolved 2026-06; **apt leg
+still open** (no pain yet). **Original decision (images/apt):** none — leaning to an
+out-of-cluster, always-on LAN box running **Zot or Harbor** as a pull-through image cache
+(consumed via Talos `registries.mirrors`), plus maybe apt-cacher-ng. **Considered:** Harbor,
 Zot, `distribution/registry`, Spegel (in-cluster P2P), Squid (rejected). _Update:_ the **nix** leg
 landed differently than the original "out-of-cluster" lean — an **in-cluster** pull-through cache
 (nginx on a Longhorn PVC, ADR-083, `argocd/resources/nix-cache/`), acceptable because losing it on
 a cluster wipe only costs a re-fill and its main consumer (agent pods) lives in-cluster anyway.
-**Why still open:** image-mirror weight vs benefit; which host. **Consequences:** repeated image
-pulls still hit upstream / rate-limits until decided.
+_The images leg followed the same shape_ (ADR-091: in-cluster `registry:3` pair, `registry-cache`
+ns) — the out-of-cluster lean and the Harbor/zot weight both dropped.
 
 ---
 
@@ -722,3 +723,32 @@ server privkey generated on and never leaves the router; peer privkeys only in w
 record whose *content* is out-of-band (dynamic Telia lease → FU-075: static-IP fee vs ddclient);
 LAN-side Noise handshake E2E-verified (`scripts/wireguard-handshake-probe.py`); from-outside
 verification pending (phone on LTE). Port 51820/udp — Telia's port filtering (53/25) doesn't touch it.
+
+### ADR-091 — OCI pull-through mirrors: in-cluster registry:3 pair, not Harbor/zot
+**Status:** Accepted (2026-07-14). Resolves the **images leg of ADR-070** (the nix leg's
+precedent applied). **Decision:** pull-through OCI mirrors as an in-cluster platform service
+(`registry-cache` ns, `argocd/resources/registry-cache/`, raw manifests per ADR-083): **one
+`registry:3` (distribution) instance per upstream** — `mirror-docker-io` and `mirror-ghcr` —
+because proxy mode is single-upstream by design. Cache PVCs on **longhorn-bulk** (re-warmable;
+TTL-evicted, `REGISTRY_PROXY_TTL=168h`), **BGP LoadBalancer VIPs** `192.168.40.20/.21` — routed
+VIPs are reachable from kata microVM guests where ClusterIPs black-hole (FU-072), and the same
+stable IPs serve off-cluster consumers (ci-runner-01, laptops). Consumers wired at birth:
+docker-mode agent rides (dind `registry-mirrors`, `agents/agent-session.sh`) and the
+`REGISTRY_MIRROR_DOCKER_IO`/`REGISTRY_MIRROR_GHCR` env contract for k3d/kind CI-gate scripts;
+the agentstack egress Composition **dropped the docker.io FQDNs** the same day (mirror down ⇒
+pulls drop loudly and `AgentWorkerEgressDropped` names it — no silent internet fallback, that's
+the point). **Considered:** **Harbor** (multi-upstream proxy projects, UI, Trivy scanning,
+quotas, replication — rejected: core+portal+jobservice+registry+redis+postgres for what nginx-
+grade simplicity covers, and its real added value serves *first-party hosting*, which ghcr owns
+by decision (CI two-tier, ADR-082); revisit only if SLSA Phase-3 self-hosting moves artifacts
+in-house); **zot** (single CNCF binary, but its sync extension is periodic/config-heavy where
+dist's proxy mode is the purpose-built primitive); **Spegel** (P2P re-serving of node-cached
+images — complements node pulls someday, useless for inner-docker/VM consumers or cold pulls);
+**out-of-cluster box** (ADR-070's original lean — dropped like the nix leg: losing an in-cluster
+cache costs a re-fill, and no new always-on host). **Consequences:** docker.io CI-gate pulls are
+LAN-speed (alpine cold 2s / warm 1s from a kata ride, E2E 2026-07-14); dockerd's
+`registry-mirrors` is Hub-only so dind's own ghcr pulls (k3d-proxy/tools) keep the `ghcr.io`
+FQDN until gate configs route ghcr per-tool; **Talos node-level `machine.registries.mirrors` +
+ci-runner-01 + ARC wiring deferred** (FU-073 carries the remainder). Gotcha for every future
+VIP-consuming netpol: pod→LB-VIP flows are policy-evaluated **post-DNAT against the backend
+identity** (Hubble-verified, even from kata) — allow with `toEndpoints`, not a VIP CIDR.
