@@ -1,0 +1,27 @@
+# Pull-through OCI registry mirrors (FU-073 / ADR-091) — the nix-cache pattern for images:
+# manifests in argocd/resources/registry-cache/. Consumed by docker-mode agent rides
+# (agents/agent-session.sh), k3d/kind CI gates, ci-runner-01; endpoints in SERVICES.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: registry-cache
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/registry-cache
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: registry-cache
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

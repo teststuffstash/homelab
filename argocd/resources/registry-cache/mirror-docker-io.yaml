@@ -1,0 +1,94 @@
+# Pull-through mirror of docker.io (FU-073 / ADR-091 — the nix-cache pattern for OCI images).
+# distribution/registry v3 in proxy mode: single-upstream by design, so one instance per upstream
+# (mirror-ghcr.yaml is the sibling). Pure regenerable cache — losing it costs a re-fill, hence
+# longhorn-bulk (2 replicas on the big-disk tier; ADR-089 tier semantics accept laptop-wipe
+# degradation). TTL eviction keeps it a cache, not an archive.
+#
+# Consumers (docker.io pulls only — dockerd's registry-mirrors is Hub-specific):
+#   inner dockerd in kata agent rides (agents/agent-session.sh --docker), k3d --registry-config /
+#   kind containerdConfigPatches in CI gates, ci-runner-01 daemon.json, and later the Talos
+#   node-level machine.registries.mirrors (deferred — see FU-073).
+# LAN endpoint: http://192.168.40.20 (BGP VIP; also registry-docker-io.registry-cache.svc in-cluster).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mirror-docker-io-data
+  namespace: registry-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn-bulk
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirror-docker-io
+  namespace: registry-cache
+  labels: { app: mirror-docker-io }
+spec:
+  replicas: 1
+  strategy: { type: Recreate } # RWO volume
+  selector:
+    matchLabels: { app: mirror-docker-io }
+  template:
+    metadata:
+      labels: { app: mirror-docker-io }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: registry
+          image: registry:3.0.0
+          env:
+            - { name: REGISTRY_PROXY_REMOTEURL, value: "https://registry-1.docker.io" }
+            # cache semantics: blobs unreferenced for a week get evicted by the proxy scheduler
+            - { name: REGISTRY_PROXY_TTL, value: "168h" }
+            - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
+            - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+          ports:
+            - { name: http, containerPort: 5000 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/registry }
+          readinessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /v2/, port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits:   { cpu: "2",    memory: "512Mi" }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: mirror-docker-io-data }
+---
+# LoadBalancer (BGP VIP) rather than ClusterIP: kata microVM guests can't reach ClusterIPs
+# (FU-072) but routed VIPs work, and the same stable IP serves off-cluster consumers
+# (ci-runner-01, laptops). HTTP-only — consumers list it under insecure-registries; it never
+# leaves the LAN.
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-docker-io
+  namespace: registry-cache
+  labels:
+    app: mirror-docker-io
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.20"
+spec:
+  type: LoadBalancer
+  selector: { app: mirror-docker-io }
+  ports:
+    - { name: http, port: 80, targetPort: 5000 }
