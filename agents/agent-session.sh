@@ -40,7 +40,7 @@ while [ $# -gt 0 ]; do
     --run)       RUN_CMD="$2"; shift 2;;
     --ref)       BASE_REF="$2"; shift 2;;
     --repo)      REPO_URL="$2"; shift 2;;
-    --harness)   HARNESS="$2"; shift 2;;
+    --harness)   HARNESS="$2"; HARNESS_SET=1; shift 2;;
     --model)     MODEL="$2"; shift 2;;
     --docker)    DOCKER=1; shift;;    # repo needs a real docker daemon (kind/k3d CI gate): kata microVM pod + dind sidecar — stack POLICY, from the AgentStack claim's fixer.docker (counterpart of CI choosing the VM runner)
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
@@ -51,6 +51,16 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+# workerModel notation from the AgentStack claim (first used by oracle, oracle-iac#8):
+# "claude/<model>" = harness-prefixed — the XRD carries no harness field yet (FU-066's
+# fixer.claudeTier is the eventual shape), so the claim encodes the tier in the model string.
+# Make it self-executing: the dispatcher passes --model straight from stacks_json and gets the
+# claude harness + bare model id; an explicit --harness still wins.
+case "$MODEL" in claude/*)
+  [ -n "${HARNESS_SET:-}" ] || HARNESS="claude"
+  MODEL="${MODEL#claude/}"
+;; esac
+
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
 
@@ -177,7 +187,7 @@ CLAUDE_ENV=""; CLAUDE_PREP=""
 if [ "$HARNESS" = "claude" ]; then
   IMAGE="${HARNESS_IMAGE:-${AGENT_COORDINATOR_IMAGE:?images.env lacks AGENT_COORDINATOR_IMAGE}}"
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
-  [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ] && MODEL="haiku"
+  if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
   CLAUDE_ENV=$'        - name: HOME\n          value: "/home/node"\n        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"'
   CLAUDE_PREP='set -e

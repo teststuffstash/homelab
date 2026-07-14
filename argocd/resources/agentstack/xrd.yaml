@@ -60,10 +60,14 @@ spec:
                 workerModel:
                   type: string
                   description: >-
-                    Primary OpenRouter model for worker (fixer) sessions, e.g.
-                    "openrouter/deepseek/deepseek-v4-flash". Chain policy: paid-cached-fast
-                    first — free tiers rate-limit below the platform's freshness windows
-                    (git-token TTL, budget pacing); they are scout-canary material.
+                    Primary model for worker (fixer) sessions. OpenRouter models as
+                    "openrouter/<vendor>/<model>"; "claude/<model>" (e.g. "claude/haiku")
+                    selects the SUBSCRIPTION claude-code harness instead (FU-066 — the
+                    launcher derives --harness claude from the prefix; a dedicated
+                    fixer.claudeTier field is the eventual shape). Chain policy:
+                    paid-cached-fast first — free tiers rate-limit below the platform's
+                    freshness windows (git-token TTL, budget pacing); they are scout-canary
+                    material.
                 workerModelFallbacks:
                   type: array
                   items:

@@ -23,11 +23,11 @@
       "_chain_policy": "Paid-cached-fast FIRST (agents/README.md model strategy + TICK-LOG meta-2): free tiers rate-limit to a crawl (~8 rpm) and slow models outlive the platform's freshness windows (hy3:free died to the 60-min git-token TTL, paid hy3 to pace/budget at 75+ min). Free tiers are scout-canary material (FU-062 M7), never fix-chain entries.",
       "_migrated": "MIRROR of the claim in oracle-iac//oracle-fleet/agent/agentstack.yaml — the cluster claim wins at runtime; this entry serves the CI lint + the probe-failed belt (see _comment). Sync on claim changes.",
       "name": "oracle",
-      "repos": ["oracle-iac", "oracle-fleet"],
+      "repos": ["oracle-iac", "allure-behavior-snippets", "oracle-fleet"],
       "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
-      "workerModelFallbacks": ["qwen/qwen3-coder", "tencent/hy3"],
+      "workerModel": "claude/haiku",
+      "workerModelFallbacks": ["openrouter/deepseek/deepseek-v4-flash", "qwen/qwen3-coder", "tencent/hy3"],
       "dockerRepos": ["oracle-fleet"]
     }
   ]
