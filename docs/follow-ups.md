@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-076**.
+  Next free id: **FU-077**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -27,7 +27,7 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-07-12._
+_Last updated: 2026-07-14._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -49,13 +49,11 @@ _Last updated: 2026-07-12._
       `containerdConfigPatches`, agent kata pods' inner dockerd, ARC runners, and ci-runner-01's
       daemon.json. Goal: `devbox run ci` never hits the internet for images; agent egress
       allowlists drop registry FQDNs.
-- [ ] **FU-074** — **Finish the k3d/kind-in-kata acceptance** (spike log + attempt matrix in
-      `docs/spikes/kata-ci-gate.md`; manifest `kata-k3d-acceptance.yaml`). Proven viable
-      (attempt 4: cluster up in 36s) but post-reinstall runs hang with the k3s container
-      emitting ZERO log lines — debug live via exec-during-wait, pin the k3d image by digest,
-      try kind; prefer running after FU-073 so pulls are local. Also re-check the reinstall
-      mystery: a maintenance-mode reinstall applied config with the metal_kata installer yet
-      produced the plain-metal schematic (fixed via talosctl upgrade).
+- [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
+      maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
+      metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
+      upgrade`; likely also the origin of the kata `/dev/kmsg` regression, see
+      `docs/spikes/kata-ci-gate.md`). Verify install.image is honored from maintenance mode.
 - [ ] **FU-072** — **Kata guests can't reach cluster-service VIPs** (Cilium 1.19, kubeProxyReplacement,
       `bpf-lb-sock=false`). Diagnosed 2026-07-13 on wk-metal-03: from a kata pod, pod-to-pod
       (incl. cross-node coredns POD IP, UDP+TCP) and external-by-IP all work; ANY 10.96.x service

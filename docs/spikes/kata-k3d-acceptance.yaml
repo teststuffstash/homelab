@@ -9,12 +9,16 @@ spec:
     nameservers: ["192.168.2.1"]
   containers:
     - name: k3d
-      image: ghcr.io/k3d-io/k3d:5-dind
+      # digest-pinned: the mutable :5-dind tag cost us attempts 9-11 worth of confounders
+      image: ghcr.io/k3d-io/k3d:5-dind@sha256:ee3872700ed070566d3680e4926d8d60b1f0d3a948e595fec52103c2ae758921
       securityContext: { privileged: true }
       command: ["sh", "-c"]
       args:
         - |
           sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512 >/dev/null || echo SYSCTL-FAILED
+          # kata guests lack /dev/kmsg and kubelet (cadvisor) hard-requires it -- without
+          # this, k3s dies AFTER its apiserver is up and k3d times out on a silent log stream
+          mknod /dev/kmsg c 1 11 2>/dev/null || true
           mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2"}' > /etc/docker/daemon.json
           nohup dockerd-entrypoint.sh >/tmp/dockerd.log 2>&1 &
           for i in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 2; done

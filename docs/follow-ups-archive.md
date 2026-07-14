@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-074** *(archived 2026-07-14)* — **k3d/kind-in-kata acceptance: SOLVED, repeatable.**
+  Root cause of all post-reinstall hangs: kata guests lack `/dev/kmsg` and kubelet (cadvisor)
+  hard-requires it — k3s died *after* its apiserver was up, so k3d saw only a silent log-stream
+  timeout (and rolled back the evidence). Fix = `mknod /dev/kmsg c 1 11` in the pod script;
+  acceptance manifest (digest-pinned `:5-dind`) then **PASSED ×2 back-to-back**, cluster up in
+  21–38s; kind v0.32.0 confirmed working too (Ready in 19s) and fails identically without the
+  fix. Full story + kata debugging gotchas (exec-EBUSY, ctl-sidecar pattern, k3d `--no-rollback`,
+  kind journal wins for postmortems) in `docs/spikes/kata-ci-gate.md`. Reinstall-mystery re-check
+  split out as FU-076.
+
 - **FU-075** *(archived 2026-07-14)* — **WireGuard endpoint freshness: ddclient on OPNsense**
   (chosen over the Telia static-IP fee). New `opnsense-ddclient` role: os-ddclient plugin
   (ensure-installed in the play), native backend, Cloudflare service, `checkip: if`/wan (public
