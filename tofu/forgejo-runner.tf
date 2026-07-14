@@ -25,12 +25,18 @@ locals {
 }
 
 # Label the ephemeral tier so workloads can SELECT it (the taint in metal.tf only repels others).
+# ⚠ field_manager MUST be distinct: every kubernetes_labels resource defaults to manager
+# "Terraform", and same-manager SSA applies prune each other's keys on a shared node — this
+# resource silently deleted longhorn_bulk_zone's topology.kubernetes.io/zone off wk-metal-01
+# (found 2026-07-14; a day of bulk-tier anti-affinity blindness).
 resource "kubernetes_labels" "ephemeral_tier" {
-  for_each    = toset(["wk-metal-01", "wk-metal-02"])
-  api_version = "v1"
-  kind        = "Node"
+  for_each      = toset(["wk-metal-01", "wk-metal-02"])
+  api_version   = "v1"
+  kind          = "Node"
   metadata { name = each.value }
-  labels = { "homelab.io/ephemeral" = "true" }
+  labels        = { "homelab.io/ephemeral" = "true" }
+  field_manager = "tofu-ephemeral-tier"
+  force         = true # take ownership of the key from the old "Terraform" manager once
 }
 
 resource "kubernetes_namespace" "forgejo_runner" {

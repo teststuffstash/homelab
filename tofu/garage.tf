@@ -53,6 +53,10 @@ resource "helm_release" "garage" {
       rpcSecret         = random_id.garage_rpc.hex
       s3 = {
         api = { region = "garage" } # S3 clients must use region "garage"
+        # Static-website endpoint (3902): anonymous GET on website-enabled buckets — the one
+        # Garage seam browsers can consume (the S3 API 403s anonymous reads). First consumer:
+        # the oracle-specs spec site (oracle-fleet#16 / oracle-iac#5).
+        web = { rootDomain = ".teststuff.net" } # bucket <b> → https://<b>.teststuff.net (3902)
       }
     }
 
@@ -88,9 +92,11 @@ resource "helm_release" "garage" {
   })]
 }
 
-# LAN VIP for the S3 API (3900) only. Separate from the chart Service because BGP advertisement
+# LAN VIP for the S3 API (3900) + the static-website endpoint (3902 — deliberately ON the VIP
+# since 2026-07-14: HAProxy fronts it as https://<bucket>.teststuff.net for browser-served
+# buckets, first oracle-specs). Separate from the chart Service because BGP advertisement
 # keys off the `bgp=advertise` label (not an annotation), which the chart's service template
-# doesn't expose. This also keeps web (3902) / admin (3903) / RPC (3901) off the VIP.
+# doesn't expose. Admin (3903) / RPC (3901) stay off the VIP.
 resource "kubernetes_service" "garage_s3_lb" {
   metadata {
     name      = "garage-s3"
@@ -110,6 +116,12 @@ resource "kubernetes_service" "garage_s3_lb" {
       name        = "s3-api"
       port        = 3900
       target_port = 3900
+      protocol    = "TCP"
+    }
+    port {
+      name        = "s3-web"
+      port        = 3902
+      target_port = 3902
       protocol    = "TCP"
     }
   }
