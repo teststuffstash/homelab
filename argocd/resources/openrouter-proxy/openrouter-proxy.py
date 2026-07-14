@@ -33,6 +33,14 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 UPSTREAM = os.environ.get("UPSTREAM", "https://openrouter.ai")
+# FU-066 (claude+haiku worker tier): requests under /anthropic/* forward to the Anthropic API
+# instead — same ref-injection rails, so the subscription OAuth token (an unscoped ~1y
+# credential) never sits in a worker pod. Wired by agent-session.sh --harness claude
+# (ANTHROPIC_BASE_URL=<proxy>/anthropic, ANTHROPIC_AUTH_TOKEN=ref:<ns>/<secret>).
+ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic.com")
+# claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
+# gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
+OAUTH_BETA = "oauth-2025-04-20"
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -78,7 +86,9 @@ def _resolve_ref(ref: str) -> dict | None:
             secret = json.load(resp)
         if (secret.get("metadata", {}).get("labels") or {}).get(SESSION_KEY_LABEL) == "true":
             data = secret.get("data") or {}
-            b64 = data.get("OPENROUTER_API_KEY", "")
+            # OPENROUTER_API_KEY = the standing/session OpenRouter keys; AUTH_TOKEN = the
+            # claude-tier session secrets (FU-066 — the Anthropic subscription oauth token).
+            b64 = data.get("OPENROUTER_API_KEY") or data.get("AUTH_TOKEN") or ""
             if b64:
                 resolved = {
                     "key": base64.b64decode(b64).decode(),
@@ -277,9 +287,25 @@ class Proxy(BaseHTTPRequestHandler):
 
     def _forward(self, body: bytes | None, note: str) -> None:
         started = time.time()
-        url = UPSTREAM + self.path
+        anthropic = self.path.startswith("/anthropic/")
+        if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
+            url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
+            note += "+anthropic"
+        else:
+            url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
         note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
+        if anthropic:
+            # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
+            # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
+            auth_k = next((k for k in headers if k.lower() == "authorization"), None)
+            if auth_k and headers[auth_k].startswith("Bearer sk-ant-oat"):
+                beta_k = next((k for k in headers if k.lower() == "anthropic-beta"), None)
+                if beta_k is None:
+                    headers["anthropic-beta"] = OAUTH_BETA
+                elif OAUTH_BETA not in headers[beta_k]:
+                    headers[beta_k] = headers[beta_k] + "," + OAUTH_BETA
+                note += "+oauth-beta"
         req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
         try:
             resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT_S)
