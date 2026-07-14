@@ -207,9 +207,13 @@ spec:
                       rules:
                         dns:
                           - matchPattern: "*"
-                # docker=true: the pull-through registry mirrors (FU-073, registry-cache ns) by
-                # their BGP VIPs — kata egress to an LB VIP is policy-evaluated pre-translation,
-                # so a CIDR rule (not toEndpoints) is what matches. Git-pinned addresses.
+                # docker=true: the pull-through registry mirrors (FU-073, registry-cache ns).
+                # Hubble-verified 2026-07-14: even from a kata guest, pod→LB-VIP traffic is
+                # DNAT'd to the backend BEFORE policy evaluation, so the identity rule below is
+                # the one that matches; the VIP CIDRs stay as a belt for any untranslated path.
+                - toEndpoints:
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: registry-cache
                 - toCIDR:
                     - 192.168.40.20/32
                     - 192.168.40.21/32
