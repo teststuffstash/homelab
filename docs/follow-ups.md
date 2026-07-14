@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-078**.
+  Next free id: **FU-080**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -54,6 +54,19 @@ _Last updated: 2026-07-14._
       kata rides — give `nixcache` an LB VIP + an agent-base substituter override (agent-runtime
       repo) to erase the ~4-min cold `devbox install` observed 2026-07-14 (ClusterIP unreachable
       per FU-072).
+- [ ] **FU-078** — **opnsense-acme role: sign + poll after create.** The role creates the cert
+      SPEC only; issuance waits for the ACME cron, so the create→haproxy sequence binds an empty
+      cert unless the operator signs by hand in between — the trap has now bitten twice (forgejo
+      2026-06-11, oracle-specs 2026-07-14; skill + runbook warn, but the role should just do it:
+      `POST acmeclient/certificates/sign/<uuid>` for a fresh cert, poll `statusCode==200`
+      (~30–60s DNS-01), THEN let the haproxy play run).
+- [ ] **FU-079** — **Un-armed open PRs are invisible to the whole merge path** — the updater,
+      review reflex, and auto-merge all key on armed PRs (by design), so an operator/stacked PR
+      born un-armed stalls silently (oracle-fleet#16: stuck at ci "Expected" after its
+      stacked-base retarget — `edited` isn't a CI trigger — then BEHIND once master moved;
+      `gh pr update-branch` + arming fixed both). Extend `coordinator-scan`'s orphan backstop
+      (today: un-armed DEP PRs only) to report ANY un-armed open PR, and note arm-at-open as
+      operator discipline in merge-path.md.
 - [ ] **FU-077** — **PodSecurity runtimeClass exemption for kata** (apiserver
       `admissionControl` patch on cp-01, Talos `cluster.apiServer`): privileged-inside-a-microVM
       is root in the guest only, but PSS can't see runtime classes — docker-mode worker

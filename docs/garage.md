@@ -76,3 +76,14 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
   ArgoCD Application later is a re-point, not a rewrite (ADR-003/004).
 - Updating Garage: re-vendor the chart at the new tag (see `charts/garage/VENDORED.md`), bump
   values in `garage.tf`, `plan`, review, `apply`.
+
+## Static-website serving (3902, live 2026-07-14)
+
+`s3.web.rootDomain = ".teststuff.net"` (garage.tf): any **website-enabled** bucket is served
+anonymously at `https://<global_alias>.teststuff.net` (HAProxy VIP → 40.16:3902 → Garage web;
+the S3 API keeps 403ing anonymous reads — this is the one browser-consumable seam). Because the
+**bucket alias IS the hostname**, website bucket aliases MUST be stack-namespaced
+(`oracle-specs`, not `specs` — a generic alias squats the name for every future stack; bit live
+on the first consumer, oracle-iac#7). Non-website buckets stay dark regardless of alias. Each
+new site name still needs the OPNsense cert/HAProxy/Unbound entries (runbook §HTTPS name —
+mind the sign-before-haproxy order).
