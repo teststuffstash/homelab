@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-002** *(archived 2026-07-15)* — **Jail GitHub PAT out of remote URLs → git credential
+  helper.** Mono jail: `tools/jail-entrypoint.sh` writes an ephemeral `~/.git-credentials` from
+  `GH_TOKEN` + injects `credential.helper store` via `GIT_CONFIG_*` env (`~/.gitconfig` is a busy
+  bind-mount → EBUSY); guarded on `GH_TOKEN` so oracle's stack jail is a no-op. All clones scrubbed
+  to plain URLs (`new-project.md` Kind 2 fixed); leaked `github_pat_11AALWBOQ0…` rotated 2026-07-15.
+  Live-verified after a real jail restart: plain-URL pushes to homelab + claude-jail via the store.
+  Gotchas: the parent `/workspace` clone itself was missed by the first scrub; and a push that
+  fails 401 (e.g. a leftover stale embedded token) makes git *erase* the matching store entry —
+  auth then stays broken until the next jail restart rewrites the file.
+
 - **FU-008** *(archived 2026-07-14)* — **Forgejo repo/org bootstrap: decided → keep imperative.**
   Forgejo is deliberately *not* in homelab's GitHub IaC — the standing mechanism is `new-project.md`
   Kind 3 (org via API, repo via `tea`, push over SSH with the dedicated `~/.claude/homelab-forgejo/`

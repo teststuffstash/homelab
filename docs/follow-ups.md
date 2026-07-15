@@ -31,17 +31,6 @@ _Last updated: 2026-07-14._
 
 ## Secrets (the "secret cleanup" track)
 
-- [ ] **FU-002** — Jail GitHub PAT no longer embedded in remote URLs → **git credential helper
-      (implemented, pending live-verify + PAT rotation).** Mono jail (`claude` compose service,
-      whole `~/Projects` mounted): `tools/jail-entrypoint.sh` writes an ephemeral
-      `~/.git-credentials` from `GH_TOKEN` and injects `credential.helper store` via `GIT_CONFIG_*`
-      env (not `git config --global` — `~/.gitconfig` is a busy bind-mount → EBUSY). Mirrors the
-      stack jail's per-repo store in `tools/stack-jail-init.sh` (the "FU-002 lesson" it cites);
-      guarded on `GH_TOKEN` so oracle's stack jail is untouched. All existing clones scrubbed to
-      plain `https://github.com/...` remotes; `new-project.md` Kind 2 updated to emit plain URLs.
-      Stale leaked PAT (`github_pat_11AALWBOQ0…`) rotated on GitHub 2026-07-15.
-      **Remaining:** verify the helper on next mono-jail restart (entrypoint change not yet
-      exercised in a real container start). Then archive.
 - [ ] **FU-003** — HA `refresh_token` is dead (`invalid_grant`; falling back to `prometheus_llat`).
       Regenerate the refresh/long-lived token (recipe: `docs/runbook.md` → Home Assistant).
 - [ ] **FU-004** — Rotate the broad bootstrap `root@pam!tofu` Proxmox token to a scoped `tofu@pve`
