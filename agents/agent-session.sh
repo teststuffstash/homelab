@@ -258,10 +258,13 @@ if [ -n "$RUN_CMD" ]; then
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
   # claude harness: the coordinator image may lack agent-finalize — degrade to a minimal
   # AGENT_RUN_STATS line (subscription tier has no cost_usd anyway; tokens/turns stand-in is
-  # FU-066 remaining) so the launcher's stats/strike parsing keeps working.
+  # FU-066 remaining) so the launcher's stats/strike parsing keeps working. Scrape the PR URL the
+  # worker printed into the run log into `pr_url` — WITHOUT it the launcher's PR-detection reads a
+  # clean PR-opening run as "no PR opened" and fires a FALSE AGENT_STRIKE (seen live on oracle#22
+  # round 1, FU-066 item b). With it, the run takes the PR path (arm auto-merge + stats comment).
   FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
   if [ "$HARNESS" = "claude" ]; then
-    FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]}; if command -v agent-finalize >/dev/null 2>&1; then HARNESS_EXIT=\$HARNESS_EXIT agent-finalize /tmp/run.log; else echo \"AGENT_RUN_STATS {\\\"project\\\":\\\"${PROJECT}\\\",\\\"pod\\\":\\\"${POD}\\\",\\\"harness\\\":\\\"claude\\\",\\\"model\\\":\\\"${MODEL}\\\",\\\"cost_unknown\\\":true,\\\"exit_status\\\":\\\"\$([ \$HARNESS_EXIT = 0 ] && echo clean || echo failed)\\\"}\"; fi"
+    FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]}; if command -v agent-finalize >/dev/null 2>&1; then HARNESS_EXIT=\$HARNESS_EXIT agent-finalize /tmp/run.log; else PRU=\$(grep -oE 'https://github.com/[^ )\"]+/pull/[0-9]+' /tmp/run.log | tail -1); echo \"AGENT_RUN_STATS {\\\"project\\\":\\\"${PROJECT}\\\",\\\"pod\\\":\\\"${POD}\\\",\\\"harness\\\":\\\"claude\\\",\\\"model\\\":\\\"${MODEL}\\\",\\\"cost_unknown\\\":true,\\\"exit_status\\\":\\\"\$([ \$HARNESS_EXIT = 0 ] && echo clean || echo failed)\\\"\${PRU:+,\\\"pr_url\\\":\\\"\$PRU\\\"}}\"; fi"
   fi
   WRAPPED="${CLAUDE_PREP}${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
