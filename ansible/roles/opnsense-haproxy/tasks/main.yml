@@ -16,6 +16,15 @@
 #
 # Prereq: the os-haproxy plugin must be INSTALLED on OPNsense.
 
+# All HTTP frontends: the per-service proxies + the per-stack wildcard gateways (ADR-092).
+# stack_gateways entries carry the same keys the frontend machinery needs (name/cert_domain/
+# vip/backend_ip/backend_port), so they flow through the create+rebind tasks unchanged — the
+# only deltas are their `cert_domain` is a cert OBJECT NAME (a wildcard cert) and their DNS is
+# a wildcard override (handled separately at the end, not the per-service Unbound task).
+- name: Merge HTTP frontends (proxied services + per-stack wildcard gateways)
+  ansible.builtin.set_fact:
+    haproxy_all_services: "{{ haproxy_proxied_services + (stack_gateways | default([])) }}"
+
 # --- bind addresses: one IP-alias VIP per service ----------------------
 - name: LAN IP-alias VIP per service
   oxlorg.opnsense.interface_vip:
@@ -23,7 +32,7 @@
     mode: ipalias
     interface: lan
     description: "haproxy-{{ item.name }}"
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.name }} ({{ item.vip }})" }
 
 # --- find issued cert refids (set by the opnsense-acme role) -----------------
@@ -34,7 +43,7 @@
   ansible.builtin.assert:
     that: acme_certs.response.rows | selectattr('name', 'eq', item.cert_domain) | list | length > 0
     fail_msg: "No ACME cert named {{ item.cert_domain }} — run opnsense-acme and sign it first."
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.cert_domain }}" }
 - name: Map cert_domain -> certRefId
   ansible.builtin.set_fact:
@@ -59,7 +68,7 @@
         mode: active
         type: static
         ssl: "0"
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.name }}-srv" }
   when: (item.name ~ '-srv') not in (hap_servers.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
@@ -89,7 +98,7 @@
         linkedServers: "{{ server_uuid[item.name ~ '-srv'] }}"
         healthCheckEnabled: "0"
         tuning_timeoutServer: 60m   # keep long-lived WebSockets alive
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.name }}-backend" }
   when: (item.name ~ '-backend') not in (hap_backends.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
@@ -121,7 +130,7 @@
         ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
         http2Enabled: "0"          # h2 breaks HA/Grafana WebSockets through the proxy
         tuning_timeoutClient: 60m
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.name }}-frontend ({{ item.vip }}:443)" }
   when: (item.name ~ '-frontend') not in (hap_frontends.response.rows | map(attribute='name') | list)
   notify: reconfigure haproxy
@@ -146,7 +155,7 @@
         ssl_certificates: "{{ cert_refid[item.cert_domain] }}"
         http2Enabled: "0"
         tuning_timeoutClient: 60m
-  loop: "{{ haproxy_proxied_services }}"
+  loop: "{{ haproxy_all_services }}"
   loop_control: { label: "{{ item.name }}-frontend rebind -> {{ item.vip }}:443" }
   vars:
     _existing: "{{ hap_frontends.response.rows | selectattr('name', 'equalto', item.name ~ '-frontend') | list }}"
@@ -309,3 +318,18 @@
     match_fields: [hostname, domain, record_type, value]
   loop: "{{ haproxy_proxied_services }}"
   loop_control: { label: "{{ item.cert_domain }} -> {{ item.vip }}" }
+
+# --- local DNS: WILDCARD per stack gateway: *.<stack>.teststuff.net -> its VIP (ADR-092) --
+# hostname `*` is API-accepted (verified 2026-07-15: two distinct names under a test wildcard
+# both resolved). This is what lets the stack add names with no homelab DNS edit — every
+# `<svc>.<stack>.teststuff.net` resolves to the gateway VIP; the in-cluster gateway host-routes.
+- name: Unbound WILDCARD override per stack gateway
+  oxlorg.opnsense.unbound_host:
+    hostname: "*"
+    domain: "{{ item.wildcard_domain }}"
+    record_type: A
+    value: "{{ item.vip }}"
+    description: "{{ item.name }} wildcard via HAProxy (ADR-092)"
+    match_fields: [hostname, domain, record_type, value]
+  loop: "{{ stack_gateways | default([]) }}"
+  loop_control: { label: "*.{{ item.wildcard_domain }} -> {{ item.vip }}" }

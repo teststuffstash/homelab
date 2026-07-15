@@ -71,7 +71,9 @@
   oxlorg.opnsense.acme_certificate:
     description: "{{ item.name }}"
     name: "{{ item.name }}"
-    alt_names: ["{{ item.name }}"]
+    # SAN list: default to the single hostname; a spec may override (e.g. a wildcard cert
+    # `*.oracle.teststuff.net` given a filesystem/UI-safe object `name` — ADR-092).
+    alt_names: "{{ item.alt_names | default([item.name]) }}"
     account: "{{ acme_account_name }}"
     validation: aws-acme
     restart_actions: ["{{ item.restart_action }}"]
@@ -81,3 +83,52 @@
   loop: "{{ acme_cert_specs }}"
   loop_control: { label: "{{ item.name }}" }
   when: item.name not in (acme_certs.response.rows | map(attribute='name') | list)
+
+# --- FU-078: sign freshly-created certs + wait for issuance -------------------
+# The task above defines only the cert SPEC; issuance otherwise waits for OPNsense's
+# ACME cron, so a create -> haproxy sequence binds an EMPTY cert and serves the wrong CN
+# (bit twice: forgejo 2026-06-11, oracle-specs 2026-07-14). Sign any spec'd cert that
+# isn't issued yet (statusCode != "200" — catches fresh creates AND a prior run that
+# created-but-never-signed) and poll until Let's Encrypt returns 200 (~30-60s for DNS-01),
+# so the haproxy play binds a real cert. Idempotent: already-issued (200) certs are skipped,
+# so no needless re-issue on steady-state runs. Signing uses OPNsense's stored CF creds — it
+# does NOT need ACME_CF_TOKEN in the env (only the validation-repoint task above does).
+- name: Re-list ACME certificates (post-create)
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: search
+  register: acme_certs_post
+
+- name: Compute unissued spec'd certs (rows with statusCode != 200)
+  ansible.builtin.set_fact:
+    acme_unissued: >-
+      {{ acme_certs_post.response.rows
+         | selectattr('name', 'in', acme_cert_specs | map(attribute='name') | list)
+         | rejectattr('statusCode', 'eq', '200')
+         | list }}
+
+- name: Sign unissued certs (POST certificates/sign/<uuid>)
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: "sign/{{ item.uuid }}"
+    action: post
+  loop: "{{ acme_unissued }}"
+  loop_control: { label: "{{ item.name }} ({{ item.uuid }})" }
+  when: acme_unissued | length > 0
+
+- name: Poll until signed certs report statusCode 200 (LE issuance)
+  oxlorg.opnsense.raw:
+    module: acmeclient
+    controller: certificates
+    command: search
+  register: acme_poll
+  until: >-
+    acme_poll.response.rows
+    | selectattr('name', 'in', acme_unissued | map(attribute='name') | list)
+    | rejectattr('statusCode', 'eq', '200')
+    | list | length == 0
+  retries: 24
+  delay: 5
+  when: acme_unissued | length > 0

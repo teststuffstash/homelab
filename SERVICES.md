@@ -28,6 +28,7 @@ truth.
 | **Forgejo** | 🟢 LIVE | Self-hosted Git | `forgejo.teststuff.net` (HTTPS + SSH :22) · `192.168.40.15:3000` | no ADR; `tofu/forgejo.tf` (CNPG-backed); cutover plan FU-007 |
 | **UniFi Network App** | 🟢 LIVE | Network controller | `192.168.40.12` (8443/8080/3478/10001) · `ubiquiti.teststuff.net` | ADR-043 |
 | **Cilium** | 🟢 LIVE | CNI · BGP · LB-IPAM (VIPs from `192.168.40.0/24`) | in-cluster | — |
+| **Per-stack subdomain delegation** | 🔴 PLANNED | Cilium Gateway API — a stack gets `*.<stack>.teststuff.net` delegated to its own in-cluster Gateway; add hostnames as **HTTPRoutes in your `-iac` repo** (no homelab change). **Opt-in** per stack. | `cilium` GatewayClass in-cluster · HAProxy wildcard-cert frontend → the stack's gateway VIP | ADR-092 (code landed, **rollout pending**); homelab `stack_gateways` in `ansible/group_vars/opnsense.yml`, `argocd/platform/gateway*.yaml` |
 | **metrics-server** | 🟢 LIVE | `kubectl top` / HPA | in-cluster | — |
 | **ArgoCD** | 🟢 LIVE | GitOps CD (reconciles `argocd/` from GitHub) | `argocd.teststuff.net` · in-cluster | ADR-005; `argocd/README.md` |
 | **Postgres (CloudNativePG)** | 🟢 LIVE | Relational DB — per-app HA `Cluster` CRs | in-cluster `<cluster>-rw.<ns>.svc:5432` | ADR-046; declare a CNPG `Cluster` in your namespace |

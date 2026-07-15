@@ -1,0 +1,25 @@
+# ReferenceGrant: lets the oracle stack's Gateway (ns oracle-fleet) route the spec site to the
+# Garage web endpoint (Service garage-s3 in ns garage) across namespaces (ADR-092). Gateway API
+# forbids cross-namespace backend refs unless the TARGET namespace grants them — so this lives
+# in ns `garage` and is PLATFORM-owned: the oracle AppProject can't write to the garage ns, and
+# garage is platform (tofu) territory. Applied by the platform app-of-apps.
+#
+# Scope is deliberately tight: only HTTPRoutes from ns oracle-fleet, only the garage-s3 Service.
+# When the oracle fleet serves its own surfaces (api.oracle, …) those HTTPRoutes stay in-namespace
+# and need no grant; this one exists solely for the Garage-served specs.oracle site.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: oracle-fleet-httproute-to-garage-s3
+  namespace: garage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after the gateway-api-crds app (ReferenceGrant CRD)
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: oracle-fleet
+  to:
+    - group: ""
+      kind: Service
+      name: garage-s3
