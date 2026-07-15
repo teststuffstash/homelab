@@ -129,6 +129,15 @@ the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later 
 Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item
 (`FU-NNN`, never reused — conventions at the top of that file). The rules that keep it consistent:
 
+- **Prior-art grep before filing or proposing ANYTHING** — a new FU, a "next step" in a summary,
+  a new doc/script/ADR: grep `docs/follow-ups.md` + `docs/follow-ups-archive.md` + `docs/adr.md`
+  **by topic keywords** (`PAT|credential`, not just the id header). Assume any loose end you
+  "discover" is already tracked until a grep says otherwise, and state the negative ("no FU/ADR
+  matches <keywords>") before creating. If a related item exists, extend it — never file a
+  parallel one. A user question like "is this a follow-up?" usually means they half-remember an
+  existing item — it's a retrieval cue, not a decision handed to you: grep first, answer with ids.
+- **Next steps reported to the user must carry FU ids** — a proposed next step that hasn't been
+  checked against the tracker is how duplicates start.
 - **≲5 minutes with the context in hand? Just do it** — an entry costs more than the fix; file
   only genuine deferrals.
 - **New deferred work / discovered loose end** → add an `FU-NNN` item there first. Never leave a
