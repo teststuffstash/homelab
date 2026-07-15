@@ -752,3 +752,56 @@ FQDN until gate configs route ghcr per-tool; **Talos node-level `machine.registr
 ci-runner-01 + ARC wiring deferred** (FU-073 carries the remainder). Gotcha for every future
 VIP-consuming netpol: pod→LB-VIP flows are policy-evaluated **post-DNAT against the backend
 identity** (Hubble-verified, even from kata) — allow with `toEndpoints`, not a VIP CIDR.
+
+### ADR-092 — Per-stack subdomain delegation: `*.<stack>.teststuff.net` → an in-cluster gateway
+**Status:** Accepted (2026-07-15). Executes the **HTTPS-names leg of FU-039** (the "homelab as
+AWS/Civo" self-service gap). **Problem:** every LAN HTTPS name is a *platform* change — one cert +
+one `192.168.3.0/24` VIP + an HAProxy server/backend/frontend + an Unbound A-record, all hand-listed
+in `ansible/group_vars/opnsense.yml`, applied by an operator, with a manual cert-sign in between. A
+stack (e.g. **oracle**) cannot add a hostname without a homelab PR. A **wildcard cert is necessary
+but not sufficient** to fix this: the cert is the cheapest part; the friction is the per-name
+VIP/HAProxy/DNS. **Decision:** push per-name host-routing **into the cluster**. Homelab wires an
+opted-in stack **once** — a `*.<stack>.teststuff.net` wildcard cert (LE DNS-01/Cloudflare, the
+`homelab-acme-dns` token already has zone-wide DNS-write), one `3.0/24` VIP, one *dumb* wildcard-TLS
+HAProxy frontend whose default backend is the stack's in-cluster **Cilium Gateway API** gateway, and
+one **wildcard** Unbound override (`*.<stack>` → the VIP; hostname `*` API-verified 2026-07-15). The
+stack then owns every hostname under its subdomain via **HTTPRoutes in its own `-iac` repo** — adding
+`specs.oracle`, `api.oracle`, … is a PR there, **zero homelab change**. This slots into the ADR-084
+three-layer topology (platform wires the wildcard + GatewayClass; the stack's `-iac` repo owns the
+Gateway + HTTPRoutes; the app repo stays platform-agnostic) and the ADR-085 mechanism/policy split.
+
+**TLS terminates at OPNsense HAProxy** with the wildcard cert (no cert-manager): HAProxy forwards
+plain HTTP to the gateway's `:80` listener; the gateway host-routes by the preserved `Host`. **Opt-in:
+** a stack that exposes no LAN service wires nothing (`stack_gateways` empty). Enabling it is still a
+thin homelab PR *once per stack* (not per name) — the ADR-085 XRD path (make opt-in a stack-`iac`
+claim) is the later trajectory, not this change. **First consumer — oracle:** the spec site moves
+`oracle-specs.teststuff.net` → `specs.oracle.teststuff.net`, served through the gateway; an HTTPRoute
+`URLRewrite` rewrites the `Host` back to `oracle-specs.teststuff.net` so the **Garage bucket alias
+stays `oracle-specs`** (no destroy/recreate, no re-publish, no oracle-fleet change) — Garage still
+sees `alias == Host`, honouring the garage.md convention where it matters (at the origin). The
+cross-namespace ref (oracle-fleet HTTPRoute → `garage-s3` Service in ns garage) is granted by a
+platform-owned **ReferenceGrant** in ns garage. VIPs: gateway cluster VIP **40.22** (40.20/.21 =
+registry mirrors, ADR-091) ↔ HAProxy **3.22**; bgp advertisement keys off the Service label
+`bgp=advertise`, carried via the Gateway's `spec.infrastructure.labels`. Folds in **FU-078** (the
+opnsense-acme role now signs + polls a fresh cert to `statusCode==200` before HAProxy binds it — the
+wildcard is issued through that same role, so the fix de-risks the rollout).
+
+**Prerequisites (live):** Gateway API **v1.4.1** standard CRDs (`argocd/platform/gateway-api-crds.yaml`,
+GitOps) installed **before** flipping `gatewayAPI.enabled=true` in `tofu/cilium.tf` (needs
+`kubeProxyReplacement=true`, already set) — a live-cluster CNI reconcile, plan-and-review first.
+The CRD app uses the **experimental** channel: we don't use TLS passthrough (TLS ends at HAProxy),
+but Cilium 1.19's gateway controller *watches* `TLSRoute` and errors if that CRD is absent (verified
+live), and flipping `gatewayAPI` needs a cilium-operator restart to load the config. **Considered:** wildcard cert
+with routing still central (rejected — nicer naming but no self-service, each name still edits
+homelab); in-cluster **cert-manager** termination (rejected for now — a new moving part; the existing
+OPNsense ACME path already issues the wildcard; revisit only for public exposure); an ingress-nginx
+controller (rejected — Cilium already the CNI, Gateway API is native, no second dataplane); renaming
+the Garage bucket to `specs.oracle` (rejected — cross-repo churn + destroy/recreate + re-publish for
+no gain over the `Host` rewrite). **Consequences:** a stack's browser surfaces become self-service
+(the FU-039 direction, now real for HTTPS names); the platform gains Gateway API as a reusable
+capability (any stack, and future in-cluster L7 routing); one more live cutover with the documented
+`3.0/24` VIP-flush caveat (a `vip_settings/reconfigure` black-holes all `40.x` VIPs ~25 min — recovery
+is a real FRR stop→start). Open verification carried into rollout: Cilium propagating
+`infrastructure.labels` to the gateway Service (else the VIP won't BGP-advertise) and `URLRewrite`
+hostname support. Full design + rollout: [`follow-ups.md`](follow-ups.md) FU-039; runbook recipe
+"delegate a stack subdomain".

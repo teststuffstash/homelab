@@ -1,0 +1,16 @@
+# The `cilium` GatewayClass — the platform-owned handle stacks reference from their own
+# Gateways (ADR-092). Cluster-scoped; applied by the platform app-of-apps (a raw manifest,
+# like oracle-project.yaml). Its controllerName binds Gateways of this class to Cilium's
+# in-cluster gateway controller (enabled via gatewayAPI.enabled in tofu/cilium.tf).
+#
+# A stack opts into subdomain delegation by declaring, in its own -iac repo, a Gateway with
+# `gatewayClassName: cilium` (+ HTTPRoutes) — no homelab change per hostname. sync-wave 2 keeps
+# it after the gateway-api-crds app (wave 0) so the GatewayClass CRD exists first.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: cilium
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  controllerName: io.cilium/gateway-controller

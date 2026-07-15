@@ -1,0 +1,37 @@
+# Gateway API CRDs (experimental channel, v1.4.1) — the prerequisite for Cilium's Gateway API
+# support (ADR-092). Cilium 1.19 ships the gateway CONTROLLER but NOT the CRDs; they must be
+# installed separately and exist BEFORE `gatewayAPI.enabled=true` is flipped in tofu/cilium.tf.
+# Installing them here (GitOps) keeps them in the boot-from-git path and version-pinned.
+#
+# v1.4.1 **experimental** channel — a superset of standard (adds TLSRoute/TCPRoute/UDPRoute). We do
+# not USE TLS passthrough (TLS terminates at OPNsense HAProxy), but Cilium 1.19's gateway controller
+# *watches* `TLSRoute` unconditionally and errors ("no kind registered for v1alpha2.TLSRouteList",
+# breaking Gateway↔backend reconciliation) if that CRD is absent — verified live 2026-07-15. So the
+# TLSRoute CRD must exist; the experimental channel is the clean single source that includes it.
+# `config/crd/experimental` carries a kustomization.yaml, so ArgoCD kustomize-builds the set.
+#
+# Rollout order (docs/adr.md ADR-092 + runbook): sync THIS app first (CRDs Established) → then
+# tofu-apply Cilium with gatewayAPI.enabled → then the GatewayClass + ReferenceGrant below.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gateway-api-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0" # before GatewayClass (wave 2) and any stack Gateway
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kubernetes-sigs/gateway-api
+    targetRevision: v1.4.1
+    path: config/crd/experimental
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system # CRDs are cluster-scoped; ns is irrelevant but required by the schema
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true # Gateway API CRDs exceed the client-side apply annotation limit
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

@@ -47,6 +47,16 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: argocd.teststuff.net, restart_action: "reload haproxy" }
   - { name: infisical.teststuff.net, restart_action: "reload haproxy" }
   - { name: transcripts.local.teststuff.net, restart_action: "reload haproxy" }
+  # Per-stack WILDCARD certs (ADR-092): one cert covers every name a stack exposes under its
+  # subdomain, so the stack adds hostnames in its own -iac repo (HTTPRoutes) with NO homelab
+  # change. `name` MUST be a real domain — OPNsense passes it as acme.sh's FIRST `--domain`
+  # (the CN), so it's the apex `oracle.teststuff.net`; the wildcard rides `alt_names`. The cert
+  # covers apex + `*.oracle`. DNS-01 issues wildcards fine (both authz challenge at
+  # `_acme-challenge.oracle`) — the homelab-acme-dns CF token has zone-wide DNS-write. NOTE:
+  # oracle-specs.teststuff.net (above) STAYS live on its own 3.20 path — the stack migrates the
+  # spec site to specs.oracle.teststuff.net in oracle-iac when ready; only then retire the
+  # oracle-specs entries (runbook "retire a per-name HTTPS entry").
+  - { name: oracle.teststuff.net, alt_names: ["*.oracle.teststuff.net"], restart_action: "reload haproxy" }
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
@@ -73,9 +83,10 @@ haproxy_proxied_services:
   - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.3.15, backend_ip: 192.168.40.15, backend_port: 3000 }
   - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.3.16, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
   # Garage static-website endpoint (3902) — browser-served buckets (oracle-fleet#16 spec site).
-  # Mirror-convention exception: the backend shares s3's 40.16 (same Garage VIP, different port)
-  # and 3.16 already mirrors it — a second entry on 3.16 would double-bind :443 (one frontend
-  # per VIP, see role) — so this takes the next free VIP instead.
+  # KEPT LIVE (ADR-092): the spec site stays on this direct 3.20 path as oracle-specs.teststuff.net
+  # until the oracle stack migrates it to specs.oracle.teststuff.net via its gateway (oracle-iac,
+  # when ready). Mirror-convention exception: shares s3's 40.16 (same Garage VIP, port 3902) so it
+  # takes the next free VIP 3.20 rather than double-binding :443 on 3.16.
   - { name: garage-oracle-specs-web, cert_domain: oracle-specs.teststuff.net, vip: 192.168.3.20, backend_ip: 192.168.40.16, backend_port: 3902 }
   # GitOps + secrets UIs — TLS terminated here; backends serve plain HTTP (argocd-server
   # --insecure, infisical). VIPs from the expanded static range (pool now starts .100).
@@ -88,6 +99,25 @@ haproxy_proxied_services:
 # Reuses the forgejo HTTPS VIP (3.15, created above), so one hostname serves HTTPS:443 + SSH:22.
 haproxy_tcp_services:
   - { name: forgejo-ssh, vip: 192.168.3.15, port: 22, backend_ip: 192.168.40.15, backend_port: 22 }
+
+# --- opnsense-haproxy : per-stack subdomain delegation (ADR-092) ---------------
+# OPT-IN: a stack that exposes NO LAN service wires nothing (leave this empty). Each entry
+# wires a stack's `*.<stack>.teststuff.net` ONCE at the platform: a wildcard-cert HAProxy
+# frontend on a dedicated 3.0/24 VIP whose default backend is the stack's in-cluster Cilium
+# Gateway API gateway (plain HTTP :80 on its 40.x LB VIP), plus a WILDCARD Unbound override
+# (`*.<stack>` -> the VIP; hostname `*` verified API-accepted 2026-07-15). The stack then owns
+# every hostname under its subdomain via HTTPRoutes in its own -iac repo — adding a name is a
+# PR there, ZERO homelab change. HAProxy is a dumb wildcard TLS terminator (no host ACLs); the
+# gateway does host routing. These entries reuse the HTTP frontend machinery above (merged into
+# haproxy_all_services by the role) — so `cert_domain` here is the wildcard cert's OBJECT NAME
+# (the acme `name` == its CN/apex domain, e.g. oracle.teststuff.net — the cert also covers
+# `*.oracle`), NOT a per-host name; `wildcard_domain` drives the wildcard DNS override.
+# Same 3.0/24 rules + VIP-flush caveat as haproxy_proxied_services apply.
+stack_gateways:
+  # 3.22 ↔ 40.22 (mirror convention): 40.10-40.21 are taken (40.20/.21 = registry-cache
+  # mirrors, ADR-091), so the oracle gateway's cluster VIP is the next free 40.22.
+  - { name: oracle-gw, cert_domain: oracle.teststuff.net, wildcard_domain: oracle.teststuff.net,
+      vip: 192.168.3.22, backend_ip: 192.168.40.22, backend_port: 80 }
 
 # --- opnsense-wireguard : road-warrior VPN (full-LAN remote access, ADR-090) ---
 # The server keypair is generated ON the router at first run (privkey never leaves it).

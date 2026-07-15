@@ -88,13 +88,12 @@ API/module gotchas:
    (all `40.x` black-holes while BGP still shows Established): recover with a real FRR cycle —
    `api/quagga/service/stop` + `start` (the `restart` endpoint is a no-op) — then confirm
    `40.x` rows in `api/diagnostics/interface/get_routes`. Full story: `group_vars/opnsense.yml`.
-2. Run **in this order** — the sign step in the middle is the trap:
-   - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert **spec only; does
-     NOT issue it** (the role is create-if-absent; issuance is left to OPNsense's ACME cron).
-   - ⚠️ **Sign the cert before running haproxy.** Trigger issuance now instead of waiting for the cron:
-     `POST /api/acmeclient/certificates/sign/<uuid>` (uuid from `certificates/search`), then poll
-     `certificates/search` until that cert's `statusCode == 200` (DNS-01 takes ~30–60s). Or click
-     *ACME → Certificates → (sign)* in the GUI.
+2. Run **in this order**:
+   - `bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml` — creates the cert spec **and now
+     signs + polls it to `statusCode == 200`** before returning (FU-078, resolved 2026-07-15: the role
+     signs any spec'd cert that isn't issued yet and waits ~30–60s for DNS-01). No manual sign step.
+     _Fallback if a cert is somehow stuck unsigned:_ `POST /api/acmeclient/certificates/sign/<uuid>`
+     (uuid from `certificates/search`), poll `statusCode == 200`, or *ACME → Certificates → (sign)*.
    - `bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml` — server/backend/frontend + VIP.
 3. If the backend app emits absolute URLs, point its base URL at the https name (e.g. Forgejo
    `gitea.config.server.ROOT_URL = https://<name>.teststuff.net/` in `tofu/forgejo.tf`).
@@ -108,6 +107,36 @@ exit 60 / HTTP 000). The haproxy role is **create-if-absent**, so a plain re-run
 **delete the `<name>-frontend`** (`POST /api/haproxy/settings/delFrontend/<uuid>`) and re-run
 `opnsense-haproxy.yml` so it recreates the frontend with the now-issued `certRefId`. (Done for
 `forgejo.teststuff.net` → VIP `.9` → `192.168.40.15:3000`, 2026-06-11.)
+
+### Delegate a stack subdomain (`*.<stack>.teststuff.net`, opt-in — ADR-092)
+
+Give a stack self-service over its own hostnames: homelab wires the wildcard ONCE, then the stack
+adds names as HTTPRoutes in its `-iac` repo with **no homelab change**. Prereq (once, platform):
+Gateway API CRDs + `gatewayAPI.enabled` in Cilium + the `cilium` GatewayClass (see the ADR-092
+rollout below). Per stack:
+
+1. **homelab** — `group_vars/opnsense.yml`: add a wildcard cert to `acme_cert_specs`
+   (`{ name: <stack>-wildcard, alt_names: ["*.<stack>.teststuff.net"], restart_action: "reload
+   haproxy" }`) and a `stack_gateways` entry (`{ name, cert_domain: <stack>-wildcard,
+   wildcard_domain: <stack>.teststuff.net, vip: 3.x, backend_ip: 40.x, backend_port: 80 }`) — pick a
+   free `3.x ↔ 40.x` pair. Run `opnsense-acme.yml` then `opnsense-haproxy.yml` (same VIP-flush caveat
+   as above). The role now also writes the **wildcard** Unbound override `*.<stack> → vip`.
+2. **stack `-iac` repo** — a `Gateway` (`gatewayClassName: cilium`, `spec.addresses` = the `40.x` VIP,
+   `spec.infrastructure.labels.bgp: advertise`, an HTTP `:80` listener `hostname: "*.<stack>.teststuff.net"`)
+   + one `HTTPRoute` per hostname. Cross-namespace backends need a platform-owned `ReferenceGrant` in
+   the target ns. Reference: `argocd/platform/gateway*.yaml`, oracle-iac `oracle-fleet/infra/gateway.yaml`.
+3. Verify: `dig +short anything.<stack>.teststuff.net @192.168.2.1` → the VIP (wildcard resolves);
+   `kubectl get gateway,httproute -n <stack-ns>` → Programmed/Accepted; `curl https://<svc>.<stack>.teststuff.net`.
+
+### Retire a per-name HTTPS entry
+
+Removing a `haproxy_proxied_services`/`acme_cert_specs` entry does **not** delete the live objects
+(the role is create-if-absent). API-delete the orphans: the `<name>-frontend`
+(`POST /api/haproxy/settings/delFrontend/<uuid>`), `<name>-backend` (`delBackend`), `<name>-srv`
+(`delServer`), the IP-alias VIP (`interfaces/vip_settings/delItem/<uuid>` — ⚠ triggers the FRR flush,
+cycle FRR after), the Unbound host override (`unbound/settings/delHostOverride/<uuid>` + reconfigure),
+and the ACME cert (`acmeclient/certificates/removeCertificate/<uuid>`). Then reconfigure haproxy.
+(Used at the oracle-specs → specs.oracle cutover, 2026-07-15: 3.20 + `oracle-specs.teststuff.net`.)
 
 ### LAN DHCP / DNS
 

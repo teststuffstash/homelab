@@ -34,6 +34,17 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   fails 401 (e.g. a leftover stale embedded token) makes git *erase* the matching store entry —
   auth then stays broken until the next jail restart rewrites the file.
 
+- **FU-078** *(archived 2026-07-15)* — **opnsense-acme role signs + polls after create.** The role
+  no longer stops at the cert SPEC: it now re-lists certs, signs any spec'd cert with
+  `statusCode != "200"` (`POST acmeclient/certificates/sign/<uuid>` — catches fresh creates AND
+  prior create-but-never-signed), and polls `certificates/search` (retries 24×5s) until issued,
+  so the haproxy play binds a real cert instead of an empty one (the trap that bit forgejo
+  2026-06-11 + oracle-specs 2026-07-14). Idempotent — steady-state 200 certs are skipped, no
+  re-issue. Signing uses OPNsense's stored CF creds, so token-less cert-adding runs sign too.
+  Shipped alongside ADR-092 (its wildcard cert issues through this same path). Jinja filters
+  validated against sample data; live-verification rides the ADR-092 rollout (the `*.oracle`
+  wildcard is the first cert through the new sign+poll path).
+
 - **FU-008** *(archived 2026-07-14)* — **Forgejo repo/org bootstrap: decided → keep imperative.**
   Forgejo is deliberately *not* in homelab's GitHub IaC — the standing mechanism is `new-project.md`
   Kind 3 (org via API, repo via `tea`, push over SSH with the dedicated `~/.claude/homelab-forgejo/`

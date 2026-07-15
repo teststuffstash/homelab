@@ -48,3 +48,9 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
   garage-s3, argocd, infisical) migrate to `3.0/24` opportunistically (FU-071) — new exposures
   land in `3.0/24` from day one. The haproxy role rebinds on VIP change; stale aliases + Unbound
   overrides need the API cleanup (see `ansible/group_vars/opnsense.yml` header).
+- **Per-stack subdomain delegation** (ADR-092): a stack that opts in gets ONE VIP pair for its
+  whole `*.<stack>.teststuff.net` — a `3.0/24` HAProxy wildcard-TLS VIP mirroring the stack's
+  in-cluster Gateway VIP (`40.x`), and a WILDCARD Unbound override so every `<svc>.<stack>` name
+  resolves to it. First: **oracle** `3.22 ↔ 40.22` (40.20/.21 = registry mirrors, ADR-091). New
+  names under the subdomain cost **no** new VIP — the in-cluster gateway host-routes them. This is
+  the near-term step before a stack graduates to its own `40.0/24`-style pool (the `32.0/19` note).
