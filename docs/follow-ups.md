@@ -48,12 +48,6 @@ _Last updated: 2026-07-15._
       kata rides — give `nixcache` an LB VIP + an agent-base substituter override (agent-runtime
       repo) to erase the ~4-min cold `devbox install` observed 2026-07-14 (ClusterIP unreachable
       per FU-072).
-- [ ] **FU-078** — **opnsense-acme role: sign + poll after create.** The role creates the cert
-      SPEC only; issuance waits for the ACME cron, so the create→haproxy sequence binds an empty
-      cert unless the operator signs by hand in between — the trap has now bitten twice (forgejo
-      2026-06-11, oracle-specs 2026-07-14; skill + runbook warn, but the role should just do it:
-      `POST acmeclient/certificates/sign/<uuid>` for a fresh cert, poll `statusCode==200`
-      (~30–60s DNS-01), THEN let the haproxy play run).
 - [ ] **FU-079** — **Un-armed open PRs are invisible to the whole merge path** — the updater,
       review reflex, and auto-merge all key on armed PRs (by design), so an operator/stacked PR
       born un-armed stalls silently (oracle-fleet#16: stuck at ci "Expected" after its
@@ -102,6 +96,13 @@ _Last updated: 2026-07-15._
       (`tofu/github/`, admin PAT outside the jail), HTTPS names (OPNsense ansible), or its own
       ArgoCD AppProject/namespace. Decide per resource: Crossplane provider vs a thin homelab PR
       seam. Prereq for the FU-025 per-stack IaC-repo model.
+      **HTTPS-names leg DELIVERED (ADR-092, 2026-07-15):** per-stack subdomain delegation —
+      homelab wires `*.<stack>.teststuff.net` ONCE (wildcard cert + one `3.0/24` VIP + a dumb
+      HAProxy TLS terminator → the stack's in-cluster Cilium Gateway; `stack_gateways` in
+      `group_vars/opnsense.yml`, opt-in), then the stack adds hostnames as HTTPRoutes in its own
+      `-iac` repo, zero homelab change. Opt-in is still a thin homelab PR *once per stack*; making
+      that an XRD claim (ADR-085) is the residual. **Still open:** the git-repos + AppProject/namespace
+      legs (both still `tofu/github` + `argocd/platform` operator PRs).
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
@@ -192,7 +193,7 @@ _Last updated: 2026-07-15._
       `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
       apply.
 
-- [ ] **FU-066** — **claude-code + Haiku worker tier — CORE BUILT + E2E 2026-07-14.** The hard
+- [ ] **FU-066** — **claude-code + Haiku worker tier — CORE BUILT + E2E 2026-07-14; FIRST REAL FIX 2026-07-15** (oracle-fleet#22 → PR #23, hand-driven coordinator from the jail, two rounds, CI green; the stack jail lacks k8s perms so a jail-side coordinator drove it). The hard
       prereq (cred injection for the subscription token) is LIVE: the egress proxy grew an
       `/anthropic/*` upstream on the ADR-087 ref rails (`AUTH_TOKEN` data-key fallback + it
       restores the oauth beta the `ANTHROPIC_AUTH_TOKEN` gateway path drops), and
@@ -205,14 +206,36 @@ _Last updated: 2026-07-15._
       infra; (b) transcripts/finalize — the coordinator image lacks `agent-finalize`, so claude
       rides emit a minimal stats line and skip transcript upload; either agent-base ships the
       claude CLI or the coordinator image ships finalize (agent-runtime/-coordinator repos), plus
-      the tokens/turns stand-in for `cost_usd`; (c) recipe translation (`.agents/fix.yaml` →
+      the tokens/turns stand-in for `cost_usd`. **Partial fix landed 2026-07-15:** the minimal
+      stats line carried no `pr_url`, so a clean PR-opening claude run tripped a **FALSE
+      `AGENT_STRIKE`** (the launcher's "no PR opened" path — seen live on #22 round 1);
+      `agent-session.sh` now scrapes the PR URL from the run log into the stats line (validated
+      round 2 — it armed auto-merge + posted the stats comment instead of striking). Transcript
+      upload + real cost accounting still open. (c) recipe translation (`.agents/fix.yaml` →
       `--append-system-prompt` + `--max-turns` caps) in the dispatcher brief + chain position =
-      the RELIABLE tier before `agent/blocked` (model-routing.md); (d) **unify coordinator +
+      the RELIABLE tier before `agent/blocked` (model-routing.md) — **exercised by hand on #22**
+      (the coordinator base64-carried the recipe `instructions` into `--append-system-prompt-file`
+      and the `prompt` into `-p --max-turns`; worked, incl. the `--work-branch` resume in round 2);
+      still needs to move OUT of the coordinator's head INTO the dispatcher brief/recipe. (d) **unify coordinator +
       reviewer onto the same ref rail** — they still hold the raw oauth token in-pod
       (`CLAUDE_CODE_OAUTH_TOKEN` secretKeyRef); the reviewer especially checks out LLM-authored
       PR code next to an unscoped ~1y credential. Mechanical once the worker rail has mileage:
       swap their env to `ANTHROPIC_BASE_URL` + ref, label `coordinator-claude`, grant the proxy
-      SA get on it.
+      SA get on it. (e) **the claude tier is docker-LESS — it silently ignores `fixer.docker`
+      (FU-065 lineage), found on #22.** The harness runs on the coordinator image (no devbox, no
+      docker daemon), and `--harness claude --docker` is untested + structurally moot (a dind
+      sidecar the image can't drive), so a claude worker has **no in-pod kind/kata inner loop** —
+      exactly the capability archived **FU-065** shipped as the `fixer.docker` knob (kata microVM +
+      dind; oracle-fleet is `fixer.docker:true` for its `scripts/e2e-kind.sh` gate, the `ert-mock`
+      world). The claude tier falls back to **CI-push** (GitHub Actions has docker) — harmless for
+      #22 (a spec + test-label re-home needs no cluster; GH CI still ran the kind gate green) but
+      the SLOW cycle Rasmus rejected for operator-shaped repos (the very reason `fixer.docker`
+      exists). **Interim routing rule (policy, no code): keep claude/haiku for NON-docker tasks
+      (spec/docs, pure-unit, API-level); route `fixer.docker` inner-loop issues to the goose kata
+      tier.** A real fix = the claude tier gaining a docker/toolchain path, which also requires
+      solving "coordinator image has no devbox" (overlaps (b)); until then the AgentStack claim
+      should express tier×docker compatibility so the dispatcher won't send a docker-needing issue
+      to claude/haiku (relates to (a)'s `fixer.claudeTier` field and ADR-085).
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
       credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). REMAINING:
