@@ -203,15 +203,20 @@ reboots:
 
 Deployed in-cluster (`tofu/homeassistant.tf`), VIP `192.168.40.10:8123`, HTTPS at
 `homeassistant.teststuff.net` via OPNsense HAProxy. Config kept in `homeassistant/ha-config/`,
-applied imperatively (`kubectl cp` + restart). Tokens in the wallet (`ha-access-token`, `ha-refresh-token`).
+applied imperatively (`kubectl cp` + restart). Token in the wallet (`ha-access-token` — a long-lived
+token; `ha-prometheus-token` is the separate tofu-side one).
 
 - HAProxy frontend must have **HTTP/2 disabled** or the HA WebSocket fails to upgrade.
 - Integrations are scriptable via the config-flow REST API; **Tuya (plugs/power) is NOT** — needs
   the user's Smart Life QR login in the UI.
-- Token refresh: `POST http://192.168.40.10:8123/auth/token` form `grant_type=refresh_token`,
-  `refresh_token=<wallet: ha-refresh-token>`, `client_id=http://192.168.2.61:30123/`
-  (the original onboarding origin — others 401). Minting a long-lived token needs the websocket API
-  (`auth/long_lived_access_token`), not REST.
+- Token: `ha-access-token` in the wallet is a **long-lived access token** (~10y, no refresh dance —
+  use it directly as `Authorization: Bearer`). The old `refresh_token` OAuth flow was retired
+  (FU-003: the refresh token had died with `invalid_grant`).
+- Regenerate it via the **websocket API** (REST can't mint one). Auth the websocket with any still-valid
+  token (e.g. `ha-prometheus-token`) — no password/MFA — then send
+  `{"type":"auth/long_lived_access_token","client_name":"…","lifespan":3650}`; the `result` is the
+  new token. If every token is dead, auth the websocket by logging in with `ha-owner-password`
+  instead. Full websocket handshake requires HTTP/2 **disabled** on the HAProxy frontend (above).
 
 ## UniFi
 

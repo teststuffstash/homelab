@@ -93,9 +93,10 @@ Then export it (don't put it in a committed file):
 export TF_VAR_proxmox_api_token='tofu@pve!provisioner=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
 ```
 
-> The live cluster was bootstrapped with a broad `root@pam!tofu` token (in the gitignored
-> `terraform.tfvars`) — **burnable: rotate to a scoped `tofu@pve` token (FU-004)** (it was never
-> committed). The SSH key bpg uses for disk import
+> The main root uses a **scoped `tofu@pve!provisioner` token** (`TerraformProv` role, in the
+> gitignored `terraform.tfvars`) — rotated off the broad bootstrap `root@pam!tofu` token, which is
+> now revoked (FU-004, 2026-07-15). A recovery copy of the token value is in the KeePass wallet
+> (`pve-api-token-tofu`); `terraform.tfvars` remains the source tofu reads. The SSH key bpg uses for disk import
 > lives outside the repo at `~/.claude/homelab-pve-ssh/` (authorize its `.pub` in pve root's
 > `authorized_keys` — the one-time root-of-trust seed; no Proxmox API can inject it).
 

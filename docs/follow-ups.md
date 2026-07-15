@@ -27,14 +27,10 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-07-14._
+_Last updated: 2026-07-15._
 
 ## Secrets (the "secret cleanup" track)
 
-- [ ] **FU-003** — HA `refresh_token` is dead (`invalid_grant`; falling back to `prometheus_llat`).
-      Regenerate the refresh/long-lived token (recipe: `docs/runbook.md` → Home Assistant).
-- [ ] **FU-004** — Rotate the broad bootstrap `root@pam!tofu` Proxmox token to a scoped `tofu@pve`
-      token (`tofu/README.md` has the `pveum` recipe).
 - [ ] **FU-005** — Decide whether an Infisical break-glass second admin is worth codifying (one
       super admin today, signups disabled).
 

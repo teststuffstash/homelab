@@ -83,8 +83,8 @@ add_secret forgejo-runner-token   "$(file_or "$HOME/.claude/homelab-forgejo/runn
 add_secret opnsense-api-key     "$(file_or "$HOME/.claude/homelab-opnsense/key" REPLACE)"
 add_secret opnsense-api-secret  "$(file_or "$HOME/.claude/homelab-opnsense/secret" REPLACE)"
 add_secret pve-api-token-matchbox "$(file_or "$HOME/.claude/homelab-pve-ssh/api_token_matchbox" REPLACE)"
-add_secret ha-access-token      "$(file_or "$HOME/.claude/homelab-ha/access_token" REPLACE)"
-add_secret ha-refresh-token     "$(file_or "$HOME/.claude/homelab-ha/refresh_token" REPLACE)"
+add_secret pve-api-token-tofu    "$(file_or "$HOME/.claude/homelab-pve-ssh/api_token_tofu" REPLACE)"  # main root (FU-004); recovery copy of terraform.tfvars value
+add_secret ha-access-token      "$(file_or "$HOME/.claude/homelab-ha/access_token" REPLACE)"  # long-lived token (FU-003)
 add_secret ha-owner-password    "$(file_or "$HOME/.claude/homelab-ha/owner_password" REPLACE)"
 add_secret droplet-api-encryption-key "$(file_or "$HOME/.claude/homelab-droplet/api_encryption_key" REPLACE)"
 add_secret droplet-ota-password "$(file_or "$HOME/.claude/homelab-droplet/ota_password" REPLACE)"

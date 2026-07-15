@@ -8,6 +8,22 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-003** *(archived 2026-07-15)* — **HA token regenerated → long-lived.** The dead
+  `refresh_token`/`access_token` (401, `invalid_grant`) are gone; `ha-access-token` in the KeePass
+  wallet is now a fresh **long-lived** token (~10y, use directly as Bearer — no refresh flow),
+  minted via the websocket `auth/long_lived_access_token` cmd, authing with the still-valid
+  `ha-prometheus-token` (no password/MFA needed). Verified HTTP 200; wallet round-trips the value.
+  Obsolete `ha-refresh-token` entry + its `keepass-init.sh` seed removed; runbook HA §token recipe
+  rewritten. Gotcha: websocket handshake needs HTTP/2 disabled on the HAProxy frontend (already is).
+
+- **FU-004** *(archived 2026-07-15)* — **Proxmox token scoped down.** Broad bootstrap
+  `root@pam!tofu` replaced by `tofu@pve!provisioner` (`TerraformProv` role, priv list per
+  `tofu/README.md`), value swapped in the gitignored `tofu/terraform.tfvars`. `devbox run tf-plan`
+  → "No changes" (token authenticates + refreshes all Proxmox VM state), *then* `root@pam!tofu`
+  revoked. End state: new token API 200, old 401; `root@pam` keeps only its `matchbox` token
+  (separate, untouched). `terraform.tfvars` stays the source tofu reads (per `scripts/tf.sh`); a
+  recovery copy of the value is in the wallet as `pve-api-token-tofu`.
+
 - **FU-002** *(archived 2026-07-15)* — **Jail GitHub PAT out of remote URLs → git credential
   helper.** Mono jail: `tools/jail-entrypoint.sh` writes an ephemeral `~/.git-credentials` from
   `GH_TOKEN` + injects `credential.helper store` via `GIT_CONFIG_*` env (`~/.gitconfig` is a busy
