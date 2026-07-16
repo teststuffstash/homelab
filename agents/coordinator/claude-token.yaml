@@ -26,16 +26,16 @@ spec:
     # FU-066(d): coordinator/reviewer pods ride the ADR-087 ref rail like workers — the pod env is
     # ANTHROPIC_BASE_URL=<proxy>/anthropic + ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude;
     # the egress proxy resolves the ref (session-key label + the Role below) and injects the token +
-    # oauth beta. AUTH_TOKEN is the data key the proxy's resolver reads; CLAUDE_CODE_OAUTH_TOKEN is
-    # kept one transition cycle for un-migrated launcher checkouts — drop it once a post-swap
-    # coordinator tick and reviewer run are green.
+    # oauth beta. AUTH_TOKEN is the data key the proxy's resolver reads. The legacy
+    # CLAUDE_CODE_OAUTH_TOKEN data key was dropped 2026-07-16 after the acceptance runs
+    # (two reviewer sessions on agent-runtime#14/#15 + a coordinator probe, all green on the rail)
+    # — no pod holds or can mount the raw token anymore.
     template:
       metadata:
         labels:
           openrouter.teststuff.net/session-key: "true"
       data:
         AUTH_TOKEN: "{{ .token }}"
-        CLAUDE_CODE_OAUTH_TOKEN: "{{ .token }}"
   data:
     - secretKey: token
       remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }

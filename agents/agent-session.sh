@@ -268,16 +268,11 @@ if [ -n "$RUN_CMD" ]; then
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
-  # claude harness: agent-base ships agent-finalize since agent-runtime#14, so claude rides take
-  # the normal finalize path (tokens/turns + transcripts, FU-066 b). The presence-gated fallback
-  # stays for an older AGENT_BASE_IMAGE pin: a minimal AGENT_RUN_STATS line WITH the PR URL
-  # scraped from the run log — without `pr_url` a clean PR-opening run reads as "no PR opened"
-  # and fires a FALSE AGENT_STRIKE (seen live on oracle#22 round 1). Drop the fallback once the
-  # post-#14 pin has a clean claude ride behind it.
+  # All harnesses (incl. claude since agent-runtime#14 / the 2026-07-16 acceptance ride) take the
+  # normal in-pod finalize path: tokens/turns + transcripts for subscription runs (FU-066 b). The
+  # coordinator-image-era minimal-stats fallback is gone — an AGENT_BASE_IMAGE pin older than
+  # agent-runtime#14 would fail loudly at `claude: command not found` long before finalize.
   FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
-  if [ "$HARNESS" = "claude" ]; then
-    FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]}; if command -v agent-finalize >/dev/null 2>&1; then HARNESS_EXIT=\$HARNESS_EXIT agent-finalize /tmp/run.log; else PRU=\$(grep -oE 'https://github.com/[^ )\"]+/pull/[0-9]+' /tmp/run.log | tail -1); echo \"AGENT_RUN_STATS {\\\"project\\\":\\\"${PROJECT}\\\",\\\"pod\\\":\\\"${POD}\\\",\\\"harness\\\":\\\"claude\\\",\\\"model\\\":\\\"${MODEL}\\\",\\\"cost_unknown\\\":true,\\\"exit_status\\\":\\\"\$([ \$HARNESS_EXIT = 0 ] && echo clean || echo failed)\\\"\${PRU:+,\\\"pr_url\\\":\\\"\$PRU\\\"}}\"; fi"
-  fi
   WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 elif [ -n "$OC_SETUP" ]; then
