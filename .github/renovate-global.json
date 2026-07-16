@@ -46,16 +46,16 @@
       "automerge": true
     },
     {
-      "description": "Python DEV deps (pytest/ruff/…) patch/minor — mechanical automerge.",
-      "matchManagers": ["pep621", "uv"],
+      "description": "Python DEV deps (pytest/ruff/…) patch/minor — mechanical automerge. poetry added 2026-07-16 (allure-behavior-snippets): same dep class, same lane, regardless of package manager.",
+      "matchManagers": ["pep621", "uv", "poetry"],
       "matchDepTypes": ["devDependencies", "dev-dependencies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["automerge"],
       "automerge": true
     },
     {
-      "description": "Python RUNTIME deps (boto3/…) patch/minor — meaningful (runs in prod, changelogs exist) → the LLM `deps-review` lane: armed, reviewed by the merge-path review reflex, worker adapts on CHANGES_REQUESTED (FU-046).",
-      "matchManagers": ["pep621", "uv"],
+      "description": "Python RUNTIME deps (boto3/…) patch/minor — meaningful (runs in prod, changelogs exist) → the LLM `deps-review` lane: armed, reviewed by the merge-path review reflex, worker adapts on CHANGES_REQUESTED (FU-046). poetry added 2026-07-16.",
+      "matchManagers": ["pep621", "uv", "poetry"],
       "matchDepTypes": ["dependencies"],
       "matchUpdateTypes": ["patch", "minor"],
       "addLabels": ["deps-review"],
