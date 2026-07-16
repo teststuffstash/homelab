@@ -17,6 +17,11 @@ spec:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly
         guardrail: only-free
+        # explicit (server defaults) — the API server stamps defaulted booleans into the stored
+        # object, so omitting them leaves the ArgoCD app permanently OutOfSync (same rule as
+        # extraFQDNs below; observed live 2026-07-16 when claudeTier's default landed).
+        docker: false
+        claudeTier: false
         egress:
           profile: python # kopf operator, uv/pip toolchain
           extraFQDNs: [] # explicit (server default) — earned from a harvest, currently none; also keeps ArgoCD diff clean
