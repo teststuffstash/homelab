@@ -42,6 +42,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
 | `infisical-db` (DB_CONNECTION_URI), `infisical-pg-app` | tofu ← KeePass | not in git |
 | `repo-homelab-github` (ArgoCD git cred for the private homelab repo) | tofu ← KeePass | not in git |
 | `repo-oracle-iac-github` (ArgoCD git cred for the private oracle-iac repo) | tofu ← KeePass | not in git |
+| `repo-ghcr-charts-oci` (ArgoCD OCI/helm cred for the PRIVATE oracle-fleet-ingester chart; classic read:packages PAT) | tofu ← KeePass | not in git |
 | `infisical-machine-identity` (ESO→Infisical auth) | `tofu/infisical/` (Infisical TF provider) | not in git |
 | every app secret after that | Infisical → ESO → namespace Secret | — |
 

@@ -159,6 +159,12 @@ variable "argocd_github_pat" {
   sensitive   = true
 }
 
+variable "ghcr_read_packages_token" {
+  description = "CLASSIC GitHub PAT with read:packages (fine-grained PATs can't grant it) so ArgoCD can pull the PRIVATE oracle-fleet-ingester OCI chart from ghcr. From KeePass (homelab-github-actions-runner-read-packages)."
+  type        = string
+  sensitive   = true
+}
+
 variable "infisical_encryption_key" {
   description = "Infisical ENCRYPTION_KEY (32 hex chars / 128-bit). From KeePass; never auto-generate in the cluster (would rotate under it)."
   type        = string

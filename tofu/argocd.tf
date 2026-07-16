@@ -162,6 +162,33 @@ resource "kubernetes_secret" "argocd_repo_oracle_iac" {
   depends_on = [helm_release.argocd]
 }
 
+# OCI Helm credential for the ghcr charts registry. NEW capability: until now every ArgoCD OCI chart
+# pull was PUBLIC (sleep-ingester's `charts/sleep-ingester` is a public package, pulled anon), so no
+# helm/OCI credential existed. The oracle-fleet-ingester chart is published PRIVATE (inherits the
+# private oracle-fleet repo's visibility), so ArgoCD needs to authenticate to pull it. This is a
+# `type=helm`/`enableOCI` repository cred keyed on the registry URL, so it covers EVERY app whose
+# `repoURL` is `ghcr.io/teststuffstash/charts` — i.e. sleep-ingester's (public) chart pull becomes
+# authenticated too. Harmless (the token reads public packages) and avoids a second charts repo. The
+# password is a CLASSIC PAT with `read:packages` — fine-grained PATs cannot grant packages scope;
+# from KeePass (`homelab-github-actions-runner-read-packages`), TF_VAR-injected like the git PAT.
+# (The in-cluster image pull uses a separate ESO dockerconfigjson provisioned in oracle-iac.)
+resource "kubernetes_secret" "argocd_repo_ghcr_charts_oci" {
+  metadata {
+    name      = "repo-ghcr-charts-oci"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type      = "helm"
+    name      = "ghcr-charts"
+    url       = "ghcr.io/teststuffstash/charts"
+    enableOCI = "true"
+    username  = "teststuffstash" # ghcr: any non-empty user; the classic PAT is the password
+    password  = var.ghcr_read_packages_token
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.

@@ -46,10 +46,11 @@ export TF_VAR_infisical_encryption_key="$(_kp_get infisical-encryption-key)"
 export TF_VAR_infisical_auth_secret="$(_kp_get infisical-auth-secret)"
 export TF_VAR_infisical_db_password="$(_kp_get infisical-db-password)"
 export TF_VAR_argocd_github_pat="$(_kp_get argocd-github-pat)"
+export TF_VAR_ghcr_read_packages_token="$(_kp_get homelab-github-actions-runner-read-packages)"
 export TF_VAR_infisical_admin_email="$(_kp_get infisical-admin-email)"
 export TF_VAR_infisical_admin_password="$(_kp_get infisical-admin-password)"
 export TF_VAR_forgejo_runner_token="$(_kp_get forgejo-runner-token)"
 
-echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,infisical_admin_*,forgejo_runner_token} from $_kp_db" >&2
+echo "keepass-env: exported TF_VAR_{grafana_admin_password,ha_prometheus_token,infisical_*,argocd_github_pat,ghcr_read_packages_token,infisical_admin_*,forgejo_runner_token} from $_kp_db" >&2
 unset -f _kp _kp_get
 unset _kp_dir _kp_db _kp_key _d
