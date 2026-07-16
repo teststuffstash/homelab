@@ -41,8 +41,12 @@ _Last updated: 2026-07-16._
       VIPs `.40.20/.21`; docker-mode agent rides wired (dind `registry-mirrors` + the
       `REGISTRY_MIRROR_*` env contract) and the docker.io FQDNs dropped from the agentstack
       egress (E2E under enforced deny-all: alpine 2s cold / 1s warm from a kata ride).
-      **Remaining consumers:** (a) Talos node-level `machine.registries.mirrors` (all cluster
-      pulls — apply from home, verify restart semantics); (b) ci-runner-01 `daemon.json`;
+      **Remaining consumers:** (a) ✅ DONE 2026-07-16 — `machine.registries.mirrors` on all 8
+      nodes (`local.registry_mirrors_patch`, talos.tf + metal.tf; skipFallback default=false so
+      a dead mirror/cold boot falls through to upstream). Restart semantics ANSWERED: applies
+      in-place, no reboot (canary wk-01 stayed Ready; pull of uncached alpine:3.18.12 rode the
+      mirror — containerd/v2.2.3 `?ns=docker.io` in the mirror log, cache-filled + served);
+      (b) ci-runner-01 `daemon.json`;
       (c) ARC runner pods; (d) gate scripts actually consuming `REGISTRY_MIRROR_*` (first:
       oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`) — now the LAST
       blocker for the full gate in-pod (FU-081 ride r3 2026-07-16: kind-NODE pulls go upstream

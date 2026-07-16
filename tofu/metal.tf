@@ -91,6 +91,7 @@ data "talos_machine_configuration" "metal" {
         }
       }
     })],
+    [local.registry_mirrors_patch],
     # Kata-capable nodes advertise it; the `kata` RuntimeClass (kata.tf) schedules on this label.
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }

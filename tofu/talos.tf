@@ -1,6 +1,25 @@
 # Provider-agnostic cluster definition. Nothing here knows about Proxmox — in a
 # DR rebuild this file is reused unchanged; only proxmox.tf/providers.tf change.
 
+locals {
+  # FU-073a: node-level image pulls ride the pull-through mirrors (ADR-091,
+  # argocd/resources/registry-cache/ — BGP VIPs, git-pinned like the agent-ride wiring in
+  # agents/agent-session.sh). skipFallback stays at its default (false): a dead mirror — or a
+  # cold cluster boot, where the VIP needs Cilium+BGP up first — falls through to the upstream
+  # registry, so pulls get slower, never broken. Applied to VM (talos.tf) + metal (metal.tf)
+  # nodes alike; registry config is config_path-based in Talos, expected to apply in-place.
+  registry_mirrors_patch = yamlencode({
+    machine = {
+      registries = {
+        mirrors = {
+          "docker.io" = { endpoints = ["http://192.168.40.20"] }
+          "ghcr.io"   = { endpoints = ["http://192.168.40.21"] }
+        }
+      }
+    }
+  })
+}
+
 resource "talos_machine_secrets" "this" {
   talos_version = var.talos_version
 }
@@ -25,6 +44,7 @@ data "talos_machine_configuration" "node" {
         # extraMounts were removed. Longhorn uses /var/lib/longhorn, not an extraMount.)
       }
     })],
+    [local.registry_mirrors_patch],
     # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). Talos applies
     # machine.nodeLabels to the kubelet registration live — safe on a running node, no reboot.
     contains(local.avx2_nodes, each.key) ? [yamlencode({
