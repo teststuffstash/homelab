@@ -277,6 +277,20 @@ resource "helm_release" "kube_prometheus_stack" {
               "for"         = "0m"
               "labels"      = { severity = "warning" }
               "annotations" = { summary = "Node {{ $labels.instance }} rebooted", description = "{{ $labels.instance }} booted {{ $value | humanizeDuration }} ago. Metal-node flapping is under investigation (2026-06-19) — note which node + time." }
+            },
+            {
+              # FU-082c: Talos's userspace OOMController SIGKILLs whole BestEffort pod cgroups
+              # under node memory pressure — every container exits 137 and lastState.reason says
+              # only "Error", so the stock OOMKilled-reason alerts never fire. Grafana died 21
+              # cycles on wk-01 (2026-07-16) with zero alert: the dashboards lived in the victim.
+              # Exit 137 + a recent restart covers Talos OOM kills, kernel OOMKilled, and
+              # eviction SIGKILLs alike; confirm the culprit with
+              # `talosctl -n <node> dmesg | grep "OOM controller"`.
+              "alert"       = "PodSigkilled"
+              "expr"        = "increase(kube_pod_container_status_restarts_total[30m]) > 0 and on (namespace, pod, container) kube_pod_container_status_last_terminated_exitcode == 137"
+              "for"         = "0m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "{{ $labels.namespace }}/{{ $labels.pod }} killed (exit 137)", description = "Container {{ $labels.container }} restarted after SIGKILL — likely the Talos OOMController (BestEffort victim under node memory pressure, FU-082) or a kernel OOM. Check `talosctl dmesg | grep 'OOM controller'` on the pod's node; recurring hits mean the node is over-committed or the pod needs resource requests." }
             }
           ]
         }]

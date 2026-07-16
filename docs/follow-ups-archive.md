@@ -8,6 +8,24 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-045** *(archived 2026-07-16)* — **Per-stack coordinator context: LIVE since 2026-07-08**
+  (`coordinator-session.sh` clones all the stack's repos to `/work/<repo>`, cwd = the stack's
+  `mainRepo`; deterministic `coordinator-scan` gate + `--stack/--repos` scoping; ran live on
+  sleep-tracking#18 and the oracle stack since). Everything the entry still carried was other
+  ids' scope, all now closed: claims + one-global-reflex = FU-048 (done 2026-07-12), the
+  scheduled tick = FU-050. Closed at the 2026-07-16 agentic-FU review — nothing left under this
+  id.
+
+- **FU-048** *(archived 2026-07-16)* — **AgentStack XRD + Composition: BUILT + ALL THREE stacks
+  on claims (2026-07-12).** `argocd/resources/agentstack/` renders per-fixer-repo git-token trio,
+  standing OpenRouterKey, worker egress CNP (profile + `enforce` dial), proxy-session RBAC,
+  storage quota; `stacks_json()` reads claims (stacks.json = committed mirror/lint universe);
+  in-cluster reflex path verified three-stacks-from-claims. Gotchas that stay greppable:
+  crossplane's SA needs an aggregated ClusterRole for composed kinds (agentstack/rbac.yaml);
+  IssueLabels adoption via `crossplane.io/external-name`. The single listed remainder — a
+  test-cluster policy field — died with FU-065 (archived 2026-07-14, superseded): the claim's
+  `fixer.docker` IS that field. Closed at the 2026-07-16 agentic-FU review.
+
 - **FU-081** *(archived 2026-07-16)* — **Full kind gate now fits the kata ride: `/var/lib/docker`
   moved from 2Gi tmpfs (charged the dind cgroup → OOM 137 mid-build) to a per-ride 20Gi ephemeral
   BLOCK PVC** on the new `longhorn-scratch` SC (replica=1 on the bulk disks, ADR-089 addendum;

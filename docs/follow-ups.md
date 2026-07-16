@@ -341,72 +341,6 @@ _Last updated: 2026-07-16._
       CI (e.g. ArgoCD notifications / a small controller watching `Application` health → revert the
       bump PR or dispatch a fixer). Relates to FU-041 (deterministic merge path) and the agent platform
       direction; the ArgoCD-health signal + that in-cluster reactor are the missing pieces.
-- [ ] **FU-045** — **Coordinator context is per-STACK, not homelab-only.** `coordinator-session.sh`
-      clones just `homelab`, but with the FU-025 three-layer split a stack's deploy truth lives in its
-      own `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is really
-      homelab + sleep-iac + the app repos — and a different stack (`idp`, …) is a different context
-      (homelab + its repos). Generalize the single homelab clone into a **per-stack context** (a small
-      stack manifest → which repos to clone/observe), and possibly run **one coordinator per stack**
-      rather than one homelab-wide. Mostly matters as stacks multiply; today the coordinator doesn't
-      need the `-iac` repo in-context because deploys are automatic (it never touches them). Relates to
-      FU-026 (durable engine), FU-039 (platform self-service), and the three-layer topology.
-      **First cut (2026-07-05):** `agents/stacks.json` (claim-shaped stack→repos list) + a **deterministic
-      gate** `agents/coordinator-scan.sh` (`devbox run coordinator-scan`) that per-stack lists open
-      issues/PRs, applies the coordinator actionability predicate, and only spawns the LLM when there's work
-      (no empty wakes) + `coordinator-session.sh --stack/--repos` scoping. The stack SOURCE is one swap-point
-      (`stacks_json()` → later `kubectl get agentstacks`). Design + target ownership: **FU-048** and
-      [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md). **Ran live (2026-07-05):**
-      the gate found sleep-tracking#18, printed the scoped `--tick` command, and the scoped opus coordinator
-      drove the FU-047 major lane E2E. Also added an **orphan backstop** (gate reports un-armed/unclassified
-      dep PRs — caught sleep-tracking#14/#15). **Second brick (2026-07-08):** `coordinator-session.sh` now
-      **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its cwd in the stack's
-      `--main-repo` (`stacks.json` `mainRepo`: oracle → `oracle-fleet`, sleep/platform → `homelab`), so the
-      main repo's `CLAUDE.md` + specs load as natural cwd context (brief still absolute-pathed from
-      `/work/homelab`); `coordinator-scan.sh` passes `--main-repo`. Clones are read-only reference (a direct
-      write tier is **FU-059**). Remaining for full FU-045: one-coordinator-per-stack + the `AgentStack` claim
-      are the **FU-048** (XRD) scope — **both resolved 2026-07-12**: claims live for all three stacks,
-      the swap-point reads them (merge over the stacks.json mirror), and one GLOBAL reflex was decided
-      over per-stack coordinators (agentstack.md §Decisions); the scheduled tick is **FU-050**.
-- [ ] **FU-048** — **BUILT 2026-07-12, first claim = oracle (live).** XRD
-      `agentstacks.platform.teststuff.net` + go-templating Composition (`argocd/resources/agentstack/`,
-      functions with the providers): per fixer repo renders the git-token trio, the standing
-      OpenRouterKey, the worker egress CNP (baseline+profile+extraFQDNs with the monitor→enforce dial
-      below), and `agentstack-proxy-session-keys` RBAC (name ≠ the hand-list's — gapless migration).
-      `stacks_json()` FLIPPED: cluster claims merged over stacks.json (probe-first fallback; reflex SA
-      granted agentstacks read). Docs dual-surface: `docs/agents/agentstack.md` + the in-cluster
-      `agentstack-docs` ConfigMap, discoverable from the XRD's `platform.teststuff.net/docs-configmap`
-      annotation + `kubectl explain` (the FU-049 pattern seed). Gotcha for the next XRD: crossplane's
-      SA holds NO RBAC for arbitrary composed kinds — aggregate a ClusterRole
-      (`rbac.crossplane.io/aggregate-to-crossplane`, agentstack/rbac.yaml). Acceptance: throwaway claim
-      rendered all 7 kinds + cascade-GC'd; oracle cutover live (hand files deleted from oracle-iac, CNP
-      AgentStack-owned + still enforced, token minted, key re-minted, scan sources oracle from the
-      cluster). **COMPLETED 2026-07-12 (second pass):** ALL THREE stacks on claims (sleep →
-      sleep-iac, platform → the fixer dir; hand-list `openrouter-proxy-rbac.yaml` DELETED after
-      gapless per-stack handoffs); in-cluster reflex path VERIFIED (report-only Job, same
-      SA/image/clone — three stacks from claims, no fallback); stacks.json REDEFINED as the
-      committed MIRROR of the claims, not deleted (CI's registration-lint universe + the
-      probe-failed belt — ADR-085's build-time question resolved; generating it FROM claims is
-      FU-049's catalog problem). DECIDED: one GLOBAL coordinator-reflex (per-stack CronJobs only
-      if cadence/isolation ever diverges — a Composition addition); GitHub-side + `.agents/`
-      recipes stay OUTSIDE the claim (in-cluster GitHub-admin creds need their own ADR; recipes
-      are repo content — see agentstack.md §Decisions). REMAINING: FU-065's test-cluster tier as
-      a policy field when rung 2 lands. Original:
-      **Agents framework = a PLATFORM CAPABILITY published as a Crossplane XRD; stacks own
-      their policy.** homelab publishes an `AgentStack` XRD + Composition (renders a stack's coordinator
-      gate/CronJob + review-reflex + RBAC + secret wiring = the MECHANISM); each stack's `-iac` repo declares
-      `kind: AgentStack` (its repos, model tiers, tools, git workflow, review rubric = the POLICY). Migrate
-      `agents/stacks.json` → a per-stack claim in the `-iac` repo and flip `coordinator-scan.sh`'s
-      `stacks_json()` to `kubectl get agentstacks`. Mechanism=platform, policy=stack — same lens as ADR-084.
-      **Egress requirement (2026-07-12, the FU-020 rollout design):** the Composition renders each fixer
-      repo's worker CiliumNetworkPolicy from *baseline + ecosystem profile + extraFQDNs* with an
-      **`enforce` dial** — `false` = monitor (`enableDefaultDeny.egress: false`: DNS visibility + the
-      allowlist evaluated, nothing blocked; harvest Hubble flows over real rides, diff three-valued
-      ALLOWED/WOULD-DROP/PROBE-FAILED per the meta-5 probe principle), `true` = deny-all. A new stack
-      onboards in monitor and flips the field after K clean rides; a
-      `hubble_drop_total{reason=POLICY_DENIED}` alert on agent namespaces makes enforcement drops loud
-      (a missing allowance manifests as a HANG, per the FU-020 nix-cache finding). Enabling
-      `hubble.relay` is the harvest prereq (flows are per-node + ring-buffered without it).
-      Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md), ADR-085. Relates FU-045/039/020.
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
@@ -492,13 +426,20 @@ _Last updated: 2026-07-16._
       triggers on wk-01 since ≥07-13, so chronic, not today's churn). wk-01 sits at ~82% of
       11.2Gi with the platform heavies (Prometheus ~1Gi, Infisical 815Mi, UniFi 739Mi, ArgoCD
       app-controller 546Mi, Home Assistant 379Mi) and BOTH victims are QoS BestEffort — first
-      in the kill order. Fix directions (probably all of): (a) ✅ DONE 2026-07-16 — requests-only
+      in the kill order. Fix directions: (a) ✅ DONE 2026-07-16 — requests-only
       (no limits) for grafana + both sidecars + sleep-sqlite-sync (monitoring.tf) and the argocd
-      application controller (argocd.tf); both pods now Burstable. Node stays hot though, so:
-      (b) rebalance a heavy off wk-01 (UniFi or
-      Infisical → wk-02/thinkcentre); (c) an alert on `talos OOMController` kills — today
-      NOTHING alerted while Grafana died 21 times (the dashboards live IN the victim). Relates
-      FU-028 (same node-tier scoping theme).
+      application controller (argocd.tf); both pods now Burstable. (c) ✅ DONE 2026-07-16 —
+      `PodSigkilled` alert (node-health group, monitoring.tf): exit-137 restarts joined to KSM
+      `last_terminated_exitcode` — Talos OOM kills report reason "Error", so stock
+      OOMKilled-reason alerts never see them; fired immediately on the day's residue (positive
+      control, self-resolves). Remaining: (b) wk-01 stays ~80% committed while wk-02 idles at
+      26% — NOTE the scheduler never moves running pods and, with requests sparse estate-wide,
+      sees wk-01 as near-empty, so "it'll balance itself" is false; real (b) = requests on the
+      remaining heavies (UniFi 739Mi, Infisical 815Mi, Home Assistant — same treatment as (a))
+      so natural churn re-places them honestly, ± a one-time nudge (delete-to-reschedule).
+      Capacity is NOT the constraint (cluster-wide free memory is ample); a new PVE worker VM is
+      justified only for headroom/HA reasons, not for this. Relates FU-028 (same node-tier
+      scoping theme).
 - [ ] **FU-028** — Longhorn schedules manager/engine-image/instance-manager onto the ephemeral
       laptops (compute-only) → `KubeDaemonSetMisScheduled` ×2 + a stale-PDB alert. Scope Longhorn
       off the ephemeral tier (node selector / taint) or silence the two rules.
