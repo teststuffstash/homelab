@@ -210,22 +210,27 @@ _Last updated: 2026-07-16._
       alerts — `docs/agents/merge-path.md` §Runaway dispatch, born from the oracle-fleet#13
       12-duplicate-approval loop). **(a) coordinator half DONE 2026-07-16:** `coordinator-scan`
       excludes `agent/error` items from every actionable clause and reports them human-first;
-      the brief's label table carries the rule (never dispatch/relabel/arbitrate; emit label +
-      `AGENT_ERROR:` comment on self-detected loop anomalies). Remaining: (a′) worker recipes
-      in the app repos' `.agents/` emit the same signal; (b) grant the
-      homelab-reviewer App `issues:write` so the reviewer can apply the label itself instead of
-      only commenting; (c) adopt the pre-created label into tofu (outside the jail):
-      `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
-      apply.
+      the brief's label table carries the rule. **(b) DONE 2026-07-16:** homelab-reviewer App
+      has `issues:write` (declared + installation-approved, JWT-verified); reviewer-session.sh
+      STEP 0 now trips the label itself (and stops silently when one is already present).
+      **(c) OBSOLETE-BY-FU-068:** the label is live on every fixer repo — claim-owned
+      (Composition taxonomy) on the five migrated repos, labels.tf on the sleep repos.
+      **Remaining:** (a′) worker-recipe breaker — PRs armed 2026-07-16 (oracle-fleet#39 +
+      sleep-tracking#21, riding the reflex); close when both merge.
 
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
-      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). Opencode leg
-      SHIPPED 2026-07-16: under injection the session config deep-merges
-      `provider.openrouter.options.baseURL=<proxy>/api/v1` over the pin, the pod key is the same
-      opaque ref, and OPENROUTER_HOST rides along so agent-finalize's usage read resolves via the
-      proxy — needs one live opencode ride to validate (opencode is fallback-chain-only right now).
-      REMAINING: drop the env/mount fallbacks with FU-020's deny-all + that validation ride.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
+      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). **Opencode leg
+      VALIDATED LIVE 2026-07-16** (ride adhoc-fu018-opencode-inject r3, transcripts in the
+      bucket): proxy log `[injected:google-vertex+cred]` 200 + `/api/v1/key → 200` — answer
+      produced, `cost_usd` real (not unknown), key_hash in stats. Two findings the validation
+      caught: (i) once the session config custom-configures provider options (baseURL), opencode
+      SKIPS env auto-detection and sends no auth at all — `apiKey: "{env:OPENROUTER_API_KEY}"`
+      must ride the merge explicitly (fixed in agent-session.sh); (ii) the proxy resolves ONLY
+      session-key-labeled refs — an injected ADHOC ride on the standing `<project>-openrouter`
+      key gets `cred-unresolved` 401 BY DESIGN: mint a session key first
+      (`estimate_budget.py --emit-cr` one-liner, coordinator README step 4).
+      REMAINING: drop the env/mount fallbacks with FU-020's deny-all.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
       `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
@@ -258,12 +263,12 @@ _Last updated: 2026-07-16._
       `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in Prometheus).
       **VALIDATION RIDE DONE 2026-07-12**: issue #8 round 2 ran CLEAN under enforced deny-all +
       broker creds + claim-composed infra (441s, $0.0347, exit clean, key_hash in stats).
-      Unclassified tail: ~150 POLICY_DENIED drops from the namespace DURING the clean ride
-      (something non-essential retried against the allowlist — likely goose telemetry or a direct
-      openrouter.ai attempt, which the policy exists to stop); the flow buffer rotated before
-      classification — **harvest must run LIVE during a ride** (`hubble observe --follow`), noted
-      for the monitor-stack harvests. Remaining: live-classify the drop source on the next ride,
-      harvest+flip the two monitor stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
+      Drop tail **CLASSIFIED LIVE 2026-07-16** (`hubble observe --follow` during the FU-018
+      opencode rides): 94 drops = **models.dev** (opencode's registry fetch, gracefully degraded
+      — run still green) + **direct openrouter.ai** Cloudflare IPs (exactly what the policy
+      exists to stop; the proxied path answered fine). All benign-by-design — NO allowlist
+      change; a run that needs neither still completes. Remaining: harvest+flip the two monitor
+      stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
       allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
 - [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
@@ -432,14 +437,15 @@ _Last updated: 2026-07-16._
       `PodSigkilled` alert (node-health group, monitoring.tf): exit-137 restarts joined to KSM
       `last_terminated_exitcode` — Talos OOM kills report reason "Error", so stock
       OOMKilled-reason alerts never see them; fired immediately on the day's residue (positive
-      control, self-resolves). Remaining: (b) wk-01 stays ~80% committed while wk-02 idles at
-      26% — NOTE the scheduler never moves running pods and, with requests sparse estate-wide,
-      sees wk-01 as near-empty, so "it'll balance itself" is false; real (b) = requests on the
-      remaining heavies (UniFi 739Mi, Infisical 815Mi, Home Assistant — same treatment as (a))
-      so natural churn re-places them honestly, ± a one-time nudge (delete-to-reschedule).
-      Capacity is NOT the constraint (cluster-wide free memory is ample); a new PVE worker VM is
-      justified only for headroom/HA reasons, not for this. Relates FU-028 (same node-tier
-      scoping theme).
+      control, self-resolves). **(b) mostly DONE 2026-07-16 evening, forced by escalation:** the
+      pressure reached BURSTABLE victims (the requests-bearing grafana pod sandbox-killed) and
+      Prometheus itself sat at 76 kill-restarts (BestEffort, the biggest target — monitoring was
+      blind to its own death, which is why (c) matters). Prometheus got requests
+      (1200Mi, monitoring.tf) and a cordon-nudge moved UniFi→wk-02 + Infisical (app→hp-01,
+      pg/redis→wk-02) off wk-01 (~1.5Gi relief; CNPG refloated cleanly). Remaining (b) residue:
+      unifi-mongo + Home Assistant still on wk-01 unrequested — give them the same requests
+      treatment on next touch; capacity is NOT the constraint (wk-02/hp-01 idle), a new PVE
+      worker VM is a headroom/HA decision only. Relates FU-028 (same node-tier scoping theme).
 - [ ] **FU-028** — Longhorn schedules manager/engine-image/instance-manager onto the ephemeral
       laptops (compute-only) → `KubeDaemonSetMisScheduled` ×2 + a stale-PDB alert. Scope Longhorn
       off the ephemeral tier (node selector / taint) or silence the two rules.

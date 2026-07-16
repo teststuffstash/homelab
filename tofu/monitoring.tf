@@ -71,6 +71,9 @@ resource "helm_release" "kube_prometheus_stack" {
       }
       prometheusSpec = {
         replicas = 1
+        # FU-082: requests-only, same rationale as grafana below — BestEffort made the TSDB the
+        # OOMController's biggest standing target on wk-01 (76 kill-restarts before this).
+        resources = { requests = { cpu = "300m", memory = "1200Mi" } }
         # Scrape ServiceMonitors / PodMonitors / PrometheusRules cluster-wide, not just the chart's
         # own (the default selector only matches release=kube-prometheus-stack). Lets Cilium +
         # Longhorn (and future) monitors/rules be picked up without per-object label wrangling.

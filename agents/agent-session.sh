@@ -250,10 +250,14 @@ if [ "$HARNESS" = "opencode" ]; then
   # FU-018 opencode leg: under cred injection, route opencode's OpenRouter traffic through the
   # egress proxy (deep-merged into the session config so the pin above survives) — the proxy
   # resolves the ref key exactly as for goose. Without injection opencode stays direct.
+  # apiKey must be EXPLICIT here: once the config custom-configures the provider's options
+  # (baseURL), opencode skips its env auto-detection and sends NO Authorization header at all —
+  # the proxy 401s "Missing Authentication header" (validation ride adhoc-fu018, 2026-07-16).
+  # The {env:...} placeholder resolves in-pod, so the ref never lands in the config file either.
   if [ -n "$OC_INJECT" ]; then
     OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" --arg u "${PROXY_URL}/api/v1" '
       ($base // {"$schema": "https://opencode.ai/config.json"})
-      * {provider: {openrouter: {options: {baseURL: $u}}}}')"
+      * {provider: {openrouter: {options: {baseURL: $u, apiKey: "{env:OPENROUTER_API_KEY}"}}}}')"
     echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087; AGENT_CRED_INJECT=0 opts out)"
   fi
   if [ -n "$OC_CONFIG" ]; then
