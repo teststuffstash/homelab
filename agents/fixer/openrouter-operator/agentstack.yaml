@@ -23,6 +23,7 @@ spec:
     - name: agent-coordinator
       labels: { extra: [] }
     - name: openrouter-operator
+      labels: { extra: [] } # claim-owned label set (FU-068; live diff 2026-07-16: strict taxonomy subset)
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly

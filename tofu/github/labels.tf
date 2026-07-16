@@ -35,12 +35,12 @@ locals {
     # with --force); `major/awaiting-human` set by the coordinator once the migration is documented + CI is
     # green — a HUMAN merges. Declared here so provisioning does NOT depend on an in-session `gh` call: a
     # missing label makes a relabel HALF-APPLY and corrupt state (learned live on sleep-tracking#18).
-    "major"                = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
+    "major" = { color = "b60205", description = "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)" }
     # C10 (TICK-LOG meta-2): a human direction reversal (language/architecture) invalidates open agent
     # PRs + queued scopes — carrying items are EXCLUDED from coordinator-scan's actionable set and
     # reported for a human sweep (re-scope / close PR + delete branch). Created imperatively via gh
     # 2026-07-09 on the six agent repos; declared here so provisioning owns it from the next apply.
-    "direction-change" = { color = "b60205", description = "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)" }
+    "direction-change"     = { color = "b60205", description = "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)" }
     "major/awaiting-human" = { color = "d93f0b", description = "Major bump: migration documented, CI green, reviewer-approved — a human merges" }
     # Automation circuit breaker (born 2026-07-12: a review-reflex predicate bug re-dispatched the
     # reviewer every tick — 12 duplicate approvals on oracle-fleet#13). Tripped by the reflex breakers
@@ -52,9 +52,20 @@ locals {
 
   # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in
   # repos.tf (auto-merge etc.) without them, so this list is separate from the repos.tf resources.
-  # (openrouter-operator/agent-runtime/agent-coordinator currently have 0 issues → 0 existing labels, so
-  # the first apply CREATEs them clean — nothing to import.)
-  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "openrouter-operator", "agent-runtime", "agent-coordinator", "homelab", "oracle-fleet", "oracle-iac"]
+  #
+  # ⚠ SHRINKING (FU-068, 2026-07-16): five repos are now CLAIM-owned (AgentStack `labels:` →
+  # authoritative IssueLabels): oracle-fleet, oracle-iac, agent-runtime, agent-coordinator,
+  # openrouter-operator (+ allure-behavior-snippets, never listed here). Their entries are
+  # REMOVED below — before the next apply, `tofu state rm` them so tofu FORGETS without
+  # deleting (a destroy apply deletes the labels on GitHub and the claim fights it back):
+  #   for r in oracle-fleet oracle-iac agent-runtime agent-coordinator openrouter-operator; do
+  #     devbox run github-tofu state list | grep "github_issue_label.agent\[\\\"$r::" \
+  #       | while read -r res; do devbox run github-tofu state rm "$res"; done
+  #   done
+  #   devbox run github-tofu state list | grep 'github_issue_label.track' \
+  #     | while read -r res; do devbox run github-tofu state rm "$res"; done
+  # Delete this file entirely when the list below empties (sleep repos + homelab remain).
+  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "homelab"]
 
   # Track-lane labels are per-STACK, not global (oracle-fleet specs/TRACKS.md): exclusive
   # directory ownership per coordinator track — meaningless on repos outside the stack, so scoped.
@@ -64,13 +75,12 @@ locals {
   #     devbox run github-tofu import "github_issue_label.agent[\"${r}::track/${l}\"]" "${r}:track/${l}"
   #   (braces matter: in zsh, unbraced `$r:track` parses `:t` as a csh modifier and eats it)
   #   done; done
-  track_labels = {
-    "track/chassis" = { color = "1d76db", description = "Lane: chassis/, scripts/, deps, ci.yaml — the shared-file service lane" }
-    "track/ingest"  = { color = "0e8a16", description = "Lane: mcps/*/ingest + fixture growth" }
-    "track/server"  = { color = "5319e7", description = "Lane: mcps/*/server + gateway" }
-    "track/deploy"  = { color = "fbca04", description = "Lane: chart/, deploy workflow, oracle-iac" }
-  }
-  track_label_repos = ["oracle-fleet", "oracle-iac"]
+  # track/* lane labels moved to the oracle AgentStack claim's labels.extra (FU-068, 2026-07-16)
+  # — both carrying repos are claim-owned now. Empty (not deleted) so the merge below stays
+  # shaped; goes away with this whole file when label_repos empties. State-rm note above covers
+  # the github_issue_label.agent["<repo>::track/*"] resources too.
+  track_labels      = {}
+  track_label_repos = []
 
   repo_labels = merge(
     {
