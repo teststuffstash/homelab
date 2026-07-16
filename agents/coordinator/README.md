@@ -332,7 +332,10 @@ devbox run coordinator-session -- --run-tick
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
 worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via
-**`CLAUDE_CODE_OAUTH_TOKEN`** (*not* `ANTHROPIC_API_KEY` — it takes precedence). Permissions are
+the **ADR-087 ref rail** (FU-066d): `ANTHROPIC_BASE_URL=<proxy>/anthropic` +
+`ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude` — the egress proxy resolves the ref
+and injects the ~1y oauth token + beta header; the pod never holds it (do **not** set
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`, they take precedence). Permissions are
 **skipped by default** (`--permission-mode bypassPermissions`) for both interactive and headless —
 the security boundary is the pod (scoped tokens + RBAC + pre-trusted `/work/homelab`), not
 per-command approval, exactly like the jail. Pass `--permission-mode default` for a supervised

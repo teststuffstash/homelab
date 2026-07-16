@@ -9,8 +9,8 @@
 #   (silence stdout: the infisical CLI ECHOES the value in its result table)
 # ESO refreshes the Secret within refreshInterval; sessions pick it up on next pod spawn.
 #
-# Applied with kubectl (not ArgoCD), AFTER rbac.yaml — same lifecycle as its siblings:
-#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/claude-token.yaml
+# GitOps-applied: the `agent-coordinator` ArgoCD app tracks agents/coordinator/ (selfHeal on —
+# a hand `kubectl apply` here gets reverted to git within seconds; push to master instead).
 ---
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -23,6 +23,41 @@ spec:
   target:
     name: coordinator-claude
     creationPolicy: Owner
+    # FU-066(d): coordinator/reviewer pods ride the ADR-087 ref rail like workers — the pod env is
+    # ANTHROPIC_BASE_URL=<proxy>/anthropic + ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/coordinator-claude;
+    # the egress proxy resolves the ref (session-key label + the Role below) and injects the token +
+    # oauth beta. AUTH_TOKEN is the data key the proxy's resolver reads; CLAUDE_CODE_OAUTH_TOKEN is
+    # kept one transition cycle for un-migrated launcher checkouts — drop it once a post-swap
+    # coordinator tick and reviewer run are green.
+    template:
+      metadata:
+        labels:
+          openrouter.teststuff.net/session-key: "true"
+      data:
+        AUTH_TOKEN: "{{ .token }}"
+        CLAUDE_CODE_OAUTH_TOKEN: "{{ .token }}"
   data:
-    - secretKey: CLAUDE_CODE_OAUTH_TOKEN
+    - secretKey: token
       remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }
+---
+# The proxy's read grant for the ref above — the per-namespace sibling of the claim-composed
+# `agentstack-proxy-session-keys` (agent-coordinator is not claim-managed, so it lives here).
+# get-only; the proxy additionally refuses secrets without the session-key label.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: proxy-session-keys
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: proxy-session-keys
+  namespace: agent-coordinator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: proxy-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }

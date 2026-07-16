@@ -146,11 +146,9 @@ if [ -n "$WORK_BRANCH" ]; then
 fi
 
 GOOSE_PROXY_ENV=""; PROXY_URL=""
-if [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "claude" ]; then
-  PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-  if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
-    GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
-  fi
+PROXY_URL="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+if [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
+  GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
 fi
 
 # ── docker mode (kata microVM + dind sidecar; spike: docs/spikes/kata-ci-gate.md) ──
@@ -197,18 +195,20 @@ fi
 
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
 # oracle-fleet#7/PR#12: full cycle incl. salvage-push + PR-open with zero pod credentials;
-# AGENT_CRED_INJECT=0 opts out): the pod gets an OPAQUE REF instead of the real OpenRouter key —
-# the egress proxy resolves ref→key (label-checked, per-namespace RBAC) and injects upstream. The
-# ref is worthless outside the cluster. opencode still goes upstream directly with the real key
-# until it too rides the proxy.
+# AGENT_CRED_INJECT=0 opts out; opencode joined the rail 2026-07-16 — the FU-018 opencode leg:
+# its session config points baseURL at the proxy, the pod key is the same opaque ref): the pod
+# gets an OPAQUE REF instead of the real OpenRouter key — the egress proxy resolves ref→key
+# (label-checked, per-namespace RBAC) and injects upstream. The ref is worthless outside the
+# cluster.
 OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           valueFrom:
             secretKeyRef: { name: ${SECRET}, key: OPENROUTER_API_KEY }"
-CRED_BROKER_ENV=""
+CRED_BROKER_ENV=""; OC_INJECT=""
 if [ "$HARNESS" = "claude" ]; then
   OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
 fi
-if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PROXY_URL" ]; then
+if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] \
+   && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
   OR_KEY_ENV="        - name: OPENROUTER_API_KEY
           value: \"ref:${NS}/${SECRET}\""
@@ -216,6 +216,13 @@ if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ "$HARNESS" = "goose" ] && [ -n "$PRO
   # the proxy's /git-token endpoint — the env/mount below stay as fallback until FU-020 removes them.
   CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
           value: \"${PROXY_URL}/git-token?ns=${NS}\""
+  if [ "$HARNESS" = "opencode" ]; then
+    OC_INJECT=1
+    # agent-finalize's or_usage() reads the key's usage via OPENROUTER_HOST — under injection the
+    # pod key is a ref only the proxy can resolve, so the read MUST ride the proxy (opencode itself
+    # ignores this env; its own traffic is routed by the baseURL merged into OC_CONFIG below).
+    GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
+  fi
 fi
 
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
@@ -237,13 +244,22 @@ if [ "$HARNESS" = "opencode" ]; then
        allow_fallbacks: true,
        max_price: {prompt: ((.pinned_provider.prompt * 2 * 10000 | ceil) / 10000)}
      }}}}}}}' 2>/dev/null || true)"
+  [ -n "$OC_CONFIG" ] \
+    && echo "→ opencode session pin: $(printf '%s' "$PIN_JSON" | jq -r '"\(.pinned_provider.provider) (effective $\(.pinned_provider.effective_per_mtok)/M in)"')" \
+    || echo "→ opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned"
+  # FU-018 opencode leg: under cred injection, route opencode's OpenRouter traffic through the
+  # egress proxy (deep-merged into the session config so the pin above survives) — the proxy
+  # resolves the ref key exactly as for goose. Without injection opencode stays direct.
+  if [ -n "$OC_INJECT" ]; then
+    OC_CONFIG="$(jq -cn --argjson base "${OC_CONFIG:-null}" --arg u "${PROXY_URL}/api/v1" '
+      ($base // {"$schema": "https://opencode.ai/config.json"})
+      * {provider: {openrouter: {options: {baseURL: $u}}}}')"
+    echo "→ opencode via egress proxy: baseURL ${PROXY_URL}/api/v1 (ADR-087; AGENT_CRED_INJECT=0 opts out)"
+  fi
   if [ -n "$OC_CONFIG" ]; then
-    echo "→ opencode session pin: $(printf '%s' "$PIN_JSON" | jq -r '"\(.pinned_provider.provider) (effective $\(.pinned_provider.effective_per_mtok)/M in)"')"
     # base64 keeps the JSON inert through the bash -c → jq -Rs → pod-yaml quoting layers.
     OC_SETUP="printf '%s' '$(printf '%s' "$OC_CONFIG" | base64 -w0)' | base64 -d > /tmp/opencode-session.json; "
     OC_ENV=$'        - name: OPENCODE_CONFIG\n          value: "/tmp/opencode-session.json"'
-  else
-    echo "→ opencode session pin unavailable (registry lookup failed / no eligible provider) — running unpinned"
   fi
 fi
 

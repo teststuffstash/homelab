@@ -21,11 +21,11 @@
 #
 # Bootstrap once (see agents/coordinator/README.md §Bootstrap):
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/rbac.yaml
-#   kubectl -n agent-coordinator create secret generic coordinator-claude \
-#       --from-literal=CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)"   # ~1y subscription token
-#   kubectl -n agent-coordinator create secret generic coordinator-git \
-#       --from-literal=GH_TOKEN="<a token that can read/label issues + merge PRs>"
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/claude-token.yaml   # ESO → coordinator-claude (+ the proxy ref RBAC)
+#   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/git-token.yaml      # ESO → coordinator-git
 #   # the image is built+pushed by CI in the teststuffstash/agent-coordinator repo — no manual build.
+#   # LLM auth = the ADR-087 ref rail (FU-066d): the pod holds ref:agent-coordinator/coordinator-claude,
+#   # the egress proxy injects the subscription token — no raw ~1y token in any pod.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
@@ -226,11 +226,15 @@ spec:
         - name: AGENT_TS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
-        # Subscription auth (Pro/Max): a ~1y token from \`claude setup-token\`, kept in a Secret.
-        # NB: do NOT also set ANTHROPIC_API_KEY here — it would take auth precedence over this.
-        - name: CLAUDE_CODE_OAUTH_TOKEN
-          valueFrom:
-            secretKeyRef: { name: coordinator-claude, key: CLAUDE_CODE_OAUTH_TOKEN, optional: true }
+        # Subscription auth rides the ADR-087 ref rail (FU-066d): the pod holds only an opaque ref;
+        # the egress proxy's /anthropic upstream resolves it (session-key label + the Role in
+        # claude-token.yaml) and injects the ~1y oauth token + the oauth beta header. The raw token
+        # never sits next to checked-out code. NB: do NOT also set ANTHROPIC_API_KEY or
+        # CLAUDE_CODE_OAUTH_TOKEN — they take auth precedence over this path.
+        - name: ANTHROPIC_BASE_URL
+          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+        - name: ANTHROPIC_AUTH_TOKEN
+          value: "ref:agent-coordinator/coordinator-claude"
         # gh/git ops: read+label issues, open/merge PRs across the project repos. The coordinator-git
         # token is a ~1h GitHub App token that ESO re-mints ~hourly — too short for a long session if
         # frozen as an env var. So ALSO mount it as a file (below) and point the image's gh-wrapper at

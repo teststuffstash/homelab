@@ -8,7 +8,8 @@
 # verdict into a mechanical merge gate, and GitHub's auto-merge completes the PR. Nobody clicks merge.
 #
 # Two distinct identities, on purpose:
-#   • LLM auth = the operator SUBSCRIPTION (coordinator-claude → CLAUDE_CODE_OAUTH_TOKEN): free at
+#   • LLM auth = the operator SUBSCRIPTION via the ADR-087 ref rail (the pod holds only
+#     ref:agent-coordinator/coordinator-claude; the egress proxy injects the token — FU-066d): free at
 #     margin, a strong model, deliberately DECORRELATED from the cheap OpenRouter model that wrote the
 #     PR. Reviewer must be at least as capable as the author; same model = same blind spots. Review +
 #     coordination are the SAFETY NET, so they run on the SUBSCRIPTION with a capable model (**sonnet**,
@@ -223,11 +224,14 @@ spec:
         - name: AGENT_TS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
-        # Operator subscription (Pro/Max): the ~1y token from \`claude setup-token\`. Do NOT also set
-        # ANTHROPIC_API_KEY — it would take auth precedence over the subscription.
-        - name: CLAUDE_CODE_OAUTH_TOKEN
-          valueFrom:
-            secretKeyRef: { name: coordinator-claude, key: CLAUDE_CODE_OAUTH_TOKEN }
+        # Subscription auth rides the ADR-087 ref rail (FU-066d) — the reviewer checks out
+        # LLM-authored PR code, so it of all roles must not hold the raw ~1y token. The pod carries
+        # only the opaque ref; the proxy resolves + injects (token + oauth beta). Do NOT also set
+        # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN — they take auth precedence over this path.
+        - name: ANTHROPIC_BASE_URL
+          value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic"
+        - name: ANTHROPIC_AUTH_TOKEN
+          value: "ref:agent-coordinator/coordinator-claude"
         # gh clone / pr checkout / pr review: the REVIEW-BOT App token (distinct identity from the PR
         # author, or Approve self-rejects). Env is the frozen fallback; the image's gh-wrapper prefers
         # the LIVE token file (ESO re-mints it ~hourly).

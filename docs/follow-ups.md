@@ -213,17 +213,26 @@ _Last updated: 2026-07-16._
       skip estimator/key-mint steps). (e) ✅ RETIRED by (b): on agent-base the claude tier has
       devbox + the kata+dind docker mode — `fixer.docker` repos ride identically on any harness;
       the interim non-docker routing rule + the tier×docker claim field are moot.
-      **Remaining:** (d) **unify coordinator + reviewer onto the same ref rail** — they still
-      hold the raw oauth token in-pod (`CLAUDE_CODE_OAUTH_TOKEN` secretKeyRef); the reviewer
-      especially checks out LLM-authored PR code next to an unscoped ~1y credential. Mechanical
-      now the worker rail has mileage (E2E + first real fix #22→PR#23): swap their env to
-      `ANTHROPIC_BASE_URL` + ref, label `coordinator-claude`, grant the proxy SA get on it.
-      Plus: one clean claude validation ride on the post-#14 pin (tokens/turns in stats,
-      transcript in the viewer, kind gate in-pod), then delete the launcher fallback.
+      (d) ✅ SHIPPED 2026-07-16: coordinator-session/reviewer-session swapped to
+      `ANTHROPIC_BASE_URL=<proxy>/anthropic` + `ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/
+      coordinator-claude`; `claude-token.yaml` templates the secret with the session-key label +
+      an `AUTH_TOKEN` data key (the proxy resolver's key) and adds the proxy's per-ns read Role —
+      **no pod holds the raw ~1y token anymore** (the legacy `CLAUDE_CODE_OAUTH_TOKEN` data key
+      stays one transition cycle for un-migrated checkouts; NB agents/coordinator/ is
+      ArgoCD-managed with selfHeal — changes go via git, a hand kubectl apply reverts).
+      **Remaining to close FU-066:** (i) the next review-reflex firing / coordinator tick is the
+      ref-rail acceptance (first candidate: agent-runtime#14's own review) — then drop the legacy
+      data key; (ii) one clean claude worker ride on the post-#14 `AGENT_BASE_IMAGE` pin
+      (tokens/turns in stats, transcript in the viewer, kind gate in-pod), then delete the
+      launcher's minimal-stats fallback.
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
-      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). REMAINING:
-      drop the env/mount fallbacks with FU-020's deny-all, opencode leg.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
+      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). Opencode leg
+      SHIPPED 2026-07-16: under injection the session config deep-merges
+      `provider.openrouter.options.baseURL=<proxy>/api/v1` over the pin, the pod key is the same
+      opaque ref, and OPENROUTER_HOST rides along so agent-finalize's usage read resolves via the
+      proxy — needs one live opencode ride to validate (opencode is fallback-chain-only right now).
+      REMAINING: drop the env/mount fallbacks with FU-020's deny-all + that validation ride.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
       and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
       providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
       `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
