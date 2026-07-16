@@ -24,7 +24,10 @@ metadata:
   namespace: agent-coordinator
 spec:
   schedule: "0 6 * * 1"           # weekly, Monday 06:00 UTC — catalog churn is slow (§M7)
-  suspend: true                   # ⚠ v1 gate: unsuspend only after the first supervised run (above)
+  suspend: false                  # unsuspended 2026-07-16: supervised run passed (a) bootstrap
+                                  # snapshot landed, (b) digest posted on a forced diff (homelab#27,
+                                  # synthetic — hy3:free removed from the snapshot by hand), (c)
+                                  # coordinator-git created the issue. FU-062.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600   # a missed weekly tick may fire up to an hour late, never doubled
   successfulJobsHistoryLimit: 1

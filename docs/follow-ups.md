@@ -355,8 +355,13 @@ _Last updated: 2026-07-16._
       **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
       (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
       graceful 429 fallback); **FU-021 RESOLVED** (watchdog live-accepted on sleep-tracking#20).
-      OPEN: scout first supervised run + unsuspend, ADR-081 cred-injection remainder (FU-018) +
-      egress lockdown (FU-020).
+      **Scout first supervised run DONE + UNSUSPENDED 2026-07-16** (all three preconditions:
+      bootstrap snapshot → forced-diff digest posted via coordinator-git, homelab#27 synthetic,
+      closed → snapshot advanced; weekly Mon 06:00 live). NB the run did NOT exercise FU-024's
+      live-fire canary — canary dispatch + key minting are still TODO in `agents/model-scout.sh`
+      (report-only v1); FU-024's remainder stays open until that leg is written and one canary
+      flies. OPEN: scout canary leg (+FU-024 live-fire), ADR-081 cred-injection remainder
+      (FU-018) + egress lockdown (FU-020).
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.
