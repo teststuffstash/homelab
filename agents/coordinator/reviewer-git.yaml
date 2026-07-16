@@ -51,15 +51,13 @@ spec:
     actions: read            #   caveat "CI not independently confirmed"; these three close that)
   repositories:              #   the repos where agent PRs land (mirror coordinator-git; verify
     - sleep-tracking         #   docs/github-apps.md covers each BEFORE adding — ESO 422s otherwise)
-    - snore-recorder
-    - sleep-iac
+    - snore-recorder         #   NB comments in this list go TRAILING — the registration lint's
+    - sleep-iac              #   parser stops at the first non-item line (found 2026-07-16)
     - openrouter-operator
     - oracle-fleet
     - oracle-iac
-    # Platform-image repos (App installed per docs/github-apps.md; found missing 2026-07-16 when
-    # the agent-runtime#14 reviewer produced a verdict it could not SUBMIT — token not scoped here):
-    - agent-runtime
-    - agent-coordinator
+    - agent-runtime          # added 2026-07-16: the #14 reviewer produced a verdict it could not
+    - agent-coordinator      # SUBMIT — App installed, token not scoped here
 ---
 # 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
