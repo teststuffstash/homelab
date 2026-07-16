@@ -8,6 +8,22 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-066** *(archived 2026-07-16)* — **claude-code + Haiku subscription worker tier: LIVE, all
+  legs.** (a) `fixer.claudeTier` in the AgentStack XRD → claim-rendered `claude-session` ES
+  (ESO *adopted* the imperative secret in place — unlike Crossplane); (b) agent-base ships the
+  claude CLI (devbox-pinned) + finalize records `subscription:true` + tokens/turns from the
+  session jsonl + uploads it as `claude-sessions/` (agent-runtime#14/#15/#16); (c) the dispatch
+  recipe translation codified in the coordinator brief; (d) **ref rail everywhere** — coordinator
+  + reviewer swapped to `ANTHROPIC_BASE_URL`+ref, legacy `CLAUDE_CODE_OAUTH_TOKEN` data key
+  dropped: NO pod holds the raw ~1y token (acceptance: reviewer approved #14; #15 merged fully
+  unattended via the reflex; `COORDINATOR-REF-RAIL-OK` probe); (e) retired — claude rides run on
+  agent-base with devbox + kata/dind (validation ride: gate `devbox run ci` PASSED in-pod,
+  nix closure from the .40.23 VIP). Boundary finding: the FULL oracle kind gate OOMs the kata
+  envelope for EVERY harness → **FU-081** (dind exit 137; interim: full-gate verification rides
+  CI). Gotchas: nixpkgs wraps claude as `.claude-wrapped` (watchdog pkill), reviewer tokens must
+  be scoped per-repo in reviewer-git.yaml, `agents/coordinator/` is ArgoCD-selfHeal (kubectl
+  applies revert). Ledger note: pre-#16 adhoc rides show false `failed/no-output` rows.
+
 - **FU-079** *(archived 2026-07-16)* — **Un-armed open PRs invisible to the merge path — backstop
   shipped.** `coordinator-scan`'s orphan clause generalized from dep-only to ANY un-armed open PR
   with no owning lane (automerge/deps-review/major/awaiting-human/merge-conflict/CHANGES_REQUESTED/

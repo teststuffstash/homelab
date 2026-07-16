@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-081**.
+  Next free id: **FU-082**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -175,6 +175,24 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+- [ ] **FU-081** — **The FULL oracle kind gate exceeds the kata ride memory envelope — for every
+      harness.** Evidence 2026-07-16 (claude validation rides, transcripts
+      `s3://agent-transcripts/oracle-fleet/adhoc-fu066-kind-gate/`): with the docker client fixed
+      (oracle-fleet#32), `devbox run e2e` reached the daemon and started the ingester image build,
+      then **dind OOMKilled (exit 137)** — the kind node image + the running kind cluster + build
+      layers all charge the dind cgroup, and `/var/lib/docker` is a 2Gi MEMORY-backed tmpfs inside
+      a 2560Mi limit. The ceiling is hard: the kata spike already proved 5Gi VM + 3Gi tmpfs
+      guest-OOMs and a 6Gi VM is refused by the hypervisor (8G laptops,
+      `docs/spikes/kata-ci-gate.md` attempts 4/5) — and its acceptance was a MINIMAL k3d
+      cluster-up, never the full gate. NB no FU/ADR matched "kind gate memory/k3d migration"
+      (FU-074 archived the minimal acceptance; FU-073d is mirror consumption). Directions:
+      (a) migrate the oracle gate kind→**k3d** — the spike's own recommendation ("faster,
+      lighter"); (b) disk-backed `/var/lib/docker` via a block PVC (kata attaches block volumes
+      natively — removes the tmpfs↔cgroup double-charge; per-ride PVC churn is the cost);
+      (c) a bigger kata node. **Interim policy (no code):** full-gate verification rides CI
+      (the GitHub runner runs the same gate green on every PR — that path merged everything
+      today); in-pod docker remains for lighter inner loops (cluster-up, smoke tests, single
+      image builds within ~2Gi). Relates FU-072/FU-073, ADR-082; born from FU-066's acceptance.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
@@ -210,42 +228,6 @@ _Last updated: 2026-07-16._
       `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
       apply.
 
-- [ ] **FU-066** — **claude-code + Haiku worker tier — CORE BUILT + E2E 2026-07-14; FIRST REAL FIX 2026-07-15** (oracle-fleet#22 → PR #23, hand-driven coordinator from the jail, two rounds, CI green; the stack jail lacks k8s perms so a jail-side coordinator drove it). The hard
-      prereq (cred injection for the subscription token) is LIVE: the egress proxy grew an
-      `/anthropic/*` upstream on the ADR-087 ref rails (`AUTH_TOKEN` data-key fallback + it
-      restores the oauth beta the `ANTHROPIC_AUTH_TOKEN` gateway path drops), and
-      `agent-session.sh --harness claude` runs workers on the coordinator image with ONLY
-      `ref:<ns>/claude-session` in the pod (Haiku default, no OpenRouter key at all, clone
-      preamble since that image has no prep entrypoint). E2E in oracle-fleet: clone → claude
-      reads the repo with tools → `CLAUDE-WORKER-E2E-OK`, exit clean, minimal AGENT_RUN_STATS.
-      **Build sweep 2026-07-16 — legs (a)(b)(c)(e) SHIPPED, (d) is the remainder:**
-      (a) ✅ `fixer.claudeTier` in the XRD; the Composition renders the `claude-session`
-      ExternalSecret (Infisical `COORDINATOR_CLAUDE_OAUTH_TOKEN` → `AUTH_TOKEN`,
-      session-key-labeled); oracle claim cut over (oracle-iac), imperative secret deleted in the
-      same cutover. (b) ✅ via the **agent-base leg**: agent-runtime#14 ships the claude CLI
-      (devbox-pinned 2.1.201) + pre-seeded onboarding/trust; `agent-finalize` records
-      `subscription:true` + tokens/turns from the session jsonl (the cost stand-in;
-      `cost_usd_equiv` opportunistic from `--output-format json`) and uploads the session jsonl
-      as `claude-sessions/`; `agent-session.sh` flipped `--harness claude` onto agent-base
-      (clone preamble deleted — the entrypoint preps). The 2026-07-15 `pr_url`-scrape fallback
-      stays presence-gated for old pins; drop it after the post-#14 pin's first clean ride.
-      (c) ✅ the dispatcher brief carries the #22 recipe-translation shape (base64-carried
-      `instructions` → `--append-system-prompt-file`, recipe `prompt` → `-p --max-turns 80`,
-      skip estimator/key-mint steps). (e) ✅ RETIRED by (b): on agent-base the claude tier has
-      devbox + the kata+dind docker mode — `fixer.docker` repos ride identically on any harness;
-      the interim non-docker routing rule + the tier×docker claim field are moot.
-      (d) ✅ SHIPPED 2026-07-16: coordinator-session/reviewer-session swapped to
-      `ANTHROPIC_BASE_URL=<proxy>/anthropic` + `ANTHROPIC_AUTH_TOKEN=ref:agent-coordinator/
-      coordinator-claude`; `claude-token.yaml` templates the secret with the session-key label +
-      an `AUTH_TOKEN` data key (the proxy resolver's key) and adds the proxy's per-ns read Role —
-      **no pod holds the raw ~1y token anymore** (the legacy `CLAUDE_CODE_OAUTH_TOKEN` data key
-      stays one transition cycle for un-migrated checkouts; NB agents/coordinator/ is
-      ArgoCD-managed with selfHeal — changes go via git, a hand kubectl apply reverts).
-      **Remaining to close FU-066:** (i) the next review-reflex firing / coordinator tick is the
-      ref-rail acceptance (first candidate: agent-runtime#14's own review) — then drop the legacy
-      data key; (ii) one clean claude worker ride on the post-#14 `AGENT_BASE_IMAGE` pin
-      (tokens/turns in stats, transcript in the viewer, kind gate in-pod), then delete the
-      launcher's minimal-stats fallback.
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
       credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). Opencode leg
