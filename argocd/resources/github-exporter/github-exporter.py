@@ -73,11 +73,11 @@ def graphql(query, variables):
         payload = json.loads(resp.read())
     data = payload.get("data")
     errors = payload.get("errors")
-    # Tolerate PARTIAL data: a field the PAT can't read (e.g. statusCheckRollup without Commit
-    # statuses:read) comes back as null with a FORBIDDEN error entry, but the rest of `data` is
-    # valid. Only raise when there's no usable data at all. This lets collect_open_prs work with just
-    # Pull requests:read (ci_state falls back to "none"); CI state auto-populates if the scope is
-    # later granted. A hard/whole-query error (bad token, SAML) still raises.
+    # Tolerate PARTIAL data: a field the PAT can't read (e.g. statusCheckRollup on a PRIVATE repo —
+    # check runs are unreadable by ANY fine-grained-PAT scope, checks:read is App-only) comes back
+    # as null with a FORBIDDEN error entry, but the rest of `data` is valid. Only raise when
+    # there's no usable data at all. collect_open_prs fills the gap from workflow runs instead
+    # (ci_state_from_runs, FU-063a). A hard/whole-query error (bad token, SAML) still raises.
     if errors and data is None:
         raise RuntimeError(errors)
     if errors:
@@ -140,6 +140,38 @@ def collect_workflow_runs(lines):
                 lines.append(metric("github_workflow_run_duration_seconds", labels, updated - epoch(started)))
 
 
+def ci_state_from_runs(repo, sha):
+    """CI state for a head SHA from workflow-run conclusions — the PRIVATE-repo path (FU-063a).
+
+    statusCheckRollup aggregates CHECK RUNS, and no fine-grained-PAT scope can read those on a
+    private repo (`checks:read` is App-only; GitHub Actions reports check runs, never commit
+    statuses — verified 2026-07-16). `/actions/runs?head_sha=` rides the PAT's existing
+    Actions:read instead. Approximates the rollup: latest attempt per (workflow, event);
+    anything unfinished → pending, any failure-ish conclusion → failure, all green-ish (≥1) →
+    success, no runs → none (also the value for non-Actions CI, same degradation as before)."""
+    if not sha:
+        return "none"  # empty head_sha= would return ALL runs, not none
+    runs = gh(f"/repos/{ORG}/{repo}/actions/runs?head_sha={sha}&per_page=100").get("workflow_runs") or []
+    latest = {}
+    for run in runs:
+        key = (run.get("workflow_id"), run.get("event"))
+        rank = (run.get("run_number") or 0, run.get("run_attempt") or 0)
+        if key not in latest or rank > latest[key][0]:
+            latest[key] = (rank, run)
+    if not latest:
+        return "none"
+    conclusions = []
+    for _, run in latest.values():
+        if run.get("status") != "completed":
+            return "pending"
+        conclusions.append(run.get("conclusion") or "")
+    if any(c in ("failure", "timed_out", "startup_failure", "cancelled", "action_required") for c in conclusions):
+        return "failure"
+    if all(c in ("success", "neutral", "skipped") for c in conclusions):
+        return "success"
+    return "error"  # stale / unknown mixtures — visible rather than falsely green
+
+
 _PR_QUERY = """
 query($org:String!, $cursor:String) {
   organization(login:$org) {
@@ -152,6 +184,7 @@ query($org:String!, $cursor:String) {
             number isDraft updatedAt reviewDecision baseRefName headRefName
             labels(first:15){ nodes { name } }
             reviews(last:30){ nodes { author { login } state submittedAt } }
+            headRefOid
             commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
           }
         }
@@ -169,11 +202,11 @@ def collect_open_prs(lines):
     reviewDecision + statusCheckRollup across every repo, so cost stays ~1 request.
 
     Token scope: this needs the PAT to also carry `Pull requests:read` (the PR list + reviewDecision).
-    The CI state in statusCheckRollup rides the exporter's existing `Actions:read` for Actions-based
-    CI (add `Commit statuses:read` only if a repo also uses external status checks). If the PAT lacks
-    Pull requests:read the GraphQL call raises and this collector is skipped (the poll's try/except
-    isolates it — billing + workflow-runs keep flowing, github_exporter_errors_total ticks). Grant it
-    via scripts/github-exporter-pat-bootstrap.sh (FU-063)."""
+    CI state comes from statusCheckRollup where readable (public repos — any token) and otherwise
+    from ci_state_from_runs() under `Actions:read` (private repos; no PAT scope reads their check
+    runs — FU-063a). If the PAT lacks Pull requests:read the GraphQL call raises and this collector
+    is skipped (the poll's try/except isolates it — billing + workflow-runs keep flowing,
+    github_exporter_errors_total ticks). Grant it via scripts/github-exporter-pat-bootstrap.sh."""
     lines += [
         "# TYPE github_pull_request_open gauge",
         "# HELP github_pull_request_open 1 per open PR; review_decision (approved|changes_requested|"
@@ -199,19 +232,26 @@ def collect_open_prs(lines):
             for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
                 if not pr:
                     continue
-                # Null-safe: without Commit statuses:read the forbidden statusCheckRollup nulls the
-                # whole commit list element (bubbles to the nullable list item), so commits[0] can be
-                # None — degrade to ci_state "none" rather than crashing the collector.
+                # Null-safe: on private repos the forbidden statusCheckRollup nulls the whole
+                # commit list element (bubbles to the nullable list item), so commits[0] can be
+                # None — fall through to the workflow-run join rather than crashing the collector.
                 commits = (pr.get("commits") or {}).get("nodes") or []
                 commit = (commits[0] or {}).get("commit") if commits else None
                 rollup = (commit or {}).get("statusCheckRollup")
+                if rollup:
+                    ci_state = rollup["state"].lower()
+                else:
+                    # Private repo (rollup FORBIDDEN-nulls for every PAT) or genuinely no checks:
+                    # join workflow runs by head SHA under Actions:read (FU-063a). One REST call
+                    # per rollup-less PR per poll — a handful against the 5000/h limit.
+                    ci_state = ci_state_from_runs(repo["name"], pr.get("headRefOid") or "")
                 labels = {
                     "owner": ORG,
                     "repo": repo["name"],
                     "number": pr["number"],
                     "draft": "true" if pr["isDraft"] else "false",
                     "review_decision": (pr["reviewDecision"] or "none").lower(),
-                    "ci_state": (rollup["state"] if rollup else "none").lower(),
+                    "ci_state": ci_state,
                     "base": pr["baseRefName"],
                     "head": pr["headRefName"],
                 }
