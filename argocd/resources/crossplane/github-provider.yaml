@@ -1,0 +1,12 @@
+# provider-upjet-github (FU-068 — the GitHub *Issues tier* in-cluster). Monolithic upjet package
+# wrapping terraform-provider-github v6.6.0; the AgentStack Composition composes its
+# repo.github.upbound.io IssueLabels (AUTHORITATIVE per-repo label sets — see agentstack.md
+# §"The GitHub side"). Credential = the dedicated homelab-labels GitHub App (Issues:R/W only,
+# github-providerconfig.yaml) — the Administration tier (repos/rulesets/org secrets) stays in
+# out-of-jail tofu/github permanently; this provider can never touch it.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-upjet-github
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/provider-upjet-github:v0.19.1

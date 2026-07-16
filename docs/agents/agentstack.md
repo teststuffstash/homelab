@@ -180,6 +180,19 @@ per-purpose.
 **End state:** Administration tier = out-of-jail tofu with the fine-grained admin PAT; Issues tier
 = claim-rendered via provider-upjet-github; clicks = App installations only.
 
+**Mechanism BUILT 2026-07-16** (`argocd/resources/crossplane/github-provider{,config}.yaml`, the
+XRD's `repos[].labels` + the Composition's `IssueLabels` block with the platform taxonomy inline,
+`scripts/github-labels-app-bootstrap.sh`). The taxonomy = GitHub defaults + the agent state
+machine (mirror of `tofu/github/labels.tf` — keep the two in sync until every repo is claim-owned
+and labels.tf dies) + the Renovate/merge-path lanes (`dependencies`/`automerge`/`deps-review`).
+**Remaining, operator:** run the bootstrap (App-create + org-wide-install clicks, `secrets` pushes
+the three `LABELS_GH_APP_*` Infisical keys) — then per repo, claim-first: add `labels:` (diff
+`gh label list` first; keepers → `extra`), verify the composed `IssueLabels` synced, drop the repo
+from `label_repos`, and when the list empties delete labels.tf. NB: verify the installed
+provider's `IssueLabels` apiVersion on first enable
+(`kubectl get crd issuelabels.repo.github.upbound.io -o jsonpath='{.spec.versions[*].name}'` —
+the Composition assumes `v1alpha1`).
+
 ## Operational notes
 
 - **Ownership collisions during migration:** Crossplane will not adopt an existing resource it

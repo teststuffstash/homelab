@@ -25,3 +25,7 @@ rules:
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [roles, rolebindings]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-068 labels tier: the Composition composes provider-upjet-github's IssueLabels.
+  - apiGroups: [repo.github.upbound.io]
+    resources: [issuelabels, issuelabels/status]
+    verbs: [get, list, watch, create, update, patch, delete]

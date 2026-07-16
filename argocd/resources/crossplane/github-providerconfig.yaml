@@ -1,0 +1,50 @@
+# Credentials + ProviderConfig for provider-upjet-github (FU-068 labels tier).
+#
+# The ExternalSecret assembles the terraform-provider-github credentials JSON from the three
+# Infisical keys minted by scripts/github-labels-app-bootstrap.sh (the homelab-labels App:
+# Issues:R/W + metadata:read, installed org-wide on All repositories). The PEM is stored
+# \n-ESCAPED as a single line (the terraform provider's required form — the JSON document must
+# carry literal \n sequences, which JSON-decode into real newlines provider-side).
+#
+# Until the operator runs the bootstrap, this ES sits SecretSyncedError and the ProviderConfig
+# is inert — composed IssueLabels stay unsynced, nothing breaks. No claim carries a `labels`
+# block before the credential exists (migration is claim-first per repo, agentstack.md).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: github-labels-provider-creds
+  namespace: crossplane-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: github-labels-provider-creds
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        credentials: |
+          {"owner": "teststuffstash", "app_auth": [{"id": "{{ .appId }}", "installation_id": "{{ .installId }}", "pem_file": "{{ .pem }}"}]}
+  data:
+    - secretKey: appId
+      remoteRef: { key: LABELS_GH_APP_ID }
+    - secretKey: installId
+      remoteRef: { key: LABELS_GH_APP_INSTALLATION_ID }
+    - secretKey: pem
+      remoteRef: { key: LABELS_GH_APP_PRIVATE_KEY }
+---
+# The ProviderConfig CRD only exists once the Provider package installs — skip the dry-run so
+# ArgoCD can sync this file in the same pass as github-provider.yaml.
+apiVersion: github.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: github-labels
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: github-labels-provider-creds
+      key: credentials

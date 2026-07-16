@@ -124,6 +124,40 @@ spec:
                             description: >-
                               Cap for StorageClass `longhorn-fast` (Optane scratch, replica=1,
                               pinned to one node), e.g. "5Gi".
+                      labels:
+                        type: object
+                        description: >-
+                          Present = this repo's GitHub label set is CLAIM-OWNED (FU-068, the
+                          Issues permission tier): the Composition renders an AUTHORITATIVE
+                          IssueLabels — the platform taxonomy (GitHub defaults + the agent
+                          state machine + the merge-path lanes) plus `extra` below becomes the
+                          repo's ENTIRE label set; any label not in it is DELETED on sync.
+                          Migration is claim-first: add this block, verify the composed
+                          IssueLabels synced (`kubectl get issuelabels <repo>-labels`), THEN
+                          remove the repo from tofu/github label_repos — two managers fight
+                          and the authoritative one wins by deleting. Requires the
+                          homelab-labels App credential
+                          (scripts/github-labels-app-bootstrap.sh). Diff the repo's live
+                          labels (gh label list) against the taxonomy before enabling — any
+                          human label you want to keep goes in `extra`.
+                        properties:
+                          extra:
+                            type: array
+                            default: []
+                            description: >-
+                              Stack-specific labels beyond the platform taxonomy (e.g. the
+                              oracle track/* lane labels). name + 6-hex color (no '#') +
+                              optional description.
+                            items:
+                              type: object
+                              required: [name, color]
+                              properties:
+                                name:
+                                  type: string
+                                color:
+                                  type: string
+                                description:
+                                  type: string
                       fixer:
                         type: object
                         description: >-

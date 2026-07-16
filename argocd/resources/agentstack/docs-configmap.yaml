@@ -42,6 +42,7 @@ data:
     | CiliumNetworkPolicy | `agent-worker-egress` | worker egress lockdown with a monitor→enforce dial |
     | Role + RoleBinding | `agentstack-proxy-session-keys` | lets the egress proxy resolve opaque-ref session keys here |
     | ExternalSecret (only with `fixer.claudeTier: true`) | `claude-session` | subscription oauth token for the claude worker tier, session-key-labeled — pods carry only `ref:<ns>/claude-session` |
+    | IssueLabels (only with a `labels:` block; cluster-scoped) | `<repo>-labels` | the repo's ENTIRE GitHub label set (platform taxonomy + `labels.extra`) — AUTHORITATIVE: unlisted labels get deleted (FU-068) |
 
     A repo entry WITHOUT `fixer` is context-only (the coordinator watches it; agents never run
     pods in it — e.g. an `-iac` deploy target).
@@ -85,6 +86,16 @@ data:
     `workerModelFallbacks` — its designed chain position is the reliable rung before
     `agent/blocked`). Rides run on agent-base like every other harness: project devbox
     toolchain and `fixer.docker` both work.
+
+    ## Claim-owned labels (`repos[].labels` — the Issues tier, FU-068)
+
+    A repo entry with a `labels:` block gets an AUTHORITATIVE `IssueLabels`: the platform
+    taxonomy (GitHub defaults + agent state machine + merge-path lanes) plus `labels.extra`
+    becomes the repo's entire label set — anything else is deleted on sync. Before enabling,
+    diff `gh label list` against the taxonomy and move keepers into `extra`. Migration is
+    claim-first: verify `kubectl get issuelabels <repo>-labels` synced, THEN drop the repo from
+    tofu/github `label_repos`. Needs the homelab-labels App credential
+    (`scripts/github-labels-app-bootstrap.sh`).
 
     ## Egress rollout (the enforce dial)
 

@@ -41,6 +41,39 @@ spec:
                   "python" (list "pypi.org" "files.pythonhosted.org")
                   "node"   (list "registry.npmjs.org")
                   "none"   (list) }}
+            {{- /* FU-068: the platform label taxonomy — a claim-owned repo's ENTIRE label set is
+                 this list + the repo's labels.extra (IssueLabels is AUTHORITATIVE: anything else
+                 gets deleted). Three tiers: GitHub defaults (humans use them), the agent state
+                 machine (mirror of tofu/github labels.tf — keep in sync until every repo is
+                 claim-owned and labels.tf dies), the merge-path/Renovate lanes. */}}
+            {{- $platformLabels := list
+                  (dict "name" "bug" "color" "d73a4a" "description" "Something isn't working")
+                  (dict "name" "documentation" "color" "0075ca" "description" "Improvements or additions to documentation")
+                  (dict "name" "duplicate" "color" "cfd3d7" "description" "This issue or pull request already exists")
+                  (dict "name" "enhancement" "color" "a2eeef" "description" "New feature or request")
+                  (dict "name" "good first issue" "color" "7057ff" "description" "Good for newcomers")
+                  (dict "name" "help wanted" "color" "008672" "description" "Extra attention is needed")
+                  (dict "name" "invalid" "color" "e4e669" "description" "This doesn't seem right")
+                  (dict "name" "question" "color" "d876e3" "description" "Further information is requested")
+                  (dict "name" "wontfix" "color" "ffffff" "description" "This will not be worked on")
+                  (dict "name" "agent-fix" "color" "0e8a16" "description" "Opt-in: this issue is fair game for the agent fixer")
+                  (dict "name" "agent/queued" "color" "fbca04" "description" "Ready to dispatch a worker")
+                  (dict "name" "agent/in-progress" "color" "1d76db" "description" "A worker pod is running this round")
+                  (dict "name" "agent/review" "color" "5319e7" "description" "PR open, awaiting review (human or agent)")
+                  (dict "name" "agent/blocked" "color" "b60205" "description" "Needs a human — budget escalate / max rounds / ambiguous")
+                  (dict "name" "agent/done" "color" "0b6b3a" "description" "Merged")
+                  (dict "name" "agent/error" "color" "b60205" "description" "Automation anomaly — circuit breaker; agents skip this item until a human clears it")
+                  (dict "name" "agent-budget/xs" "color" "c5def5" "description" "Estimator cap-tier override: xs")
+                  (dict "name" "agent-budget/sm" "color" "c5def5" "description" "Estimator cap-tier override: sm")
+                  (dict "name" "agent-budget/md" "color" "c5def5" "description" "Estimator cap-tier override: md")
+                  (dict "name" "agent-budget/lg" "color" "c5def5" "description" "Estimator cap-tier override: lg")
+                  (dict "name" "merge-conflict" "color" "e11d21" "description" "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase")
+                  (dict "name" "major" "color" "b60205" "description" "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)")
+                  (dict "name" "major/awaiting-human" "color" "d93f0b" "description" "Major bump: migration documented, CI green, reviewer-approved — a human merges")
+                  (dict "name" "direction-change" "color" "b60205" "description" "Human reversed direction — sweep (re-scope/close+delete-branch) before any dispatch (C10)")
+                  (dict "name" "dependencies" "color" "ededed" "description" "Dependency bump (Renovate)")
+                  (dict "name" "automerge" "color" "ededed" "description" "Mechanical dep lane: CI-only approval, no LLM review")
+                  (dict "name" "deps-review" "color" "ededed" "description" "Reviewable dep lane: armed + LLM-reviewed (FU-046)") }}
             {{- range $r := $xr.spec.repos }}
             {{- if $r.storage }}
             ---
@@ -61,6 +94,33 @@ spec:
                 longhorn.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "standard") | quote }}
                 longhorn-bulk.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "bulk") | quote }}
                 longhorn-fast.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "fast") | quote }}
+            {{- end }}
+            {{- if $r.labels }}
+            ---
+            # FU-068 (Issues tier): the repo's AUTHORITATIVE label set — platform taxonomy + the
+            # claim's labels.extra. Any label outside this list is DELETED on sync (that is the
+            # point: label truth lives here, not in hand-driven tofu). external-name = the repo,
+            # so the provider adopts the live set instead of erroring on "exists".
+            apiVersion: repo.github.upbound.io/v1alpha1
+            kind: IssueLabels
+            metadata:
+              name: {{ $r.name }}-labels
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-issue-labels
+                crossplane.io/external-name: {{ $r.name }}
+            spec:
+              providerConfigRef:
+                name: github-labels
+              forProvider:
+                repository: {{ $r.name }}
+                label:
+                  {{- range $l := concat $platformLabels (default (list) (get $r.labels "extra")) }}
+                  - name: {{ get $l "name" | quote }}
+                    color: {{ get $l "color" | quote }}
+                    {{- if get $l "description" }}
+                    description: {{ get $l "description" | quote }}
+                    {{- end }}
+                  {{- end }}
             {{- end }}
             {{- if $r.fixer }}
             {{- $fx := $r.fixer }}
