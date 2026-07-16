@@ -19,9 +19,9 @@ spec:
     # labels: {} = claim-owned label set (FU-068, taxonomy only) — tofu label_repos handoff via
     # `tofu state rm` like the oracle repos.
     - name: agent-runtime
-      labels: {}
+      labels: { extra: [] } # explicit (server default) — bare {} gets stamped to {extra: []}, ArgoCD drifts
     - name: agent-coordinator
-      labels: {}
+      labels: { extra: [] }
     - name: openrouter-operator
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
