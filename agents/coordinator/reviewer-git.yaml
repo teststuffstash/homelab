@@ -56,6 +56,10 @@ spec:
     - openrouter-operator
     - oracle-fleet
     - oracle-iac
+    # Platform-image repos (App installed per docs/github-apps.md; found missing 2026-07-16 when
+    # the agent-runtime#14 reviewer produced a verdict it could not SUBMIT — token not scoped here):
+    - agent-runtime
+    - agent-coordinator
 ---
 # 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
