@@ -8,6 +8,19 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-081** *(archived 2026-07-16)* — **Full kind gate now fits the kata ride: `/var/lib/docker`
+  moved from 2Gi tmpfs (charged the dind cgroup → OOM 137 mid-build) to a per-ride 20Gi ephemeral
+  BLOCK PVC** on the new `longhorn-scratch` SC (replica=1 on the bulk disks, ADR-089 addendum;
+  kata hotplugs it virtio-blk — the one disk shape where overlay2 works in the guest). AgentStack
+  quota knob `storage.scratch`. Acceptance ride r4 same day: `devbox run e2e` **E2E GREEN in-pod**
+  (277s, transcripts `s3://agent-transcripts/oracle-fleet/adhoc-fu081-scratch-pvc/worker-r4-*`) —
+  interim CI-only policy retired; prereqs were oracle-fleet#33 (in-pod kubectl resolves empty
+  context-ns to the SA ns) + #35 (FU-073d kind-node mirrors). Fixed en route: longhorn-csi-plugin
+  DS lacked the ephemeral-taint toleration (NO kata laptop could attach ANY volume — same bridge
+  as engine-image, longhorn.tf comment) and busybox blkid exits 0 on a blank device (mkfs guard
+  is now mount-first-else-mkfs). Oracle claim declaring `storage: {scratch: 40Gi}` when quotas
+  go live = a line in FU-048's world, not tracked separately.
+
 - **FU-077** *(archived 2026-07-16)* — **kata PodSecurity exemption LIVE.** Talos
   `cluster.apiServer.admissionControl` patch on cp-01 (tofu/talos.tf) exempts
   `runtimeClasses: [kata]`; oracle-fleet ns reverted privileged→baseline

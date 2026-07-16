@@ -343,7 +343,7 @@ if [ -n "$DOCKER" ]; then
   KATA_BLOCK=$'  runtimeClassName: kata\n  dnsPolicy: "None"\n  dnsConfig:\n    nameservers: ["192.168.2.1"]'
   # Pull-through mirrors (FU-073, argocd/resources/registry-cache/): docker.io rides the mirror
   # via dockerd registry-mirrors (Hub-only by dockerd design); the ghcr mirror is exported for
-  # gate scripts (k3d --registry-config / kind containerdConfigPatches). BGP VIPs, git-pinned —
+  # gate scripts (kind: certs.d/hosts.toml into the node, oracle-fleet#35). BGP VIPs, git-pinned —
   # reachable from kata guests where ClusterIPs are not (FU-072). NO upstream fallback once the
   # egress CNP drops the docker.io FQDNs: mirror down ⇒ pulls hang ⇒ AgentWorkerEgressDropped.
   MIRROR_DOCKER_IO="${AGENT_MIRROR_DOCKER_IO-http://192.168.40.20}"

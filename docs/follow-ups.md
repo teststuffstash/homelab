@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-082**.
+  Next free id: **FU-084**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -47,13 +47,11 @@ _Last updated: 2026-07-16._
       in-place, no reboot (canary wk-01 stayed Ready; pull of uncached alpine:3.18.12 rode the
       mirror — containerd/v2.2.3 `?ns=docker.io` in the mirror log, cache-filled + served);
       (b) ci-runner-01 `daemon.json`;
-      (c) ARC runner pods; (d) gate scripts actually consuming `REGISTRY_MIRROR_*` (first:
-      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`) — now the LAST
-      blocker for the full gate in-pod (FU-081 ride r3 2026-07-16: kind-NODE pulls go upstream
-      docker.io, the enforced CNP drops them → garage rollout timeout; dind's own mirror config
-      doesn't reach the kind node's containerd). Design caveat: recent kindest/node ships
-      containerd 2.x, where the legacy `registry.mirrors` TOML is removed — use the
-      `config_path` + `certs.d/hosts.toml` shape, not the old patch examples; (e) ✅ DONE
+      (c) ARC runner pods; (d) ✅ DONE 2026-07-16 — oracle-fleet#35: `e2e-kind.sh` writes a
+      `certs.d/hosts.toml` per registry into the kind node when the ride exports
+      `REGISTRY_MIRROR_*` (kindest/node ≥ kind 0.27 preconfigures containerd's `config_path`;
+      no-op on the CI VM). Acceptance = the FU-081 r4 green in-pod gate (garage image pulled
+      through the mirror under the enforced CNP); (e) ✅ DONE
       2026-07-16 — `nixcache` LB VIP `192.168.40.23` (+ CNP belt in the agentstack Composition);
       the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
       already honored the env — no agent-runtime change needed). Verify on the next kata ride:
@@ -177,38 +175,14 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
-- [ ] **FU-081** — **The FULL oracle kind gate exceeds the kata ride memory envelope — for every
-      harness.** Evidence 2026-07-16 (claude validation rides, transcripts
-      `s3://agent-transcripts/oracle-fleet/adhoc-fu066-kind-gate/`): with the docker client fixed
-      (oracle-fleet#32), `devbox run e2e` reached the daemon and started the ingester image build,
-      then **dind OOMKilled (exit 137)** — the kind node image + the running kind cluster + build
-      layers all charge the dind cgroup, and `/var/lib/docker` is a 2Gi MEMORY-backed tmpfs inside
-      a 2560Mi limit. The ceiling is hard: the kata spike already proved 5Gi VM + 3Gi tmpfs
-      guest-OOMs and a 6Gi VM is refused by the hypervisor (8G laptops,
-      `docs/spikes/kata-ci-gate.md` attempts 4/5) — and its acceptance was a MINIMAL k3d
-      cluster-up, never the full gate. NB no FU/ADR matched "kind gate memory/k3d migration"
-      (FU-074 archived the minimal acceptance; FU-073d is mirror consumption). **DECIDED (b)
-      2026-07-16 (operator): disk-backed `/var/lib/docker` via a block PVC** — the layer store
-      outgrows RAM on any full gate regardless of harness; get the shape right now, the perfect
-      build machine (128G+Optane class) is a hardware decision for later. BUILT same day:
-      `longhorn-scratch` StorageClass (replica=1 on the bulk disks, ADR-089 addendum) +
-      agent-session.sh dind mounts a per-ride ephemeral BLOCK PVC (20Gi, volumeDevices +
-      mkfs/mount preamble — virtio-blk is the one disk shape where overlay2 works in a kata
-      guest) + `storage.scratch` quota knob in the AgentStack XRD/Composition. Rejected for
-      now: (a) kind→k3d migration (orthogonal, still worthwhile for speed), (c) bigger node
-      (hardware later). **Validated same day** (rides r2/r3, transcripts
-      `s3://agent-transcripts/oracle-fleet/adhoc-fu081-scratch-pvc/`): the old OOM point is
-      GONE — ingester image build + kind cluster-up both completed on the block PVC, dind
-      healthy throughout. Two non-memory blockers surfaced en route: the gate script's
-      context-namespace fallback (in-pod kubectl resolves empty context-ns to the SA ns →
-      oracle-fleet#33, one-line fix) and kind-NODE image pulls bypassing the dind mirror into
-      the egress CNP drop (= FU-073d, where the fix belongs — garage rollout timeout was an
-      image pull, not memory). **Remaining:** land oracle-fleet#33 + FU-073d, then one green
-      full gate in-pod retires the interim CI-only policy; consider oracle's claim declaring
-      `storage: {scratch: 40Gi}` once quotas go live (claim today has no storage block =
-      legacy-open). Two live fixes this exposed are in the same commit: the longhorn-csi-plugin
-      DS toleration bridge (attach was impossible on ALL kata laptops) and the busybox-blkid
-      mkfs guard. Relates FU-072/FU-073, ADR-082; born from FU-066's acceptance.
+- [ ] **FU-083** — **agent-finalize misclassifies raw-command adhoc rides as failed.** The FU-081
+      validation ride r4 ran `--run "devbox run e2e"` (no harness) to a GREEN gate, but
+      AGENT_RUN_STATS said `exit_status:"failed", error_class:"no-output"` — the classifier
+      expects harness-shaped output in /tmp/run.log and pushes failure metrics to the ledger for
+      a successful ride. Cosmetic for tasked rides (always harnessed) but poisons the agent_run
+      metrics/ledger for ad-hoc verification rides. Fix in agent-runtime (agent-finalize):
+      when no harness marker is found, fall back to HARNESS_EXIT for exit_status and
+      error_class none/nonzero-exit-N.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
@@ -510,6 +484,20 @@ _Last updated: 2026-07-16._
 
 ## Monitoring & storage
 
+- [ ] **FU-082** — **wk-01 memory pressure makes Talos's OOMController serially kill BestEffort
+      pods — Grafana crashlooped 21 cycles (84 restarts), argocd-application-controller 26.**
+      Diagnosed 2026-07-16 (operator noticed Grafana): all four grafana containers exit 137
+      SIMULTANEOUSLY + `SandboxChanged` — that's the Talos 1.13 userspace OOM controller
+      SIGKILLing whole besteffort pod cgroups (`talosctl dmesg | grep "OOM controller"` — 90
+      triggers on wk-01 since ≥07-13, so chronic, not today's churn). wk-01 sits at ~82% of
+      11.2Gi with the platform heavies (Prometheus ~1Gi, Infisical 815Mi, UniFi 739Mi, ArgoCD
+      app-controller 546Mi, Home Assistant 379Mi) and BOTH victims are QoS BestEffort — first
+      in the kill order. Fix directions (probably all of): (a) resource REQUESTS for grafana
+      (kube-prometheus-stack values, monitoring.tf) + argocd-application-controller (argocd.tf)
+      → Burstable, out of the first-kill tier; (b) rebalance a heavy off wk-01 (UniFi or
+      Infisical → wk-02/thinkcentre); (c) an alert on `talos OOMController` kills — today
+      NOTHING alerted while Grafana died 21 times (the dashboards live IN the victim). Relates
+      FU-028 (same node-tier scoping theme).
 - [ ] **FU-028** — Longhorn schedules manager/engine-image/instance-manager onto the ephemeral
       laptops (compute-only) → `KubeDaemonSetMisScheduled` ×2 + a stale-PDB alert. Scope Longhorn
       off the ephemeral tier (node selector / taint) or silence the two rules.
