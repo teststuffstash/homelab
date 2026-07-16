@@ -147,11 +147,12 @@ spec:
             # FU-066 leg (a): the claude-tier session secret — the subscription oauth token,
             # Infisical → Secret, session-key-labeled so the egress proxy's /anthropic upstream
             # resolves ref:<ns>/claude-session and injects it (ADR-087 leg A; the pod never holds
-            # the token). Replaces the operator-imperative `kubectl create secret` (oracle-fleet
-            # was the only one) — ESO creationPolicy Owner will NOT adopt a pre-existing hand-made
-            # Secret: delete it in the same cutover, expect one reconcile round (agentstack.md
-            # §Operational notes). Real Ready condition kept (like agent-git-token): AgentStack
-            # READY ⇒ the token materialized.
+            # the token). Replaced the operator-imperative `kubectl create secret` (oracle-fleet
+            # was the only one) — observed on the 2026-07-16 cutover: ESO creationPolicy Owner
+            # ADOPTED the pre-existing hand-made Secret in place (ownerRef + managed label set,
+            # no deletion needed) — unlike Crossplane, which refuses to adopt (agentstack.md
+            # §Operational notes still applies to composed non-ESO kinds). Real Ready condition
+            # kept (like agent-git-token): AgentStack READY ⇒ the token materialized.
             apiVersion: external-secrets.io/v1
             kind: ExternalSecret
             metadata:
