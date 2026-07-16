@@ -69,15 +69,25 @@ for repo in $REPOS; do
   # worst-case node count from the query's first:/last: args (independent of how many PRs actually exist).
   # At 50 that estimate is ~515k > GitHub's 500k cap → hard error; 40 (~412k) always clears it. Bump only
   # in lockstep with this ceiling. 40 open+auto-merge PRs/repo is far beyond anything the agent flow hits.
+  # One retry absorbs GitHub's one-shot GraphQL transients ("Something went wrong while executing
+  # your query", seen 2026-07-15 on oracle-iac) without weakening the fail-loud posture: a real
+  # outage/scope problem still aborts the run rather than silently reviewing nothing.
   errfile="$(mktemp)"
-  if ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
+  attempt=0
+  while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
       --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels \
-      2>"$errfile")"; then
-    log "[$repo] FATAL: gh pr list failed — aborting rather than silently reviewing nothing:"
+      2>"$errfile")"; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 2 ]; then
+      log "[$repo] FATAL: gh pr list failed (after retry) — aborting rather than silently reviewing nothing:"
+      cat "$errfile" >&2
+      rm -f "$errfile"
+      exit 1
+    fi
+    log "[$repo] gh pr list failed (transient?) — retrying once in 10s:"
     cat "$errfile" >&2
-    rm -f "$errfile"
-    exit 1
-  fi
+    sleep 10
+  done
   rm -f "$errfile"
 
   # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
