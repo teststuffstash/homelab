@@ -54,13 +54,6 @@ _Last updated: 2026-07-16._
       the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
       already honored the env — no agent-runtime change needed). Verify on the next kata ride:
       `devbox install` should be LAN-speed, not the ~4-min WAN fallback observed 2026-07-14.
-- [ ] **FU-077** — **PodSecurity runtimeClass exemption for kata** (apiserver
-      `admissionControl` patch on cp-01, Talos `cluster.apiServer`): privileged-inside-a-microVM
-      is root in the guest only, but PSS can't see runtime classes — docker-mode worker
-      namespaces (oracle-fleet, `argocd/platform/oracle-namespaces.yaml`) currently opt up to
-      `enforce: privileged` wholesale. The exemption makes kata pods PSS-exempt surgically and
-      the namespaces revert to baseline. Needs a brief apiserver restart on the single control
-      plane — do it from home, not over the VPN.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl

@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-077** *(archived 2026-07-16)* — **kata PodSecurity exemption LIVE.** Talos
+  `cluster.apiServer.admissionControl` patch on cp-01 (tofu/talos.tf) exempts
+  `runtimeClasses: [kata]`; oracle-fleet ns reverted privileged→baseline
+  (argocd/platform/oracle-namespaces.yaml). Acceptance: privileged kata pod ADMITTED +
+  privileged runc pod REJECTED in a baseline-enforced test ns. ⚠️ Gotcha that cost a ~12-min
+  single-CP apiserver outage: Talos MERGES the admissionControl entry with its built-in
+  PodSecurity config by plugin name — restating `namespaces: [kube-system]` concatenates into
+  a duplicate and PodSecurity refuses to initialize (apiserver exits; KCM crashloops behind
+  it and takes minutes of backoff to recover after the fix). Patch ONLY the new field.
+
 - **FU-063** *(archived 2026-07-16)* — **Exporter `ci_state` on private repos: DONE via
   workflow-run join (path a).** No PAT scope reads private-repo check runs (`checks:read` is
   App-only; the check-runs endpoints are absent from the fine-grained-permissions doc; GitHub

@@ -50,8 +50,9 @@ data "talos_machine_configuration" "node" {
           # PSS can't see runtime classes, so privileged-inside-a-microVM (kata dind rides —
           # root in the GUEST only) forced docker-worker namespaces to enforce: privileged
           # wholesale. Exempting the kata runtimeClass lets those namespaces return to
-          # baseline (FU-077). Setting admissionControl REPLACES Talos's built-in PodSecurity
-          # entry, so this is the live default (talosctl get mc) + the one exemption.
+          # baseline (FU-077). Talos MERGES this with its built-in PodSecurity entry by plugin
+          # name — carry ONLY the new field: restating the defaults crashes the apiserver
+          # ("Duplicate value: kube-system", learned live 2026-07-16 — list merge concatenates).
           # Applied in-place: brief apiserver static-pod restart on the single control plane.
           apiServer = {
             admissionControl = [{
@@ -59,18 +60,8 @@ data "talos_machine_configuration" "node" {
               configuration = {
                 apiVersion = "pod-security.admission.config.k8s.io/v1alpha1"
                 kind       = "PodSecurityConfiguration"
-                defaults = {
-                  enforce           = "baseline"
-                  "enforce-version" = "latest"
-                  audit             = "restricted"
-                  "audit-version"   = "latest"
-                  warn              = "restricted"
-                  "warn-version"    = "latest"
-                }
                 exemptions = {
-                  namespaces     = ["kube-system"]
                   runtimeClasses = ["kata"]
-                  usernames      = []
                 }
               }
             }]
