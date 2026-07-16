@@ -11,7 +11,7 @@
 #       --run "goose run --recipe .agents/fix.yaml --params issue=42"
 #       → headless: runs the recipe to a branch+PR, streams logs, pod self-terminates.
 #
-# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode  --model provider/model
+# Flags: --run "<cmd>"  --ref <base-branch>  --repo <git-url>  --harness goose|opencode|claude  --model provider/model
 #
 # FU-019 (ADR-078): migrate Pod → agent-sandbox Sandbox CR; scoped SA + RBAC. FU-020/FU-018
 # (ADR-081): Cilium egress policy + auth-injecting proxy so the git/LLM tokens are INJECTED, never
@@ -27,7 +27,7 @@ KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
 [ -x "$KUBECTL" ] || KUBECTL="kubectl"
 
-PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode] [--model provider/model]}"
+PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 shift || true
 
 # Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap. The
@@ -169,7 +169,7 @@ if [ -n "$DOCKER" ]; then
       GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
       echo "→ docker mode: openrouter-proxy via endpoint IP ${EP} (FU-072 workaround)"
     else
-      echo "WARN docker mode: openrouter-proxy endpoint unresolvable — goose LLM egress will fail from the kata guest (FU-072)" >&2
+      echo "WARN docker mode: openrouter-proxy endpoint unresolvable — goose/claude LLM egress will fail from the kata guest (FU-072)" >&2
     fi
   fi
 fi
@@ -181,22 +181,18 @@ fi
 # resolves the ref, injects the subscription oauth token + the oauth beta header. The unscoped
 # ~1y token NEVER sits in a worker pod (unlike the trusted coordinator/reviewer roles, which
 # still hold it directly — unify them onto this rail once it has mileage).
-# Image = the coordinator image (ships the claude CLI; agent-base doesn't yet — FU-066
-# remaining). Its entrypoint does NO repo prep, so the args carry a clone preamble below.
-CLAUDE_ENV=""; CLAUDE_PREP=""
+# Image = agent-base, same as goose/opencode (it ships the claude CLI + the pre-seeded
+# onboarding/trust files since agent-runtime#14): the entrypoint preps the repo, the project
+# devbox toolchain (`devbox run ci`) works, and `--docker` (kata+dind) is structurally valid —
+# the FU-066(e) coordinator-image interim is retired. Needs AGENT_BASE_IMAGE ≥ the
+# agent-runtime#14 build (the deploy-pin bump in images.env); on an older pin the ride fails
+# loudly at `claude: command not found` → one strike, no silent damage.
+CLAUDE_ENV=""
 if [ "$HARNESS" = "claude" ]; then
-  IMAGE="${HARNESS_IMAGE:-${AGENT_COORDINATOR_IMAGE:?images.env lacks AGENT_COORDINATOR_IMAGE}}"
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
-  CLAUDE_ENV=$'        - name: HOME\n          value: "/home/node"\n        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"'
-  CLAUDE_PREP='set -e
-git config --global credential.helper "!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f" >/dev/null 2>&1 || true
-git clone --quiet "$REPO_URL" /work/repo && cd /work/repo
-git checkout --quiet "$BASE_REF"
-if [ -n "${WORK_BRANCH:-}" ]; then git checkout --quiet -B "$WORK_BRANCH" "origin/$WORK_BRANCH"; else git checkout --quiet -b "agent/$(date -u +%Y%m%d-%H%M%S)"; fi
-echo "claude worker: repo=$REPO_URL base=$BASE_REF branch=$(git rev-parse --abbrev-ref HEAD) model=$MODEL"
-'
+  CLAUDE_ENV=$'        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"'
 fi
 
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
@@ -256,21 +252,18 @@ if [ -n "$RUN_CMD" ]; then
   # parses the run's structured outcome from that file + computes cost/duration). `set +e` so a
   # harness failure still runs finalize; the tee keeps the live stream intact for `kubectl logs -f`.
   # HARNESS_EXIT (the harness's own status, not tee's) feeds the transcript manifest (§A1).
-  # claude harness: the coordinator image may lack agent-finalize — degrade to a minimal
-  # AGENT_RUN_STATS line (subscription tier has no cost_usd anyway; tokens/turns stand-in is
-  # FU-066 remaining) so the launcher's stats/strike parsing keeps working. Scrape the PR URL the
-  # worker printed into the run log into `pr_url` — WITHOUT it the launcher's PR-detection reads a
-  # clean PR-opening run as "no PR opened" and fires a FALSE AGENT_STRIKE (seen live on oracle#22
-  # round 1, FU-066 item b). With it, the run takes the PR path (arm auto-merge + stats comment).
+  # claude harness: agent-base ships agent-finalize since agent-runtime#14, so claude rides take
+  # the normal finalize path (tokens/turns + transcripts, FU-066 b). The presence-gated fallback
+  # stays for an older AGENT_BASE_IMAGE pin: a minimal AGENT_RUN_STATS line WITH the PR URL
+  # scraped from the run log — without `pr_url` a clean PR-opening run reads as "no PR opened"
+  # and fires a FALSE AGENT_STRIKE (seen live on oracle#22 round 1). Drop the fallback once the
+  # post-#14 pin has a clean claude ride behind it.
   FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
   if [ "$HARNESS" = "claude" ]; then
     FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]}; if command -v agent-finalize >/dev/null 2>&1; then HARNESS_EXIT=\$HARNESS_EXIT agent-finalize /tmp/run.log; else PRU=\$(grep -oE 'https://github.com/[^ )\"]+/pull/[0-9]+' /tmp/run.log | tail -1); echo \"AGENT_RUN_STATS {\\\"project\\\":\\\"${PROJECT}\\\",\\\"pod\\\":\\\"${POD}\\\",\\\"harness\\\":\\\"claude\\\",\\\"model\\\":\\\"${MODEL}\\\",\\\"cost_unknown\\\":true,\\\"exit_status\\\":\\\"\$([ \$HARNESS_EXIT = 0 ] && echo clean || echo failed)\\\"\${PRU:+,\\\"pr_url\\\":\\\"\$PRU\\\"}}\"; fi"
   fi
-  WRAPPED="${CLAUDE_PREP}${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
+  WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
-elif [ -n "$CLAUDE_PREP" ]; then
-  # Interactive claude session: clone/prep (the coordinator image's entrypoint does none), then idle.
-  ARGS="[\"bash\",\"-c\",$(printf '%s' "${CLAUDE_PREP}exec sleep infinity" | jq -Rs .)]"
 elif [ -n "$OC_SETUP" ]; then
   # Interactive opencode session: write the pin config, then idle for the exec below.
   ARGS="[\"bash\",\"-c\",$(printf '%s' "${OC_SETUP}exec sleep infinity" | jq -Rs .)]"
