@@ -217,6 +217,7 @@ spec:
                 - toCIDR:
                     - 192.168.40.20/32
                     - 192.168.40.21/32
+                    - 192.168.40.23/32 # nix-cache VIP (FU-073e) — kata rides install via it
                   toPorts:
                     - ports:
                         - { port: "80", protocol: TCP }

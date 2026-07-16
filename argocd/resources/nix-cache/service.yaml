@@ -1,13 +1,21 @@
-# In-cluster only (ClusterIP) — agent pods reach it at http://nixcache.nix-cache.svc.cluster.local.
-# No BGP/LoadBalancer VIP: nothing off-cluster needs the cache.
+# In-cluster consumers reach it at http://nixcache.nix-cache.svc.cluster.local (the ClusterIP a
+# LoadBalancer Service still carries). The BGP VIP exists for KATA worker rides (FU-073e): kata
+# guests can't reach ClusterIP service VIPs (FU-072), so docker-mode agent pods get
+# NIX_CACHE_URL=http://192.168.40.23 from the launcher — same pattern as the registry mirrors
+# (.40.20/.21, ADR-091). Without it a kata ride's `devbox install` fell back to cache.nixos.org
+# over the WAN (~4 min cold, measured 2026-07-14).
 apiVersion: v1
 kind: Service
 metadata:
   name: nixcache
   namespace: nix-cache
-  labels: { app: nixcache }
+  labels:
+    app: nixcache
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.23"
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector: { app: nixcache }
   ports:
     - { name: http, port: 80, targetPort: 8080 }

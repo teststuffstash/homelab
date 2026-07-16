@@ -44,10 +44,11 @@ _Last updated: 2026-07-16._
       **Remaining consumers:** (a) Talos node-level `machine.registries.mirrors` (all cluster
       pulls — apply from home, verify restart semantics); (b) ci-runner-01 `daemon.json`;
       (c) ARC runner pods; (d) gate scripts actually consuming `REGISTRY_MIRROR_*` (first:
-      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`); (e) nix-cache for
-      kata rides — give `nixcache` an LB VIP + an agent-base substituter override (agent-runtime
-      repo) to erase the ~4-min cold `devbox install` observed 2026-07-14 (ClusterIP unreachable
-      per FU-072).
+      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`); (e) ✅ DONE
+      2026-07-16 — `nixcache` LB VIP `192.168.40.23` (+ CNP belt in the agentstack Composition);
+      the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
+      already honored the env — no agent-runtime change needed). Verify on the next kata ride:
+      `devbox install` should be LAN-speed, not the ~4-min WAN fallback observed 2026-07-14.
 - [ ] **FU-079** — **Un-armed open PRs are invisible to the whole merge path** — the updater,
       review reflex, and auto-merge all key on armed PRs (by design), so an operator/stacked PR
       born un-armed stalls silently (oracle-fleet#16: stuck at ci "Expected" after its
