@@ -8,6 +8,26 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-057** *(archived 2026-07-16)* — **Retro P2: retro-facts reflex + cross-run dashboards, LIVE.**
+  Shipped 2026-07-09/10 (agent-runtime#7 + homelab `fu057-fu061-observability`, merged; polish
+  524c331/7224d20): `exit_status`+`error_class` classifier in agent-finalize, pushgateway +
+  `agent_run_*` metrics, four dashboards (model-health, running-agents/stall-detector, cost, +
+  the agent-issue drill-down), goose sessions.db rendering in the viewer, `agents/ledger.py` +
+  `ledger-reflex` CronJob, KEY_HASH end-to-end, NegativeCost/InfraDeathBurst rules. Acceptance
+  (verified live 2026-07-16): pushgateway serves `agent_run_cost_usd` for the real oracle-fleet
+  runs with exit/error labels; ledger-reflex green on its 30-min cadence ("1 already ledgered");
+  all 4 dashboard ConfigMaps synced; #8 ride evidence on the drill-down (c686645). Residue moved
+  to FU-058 (`key_hash` activity-API backfill) + FU-063 (stall detector's true CI-green).
+
+- **FU-061** *(archived 2026-07-16)* — **Transcript taxonomy unified — viewer groups by
+  issue/project.** Shipped with FU-057: reviewer resolves PR→issue via `closingIssuesReferences`,
+  coordinator keys `<mainRepo>/_ticks/`, agent-finalize adds `issue`, and the viewer sync rewrites
+  each jsonl `cwd` / goose `working_dir` to `/<project>--issue-<N>` so one issue's
+  coordinator+worker+reviewer sessions collapse into one group. Verified on the real issue-1 slice
+  (4 goose worker sessions + the reviewer jsonl regroup correctly); viewer deployed and serving.
+  Gotcha: cchv labels by cwd *basename* → the leaf is `<project>--issue-<N>` with role-round in the
+  filename/session name (a path-shaped `/<project>/issue-<N>/<role>-rN` would scatter).
+
 - **FU-003** *(archived 2026-07-15)* — **HA token regenerated → long-lived.** The dead
   `refresh_token`/`access_token` (401, `invalid_grant`) are gone; `ha-access-token` in the KeePass
   wallet is now a fresh **long-lived** token (~10y, use directly as Bearer — no refresh flow),

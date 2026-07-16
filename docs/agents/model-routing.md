@@ -1,8 +1,13 @@
 # Model routing — chains, strikes, and a live registry (not one hardcoded model)
 
-> **Status: direction set 2026-07-09** (from the oracle-fleet issue #1 postmortem + the 2026-06-29
-> qwen cost autopsy). This doc is the umbrella for **FU-062** and binds together FU-018 (provider
-> injection), FU-021 (retry hard-stop), FU-024 (only-free guardrail) and FU-057 (ledger/error-class)
+> **Status: direction set 2026-07-09; core BUILT same week** — the live registry is code
+> (`estimate_budget.py`: cached /models + /endpoints, cache-aware effective price, `--lookup`),
+> strike bookkeeping is in the launcher (`AGENT_STRIKE` comments), goose provider injection is LIVE
+> via the egress proxy, opencode carries the per-session pin, and the model scout v1 is deployed
+> **suspended** (first supervised run = the remaining tail, with FU-024's live-fire canary).
+> Born from the oracle-fleet issue #1 postmortem + the 2026-06-29 qwen cost autopsy. This doc is
+> the umbrella for **FU-062** and binds together FU-018 (provider injection), FU-021 (retry
+> hard-stop — resolved), FU-024 (only-free guardrail) and FU-057 (ledger/error-class — live)
 > — they only work as one design. Companions: [`observability-and-retro.md`](observability-and-retro.md)
 > (the ledger this feeds), [`../../agents/coordinator/README.md`](../../agents/coordinator/README.md)
 > (the brief that executes it).

@@ -27,7 +27,7 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-07-15._
+_Last updated: 2026-07-16._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -279,61 +279,12 @@ _Last updated: 2026-07-15._
       for the monitor-stack harvests. Remaining: live-classify the drop source on the next ride,
       harvest+flip the two monitor stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
       allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
-- [ ] **FU-057** — **Retro P2: the retro-facts reflex + cross-run dashboard**
-      **BUILT 2026-07-09 (agent-runtime `fu057-exit-status-metrics` + homelab `fu057-fu061-observability`) —
-      pending merge + deploy (agent-base image build/pin, ArgoCD sync of pushgateway/dashboards/viewer)
-      + a post-deploy first-render confirmation; delete this item + refs once green.**
-      **Polish 2026-07-10:** AgentRunNegativeCost + AgentRunInfraDeathBurst PrometheusRules (524c331);
-      KEY_HASH durable end-to-end operator→Secret→launcher env→finalize stats (7224d20, operator
-      3510362, runtime bd6b84b) — first live appearance in oracle-fleet#8's run stats. REMAINING small:
-      ledger-reflex actually consuming `key_hash` for the OpenRouter activity-API backfill. Delivered:
-      `exit_status`+`error_class` classifier (validated against the 4 real oracle-fleet runs → 2 clean,
-      1 harness-death, 1 auth-storm), pushgateway + `agent_run_*` metrics push, the three dashboards
-      (running-agents incl. the stall detector, model-health, cost), goose sessions.db merge in the
-      viewer sync (worker sessions render turn-by-turn, verified on real data), and `agents/ledger.py` +
-      `ledger-reflex` CronJob (`_ledger.jsonl`, tested against issue #1 → 4 rounds/$0.248/~3.8h). The
-      stall detector's PR-state source needs FU-063 (PAT scope). Original scope below.
-      (`docs/agents/observability-and-retro.md` §B1; absorbs the old FU-023 "stats v2"). On a task's
-      terminal label, deterministically append one line to `agent-transcripts/_ledger.jsonl` (cost vs
-      estimator band, rounds, retry storms, CI red/green, wall time, cache-hit %, tokens/request —
-      per-request splits via the OpenRouter *activity* API) + a Grafana dashboard over the ledger.
-      P0/P1 (capture + viewer) are LIVE — the manifests this computes from already accumulate.
-      **Scope sharpened (2026-07-09 measurement, docs/agents/observability-and-retro.md §A′/§B1):**
-      add `exit_status`+`error_class` to AGENT_RUN_STATS (clean/ci-failed/harness-death/auth-storm/
-      budget-403/timeout); dashboards = (a) **model-health** pivot (model × success-rate/
-      harness-death/$-per-successful-issue → the blacklist signal — deepseek-v4-flash died 2/4),
-      (b) **running-agents** (pods by role×phase, kube-state-metrics), (c) **cost** (push worker
-      cost_usd to Prometheus; coordinator/reviewer already via A0 OTLP). Highest-leverage speed
-      work: this makes invisible stalls (the 2.5h reviewer block) visible — caching (FU-022) did
-      NOT help the measured runs (warm nix). Also: upload goose sessions.db so the viewer renders
-      worker sessions natively (no converter — it reads goose+opencode formats).
 - [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
-      (human-gated), scores its predecessor first. Needs FU-057's ledger; first run hand-supervised.
-- [ ] **FU-061** — **Unify the transcript taxonomy so the viewer groups by issue/project, not cwd.**
-      **BUILT 2026-07-09 (homelab `fu057-fu061-observability`, alongside FU-057) — pending merge + deploy.**
-      Delivered: reviewer resolves PR→issue via `closingIssuesReferences` (verified PR#5→#1), coordinator
-      keys `<mainRepo>/_ticks/`, agent-finalize adds `issue`, and the sync rewrites each jsonl `cwd` +
-      each goose session's `working_dir` to a single project-qualified segment `/<project>--issue-<N>`
-      so all of an issue's sessions collapse into one group (verified on the real issue-1 slice: 4 goose
-      worker sessions + the reviewer's claude jsonl regroup correctly). NB deviation from the original
-      cwd string below: the deployed cchv labels by cwd *basename*, so the leaf is `<project>--issue-<N>`
-      (grouping) with role-round in the filename + goose session name, not `/<project>/issue-<N>/<role>-rN`
-      (which would scatter under basename-labelling). Original spec below.
-      Live problem (2026-07-09, screenshot): the viewer shows 7× "homelab", N× "oracle-fleet", "repo" —
-      it **derives its label from the jsonl `cwd` field**, ignoring our `<proj>--<task>` sync dir names,
-      AND the bucket keys scatter one issue's work across three top-level names (workers
-      `oracle-fleet/issue-N`, reviewer `oracle-fleet/pr-M`, coordinator `oracle/tick-ts` — the
-      stack-vs-project split, old finding F). Fix, two parts: **(1) one key**
-      `<project>/issue-<N>/<role>-r<round>-<ts>/` everywhere — project = the repo always; reviewer
-      resolves PR→issue via "Fixes #N"; pure-reconcile ticks that dispatch nothing → `<project>/_ticks/`.
-      Manifest carries {project, issue, role, round}. **(2) sync rewrites `cwd`**: since the viewer keys
-      on cwd, the sync sets each synced jsonl's cwd to `/<project>/issue-<N>/<role>-r<round>` (from the
-      sibling manifest) → all of issue N's coordinator+worker+reviewer sessions group under one
-      `oracle-fleet · issue-1` project, each session labelled by role-round. Touches: agent-finalize +
-      reviewer/coordinator launchers (bucket path + manifest fields + PR→issue resolution),
-      transcripts-viewer.yaml sync. Pairs with FU-057's goose-sessions.db upload (same agent-finalize).
+      (human-gated), scores its predecessor first. The FU-057 ledger it needs is LIVE (archived
+      2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:
+      ledger-reflex consuming `key_hash` for the OpenRouter activity-API per-request backfill.
 
 - [ ] **FU-063** — **(optional enrichment) Grant the github-exporter PAT `Commit statuses: read` (or
       `Checks: read`) so the stall detector sees CI-green.** DONE 2026-07-09: `Pull requests: read` was

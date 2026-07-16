@@ -118,13 +118,16 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 4. **Service XRDs** become the discovery source of truth; generate a catalog, retire/auto-generate
    `SERVICES.md` (FU-049).
 
-## Open questions
+## Open questions — all three since resolved (2026-07-12, with the FU-048 build)
 
-- **Build-time discovery.** XRD discovery is a cluster query; an app repo's CI may have no cluster creds at
-  build time. Provisioning-discovery (in `-iac`, which reconciles against the cluster) fits XRDs cleanly;
-  documentation-discovery for a human/CI without cluster access may still want a generated static catalog.
-- **How much policy is a claim vs a Composition default?** Model tiers, budget caps, git-workflow and the
-  review rubric are stack policy — but sensible platform defaults keep a minimal claim minimal. Draw the
-  line when writing the XRD (FU-048).
-- **One coordinator per stack vs one that iterates stacks.** The gate already iterates; whether each stack
-  gets its own long-lived control plane or shares one is a Composition decision (FU-048).
+- **Build-time discovery.** ✅ Resolved: **keep `agents/stacks.json` as the committed MIRROR of the
+  claims** — the registration lint's repo universe in CI (no cluster creds) and the probe-failed
+  fallback belt both need it. Generating it *from* the claims is FU-049's catalog problem. See
+  [`agentstack.md`](agentstack.md) §Consumption.
+- **How much policy is a claim vs a Composition default?** ✅ Drawn in the built XRD: baseline +
+  ecosystem `profile` + `extraFQDNs` for egress, `fixer` block per repo (docker, storage), platform
+  defaults for the rest ([`agentstack.md`](agentstack.md) §What a claim renders).
+- **One coordinator per stack vs one that iterates stacks.** ✅ Decided: **one GLOBAL
+  coordinator-reflex** — the gate iterates all claims for cents and spawns scoped ticks; per-stack
+  CronJobs only if cadence/isolation ever diverges (a Composition addition, not a redesign).
+  [`agentstack.md`](agentstack.md) §Decisions.

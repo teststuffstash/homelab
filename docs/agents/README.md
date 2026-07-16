@@ -1,9 +1,11 @@
 # Agent platform — in-cluster MCP capability + ephemeral sandbox harness
 
-> **Status: substrate LIVE, loop hand-driven (2026-07).** The launcher/worker/budget/reviewer
-> pieces run for real (`../../agents/README.md`); the coordinator is a hand-driven brief
-> (`../../agents/coordinator/README.md`, durable engine = FU-026); the egress proxy is pending
-> (FU-018). This is the narrative home for the agent
+> **Status: substrate LIVE, loop reflex-driven, autonomy switch off (2026-07).** The
+> launcher/worker/budget/reviewer pieces run for real (`../../agents/README.md`); the coordinator
+> is a scoped brief behind a deterministic scan gate, with the `coordinator-reflex` CronJob built
+> and deployed **suspended** (FU-050 — unsuspending it is the autonomy switch; durable engine =
+> FU-026); credential injection + the egress proxy are **LIVE default-on** (ADR-087: opaque refs +
+> git-cred broker; Cilium lockdown rollout = FU-020). This is the narrative home for the agent
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
 > [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in
 > [`../../ROADMAP.md`](../../ROADMAP.md). Where a piece goes LIVE it gets a row in
@@ -215,8 +217,12 @@ Recorded as thin ADRs in [`../adr.md`](../adr.md):
 | ADR-078 | Isolation layer = **agent-sandbox** (k8s-native), not Omnibox/Istio | accepted (plain Pod until it lands — FU-019) |
 | ADR-079 | **Strict-PR write policy** — agents propose, GitOps applies | accepted |
 | ADR-080 | **Durable git/S3 state is truth; context/vectors/snapshots are cache** (may rise to CONTEXT.md) | accepted |
-| ADR-081 | Per-job identity — minted budget-capped LLM keys + 1h GitHub App tokens; Cilium FQDN + injection proxy | accepted (proxy pending — FU-018) |
+| ADR-081 | Per-job identity — minted budget-capped LLM keys + 1h GitHub App tokens; Cilium FQDN + injection proxy | accepted (proxy v1 LIVE 2026-07-09; refined by ADR-087) |
 | ADR-082 | **CI runners = Tofu'd Proxmox VMs** running ephemeral k3d (not privileged ARC, not off-cluster pop-os) | accepted (ci-runner-01 live) |
+| ADR-084 | **Three-layer repo topology + automated deploy** (chart = the deployable unit; `-iac` pins one number) | accepted (live E2E) |
+| ADR-085 | **AgentStack + platform-service XRDs** — mechanism=platform, policy=stack | open direction (AgentStack BUILT — [`agentstack.md`](agentstack.md); service XRDs = FU-049) |
+| ADR-086 | Coordinator write tier **W1: ⚑ spec gap-flags** on open agent PR branches | accepted (W2+ needs its own ADR — FU-059) |
+| ADR-087 | **Opaque-ref creds**: egress proxy resolves LLM refs; git-cred broker mints per-request tokens | accepted (default-on; fallbacks drop with FU-020) |
 
 ## Open / deferred
 
