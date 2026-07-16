@@ -41,6 +41,7 @@ data:
     | OpenRouterKey | `<repo>` | standing budget key; the operator writes Secret `<repo>-openrouter` |
     | CiliumNetworkPolicy | `agent-worker-egress` | worker egress lockdown with a monitor→enforce dial |
     | Role + RoleBinding | `agentstack-proxy-session-keys` | lets the egress proxy resolve opaque-ref session keys here |
+    | ExternalSecret (only with `fixer.claudeTier: true`) | `claude-session` | subscription oauth token for the claude worker tier, session-key-labeled — pods carry only `ref:<ns>/claude-session` |
 
     A repo entry WITHOUT `fixer` is context-only (the coordinator watches it; agents never run
     pods in it — e.g. an `-iac` deploy target).
@@ -75,6 +76,15 @@ data:
     runner over an ephemeral in-cluster one. Costs: ~5Gi microVM per ride (one per node),
     registry FQDNs added to the egress allowlist until the pull-through mirrors land (FU-073),
     in-cluster services reached via endpoint IPs until FU-072.
+
+    ## The subscription claude tier (`fixer.claudeTier: true`)
+
+    Enables `claude-code` workers on the operator subscription (FU-066): renders the
+    `claude-session` ExternalSecret into the namespace. Dispatch selects the tier via the
+    workerModel notation `claude/<alias>` (e.g. `claude/haiku` as primary, or anywhere in
+    `workerModelFallbacks` — its designed chain position is the reliable rung before
+    `agent/blocked`). Rides run on agent-base like every other harness: project devbox
+    toolchain and `fixer.docker` both work.
 
     ## Egress rollout (the enforce dial)
 

@@ -27,6 +27,7 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
+| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
 verdicts; infra failures are **strikes** that swap the model instead of consuming a round, see the
@@ -127,6 +128,27 @@ double-spawns.
        --task issue-<N> --round <r> \
        --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
    ```
+   **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — there
+   is no OpenRouter key (auth = `ref:<project>/claude-session` via the egress proxy; the estimator
+   and the budget CR have no role; the turn cap below is the spend bound). claude-code takes no
+   goose recipe, so **you translate `.agents/fix.yaml`** (read it from the stack clone,
+   `/work/<project>/.agents/fix.yaml`): the recipe's `instructions` become the appended system
+   prompt, its `prompt` (with `issue=<N>` substituted) becomes `-p`. The system-prompt file must
+   exist **in the worker pod**, not here — base64-carry it through the run command (the proven
+   oracle-fleet#22 shape):
+   ```sh
+   B64=$(base64 -w0 /tmp/fix-instructions.md)   # ← the recipe's `instructions`, extracted by you
+   bash agents/agent-session.sh <project> --model claude/<alias> \
+       --task issue-<N> --round <r> \
+       --run "printf '%s' '$B64' | base64 -d > /tmp/fix-system.md; \
+              claude -p --dangerously-skip-permissions --max-turns 80 \
+                --append-system-prompt-file /tmp/fix-system.md \
+                '<the recipe prompt, issue=<N> substituted>'"
+   ```
+   `--max-turns 80` is the GOOSE_MAX_TURNS counterpart — keep it unless the recipe declares its
+   own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
+   `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
+   work; `fixer.docker` repos ride kata as usual).
    **Parallel track lanes:** when dispatching a SECOND worker into a repo whose open issues sit on
    independent `track/*` lanes (TRACKS.md — disjoint path ownership), prefix the dispatch with
    `AGENT_WIP_LIMIT=<number of lanes>`; the default cap is 1 worker per project. Never run two

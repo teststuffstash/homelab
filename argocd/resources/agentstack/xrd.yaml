@@ -63,11 +63,11 @@ spec:
                     Primary model for worker (fixer) sessions. OpenRouter models as
                     "openrouter/<vendor>/<model>"; "claude/<model>" (e.g. "claude/haiku")
                     selects the SUBSCRIPTION claude-code harness instead (FU-066 — the
-                    launcher derives --harness claude from the prefix; a dedicated
-                    fixer.claudeTier field is the eventual shape). Chain policy:
-                    paid-cached-fast first — free tiers rate-limit below the platform's
-                    freshness windows (git-token TTL, budget pacing); they are scout-canary
-                    material.
+                    launcher derives --harness claude from the prefix; repos running it
+                    need fixer.claudeTier=true so the session secret renders). Chain
+                    policy: paid-cached-fast first — free tiers rate-limit below the
+                    platform's freshness windows (git-token TTL, budget pacing); they are
+                    scout-canary material.
                 workerModelFallbacks:
                   type: array
                   items:
@@ -154,6 +154,22 @@ spec:
                               only-free = the egress proxy 403s paid-model completions on
                               this key BEFORE spend (FU-024). Ephemeral session keys carry
                               their own guardrail; this is the standing key's.
+                          claudeTier:
+                            type: boolean
+                            default: false
+                            description: >-
+                              true = this repo's workers may run the SUBSCRIPTION
+                              claude-code harness (FU-066): renders the `claude-session`
+                              ExternalSecret into the namespace (Infisical
+                              COORDINATOR_CLAUDE_OAUTH_TOKEN → data key AUTH_TOKEN,
+                              session-key-labeled). A claude ride's pod holds only
+                              ref:<name>/claude-session; the egress proxy's /anthropic
+                              upstream resolves it and injects the oauth token + beta
+                              header (ADR-087 leg A). Select the tier per dispatch via
+                              the workerModel notation "claude/<alias>" (primary or any
+                              chain position). Rides run on agent-base like every other
+                              harness (devbox toolchain + docker mode included,
+                              agent-runtime#14).
                           docker:
                             type: boolean
                             default: false

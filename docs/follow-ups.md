@@ -49,13 +49,6 @@ _Last updated: 2026-07-16._
       the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
       already honored the env — no agent-runtime change needed). Verify on the next kata ride:
       `devbox install` should be LAN-speed, not the ~4-min WAN fallback observed 2026-07-14.
-- [ ] **FU-079** — **Un-armed open PRs are invisible to the whole merge path** — the updater,
-      review reflex, and auto-merge all key on armed PRs (by design), so an operator/stacked PR
-      born un-armed stalls silently (oracle-fleet#16: stuck at ci "Expected" after its
-      stacked-base retarget — `edited` isn't a CI trigger — then BEHIND once master moved;
-      `gh pr update-branch` + arming fixed both). Extend `coordinator-scan`'s orphan backstop
-      (today: un-armed DEP PRs only) to report ANY un-armed open PR, and note arm-at-open as
-      operator discipline in merge-path.md.
 - [ ] **FU-077** — **PodSecurity runtimeClass exemption for kata** (apiserver
       `admissionControl` patch on cp-01, Talos `cluster.apiServer`): privileged-inside-a-microVM
       is root in the guest only, but PSS can't see runtime classes — docker-mode worker
@@ -186,9 +179,11 @@ _Last updated: 2026-07-16._
       circuit-breaker label + `AGENT_ERROR:` comment convention went live for reviews 2026-07-12
       (reflex breakers + reviewer self-guard + exporter `AgentReviewLoop`/`AgentErrorFlagged`
       alerts — `docs/agents/merge-path.md` §Runaway dispatch, born from the oracle-fleet#13
-      12-duplicate-approval loop). Remaining: (a) workers + coordinator honor and emit the same
-      signal — worker recipes live in the app repos' `.agents/`, and `coordinator-scan` should
-      report `agent/error` items as human-first instead of actionable; (b) grant the
+      12-duplicate-approval loop). **(a) coordinator half DONE 2026-07-16:** `coordinator-scan`
+      excludes `agent/error` items from every actionable clause and reports them human-first;
+      the brief's label table carries the rule (never dispatch/relabel/arbitrate; emit label +
+      `AGENT_ERROR:` comment on self-detected loop anomalies). Remaining: (a′) worker recipes
+      in the app repos' `.agents/` emit the same signal; (b) grant the
       homelab-reviewer App `issues:write` so the reviewer can apply the label itself instead of
       only commenting; (c) adopt the pre-created label into tofu (outside the jail):
       `github_issue_label.agent[<repo>::agent/error]` imports per the `labels.tf` header, then
@@ -202,41 +197,29 @@ _Last updated: 2026-07-16._
       `ref:<ns>/claude-session` in the pod (Haiku default, no OpenRouter key at all, clone
       preamble since that image has no prep entrypoint). E2E in oracle-fleet: clone → claude
       reads the repo with tools → `CLAUDE-WORKER-E2E-OK`, exit clean, minimal AGENT_RUN_STATS.
-      **Remaining:** (a) `claude-session` Secret is operator-imperative in oracle-fleet only —
-      render from the AgentStack claim (a `fixer.claudeTier` field) like the rest of the fixer
-      infra; (b) transcripts/finalize — the coordinator image lacks `agent-finalize`, so claude
-      rides emit a minimal stats line and skip transcript upload; either agent-base ships the
-      claude CLI or the coordinator image ships finalize (agent-runtime/-coordinator repos), plus
-      the tokens/turns stand-in for `cost_usd`. **Partial fix landed 2026-07-15:** the minimal
-      stats line carried no `pr_url`, so a clean PR-opening claude run tripped a **FALSE
-      `AGENT_STRIKE`** (the launcher's "no PR opened" path — seen live on #22 round 1);
-      `agent-session.sh` now scrapes the PR URL from the run log into the stats line (validated
-      round 2 — it armed auto-merge + posted the stats comment instead of striking). Transcript
-      upload + real cost accounting still open. (c) recipe translation (`.agents/fix.yaml` →
-      `--append-system-prompt` + `--max-turns` caps) in the dispatcher brief + chain position =
-      the RELIABLE tier before `agent/blocked` (model-routing.md) — **exercised by hand on #22**
-      (the coordinator base64-carried the recipe `instructions` into `--append-system-prompt-file`
-      and the `prompt` into `-p --max-turns`; worked, incl. the `--work-branch` resume in round 2);
-      still needs to move OUT of the coordinator's head INTO the dispatcher brief/recipe. (d) **unify coordinator +
-      reviewer onto the same ref rail** — they still hold the raw oauth token in-pod
-      (`CLAUDE_CODE_OAUTH_TOKEN` secretKeyRef); the reviewer especially checks out LLM-authored
-      PR code next to an unscoped ~1y credential. Mechanical once the worker rail has mileage:
-      swap their env to `ANTHROPIC_BASE_URL` + ref, label `coordinator-claude`, grant the proxy
-      SA get on it. (e) **the claude tier is docker-LESS — it silently ignores `fixer.docker`
-      (FU-065 lineage), found on #22.** The harness runs on the coordinator image (no devbox, no
-      docker daemon), and `--harness claude --docker` is untested + structurally moot (a dind
-      sidecar the image can't drive), so a claude worker has **no in-pod kind/kata inner loop** —
-      exactly the capability archived **FU-065** shipped as the `fixer.docker` knob (kata microVM +
-      dind; oracle-fleet is `fixer.docker:true` for its `scripts/e2e-kind.sh` gate, the `ert-mock`
-      world). The claude tier falls back to **CI-push** (GitHub Actions has docker) — harmless for
-      #22 (a spec + test-label re-home needs no cluster; GH CI still ran the kind gate green) but
-      the SLOW cycle Rasmus rejected for operator-shaped repos (the very reason `fixer.docker`
-      exists). **Interim routing rule (policy, no code): keep claude/haiku for NON-docker tasks
-      (spec/docs, pure-unit, API-level); route `fixer.docker` inner-loop issues to the goose kata
-      tier.** A real fix = the claude tier gaining a docker/toolchain path, which also requires
-      solving "coordinator image has no devbox" (overlaps (b)); until then the AgentStack claim
-      should express tier×docker compatibility so the dispatcher won't send a docker-needing issue
-      to claude/haiku (relates to (a)'s `fixer.claudeTier` field and ADR-085).
+      **Build sweep 2026-07-16 — legs (a)(b)(c)(e) SHIPPED, (d) is the remainder:**
+      (a) ✅ `fixer.claudeTier` in the XRD; the Composition renders the `claude-session`
+      ExternalSecret (Infisical `COORDINATOR_CLAUDE_OAUTH_TOKEN` → `AUTH_TOKEN`,
+      session-key-labeled); oracle claim cut over (oracle-iac), imperative secret deleted in the
+      same cutover. (b) ✅ via the **agent-base leg**: agent-runtime#14 ships the claude CLI
+      (devbox-pinned 2.1.201) + pre-seeded onboarding/trust; `agent-finalize` records
+      `subscription:true` + tokens/turns from the session jsonl (the cost stand-in;
+      `cost_usd_equiv` opportunistic from `--output-format json`) and uploads the session jsonl
+      as `claude-sessions/`; `agent-session.sh` flipped `--harness claude` onto agent-base
+      (clone preamble deleted — the entrypoint preps). The 2026-07-15 `pr_url`-scrape fallback
+      stays presence-gated for old pins; drop it after the post-#14 pin's first clean ride.
+      (c) ✅ the dispatcher brief carries the #22 recipe-translation shape (base64-carried
+      `instructions` → `--append-system-prompt-file`, recipe `prompt` → `-p --max-turns 80`,
+      skip estimator/key-mint steps). (e) ✅ RETIRED by (b): on agent-base the claude tier has
+      devbox + the kata+dind docker mode — `fixer.docker` repos ride identically on any harness;
+      the interim non-docker routing rule + the tier×docker claim field are moot.
+      **Remaining:** (d) **unify coordinator + reviewer onto the same ref rail** — they still
+      hold the raw oauth token in-pod (`CLAUDE_CODE_OAUTH_TOKEN` secretKeyRef); the reviewer
+      especially checks out LLM-authored PR code next to an unscoped ~1y credential. Mechanical
+      now the worker rail has mileage (E2E + first real fix #22→PR#23): swap their env to
+      `ANTHROPIC_BASE_URL` + ref, label `coordinator-claude`, grant the proxy SA get on it.
+      Plus: one clean claude validation ride on the post-#14 pin (tokens/turns in stats,
+      transcript in the viewer, kind gate in-pod), then delete the launcher fallback.
 - [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
       acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
       credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). REMAINING:

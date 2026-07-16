@@ -11,7 +11,8 @@
 #          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
 #          kubectl, probe failures skip the clause rather than fail into a wake)
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
-# `major/awaiting-human`), done/merged, and everything on the review-reflex's ARMED track — arming is the
+# `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
+# report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
 # boundary (docs/agents/merge-path.md). Still v3 territory: red-beyond-T (needs checks:read). The
 # `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
 # schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
@@ -86,21 +87,34 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # dispatch, or the tick works a dead assumption (live 2026-07-09: the TS→Python flip left a
     # CHANGES_REQUESTED PR the scan would happily have burned a round on). Excluded + reported.
     iss="$(gh issue list --repo "$slug" --state open --json number,title,labels \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"
+    # FU-069(a): `agent/error` = the anomaly circuit-breaker (merge-path.md §Runaway dispatch) —
+    # HUMAN-FIRST, excluded from every actionable clause above/below. Reported so it never rots
+    # silently, but a tick must not touch it (no dispatch, no relabel, no arbitration).
+    errs="$( { gh issue list --repo "$slug" --state open --json number,title,labels \
+        --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; \
+      gh pr list --repo "$slug" --state open --json number,title,labels \
+        --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("agent/error"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true; } )"
+    [ -n "$errs" ] && orphans="${orphans}[$repo] ⚠ agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched:\n${errs}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
     # UN-ARMED — an armed PR is the review reflex's, never the coordinator's (arming is the boundary).
     prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
-      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
-    # BACKSTOP: a dependency PR that is un-armed AND carries NO lane label (automerge/deps-review/major)
-    # is owned by NOBODY — not the renovate-approve reflex (needs `automerge`), not the review reflex
-    # (needs armed), not the coordinator (needs `major`). Renovate is meant to classify+arm every bump, so
-    # this catches its escapes: a disabled-manager leftover, a stale pre-classification PR, or a human's
-    # dep PR. Report-only (NOT a spawn — the coordinator doesn't own dep classification, Renovate does).
-    orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,autoMergeRequest \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("dependencies")) and (.autoMergeRequest==null) and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major")]|length)==0))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
+    # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
+    # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
+    # un-armed, stuck at ci "Expected" then BEHIND). Owned lanes excluded: automerge/deps-review
+    # (their reflexes arm), un-armed `major` + merge-conflict + CHANGES_REQUESTED (coordinator
+    # actionable, above), major/awaiting-human (parked on a human by design), agent/error
+    # (human-first). Report-only: the fix is `gh pr merge --auto` or an explicit parking label —
+    # arm-at-open is operator discipline (merge-path.md).
+    orph="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
+      --jq '[.[]|(.labels|map(.name)) as $L|select((.autoMergeRequest==null)
+        and (([$L[]|select(.=="automerge" or .=="deps-review" or .=="major" or .=="major/awaiting-human" or .=="merge-conflict" or .=="agent/error")]|length)==0)
+        and (.reviewDecision!="CHANGES_REQUESTED"))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
     # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
     # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
@@ -139,10 +153,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
     [ -n "$v2" ]   && items="${items}[$repo]\n${v2}\n"
     [ -n "$prs" ]  && items="${items}[$repo]\n${prs}\n"
-    [ -n "$orph" ] && orphans="${orphans}[$repo]\n${orph}\n"
+    [ -n "$orph" ] && orphans="${orphans}[$repo] ⚠ un-armed open PRs (invisible to the merge path — arm or park, FU-079):\n${orph}\n"
   done
 
-  [ -n "$orphans" ] && { echo "stack ${name}: ⚠ ORPHANED dep PRs (un-armed + unclassified — classify or close; Renovate didn't lane them):"; printf '%b' "$orphans"; }
+  [ -n "$orphans" ] && { echo "stack ${name}: ⚠ REPORT-ONLY items (human attention; the tick does not touch these):"; printf '%b' "$orphans"; }
 
   if [ -z "$items" ]; then
     echo "stack ${name}: nothing actionable"

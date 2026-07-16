@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-079** *(archived 2026-07-16)* — **Un-armed open PRs invisible to the merge path — backstop
+  shipped.** `coordinator-scan`'s orphan clause generalized from dep-only to ANY un-armed open PR
+  with no owning lane (automerge/deps-review/major/awaiting-human/merge-conflict/CHANGES_REQUESTED/
+  agent/error all excluded); arm-at-open noted as operator discipline in merge-path.md §Arming is
+  the boundary. Born from oracle-fleet#16 (stacked PR born un-armed → stuck at ci "Expected", then
+  BEHIND). Report-only by design — the fix is `gh pr merge --auto` or an explicit parking label.
+
 - **FU-057** *(archived 2026-07-16)* — **Retro P2: retro-facts reflex + cross-run dashboards, LIVE.**
   Shipped 2026-07-09/10 (agent-runtime#7 + homelab `fu057-fu061-observability`, merged; polish
   524c331/7224d20): `exit_status`+`error_class` classifier in agent-finalize, pushgateway +

@@ -142,6 +142,37 @@ spec:
                       apiVersion: generators.external-secrets.io/v1alpha1
                       kind: GithubAccessToken
                       name: agent-git-token-gen
+            {{- if default false (get $fx "claudeTier") }}
+            ---
+            # FU-066 leg (a): the claude-tier session secret — the subscription oauth token,
+            # Infisical → Secret, session-key-labeled so the egress proxy's /anthropic upstream
+            # resolves ref:<ns>/claude-session and injects it (ADR-087 leg A; the pod never holds
+            # the token). Replaces the operator-imperative `kubectl create secret` (oracle-fleet
+            # was the only one) — ESO creationPolicy Owner will NOT adopt a pre-existing hand-made
+            # Secret: delete it in the same cutover, expect one reconcile round (agentstack.md
+            # §Operational notes). Real Ready condition kept (like agent-git-token): AgentStack
+            # READY ⇒ the token materialized.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: claude-session
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-claude-session-es
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+              target:
+                name: claude-session
+                creationPolicy: Owner
+                template:
+                  metadata:
+                    labels:
+                      openrouter.teststuff.net/session-key: "true"
+              data:
+                - secretKey: AUTH_TOKEN
+                  remoteRef: { key: COORDINATOR_CLAUDE_OAUTH_TOKEN }
+            {{- end }}
             ---
             # Standing funding ceiling — the operator mints the key and writes Secret <repo>-openrouter;
             # per-session ephemeral keys budget underneath it.

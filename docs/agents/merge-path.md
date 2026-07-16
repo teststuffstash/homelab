@@ -146,6 +146,12 @@ devbox bumps stay armed and ride the reflex like any other PR. **Proven E2E (202
 coordinator drove sleep-tracking#18 (helm 3→4) through this exact lane — investigate-while-red → worker
 applied `--verify=false` → green → `major/awaiting-human` → human merged (FU-047).
 
+The corollary is **arm-at-open discipline (FU-079)**: any PR opened by an operator or a stacked
+workflow must either be armed immediately (`gh pr merge <N> --auto --squash`) or carry an owning
+lane label — an un-armed, unlabeled PR is invisible to the updater, the reflex, AND auto-merge, and
+stalls silently (live: oracle-fleet#16 stuck at ci "Expected" after a stacked-base retarget, then
+BEHIND). `coordinator-scan` reports every such PR as a report-only orphan.
+
 ### Why update-before-review, and why reviews serialize per repo
 
 Two orderings were on the table:
