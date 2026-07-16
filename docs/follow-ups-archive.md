@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-063** *(archived 2026-07-16)* — **Exporter `ci_state` on private repos: DONE via
+  workflow-run join (path a).** No PAT scope reads private-repo check runs (`checks:read` is
+  App-only; the check-runs endpoints are absent from the fine-grained-permissions doc; GitHub
+  Actions reports check runs, never commit statuses — two wrong scope theories died here, the
+  operator caught both). `ci_state_from_runs()` joins `/actions/runs?head_sha=` conclusions
+  under the existing `Actions:read` (`headRefOid` added to the PR query). Verified in
+  Prometheus same day: oracle-fleet #13/#30/#33 `success`, #31 `pending`. `Commit statuses:
+  read` on the PAT is a no-op and can be dropped at leisure.
+
 - **FU-066** *(archived 2026-07-16)* — **claude-code + Haiku subscription worker tier: LIVE, all
   legs.** (a) `fixer.claudeTier` in the AgentStack XRD → claim-rendered `claude-session` ES
   (ESO *adopted* the imperative secret in place — unlike Crossplane); (b) agent-base ships the

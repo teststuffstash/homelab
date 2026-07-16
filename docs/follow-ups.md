@@ -301,23 +301,6 @@ _Last updated: 2026-07-16._
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:
       ledger-reflex consuming `key_hash` for the OpenRouter activity-API per-request backfill.
 
-- [ ] **FU-063** — **(optional enrichment) `ci_state` on PRIVATE repos needs a code change —
-      NO PAT scope can read their check runs.** Fully corrected 2026-07-16 (operator caught both
-      wrong theories): the exporter's open-PR GraphQL queries `statusCheckRollup` on the PR head
-      commit = the aggregate of **check runs** (REST: `/commits/{ref}/check-runs`) + commit
-      statuses. GitHub Actions reports check runs, never commit statuses (verified: the status
-      API on an oracle-fleet PR head is empty) — so `Commit statuses: read` is a no-op here and
-      can be dropped. And the Checks read API supports ONLY classic-PAT `repo` scope or GitHub
-      App tokens (Apps have `checks:read`) — fine-grained PATs have NO route (the endpoints are
-      absent from the fine-grained-permissions doc; the "Checks: read grant" this entry briefly
-      claimed does not exist). Public repos need no scope — hence agent-runtime#16 exports
-      `success` while private oracle repos read `none`. Paths: (a) **join workflow-run
-      conclusions by PR head SHA** — `Actions: read` (already granted) covers
-      `/actions/runs?head_sha=` on private repos; add `headRefOid` to the PR query + aggregate
-      in `collect_*()` (fits the one-poller doctrine, no new creds); (b) an App installation
-      token for repo data (billing must stay PAT — two creds, bootstrap work); (c) classic
-      `repo`-scope PAT — rejected, overbroad. Prefer (a).
-
 - [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags
       to open agent PR branches during merge-forward arbitration (record-in-git; issues = work
       pointers only). Remaining scope = W2+ (direct fixes/seeds), still needs design.** Original:
