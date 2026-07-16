@@ -589,7 +589,11 @@ if [ -n "$RUN_CMD" ]; then
   # (not a PR: there is none). That comment IS the strike store: state lives in GitHub, and the
   # coordinator greps `AGENT_STRIKE:` in issue comments to blacklist the model for this task and
   # pick the next chain entry. Keep the first line's format STABLE — it's the machine interface.
-  if [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
+  # Strike semantics apply only to TASKED rides (issue-*/pr-*) — an adhoc ride (validation,
+  # experiment) expects no PR; striking it is noise (the finalize-side twin landed in
+  # agent-runtime#16 the same day).
+  case "$TASK" in issue-*|pr-*) STRIKE_APPLIES=1;; *) STRIKE_APPLIES="";; esac
+  if [ -n "$STRIKE_APPLIES" ] && [ -z "$PR_URL" ] && [ "${STRIKE_BY_POD:-false}" != "true" ]; then
     if [ -n "$STATS" ]; then
       # agent-finalize already classified the run (authoritative — it saw the full log + exit code).
       # Its exit_status maps onto the strike taxonomy; anything else (failed/no-output/ci-failed
