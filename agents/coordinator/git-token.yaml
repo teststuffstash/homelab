@@ -64,6 +64,8 @@ spec:
     - openrouter-operator
     - oracle-fleet
     - oracle-iac
+    - agent-runtime          # platform stack context-only (2026-07-16); App covers it (github-apps.md)
+    - agent-coordinator      # ditto — trailing comments only, the lint parser stops at non-item lines
 ---
 # 3) Drive the generator → write the Secret the coordinator pod reads as GH_TOKEN. The generator
 # yields key `token`; remap it to GH_TOKEN (what coordinator-session.sh's secretKeyRef expects).

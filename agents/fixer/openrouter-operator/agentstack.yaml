@@ -12,6 +12,16 @@ spec:
   workerModel: openrouter/deepseek/deepseek-v4-flash
   workerModelFallbacks: [tencent/hy3, qwen/qwen3-coder]
   repos:
+    # Platform-image repos, context-only (FU-052 "still to onboard", visibility half done
+    # 2026-07-16): the review-reflex derives its scan set from the stack claims, so agent PRs
+    # here were invisible until a human dispatched the reviewer by hand (found live on
+    # agent-runtime#14). No fixer: these build the agent images; workers don't run pods in them.
+    # labels: {} = claim-owned label set (FU-068, taxonomy only) — tofu label_repos handoff via
+    # `tofu state rm` like the oracle repos.
+    - name: agent-runtime
+      labels: {}
+    - name: agent-coordinator
+      labels: {}
     - name: openrouter-operator
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
