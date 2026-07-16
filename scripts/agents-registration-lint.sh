@@ -27,10 +27,8 @@ fail=0
 # TOKEN-LIST exemptions: stack repos the homelab-agents/-reviewer Apps DON'T cover yet — adding
 # them to the lists before the App install 422s the ESO generator and kills the LIVE token for
 # every repo. Each entry is a pending OPERATOR install click; remove the entry (and add the repo
-# to both lists) the moment the install lands (docs/github-apps.md regenerated).
-#   allure-behavior-snippets — context-only oracle repo (2026-07-16): callers pushed, Apps
-#   (agents/merge/reviewer/renovate) not yet installed.
-TOKEN_EXEMPT="allure-behavior-snippets"
+# to both lists) the moment the install lands (docs/github-apps.md regenerated). Empty today.
+TOKEN_EXEMPT=""
 for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.yaml; do
   have="$(list_repos "$HERE/$target")"
   for repo in $stack_repos; do

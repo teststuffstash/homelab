@@ -58,6 +58,7 @@ spec:
     - oracle-iac
     - agent-runtime          # added 2026-07-16: the #14 reviewer produced a verdict it could not
     - agent-coordinator      # SUBMIT — App installed, token not scoped here
+    - allure-behavior-snippets # oracle stack context-only; Apps installed 2026-07-16
 ---
 # 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
