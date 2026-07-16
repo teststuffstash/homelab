@@ -109,7 +109,10 @@ resource "helm_release" "longhorn" {
       # volumes are detached — it will not roll the engine-image/CSI DaemonSets on a live
       # system. Found 2026-07-13: replicas couldn't schedule on wk-metal-01 (no engine image
       # there); bridged by patching the engine-image DS toleration directly (kubectl patch ds
-      # engine-image-ei-* — same toleration as below). Longhorn applies this setting properly
+      # engine-image-ei-* — same toleration as below). Same bridge applied 2026-07-16 to the
+      # longhorn-csi-plugin DS (FU-081: scratch PVCs must ATTACH on the kata laptops, and the
+      # setting didn't propagate to the already-deployed CSI driver either — without it CSINode
+      # carries no longhorn driver there and every attach fails). Longhorn applies this setting properly
       # on the next full-detach window (e.g. a Longhorn upgrade); the manual patch is
       # equivalent and idempotent until then.
       taintToleration = "homelab.io/ephemeral=true:NoSchedule"
@@ -186,6 +189,27 @@ resource "kubernetes_storage_class" "longhorn_bulk" {
     dataLocality        = "disabled" # consumer pods can't run on the tainted bulk node anyway
     staleReplicaTimeout = "30"
     fsType              = "ext4"
+  }
+  depends_on = [helm_release.longhorn]
+}
+
+# ---- Scratch tier (FU-081, ADR-089 addendum) --------------------------------
+# Throwaway per-ride volumes: the docker-mode agent pods' /var/lib/docker (agent-session.sh
+# mounts one as an ephemeral BLOCK PVC — kata hotplugs it as virtio-blk, the one disk shape
+# where overlay2 works inside the microVM). replica=1 on the bulk disks: scratch data on the
+# roomy pool, and losing a replica just kills a ride that dies with it anyway. No fsType —
+# consumers take volumeMode: Block and mkfs themselves.
+resource "kubernetes_storage_class" "longhorn_scratch" {
+  metadata { name = "longhorn-scratch" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "Immediate"
+  parameters = {
+    numberOfReplicas    = "1"
+    diskSelector        = "bulk"
+    dataLocality        = "best-effort" # a ride on wk-metal-01 can land next to its replica
+    staleReplicaTimeout = "30"
   }
   depends_on = [helm_release.longhorn]
 }

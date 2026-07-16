@@ -94,6 +94,7 @@ spec:
                 longhorn.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "standard") | quote }}
                 longhorn-bulk.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "bulk") | quote }}
                 longhorn-fast.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "fast") | quote }}
+                longhorn-scratch.storageclass.storage.k8s.io/requests.storage: {{ default "0" (get $r.storage "scratch") | quote }}
             {{- end }}
             {{- if $r.labels }}
             ---

@@ -44,7 +44,12 @@ _Last updated: 2026-07-16._
       **Remaining consumers:** (a) Talos node-level `machine.registries.mirrors` (all cluster
       pulls — apply from home, verify restart semantics); (b) ci-runner-01 `daemon.json`;
       (c) ARC runner pods; (d) gate scripts actually consuming `REGISTRY_MIRROR_*` (first:
-      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`); (e) ✅ DONE
+      oracle-fleet `scripts/e2e-kind.sh` via kind `containerdConfigPatches`) — now the LAST
+      blocker for the full gate in-pod (FU-081 ride r3 2026-07-16: kind-NODE pulls go upstream
+      docker.io, the enforced CNP drops them → garage rollout timeout; dind's own mirror config
+      doesn't reach the kind node's containerd). Design caveat: recent kindest/node ships
+      containerd 2.x, where the legacy `registry.mirrors` TOML is removed — use the
+      `config_path` + `certs.d/hosts.toml` shape, not the old patch examples; (e) ✅ DONE
       2026-07-16 — `nixcache` LB VIP `192.168.40.23` (+ CNP belt in the agentstack Composition);
       the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
       already honored the env — no agent-runtime change needed). Verify on the next kata ride:
@@ -185,14 +190,28 @@ _Last updated: 2026-07-16._
       guest-OOMs and a 6Gi VM is refused by the hypervisor (8G laptops,
       `docs/spikes/kata-ci-gate.md` attempts 4/5) — and its acceptance was a MINIMAL k3d
       cluster-up, never the full gate. NB no FU/ADR matched "kind gate memory/k3d migration"
-      (FU-074 archived the minimal acceptance; FU-073d is mirror consumption). Directions:
-      (a) migrate the oracle gate kind→**k3d** — the spike's own recommendation ("faster,
-      lighter"); (b) disk-backed `/var/lib/docker` via a block PVC (kata attaches block volumes
-      natively — removes the tmpfs↔cgroup double-charge; per-ride PVC churn is the cost);
-      (c) a bigger kata node. **Interim policy (no code):** full-gate verification rides CI
-      (the GitHub runner runs the same gate green on every PR — that path merged everything
-      today); in-pod docker remains for lighter inner loops (cluster-up, smoke tests, single
-      image builds within ~2Gi). Relates FU-072/FU-073, ADR-082; born from FU-066's acceptance.
+      (FU-074 archived the minimal acceptance; FU-073d is mirror consumption). **DECIDED (b)
+      2026-07-16 (operator): disk-backed `/var/lib/docker` via a block PVC** — the layer store
+      outgrows RAM on any full gate regardless of harness; get the shape right now, the perfect
+      build machine (128G+Optane class) is a hardware decision for later. BUILT same day:
+      `longhorn-scratch` StorageClass (replica=1 on the bulk disks, ADR-089 addendum) +
+      agent-session.sh dind mounts a per-ride ephemeral BLOCK PVC (20Gi, volumeDevices +
+      mkfs/mount preamble — virtio-blk is the one disk shape where overlay2 works in a kata
+      guest) + `storage.scratch` quota knob in the AgentStack XRD/Composition. Rejected for
+      now: (a) kind→k3d migration (orthogonal, still worthwhile for speed), (c) bigger node
+      (hardware later). **Validated same day** (rides r2/r3, transcripts
+      `s3://agent-transcripts/oracle-fleet/adhoc-fu081-scratch-pvc/`): the old OOM point is
+      GONE — ingester image build + kind cluster-up both completed on the block PVC, dind
+      healthy throughout. Two non-memory blockers surfaced en route: the gate script's
+      context-namespace fallback (in-pod kubectl resolves empty context-ns to the SA ns →
+      oracle-fleet#33, one-line fix) and kind-NODE image pulls bypassing the dind mirror into
+      the egress CNP drop (= FU-073d, where the fix belongs — garage rollout timeout was an
+      image pull, not memory). **Remaining:** land oracle-fleet#33 + FU-073d, then one green
+      full gate in-pod retires the interim CI-only policy; consider oracle's claim declaring
+      `storage: {scratch: 40Gi}` once quotas go live (claim today has no storage block =
+      legacy-open). Two live fixes this exposed are in the same commit: the longhorn-csi-plugin
+      DS toleration bridge (attach was impossible on ALL kata laptops) and the busybox-blkid
+      mkfs guard. Relates FU-072/FU-073, ADR-082; born from FU-066's acceptance.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
@@ -282,16 +301,22 @@ _Last updated: 2026-07-16._
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:
       ledger-reflex consuming `key_hash` for the OpenRouter activity-API per-request backfill.
 
-- [ ] **FU-063** — **(optional enrichment) Grant the github-exporter PAT `Commit statuses: read` (or
-      `Checks: read`) so the stall detector sees CI-green.** DONE 2026-07-09: `Pull requests: read` was
-      granted, so `collect_open_prs()` now emits `github_pull_request_open` with `review_decision` — the
-      stall detector works on review-state (unapproved PR + no reviewer pod). Measured that the PR's
-      `statusCheckRollup` (CI state) needs a SEPARATE scope the PAT still lacks — the collector tolerates
-      that (partial GraphQL data → `ci_state="none"`), and the dashboard filter is `ci_state=~"success|none"`
-      so it degrades to "not known-red" rather than reading 0. Granting `Commit statuses: read` (GitHub-
-      Actions CI reports via commit statuses under a fine-grained PAT; there is no plain "Checks: read" in
-      the UI for this) upgrades it to true CI-green with no code change. Out-of-jail, operator; then the
-      `ci_state="failure"/"pending"` rows populate.
+- [ ] **FU-063** — **(optional enrichment) `ci_state` on PRIVATE repos needs a code change —
+      NO PAT scope can read their check runs.** Fully corrected 2026-07-16 (operator caught both
+      wrong theories): the exporter's open-PR GraphQL queries `statusCheckRollup` on the PR head
+      commit = the aggregate of **check runs** (REST: `/commits/{ref}/check-runs`) + commit
+      statuses. GitHub Actions reports check runs, never commit statuses (verified: the status
+      API on an oracle-fleet PR head is empty) — so `Commit statuses: read` is a no-op here and
+      can be dropped. And the Checks read API supports ONLY classic-PAT `repo` scope or GitHub
+      App tokens (Apps have `checks:read`) — fine-grained PATs have NO route (the endpoints are
+      absent from the fine-grained-permissions doc; the "Checks: read grant" this entry briefly
+      claimed does not exist). Public repos need no scope — hence agent-runtime#16 exports
+      `success` while private oracle repos read `none`. Paths: (a) **join workflow-run
+      conclusions by PR head SHA** — `Actions: read` (already granted) covers
+      `/actions/runs?head_sha=` on private repos; add `headRefOid` to the PR query + aggregate
+      in `collect_*()` (fits the one-poller doctrine, no new creds); (b) an App installation
+      token for repo data (billing must stay PAT — two creds, bootstrap work); (c) classic
+      `repo`-scope PAT — rejected, overbroad. Prefer (a).
 
 - [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags
       to open agent PR branches during merge-forward arbitration (record-in-git; issues = work

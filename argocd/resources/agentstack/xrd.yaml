@@ -124,6 +124,14 @@ spec:
                             description: >-
                               Cap for StorageClass `longhorn-fast` (Optane scratch, replica=1,
                               pinned to one node), e.g. "5Gi".
+                          scratch:
+                            type: string
+                            default: "0"
+                            description: >-
+                              Cap for StorageClass `longhorn-scratch` (per-ride throwaway
+                              volumes, replica=1 on the bulk disks; the docker-mode dind
+                              /var/lib/docker block PVC, FU-081), e.g. "40Gi" — size for
+                              20Gi × concurrent docker rides.
                       labels:
                         type: object
                         description: >-

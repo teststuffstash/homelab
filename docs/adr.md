@@ -702,6 +702,10 @@ bulk ≈150Gi grantable at 2 replicas (wk-02-side headroom bounds it); std stays
 until more always-on disks join; wipe/power-off of wk-metal-01 degrades bulk volumes until
 rebuild — acceptable by tier definition, alert via Longhorn robustness metrics; disk tags +
 bulk-disk registration are node-CR patches (`scripts/longhorn-tag-disks.sh`), not tofu.
+**Addendum (2026-07-16, FU-081):** a fourth tier `longhorn-scratch` — replica=1 on the bulk
+disks, for per-ride throwaway volumes (the docker-mode dind `/var/lib/docker` ephemeral BLOCK
+PVC). Same fence, no redundancy by definition: losing the replica kills a ride that dies with
+it anyway. Claim knob: `storage.scratch`.
 
 ### ADR-090 — Full-LAN remote access: WireGuard on OPNsense (road-warrior), not Cloudflare Zero-Trust
 **Status:** Accepted (2026-07-14). **Decision:** "work from the summer home like at home" = a

@@ -328,11 +328,14 @@ fi
 # laptops + tolerates the compute taint by itself. dnsPolicy None + LAN resolver = the FU-072
 # workaround. The sidecar preamble: inotify sysctls (kubelet watches), mknod /dev/kmsg (kata
 # guests lack it; kubelet/cadvisor hard-requires it — THE spike root cause), MTU clamp 1350,
-# /var/lib/docker on tmpfs (overlayfs can't stack on the virtiofs rootfs). --group=1000 lets the
+# mkfs+mount /var/lib/docker from an ephemeral BLOCK PVC (longhorn-scratch, FU-081): kata
+# hotplugs a block volume as virtio-blk — the one disk shape where overlay2 works in the guest
+# (it can't stack on the virtiofs rootfs, and the earlier 2Gi tmpfs charged the dind cgroup —
+# the full kind gate OOMed on image builds). --group=1000 lets the
 # non-root agent use the socket; dockerd-entrypoint.sh (not raw dockerd) keeps the dind cgroup-v2
 # nesting that gives inner containers the memory controller. Memory envelope: agent 2Gi + dind
-# 2560Mi + 2Gi tmpfs ≈ the acceptance-proven ~5Gi VM — the ceiling on the 8G laptops (one
-# docker ride per node; kata.tf).
+# 2560Mi, layer store on disk ≈ the acceptance-proven ~5Gi VM with tmpfs headroom back — the
+# ceiling on the 8G laptops (one docker ride per node; kata.tf).
 KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
 AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
 if [ -n "$DOCKER" ]; then
@@ -351,7 +354,7 @@ if [ -n "$DOCKER" ]; then
   NIX_CACHE_VIP="${AGENT_NIX_CACHE_URL-http://192.168.40.23}"
   DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
-  DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      emptyDir: { medium: Memory, sizeLimit: 2Gi }'
+  DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
   DIND_CONTAINER="$(cat <<'DIND'
     - name: dind
       image: __DIND_IMAGE__
@@ -361,11 +364,19 @@ if [ -n "$DOCKER" ]; then
         - |
           sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=512 >/dev/null || true
           mknod /dev/kmsg c 1 11 2>/dev/null || true
+          # mount-first, mkfs on failure: busybox blkid exits 0 on a BLANK device, so it can't
+          # be the "is it formatted" guard (learned live — dockerd fell back to the virtiofs
+          # rootfs and overlay2 refused). Hard-fail instead of letting that happen again.
+          mkdir -p /var/lib/docker
+          mount /dev/docker-scratch /var/lib/docker 2>/dev/null \
+            || { mkfs.ext4 -q /dev/docker-scratch && mount /dev/docker-scratch /var/lib/docker; } \
+            || { echo "FATAL: scratch block volume mount failed"; exit 1; }
           mkdir -p /etc/docker && echo '{"mtu": 1350, "storage-driver": "overlay2", "registry-mirrors": ["__MIRROR_DOCKER_IO__"], "insecure-registries": ["__MIRROR_HOST__"]}' > /etc/docker/daemon.json
           exec dockerd-entrypoint.sh dockerd --host=unix:///run/docker.sock --group=1000
       volumeMounts:
         - { name: docker-run, mountPath: /run }
-        - { name: docker-lib, mountPath: /var/lib/docker }
+      volumeDevices:
+        - { name: docker-lib, devicePath: /dev/docker-scratch }
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   { cpu: "2",    memory: "2560Mi" }
