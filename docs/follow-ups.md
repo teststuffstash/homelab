@@ -492,9 +492,10 @@ _Last updated: 2026-07-16._
       triggers on wk-01 since ≥07-13, so chronic, not today's churn). wk-01 sits at ~82% of
       11.2Gi with the platform heavies (Prometheus ~1Gi, Infisical 815Mi, UniFi 739Mi, ArgoCD
       app-controller 546Mi, Home Assistant 379Mi) and BOTH victims are QoS BestEffort — first
-      in the kill order. Fix directions (probably all of): (a) resource REQUESTS for grafana
-      (kube-prometheus-stack values, monitoring.tf) + argocd-application-controller (argocd.tf)
-      → Burstable, out of the first-kill tier; (b) rebalance a heavy off wk-01 (UniFi or
+      in the kill order. Fix directions (probably all of): (a) ✅ DONE 2026-07-16 — requests-only
+      (no limits) for grafana + both sidecars + sleep-sqlite-sync (monitoring.tf) and the argocd
+      application controller (argocd.tf); both pods now Burstable. Node stays hot though, so:
+      (b) rebalance a heavy off wk-01 (UniFi or
       Infisical → wk-02/thinkcentre); (c) an alert on `talos OOMController` kills — today
       NOTHING alerted while Grafana died 21 times (the dashboards live IN the victim). Relates
       FU-028 (same node-tier scoping theme).

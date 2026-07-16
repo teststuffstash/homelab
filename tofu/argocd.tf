@@ -74,8 +74,12 @@ resource "helm_release" "argocd" {
 
     # The UI/API Service stays ClusterIP; the BGP VIP is a separate labelled Service
     # below (the chart's service template can't carry the bgp=advertise label, same as
-    # garage.tf). Redis/repo-server/controller keep their defaults.
+    # garage.tf). Redis/repo-server keep their defaults.
     server = { service = { type = "ClusterIP" } }
+
+    # FU-082: requests-only, same rationale as grafana in monitoring.tf — BestEffort made the
+    # controller a serial Talos-OOMController victim on wk-01 (26 kills); ~500Mi steady-state.
+    controller = { resources = { requests = { cpu = "250m", memory = "512Mi" } } }
   })]
 }
 

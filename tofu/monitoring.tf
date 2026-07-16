@@ -137,6 +137,11 @@ resource "helm_release" "kube_prometheus_stack" {
       # Stateless: datasource (in-cluster Prometheus) and dashboards are provisioned as
       # code, so we don't need a PV.
       persistence = { enabled = false }
+      # FU-082: requests-only (NO limits) — with no resources at all the pod is QoS BestEffort,
+      # the first tier Talos's OOMController kills whole under node memory pressure (21 kill
+      # cycles on wk-01 before this). Requests make it Burstable + scheduler-accounted; limits
+      # deliberately omitted so a dashboard spike degrades instead of reintroducing OOM kills.
+      resources = { requests = { cpu = "100m", memory = "256Mi" } }
       service = {
         type        = "LoadBalancer"
         labels      = { bgp = "advertise" } # opt in to BGP advertisement (see cilium-bgp.tf)
@@ -146,6 +151,7 @@ resource "helm_release" "kube_prometheus_stack" {
       # Sidecar discovers dashboard ConfigMaps labelled grafana_dashboard across namespaces.
       sidecar = {
         dashboards = { enabled = true, searchNamespace = "ALL", label = "grafana_dashboard" }
+        resources  = { requests = { cpu = "20m", memory = "64Mi" } } # both sc-* containers (FU-082)
       }
 
       # --- sleep-tracking dashboard (SQLite v1, ADR-045) ---------------------------------
@@ -183,6 +189,8 @@ resource "helm_release" "kube_prometheus_stack" {
               valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_SECRET_KEY } }
           volumeMounts:
             - { name: sleep-data, mountPath: /data }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
       EOT
     }
 
