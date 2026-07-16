@@ -504,13 +504,20 @@ _Last updated: 2026-07-16._
       `repos[].labels` + Composition `IssueLabels` block with the platform taxonomy inline
       (GitHub defaults + agent state machine + Renovate lanes; mirrors labels.tf until it dies);
       `scripts/github-labels-app-bootstrap.sh` (check|manifest|catch|convert|secrets|verify —
-      mints the three `LABELS_GH_APP_*` Infisical keys). **Remaining:** (operator) the App
-      create + org-wide **All repositories** install clicks, then `secrets`; then per repo
-      CLAIM-FIRST: diff `gh label list` vs the taxonomy (keepers → `labels.extra`), add the
-      `labels:` block, verify the composed `IssueLabels` synced (+ its apiVersion — the
-      Composition assumes v1alpha1), drop the repo from `label_repos`; delete labels.tf when the
-      list empties. The generated resource is AUTHORITATIVE `github_issue_labels` — it deletes
-      unmanaged labels; two managers fight.
+      mints the three `LABELS_GH_APP_*` Infisical keys). **FIRST MIGRATION LIVE 2026-07-16**
+      (same day): homelab-labels App installed org-wide (All repositories), creds chain green,
+      and FIVE repos claim-owned — oracle-iac + oracle-fleet + allure-behavior-snippets
+      (oracle claim, track/* extras; verified on GitHub: allure 9→27 labels, oracle-fleet
+      complete incl. the previously-missing deps-review, nothing deleted) and agent-runtime +
+      agent-coordinator (platform claim, taxonomy-only). Gotchas found live: bare hex colors
+      parse as YAML scientific notation (`5319e7` → 5.319e10 — QUOTE them; XRD description
+      warns), and `labels: {}` gets server-stamped to `{extra: []}` (explicit `extra: []` per
+      the drift convention). **Remaining:** per-repo CLAIM-FIRST migration of the rest
+      (sleep-tracking/snore-recorder/sleep-iac via the sleep claim; homelab has no claim —
+      decide its home); (operator, out-of-jail) drop migrated repos from `label_repos` via
+      **`tofu state rm`** (NOT destroy — it deletes the labels on GitHub and the authoritative
+      claim fights back), delete labels.tf when the list empties. The generated resource is
+      AUTHORITATIVE `github_issue_labels` — it deletes unmanaged labels; two managers fight.
       Design: [`docs/agents/agentstack.md`](agents/agentstack.md) §"The GitHub side". Relates
       FU-048, ADR-085.
 
