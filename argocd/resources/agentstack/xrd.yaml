@@ -147,7 +147,9 @@ spec:
                             description: >-
                               Stack-specific labels beyond the platform taxonomy (e.g. the
                               oracle track/* lane labels). name + 6-hex color (no '#') +
-                              optional description.
+                              optional description. QUOTE the color in YAML — a bare hex like
+                              5319e7 parses as scientific notation (found live on the first
+                              migration, oracle-iac#12→#13).
                             items:
                               type: object
                               required: [name, color]
