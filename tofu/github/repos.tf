@@ -356,6 +356,50 @@ resource "github_repository" "homelab" {
   }
 }
 
+# allure-behavior-snippets — evidence-snippets tool riding the oracle stack claim (context-only;
+# re-homes with the next spec-heavy stack). Adopted 2026-07-16 so the merge path can arm PRs
+# (allow_auto_merge was false — renovate/automerge lanes can't work without it). PUBLIC repo,
+# default branch MAIN (not master). Import before the first apply (outside the jail):
+#   devbox run github-tofu import github_repository.allure_behavior_snippets allure-behavior-snippets
+resource "github_repository" "allure_behavior_snippets" {
+  name         = "allure-behavior-snippets"
+  description  = ""
+  homepage_url = ""
+  topics       = []
+  visibility   = "public"
+
+  has_issues      = true
+  has_projects    = true
+  has_wiki        = true # was enabled at creation; keep — flipping it deletes wiki content
+  has_discussions = false
+  is_template     = false
+
+  allow_merge_commit          = true
+  allow_squash_merge          = true
+  allow_rebase_merge          = true
+  allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
+  allow_update_branch         = false
+  allow_forking               = true # forced true on public repos
+  delete_branch_on_merge      = true # clean up renovate/agent branches after merge
+  web_commit_signoff_required = false
+
+  merge_commit_title          = "MERGE_MESSAGE"
+  merge_commit_message        = "PR_TITLE"
+  squash_merge_commit_title   = "COMMIT_OR_PR_TITLE"
+  squash_merge_commit_message = "COMMIT_MESSAGES"
+
+  archive_on_destroy = true
+
+  security_and_analysis {
+    secret_scanning { status = "disabled" }
+    secret_scanning_push_protection { status = "disabled" }
+  }
+
+  lifecycle {
+    ignore_changes = [has_downloads]
+  }
+}
+
 resource "github_repository" "oracle_fleet" {
   name         = "oracle-fleet"
   description  = ""
