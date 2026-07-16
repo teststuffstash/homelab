@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-080**.
+  Next free id: **FU-081**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -175,6 +175,27 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+- [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
+      jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
+      revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
+      `oracle-workbench` SA (namespace-admin, oracle-iac//oracle-fleet/agent/workbench.yaml) can
+      spawn fixer workers but cannot touch coordinator/reviewer (ns `agent-coordinator`) — on
+      oracle-fleet#22 the mono jail had to drive the loop. REJECTED: broadening the workbench SA
+      into agent-coordinator (pod-create there ⇒ can mount `coordinator-git` — the airlock dies)
+      and moving the agents while they held the raw token (retired by FU-066(d), the prereq that
+      is now in). The build: the Composition renders per-stack coordinator/reviewer
+      identity+launch RBAC (and optionally a per-stack reflex CronJob) INTO the stack's fixer
+      namespace — pods there hold only `ref:` creds, so the workbench SA controls the loop by
+      construction, zero broadening. Include the two cross-ns leftovers found 2026-07-16:
+      (a) render the write-only transcripts key into each fixer ns (kills agent-session.sh's
+      cross-ns read of `agent-transcripts-s3` + the "one deliberate exception" in
+      agents/coordinator/rbac.yaml — no FU/ADR matched "transcripts key per-namespace");
+      (b) workbench needs an explicit `openrouterkeys` read Role (the CRD lacks the `admin`
+      aggregation label — same gap workbench.yaml already patched for tf.upbound.io). Docker-ride
+      dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns endpoint reads).
+      Also: document the stack-jail credential-airlock pattern in
+      docs/agents/platform-and-stacks.md when this lands (today it lives only in script headers).
+      Relates FU-045/FU-048/FU-050/FU-066.
 - [ ] **FU-069** — **Propagate the anomaly protocol beyond the review path.** The `agent/error`
       circuit-breaker label + `AGENT_ERROR:` comment convention went live for reviews 2026-07-12
       (reflex breakers + reviewer self-guard + exporter `AgentReviewLoop`/`AgentErrorFlagged`
