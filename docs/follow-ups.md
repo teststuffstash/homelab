@@ -212,12 +212,21 @@ _Last updated: 2026-07-16._
       doesn't itself hold — the pods/exec/pvc verbs had to be mirrored into the
       crossplane-aggregated ClusterRole (the proxy Role slipped by on core's secrets access).
       Airlock pattern documented in docs/agents/platform-and-stacks.md §"The credential-airlock pattern".
-      **REMAINING (the decision-revisit half):** move the coordinator/reviewer reflex CronJobs
-      in-namespace running as `agentstack-loop` — which requires per-stack ref-railing of the
-      coordinator creds (`coordinator-claude` subscription ref + `coordinator-git`) into each
-      fixer ns, and flips agentstack.md §Decisions' "one global reflex" to "one per stack jail".
+      **REMAINING (the decision-revisit half) — now on ADR-093 Argo (agent-loop Phase 1):** move
+      the coordinator/reviewer reflexes in-namespace as `agentstack-loop` — reflexes become
+      per-stack CronWorkflows + Argo Events Sensors (not the global CronJobs), which requires
+      per-stack ref-railing of the coordinator creds (`coordinator-claude` subscription ref +
+      `coordinator-git`) into each `<stack>-agents` ns, and flips agentstack.md §Decisions'
+      "one global reflex" to "one per stack jail". **Suspend/unsuspend becomes PER-STACK
+      (decided 2026-07-17):** TWO claim knobs — `coordinator.enabled` (default OFF, opt-in;
+      dispatches workers + spends budget, the FU-050 autonomy switch, now graduated per stack)
+      and `reviewer.enabled` (default ON; only reviews green PRs, safe) — the Composition renders
+      each into that stack's CronWorkflow `spec.suspend` AND gates its Sensor (a suspended stack
+      fires no review workflow on PR events either). The claim is the durable switch; an
+      imperative `kubectl patch … suspend` is a git-revertible brake (ArgoCD/Crossplane selfHeal
+      reverts it). model-scout + ledger stay GLOBAL single CronWorkflows (fleet-wide by nature).
       Docker-ride dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns
-      endpoint reads). Relates FU-045/FU-048/FU-050/FU-066.
+      endpoint reads). Relates FU-045/FU-048/FU-050/FU-066, ADR-093.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
