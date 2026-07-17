@@ -17,6 +17,19 @@ spec:
     helm:
       valuesObject:
         installCRDs: true
+        # FU-082: all three ESO deployments were BestEffort. Requests + modest memory limits
+        # (controller ~60Mi, webhook ~35Mi, cert-controller ~47Mi from live top).
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "256Mi" }
+        webhook:
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits: { memory: "128Mi" }
+        certController:
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits: { memory: "128Mi" }
   destination:
     server: https://kubernetes.default.svc
     namespace: external-secrets

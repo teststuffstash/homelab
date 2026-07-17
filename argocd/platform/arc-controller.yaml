@@ -20,6 +20,12 @@ spec:
     repoURL: ghcr.io/actions/actions-runner-controller-charts
     chart: gha-runner-scale-set-controller
     targetRevision: 0.14.2 # keep in lockstep with arc-runners.yaml
+    helm:
+      valuesObject:
+        # FU-082: the ARC controller reconciles runner scale sets — ~44Mi steady, was BestEffort.
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "256Mi" }
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-systems

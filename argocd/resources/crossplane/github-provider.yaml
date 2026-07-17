@@ -10,3 +10,22 @@ metadata:
   name: provider-upjet-github
 spec:
   package: xpkg.upbound.io/crossplane-contrib/provider-upjet-github:v0.19.1
+  runtimeConfigRef: { name: github-runtime }
+---
+# FU-082: the monolithic upjet provider is the biggest BestEffort pod (~145Mi). Requests +
+# a limit with headroom (upjet spins per-resource terraform under the hood).
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: github-runtime
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+            - name: package-runtime
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits: { memory: "512Mi" }

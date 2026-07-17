@@ -14,6 +14,12 @@ spec:
         spec:
           containers:
             - name: package-runtime
+              # FU-082: provider-terraform runs `tofu` subprocesses — ~100Mi steady, spikes on
+              # plan/apply. Requests lift it out of BestEffort; limit has real headroom so a big
+              # plan degrades rather than OOM-kills mid-reconcile.
+              resources:
+                requests: { cpu: "100m", memory: "256Mi" }
+                limits: { memory: "512Mi" }
               env:
                 - name: GARAGE_ENDPOINT
                   value: http://garage-0.garage-headless.garage.svc.cluster.local:3903
