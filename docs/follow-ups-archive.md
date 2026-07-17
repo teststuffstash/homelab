@@ -8,6 +8,18 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-069** *(archived 2026-07-17)* — **Anomaly protocol propagated to every role.** The
+  `agent/error` breaker label + `AGENT_ERROR:` comment convention (live for reviews since
+  2026-07-12) now also covers: (a) the coordinator scan (excludes `agent/error`, reports
+  human-first); (b) the reviewer — homelab-reviewer App got `issues:write` (JWT-verified), STEP 0
+  trips the label itself; (a′) the worker recipes — both `.agents/fix.yaml` emit the breaker on
+  self-detected loop anomalies (oracle-fleet#39 + sleep-tracking#21, merged 2026-07-17). (c) was
+  obsolete by FU-068 (label claim-owned on migrated repos). Side quest: sleep-tracking#21 surfaced
+  a pre-existing date-rot test bug (fixtures with absolute June dates vs a rolling now() window) —
+  filed #22, the fixer nailed it in 2 rounds (found the SAME rot in a second file), which
+  unblocked #21. ⚠ Self-note: don't drive the review reflex with an external 90s poll loop — that
+  IS the runaway-dispatch pattern the breaker guards against; fire once, let the reflex own it.
+
 - **FU-024** *(archived 2026-07-17)* — **`guardrail: only-free` ENFORCED + live-fired.** The egress
   proxy 403s any non-`:free` model on an only-free session BEFORE spend (`_guardrail_reject`,
   openrouter-proxy.py; the operator writes GUARDRAIL into the session Secret). Live-fire

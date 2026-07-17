@@ -218,20 +218,6 @@ _Last updated: 2026-07-16._
       fixer ns, and flips agentstack.md §Decisions' "one global reflex" to "one per stack jail".
       Docker-ride dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns
       endpoint reads). Relates FU-045/FU-048/FU-050/FU-066.
-- [ ] **FU-069** — **Propagate the anomaly protocol beyond the review path.** The `agent/error`
-      circuit-breaker label + `AGENT_ERROR:` comment convention went live for reviews 2026-07-12
-      (reflex breakers + reviewer self-guard + exporter `AgentReviewLoop`/`AgentErrorFlagged`
-      alerts — `docs/agents/merge-path.md` §Runaway dispatch, born from the oracle-fleet#13
-      12-duplicate-approval loop). **(a) coordinator half DONE 2026-07-16:** `coordinator-scan`
-      excludes `agent/error` items from every actionable clause and reports them human-first;
-      the brief's label table carries the rule. **(b) DONE 2026-07-16:** homelab-reviewer App
-      has `issues:write` (declared + installation-approved, JWT-verified); reviewer-session.sh
-      STEP 0 now trips the label itself (and stops silently when one is already present).
-      **(c) OBSOLETE-BY-FU-068:** the label is live on every fixer repo — claim-owned
-      (Composition taxonomy) on the five migrated repos, labels.tf on the sleep repos.
-      **Remaining:** (a′) worker-recipe breaker — PRs armed 2026-07-16 (oracle-fleet#39 +
-      sleep-tracking#21, riding the reflex); close when both merge.
-
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
