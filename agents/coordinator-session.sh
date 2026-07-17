@@ -28,7 +28,10 @@
 #   # the egress proxy injects the subscription token — no raw ~1y token in any pod.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"
+# Jail (cockpit) uses tofu/kubeconfig; inside the reflex pod the file doesn't exist (gitignored,
+# absent from the clone) — fall back to the pod ServiceAccount, same pattern as agent-session.sh.
+# First exercised by the first autonomous C4/C5 spawn (meta-7): the hardcoded path killed the tick.
+if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
 # kubectl isn't on the bare jail PATH (devbox/nix tool); fall back to the devbox profile.
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
