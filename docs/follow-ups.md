@@ -204,38 +204,6 @@ _Last updated: 2026-07-16._
       graph to encode at build time: oracle-fleet #42/#50→#43, #45→iac#41, #46→SRV P1. Why not a
       `blocked` label: labels are state someone must remove — they rot; the body line is
       declarative, blockedness derived fresh each scan.
-- [ ] **FU-088** — **Capacity semaphores in the deterministic layer: subscription sessions +
-      OpenRouter credit (ADR-094).** (a) **Global subscription-session semaphore** — nothing counts
-      concurrent Claude-subscription pods: ticks, reviewers, and interactive rides all draw from
-      the one operator plan, and the ceiling was found by dying on it (2026-07-12 loop, 12
-      approvals until the session limit cut it). Enforce at dispatch: the scheduler defers a unit
-      when ≥N subscription-labelled pods are Running (label-selector count — the same mechanism as
-      the launcher pre-flight belt), report-only line instead of a doomed spawn. Struck again
-      2026-07-17: a review-reflex tick 429'd mid-run ("would exceed your account's rate limit",
-      `review-reflex-1784313000`) while reviewer sessions + interactive use stacked. **REACTIVE
-      LATCH SHIPPED 2026-07-17 (the detection half):** the egress proxy — the choke point every
-      subscription session flows through — latches on the first `/anthropic` upstream 429
-      (Retry-After or 900s hold, any 2xx clears early; `GET /anthropic-limit` serves the state),
-      and all four subscription launchers (`review-reflex.sh` tick, `reviewer-session.sh` incl.
-      the Sensor path, `coordinator-session.sh`, `agent-session.sh --harness claude`) probe it
-      via `agents/subscription-latch.sh` pre-spawn and defer report-only (fail-open when no proxy
-      is reachable, e.g. jail runs). The proxy also passively HARVESTS the
-      `anthropic-ratelimit-*` response headers (the sanctioned source — the same one the CLI
-      statusline's `rate_limits` 5h/7d block is fed from; cf. `/workspace/.claude/statusline.sh`
-      in the jail) and serves the last-seen set + its age on `/anthropic-limit`. STILL OPEN here:
-      threshold deferral on harvested utilization (defer BEFORE the 429 — wire once real header
-      names/values are on record in the proxy log), the ≥N Running pod-count semaphore
-      (proactive, prevents the burst that CAUSES the 429 — the latch only stops the pile-on),
-      and alerting on the latch. Non-load-bearing fallback only: the unofficial
-      `GET api.anthropic.com/api/oauth/usage` (claude-code#13585 is the open ask for an official
-      `claude quota`; ryan-knowone/quota-dashboard is a working reference). NOTE the OTLP
-      `claude_code_*` rail measures consumption (tokens/cost), never headroom — it cannot serve
-      as this semaphore's input. (b) **OpenRouter
-      out-of-funds gate** — account-level credit exhaustion today surfaces only as per-pod 402
-      retry storms AFTER spawn (the agent-runtime storm watchdog hard-stops in-pod, agent-runtime#8);
-      add a pre-dispatch probe (credits/key-status via the ADR-081 proxy) so worker dispatch defers
-      while the account is dry. Both are scan predicates under FU-086; (a) is a prerequisite for
-      any WIP >1. Relates FU-062 (registry/proxy), FU-086, ADR-094.
 - [ ] **FU-085** — **Coordinator edge-trigger: a `/coordinate` Sensor so the loop reacts in seconds;
       the `*/10` cron demotes to backstop.** Design + emitter analysis in
       `docs/agents/workflow.md` §Triggers → "The coordinator Sensor" (2026-07-17; motivating sting:

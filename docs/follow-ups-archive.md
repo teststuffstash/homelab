@@ -8,6 +8,24 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-088** *(archived 2026-07-17)* — **Capacity semaphores in the deterministic layer
+  (ADR-094): subscription sessions + OpenRouter credit — RESOLVED 2026-07-17, same-day build
+  after the second 429 incident (`review-reflex-1784313000`).** (a) The egress proxy (the choke
+  point all subscription traffic rides) latches on `/anthropic` 429s AND defers dispatch at
+  ≥80% window utilization (`ANTHROPIC_UTIL_THRESHOLD`), harvested passively from the
+  `anthropic-ratelimit-unified-{5h,7d}-*` response headers — the same sanctioned source the CLI
+  statusline's `rate_limits` block uses (probed live: 0–1 fractions, per-window resets; account
+  overage org-disabled). State on `GET /anthropic-limit` + Prometheus `/metrics`
+  (`anthropic_subscription_*`), Grafana `claude-subscription` dashboard, alerts
+  `SubscriptionDispatchLimited`/`SubscriptionWeeklyPoolLow`. All four launchers gate via
+  `agents/subscription-latch.sh` (fail-open off-cluster), which also enforces the proactive
+  concurrency semaphore: defer at ≥`SUBSCRIPTION_MAX_RUNNING` (3) Running pods labelled
+  `homelab.teststuff.net/subscription-session=claude`. (b) `agent-session.sh` defers OpenRouter
+  dispatch when account credit (probed via the proxy with the pod's opaque ref,
+  `/api/v1/credits`) is under `OPENROUTER_MIN_CREDIT` ($0.25). Acceptance: unit+live tests of
+  verdicts/metrics; live 19:15Z reflex tick honored the paired `reviewer.enabled` knob; live
+  probe seeded 5h=0.24/7d=0.48 through the rolled proxy. Fallback never wired by design: the
+  unofficial `oauth/usage` endpoint (claude-code#13585 / ryan-knowone/quota-dashboard).
 - **FU-026** *(archived 2026-07-17)* — **Coordinator graduated off the hand-driven CronJob+bash
   substrate → Argo Workflows + Events (ADR-093, Accepted 2026-07-17; the ADR marks this
   discharged by Phase 1).** Live: all four reflexes are Argo CronWorkflows
