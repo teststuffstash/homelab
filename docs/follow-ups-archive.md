@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-083** *(archived 2026-07-17)* — **agent-finalize no longer misclassifies raw-command adhoc
+  rides as failed.** Adhoc tasks (not `issue-*`/`pr-*`) with `harness_exit==0` now classify as
+  clean instead of `failed/no-output` — the adhoc branch sits after every failure signature, so
+  fix rides are unaffected; review finding added `ci_passed is not False` to the clean gate.
+  Shipped agent-runtime#16 (merged 2026-07-16), deployed via deploy-pin
+  `agent-base:2026.7.16-g55879b292003` (homelab#30). Not yet re-validated by a live adhoc ride —
+  next `--run`-style verification ride doubles as the check.
+
 - **FU-069** *(archived 2026-07-17)* — **Anomaly protocol propagated to every role.** The
   `agent/error` breaker label + `AGENT_ERROR:` comment convention (live for reviews since
   2026-07-12) now also covers: (a) the coordinator scan (excludes `agent/error`, reports

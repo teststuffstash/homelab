@@ -175,14 +175,6 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
-- [ ] **FU-083** — **agent-finalize misclassifies raw-command adhoc rides as failed.** The FU-081
-      validation ride r4 ran `--run "devbox run e2e"` (no harness) to a GREEN gate, but
-      AGENT_RUN_STATS said `exit_status:"failed", error_class:"no-output"` — the classifier
-      expects harness-shaped output in /tmp/run.log and pushes failure metrics to the ledger for
-      a successful ride. Cosmetic for tasked rides (always harnessed) but poisons the agent_run
-      metrics/ledger for ad-hoc verification rides. Fix in agent-runtime (agent-finalize):
-      when no harness marker is found, fall back to HARNESS_EXIT for exit_status and
-      error_class none/nonzero-exit-N.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
