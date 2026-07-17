@@ -87,6 +87,40 @@ cant-repro | max-rounds-exceeded | review flip-flop    → coordinator tie-break
 Spawning a round = the existing `agents/agent-session.sh` mechanism (→ an `agent-sandbox` `Sandbox`
 CR once that lands, ADR-078/081).
 
+### Capacity gates — a tick vs a hot subscription (FU-088, 2026-07-17)
+
+Every subscription spawn is preceded by a deterministic probe (`agents/subscription-latch.sh` →
+the egress proxy's `GET /anthropic-limit`). **Schedules always fire; capacity only turns the
+spawn into a report-only line.** Concretely — the coordinator cron fires while the 5h window sits
+at 85%:
+
+1. The `*/10` CronWorkflow runs the deterministic scan normally (`gh` reads — no LLM, no
+   subscription traffic, so the scan itself can never worsen the situation).
+2. When the scan decides a stack needs an LLM tick, `coordinator-session.sh` probes the proxy
+   *before* creating the pod. 85% ≥ the 80% threshold (`ANTHROPIC_UTIL_THRESHOLD`) →
+   `{limited: true, reason: "utilization-5h"}` → the launcher prints
+   `→ coordinator tick deferred — subscription rate-limited (FU-088)` and exits 0. No pod, no
+   session burned, nothing to clean up.
+3. There is no state to unwind: the verdict is recomputed on every probe from the last-harvested
+   `anthropic-ratelimit-unified-*` headers, and a window whose reset epoch has passed is dead
+   data by construction. The next cron firing re-probes; once the 5h window resets (or usage
+   drops back under the threshold) dispatch resumes by itself — level-triggered, no human step.
+4. The review path gates harder: the reflex tick exits at its step 0a *before any GraphQL
+   spend*, and the Sensor (edge-trigger) path defers inside `reviewer-session.sh` via the same
+   probe — a parked review loses nothing, the `*/15` backstop re-lists the PR later.
+5. In-flight sessions are never killed by the gates. If one drives the window over the top
+   anyway, the proxy's 429 latch (Retry-After or 900s, any 2xx clears early) catches the next
+   dispatch — and on this account overage is org-disabled, so a hot window hard-429s rather
+   than spilling to paid.
+
+Two more gates ride the same probe script: the **concurrency semaphore** (≥
+`SUBSCRIPTION_MAX_RUNNING`, default 3, Running pods labelled
+`homelab.teststuff.net/subscription-session=claude` → defer — the proactive half that prevents
+the burst which *causes* a 429) and, for OpenRouter workers, the **account-credit floor** in
+`agent-session.sh` (FU-088b, `OPENROUTER_MIN_CREDIT`). Observability: Grafana
+`claude-subscription` (utilization vs threshold, data age, deferral state) + the
+`SubscriptionDispatchLimited` (deferring >15m) and `SubscriptionWeeklyPoolLow` alerts.
+
 ### Triggers: polling first, webhooks as an edge-trigger on top
 
 - **Don't build a pure-webhook system.** Deliveries get missed and the coordinator can be down.

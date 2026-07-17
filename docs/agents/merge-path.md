@@ -492,6 +492,19 @@ contract-versioning discipline), not a merge-path mechanism.
   PR; removing it resumes. Budget framing: workers are cost-capped by their per-round OpenRouter
   keys, but reviewer/coordinator sessions ride the flat-rate subscription where no $-cap exists —
   there the budget IS a dispatch bound, which is what the breakers enforce.
+- **Subscription/OpenRouter capacity — the FU-088 dispatch gates** (2026-07-17, after the second
+  429 incident; archived same day). Orthogonal to the breakers above: those bound *how often* a
+  buggy predicate can dispatch, these bound dispatch against the *shared account's headroom*.
+  All subscription launchers (reflex tick step 0a, `reviewer-session.sh` incl. the Sensor path,
+  `coordinator-session.sh`, `agent-session.sh --harness claude`) run
+  `agents/subscription-latch.sh` pre-spawn: defer (report-only, exit 0) when the egress proxy's
+  `GET /anthropic-limit` says limited — a 429 latch OR ≥80% utilization in the 5h/7d window
+  (harvested passively from `anthropic-ratelimit-unified-*` response headers) — or when ≥3
+  subscription-labelled pods are already Running. OpenRouter workers get the account-credit
+  floor instead. Fail-open off-cluster; schedules never suspend — a deferred spawn simply
+  re-probes on the next level-triggered pass. Walkthrough of the deferred-tick flow:
+  [`workflow.md`](workflow.md) §Capacity gates. Alerts: `SubscriptionDispatchLimited`,
+  `SubscriptionWeeklyPoolLow`; dashboard `claude-subscription`.
 - **Flaky CI** — a flaky red steals the PR's queue slot (next PR gets updated first). Acceptable:
   FIFO is a fairness preference, not a correctness requirement.
 - **Concurrent triggers / locking** — cron tick + wake-up ping firing together must never

@@ -159,7 +159,13 @@ double-spawns.
    (finding C: never leave "which branch" to the model). The launcher **pre-flight** (FU-042) refuses
    to dispatch when the issue already has an open agent PR, when a worker pod is already Running in
    the project, or when the session key has <30 min of real life — a refusal means fix the state
-   (resume the PR / wait / re-mint), not retry. Terminal bookkeeping (auto-merge arming, the stats
+   (resume the PR / wait / re-mint), not retry. Distinct from a refusal: a **capacity deferral**
+   (FU-088) — every subscription launcher (this one, the reviewer, claude-tier workers) probes
+   `agents/subscription-latch.sh` pre-spawn and exits 0 with a `deferred — subscription
+   rate-limited` line when the egress proxy reports a 429 latch, ≥80% window utilization, or ≥3
+   subscription pods already Running (OpenRouter workers: the account-credit floor). Deferrals
+   need NO operator action — the next cron/backstop pass re-probes and resumes once the window
+   resets; flow walkthrough in docs/agents/workflow.md §Capacity gates. Terminal bookkeeping (auto-merge arming, the stats
    comment, the `AGENT_STRIKE` issue comment, and a salvage-push of any committed-but-unpushed work)
    now runs **in-pod** via agent-finalize — a strike comment mentioning a **resumable branch** means
    the next round should `--work-branch` it rather than restart.
