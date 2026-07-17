@@ -185,7 +185,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}" }
+  labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}", "homelab.teststuff.net/subscription-session": claude }
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5

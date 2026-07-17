@@ -1,0 +1,17 @@
+# FU-088: subscription-headroom metrics (/metrics on the proxy) → Prometheus. Picked up
+# cluster-wide (serviceMonitorSelectorNilUsesHelmValues=false in tofu/monitoring.tf) — the
+# github-exporter pattern.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: openrouter-proxy
+  labels:
+    app: openrouter-proxy
+spec:
+  selector:
+    matchLabels:
+      app: openrouter-proxy
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 60s

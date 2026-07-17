@@ -1,0 +1,36 @@
+# FU-088 alerting: the latch/threshold state that defers agent dispatch should never sit
+# unnoticed (the 2026-07-12 and 2026-07-17 429 incidents were both discovered by a human reading
+# pod output). Alertmanager routes to the Home Assistant webhook (tofu/monitoring.tf).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: openrouter-proxy
+  labels:
+    app: openrouter-proxy
+spec:
+  groups:
+    - name: claude-subscription
+      rules:
+        # Dispatch has been deferring (429 latch or ≥threshold utilization) for 15m — batch
+        # work is parked; decide whether to wait out the window or pause interactive use.
+        - alert: SubscriptionDispatchLimited
+          expr: anthropic_subscription_dispatch_limited == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Claude subscription dispatch is deferred"
+            description: 'Agent dispatch (reviewers/coordinator/claude-tier workers) has been deferring for 15m — 5h utilization {{ with query "anthropic_subscription_utilization{window=''5h''}" }}{{ . | first | value | humanizePercentage }}{{ end }}, 7d {{ with query "anthropic_subscription_utilization{window=''7d''}" }}{{ . | first | value | humanizePercentage }}{{ end }}. Probe: GET openrouter-proxy.agent-egress:8080/anthropic-limit.'
+
+        # The WEEKLY pool is the scarce one (5h refills fast): >90% with >1 day to the reset
+        # means the rest of the week runs on fumes even though 5h windows keep clearing.
+        - alert: SubscriptionWeeklyPoolLow
+          expr: >-
+            anthropic_subscription_utilization{window="7d"} > 0.9
+            and (anthropic_subscription_reset_timestamp_seconds{window="7d"} - time()) > 86400
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Claude subscription weekly pool above 90%"
+            description: '7d utilization is {{ $value | humanizePercentage }} with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'

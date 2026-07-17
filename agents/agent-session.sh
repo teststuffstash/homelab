@@ -185,8 +185,10 @@ fi
 # the FU-066(e) coordinator-image interim is retired. Needs AGENT_BASE_IMAGE ≥ the
 # agent-runtime#14 build (the deploy-pin bump in images.env); on an older pin the ride fails
 # loudly at `claude: command not found` → one strike, no silent damage.
-CLAUDE_ENV=""
+CLAUDE_ENV=""; SUB_LABEL=""
 if [ "$HARNESS" = "claude" ]; then
+  # FU-088: mark subscription-drawing pods for the concurrency semaphore's label-selector count
+  SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude'
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
@@ -401,10 +403,26 @@ DIND
 fi
 
 # FU-088(a): a claude-harness worker draws on the one operator subscription — defer the spawn
-# while the egress proxy's 429 latch is set (OpenRouter harnesses are unaffected).
+# while the egress proxy's 429 latch / utilization threshold / concurrency semaphore says so
+# (OpenRouter harnesses are unaffected).
 if [ "$HARNESS" = "claude" ] && ! bash "$HERE/subscription-latch.sh"; then
-  echo "→ ${PROJECT} claude-tier dispatch deferred — subscription rate-limited (FU-088 latch)"
+  echo "→ ${PROJECT} claude-tier dispatch deferred — subscription limited (FU-088)"
   exit 0
+fi
+
+# FU-088(b): account-level OpenRouter credit gate — credit exhaustion otherwise surfaces only as
+# per-pod 402 retry storms AFTER spawn (agent-runtime#8 hard-stops in-pod; this saves the spawn).
+# Probes the account's credit balance through the proxy with the pod's own opaque ref — no key
+# material touches this launcher. Fail-open on any probe failure.
+if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
+  OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"
+  credits="$(curl -fsS --max-time 10 -H "Authorization: Bearer ref:${NS}/${SECRET}" \
+    "$PROXY_URL/api/v1/credits" 2>/dev/null \
+    | jq -r 'try ((.data.total_credits // empty) - (.data.total_usage // 0)) catch empty' 2>/dev/null)" || credits=""
+  if [ -n "$credits" ] && awk -v c="$credits" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
+    echo "→ ${PROJECT} dispatch deferred — OpenRouter account credit \$${credits} below the \$${OR_MIN} floor (FU-088b; top up, or OPENROUTER_MIN_CREDIT / AGENT_CREDIT_GATE=0 to override)"
+    exit 0
+  fi
 fi
 
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
@@ -412,7 +430,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-session, project: ${PROJECT} }
+  labels: { app: agent-session, project: ${PROJECT}${SUB_LABEL} }
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5

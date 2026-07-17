@@ -55,11 +55,49 @@ ANTHROPIC_429_HOLD_S = int(os.environ.get("ANTHROPIC_429_HOLD_S", "900"))
 # with `anthropic-ratelimit-*` headers — the same source the Claude Code statusline's
 # `rate_limits` block (5h/7d used_percentage + resets_at) is fed from. Since all subscription
 # traffic rides this leg, the last-seen set + its age is served on /anthropic-limit for free —
-# no extra API call, no undocumented usage endpoint. Threshold-based deferral on utilization
-# (defer BEFORE the 429) is the FU-088 next increment, once real header names/values are on
-# record here.
-_latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0}
+# no extra API call, no undocumented usage endpoint. Real shape (probed live 2026-07-17):
+# `anthropic-ratelimit-unified-{5h,7d}-utilization` is a 0–1 FRACTION, each window carries its
+# own `-reset` epoch + `-status`; overage is org-disabled on this account, so hitting a window
+# hard-stops (429) rather than spilling to paid.
+# Threshold deferral: dispatch reads limited=true once EITHER window's utilization crosses
+# ANTHROPIC_UTIL_THRESHOLD (fraction; 0 disables) and that window hasn't reset yet — deferring
+# BEFORE the 429 leaves headroom for interactive rides instead of burning it on batch spawns.
+ANTHROPIC_UTIL_THRESHOLD = float(os.environ.get("ANTHROPIC_UTIL_THRESHOLD", "0.80"))
+_latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
+          "windows": {}, "count_429": 0}
 _latch_lock = threading.Lock()
+
+
+def _parse_windows(seen: dict) -> dict:
+    """{'5h': {'utilization': 0.19, 'reset': 1784331600.0, 'status': 'allowed'}, '7d': …}
+    from the harvested headers — absent/malformed fields drop the window (no guessing)."""
+    windows = {}
+    for w in ("5h", "7d"):
+        try:
+            windows[w] = {
+                "utilization": float(seen[f"anthropic-ratelimit-unified-{w}-utilization"]),
+                "reset": float(seen[f"anthropic-ratelimit-unified-{w}-reset"]),
+                "status": seen.get(f"anthropic-ratelimit-unified-{w}-status", ""),
+            }
+        except (KeyError, ValueError):
+            pass
+    return windows
+
+
+def _dispatch_verdict(now: float) -> tuple[bool, str | None, dict]:
+    """The composite launcher answer: (limited, reason, windows). 429 latch wins; otherwise a
+    window past the utilization threshold that hasn't reset yet defers dispatch. A window whose
+    reset epoch has passed is dead data, never a verdict — stale headers can't wedge dispatch."""
+    with _latch_lock:
+        until = _latch["until"]
+        windows = {k: dict(v) for k, v in _latch["windows"].items()}
+    if until > now:
+        return True, "429-latch", windows
+    if ANTHROPIC_UTIL_THRESHOLD > 0:
+        for w, data in sorted(windows.items()):
+            if data["utilization"] >= ANTHROPIC_UTIL_THRESHOLD and now < data["reset"]:
+                return True, f"utilization-{w}", windows
+    return False, None, windows
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -305,6 +343,7 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
     if seen:
         with _latch_lock:
             _latch["headers"], _latch["headers_at"] = seen, now
+            _latch["windows"] = _parse_windows(seen)
         unified = seen.get("anthropic-ratelimit-unified-status", "")
         if unified and unified != "allowed":
             log(f"anthropic ratelimit headers: {json.dumps(seen)}")
@@ -316,6 +355,7 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
         with _latch_lock:
             _latch["until"] = now + hold
             _latch["last_429"] = now
+            _latch["count_429"] += 1
         log(f"anthropic 429 — subscription LATCHED for {hold:.0f}s (launchers defer via /anthropic-limit)")
         return "+429-latched"
     if 200 <= status < 300:
@@ -399,11 +439,15 @@ class Proxy(BaseHTTPRequestHandler):
             # FU-088(a): the launcher-side probe (agents/subscription-latch.sh). limited=true →
             # every subscription launcher defers its spawn until the latch expires/clears.
             now = time.time()
+            limited, reason, windows = _dispatch_verdict(now)
             with _latch_lock:
                 until, last = _latch["until"], _latch["last_429"]
                 seen, seen_at = dict(_latch["headers"]), _latch["headers_at"]
             payload = json.dumps({
-                "limited": until > now,
+                "limited": limited,
+                "reason": reason,
+                "threshold": ANTHROPIC_UTIL_THRESHOLD,
+                "windows": windows,
                 "until_epoch": round(until),
                 "remaining_s": max(0, round(until - now)),
                 "last_429_epoch": round(last),
@@ -412,6 +456,48 @@ class Proxy(BaseHTTPRequestHandler):
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path == "/metrics":
+            # FU-088 observability: subscription headroom → Prometheus (ServiceMonitor in this
+            # app). Window gauges only exist once a subscription request has flowed — absent
+            # series ≠ zero utilization, dashboards should show "no data yet" honestly.
+            now = time.time()
+            limited, reason, windows = _dispatch_verdict(now)
+            with _latch_lock:
+                until, count_429 = _latch["until"], _latch["count_429"]
+                seen_at = _latch["headers_at"]
+            lines = [
+                "# TYPE anthropic_subscription_utilization gauge",
+                "# HELP anthropic_subscription_utilization Last-seen unified rate-limit utilization (0-1 fraction) per window.",
+            ]
+            for w, data in sorted(windows.items()):
+                lines.append(f'anthropic_subscription_utilization{{window="{w}"}} {data["utilization"]}')
+            lines += [
+                "# TYPE anthropic_subscription_reset_timestamp_seconds gauge",
+            ]
+            for w, data in sorted(windows.items()):
+                lines.append(f'anthropic_subscription_reset_timestamp_seconds{{window="{w}"}} {data["reset"]:.0f}')
+            lines += [
+                "# TYPE anthropic_subscription_headers_age_seconds gauge",
+                f"anthropic_subscription_headers_age_seconds {now - seen_at:.0f}" if seen_at
+                else "anthropic_subscription_headers_age_seconds NaN",
+                "# TYPE anthropic_subscription_utilization_threshold gauge",
+                f"anthropic_subscription_utilization_threshold {ANTHROPIC_UTIL_THRESHOLD}",
+                "# TYPE anthropic_subscription_latched gauge",
+                "# HELP anthropic_subscription_latched 1 while the reactive 429 latch holds.",
+                f"anthropic_subscription_latched {1 if until > now else 0}",
+                "# TYPE anthropic_subscription_dispatch_limited gauge",
+                "# HELP anthropic_subscription_dispatch_limited The composite /anthropic-limit verdict launchers defer on (429 latch OR utilization threshold).",
+                f"anthropic_subscription_dispatch_limited {1 if limited else 0}",
+                "# TYPE anthropic_subscription_429_total counter",
+                f"anthropic_subscription_429_total {count_429}",
+            ]
+            payload = ("\n".join(lines) + "\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)

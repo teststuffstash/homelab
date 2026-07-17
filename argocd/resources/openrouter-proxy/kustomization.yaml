@@ -10,8 +10,16 @@ resources:
   - rbac.yaml
   - deployment.yaml
   - service.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml
 
 configMapGenerator:
   - name: openrouter-proxy-script
     files:
       - openrouter-proxy.py
+  - name: grafana-dashboard-subscription
+    files:
+      - subscription.json=dashboard-subscription.json
+    options:
+      labels:
+        grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces

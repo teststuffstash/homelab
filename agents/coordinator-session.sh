@@ -185,7 +185,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${POD}
-  labels: { app: agent-coordinator }
+  labels: { app: agent-coordinator, "homelab.teststuff.net/subscription-session": claude }
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
