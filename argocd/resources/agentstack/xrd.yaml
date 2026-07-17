@@ -57,6 +57,34 @@ spec:
                   description: >-
                     Claude model alias for the stack's coordinator sessions (sonnet/opus).
                     The coordinator is subscription-run; workers use OpenRouter (workerModel).
+                coordinator:
+                  type: object
+                  default: {}
+                  description: >-
+                    The stack's coordinator loop — dispatches workers, spends budget (FU-080).
+                    Rendered as a PER-STACK coordinator CronWorkflow (ADR-093) in <stack>-agents,
+                    running as the stack loop SA, so the stack owns its own loop instead of a
+                    global reflex driving every stack. This is the FU-050 autonomy switch made
+                    per-stack: enable a proven stack while newer ones stay off.
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: false
+                      description: >-
+                        Opt THIS stack in to autonomous coordination. Default OFF — the
+                        CronWorkflow renders suspended; flip per stack when you trust its loop.
+                reviewer:
+                  type: object
+                  default: {}
+                  description: >-
+                    The stack's PR review (the ADR-093 edge-trigger + backstop). Default ON —
+                    reviewing green, unapproved PRs is SAFE (it never dispatches new work or
+                    spends worker budget). Set enabled:false only to opt a stack out entirely.
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                      description: Auto-review this stack's PRs. Default on.
                 workerModel:
                   type: string
                   description: >-

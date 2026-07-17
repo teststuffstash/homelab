@@ -56,6 +56,9 @@ stacks_json() {
         coordinatorModel: (.spec.coordinatorModel // "sonnet"),
         workerModel: .spec.workerModel,
         workerModelFallbacks: (.spec.workerModelFallbacks // []),
+        # FU-080 per-stack autonomy knob: only spawn the LLM coordinator for a stack that opted in
+        # (default false). Graduated autonomy — enable a proven stack while newer ones stay off.
+        coordinatorEnabled: (.spec.coordinator.enabled // false),
         # repos whose fixer declared docker=true: dispatch their workers with
         # agent-session.sh --docker (kata microVM + dind — the CI-gate runtime choice)
         dockerRepos: [.spec.repos[] | select(.fixer.docker == true) | .name]
@@ -166,6 +169,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   echo "stack ${name}: ACTIONABLE —"
   printf '%b' "$items"
 
+  # FU-080 coordinator knob: default-off, opt in per stack via the claim's spec.coordinator.enabled.
+  coord_enabled="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')"
+  if [ -n "$SPAWN" ] && [ "$coord_enabled" != "true" ]; then
+    echo "  coordinator.enabled=false for stack ${name} — NOT spawning (report-only; enable in the AgentStack claim)."
+    continue
+  fi
   if [ -n "$SPAWN" ]; then
     echo "→ spawning headless coordinator tick for ${name}…"
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
