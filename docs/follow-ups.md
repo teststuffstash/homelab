@@ -219,12 +219,16 @@ _Last updated: 2026-07-16._
       and all four subscription launchers (`review-reflex.sh` tick, `reviewer-session.sh` incl.
       the Sensor path, `coordinator-session.sh`, `agent-session.sh --harness claude`) probe it
       via `agents/subscription-latch.sh` pre-spawn and defer report-only (fail-open when no proxy
-      is reachable, e.g. jail runs). STILL OPEN here: the ≥N Running pod-count semaphore
-      (proactive, prevents the burst that CAUSES the 429 — the latch only stops the pile-on) and
-      alerting on the latch metric. Bonus sensing (deliberately not load-bearing — unofficial,
-      may vanish): `GET api.anthropic.com/api/oauth/usage` (OAuth bearer + oauth beta → 5h/weekly
-      utilization + resets_at) — claude-code#13585 is the open ask for an official `claude quota`;
-      ryan-knowone/quota-dashboard is a working reference implementation. NOTE the OTLP
+      is reachable, e.g. jail runs). The proxy also passively HARVESTS the
+      `anthropic-ratelimit-*` response headers (the sanctioned source — the same one the CLI
+      statusline's `rate_limits` 5h/7d block is fed from; cf. `/workspace/.claude/statusline.sh`
+      in the jail) and serves the last-seen set + its age on `/anthropic-limit`. STILL OPEN here:
+      threshold deferral on harvested utilization (defer BEFORE the 429 — wire once real header
+      names/values are on record in the proxy log), the ≥N Running pod-count semaphore
+      (proactive, prevents the burst that CAUSES the 429 — the latch only stops the pile-on),
+      and alerting on the latch. Non-load-bearing fallback only: the unofficial
+      `GET api.anthropic.com/api/oauth/usage` (claude-code#13585 is the open ask for an official
+      `claude quota`; ryan-knowone/quota-dashboard is a working reference). NOTE the OTLP
       `claude_code_*` rail measures consumption (tokens/cost), never headroom — it cannot serve
       as this semaphore's input. (b) **OpenRouter
       out-of-funds gate** — account-level credit exhaustion today surfaces only as per-pod 402

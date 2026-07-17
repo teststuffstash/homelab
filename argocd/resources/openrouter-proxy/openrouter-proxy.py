@@ -51,7 +51,14 @@ OAUTH_BETA = "oauth-2025-04-20"
 # (e.g. an interactive session after the window reset) clears it. In-memory by design — a proxy
 # restart forgets, the next 429 re-latches.
 ANTHROPIC_429_HOLD_S = int(os.environ.get("ANTHROPIC_429_HOLD_S", "900"))
-_latch = {"until": 0.0, "last_429": 0.0}
+# Passive headroom harvest (the upgrade path past 429-only): Anthropic answers every request
+# with `anthropic-ratelimit-*` headers — the same source the Claude Code statusline's
+# `rate_limits` block (5h/7d used_percentage + resets_at) is fed from. Since all subscription
+# traffic rides this leg, the last-seen set + its age is served on /anthropic-limit for free —
+# no extra API call, no undocumented usage endpoint. Threshold-based deferral on utilization
+# (defer BEFORE the 429) is the FU-088 next increment, once real header names/values are on
+# record here.
+_latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0}
 _latch_lock = threading.Lock()
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
@@ -293,6 +300,14 @@ def pin_for(model: str) -> dict | None:
 def _anthropic_latch_update(status: int, resp_headers) -> str:
     """FU-088(a): fold one /anthropic upstream status into the 429 latch. Returns a note suffix."""
     now = time.time()
+    seen = {k.lower(): v for k, v in resp_headers.items()
+            if k.lower().startswith("anthropic-ratelimit")}
+    if seen:
+        with _latch_lock:
+            _latch["headers"], _latch["headers_at"] = seen, now
+        unified = seen.get("anthropic-ratelimit-unified-status", "")
+        if unified and unified != "allowed":
+            log(f"anthropic ratelimit headers: {json.dumps(seen)}")
     if status == 429:
         try:  # Retry-After may be absent or an HTTP-date — both fall back to the fixed hold
             hold = float(resp_headers.get("retry-after") or 0) or ANTHROPIC_429_HOLD_S
@@ -386,11 +401,14 @@ class Proxy(BaseHTTPRequestHandler):
             now = time.time()
             with _latch_lock:
                 until, last = _latch["until"], _latch["last_429"]
+                seen, seen_at = dict(_latch["headers"]), _latch["headers_at"]
             payload = json.dumps({
                 "limited": until > now,
                 "until_epoch": round(until),
                 "remaining_s": max(0, round(until - now)),
                 "last_429_epoch": round(last),
+                "ratelimit_headers": seen,
+                "headers_age_s": round(now - seen_at) if seen_at else None,
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
