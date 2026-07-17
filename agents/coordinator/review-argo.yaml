@@ -48,6 +48,12 @@ spec:
       port: "12000"
       endpoint: /review
       method: POST
+    # FU-085: the coordinator doorbell — POST /coordinate {repo} wakes the scan in seconds where
+    # the */10 cron would wait minutes. Consumed by the `coordinator` Sensor (coordinate-argo.yaml).
+    coordinate:
+      port: "12000"
+      endpoint: /coordinate
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

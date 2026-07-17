@@ -678,6 +678,15 @@ if [ -n "$RUN_CMD" ]; then
       echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
     fi
   fi
+  # FU-085: ring the coordinator doorbell — a tasked worker's terminal state is scan-actionable
+  # (C4/C5 re-dispatch, strike chain-walk, C6 bookkeeping). Doorbell, never a work item: the scan
+  # re-lists and re-applies the full predicate; a false wake costs `gh` calls, not an LLM tick.
+  # Fail-open: unreachable off-cluster (jail runs — the cron backstop covers those).
+  if [ -n "$STRIKE_APPLIES" ]; then
+    curl -m 5 -s -X POST -d "{\"repo\":\"${PROJECT}\"}" \
+      "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+      >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate repo=${PROJECT})" || true
+  fi
   rm -f "$RUNLOG"
 else
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"

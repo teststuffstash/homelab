@@ -51,3 +51,12 @@ jobs:
           RENOVATE_CONFIG_FILE: ${{ github.workspace }}/.github/renovate-global.json # the global baseline
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
           RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || '' }}
+
+      # FU-085: Renovate may have opened/updated PRs the coordinator owns (deps-review, major).
+      # Ring the doorbell (in-cluster ARC runner → ClusterIP svc); a false wake costs a scan.
+      - name: Ring the coordinator doorbell
+        if: always()
+        run: |
+          curl -m 5 -s -X POST -d '{"repo":"all"}' \
+            http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate \
+            >/dev/null || true

@@ -88,41 +88,12 @@ spec:
   suspend: false # per-stack autonomy via claim coordinator.enabled (FU-080); global kill switch stays here
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
+  # FU-085 refactor: the scan container lives in the `coordinate` WorkflowTemplate
+  # (coordinate-argo.yaml) — this cron is the level-triggered BACKSTOP, the /coordinate Sensor is
+  # the edge. The template carries the FU-088 semaphore + the coordinator-scan mutex (Forbid
+  # doesn't see Sensor submissions). Demote */10 → */30 once the edge proves itself in live use.
   workflowSpec:
-    serviceAccountName: agent-coordinator
-    activeDeadlineSeconds: 1800
-    ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
-    # FU-088 Argo layer: queue behind the subscription pool (ConfigMap header above).
-    synchronization:
-      semaphores:
-        - configMapKeyRef: { name: subscription-capacity, key: claude }
-    entrypoint: main
-    volumes:
-      - { name: work, emptyDir: {} }
-      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
-    templates:
-      - name: main
-        container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
-          command: ["bash", "-lc"]
-          args:
-            - |
-              set -e
-              rm -rf /work/homelab
-              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-              exec bash /work/homelab/agents/coordinator-scan.sh --spawn
-          env:
-            - { name: HOME, value: "/home/node" }
-            - { name: ORG, value: "teststuffstash" }
-            - name: GH_TOKEN
-              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
-          volumeMounts:
-            - { name: work, mountPath: /work }
-            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
-          resources:
-            requests: { cpu: "100m", memory: "256Mi" }
-            limits: { memory: "512Mi" }
+    workflowTemplateRef: { name: coordinate }
 ---
 # Model scout — weekly catalog diff + canary (FU-062). GLOBAL (fleet-wide by nature).
 apiVersion: argoproj.io/v1alpha1

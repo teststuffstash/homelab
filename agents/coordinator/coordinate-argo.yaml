@@ -1,0 +1,109 @@
+# Coordinator edge-trigger (FU-085, docs/agents/workflow.md §Triggers ▸ "The coordinator Sensor")
+# — the review-argo.yaml pattern applied to the coordinator: POST /coordinate {repo} on the
+# agent-loop EventSource → this Sensor → a `coordinate` Workflow running the deterministic scan.
+#
+# THE EVENT IS A DOORBELL, NEVER A WORK ITEM: the payload only scopes (`{repo}`, v1 logs it and
+# re-lists everything); the scan re-applies the FULL predicate (C4/C5 probes, FU-080
+# coordinator.enabled, FU-088 capacity via coordinator-session's latch probe). A false/duplicate
+# wake costs a handful of `gh` calls, never an LLM tick — emitters may over-approximate freely.
+# Emitters (workflow.md table): agent-session.sh at worker-terminal, reviewer-session.sh after a
+# verdict, devbox-update at PR-open; the mono jail keeps `devbox run coordinate-now` (kubectl
+# path); stack jails curl this webhook — no RBAC into agent-coordinator needed (airlock-aligned).
+#
+# Serialization: the `coordinator-scan` mutex (here, in the WorkflowTemplate) makes Sensor
+# submissions and the */10 CronWorkflow backstop (reflexes-argo.yaml, workflowTemplateRef to the
+# SAME template) mutually exclusive — Cron `Forbid` alone does NOT see Sensor submissions. The
+# Sensor trigger rateLimit is the dumb outer belt. Cron demotes */10 → */30 after the edge proves
+# itself in live use (FU-084 GraphQL burn).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: coordinator
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review # same submit-only Role (workflows/workflowtemplates create)
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: coordinate-dep
+      eventSourceName: agent-loop
+      eventName: coordinate
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 2 } # dumb outer belt vs emitter storms
+      template:
+        name: submit-coordinate
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: coordinate-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: coordinate }
+                arguments:
+                  parameters:
+                    - { name: repo, value: "all" }
+          parameters:
+            # dataKey missing from the POST body → the static `value` above stays (unscoped scan).
+            - src: { dependencyName: coordinate-dep, dataKey: body.repo, value: "all" }
+              dest: spec.arguments.parameters.0.value
+---
+# The coordinate Workflow — the coordinator-reflex CronWorkflow's inline container, extracted so
+# the cron backstop and the Sensor edge both workflowTemplateRef ONE definition (the review-argo
+# refactor shape). Carries the FU-088 subscription semaphore + the coordinator-scan mutex for
+# every submission path.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: coordinate
+  namespace: agent-coordinator
+spec:
+  serviceAccountName: agent-coordinator
+  activeDeadlineSeconds: 1800
+  ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+  synchronization:
+    mutexes:
+      - name: coordinator-scan # one scan at a time across cron + Sensor submissions
+    semaphores:
+      - configMapKeyRef: { name: subscription-capacity, key: claude } # FU-088 pool
+  arguments:
+    parameters:
+      - { name: repo, value: "all" }
+  entrypoint: main
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: main
+      metadata:
+        labels: { app: coordinate-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            echo "coordinate: doorbell scope={{workflow.parameters.repo}} (v1: scope is logged only — the scan re-lists everything)"
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: ORG, value: "teststuffstash" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "512Mi" }

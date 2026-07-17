@@ -286,3 +286,9 @@ echo "→ review submitted on ${REPO_SLUG}#${PR}. verdict:"
 gh pr view "${PR}" --repo "${REPO_SLUG}" --json reviewDecision -q .reviewDecision 2>/dev/null | sed 's/^/    reviewDecision=/' || true
 echo "  (APPROVED + CI green ⇒ auto-merge completes the PR; CHANGES_REQUESTED ⇒ back to the worker.)"
 echo "  remove the pod:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
+# FU-085: a verdict is scan-actionable (CHANGES_REQUESTED → round N+1 is the coordinator's move) —
+# ring the doorbell instead of waiting out the */10 cron. Cheap over-approximation: ring on every
+# verdict, the scan re-applies the full predicate. Fail-open off-cluster.
+curl -m 5 -s -X POST -d "{\"repo\":\"${PROJECT}\"}" \
+  "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+  >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate repo=${PROJECT})" || true

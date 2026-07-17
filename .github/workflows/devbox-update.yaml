@@ -75,3 +75,12 @@ jobs:
           devbox global add gh jq
           eval "$(devbox global shellenv)"
           bash scripts/devbox-update.sh
+
+      # FU-085: this run may have opened un-armed `major` PRs — the coordinator owns those.
+      # Ring the doorbell (in-cluster ARC runner → ClusterIP svc); a false wake costs a scan.
+      - name: Ring the coordinator doorbell
+        if: always()
+        run: |
+          curl -m 5 -s -X POST -d "{\"repo\":\"${{ matrix.repo }}\"}" \
+            http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate \
+            >/dev/null || true
