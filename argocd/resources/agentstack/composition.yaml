@@ -132,6 +132,30 @@ spec:
             {{- $enforce := default false (get $eg "enforce") }}
             {{- $docker := default false (get $fx "docker") }}
             ---
+            # Transcript-capture WRITE-ONLY S3 key, mirrored in-namespace (FU-080 a): worker pods
+            # secretKeyRef it locally, so no launcher reads key material and no cross-namespace
+            # exception is needed. Source of truth stays the Crossplane-terraform-minted Secret in
+            # agent-coordinator (transcripts-store.yaml holds the mirror store).
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agent-transcripts-s3
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-transcripts-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: agent-transcripts, kind: ClusterSecretStore }
+              target:
+                name: agent-transcripts-s3
+                creationPolicy: Owner
+              data:
+                - secretKey: writer_access_key_id
+                  remoteRef: { key: agent-transcripts-s3, property: writer_access_key_id }
+                - secretKey: writer_secret_access_key
+                  remoteRef: { key: agent-transcripts-s3, property: writer_secret_access_key }
+            ---
             # GitHub App private key, Infisical → Secret (the generator below reads it).
             apiVersion: external-secrets.io/v1
             kind: ExternalSecret

@@ -195,9 +195,11 @@ _Last updated: 2026-07-16._
       identity+launch RBAC (and optionally a per-stack reflex CronJob) INTO the stack's fixer
       namespace — pods there hold only `ref:` creds, so the workbench SA controls the loop by
       construction, zero broadening. Include the two cross-ns leftovers found 2026-07-16:
-      (a) render the write-only transcripts key into each fixer ns (kills agent-session.sh's
-      cross-ns read of `agent-transcripts-s3` + the "one deliberate exception" in
-      agents/coordinator/rbac.yaml — no FU/ADR matched "transcripts key per-namespace");
+      (a) ✅ DONE 2026-07-17 (first brick) — `agent-transcripts` ClusterSecretStore (ESO
+      kubernetes provider, scoped SA; argocd/resources/agentstack/transcripts-store.yaml) +
+      per-fixer-ns ExternalSecret in the Composition; worker pods secretKeyRef the key IN-NS,
+      agent-session.sh reads no key material, and the rbac.yaml "one deliberate exception" is
+      REMOVED — the coordinator SA now has zero secret access;
       (b) workbench needs an explicit `openrouterkeys` read Role (the CRD lacks the `admin`
       aggregation label — same gap workbench.yaml already patched for tf.upbound.io). Docker-ride
       dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns endpoint reads).

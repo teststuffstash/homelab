@@ -1,0 +1,85 @@
+# FU-080 (a): the transcript-capture WRITE-ONLY S3 key, mirrored into every fixer namespace.
+#
+# The key is Crossplane-terraform-minted into agent-coordinator (coordinator/garage-workspace.yaml,
+# Secret `agent-transcripts-s3`) — historically the launchers READ it there and injected the values
+# into worker pods as env (a cross-namespace secretKeyRef is impossible), which forced the "one
+# deliberate exception" in the coordinator RBAC and made every launcher a secret-reader. This store
+# lets the AgentStack Composition render a per-fixer-namespace ExternalSecret copy instead: worker
+# pods secretKeyRef it IN-NAMESPACE, no launcher touches key material, and a per-stack workbench SA
+# (FU-080) needs nothing outside its own namespace to dispatch a transcript-capturing ride.
+#
+# The mirrored key stays write-only (put, no list/get) — holding it grants nothing beyond appending
+# more exhaust to the agent-transcripts bucket.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-transcripts-reader
+  namespace: agent-coordinator
+---
+# Exactly one secret readable, by name.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eso-transcripts-reader
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["agent-transcripts-s3"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eso-transcripts-reader
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eso-transcripts-reader
+subjects:
+  - kind: ServiceAccount
+    name: eso-transcripts-reader
+    namespace: agent-coordinator
+---
+# ESO's kubernetes provider validates itself with a SelfSubjectRulesReview.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: eso-transcripts-reader-ssrr
+rules:
+  - apiGroups: ["authorization.k8s.io"]
+    resources: ["selfsubjectrulesreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-transcripts-reader-ssrr
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: eso-transcripts-reader-ssrr
+subjects:
+  - kind: ServiceAccount
+    name: eso-transcripts-reader
+    namespace: agent-coordinator
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: agent-transcripts
+spec:
+  provider:
+    kubernetes:
+      remoteNamespace: agent-coordinator
+      server:
+        caProvider:
+          type: ConfigMap
+          name: kube-root-ca.crt
+          key: ca.crt
+          namespace: agent-coordinator
+      auth:
+        serviceAccount:
+          name: eso-transcripts-reader
+          namespace: agent-coordinator

@@ -63,36 +63,8 @@ subjects:
   - kind: ServiceAccount
     name: agent-coordinator
     namespace: agent-coordinator
----
-# The ONE deliberate exception to "no Secret values": the transcript-capture WRITE-ONLY S3 key
-# (docs/agents/observability-and-retro.md §A1). agent-session.sh injects it into worker pods as
-# env VALUES (a cross-namespace secretKeyRef is impossible — workers run in project namespaces,
-# the key lives here in agent-coordinator), so a coordinator-dispatched worker needs the launcher
-# to read it. Scoped to exactly this Secret by resourceNames, get-only; the writer key it carries
-# can only append to the agent-transcripts bucket (no list/get), so holding it grants nothing
-# beyond writing more exhaust. Everything else stays unreadable (the ClusterRole above still
-# grants no secret access).
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: agent-transcripts-key-reader
-  namespace: agent-coordinator
-rules:
-  - apiGroups: [""]
-    resources: [secrets]
-    resourceNames: [agent-transcripts-s3]
-    verbs: [get]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: agent-transcripts-key-reader
-  namespace: agent-coordinator
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: agent-transcripts-key-reader
-subjects:
-  - kind: ServiceAccount
-    name: agent-coordinator
-    namespace: agent-coordinator
+# (The former "one deliberate exception" — a get on the agent-transcripts-s3 Secret for
+# agent-session.sh's cross-namespace env-value injection — was REMOVED 2026-07-17, FU-080 a:
+# the AgentStack Composition now mirrors the write-only key into each fixer namespace via the
+# `agent-transcripts` ClusterSecretStore, and worker pods secretKeyRef it in-ns. No launcher
+# reads Secret values anymore; this SA has zero secret access.)

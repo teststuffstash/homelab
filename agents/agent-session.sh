@@ -297,19 +297,19 @@ fi
 
 # §A1 transcript capture (docs/agents/observability-and-retro.md): fetch the WRITE-ONLY key for the
 # agent-transcripts bucket and inject it as env VALUES below — a secretKeyRef can't cross namespaces
-# (workers run in the project ns; the key lives in agent-coordinator, written by the Crossplane
-# Workspace agents/coordinator/garage-workspace.yaml). Best-effort: without the key the run proceeds
-# and agent-finalize skips the upload loudly. Jail kubeconfig reads it as admin; the coordinator SA
-# has a resourceNames-scoped get on exactly this Secret (agents/coordinator/rbac.yaml).
+# (source of truth: agent-coordinator ns, written by the Crossplane Workspace
+# agents/coordinator/garage-workspace.yaml; the AgentStack Composition mirrors it into each fixer
+# namespace as an ExternalSecret — FU-080 a — and the pod secretKeyRefs it in-ns, so this launcher
+# reads NO key material). Best-effort: without the mirror the run proceeds and agent-finalize
+# skips the upload loudly.
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
   EP="$(resolve_ep garage garage)";                          [ -n "$EP" ] && TS_ENDPOINT="http://${EP}:3900" || echo "→ docker mode: garage endpoint unresolvable — transcript upload will be skipped"
   EP="$(resolve_ep monitoring prometheus-pushgateway)";      [ -n "$EP" ] && PGW_URL="http://${EP}:9091" || echo "→ docker mode: pushgateway endpoint unresolvable — run metrics push will fail silently"
 fi
-TS_KEY_ID="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_access_key_id}' 2>/dev/null | base64 -d || true)"
-TS_KEY_SECRET="$("$KUBECTL" $KUBE -n agent-coordinator get secret agent-transcripts-s3 -o jsonpath='{.data.writer_secret_access_key}' 2>/dev/null | base64 -d || true)"
-[ -n "$TS_KEY_ID" ] || echo "→ transcript-capture key unavailable (agent-transcripts-s3 in agent-coordinator) — run proceeds, upload will be skipped"
+"$KUBECTL" $KUBE -n "$NS" get secret agent-transcripts-s3 >/dev/null 2>&1 \
+  || echo "→ transcript mirror agent-transcripts-s3 absent in ns ${NS} (claim not synced?) — run proceeds, upload will be skipped"
 
 # Persistent uv (PyPI wheel) cache: if a `agent-uv-cache` PVC exists in the namespace, mount it so
 # `devbox run ci`'s `uv sync` fetches wheels once across runs (the nix cache only covers `devbox
@@ -443,10 +443,16 @@ ${KATA_BLOCK}
           value: "${TS_ENDPOINT}"
         - name: AGENT_TS_BUCKET
           value: "${TS_BUCKET}"
+        # FU-080 (a): the write-only transcripts key is mirrored INTO each fixer namespace by the
+        # AgentStack Composition (ClusterSecretStore agent-transcripts) — referenced in-ns, so the
+        # launcher never touches key material. optional:true = a namespace without the mirror
+        # (claim not synced yet) still runs; agent-finalize skips the upload loudly.
         - name: AGENT_TS_ACCESS_KEY_ID
-          value: "${TS_KEY_ID}"
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true }
         - name: AGENT_TS_SECRET_ACCESS_KEY
-          value: "${TS_KEY_SECRET}"
+          valueFrom:
+            secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true }
         # FU-057 §B1: agent-finalize PUTs this run's cost/duration/outcome here (goose has no OTLP
         # rail). Cross-namespace to the monitoring pushgateway; unset it to disable the push.
         - name: AGENT_PUSHGATEWAY_URL
