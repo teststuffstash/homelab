@@ -563,3 +563,27 @@ policy block in the header.
   duplicate verdict), and independent github-exporter metrics + `AgentReviewLoop`/
   `AgentErrorFlagged` alerts. Propagation to workers/coordinator + reviewer App issues:write =
   FU-069.
+
+### 2026-07-17 — meta-7: oracle graduates to autonomy — per-stack coordinator (FU-080) on Argo (ADR-093)
+- **The run's goal (operator):** see specs-for-agentic-delivery work end-to-end on the new
+  Argo-based loop — queued issue → tick → worker → PR with flagged spec diff → per-PR specs
+  preview + evidence → bot review → CODEOWNERS spec-gate → merge → deploy.
+- **Switches flipped (both in this operation):** `reflexes-argo.yaml` coordinator-reflex
+  `suspend: false` (this commit; the FU-050 global switch stays as kill switch) + oracle claim
+  `spec.coordinator.enabled: true` (oracle-iac#42, auto-merged). Scan-side FU-080 enforcement
+  means sleep/platform stay report-only — graduated autonomy, oracle first (supervised
+  acceptance was 2026-07-12, meta-6).
+- **DELEGATION (scoped to this run):** the operator delegated oracle-fleet **CODEOWNERS
+  spec-diff approvals** to the supervising meta session (jail, operator identity). Review
+  protocol per specs-for-agentic-delivery: spec-table diff read + preview-site evidence +
+  deterministic gates — approve/annotate rows, never rewrite worker code. Everything else
+  unchanged: bot review via reflex, auto-merge via gate.
+- **Board at enablement:** #29 (census alignment, chassis lane) sole `agent/queued`; #4
+  human-gated (redistribution check); roadmap issues #41–#45 labelled, deliberately unqueued;
+  #8/#10/#14 closed today; spec surface current (PRs #37/#40 + direct-push doctrine commits
+  `ef4a34f`/`06b90e4` — worlds process, evidence rules, ADR-093 migration plan).
+- **Watch items for the ride:** FU-083 adhoc-classification revalidation (first live ride since
+  agent-base `2026.7.16-g55879b2`); worker is `claude/haiku` subscription tier (no estimator/key
+  mint — turn cap is the spend bound); kata+dind pod (fixer.docker); expect the #29 PR to shrink
+  UC-1 expected-responses (item 1 windows) — a *flagged* spec diff routing to the delegated gate
+  is the mechanism working, not a stall.

@@ -52,8 +52,9 @@ spec:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "512Mi" }
 ---
-# Coordinator tick — the LLM sibling (dispatches workers, spends budget). SUSPENDED = the FU-050
-# autonomy switch (unsuspend to enable). Per-stack (FU-080) this becomes coordinator.enabled.
+# Coordinator tick — the LLM sibling (dispatches workers, spends budget). UNSUSPENDED 2026-07-17
+# (operator, meta-7): the FU-050 switch is now the per-stack FU-080 knob — the scan spawns ONLY
+# for stacks whose claim sets coordinator.enabled=true (oracle first; sleep/platform stay off).
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
@@ -62,7 +63,7 @@ metadata:
 spec:
   schedules:
     - "*/10 * * * *"
-  suspend: true # ← the autonomy switch (FU-050)
+  suspend: false # per-stack autonomy via claim coordinator.enabled (FU-080); global kill switch stays here
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   workflowSpec:
