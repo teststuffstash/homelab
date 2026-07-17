@@ -85,6 +85,34 @@ spec:
                   (dict "name" "dependencies" "color" "ededed" "description" "Dependency bump (Renovate)")
                   (dict "name" "automerge" "color" "ededed" "description" "Mechanical dep lane: CI-only approval, no LLM review")
                   (dict "name" "deps-review" "color" "ededed" "description" "Reviewable dep lane: armed + LLM-reviewed (FU-046)") }}
+            ---
+            # FU-080 loop-home: the stack's <stack>-agents namespace — where the per-stack
+            # coordinator/reviewer will run, OUT of the project namespaces (the airlock's real
+            # close). Today: namespace + identity only, nothing scheduled here yet; the
+            # cross-ns RoleBindings below already let this SA dispatch workers into every fixer
+            # ns of the stack — the namespaced replacement for the global coordinator's
+            # cluster-scoped grant. Remaining legs (FU-080): cred ref-rail into this ns
+            # (loop-git ExternalSecret; coordinator-claude needs NO rail — the opaque
+            # `ref:agent-coordinator/coordinator-claude` resolves at the egress proxy from any
+            # ns) + the per-stack coordinate/review CronWorkflows + session-script ns plumbing.
+            apiVersion: v1
+            kind: Namespace
+            metadata:
+              name: {{ $xr.metadata.name }}-agents
+              labels:
+                platform.teststuff.net/agentstack: {{ $xr.metadata.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $xr.metadata.name }}-loop-ns
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: agentstack-loop
+              namespace: {{ $xr.metadata.name }}-agents
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $xr.metadata.name }}-loop-home-sa
+                gotemplating.fn.crossplane.io/ready: "True"
             {{- range $r := $xr.spec.repos }}
             {{- if $r.storage }}
             ---
@@ -467,6 +495,9 @@ spec:
             roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-loop }
             subjects:
               - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $r.name }} }
+              # FU-080 cross-ns dispatch: the STACK loop (ns <stack>-agents) may launch workers
+              # in this fixer ns — namespaced grants only, no cluster-scoped reach.
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $xr.metadata.name }}-agents }
             {{- end }}
             {{- if and $r.argo (get $r.argo "enabled") }}
             ---

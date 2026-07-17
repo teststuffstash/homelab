@@ -50,6 +50,10 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-080 loop-home: the Composition composes the per-stack <stack>-agents Namespace.
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch, create, update, patch, delete]
   # FU-068 labels tier: the Composition composes provider-upjet-github's IssueLabels.
   - apiGroups: [repo.github.upbound.io]
     resources: [issuelabels, issuelabels/status]
