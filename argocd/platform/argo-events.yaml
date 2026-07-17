@@ -1,0 +1,43 @@
+# Argo Events — the event-driven trigger layer for ADR-093 (the ADR-084 sync.yaml-webhook pattern,
+# generalized). The controller watches EventSource / Sensor / EventBus CRs cluster-wide; a JetStream
+# EventBus + the review-reflex EventSource/Sensor land per-namespace with the agent-loop migration
+# (Phase 1, agent-coordinator ns — the EventBus is namespaced, one per namespace that runs Sensors).
+# This app is the controllers only. Resources per FU-082 (the JetStream EventBus, added with the
+# Sensor, is the stateful bit that most needs requests). Helm — ADR-083 operator carve-out.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-events
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-events
+    targetRevision: 2.4.23 # app v1.9.11
+    helm:
+      valuesObject:
+        crds:
+          install: true
+          keep: true
+        controller:
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { memory: "128Mi" }
+        webhook:
+          resources:
+            requests: { cpu: "25m", memory: "64Mi" }
+            limits: { memory: "128Mi" }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-events
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

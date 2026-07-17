@@ -1,0 +1,52 @@
+# Argo Workflows — the platform orchestration/step engine (ADR-093). Phase 1: the agent-loop
+# reflexes become CronWorkflows + Argo Events Sensors (agent-coordinator ns); Phase 2: oracle
+# ingestion DAGs (snapshot→parse→build→publish) with Garage as the S3 artifact repository.
+# Helm (not raw manifests) — the ADR-083 carve-out for a real operator with CRDs. The controller
+# runs cluster-wide (singleNamespace:false); `workflowNamespaces` is where the chart renders the
+# per-namespace workflow SA + RBAC — agent-coordinator for Phase 1, per-stack via the AgentStack
+# Composition later. Garage artifact repo is wired in the proof step (exercised in Phase 2).
+# Resources per FU-082 (nothing BestEffort). Metrics ServiceMonitor → the kube-prometheus stack.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-workflows
+    targetRevision: 1.0.20 # app v4.0.7
+    helm:
+      valuesObject:
+        crds:
+          install: true
+          keep: true
+        singleNamespace: false
+        controller:
+          workflowNamespaces:
+            - agent-coordinator
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { memory: "256Mi" }
+          metricsConfig: { enabled: true }
+          serviceMonitor: { enabled: true }
+        server:
+          enabled: true
+          authModes: ["server"] # internal; the server SA authenticates — no SSO/VIP yet (later nicety)
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { memory: "128Mi" }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # the workflow/CronWorkflow CRDs are large
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

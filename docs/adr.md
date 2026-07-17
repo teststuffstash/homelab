@@ -811,10 +811,11 @@ hostname support. Full design + rollout: [`follow-ups.md`](follow-ups.md) FU-039
 "delegate a stack subdomain".
 
 ### ADR-093 — Argo Workflows + Events as the platform orchestration engine; agent-loop first
-**Status:** Proposed (drafted 2026-07-17, pending operator accept — DRAFT, nothing installed). This
+**Status:** Accepted (2026-07-17). This
 is the "**open homelab ADR**" the oracle-fleet `ING-RT-STEP-CONTRACTS` spec defers its step engine
 to, and it discharges **FU-026** (graduate the coordinator off the hand-driven CronJob+bash
-substrate onto a durable engine). **Problem:** two independent consumers need the *same* thing — a
+substrate onto a durable engine). Operator also confirmed the FU-080 **`<stack>-agents`** namespace
+direction (agent loop in `<stack>-agents`, ingestion DAGs in the stack workload ns). **Problem:** two independent consumers need the *same* thing — a
 platform-provided step/orchestration engine with scheduling, cross-run retries, event-triggering,
 and observability — and the platform has none, so both would otherwise hand-roll it. (1) The **agent
 loop**: today's reflexes are k8s **CronJobs** in ns `agent-coordinator` (`review`/`coordinator`/
