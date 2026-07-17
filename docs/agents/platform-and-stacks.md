@@ -131,3 +131,28 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   coordinator-reflex** — the gate iterates all claims for cents and spawns scoped ticks; per-stack
   CronJobs only if cadence/isolation ever diverges (a Composition addition, not a redesign).
   [`agentstack.md`](agentstack.md) §Decisions.
+
+## The credential-airlock pattern (stack jails, FU-080)
+
+A stack's agent loop is driven from a **per-stack jail** on the operator's machine
+(`claude-jail tools/stack-jail.sh`), NOT with cluster-admin. The airlock: the HOST holds the admin
+kubeconfig and mints a **short-lived, namespace-scoped derivative** token, injecting only that into
+the jail — the admin credential never crosses the boundary. Concretely for oracle:
+`kubectl -n oracle-fleet create token oracle-workbench --duration=72h` (host, admin) → the jail gets
+a 72h token for the `oracle-workbench` SA, which is **namespace-admin in the one fixer namespace and
+nothing cluster-scoped** (`oracle-iac//oracle-fleet/agent/workbench.yaml`). Blast radius is that
+namespace's own worker creds (branch-only git token, budget-capped OpenRouter key) — accepted.
+
+Two aggregation gaps bite this pattern, because the `admin` ClusterRole only aggregates API groups
+carrying the aggregation label and the platform CRDs don't: the jail needs **explicit namespaced
+Roles** for `tf.upbound.io` workspaces (observe infra provisioning) and `openrouter.teststuff.net`
+openrouterkeys (drive the session-key mint→observe→delete its loop needs) — both hand-added to
+`workbench.yaml` (FU-080 b).
+
+**Endgame (FU-080, revisits the global-reflex decision above):** the Composition renders a per-stack
+`agentstack-loop` SA + a **namespaced** launch Role (pods/exec/pvc/openrouterkeys) INTO each fixer
+namespace, and a per-stack coordinator/reviewer runs there as that SA holding only `ref:` creds — so
+the namespace-admin workbench controls the *whole* loop by construction, with zero cluster-scoped
+grant and zero cross-namespace reach. The identity + RBAC are rendered today (additive); moving the
+reflex CronJobs in-namespace is the remaining step (and the point at which "one global reflex"
+becomes "one reflex per stack jail").

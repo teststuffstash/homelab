@@ -200,12 +200,19 @@ _Last updated: 2026-07-16._
       per-fixer-ns ExternalSecret in the Composition; worker pods secretKeyRef the key IN-NS,
       agent-session.sh reads no key material, and the rbac.yaml "one deliberate exception" is
       REMOVED — the coordinator SA now has zero secret access;
-      (b) workbench needs an explicit `openrouterkeys` read Role (the CRD lacks the `admin`
-      aggregation label — same gap workbench.yaml already patched for tf.upbound.io). Docker-ride
-      dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns endpoint reads).
-      Also: document the stack-jail credential-airlock pattern in
-      docs/agents/platform-and-stacks.md when this lands (today it lives only in script headers).
-      Relates FU-045/FU-048/FU-050/FU-066.
+      (b) ✅ DONE 2026-07-17 — `oracle-workbench-orkeys` Role+Binding in oracle-iac
+      workbench.yaml (openrouterkeys R/W, mint→observe→delete; oracle-iac#34, CI-only merge).
+      **Identity+launch-RBAC render DONE 2026-07-17:** the Composition renders per fixer repo a
+      NAMESPACED `agentstack-loop` SA + Role (pods/exec/pvc/openrouterkeys) + Binding — the
+      in-namespace equivalent of the global coordinator's cluster-scoped grant, ready for a
+      per-stack coordinator/reviewer to run as. Additive (nothing binds a pod to it yet). Airlock
+      pattern documented in docs/agents/platform-and-stacks.md §"The credential-airlock pattern".
+      **REMAINING (the decision-revisit half):** move the coordinator/reviewer reflex CronJobs
+      in-namespace running as `agentstack-loop` — which requires per-stack ref-railing of the
+      coordinator creds (`coordinator-claude` subscription ref + `coordinator-git`) into each
+      fixer ns, and flips agentstack.md §Decisions' "one global reflex" to "one per stack jail".
+      Docker-ride dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns
+      endpoint reads). Relates FU-045/FU-048/FU-050/FU-066.
 - [ ] **FU-069** — **Propagate the anomaly protocol beyond the review path.** The `agent/error`
       circuit-breaker label + `AGENT_ERROR:` comment convention went live for reviews 2026-07-12
       (reflex breakers + reviewer self-guard + exporter `AgentReviewLoop`/`AgentErrorFlagged`

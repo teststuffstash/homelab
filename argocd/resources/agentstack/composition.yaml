@@ -13,6 +13,13 @@
 #                                                Named agentstack-* (NOT openrouter-proxy-session-keys)
 #                                                so migration never collided with the retired
 #                                                hand-list's same-named Roles (gapless handoff).
+#   7. agent-transcripts-s3 ExternalSecret      — FU-080 a: write-only transcripts key mirrored in-ns
+#                                                (ClusterSecretStore agent-transcripts) so no launcher
+#                                                reads Secret values cross-namespace.
+#   8. agentstack-loop SA + Role + Binding      — FU-080: the per-stack loop identity + NAMESPACED
+#                                                launch grants (pods/exec/pvc/openrouterkeys), ready
+#                                                for a per-stack coordinator/reviewer to run in-ns.
+#                                                Additive; the reflex CronJob move is the remaining step.
 # Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
@@ -404,6 +411,58 @@ spec:
             roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-proxy-session-keys }
             subjects:
               - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
+            ---
+            # FU-080: the per-stack LOOP identity + launch RBAC, rendered INTO the fixer namespace.
+            # Today ONE global coordinator (ns agent-coordinator) holds a CLUSTER-scoped grant to
+            # create pods + mint OpenRouterKeys in every namespace (agents/coordinator/rbac.yaml).
+            # The endgame (agentstack.md §Decisions revisit): a per-stack coordinator/reviewer run
+            # HERE as this SA, so the stack jail's namespace-admin workbench controls its whole loop
+            # by construction — no cluster-scoped grant, no cross-ns reach. This renders the identity
+            # + a NAMESPACED Role mirroring the global launcher grants (pods, exec, pvc read,
+            # openrouterkeys lifecycle) so it's ready the moment the reflexes move in-namespace.
+            # Additive: nothing binds a pod to it yet (the CronJob move is the remaining step).
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: agentstack-loop
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-loop-sa
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-loop
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-loop-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: [pods, pods/log]
+                verbs: [get, list, watch, create, delete]
+              - apiGroups: [""]
+                resources: [pods/exec]
+                verbs: [create]
+              - apiGroups: [""]
+                resources: [persistentvolumeclaims]
+                verbs: [get, list]
+              - apiGroups: [openrouter.teststuff.net]
+                resources: [openrouterkeys, openrouterkeys/status]
+                verbs: [get, list, watch, create, update, patch, delete]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-loop
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-loop-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-loop }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $r.name }} }
             {{- end }}
             {{- end }}
             ---
