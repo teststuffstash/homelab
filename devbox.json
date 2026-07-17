@@ -106,7 +106,10 @@
         "bash scripts/coordinator-logs.sh \"$@\""
       ],
       "review-reflex-now": [
-        "KUBECONFIG=$PWD/tofu/kubeconfig kubectl -n agent-coordinator create job --from=cronjob/review-reflex review-reflex-manual-$(date +%s)"
+        "bash scripts/reflex-now.sh review-reflex"
+      ],
+      "coordinate-now": [
+        "bash scripts/reflex-now.sh coordinator-reflex"
       ],
       "estimate-budget": [
         "python3 agents/estimate_budget.py \"$@\""

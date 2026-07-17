@@ -121,18 +121,20 @@ shape; EventBus, sensor-SA pattern, and backstop doctrine all exist):
   emitters may over-approximate freely.
 - **Pick emitters per transition** — the review-path insight generalizes: *almost every actor that
   CAUSES a scan-actionable transition already runs in-cluster*, so the sharpest emitter is one curl
-  at the moment it acts (instant, exact, no new polling). The github-exporter piggyback (the user
-  of the one-poller doctrine) is the right emitter only for the label-borne transitions it already
-  polls; humans are the latency-tolerant class the cron backstop covers (this section's own
-  doctrine above):
+  at the moment it acts (instant, exact, no new polling). That includes **ARC**: any workflow on
+  `runs-on: homelab-ephemeral` is an in-cluster actor and can end with the ADR-084 one-line POST —
+  but move a workflow in-cluster for its own reasons, never just to emit; the one deliberately
+  GitHub-hosted job (`update-pr-branch.reusable.yml` — "the merge path must not depend on the
+  self-hosted tier being awake") stays on `ubuntu-latest`, and the github-exporter piggyback
+  (rider on the one-poller doctrine) covers what off-cluster actors touch:
 
   | scan clause (transition) | who causes it | edge emitter | latency (today: ≤10 min) |
   |---|---|---|---|
   | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
-  | `merge-conflict` label appears | updater workflows (N app repos — don't touch them all) | exporter piggyback: labels are already in its 120 s poll | ≤2 min |
-  | un-armed `major` PR appears | Renovate / `devbox-update.sh` | exporter piggyback: labels + `autoMergeRequest` already polled | ≤2 min |
-  | issue gains `agent/queued` | a **human** | cron backstop (exporter would need NEW issue polling — add only if the latency ever annoys) | ≤10 min |
+  | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback: labels are already in its 120 s poll; conflict-resolution latency is non-critical | ≤2 min |
+  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs; exporter piggyback as belt | instant |
+  | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `devbox run coordinate-now` (`scripts/reflex-now.sh`, live); stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
 
 - **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
   the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the

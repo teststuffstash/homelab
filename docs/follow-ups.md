@@ -185,9 +185,16 @@ _Last updated: 2026-07-16._
       `synchronization.mutex` (Cron `Forbid` doesn't see Sensor submissions) + Sensor `rateLimit`;
       (2) instant in-cluster emitters, one curl at the moment the author acts:
       `agent-session.sh` on `AGENT_STRIKE`/terminal-no-PR (C4/C5), `reviewer-session.sh` after a
-      CHANGES_REQUESTED verdict; (3) exporter piggyback for label-borne transitions it already
-      polls (`merge-conflict`, un-armed `major`); `agent/queued` (human) stays on the cron
-      backstop by doctrine. Doorbell rule: events scope (`{repo}`), never carry state — the scan
+      CHANGES_REQUESTED verdict, and the ARC-hosted Renovate + `devbox-update.yaml` runs (un-armed
+      `major`; both centralized in homelab `.github/workflows/`); (3) exporter piggyback for
+      `merge-conflict` — its author `update-pr-branch` is GitHub-hosted BY DESIGN (merge path must
+      not depend on the self-hosted tier; don't move it to emit), and the exporter already polls
+      labels; (4) ✅ DONE 2026-07-17 — the operator knob for `agent/queued` (issues are authored by
+      jail LLM sessions, not hand-labelled): `devbox run coordinate-now` via `scripts/reflex-now.sh`
+      (kubectl-only `argo submit --from cronwf` equivalent; also FIXED `review-reflex-now`, broken
+      since the CronJob→CronWorkflow migration), live-verified same day; stack jails ring the
+      `/coordinate` webhook once built — the doorbell needs no RBAC into `agent-coordinator`
+      (airlock-aligned). Doorbell rule: events scope (`{repo}`), never carry state — the scan
       re-lists and gates (incl. the FU-080 `coordinator.enabled` knob), so a false wake costs `gh`
       calls, never an LLM tick. After proving: cron `*/10 → */30` (FU-084 GraphQL burn);
       red-beyond-T stays cron-only. Relates FU-050/FU-080/FU-084, ADR-093/ADR-084.
