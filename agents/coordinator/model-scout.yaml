@@ -1,12 +1,13 @@
-# Model-scout CronJob — the weekly REPORT-ONLY model-discovery reflex (homelab FU-062,
+# Model-scout CronJob — the weekly model-discovery reflex (homelab FU-062,
 # docs/agents/model-routing.md §M7). Sibling of review-reflex/ledger-reflex: deterministic, costs no
 # LLM turn, lives in the coordinator's namespace and reuses the coordinator's identity + secrets.
 #
 # Each tick clones the current homelab and runs agents/model-scout.sh: diff the live OpenRouter
 # /models catalog against the previous snapshot (s3://agent-transcripts/_model-scout/, next to the
-# ledger), enrich new tool-capable :free/≤-ceiling models via estimate_budget.py --lookup, and post
-# ONE digest issue on homelab. Chain graduation stays a human call; canary dispatch + key minting
-# are TODO(FU-062) in the script, gated on FU-024.
+# ledger), enrich new tool-capable :free/≤-ceiling models via estimate_budget.py --lookup, CANARY
+# each (v2, FU-062/FU-024: an ephemeral capped key — only-free guardrail for :free ids so the proxy
+# 403s any paid model pre-spend — runs a trivial closed task, verdict → ledger + digest), and post
+# ONE digest issue on homelab. Chain graduation stays a human call. CANARY=0 restores report-only.
 #
 # ⚠ Deployed SUSPENDED — unsuspend after the first supervised run:
 #     kubectl -n agent-coordinator create job --from=cronjob/model-scout model-scout-manual

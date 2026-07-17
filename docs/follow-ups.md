@@ -249,11 +249,6 @@ _Last updated: 2026-07-16._
       dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
-- [ ] **FU-024** — **ENFORCED 2026-07-10 at the egress proxy** (operator writes GUARDRAIL into session
-      Secrets; proxy 403s paid models on only-free INJECTED sessions before spend; unit-verified).
-      Remaining: one live-fire canary (the scout's first supervised run is it). Original: Wire
-      `guardrail: only-free` enforcement in the openrouter-operator (declared, not enforced). Now load-bearing for the FU-062 model scout (free canary keys must be
-      honor-system no longer).
 - [ ] **FU-062** — **Model routing: chains + strikes + a live registry** — the umbrella that binds
       FU-018/FU-021/FU-024/FU-057 into one design (they don't work separately). Full doc:
       [`docs/agents/model-routing.md`](agents/model-routing.md). Core: (1) **rounds ≠ strikes** —
@@ -283,13 +278,16 @@ _Last updated: 2026-07-16._
       **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
       (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
       graceful 429 fallback); **FU-021 RESOLVED** (watchdog live-accepted on sleep-tracking#20).
-      **Scout first supervised run DONE + UNSUSPENDED 2026-07-16** (all three preconditions:
-      bootstrap snapshot → forced-diff digest posted via coordinator-git, homelab#27 synthetic,
-      closed → snapshot advanced; weekly Mon 06:00 live). NB the run did NOT exercise FU-024's
-      live-fire canary — canary dispatch + key minting are still TODO in `agents/model-scout.sh`
-      (report-only v1); FU-024's remainder stays open until that leg is written and one canary
-      flies. OPEN: scout canary leg (+FU-024 live-fire), ADR-081 cred-injection remainder
-      (FU-018) + egress lockdown (FU-020).
+      **Scout first supervised run DONE + UNSUSPENDED 2026-07-16**; **CANARY LEG LIVE 2026-07-17**
+      — `agents/model-scout.sh` v2 `canary_one()` mints an ephemeral capped key per candidate
+      (only-free guardrail for :free ids), dispatches a trivial closed ride, writes the verdict to
+      the ledger + digest, cleans the key. Proven end-to-end: `tencent/hy3:free → clean`. This
+      also live-fired **FU-024** (now archived): only-free key + paid model = proxy 403 pre-spend
+      (`cost_usd:0.0`, both the router's haiku probe and the target rejected), + free model =
+      clean on the same key. **All four legs of the umbrella now live; FU-062 stays open only as
+      the routing-doctrine home** — nothing here is unbuilt, close when the doctrine stabilizes or
+      fold into model-routing.md. ADR-081 cred-injection (FU-018) + egress lockdown (FU-020) both
+      archived 2026-07-17.
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
       it's a mechanical swap.

@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-024** *(archived 2026-07-17)* — **`guardrail: only-free` ENFORCED + live-fired.** The egress
+  proxy 403s any non-`:free` model on an only-free session BEFORE spend (`_guardrail_reject`,
+  openrouter-proxy.py; the operator writes GUARDRAIL into the session Secret). Live-fire
+  2026-07-17: only-free key + `deepseek-v4-flash` → 403 `cost_usd:0.0` (proxy log shows both the
+  router's `claude-haiku-4.5` probe and the target rejected); same key + `tencent/hy3:free` →
+  clean `OK`. Exercised for real by the FU-062 model-scout canary leg (which issues only-free
+  keys for :free candidates). No honor system left.
+
 - **FU-018** *(archived 2026-07-17)* — **ADR-087 credential injection: COMPLETE on the
   goose+opencode tier.** Opaque-ref LLM creds + broker git tokens; goose default-on since
   2026-07-10 (acceptance oracle-fleet#7/PR#12); opencode leg validated live 2026-07-16
