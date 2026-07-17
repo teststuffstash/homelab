@@ -1,8 +1,14 @@
 # Crossplane core composes ARBITRARY k8s kinds (v2), but its SA only holds RBAC for kinds it
 # defines itself — every kind the AgentStack Composition renders must be granted explicitly.
 # Aggregated into the core `crossplane` ClusterRole via the label (the supported extension point).
-# Includes /status: composed-resource readiness reads it. NB roles/rolebindings creation passes
-# the escalation check because the core role already holds secrets access cluster-wide.
+# Includes /status: composed-resource readiness reads it.
+#
+# ⚠ ESCALATION CHECK (FU-080, learned live): to COMPOSE a Role/RoleBinding that GRANTS verb V on
+# resource R, Crossplane's own SA must already HOLD V on R (k8s privilege-escalation prevention) —
+# otherwise the compose fails "attempting to grant RBAC permissions not currently held". The proxy
+# Role (secrets:get) passed because core holds it; the FU-080 agentstack-loop Role grants
+# pods/pods-exec/pvc, so those verbs are mirrored below purely to satisfy the check (Crossplane
+# never USES them — they exist so it can hand them to the loop SA).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -10,6 +16,16 @@ metadata:
   labels:
     rbac.crossplane.io/aggregate-to-crossplane: "true"
 rules:
+  # FU-080 escalation-check mirror for the composed agentstack-loop Role (see header).
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list]
   - apiGroups: [cilium.io]
     resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
     verbs: [get, list, watch, create, update, patch, delete]
