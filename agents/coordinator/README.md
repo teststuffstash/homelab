@@ -141,12 +141,13 @@ double-spawns.
    bash agents/agent-session.sh <project> --model claude/<alias> \
        --task issue-<N> --round <r> \
        --run "printf '%s' '$B64' | base64 -d > /tmp/fix-system.md; \
-              claude -p --dangerously-skip-permissions --max-turns 80 \
+              claude -p --dangerously-skip-permissions --max-turns 200 \
                 --append-system-prompt-file /tmp/fix-system.md \
                 '<the recipe prompt, issue=<N> substituted>'"
    ```
-   `--max-turns 80` is the GOOSE_MAX_TURNS counterpart — keep it unless the recipe declares its
-   own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
+   `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
+   haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
+   run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
    `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
    work; `fixer.docker` repos ride kata as usual).
    **Parallel track lanes:** when dispatching a SECOND worker into a repo whose open issues sit on
