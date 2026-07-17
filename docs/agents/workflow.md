@@ -103,6 +103,56 @@ CR once that lands, ADR-078/081).
 - **Delivery into the homelab** — reuse the Cloudflare Tunnel pattern (a small `cloudflared` ingress
   to an in-cluster coordinator); no inbound ports.
 
+#### The coordinator Sensor (design 2026-07-17; build = FU-085)
+
+Nothing wakes the coordinator early today — the `*/10` `coordinator-reflex` CronWorkflow is the only
+thing that runs `coordinator-scan.sh --spawn` (live sting: the oracle-fleet#29 C4/C5 re-tick sat
+waiting on cron minutes after its `AGENT_STRIKE` comment landed). The next increment mirrors the
+review edge on the SAME machinery — one more endpoint on the existing `agent-loop` webhook
+EventSource, a `coordinator` Sensor, a `coordinate` WorkflowTemplate
+([`../../agents/coordinator/review-argo.yaml`](../../agents/coordinator/review-argo.yaml) is the
+shape; EventBus, sensor-SA pattern, and backstop doctrine all exist):
+
+- **The event is a doorbell, never a work item.** The Sensor submits a Workflow that re-runs the
+  deterministic scan, which re-lists GitHub and applies the FULL predicate — including the C4/C5
+  kubectl probe and the FU-080 `coordinator.enabled` knob. Payloads *scope* (`{repo}`), they never
+  carry state (at-least-once, missable — the review-path rule). A false wake costs a scan run (a
+  handful of `gh` calls), **not** an LLM tick: the scan gate is what protects the subscription, so
+  emitters may over-approximate freely.
+- **Pick emitters per transition** — the review-path insight generalizes: *almost every actor that
+  CAUSES a scan-actionable transition already runs in-cluster*, so the sharpest emitter is one curl
+  at the moment it acts (instant, exact, no new polling). The github-exporter piggyback (the user
+  of the one-poller doctrine) is the right emitter only for the label-borne transitions it already
+  polls; humans are the latency-tolerant class the cron backstop covers (this section's own
+  doctrine above):
+
+  | scan clause (transition) | who causes it | edge emitter | latency (today: ≤10 min) |
+  |---|---|---|---|
+  | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
+  | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
+  | `merge-conflict` label appears | updater workflows (N app repos — don't touch them all) | exporter piggyback: labels are already in its 120 s poll | ≤2 min |
+  | un-armed `major` PR appears | Renovate / `devbox-update.sh` | exporter piggyback: labels + `autoMergeRequest` already polled | ≤2 min |
+  | issue gains `agent/queued` | a **human** | cron backstop (exporter would need NEW issue polling — add only if the latency ever annoys) | ≤10 min |
+
+- **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
+  the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the
+  `agent/error` breaker (excluded from every clause), and the `(issue, base-sha, round)` job-name
+  test-and-set. Add mechanically: one `synchronization.mutex` (`coordinator-scan`) shared by the
+  Sensor-submitted Workflow AND the CronWorkflow — the Cron's `concurrencyPolicy: Forbid` does
+  **not** see Sensor submissions — plus a Sensor trigger `rateLimit` as the dumb outer belt.
+- **Refactor that falls out:** extract the cron's inline scan container into the `coordinate`
+  WorkflowTemplate and have both the CronWorkflow and the Sensor `workflowTemplateRef` it (exactly
+  the review-argo shape). A `--repo <r>` scope arg on the scan makes an event cheaper than a full
+  tick; v1 may skip it — an unscoped scan is just an early cron tick.
+- **After it proves out:** relax the coordinator cron `*/10 → */30` (the review reflex's own
+  `*/5 → */15` move) — less GraphQL burn (FU-084). Red-beyond-T (FU-050 v3) stays cron-only by
+  nature (a timer is level-triggered). Under FU-080's per-stack move the Composition renders the
+  Sensor/trigger per stack like the rest of the loop.
+
+End state: the whole loop is edge-driven — queued issue → tick → worker → green PR → review Sensor
+→ verdict → coordinator Sensor → round N+1 → merge — with cron sweeping behind as the
+level-triggered backstop.
+
 ### Hazards to bake in from day one
 
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns

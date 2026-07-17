@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-085**.
+  Next free id: **FU-086**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -175,6 +175,22 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+- [ ] **FU-085** — **Coordinator edge-trigger: a `/coordinate` Sensor so the loop reacts in seconds;
+      the `*/10` cron demotes to backstop.** Design + emitter analysis in
+      `docs/agents/workflow.md` §Triggers → "The coordinator Sensor" (2026-07-17; motivating sting:
+      oracle-fleet#29's C4/C5 re-tick waited on cron minutes after its `AGENT_STRIKE` landed).
+      Build, mirroring review-argo.yaml on the existing machinery: (1) `/coordinate` endpoint on
+      the `agent-loop` EventSource + `coordinator` Sensor + a `coordinate` WorkflowTemplate running
+      the scan — refactor the CronWorkflow to `workflowTemplateRef` the same template, shared
+      `synchronization.mutex` (Cron `Forbid` doesn't see Sensor submissions) + Sensor `rateLimit`;
+      (2) instant in-cluster emitters, one curl at the moment the author acts:
+      `agent-session.sh` on `AGENT_STRIKE`/terminal-no-PR (C4/C5), `reviewer-session.sh` after a
+      CHANGES_REQUESTED verdict; (3) exporter piggyback for label-borne transitions it already
+      polls (`merge-conflict`, un-armed `major`); `agent/queued` (human) stays on the cron
+      backstop by doctrine. Doorbell rule: events scope (`{repo}`), never carry state — the scan
+      re-lists and gates (incl. the FU-080 `coordinator.enabled` knob), so a false wake costs `gh`
+      calls, never an LLM tick. After proving: cron `*/10 → */30` (FU-084 GraphQL burn);
+      red-beyond-T stays cron-only. Relates FU-050/FU-080/FU-084, ADR-093/ADR-084.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
