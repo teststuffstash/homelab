@@ -1,0 +1,41 @@
+# Garage S3 artifact repository for Argo Workflows (ADR-093). Crossplane provider-terraform mints
+# the bucket + a read/write key (CREATE-pattern, ADR-076, like the agent-transcripts workspace) and
+# writes them into the `argo-artifacts-s3` Secret. Proven 2026-07-17: a produce→S3→consume workflow
+# round-tripped a real object through this bucket. The write ns is where Phase-1 agent-loop workflows
+# run (agent-coordinator); Phase 2 / per-stack (FU-080) mirrors the key into each workflow namespace.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  name: argo-artifacts-garage
+  namespace: argo
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "artifacts" {
+        global_alias = "argo-artifacts"
+        max_size     = 10737418240 # 10Gi — ADR-089 quota-as-contract (agent-loop; ingestion raises later)
+      }
+      resource "garage_key" "rw" { name = "argo-artifacts-rw" }
+      resource "garage_bucket_permission" "rw" {
+        bucket_id     = garage_bucket.artifacts.id
+        access_key_id = garage_key.rw.id
+        read  = true
+        write = true
+        owner = false
+      }
+      output "access_key_id" {
+        value = garage_key.rw.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.rw.secret_access_key
+        sensitive = true
+      }
+      output "bucket" {
+        value = garage_bucket.artifacts.global_alias
+      }
+  writeConnectionSecretToRef:
+    namespace: agent-coordinator
+    name: argo-artifacts-s3

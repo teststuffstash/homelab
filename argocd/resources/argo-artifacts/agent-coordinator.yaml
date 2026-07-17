@@ -1,0 +1,29 @@
+# Phase-1 agent-loop workflow wiring in ns agent-coordinator (ADR-093). The argo-workflows chart
+# (controller.workflowNamespaces=[agent-coordinator]) renders the workflow Role+RoleBinding here but
+# not the SA it binds — create it. The artifact-repositories ConfigMap is the DEFAULT S3 repo Argo
+# resolves per-workflow-namespace: Garage over the in-cluster ClusterIP, keyed by workflow+pod.
+# FU-080 / Phase 2 will render this per-stack from the AgentStack Composition; this is the interim
+# home while the reflexes still run globally in agent-coordinator.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-workflow
+  namespace: agent-coordinator
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artifact-repositories
+  namespace: agent-coordinator
+  annotations:
+    workflows.argoproj.io/default-artifact-repository: garage-s3
+data:
+  garage-s3: |
+    s3:
+      endpoint: garage.garage.svc.cluster.local:3900
+      bucket: argo-artifacts
+      region: garage
+      insecure: true
+      keyFormat: "{{workflow.namespace}}/{{workflow.name}}/{{pod.name}}"
+      accessKeySecret: { name: argo-artifacts-s3, key: access_key_id }
+      secretKeySecret: { name: argo-artifacts-s3, key: secret_access_key }

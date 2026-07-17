@@ -1,0 +1,27 @@
+# Argo Workflows artifact repository (ADR-093) — the Garage bucket+key (Crossplane) + the Phase-1
+# agent-coordinator workflow SA + default artifact-repository ConfigMap. Wave 2: after the
+# argo-workflows/argo-events controllers (wave 1) and Crossplane's provider-terraform.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-artifacts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/argo-artifacts
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
