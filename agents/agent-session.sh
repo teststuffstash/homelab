@@ -400,6 +400,13 @@ DIND
   DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_HOST__/${MIRROR_DOCKER_IO#http://}}"
 fi
 
+# FU-088(a): a claude-harness worker draws on the one operator subscription — defer the spawn
+# while the egress proxy's 429 latch is set (OpenRouter harnesses are unaffected).
+if [ "$HARNESS" = "claude" ] && ! bash "$HERE/subscription-latch.sh"; then
+  echo "→ ${PROJECT} claude-tier dispatch deferred — subscription rate-limited (FU-088 latch)"
+  exit 0
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod

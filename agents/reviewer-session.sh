@@ -172,6 +172,14 @@ SNIP
 )
 ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s' "$UPLOADER" "$PREP" "$RUNPART" | jq -Rs .)]"
 
+# FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
+# dispatches this script directly without the reflex tick's guard). Level-triggered upstream —
+# the backstop tick re-picks this PR once the latch clears, so a skip loses nothing.
+if ! bash "$HERE/subscription-latch.sh"; then
+  echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
+  exit 0
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod

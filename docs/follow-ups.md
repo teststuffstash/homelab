@@ -212,13 +212,21 @@ _Last updated: 2026-07-16._
       when ≥N subscription-labelled pods are Running (label-selector count — the same mechanism as
       the launcher pre-flight belt), report-only line instead of a doomed spawn. Struck again
       2026-07-17: a review-reflex tick 429'd mid-run ("would exceed your account's rate limit",
-      `review-reflex-1784313000`) while reviewer sessions + interactive use stacked; oracle-iac's
-      reflex was manually suspended as mitigation. Sensing option beyond the pod count: the
-      undocumented `GET api.anthropic.com/api/oauth/usage` (OAuth bearer + oauth beta header →
-      5h/weekly utilization + resets_at) — claude-code#13585 (open) asks for an official
-      `claude quota`, none exists yet; a probe could ride the ADR-087 proxy's `/anthropic` leg.
-      NOTE the existing OTLP `claude_code_*` rail measures consumption (tokens/cost), never
-      headroom — it cannot serve as this semaphore's input. (b) **OpenRouter
+      `review-reflex-1784313000`) while reviewer sessions + interactive use stacked. **REACTIVE
+      LATCH SHIPPED 2026-07-17 (the detection half):** the egress proxy — the choke point every
+      subscription session flows through — latches on the first `/anthropic` upstream 429
+      (Retry-After or 900s hold, any 2xx clears early; `GET /anthropic-limit` serves the state),
+      and all four subscription launchers (`review-reflex.sh` tick, `reviewer-session.sh` incl.
+      the Sensor path, `coordinator-session.sh`, `agent-session.sh --harness claude`) probe it
+      via `agents/subscription-latch.sh` pre-spawn and defer report-only (fail-open when no proxy
+      is reachable, e.g. jail runs). STILL OPEN here: the ≥N Running pod-count semaphore
+      (proactive, prevents the burst that CAUSES the 429 — the latch only stops the pile-on) and
+      alerting on the latch metric. Bonus sensing (deliberately not load-bearing — unofficial,
+      may vanish): `GET api.anthropic.com/api/oauth/usage` (OAuth bearer + oauth beta → 5h/weekly
+      utilization + resets_at) — claude-code#13585 is the open ask for an official `claude quota`;
+      ryan-knowone/quota-dashboard is a working reference implementation. NOTE the OTLP
+      `claude_code_*` rail measures consumption (tokens/cost), never headroom — it cannot serve
+      as this semaphore's input. (b) **OpenRouter
       out-of-funds gate** — account-level credit exhaustion today surfaces only as per-pod 402
       retry storms AFTER spawn (the agent-runtime storm watchdog hard-stops in-pod, agent-runtime#8);
       add a pre-dispatch probe (credits/key-status via the ADR-081 proxy) so worker dispatch defers
@@ -278,6 +286,11 @@ _Last updated: 2026-07-16._
       doesn't itself hold — the pods/exec/pvc verbs had to be mirrored into the
       crossplane-aggregated ClusterRole (the proxy Role slipped by on core's secrets access).
       Airlock pattern documented in docs/agents/platform-and-stacks.md §"The credential-airlock pattern".
+      **`reviewer.enabled` knob CONSUMED 2026-07-17 (first slice):** the global `review-reflex.sh`
+      now reads the claims each tick and drops every repo of a stack with `reviewer:
+      {enabled: false}` (probe-first: a failed read warns + keeps the full list). Found live: the
+      oracle claim's disable had synced but the schema-only knob gated nothing — reviews kept
+      firing. The full per-stack CronWorkflow render below stays the real fix.
       **REMAINING (the decision-revisit half) — now on ADR-093 Argo (agent-loop Phase 1):** move
       the coordinator/reviewer reflexes in-namespace as `agentstack-loop` — reflexes become
       per-stack CronWorkflows + Argo Events Sensors (not the global CronJobs), which requires

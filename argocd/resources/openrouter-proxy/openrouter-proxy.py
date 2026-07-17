@@ -41,6 +41,18 @@ ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
 OAUTH_BETA = "oauth-2025-04-20"
+# FU-088(a) reactive 429 latch: the subscription's account rate limit is invisible until a request
+# dies on it (no official quota interface — anthropics/claude-code#13585), so this proxy — the one
+# choke point EVERY subscription session already flows through (coordinator tick, reviewer,
+# claude-tier worker, interactive rides) — latches on the first upstream 429 from the /anthropic
+# leg. Launchers probe GET /anthropic-limit pre-spawn (agents/subscription-latch.sh) and defer
+# while latched: a report-only line instead of a doomed pod. Self-healing both ways: the latch
+# expires after Retry-After (or ANTHROPIC_429_HOLD_S), and any /anthropic 2xx that lands earlier
+# (e.g. an interactive session after the window reset) clears it. In-memory by design — a proxy
+# restart forgets, the next 429 re-latches.
+ANTHROPIC_429_HOLD_S = int(os.environ.get("ANTHROPIC_429_HOLD_S", "900"))
+_latch = {"until": 0.0, "last_429": 0.0}
+_latch_lock = threading.Lock()
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -278,6 +290,28 @@ def pin_for(model: str) -> dict | None:
     return pin
 
 
+def _anthropic_latch_update(status: int, resp_headers) -> str:
+    """FU-088(a): fold one /anthropic upstream status into the 429 latch. Returns a note suffix."""
+    now = time.time()
+    if status == 429:
+        try:  # Retry-After may be absent or an HTTP-date — both fall back to the fixed hold
+            hold = float(resp_headers.get("retry-after") or 0) or ANTHROPIC_429_HOLD_S
+        except (TypeError, ValueError):
+            hold = ANTHROPIC_429_HOLD_S
+        with _latch_lock:
+            _latch["until"] = now + hold
+            _latch["last_429"] = now
+        log(f"anthropic 429 — subscription LATCHED for {hold:.0f}s (launchers defer via /anthropic-limit)")
+        return "+429-latched"
+    if 200 <= status < 300:
+        with _latch_lock:
+            if _latch["until"] > now:
+                _latch["until"] = 0.0
+                log("anthropic 2xx while latched — latch cleared early")
+                return "+latch-cleared"
+    return ""
+
+
 class Proxy(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "openrouter-proxy"
@@ -321,6 +355,8 @@ class Proxy(BaseHTTPRequestHandler):
             return
 
         status = resp.getcode()
+        if anthropic:
+            note += _anthropic_latch_update(status, resp.headers)
         self.send_response(status)
         for k, v in resp.headers.items():
             if k.lower() not in _DROP_RESP:
@@ -344,6 +380,24 @@ class Proxy(BaseHTTPRequestHandler):
         log(f"{self.command} {self.path} → {status} [{note}] {sent}B {time.time() - started:.1f}s")
 
     def do_GET(self) -> None:
+        if self.path == "/anthropic-limit":
+            # FU-088(a): the launcher-side probe (agents/subscription-latch.sh). limited=true →
+            # every subscription launcher defers its spawn until the latch expires/clears.
+            now = time.time()
+            with _latch_lock:
+                until, last = _latch["until"], _latch["last_429"]
+            payload = json.dumps({
+                "limited": until > now,
+                "until_epoch": round(until),
+                "remaining_s": max(0, round(until - now)),
+                "last_429_epoch": round(last),
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path == "/healthz":
             payload = b"ok"
             self.send_response(200)

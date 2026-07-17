@@ -173,6 +173,13 @@ else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
 fi
 
+# FU-088(a): defer the tick while the subscription is 429-latched — the cron re-fires; a spawn
+# now would just die on the same limit. Fail-open from the jail (proxy unreachable = proceed).
+if ! bash "$HERE/subscription-latch.sh"; then
+  echo "→ coordinator tick deferred — subscription rate-limited (FU-088 latch)"
+  exit 0
+fi
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod

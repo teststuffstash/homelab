@@ -51,6 +51,35 @@ KUBECTL="$(command -v kubectl || echo kubectl)"
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
+# 0a. FU-088(a) reactive latch: the first 429 anywhere on the subscription latches the egress
+#     proxy — skip the whole tick while latched (this reflex only ever spawns subscription
+#     reviewers; level-triggered, so the next tick simply re-checks).
+if ! bash "$HERE/subscription-latch.sh"; then
+  log "tick skipped — subscription rate-limited (FU-088 latch)"
+  exit 0
+fi
+
+# 0b. Honor the per-stack `reviewer.enabled` knob — the first CONSUMED slice of FU-080 (found
+#     live 2026-07-17: the oracle claim synced `reviewer: {enabled: false}` but nothing read it,
+#     so reviews kept firing). A stack that opted out drops ALL its repos from this global
+#     reflex. PROBE-FIRST like coordinator-scan: a failed claims read warns + keeps the full
+#     list — never silently change the review set on a flaky read.
+if claims="$("$KUBECTL" get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
+  optout="$(printf '%s' "$claims" | jq -r '.items[] | select(.spec.reviewer.enabled == false) | .spec.repos[].name' | sort -u | tr '\n' ' ')"
+  if [ -n "${optout%% }" ]; then
+    kept=""
+    for r in $REPOS; do
+      case " $optout" in
+        *" $r "*) log "[$r] skipped — stack reviewer.enabled=false (AgentStack claim)";;
+        *) kept="$kept $r";;
+      esac
+    done
+    REPOS="$kept"
+  fi
+else
+  log "WARN: agentstacks read PROBE-FAILED — reviewer.enabled knobs not honored this tick"
+fi
+
 # 1. Reap finished reviewer pods so the "already under review?" check below stays accurate and the
 #    namespace doesn't fill up (a completed pod's verdict already lives in the PR's state).
 for phase in Succeeded Failed; do
