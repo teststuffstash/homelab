@@ -2,9 +2,10 @@
 
 > **Status: running hand-driven (2026-07).** The *substrate* (scoped pods, recipes, scoped tokens,
 > branch protection, stats) is LIVE — see [`README.md`](README.md) and
-> [`../../agents/README.md`](../../agents/README.md). The **coordinator** exists as a hand-driven
-> Claude Code brief ([`../../agents/coordinator/`](../../agents/coordinator/README.md)); graduating
-> it to the durable, self-running reconciler described below is FU-026. Pivotal choices → thin ADRs
+> [`../../agents/README.md`](../../agents/README.md). The **coordinator**
+> ([`../../agents/coordinator/`](../../agents/coordinator/README.md)) now runs as the durable,
+> self-running reconciler described below — Argo CronWorkflow reflexes (ADR-093, FU-026 archived),
+> per-stack autonomy via the FU-080 claim knobs. Pivotal choices → thin ADRs
 > in [`../adr.md`](../adr.md).
 
 The end-to-end goal (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged

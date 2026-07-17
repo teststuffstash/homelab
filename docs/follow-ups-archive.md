@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-026** *(archived 2026-07-17)* — **Coordinator graduated off the hand-driven CronJob+bash
+  substrate → Argo Workflows + Events (ADR-093, Accepted 2026-07-17; the ADR marks this
+  discharged by Phase 1).** Live: all four reflexes are Argo CronWorkflows
+  (`agents/coordinator/reflexes-argo.yaml` — the k8s CronJob manifests are deleted, the */15
+  review CronWorkflow *is* the rollback backstop), the review edge-trigger Sensor is active
+  (exporter POSTs reviewable PRs incl. re-review rounds → `review-argo.yaml`), stacks opt in via
+  the AgentStack `argo.enabled` render, and the coordinator reflex was **unsuspended 2026-07-17**
+  (meta-7) gated per-stack by the FU-080 `coordinator.enabled` knob. Remainder lives elsewhere:
+  per-stack loop move (creds ref-rail + `<stack>-agents` ns CronWorkflows) = **FU-080**; oracle
+  ingestion DAGs = ADR-093 Phase 2 (oracle-fleet's ING-RT-STEP-CONTRACTS, unbuilt by design).
+
 - **FU-083** *(archived 2026-07-17)* — **agent-finalize no longer misclassifies raw-command adhoc
   rides as failed.** Adhoc tasks (not `issue-*`/`pr-*`) with `harness_exit==0` now classify as
   clean instead of `failed/no-output` — the adhoc branch sits after every failure signature, so

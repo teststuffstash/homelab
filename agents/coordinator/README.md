@@ -419,9 +419,9 @@ The **image-build CI needs no token** — it pushes to ghcr with the job's built
 
 - **FU-018 — `provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid
   worker path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
-- **FU-026 — Graduate the loop** off hand-driving to a durable engine (Temporal / Argo
-  Workflows+Events / a CRD+controller) once the runbook is proven — state already lives in
-  labels+CRs, so it's a swap.
+- **Durable engine (FU-026, done):** the loop runs on Argo Workflows+Events (ADR-093) — reflexes
+  are CronWorkflows + the review edge-trigger Sensor. The per-stack move (creds ref-rail +
+  `<stack>-agents` ns) is FU-080.
 - **Deploy path (FU-025, done):** the release→deploy path is now automated — the app repo's `deploy`
   workflow builds + opens an auto-merging version-bump PR in the stack's `-iac` repo, ArgoCD syncs. So
   step 7a is a no-op (deploy is hands-off); the coordinator never cuts releases or touches homelab.

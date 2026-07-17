@@ -136,8 +136,8 @@ The standing project key stays as the **funding ceiling**; the session key is th
   `agents/estimate_budget.py` sizes the pre-flight cap into a tier and `--emit-cr`s the CR; (3)
   `agent-session.sh --openrouter-secret <name>` binds a worker to a per-session key instead of the
   shared `<project>-openrouter`. The **coordinator** (`agents/coordinator/`) ties them together per
-  dispatch. Remaining: the coordinator's own dispatch loop is still hand-driven (by design, v1 —
-  FU-026).
+  dispatch. The dispatch loop now runs on the Argo reflexes (ADR-093; FU-026 archived), gated
+  per-stack by the FU-080 `coordinator.enabled` knob.
 - **FU-018 — OpenRouter provider routing: root cause found (2026-06-29), not yet wired.** The
   playground **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so
   the pod sent *no* `provider` field → default routing (filter ~30s-outage providers, then
