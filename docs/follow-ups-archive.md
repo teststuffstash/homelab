@@ -26,6 +26,10 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   verdicts/metrics; live 19:15Z reflex tick honored the paired `reviewer.enabled` knob; live
   probe seeded 5h=0.24/7d=0.48 through the rolled proxy. Fallback never wired by design: the
   unofficial `oauth/usage` endpoint (claude-code#13585 / ryan-knowone/quota-dashboard).
+  Same-day addendum: **Argo-native queueing layer** — `subscription-capacity` ConfigMap semaphore
+  (`synchronization.semaphores`) on the review-reflex/coordinator CronWorkflows + the `review`
+  WorkflowTemplate; over-cap submissions queue "waiting for lock" instead of deferring (Argo sees
+  only Argo-run workflows — the latch stays ground truth; per-stack scoping = FU-080's problem).
 - **FU-026** *(archived 2026-07-17)* — **Coordinator graduated off the hand-driven CronJob+bash
   substrate → Argo Workflows + Events (ADR-093, Accepted 2026-07-17; the ADR marks this
   discharged by Phase 1).** Live: all four reflexes are Argo CronWorkflows

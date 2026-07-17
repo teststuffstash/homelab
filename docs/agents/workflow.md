@@ -121,6 +121,19 @@ the burst which *causes* a 429) and, for OpenRouter workers, the **account-credi
 `claude-subscription` (utilization vs threshold, data age, deferral state) + the
 `SubscriptionDispatchLimited` (deferring >15m) and `SubscriptionWeeklyPoolLow` alerts.
 
+**The Argo-native layer (2026-07-17):** the three subscription-holding workflows (review-reflex
+tick, coordinator tick, the Sensor-submitted `review` Workflow — each holds its container for
+the session's whole duration) also declare a native Argo `synchronization` semaphore
+(`subscription-capacity` ConfigMap, key `claude: "3"`). An over-cap submission **queues**
+("waiting for lock" in the Argo UI, priority-ordered) instead of being deferred-and-rediscovered
+— work waits in line rather than relying on the next level-triggered pass. Deliberate layering,
+not redundancy: Argo counts only Argo-run *workflows* (interactive rides and jail launches are
+invisible to it, and one reflex tick can hold two reviewer pods on a single slot), while the
+probe script's proxy verdict + pod-label count see all subscription traffic — Argo provides
+queueing semantics, the latch provides ground truth. ConfigMap semaphores are namespace-scoped,
+so the FU-080 per-stack world needs the DB-backed lock flavor or per-stack pools (decide there).
+Never suspend a schedule for capacity — `suspend: true` is state that rots.
+
 ### Triggers: polling first, webhooks as an edge-trigger on top
 
 - **Don't build a pure-webhook system.** Deliveries get missed and the coordinator can be down.

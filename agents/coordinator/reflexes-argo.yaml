@@ -7,6 +7,23 @@
 # the two knobs (coordinator.enabled off / reviewer.enabled on) is the FU-080 continuation; these
 # stay GLOBAL in agent-coordinator until then (model-scout + ledger stay global permanently).
 ---
+# FU-088 Argo layer: the subscription-capacity semaphore. Workflows that HOLD a live subscription
+# session (review-reflex tick, coordinator tick, the Sensor-submitted review Workflow — their
+# containers run for the session's whole duration) declare this semaphore, so an over-cap
+# submission QUEUES ("waiting for lock" in the UI, priority-ordered) instead of spawning into a
+# rate-limited account. Complements — never replaces — agents/subscription-latch.sh: Argo counts
+# only Argo-run workflows (interactive rides and jail launches are invisible here, and one reflex
+# tick may hold K=2 reviewer pods on a single slot), while the latch's proxy verdict + pod-label
+# count see ALL subscription traffic. ConfigMap semaphores are namespace-scoped — the FU-080
+# per-stack world needs the DB-backed lock flavor or per-stack pools (decide there).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: subscription-capacity
+  namespace: agent-coordinator
+data:
+  claude: "3" # keep in step with SUBSCRIPTION_MAX_RUNNING in agents/subscription-latch.sh
+---
 # Review backstop — level-triggered catch-all for anything the edge-trigger missed (exporter down,
 # lost event). The Sensor path handles the common case near-instantly; this only sweeps.
 apiVersion: argoproj.io/v1alpha1
@@ -23,6 +40,11 @@ spec:
     serviceAccountName: agent-coordinator
     activeDeadlineSeconds: 900
     ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+    # FU-088 Argo layer: queue (not spawn) when the subscription pool is full — see the
+    # subscription-capacity ConfigMap header. The tick holds its slot while its reviewers run.
+    synchronization:
+      semaphores:
+        - configMapKeyRef: { name: subscription-capacity, key: claude }
     entrypoint: main
     volumes:
       - { name: work, emptyDir: {} }
@@ -70,6 +92,10 @@ spec:
     serviceAccountName: agent-coordinator
     activeDeadlineSeconds: 1800
     ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+    # FU-088 Argo layer: queue behind the subscription pool (ConfigMap header above).
+    synchronization:
+      semaphores:
+        - configMapKeyRef: { name: subscription-capacity, key: claude }
     entrypoint: main
     volumes:
       - { name: work, emptyDir: {} }

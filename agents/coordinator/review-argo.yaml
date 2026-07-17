@@ -102,6 +102,11 @@ metadata:
   namespace: agent-coordinator
 spec:
   serviceAccountName: agent-coordinator
+  # FU-088 Argo layer: an edge-triggered review queues ("waiting for lock") instead of spawning
+  # into a full subscription pool — see the subscription-capacity ConfigMap in reflexes-argo.yaml.
+  synchronization:
+    semaphores:
+      - configMapKeyRef: { name: subscription-capacity, key: claude }
   entrypoint: main
   arguments:
     parameters:
