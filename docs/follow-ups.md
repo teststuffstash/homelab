@@ -210,7 +210,15 @@ _Last updated: 2026-07-16._
       the one operator plan, and the ceiling was found by dying on it (2026-07-12 loop, 12
       approvals until the session limit cut it). Enforce at dispatch: the scheduler defers a unit
       when ≥N subscription-labelled pods are Running (label-selector count — the same mechanism as
-      the launcher pre-flight belt), report-only line instead of a doomed spawn. (b) **OpenRouter
+      the launcher pre-flight belt), report-only line instead of a doomed spawn. Struck again
+      2026-07-17: a review-reflex tick 429'd mid-run ("would exceed your account's rate limit",
+      `review-reflex-1784313000`) while reviewer sessions + interactive use stacked; oracle-iac's
+      reflex was manually suspended as mitigation. Sensing option beyond the pod count: the
+      undocumented `GET api.anthropic.com/api/oauth/usage` (OAuth bearer + oauth beta header →
+      5h/weekly utilization + resets_at) — claude-code#13585 (open) asks for an official
+      `claude quota`, none exists yet; a probe could ride the ADR-087 proxy's `/anthropic` leg.
+      NOTE the existing OTLP `claude_code_*` rail measures consumption (tokens/cost), never
+      headroom — it cannot serve as this semaphore's input. (b) **OpenRouter
       out-of-funds gate** — account-level credit exhaustion today surfaces only as per-pod 402
       retry storms AFTER spawn (the agent-runtime storm watchdog hard-stops in-pod, agent-runtime#8);
       add a pre-dispatch probe (credits/key-status via the ADR-081 proxy) so worker dispatch defers
