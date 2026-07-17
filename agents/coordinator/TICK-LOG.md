@@ -587,3 +587,26 @@ policy block in the header.
   mint — turn cap is the spend bound); kata+dind pod (fixer.docker); expect the #29 PR to shrink
   UC-1 expected-responses (item 1 windows) — a *flagged* spec diff routing to the delegated gate
   is the mechanism working, not a stall.
+
+### 2026-07-17 — meta-7 (closing): first autonomous issue→merge cycle CLEAN — oracle #29 via PR #48
+- **The loop closed end-to-end autonomously** (one meta arbitration + the delegated spec gate as
+  the only human-side touches): tick claimed #29 → haiku ride died at the 80-turn cap →
+  AGENT_STRIKE + branch salvage (FU-083 finalize classification validated live) → META comment
+  arbitrated "cap was the cause, resume haiku, don't chain-walk" → next tick obeyed verbatim
+  (round 1 re-dispatch, `--work-branch`, cap 200) → PR #48: red→green committed test-first,
+  decision-table rows with intent ids, ⚑-scoped-out addendum with the latent risk documented →
+  review edge-trigger fired the bot seconds after armed∧green → delegated CODEOWNERS gate
+  reviewed the SPEC DIFF + evidence (not the code), caught two hygiene defects (WIP flags
+  pointing at the closing #29; a ⚑ without a work pointer), fixed W1 on-branch after filing
+  carriers #49/#50 → approved → auto-merge 15:05Z. #29 CLOSED.
+- **Bugs found+fixed live**: coordinator-session.sh hardcoded the jail kubeconfig — the FIRST
+  autonomous C4/C5 spawn died on it (`525dff5` adds the pod-SA fallback agent-session.sh always
+  had); claude-tier `--max-turns` 80→200 (`8a4a1e1`, operator call — haiku hit the ceiling,
+  proven sufficient by the successful ride).
+- **Retro (not yet built)**: (a) worker finalize did NOT arm auto-merge on PR #48 — un-armed is
+  invisible to the review edge-trigger (FU-079 class); the gate armed by hand; fix in finalize.
+  (b) coordinator is cron-only — the C4/C5 re-dispatch waited ~10 min where the reviewer fires
+  in seconds; operator filed the edge-trigger FU, deferred. (c) single-action TICK_PROMPT
+  serializes lanes; multi-dispatch-per-free-lane is the cheap unlock. (d) issue dependencies are
+  prose — proposed `Depends-on: #N` body line + scan predicate (queued-blocked, level-triggered).
+  (e) oracle-iac is context-only (no fixer) — its Argo issues (#40/#41) are jail work by design.
