@@ -17,6 +17,14 @@ per-stack `-iac` model (FU-025, ADR-084). Two moves fall out:
    loop, RBAC, secret wiring). Each stack owns its *policy* (which repos, which model tiers, which tools,
    its git workflow, its review rubric). A stack declares `kind: AgentStack` in its own `-iac` repo;
    homelab's Composition renders the control plane for it. **Mechanism = platform; policy = stack.**
+   **(2026-07-17, ADR-093:) the orchestration engine underneath is now Argo Workflows + Events — the
+   agent-loop reflexes run as Argo CronWorkflows, and the review path is event-driven (github-exporter
+   POSTs reviewable PRs → Argo Events Sensor → review WorkflowTemplate → reviewer, */15 CronWorkflow
+   backstop). Argo Workflows is itself a claimable capability — a textbook mechanism/policy split: a
+   stack sets `argo.enabled: true` on its AgentStack claim and the platform renders a workflow SA +
+   workflowtaskresults RBAC into its namespace, while the stack authors its own WorkflowTemplates /
+   CronWorkflows (DAG + step images = stack policy; Garage is the S3 artifact repo). First consumer:
+   oracle-fleet ingestion.)**
 
 2. **Platform services are published as XRDs too — superseding `SERVICES.md` as the source of truth.**
    Today apps discover services by grepping a hand-maintained markdown catalog. The target: the platform's
@@ -31,8 +39,8 @@ homelab (platform)                         <stack>-iac (e.g. sleep-iac)         
 ──────────────────                         ────────────────────────────         ───────────────────
 publishes:                                 declares (its POLICY):               consumes via the k8s API
   • AgentStack XRD + Composition             kind: AgentStack                    kubectl get agentstacks
-    → coordinator gate/CronJob                 spec: repos, modelTiers,          kubectl get xrd
-    → review-reflex                                  tools, gitWorkflow,          (no more grep SERVICES.md)
+    → coordinator gate/CronWorkflow            spec: repos, modelTiers,          kubectl get xrd
+    → review Sensor+Wf                               tools, gitWorkflow,          (no more grep SERVICES.md)
     → RBAC + ESO secret wiring                       reviewRubric
   • service XRDs (S3/Postgres/…)            kind: Bucket / PostgresInstance
     → supersede SERVICES.md                  (already app-owned, ADR-076)
@@ -109,8 +117,11 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 ## Migration path
 
 1. **Now:** `stacks.json` + `coordinator-scan` (report) + `--stack` scoping. Supervised interactive ticks.
-2. **coordinator-reflex** CronJob running `coordinator-scan --spawn` per schedule (FU-050) — the gate keeps
-   the LLM off empty wakes. Graduating to autonomy is a scheduler swap, not a behavior change.
+2. **coordinator-reflex** — an Argo **CronWorkflow** (ADR-093; was a k8s CronJob) running
+   `coordinator-scan --spawn` per schedule (FU-050); the gate keeps the LLM off empty wakes. The review
+   path is now event-driven: github-exporter POSTs reviewable PRs to an Argo Events webhook → Sensor →
+   review WorkflowTemplate → reviewer (the ADR-084 sync.yaml pattern generalized), with a */15
+   CronWorkflow backstop. Graduating to autonomy is a scheduler swap, not a behavior change.
 3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack to a claim in its `-iac`;
    `stacks_json()` → `kubectl get agentstacks` (FU-048). **✅ DONE 2026-07-12 — first claim = oracle
    (not sleep: oracle's `-iac` agent dir was already GitOps-owned). See
@@ -129,8 +140,14 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   defaults for the rest ([`agentstack.md`](agentstack.md) §What a claim renders).
 - **One coordinator per stack vs one that iterates stacks.** ✅ Decided: **one GLOBAL
   coordinator-reflex** — the gate iterates all claims for cents and spawns scoped ticks; per-stack
-  CronJobs only if cadence/isolation ever diverges (a Composition addition, not a redesign).
-  [`agentstack.md`](agentstack.md) §Decisions.
+  CronWorkflows only if cadence/isolation ever diverges (a Composition addition, not a redesign).
+  [`agentstack.md`](agentstack.md) §Decisions. **Revisited 2026-07-17 (FU-080):** still one global
+  reflex, but suspend/unsuspend is now PER-STACK via two claim knobs it respects —
+  `spec.coordinator.enabled` (default false; the FU-050 autonomy switch, made per-stack —
+  `coordinator-scan --spawn` skips a stack whose flag isn't set) and `spec.reviewer.enabled`
+  (default true). model-scout + ledger stay global. The fuller per-stack `<stack>-agents` namespace
+  isolation (agents out of the project namespace, cross-namespace dispatch) is a separate remaining
+  FU-080 goal.
 
 ## The credential-airlock pattern (stack jails, FU-080)
 
@@ -153,6 +170,7 @@ openrouterkeys (drive the session-key mint→observe→delete its loop needs) �
 `agentstack-loop` SA + a **namespaced** launch Role (pods/exec/pvc/openrouterkeys) INTO each fixer
 namespace, and a per-stack coordinator/reviewer runs there as that SA holding only `ref:` creds — so
 the namespace-admin workbench controls the *whole* loop by construction, with zero cluster-scoped
-grant and zero cross-namespace reach. The identity + RBAC are rendered today (additive); moving the
-reflex CronJobs in-namespace is the remaining step (and the point at which "one global reflex"
-becomes "one reflex per stack jail").
+grant and zero cross-namespace reach. The identity + RBAC are rendered today (additive), and per-stack
+suspend/unsuspend already ships via the `spec.coordinator.enabled` / `spec.reviewer.enabled` claim
+knobs the global reflex respects (2026-07-17); moving the reflex CronWorkflows in-namespace is the
+remaining step (and the point at which "one global reflex" becomes "one reflex per stack jail").

@@ -43,6 +43,7 @@ truth.
 | **AgentStack (XRD)** | 🟢 LIVE | Agents framework as a platform API — one claim per stack renders its fixer infra (budget key, git token, worker egress netpol, proxy RBAC) | in-cluster: `kubectl get agentstacks` · `kubectl explain agentstacks.spec` · usage doc `kubectl get cm -n crossplane-system agentstack-docs -o jsonpath='{.data.USAGE\.md}'` | declare `kind: AgentStack` in your `-iac` repo; [`docs/agents/agentstack.md`](docs/agents/agentstack.md); FU-048/ADR-085 |
 | **OTel collector (OTLP sink)** | 🟢 LIVE | OTLP metrics+logs → Prometheus + Loki (the claude-code agent roles' telemetry rail) | in-cluster `otel-collector.monitoring.svc:4317` (grpc) / `:4318` (http) | `argocd/resources/otel-collector/`; [`docs/agents/observability-and-retro.md`](docs/agents/observability-and-retro.md) §A0 |
 | **Agent transcripts** | 🟢 LIVE | Every agent session persisted to S3 (`<project>/<task>/<role>-r<n>-<ts>/` + manifest) + a browse UI (LAN-only — transcripts carry repo content) | bucket `agent-transcripts` (Garage) · `https://transcripts.local.teststuff.net` | [`docs/agents/observability-and-retro.md`](docs/agents/observability-and-retro.md) §A1/§A2; `agents/coordinator/{garage-workspace,transcripts-viewer,transcripts-sync}.yaml` |
+| **Argo Workflows + Events** | 🟢 LIVE | The platform **orchestration engine** (ADR-093, agent-loop-first) — CronWorkflows/WorkflowTemplates + event triggers (JetStream EventBus). The agent-loop reflexes run on it; a stack opts its namespace in (`argo.enabled`) to run its own DAGs. **Garage is the S3 artifact repository.** Metrics + DAG UI for free. | in-cluster ns `argo` (workflow-controller + `argo-server`) / `argo-events`; metrics → Prometheus | `argocd/platform/argo-{workflows,events}.yaml` · artifact repo `argocd/resources/argo-artifacts/` · ADR-093; the agent-loop reflexes in `agents/coordinator/{reflexes,review}-argo.yaml` |
 | **OIDC IDP** | 🔴 PLANNED | Auth for "Others" | — not deployed | ADR-055 |
 
 ## Consuming a LIVE service
@@ -58,6 +59,12 @@ truth.
 - **Secrets (Infisical → ESO):** put the value in Infisical (`devbox run infisical-secret K=V`) and
   pull it into your namespace with an `ExternalSecret` against the `infisical` `ClusterSecretStore`.
   Full recipe: [`docs/secrets.md`](docs/secrets.md). Never commit secret values (repos are public).
+- **Orchestration (Argo Workflows):** opt your stack's namespace in with `argo.enabled: true` on its
+  AgentStack claim (`spec.repos[].argo`, ADR-093) — the platform renders a `argo-workflow` SA +
+  `workflowtaskresults` RBAC there. Then author your **WorkflowTemplates/CronWorkflows** (the DAG +
+  step images are *your* policy) with `serviceAccountName: argo-workflow`; artifacts pass via Garage
+  (S3 artifact repo, rendered per-namespace when a multi-step DAG needs it). Mechanism = platform,
+  policy = stack (ADR-085). First consumer: oracle-fleet ingestion.
 - **Database (Postgres/CNPG):** declare a `postgresql.cnpg.io/v1` `Cluster` in your namespace; consume
   the operator-generated `<cluster>-app` secret (or supply your own). Example: `argocd/resources/postgres/`.
 - **Dashboards (Grafana):** for "me"-facing views. For non-technical "Others", see ADR-072 (gated on

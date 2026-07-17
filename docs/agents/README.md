@@ -2,9 +2,10 @@
 
 > **Status: substrate LIVE, loop reflex-driven, autonomy switch off (2026-07).** The
 > launcher/worker/budget/reviewer pieces run for real (`../../agents/README.md`); the coordinator
-> is a scoped brief behind a deterministic scan gate, with the `coordinator-reflex` CronJob built
-> and deployed **suspended** (FU-050 — unsuspending it is the autonomy switch; durable engine =
-> FU-026); credential injection + the egress proxy are **LIVE default-on** (ADR-087: opaque refs +
+> is a scoped brief behind a deterministic scan gate, with the `coordinator-reflex` Argo CronWorkflow
+> (ADR-093 — the loop reflexes are Argo CronWorkflows in `agents/coordinator/reflexes-argo.yaml`, no
+> longer k8s CronJobs) built and deployed **suspended** (FU-050 — unsuspending it is the autonomy
+> switch; durable engine = FU-026); credential injection + the egress proxy are **LIVE default-on** (ADR-087: opaque refs +
 > git-cred broker; Cilium lockdown rollout = FU-020). This is the narrative home for the agent
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
 > [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in

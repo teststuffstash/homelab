@@ -171,9 +171,13 @@ double-spawns.
    the worker crash-loops on `secret … not found`.
 > **Steps 6–7 are now DETERMINISTIC REFLEXES, not coordinator turns** (FU-041,
 > [`../../docs/agents/merge-path.md`](../../docs/agents/merge-path.md)). `agent-session.sh` arms
-> auto-merge at PR open; the per-repo **updater workflow** keeps a behind PR current; the **review
-> reflex** CronJob (`agents/coordinator/review-reflex.yaml`) dispatches the reviewer the moment a PR is
-> green + current + unapproved; GitHub auto-merge completes it. So in the normal path you do **not** run
+> auto-merge at PR open; the per-repo **updater workflow** keeps a behind PR current; the **review path
+> is event-driven** (ADR-093, generalizing the ADR-084 webhook pattern): the github-exporter POSTs a
+> reviewable PR (green ∧ current ∧ unapproved ∧ armed — incl. `changes_requested` re-review rounds) to
+> an **Argo Events** webhook → Sensor → the `review` WorkflowTemplate → `reviewer-session.sh <repo>
+> <pr>`, near-instant instead of the old ≤5-min poll (`agents/coordinator/{review-argo,reflexes-argo}.yaml`);
+> the **review reflex** is now a `*/15` Argo **CronWorkflow BACKSTOP**. GitHub auto-merge completes it.
+> So in the normal path you do **not** run
 > steps 6–7 by hand — you WATCH the reflexes work and only step in for the exception plays (conflict →
 > close + re-dispatch fresh; changes-requested → next round; round-limit / flip-flop / stale-red →
 > decide or escalate). The manual commands below remain valid as a fallback when a reflex is disabled.
@@ -307,16 +311,16 @@ devbox run coordinator-session
 # scope a first run to one item
 devbox run coordinator-session -- --seed "Work PR #18 on sleep-tracking to major/awaiting-human."
 
-# headless one tick — the exact call a future coordinator reflex (CronJob) will make
+# headless one tick — the exact call the coordinator-reflex Argo CronWorkflow makes (ADR-093)
 devbox run coordinator-session -- --run-tick
 ```
 
 > **Tick prompt = one source of truth.** The reconcile instruction lives once in
 > `coordinator-session.sh` as `TICK_PROMPT`; `--tick` (interactive) and `--run-tick` (headless) inject
-> the *same* string. So the first runs are hand-supervised with exactly the prompt the eventual
-> autonomous **coordinator reflex** (the LLM sibling of `review-reflex`, a CronJob doing `--run-tick` on
-> a schedule) will use — graduating to autonomy is a **scheduler swap, not a behavior change**. Edit the
-> wording in one place and both follow.
+> the *same* string. So the first runs are hand-supervised with exactly the prompt the autonomous
+> **coordinator-reflex** (the LLM sibling of the review reflex, now an Argo **CronWorkflow** doing
+> `--run-tick` on a schedule — ADR-093) uses — graduating to autonomy was a **scheduler swap, not a
+> behavior change**. Edit the wording in one place and both follow.
 
 > **Scope note (partially landed — FU-045).** A coordinator instance is scoped to a **stack**: the
 > platform (homelab) **plus that stack's repos**. Since FU-025 a stack's deploy truth lives in its own
@@ -352,9 +356,11 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 ## Bootstrap (one-time)
 
 > **Now GitOps-managed (2026-07-06).** The subsystem manifests — `rbac.yaml` (Namespace + SA + roles),
-> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and
-> `review-reflex.yaml` (the CronJob) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
-> ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a review-reflex
+> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and the four
+> agent-loop reflexes as **Argo CronWorkflows** in `reflexes-argo.yaml` + the event-driven review path
+> in `review-argo.yaml` (ADR-093; each reflex shows in the argo-server UI and emits `argo_workflows_*`
+> Prometheus metrics) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
+> ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a reflex
 > image bump) auto-applies — **no manual `kubectl apply`**. The `kubectl apply` commands below are only the
 > pre-ArgoCD / disaster-recovery path. Since 2026-07-12 (FU-001 leg A) **nothing here is imperative**:
 > `coordinator-claude` is ESO-materialized too (`claude-token.yaml` ← Infisical
@@ -373,8 +379,8 @@ devbox run infisical-secret COORDINATOR_CLAUDE_OAUTH_TOKEN="$(claude setup-token
 
 The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
-(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + `review-reflex.yaml`
-(the CronJob, ArgoCD-synced); the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
+(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + `reflexes-argo.yaml`
+/ `review-argo.yaml` (the Argo CronWorkflows, ArgoCD-synced); the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
 is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 

@@ -41,6 +41,7 @@ exist — it belongs to the repo's own deployment, never to the XR):
 | `agentstack-proxy-session-keys` Role+RoleBinding (ADR-087 leg A) | the hand-list that lived in `agents/coordinator/openrouter-proxy-rbac.yaml` (deleted 2026-07-12 — all stacks on claims) |
 | `claude-session` ExternalSecret — only with `fixer.claudeTier: true` (FU-066a): the subscription oauth token, session-key-labeled; claude rides hold only `ref:<ns>/claude-session` | the operator-imperative `kubectl create secret` (oracle-fleet was the only one) |
 | `agentstack-storage` ResourceQuota (per-StorageClass caps from `spec.repos[].storage` — ADR-089 quota-as-contract; rendered for ANY repo with a `storage` block, fixer or not) | nothing — namespaces were quota-less; over-cap PVCs used to wedge unschedulable in Longhorn |
+| `argo-workflow` ServiceAccount + `workflowtaskresults` Role/RoleBinding — only with `spec.repos[].argo.enabled: true` (bool, default false; opts the namespace in to run **Argo Workflows**, the ADR-093 platform orchestration engine). The DAG + step images are STACK POLICY (WorkflowTemplates/CronWorkflows in the stack's own `-iac`/app repos) — mechanism = platform, policy = stack (ADR-085). The S3 artifact repository (a Garage bucket + key + default `artifact-repositories` ConfigMap) renders per-namespace when a multi-step DAG needs inter-step handoff. First consumer: oracle-fleet's ingestion DAG (FU-080) | the hand-written Argo RBAC/artifact wiring a stack would otherwise carry |
 
 The composed Role is deliberately named `agentstack-*` (not `openrouter-proxy-session-keys`) so
 migration never collided with the hand-list's same-named Role — each hand-list entry was deleted
@@ -121,11 +122,22 @@ catalog problem.
 
 ## Decisions (2026-07-12)
 
-- **One global coordinator-reflex, not per-stack control planes.** The gate already iterates all
-  claims for cents (deterministic, no LLM until work exists) and spawns *scoped* ticks; per-stack
-  CronJobs would multiply idle wakes and pod churn while changing nothing about scoping. Revisit
-  only if one stack's tick cadence must diverge or a stack needs isolation from another's queue —
-  then it's a Composition addition (render a per-stack CronJob from the claim), not a redesign.
+- **One global reflex, per-stack control via claim flags (revisited 2026-07-17, FU-080).** The
+  gate already iterates all claims for cents (deterministic, no LLM until work exists) and spawns
+  *scoped* ticks; per-stack control planes would multiply idle wakes and pod churn. Rather than a
+  reflex-per-stack, per-stack autonomy is now two claim knobs the ONE global reflex respects:
+  - **`spec.coordinator.enabled`** (bool, default **false**) — the per-stack autonomy switch (the
+    FU-050 global switch made per-stack). `coordinator-scan.sh --spawn` skips a stack whose
+    `coordinator.enabled != true`, so a proven stack graduates to autonomous coordination while
+    newer ones stay off. A supervised `coordinator-session --run-tick` still overrides for a
+    one-off tick.
+  - **`spec.reviewer.enabled`** (bool, default **true** = current behavior) — auto-review this
+    stack's PRs. Safe to leave on: reviewing green, unapproved PRs never dispatches new work.
+
+  These make suspend/unsuspend **per-stack** (delivered via the global reflex honouring the claim
+  flags); the fuller per-stack `<stack>-agents` namespace isolation from another stack's queue is a
+  separate remaining goal (FU-080). The agent-loop reflexes are Argo **CronWorkflows** (ADR-093),
+  not CronJobs.
 - **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided) — refined
   same day by the permission-tier split below (FU-068):** the *Issues-tier* slice (labels) has a
   designed in-cluster path via `provider-upjet-github`; the *Administration-tier* slice

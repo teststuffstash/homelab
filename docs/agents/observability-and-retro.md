@@ -8,7 +8,8 @@
 > 2026-07-10; archived 2026-07-16)** — exit_status/error_class classifier, pushgateway +
 > `agent_run_*` metrics, the dashboards (model-health, running-agents/stall detector, cost, the
 > agent-issue drill-down), goose sessions.db rendering in the viewer, and the `ledger-reflex`
-> CronJob on a 30-min cadence; taxonomy unification (FU-061) landed with it. **P3 = FU-058**, next
+> Argo CronWorkflow on a 30-min cadence (ADR-093 — the loop reflexes migrated k8s CronJob → Argo
+> CronWorkflow, `agents/coordinator/reflexes-argo.yaml`); taxonomy unification (FU-061) landed with it. **P3 = FU-058**, next
 > (the ledger it needs is accumulating; both absorbed the old "stats v2" scope). Companion to [`workflow.md`](workflow.md) (control flow)
 > and [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 
@@ -71,6 +72,13 @@ token/cost/latency metrics on the standard schema for free and feeds the B1 ledg
 replace transcripts (replay + LLM root-cause need the raw JSONL). Goose workers stay
 manifest-only until goose grows OTel.
 
+Since ADR-093 the loop reflexes run as **Argo CronWorkflows**, so Argo also emits
+`argo_workflows_*` orchestration metrics to Prometheus (workflow/step duration, phase, retries) and
+every run shows in the argo-server UI — orchestration visibility "for free." This is an *additional*
+layer alongside the agent-domain rails (pushgateway `agent_run_*`, the github-exporter, OTLP); Argo
+adds orchestration observability, it does not replace the domain layer, and the transcripts/ledger
+machinery is unchanged.
+
 ### A1. Capture (P0 — the blocker)
 
 Extend ADR-080's "durable = git + S3": **every agent session persists, before pod exit, to the
@@ -126,9 +134,12 @@ first. Ranked reality:
    and the reason the loop was un-followable — *nothing visibly happened*. **This is why monitoring
    IS the speed fix**: a "reviewer idle N min with a green PR waiting" panel turns a 2.5h silent
    stall into a glance. Highest-leverage speed work = FU-057, not caching.
-2. **Orchestration latency — ~50 min** (5-min review-reflex cron + manual meta-ticks + CI cycles).
-   The documented levers apply: hot-tick + CI-green→coordinator ping + webhook edge-trigger
-   ([workflow.md](workflow.md) §Triggers). Real but second-order.
+2. **Orchestration latency — ~50 min** (then a 5-min review-reflex cron + manual meta-ticks + CI
+   cycles). The documented levers apply: hot-tick + CI-green→coordinator ping + webhook edge-trigger
+   ([workflow.md](workflow.md) §Triggers). Since ADR-093 the review path is **event-driven** — the
+   github-exporter POSTs a reviewable PR to an Argo Events webhook → Sensor → `review`
+   WorkflowTemplate (near-instant vs the old `*/5` poll; a `*/15` review-reflex CronWorkflow is only
+   the backstop). Real but second-order.
 3. **The model — ~48 min of pod compute** (deepseek-v4-flash: 400–1170s LLM loops, and 2 of 4
    rounds *died* to truncation/retry-storms). Cheap per token but slow (many round-trips) and
    error-prone → slow AND wasteful per *successful* issue. The model-health dashboard (below) makes
@@ -201,4 +212,4 @@ transcripts. The per-task hook is only the deterministic B1 reflex.
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —
   everything later can analyze retroactively *because* P0 captured the raw material.
 - **P1**: viewer Deployment + PR-comment task link. **P2**: facts reflex + dashboard (FU-057).
-- **P3**: retro brief + first hand-supervised run, then a CronJob sibling of the review reflex (FU-058).
+- **P3**: retro brief + first hand-supervised run, then a CronWorkflow sibling of the review reflex (FU-058).

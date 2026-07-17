@@ -5,11 +5,21 @@
 workflows** — [`../../.github/workflows/update-pr-branch.reusable.yml`](../../.github/workflows/update-pr-branch.reusable.yml)
 + [`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml) — with ~3-line
 callers in each agent repo (sleep-tracking, snore-recorder, openrouter-operator, agent-runtime,
-agent-coordinator); the **review reflex** ([`../../agents/review-reflex.sh`](../../agents/review-reflex.sh)
-+ [`../../agents/coordinator/review-reflex.yaml`](../../agents/coordinator/review-reflex.yaml)) is now
-**GitOps-managed** by the `agent-coordinator` ArgoCD app (no more `kubectl apply`); the `gh pr merge --auto
---squash` arming lives in [`../../agents/agent-session.sh`](../../agents/agent-session.sh). Renovate's shared
-classification is in [`../../.github/renovate-global.json`](../../.github/renovate-global.json) (FU-014).
+agent-coordinator); the `gh pr merge --auto --squash` arming lives in
+[`../../agents/agent-session.sh`](../../agents/agent-session.sh). Renovate's shared classification is in
+[`../../.github/renovate-global.json`](../../.github/renovate-global.json) (FU-014).
+
+> **Update (2026-07-17, ADR-093 — Argo Workflows + Events as the platform orchestration engine):** the
+> review path is now **event-driven** and the reflexes run as **Argo CronWorkflows**, not k8s CronJobs.
+> The github-exporter (the ONE poller) POSTs each reviewable PR (green ∧ unapproved ∧ armed — the same
+> predicate `review-reflex.sh` uses, incl. `changes_requested` re-review rounds) to an Argo Events
+> **webhook EventSource** → a **Sensor** submits a `review` **WorkflowTemplate** → `reviewer-session.sh
+> <repo> <pr>` for that exact PR (near-instant, no GraphQL poll; generalizes the ADR-084 `sync.yaml`
+> webhook). The old `*/5` review-reflex survives only as a **`*/15` CronWorkflow BACKSTOP** for anything
+> the edge-trigger missed. Manifests: [`../../agents/coordinator/review-argo.yaml`](../../agents/coordinator/review-argo.yaml)
+> + [`../../agents/coordinator/reflexes-argo.yaml`](../../agents/coordinator/reflexes-argo.yaml) (proven
+> E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
+> original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
 The last leg of the NL→auto-merged pipeline ([`workflow.md`](workflow.md)): how an approved, green
 agent PR actually lands on master — **without an LLM making any merge decision**. LLMs author code
@@ -78,9 +88,13 @@ Four deterministic pieces around the existing gates:
    which is what we want — no history rewrite, no force-push, a stale worker clone can still
    `git pull`). Triggers: `push` to master, CI-workflow completion, and a cron sweeper
    (catches a PR that goes green while master is quiet).
-3. **Review reflex** — the *coordinator subsystem's* deterministic half: a CronJob in ns
-   `agent-coordinator` (it holds both reviewer secrets), pure bash + `gh`, every ~5 min: across
-   the agent repos, list open PRs; filter **green AND up-to-date AND auto-merge-armed AND
+3. **Review reflex** — the *coordinator subsystem's* deterministic half, in ns `agent-coordinator`
+   (it holds both reviewer secrets), pure bash + `gh`. **Now edge-triggered (ADR-093):** the
+   github-exporter POSTs a reviewable PR to an Argo Events webhook EventSource → Sensor → `review`
+   WorkflowTemplate → `reviewer-session.sh <repo> <pr>` for that exact PR, near-instant. A `*/15`
+   **CronWorkflow backstop** (the old `*/5` reflex, generalized) re-lists as a level-triggered
+   catch-all for anything the edge missed: across the agent repos, list open PRs; filter
+   **green AND up-to-date AND auto-merge-armed AND
    unapproved AND no changes-requested** (*unapproved* = the reviewer bot has no approval at the
    current head — NOT GitHub's `reviewDecision`, which on code-owner-gated repos stays
    `REVIEW_REQUIRED` until the human owner approves; see the edge case below); pick the oldest
@@ -90,9 +104,10 @@ Four deterministic pieces around the existing gates:
    other (masters move independently), so the per-repo serialization that protects review
    economics costs nothing across repos; K exists only to protect the shared subscription quota.
    Anything it *can't* mechanically progress (conflict, round limit, flip-flop — see the
-   escalation table) it **labels for the coordinator** rather than acting on. Polling-first per
-   the trigger doctrine in [`workflow.md`](workflow.md) §Triggers; a webhook edge-trigger can
-   lower latency later.
+   escalation table) it **labels for the coordinator** rather than acting on. Edge-triggered by the
+   exporter POST with the `*/15` backstop (ADR-093) — the edge+level pattern from
+   [`workflow.md`](workflow.md) §Triggers, now live; double-dispatch is safe (see §Concurrent
+   triggers). This collapsed the reflex's separate PR-list GraphQL poll (a rate-limit burn).
 4. **GitHub auto-merge** completes the PR the moment approval lands (the PR is already green and
    current — the reflex only reviews PRs in that state). Nobody — human or LLM — clicks merge.
 
@@ -117,7 +132,7 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 | event | who acts | what happens |
 |---|---|---|
 | PR green + behind | reflex (updater workflow) | update-branch API call |
-| PR green + current + unapproved | reflex (review CronJob) | dispatch reviewer session |
+| PR green + current + unapproved | reflex (exporter POST → Argo Events → review WorkflowTemplate; `*/15` CronWorkflow backstop) | dispatch reviewer session |
 | approval lands | reflex (GitHub auto-merge) | merge, delete branch |
 | update-branch returns 422 (conflict) | reflex labels → **coordinator decides** | usually: close the PR and re-dispatch the original worker fresh from new master (workers are pure functions — re-running one is cheaper and cleaner than a rebase-surgeon session); a dedicated conflict-resolution session only when the diff is expensive to regenerate |
 | reviewer requests changes, rounds left | reflex (the reconciler's `changes-requested → round N+1` transition, `workflow.md`) | spawn a fresh worker with PR + review thread; PR re-enters the queue mechanically |
@@ -127,7 +142,8 @@ The coordinator **keeps start-to-finish ownership of every issue** as an oversee
 | un-armed `major` devbox bump PR opens (FU-022 gate) | **coordinator owns end-to-end** (never the reflex — it's un-armed) | investigate (dispatch reviewer *even while red* — the review explains the break) → worker fixes breakage if within budget → green + approved → relabel `major/awaiting-human`; a **human** merges. See `agents/coordinator/README.md` §"Dependency major bumps". |
 
 Two properties fall out. First, the merge path stays fully deterministic (constraint 1): every
-box on the mechanical rows is a workflow or a CronJob. Second, nothing ever leaves the
+box on the mechanical rows is a GitHub workflow, an Argo Events Sensor, or an Argo CronWorkflow.
+Second, nothing ever leaves the
 coordinator's authority: the reflexes are *its* machinery (they live in its namespace, they report
 into its label vocabulary), so from the issue's point of view there is one owner from triage to
 close — the coordinator just isn't billed an LLM turn for the trivial 90 %. Its brief loses the
@@ -184,7 +200,7 @@ sequenceDiagram
     participant GH as GitHub
     participant CI as ci (ARC runner)
     participant U as updater workflow
-    participant D as review reflex (CronJob)
+    participant D as review reflex (Argo Events edge + */15 backstop)
     participant R as reviewer pod (LLM)
 
     K->>W: tick: issue triaged → spawn worker
@@ -194,7 +210,7 @@ sequenceDiagram
     GH->>CI: pull_request → ci
     CI-->>GH: ✓ green
     Note over U: runs on CI completion:<br/>PR current → nothing to do
-    D->>GH: poll: green ∧ current ∧ armed ∧ unapproved?
+    Note over D: exporter POSTs green ∧ current ∧ armed ∧ unapproved<br/>→ Argo Events (backstop re-lists on */15)
     D->>R: reviewer-session.sh sleep-tracking 35
     R->>GH: native review: APPROVE
     GH->>GH: auto-merge → squash onto master
@@ -212,10 +228,10 @@ every other fact: by re-listing on the next tick and finding the merged PR + aut
 It does not need to have *spawned* the review to know the outcome, any more than it needs to spawn
 CI to read CI results — the verdict is a native PR review, durable state. (If the LLM-coordinator
 were the review spawner, it would have to be awake at the right moment — i.e. LLM-polling a
-boolean every few minutes, a billed turn per poll for a decision with zero content.) The reflex
-cron adds ≤5 min latency against a 8–20 min CI cycle; when that ever matters, the CI workflow's
-final step can ping the reflex directly (the edge-trigger-on-top-of-polling pattern from
-`workflow.md` §Triggers) and the cron delay drops to zero. For tasks predicted small, the
+boolean every few minutes, a billed turn per poll for a decision with zero content.) The review is
+now edge-triggered (ADR-093): the github-exporter POSTs the reviewable PR to Argo Events the moment
+it goes green ∧ armed ∧ unapproved, so dispatch is near-instant against the 8–20 min CI cycle; the
+`*/15` CronWorkflow backstop only covers a missed event. For tasks predicted small, the
 coordinator may also stay hot through the whole cycle and verify in-session — the "hot tick"
 micro-opt in `workflow.md` §Worker = a pure function (watch and nudge, never dispatch).
 
@@ -261,7 +277,8 @@ stateDiagram-v2
 ## Worked examples
 
 Assumptions (today's numbers): `ci` ≈ **8 min** on ARC (~5 min cold start, improves with FU-015);
-reviewer session ≈ **4 min**; reflex tick 5 min; updates are API calls (free) that each induce
+reviewer session ≈ **4 min**; review dispatch now edge-triggered (near-instant, `*/15` backstop);
+updates are API calls (free) that each induce
 one CI cycle.
 
 ### S — one agent PR, quiet master
@@ -478,7 +495,11 @@ contract-versioning discipline), not a merge-path mechanism.
 - **Flaky CI** — a flaky red steals the PR's queue slot (next PR gets updated first). Acceptable:
   FIFO is a fairness preference, not a correctness requirement.
 - **Concurrent triggers / locking** — cron tick + wake-up ping firing together must never
-  double-dispatch. Two layers:
+  double-dispatch. Under ADR-093 the live case is the **edge-trigger (exporter POST) and the `*/15`
+  backstop both firing for one PR**; that's safe via three guards: the reviewer **pod-label
+  idempotency** (`app=agent-reviewer,project,pr`), the reviewer's **STEP-0 self-guard**, and the
+  **review WorkflowTemplate's pre-dispatch pod check**. The original CronJob-era layering still
+  describes the shape:
   1. *Serialize the reconciler (best-effort, throughput):* the CronJob runs with
      `concurrencyPolicy: Forbid`; the wake path creates its Job under a **fixed name**
      (`review-reflex-manual`) — `kubectl create` is atomic, `AlreadyExists` = someone's already
@@ -507,8 +528,9 @@ contract-versioning discipline), not a merge-path mechanism.
   approves; `require_last_push_approval = false`) — so the distinct identity is for blast-radius +
   audit legibility, not a hard GitHub constraint. Bootstrap: `scripts/github-merge-app-bootstrap.sh`;
   published to Actions by `tofu/github/actions_secrets.tf` via `devbox run github-tofu apply`.
-- **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. It's a CronJob:
-  next tick resumes. Same level-triggered posture as the coordinator doctrine.
+- **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. The `*/15`
+  CronWorkflow backstop re-lists next tick and resumes (and covers a missed exporter POST too).
+  Same level-triggered posture as the coordinator doctrine.
 - **Worker still pushing while updater updates** — prevented by ordering, not locking: the updater
   only touches PRs that are green + auto-merge-armed, and arming happens at the *end* of the worker
   session. A worker addressing review feedback re-pushes to its own branch — but at that moment the
@@ -533,8 +555,13 @@ you're back to today's coordinator-driven flow).
 3. **Phase 3 — hygiene.** `agent-session.sh`: make `gh pr merge --auto --squash` a mandatory
    post-PR step. Updater labels conflicted PRs. `tofu/github/repos.tf`: leave
    `allow_update_branch = false` (irrelevant to the API; the UI suggestion stays off).
-4. **Phase 4 — later.** Edge-triggers for the review reflex, in escalating order of effort —
-   every *automated* actor already runs in-cluster (worker pod, reviewer pod, ARC runner incl.
+4. **Phase 4 — DONE (2026-07-17, ADR-093).** The review reflex is edge-triggered: the
+   github-exporter POSTs each reviewable PR to an Argo Events webhook EventSource → Sensor → `review`
+   WorkflowTemplate ([`../../agents/coordinator/review-argo.yaml`](../../agents/coordinator/review-argo.yaml)),
+   with the `*/15` CronWorkflow as the level-triggered backstop; the reflexes moved from k8s CronJobs
+   to Argo CronWorkflows ([`../../agents/coordinator/reflexes-argo.yaml`](../../agents/coordinator/reflexes-argo.yaml)).
+   The original plan for reaching that end-state, for reference: edge-triggers in escalating order of
+   effort — every *automated* actor already runs in-cluster (worker pod, reviewer pod, ARC runner incl.
    the updater workflow's job), so each can wake the reflex with a one-line curl / `kubectl create
    job --from=cronjob/review-reflex` as its last step: **no public webhook receiver needed**. A
    real GitHub webhook (HMAC-verified receiver behind a `cloudflared` tunnel, à la
@@ -557,10 +584,11 @@ you're back to today's coordinator-driven flow).
   reviewing supply-chain-shaped changes. See [`../renovate.md`](../renovate.md).
 - Squash vs merge for auto-merge: squash keeps master linear and is what the worker arms today —
   any reason for merge commits on agent PRs? (Default: squash.)
-- Review reflex as in-cluster CronJob vs a GitHub Actions cron: CronJob chosen because the reviewer
-  secrets live in ns `agent-coordinator` and must not become GitHub org secrets — and because the
-  reflex is coordinator machinery, so it belongs in the coordinator's namespace and label
-  vocabulary. Revisit only if the cluster/GitHub trust boundary changes.
+- Review reflex in-cluster vs a GitHub Actions cron: in-cluster chosen because the reviewer secrets
+  live in ns `agent-coordinator` and must not become GitHub org secrets — and because the reflex is
+  coordinator machinery, so it belongs in the coordinator's namespace and label vocabulary. Revisit
+  only if the cluster/GitHub trust boundary changes. (Realized as an Argo CronWorkflow backstop +
+  Argo Events edge-trigger, ADR-093 — not a k8s CronJob.)
 - The staleness timer T (escalation table): start 24 h, tune from transcripts. The fix-round
   bound already lives in [`workflow.md`](workflow.md) §Hazards ("max review rounds, e.g. 3") —
   that stays the single knob; this doc doesn't define its own.

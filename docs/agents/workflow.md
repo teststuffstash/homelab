@@ -12,8 +12,11 @@ fix. This doc is the *control flow* that gets it there — who runs the agent, w
 CI feed back. The last leg — how an approved green PR deterministically lands on master (branch
 updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed **and built** separately
 in [`merge-path.md`](merge-path.md) (FU-041): a per-repo updater workflow keeps the head-of-line PR
-current, and the **review reflex** CronJob auto-dispatches the reviewer when a PR is green + current +
+current, and the **review reflex** auto-dispatches the reviewer when a PR is green + current +
 unapproved — so the mechanical "trigger the reviewer" step below is now a reflex, not a coordinator turn.
+Since 2026-07-17 (ADR-093) that dispatch is **event-driven**: the github-exporter POSTs the reviewable
+PR to an Argo Events webhook → Sensor → `review` WorkflowTemplate (the reflexes are Argo CronWorkflows
+now, not k8s CronJobs, with a `*/15` backstop) — near-instant instead of a poll.
 
 ## Two gates, not one
 
@@ -88,7 +91,9 @@ CR once that lands, ADR-078/081).
 - **Don't build a pure-webhook system.** Deliveries get missed and the coordinator can be down.
   Build a reconciler that **periodically re-lists** open `agent-fix` issues/PRs and drives the state
   machine (level-triggered, robust). Webhooks then merely *wake it sooner* (edge-triggered) — the
-  standard k8s "edge + level" wisdom.
+  standard k8s "edge + level" wisdom. The **review path already runs this way** (2026-07-17, ADR-093):
+  the github-exporter POST is the edge-trigger into an Argo Events webhook, backed by a `*/15`
+  CronWorkflow that re-lists — see [`merge-path.md`](merge-path.md).
 - **Start with polling** (every 1–2 min — trivial at this volume); add webhooks when latency annoys.
   Events worth subscribing to: `pull_request` (opened/synchronize), `pull_request_review`,
   `check_suite` completed, `issues`/`issue_comment` (label/comment).
