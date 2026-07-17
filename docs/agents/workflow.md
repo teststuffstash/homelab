@@ -150,7 +150,7 @@ Never suspend a schedule for capacity — `suspend: true` is state that rots.
 - **Delivery into the homelab** — reuse the Cloudflare Tunnel pattern (a small `cloudflared` ingress
   to an in-cluster coordinator); no inbound ports.
 
-#### The coordinator Sensor (design 2026-07-17; build = FU-085)
+#### The coordinator Sensor (design 2026-07-17; BUILT same day — FU-085 archived, coordinate-argo.yaml)
 
 Nothing wakes the coordinator early today — the `*/10` `coordinator-reflex` CronWorkflow is the only
 thing that runs `coordinator-scan.sh --spawn` (live sting: the oracle-fleet#29 C4/C5 re-tick sat

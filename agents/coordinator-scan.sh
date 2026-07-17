@@ -61,7 +61,12 @@ stacks_json() {
         coordinatorEnabled: (.spec.coordinator.enabled // false),
         # repos whose fixer declared docker=true: dispatch their workers with
         # agent-session.sh --docker (kata microVM + dind — the CI-gate runtime choice)
-        dockerRepos: [.spec.repos[] | select(.fixer.docker == true) | .name]
+        dockerRepos: [.spec.repos[] | select(.fixer.docker == true) | .name],
+        # ADR-094 dispatchability predicate: only repos with a fixer block can run workers —
+        # a context-only repo (oracle-iac) becomes a VISIBLE predicate, not an implicit
+        # clone-but-cant-work state. Absent from the file fallback → null → treated as unknown
+        # (all repos dispatchable — the belt stays permissive, never silently narrower).
+        fixerRepos: [.spec.repos[] | select(.fixer) | .name]
       })) as $claims
       | {stacks: ($claims + [$f.stacks[] | select(.name as $n | $claims | all(.name != $n))])}
     ')"
@@ -81,9 +86,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""
+  items=""; orphans=""; units=""
+  # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
+  fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
     slug="$ORG/$repo"
+    case " $fixer_repos" in *" __ALL__ "*|*" $repo "*) dispatchable=1;; *) dispatchable="";; esac
     # gh's built-in --jq keeps this to one repo-read scope — no statusCheckRollup (checks:read) needed.
     # `direction-change` (C10): a human reversed direction (language/architecture) — every carrying
     # item needs a human SWEEP (re-scope the issue / close the PR + delete its branch) BEFORE any
@@ -100,8 +108,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))]' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
+    # In-progress issues once per repo — the C4/C5 clause below AND the ADR-094 lane predicate
+    # (`track/*` labels = the human-declared independence assertion; ≤1 in flight per lane) read it.
+    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
+    busy_tracks="$(printf '%s' "$inprog" | jq -r '.[].labels[].name | select(startswith("track/"))' | sort -u | tr '\n' ' ')"
     iss=""; qblocked=""; qcycles=""
-    while IFS="$(printf '\t')" read -r qnum qtitle qdeps; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps; do
       [ -n "$qnum" ] || continue
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
@@ -126,12 +140,28 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$blocked" ]; then
         qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
-      elif [ -n "$stale" ]; then
+        continue
+      fi
+      # ADR-094 scheduling predicates (deterministic — the LLM never picks):
+      if [ -z "$dispatchable" ]; then
+        orphans="${orphans}[$repo] ⚠ queued but NOT dispatchable (no fixer block — context-only repo; jail work):\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      lane_busy=""
+      for t in $(printf '%s' "$qtracks" | tr ',' ' '); do
+        case " $busy_tracks" in *" $t "*) lane_busy="$t";; esac
+      done
+      if [ -n "$lane_busy" ]; then
+        orphans="${orphans}[$repo] ⏳ lane busy (ADR-094: ≤1 in flight per track):\n  issue #${qnum} — ${qtitle} (lane ${lane_busy} has an in-progress issue)\n"
+        continue
+      fi
+      if [ -n "$stale" ]; then
         iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
       else
         iss="${iss}  issue #${qnum} — ${qtitle}\n"
       fi
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ")) ] | @tsv')
+      units="${units}queued-dispatch|${repo}|issue-${qnum}\n"
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",")), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ")) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
@@ -148,8 +178,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     [ -n "$errs" ] && orphans="${orphans}[$repo] ⚠ agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched:\n${errs}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
     # UN-ARMED — an armed PR is the review reflex's, never the coordinator's (arming is the boundary).
-    prs="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest \
-      --jq '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest 2>/dev/null)" || prsjson='[]'
+    jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
+    prs="$(printf '%s' "$prsjson" | jq -r '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]')"
+    # ADR-094 units: each predicate row IS an action class — (clause, repo, item), the LLM never picks.
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+      units="${units}changes-requested|${repo}|pr-${u}\n"
+    done
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
+      units="${units}merge-conflict|${repo}|pr-${u}\n"
+    done
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
+      units="${units}unarmed-major|${repo}|pr-${u}\n"
+    done
     # BACKSTOP (FU-079, generalizes the old dep-only clause): an un-armed open PR that no lane owns
     # is invisible to the ENTIRE merge path — the updater, review reflex, and auto-merge all key on
     # armed PRs (by design), so it stalls silently (live: oracle-fleet#16, a stacked PR born
@@ -169,8 +210,6 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # A kubectl probe failure is reported and SKIPS the clause — it never fails INTO a wake
     # (rule #6); the launcher pre-flight is the double-dispatch belt either way.
     v2=""
-    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     if [ "$(printf '%s' "$inprog" | jq 'length')" -gt 0 ]; then
       if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
             --field-selector=status.phase=Running --no-headers 2>/dev/null)"; then
@@ -180,6 +219,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             '.[] | .number as $n
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
+          if [ -n "$dispatchable" ]; then
+            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
+                '.[] | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0) | .number'); do
+              units="${units}c4c5-redispatch|${repo}|issue-${u}\n"
+            done
+          fi
         fi
       else
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
@@ -220,8 +265,33 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     continue
   fi
   if [ -n "$SPAWN" ]; then
-    echo "→ spawning headless coordinator tick for ${name}…"
-    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
+    # ADR-094/FU-086 item dispatch: the scan SCHEDULES (one highest-priority unit — WIP=1; the
+    # FU-088 gates are the belt), the session JUDGES one item. Priority finishes in-flight work
+    # before starting new: c4c5 > changes-requested > merge-conflict > unarmed-major > queued.
+    # SCAN_ITEM_MODE=0 = rollback to the whole-stack tick (also the janitor/manual path).
+    if ! bash "${HERE}/subscription-latch.sh"; then
+      echo "  capacity: subscription limited (FU-088) — no dispatch this pass (level-triggered; next scan re-checks)."
+      continue
+    fi
+    if [ "${SCAN_ITEM_MODE:-1}" = "0" ]; then
+      echo "→ spawning headless coordinator tick for ${name} (SCAN_ITEM_MODE=0 whole-stack mode)…"
+      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
+      continue
+    fi
+    unit=""
+    for clause in c4c5-redispatch changes-requested merge-conflict unarmed-major queued-dispatch; do
+      unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
+      [ -n "$unit" ] && break
+    done
+    if [ -z "$unit" ]; then
+      echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
+      continue
+    fi
+    uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; uitem="${rest#*|}"
+    cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}, model ${cmodel})…"
+    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
+      --model "$cmodel" --item "repo=${urepo} item=${uitem} clause=${uclause}"
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"

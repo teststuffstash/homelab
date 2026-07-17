@@ -42,13 +42,14 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 ORG="${ORG:-teststuffstash}"   # org the stack repos live under (for `gh repo clone <org>/<repo>`)
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)             RUN_CMD="$2"; shift 2;;
     --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
+    --item)            ITEM="$2"; shift 2;;               # ADR-094/FU-086: reconcile ONE unit — "<repo> <issue-N|pr-N> <clause>"
     --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
     --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
     --stack)           STACK="$2"; shift 2;;              # scope this session to a stack (agents/stacks.json)
@@ -67,6 +68,14 @@ done
 # which repos are its world this session, and expose it as pod env for forward-compat. Policy will move
 # to a Crossplane AgentStack claim in the stack's -iac repo (docs/agents/platform-and-stacks.md); for
 # now coordinator-scan.sh passes --stack/--repos from agents/stacks.json.
+# ADR-094/FU-086 item mode: the deterministic scan already DECIDED what and when (clause,
+# lane-free, deps-closed, dispatchable, capacity) — this session judges HOW for exactly one unit.
+# Doorbell semantics: at-least-once delivery means the unit may be stale on arrival; re-read first
+# and exit clean when it is. The whole-stack TICK_PROMPT survives as the janitor/manual path.
+if [ -n "$ITEM" ]; then
+  [ -n "$RUN_CMD" ] && { echo "--item and --run/--run-tick are mutually exclusive" >&2; exit 2; }
+  RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Reconcile EXACTLY ONE work unit as the coordinator, per your brief (agents/coordinator/README.md): ${ITEM} (format: repo, item, clause — the clause is WHY the deterministic scan dispatched you). FIRST re-read the item's live state (labels, PR/issue state, worker pods): dispatch is at-least-once and level-triggered, so if the unit is no longer actionable — already claimed with a live worker, already armed/approved/merged, labels moved on — say so and EXIT CLEAN having touched nothing. Otherwise CLAIM it (relabel + a one-line plan comment) and take exactly the next action its state calls for per the brief; the judgment calls (triage completeness, budget sizing, arbitration per the meta-4 doctrine) are yours, inside this one item. Do NOT go looking for other work — scheduling (which item, lanes, capacity) is the scan's job, not yours. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex's armed PRs."
+fi
 if [ -n "$STACK" ]; then
   SCOPE="You are the coordinator for the ${STACK} stack; its repos are: ${STACK_REPOS:-see agents/stacks.json}, cloned at /work/<repo>; your cwd is the stack main repo ${MAIN_REPO}. Clones are READ-ONLY reference — your writes remain labels, comments, and merge state via gh. "
   [ -n "$RUN_CMD" ] && RUN_CMD="${SCOPE}${RUN_CMD}"

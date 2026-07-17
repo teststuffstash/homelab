@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-085** *(archived 2026-07-17)* — **Coordinator edge-trigger BUILT + E2E-proven same day**
+  (design was already in workflow.md §Triggers). `/coordinate` endpoint on the agent-loop
+  EventSource + `coordinator` Sensor (rateLimit 2/min, `body.repo` scope with `"all"` fallback)
+  + the `coordinate` WorkflowTemplate (scan container extracted; carries the `coordinator-scan`
+  mutex — Cron `Forbid` doesn't see Sensor submissions — and the FU-088 semaphore); the
+  coordinator-reflex CronWorkflow demoted to a `workflowTemplateRef` backstop. Emitters:
+  `agent-session.sh` (tasked worker terminal), `reviewer-session.sh` (every verdict),
+  devbox-update + renovate ARC workflows; all fail-open off-cluster; doorbell = scope only, never
+  state. E2E: in-cluster POST → Sensor → `coordinate-rkd6l` ran the scan with `repo=oracle-fleet`.
+  Residual moved to FU-084 (cron `*/10→*/30` after live proving); per-stack render = FU-080;
+  Sensor→item-unit submission = FU-086.
 - **FU-087** *(archived 2026-07-17)* — **`Depends-on:` dependency lines + scan enforcement
   (ADR-094) — RESOLVED same-day.** Convention (`Depends-on: [<org>/<repo>]#N[, …]` body lines,
   bare `#N` = same repo, closed = satisfied) enforced in `coordinator-scan.sh`: queued ∧ dep open

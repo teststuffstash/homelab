@@ -176,44 +176,26 @@ _Last updated: 2026-07-16._
 ## Agents
 
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
-      the session judges one item.** `coordinator-scan.sh`: emit `(repo, item, clause)` units
-      (clause = the existing predicate rows: queued-dispatch | C4/C5 re-dispatch |
-      changes-requested round | un-armed major | merge-conflict | arbitrate) instead of a per-stack
-      boolean + whole-stack spawn. `coordinator-session.sh --item`: seeded with one unit,
-      "reconcile THIS item, exit clean if stale on re-read" (idempotent doorbell semantics —
-      triage/budget/arbitration judgment stays inside). Scheduling predicates move into the scan:
-      lane free (`track/*` ≤1 in flight per lane), deps closed (FU-087), repo dispatchable (claim
+      the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
+      `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch
+      | changes-requested | merge-conflict | unarmed-major) and `--spawn` dispatches the single
+      highest-priority unit (in-flight before new; WIP=1 kept) via `coordinator-session.sh --item`
+      with the stack's `coordinatorModel`; `SCAN_ITEM_MODE=0` = whole-stack rollback (also the
+      janitor/manual path). Scheduling predicates in the scan: deps closed (FU-087), lane free
+      (`track/*` ≤1 in-progress per lane), repo dispatchable (claim `fixerRepos` — context-only
+      repos report as visible ⚠, never dispatch), capacity (subscription-latch pre-spawn).
+      Acceptance: a deliberately stale unit (merged PR#53 as changes-requested) re-read live,
+      exited clean, fixed only its own item's label drift (#42 → agent/done). STILL OPEN: the
+      `arbitrate` clause (rounds-exhausted/flip-flop detection as a unit), the FU-085 compound
+      (Sensor submits item units directly; cron sweep emits only missed units), lifting WIP>1
+      (lane-parallel dispatch — FU-088 gates are in), janitor-tick cron demotion. Original spec:
+      scheduling predicates were: lane free, deps closed (FU-087), repo dispatchable (claim
       fixer block — makes context-only `oracle-iac` a visible predicate), capacity (FU-088 — a
       PREREQUISITE before WIP goes above 1). Keep a ~daily report-only **janitor tick** for
       board-level judgment (direction-change sweeps, orphans, cross-PR smells). Explicitly
       skipped: multi-dispatch TICK_PROMPT (prompt-level parallelism, obsoleted by this). FU-085's
       edge then submits units directly (events are item-shaped); the cron sweep emits missed
       units. Relates FU-050/FU-080/FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
-- [ ] **FU-085** — **Coordinator edge-trigger: a `/coordinate` Sensor so the loop reacts in seconds;
-      the `*/10` cron demotes to backstop.** Design + emitter analysis in
-      `docs/agents/workflow.md` §Triggers → "The coordinator Sensor" (2026-07-17; motivating sting:
-      oracle-fleet#29's C4/C5 re-tick waited on cron minutes after its `AGENT_STRIKE` landed).
-      Build, mirroring review-argo.yaml on the existing machinery: (1) `/coordinate` endpoint on
-      the `agent-loop` EventSource + `coordinator` Sensor + a `coordinate` WorkflowTemplate running
-      the scan — refactor the CronWorkflow to `workflowTemplateRef` the same template, shared
-      `synchronization.mutex` (Cron `Forbid` doesn't see Sensor submissions) + Sensor `rateLimit`;
-      (2) instant in-cluster emitters, one curl at the moment the author acts:
-      `agent-session.sh` on `AGENT_STRIKE`/terminal-no-PR (C4/C5), `reviewer-session.sh` after a
-      CHANGES_REQUESTED verdict, and the ARC-hosted Renovate + `devbox-update.yaml` runs (un-armed
-      `major`; both centralized in homelab `.github/workflows/`); (3) exporter piggyback for
-      `merge-conflict` — its author `update-pr-branch` is GitHub-hosted BY DESIGN (merge path must
-      not depend on the self-hosted tier; don't move it to emit), and the exporter already polls
-      labels; (4) ✅ DONE 2026-07-17 — the operator knob for `agent/queued` (issues are authored by
-      jail LLM sessions, not hand-labelled): `devbox run coordinate-now` via `scripts/reflex-now.sh`
-      (kubectl-only `argo submit --from cronwf` equivalent; also FIXED `review-reflex-now`, broken
-      since the CronJob→CronWorkflow migration), live-verified same day; stack jails ring the
-      `/coordinate` webhook once built — the doorbell needs no RBAC into `agent-coordinator`
-      (airlock-aligned). Doorbell rule: events scope (`{repo}`), never carry state — the scan
-      re-lists and gates (incl. the FU-080 `coordinator.enabled` knob), so a false wake costs `gh`
-      calls, never an LLM tick. After proving: cron `*/10 → */30` (FU-084 GraphQL burn);
-      red-beyond-T stays cron-only. ADR-094 compounds this: events are item-shaped, so under
-      FU-086 the Sensor submits an item work unit directly and the cron sweep emits only missed
-      units. Relates FU-050/FU-080/FU-084/FU-086, ADR-093/ADR-084/ADR-094.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
@@ -248,6 +230,12 @@ _Last updated: 2026-07-16._
       {enabled: false}` (probe-first: a failed read warns + keeps the full list). Found live: the
       oracle claim's disable had synced but the schema-only knob gated nothing — reviews kept
       firing. The full per-stack CronWorkflow render below stays the real fix.
+      **Loop-home brick DONE 2026-07-17:** the Composition renders the per-stack
+      `<stack>-agents` Namespace + its `agentstack-loop` SA and adds that SA to every fixer ns's
+      loop RoleBinding — cross-ns dispatch on namespaced grants only, verified live (oracle's
+      loop SA: pod-create YES in oracle-fleet, NO in sleep-tracking; all three namespaces
+      rendered). Cred note: coordinator-claude needs NO per-stack rail — the opaque
+      `ref:agent-coordinator/coordinator-claude` resolves at the egress proxy from any ns.
       **REMAINING (the decision-revisit half) — now on ADR-093 Argo (agent-loop Phase 1):** move
       the coordinator/reviewer reflexes in-namespace as `agentstack-loop` — reflexes become
       per-stack CronWorkflows + Argo Events Sensors (not the global CronJobs), which requires
@@ -445,6 +433,9 @@ _Last updated: 2026-07-16._
       (`github_rate_limit_remaining / _limit < 0.1` for 5m, warning) in `prometheusrule.yaml` —
       the same file as `AgentReviewLoop`/`AgentErrorFlagged`. Prior-art: none matched "rate limit
       / graphql / quota" in FU/ADR; the exporter has no rate-limit collector today. See
+      Inherited from FU-085 (built+archived 2026-07-17): once the /coordinate edge
+      proves itself in live use, relax the coordinator cron `*/10 → */30` (one line in
+      reflexes-argo.yaml) — the edge carries latency, the cron only sweeps. See
       [[reflex-graphql-rate-limit]] for the behavioral half (don't poll-loop the reflex). Relates
       the one-poller doctrine ([[github-exporter]]).
 - [ ] **FU-082** — **wk-01 memory pressure makes Talos's OOMController serially kill BestEffort
