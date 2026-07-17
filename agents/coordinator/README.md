@@ -34,6 +34,18 @@ verdicts; infra failures are **strikes** that swap the model instead of consumin
 MODEL note in the runbook); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
+**Dependencies are body lines, not labels (FU-087).** An issue that must wait for another carries
+`Depends-on: [<org>/<repo>]#N[, …]` in its **body** (bare `#N` = same repo) — mirroring the
+`Fixes #N` idiom; *closed* is the satisfaction proxy because `Fixes` closes on merge. The scan
+enforces it level-triggered: `agent/queued` ∧ any referenced issue still open → reported as
+`⏳ queued-blocked (waiting #N)`, never dispatched (closure is simply seen next pass — no label to
+un-rot). A dependency **closed as not-planned** flags the dependent `premise may be dead` (still
+actionable — re-read the issue before dispatch); a direct `A↔B` cycle is a human-first report,
+neither side dispatched. **The EMITTER side is the point**: issues are authored by jail LLM
+sessions from specs — the dependency graph is known exactly at authoring time, so *write the
+lines then* (a reader without coverage leaves the graph in prose; the scan can only enforce what
+the body encodes). Native sub-issues/Projects may mirror this for UI, never replace it.
+
 > **Labels are provisioned as code** in [`tofu/github/labels.tf`](../../tofu/github/labels.tf) (this
 > table = its source of truth — add any new state label there too, or it won't exist on the repos).
 > **Never leave a relabel half-applied.** `gh issue edit --add-label X --remove-label Y` is *not* atomic:

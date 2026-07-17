@@ -89,8 +89,52 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # item needs a human SWEEP (re-scope the issue / close the PR + delete its branch) BEFORE any
     # dispatch, or the tick works a dead assumption (live 2026-07-09: the TS→Python flip left a
     # CHANGES_REQUESTED PR the scan would happily have burned a round on). Excluded + reported.
-    iss="$(gh issue list --repo "$slug" --state open --json number,title,labels \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+    # FU-087: `Depends-on: [<org>/<repo>]#N[, …]` issue-body lines gate the queue — the
+    # machine-readable dependency graph, mirroring the `Fixes #N` idiom (bare #N = same repo).
+    # Level-triggered each scan: any referenced issue still OPEN → the issue is ⏳ queued-blocked
+    # (reported, never dispatched; closure is seen next pass — *closed* is the right satisfaction
+    # proxy because `Fixes #N` closes on merge). A dep closed as NOT-PLANNED → still actionable
+    # but flagged stale (the dependent's premise may have died with it). A direct A↔B cycle →
+    # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
+    # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
+    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))]' 2>/dev/null)" || queued='[]'
+    jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
+    iss=""; qblocked=""; qcycles=""
+    while IFS="$(printf '\t')" read -r qnum qtitle qdeps; do
+      [ -n "$qnum" ] || continue
+      blocked=""; stale=""
+      for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
+        dnum="${dep##*#}"; dslug="$slug"
+        case "$dep" in *"/"*"#"*) dslug="${dep%#*}";; esac
+        case "$dnum" in ''|*[!0-9]*) continue;; esac  # not a #N token — ignore, don't guess
+        if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,body 2>/dev/null </dev/null)"; then
+          if [ "$(jq -r .state <<<"$depjson")" = "OPEN" ]; then
+            blocked="${blocked} ${dslug}#${dnum}"
+            # direct 2-cycle: the dependency's own Depends-on lines point back at this issue.
+            # A bare #N in the dep's body refers to the DEP's repo — only equal-repo bare refs count.
+            if [ "$dslug" = "$slug" ]; then revpat="(${slug})?#${qnum}"; else revpat="${slug}#${qnum}"; fi
+            if jq -r '.body // ""' <<<"$depjson" | grep -iE '^[[:space:]]*depends-on:' | grep -qE "(^|[ ,:])${revpat}([ ,]|\$)"; then
+              qcycles="${qcycles}  issue #${qnum} ↔ ${dslug}#${dnum} — mutual Depends-on\n"
+            fi
+          elif [ "$(jq -r '.stateReason // ""' <<<"$depjson")" = "NOT_PLANNED" ]; then
+            stale="${stale} ${dslug}#${dnum}"
+          fi
+        else
+          blocked="${blocked} ${dslug}#${dnum}(PROBE-FAILED)"
+        fi
+      done
+      if [ -n "$blocked" ]; then
+        qblocked="${qblocked}  issue #${qnum} — ${qtitle} (waiting${blocked})\n"
+      elif [ -n "$stale" ]; then
+        iss="${iss}  issue #${qnum} — ${qtitle} [⚠ dep${stale} closed as not-planned — premise may be dead]\n"
+      else
+        iss="${iss}  issue #${qnum} — ${qtitle}\n"
+      fi
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ")) ] | @tsv')
+    iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
+    [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
+    [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
     swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"

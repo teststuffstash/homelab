@@ -189,21 +189,6 @@ _Last updated: 2026-07-16._
       skipped: multi-dispatch TICK_PROMPT (prompt-level parallelism, obsoleted by this). FU-085's
       edge then submits units directly (events are item-shaped); the cron sweep emits missed
       units. Relates FU-050/FU-080/FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
-- [ ] **FU-087** — **`Depends-on:` machine-readable dependency lines + scan enforcement (ADR-094).**
-      Convention, mirroring the `Fixes #N` idiom: `Depends-on: <org>/<repo>#N[, <org>/<repo>#M…]`
-      in the issue body. Scan rule: `agent/queued` ∧ any referenced issue still open → NOT
-      actionable, reported as `⏳ queued-blocked (waiting #N)` — level-triggered (closure is seen
-      next pass; *closed* is the right satisfaction proxy because `Fixes #N` closes issues on
-      merge). Guardrails: cycle detection (A↔B → `agent/error`-style human-first report) and a
-      staleness line when a dependency closed as not-planned (the dependent's premise may have died
-      with it). The EMITTER side is the point: issues are authored by jail LLM sessions from specs
-      — the graph is known exactly then, so the authoring practice/recipes must write the lines
-      (a reader without coverage leaves the graph in prose). Document in
-      `agents/coordinator/README.md` §State machine (the scan MUST track it) + oracle-fleet
-      TRACKS. Native sub-issues/Projects = optional UI mirror, never the source. Today's real
-      graph to encode at build time: oracle-fleet #42/#50→#43, #45→iac#41, #46→SRV P1. Why not a
-      `blocked` label: labels are state someone must remove — they rot; the body line is
-      declarative, blockedness derived fresh each scan.
 - [ ] **FU-085** — **Coordinator edge-trigger: a `/coordinate` Sensor so the loop reacts in seconds;
       the `*/10` cron demotes to backstop.** Design + emitter analysis in
       `docs/agents/workflow.md` §Triggers → "The coordinator Sensor" (2026-07-17; motivating sting:

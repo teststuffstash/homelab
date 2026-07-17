@@ -8,6 +8,16 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-087** *(archived 2026-07-17)* — **`Depends-on:` dependency lines + scan enforcement
+  (ADR-094) — RESOLVED same-day.** Convention (`Depends-on: [<org>/<repo>]#N[, …]` body lines,
+  bare `#N` = same repo, closed = satisfied) enforced in `coordinator-scan.sh`: queued ∧ dep open
+  → `⏳ queued-blocked` report (level-triggered, no label to rot); dep closed NOT_PLANNED →
+  actionable + `premise may be dead` flag; direct A↔B cycle (same- or cross-repo) → human-first
+  report, dep probes fail CONSERVATIVELY (rule #6). All three paths E2E-verified live on a
+  synthetic pair (agent-coordinator#6/#7, closed). Real graph encoded: oracle-fleet#45→iac#41,
+  #50→#43 (#42/#43 had already closed; #46→"SRV P1" is prose, not an issue — left). Doc:
+  coordinator README §State machine (incl. the emitter-side authoring rule). jq gotcha: `^…$`
+  multiline needs INLINE `(?m)` — the `scan(re; "m")` flags-arg form silently matches nothing.
 - **FU-088** *(archived 2026-07-17)* — **Capacity semaphores in the deterministic layer
   (ADR-094): subscription sessions + OpenRouter credit — RESOLVED 2026-07-17, same-day build
   after the second 429 incident (`review-reflex-1784313000`).** (a) The egress proxy (the choke
