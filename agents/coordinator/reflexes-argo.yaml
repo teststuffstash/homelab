@@ -1,0 +1,206 @@
+# The agent-loop reflexes as Argo CronWorkflows (ADR-093 Phase 1) — replacing the k8s CronJobs
+# (review-reflex/coordinator-reflex/model-scout/ledger were `kind: CronJob`). Same containers, same
+# coordinator SA + secrets; now on Argo, so each tick shows in the argo-server UI + emits
+# argo_workflows_* metrics (duration/phase/retry) to Prometheus. The clone-homelab initContainer
+# folds into the single step. review-reflex is now the *backstop* (the edge-trigger Sensor +
+# exporter POST is the fast path — review-argo.yaml) so it drops to */15. The per-stack split with
+# the two knobs (coordinator.enabled off / reviewer.enabled on) is the FU-080 continuation; these
+# stay GLOBAL in agent-coordinator until then (model-scout + ledger stay global permanently).
+---
+# Review backstop — level-triggered catch-all for anything the edge-trigger missed (exporter down,
+# lost event). The Sensor path handles the common case near-instantly; this only sweeps.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: review-reflex
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 900
+    ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+    entrypoint: main
+    volumes:
+      - { name: work, emptyDir: {} }
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    templates:
+      - name: main
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              exec bash /work/homelab/agents/review-reflex.sh
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - { name: REVIEW_CONCURRENCY, value: "2" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
+---
+# Coordinator tick — the LLM sibling (dispatches workers, spends budget). SUSPENDED = the FU-050
+# autonomy switch (unsuspend to enable). Per-stack (FU-080) this becomes coordinator.enabled.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: coordinator-reflex
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "*/10 * * * *"
+  suspend: true # ← the autonomy switch (FU-050)
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 1800
+    ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+    entrypoint: main
+    volumes:
+      - { name: work, emptyDir: {} }
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    templates:
+      - name: main
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
+---
+# Model scout — weekly catalog diff + canary (FU-062). GLOBAL (fleet-wide by nature).
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: model-scout
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "0 6 * * 1" # weekly, Monday 06:00 UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 1800
+    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 86400 }
+    entrypoint: main
+    volumes:
+      - { name: work, emptyDir: {} }
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    templates:
+      - name: main
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              exec bash /work/homelab/agents/model-scout.sh
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - { name: DIGEST_REPO, value: "homelab" }
+            - { name: PRICE_CEILING, value: "0.50" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_READER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+            - name: AGENT_TS_READER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+            - name: AGENT_TS_WRITER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_WRITER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
+---
+# Ledger — cost/model-health accounting (FU-057). GLOBAL (fleet-wide by nature).
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: ledger-reflex
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 900
+    ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+    entrypoint: main
+    volumes:
+      - { name: work, emptyDir: {} }
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    templates:
+      - name: main
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              exec python3 /work/homelab/agents/ledger.py
+          env:
+            - { name: HOME, value: "/home/node" }
+            - { name: ORG, value: "teststuffstash" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+            - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_READER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+            - name: AGENT_TS_READER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+            - name: AGENT_TS_WRITER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id, optional: true } }
+            - name: AGENT_TS_WRITER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key, optional: true } }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
