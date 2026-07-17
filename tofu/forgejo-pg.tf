@@ -33,6 +33,12 @@ resource "kubernetes_manifest" "forgejo_pg" {
     }
     spec = {
       instances = 2
+      # FU-082: a BestEffort DB is first to be OOM-killed under pressure. Requests → Burstable +
+      # honest scheduling (~110Mi steady); the memory limit is generous headroom, not a tight cap.
+      resources = {
+        requests = { cpu = "100m", memory = "256Mi" }
+        limits   = { memory = "768Mi" }
+      }
       # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
       # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (monitoring.tf).
       monitoring = { enablePodMonitor = true }

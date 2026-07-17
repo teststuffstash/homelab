@@ -60,6 +60,13 @@ resource "helm_release" "kube_prometheus_stack" {
     kubeScheduler         = { endpoints = local.controlplane_ips }
     kubeControllerManager = { endpoints = local.controlplane_ips }
 
+    # ---- Requests for the stack's own sub-charts (FU-082) -----------------
+    # All BestEffort by chart default → first in the Talos OOMController kill order. Requests-only
+    # (steady usage + headroom); the operator + KSM get small memory limits (bounded workloads).
+    prometheusOperator             = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } } # ~42Mi
+    "prometheus-node-exporter"     = { resources = { requests = { cpu = "20m", memory = "32Mi" } } }                                  # DaemonSet, ~10-22Mi
+    "kube-state-metrics"           = { resources = { requests = { cpu = "20m", memory = "64Mi" }, limits = { memory = "192Mi" } } }   # ~40Mi, grows with object count
+
     # ---- Prometheus -------------------------------------------------------
     prometheus = {
       # BGP LoadBalancer VIP so OPNsense HAProxy can reach it for the TLS frontend

@@ -9,6 +9,12 @@ metadata:
   namespace: infisical
 spec:
   instances: 2
+  # FU-082: a BestEffort database is first in the OOM-kill order under node memory pressure —
+  # unacceptable for a DB. Requests lift it to Burstable + honest scheduling (~100Mi steady);
+  # the memory limit is generous headroom (shared_buffers/work_mem/connections), not a tight cap.
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { memory: "768Mi" }
   # Expose CNPG metrics — the operator creates a PodMonitor that kube-prometheus-stack
   # auto-discovers (open selectors). Feeds the cnpg alerts + dashboard (tofu/monitoring.tf).
   monitoring:

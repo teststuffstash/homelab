@@ -92,6 +92,11 @@ resource "kubernetes_deployment" "forgejo_runner" {
             initial_delay_seconds = 5
             period_seconds        = 5
           }
+          # FU-082: requests only — CI builds spike unpredictably, a memory limit would OOM job
+          # containers mid-build. On the dedicated ephemeral tier, this is just scheduler honesty.
+          resources {
+            requests = { cpu = "100m", memory = "256Mi" }
+          }
         }
 
         # --- act_runner: register-if-needed, then run the daemon. ---
@@ -139,6 +144,9 @@ resource "kubernetes_deployment" "forgejo_runner" {
           volume_mount {
             name       = "runner-data"
             mount_path = "/data"
+          }
+          resources { # FU-082: the daemon itself is light (~50Mi); requests-only, no throttle cap.
+            requests = { cpu = "50m", memory = "128Mi" }
           }
         }
 

@@ -65,6 +65,14 @@ resource "helm_release" "garage" {
       replicaCount = 1
     }
 
+    # FU-082: the S3 store was BestEffort — every LAN app's object storage, shouldn't be
+    # first-to-die. Requests + a limit with headroom over the ~20Mi steady state (lmdb metadata
+    # cache grows with object count).
+    resources = {
+      requests = { cpu = "100m", memory = "128Mi" }
+      limits   = { memory = "512Mi" }
+    }
+
     # meta (lmdb) + data on replicated Longhorn. RWO; the pod avoids the ephemeral/laptop nodes
     # (taint, ADR-044) by default, landing on a storage node. storageClass must be set explicitly
     # or the volumeClaimTemplates omit storageClassName.

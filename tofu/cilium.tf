@@ -70,11 +70,20 @@ resource "helm_release" "cilium" {
         ]
         serviceMonitor = { enabled = true }
       }
-      relay = { enabled = true }
+      relay = {
+        enabled   = true
+        resources = { requests = { cpu = "50m", memory = "64Mi" } } # FU-082: ~22Mi steady
+      }
     }
+    # FU-082: requests only (DaemonSet, one per node) — envoy proxies pod L7 traffic, ~15-30Mi.
+    envoy = { resources = { requests = { cpu = "50m", memory = "64Mi" } } }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
-    operator = { replicas = 1, prometheus = { enabled = true, serviceMonitor = { enabled = true } } }
+    operator = {
+      replicas   = 1
+      prometheus = { enabled = true, serviceMonitor = { enabled = true } }
+      resources  = { requests = { cpu = "100m", memory = "128Mi" }, limits = { memory = "256Mi" } } # ~77Mi steady
+    }
     cgroup = {
       autoMount = { enabled = false }
       hostRoot  = "/sys/fs/cgroup"

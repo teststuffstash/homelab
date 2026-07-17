@@ -75,11 +75,23 @@ resource "helm_release" "argocd" {
     # The UI/API Service stays ClusterIP; the BGP VIP is a separate labelled Service
     # below (the chart's service template can't carry the bgp=advertise label, same as
     # garage.tf). Redis/repo-server keep their defaults.
-    server = { service = { type = "ClusterIP" } }
+    server = {
+      service   = { type = "ClusterIP" }
+      resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } # ~39Mi
+    }
 
     # FU-082: requests-only, same rationale as grafana in monitoring.tf — BestEffort made the
     # controller a serial Talos-OOMController victim on wk-01 (26 kills); ~500Mi steady-state.
     controller = { resources = { requests = { cpu = "250m", memory = "512Mi" } } }
+
+    # FU-082: the remaining argo-cd components were all BestEffort. Requests + modest memory limits
+    # (steady usage from `kubectl top`, ×~3 headroom). repoServer spikes on manifest render, so no
+    # memory limit there — a spike degrades instead of OOM-killing mid-sync.
+    repoServer            = { resources = { requests = { cpu = "50m", memory = "128Mi" } } }                                    # ~68Mi, render spikes
+    applicationSet        = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } }     # ~40Mi
+    notifications         = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "192Mi" } } }      # ~24Mi
+    dex                   = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~25Mi
+    redis                 = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~13Mi
   })]
 }
 
