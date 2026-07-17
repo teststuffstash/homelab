@@ -288,7 +288,15 @@ _Last updated: 2026-07-16._
       archived 2026-07-17.
 - [ ] **FU-026** — Graduate the coordinator from the hand-driven brief to a durable engine
       (Temporal / Argo Workflows+Events / CRD+controller) — state already lives in labels+CRs, so
-      it's a mechanical swap.
+      it's a mechanical swap. **DECISION DRAFTED 2026-07-17 → ADR-093 (Proposed, pending accept):
+      Argo Workflows + Events**, chosen over Temporal (weight + poor fit to container-per-step) and
+      a bespoke CRD-controller (reinvents what Argo ships) because it ALSO serves oracle's
+      ingestion DAGs (ING-RT-STEP-CONTRACTS), so the two consumers share one engine instead of two
+      bespoke ones. **Rollout agent-loop-FIRST** (oracle ingestion is unbuilt + a 42GB first step):
+      Phase 1 = reflexes → CronWorkflows + an Argo Events Sensor edge-trigger (worker POSTs "PR
+      green" in-cluster, the ADR-084 sync.yaml trick generalized — also kills the FU-084 GraphQL
+      burn), CronJobs kept as instant-rollback fallback; Phase 2 = ingestion DAGs when built. Next
+      artifact: operator accepts ADR-093, then the platform install. Relates FU-050/FU-080/FU-084.
 - [ ] **FU-044** — **LLM oversight of the deploy path: auto-rollback / roll-forward on a broken
       deploy.** The FU-025 deploy pipeline (app-repo build → chart+image at `<calver>-g<sha>` →
       auto-bump PR in `sleep-iac` → ArgoCD sync, see `docs/sleep-iac.md` §Deploy pipeline) merges on

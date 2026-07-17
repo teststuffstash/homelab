@@ -809,3 +809,88 @@ is a real FRR stop→start). Open verification carried into rollout: Cilium prop
 `infrastructure.labels` to the gateway Service (else the VIP won't BGP-advertise) and `URLRewrite`
 hostname support. Full design + rollout: [`follow-ups.md`](follow-ups.md) FU-039; runbook recipe
 "delegate a stack subdomain".
+
+### ADR-093 — Argo Workflows + Events as the platform orchestration engine; agent-loop first
+**Status:** Proposed (drafted 2026-07-17, pending operator accept — DRAFT, nothing installed). This
+is the "**open homelab ADR**" the oracle-fleet `ING-RT-STEP-CONTRACTS` spec defers its step engine
+to, and it discharges **FU-026** (graduate the coordinator off the hand-driven CronJob+bash
+substrate onto a durable engine). **Problem:** two independent consumers need the *same* thing — a
+platform-provided step/orchestration engine with scheduling, cross-run retries, event-triggering,
+and observability — and the platform has none, so both would otherwise hand-roll it. (1) The **agent
+loop**: today's reflexes are k8s **CronJobs** in ns `agent-coordinator` (`review`/`coordinator`/
+`model-scout`/`ledger`), `*/5` **blind polling** — the review reflex lists PRs across ~9 repos via
+`gh pr list --json` (GraphQL) every tick whether or not there's work, which both adds up-to-5-min
+latency and burned the coordinator-git installation's 5000/hr GraphQL pool to 9 during a manual
+over-fire (FU-084 incident, 2026-07-17). (2) **Stack production DAGs** (oracle ingestion): the spec
+already designs ingestion as `snapshot → parse → build → publish` + a scheduled `delta` job +
+a quarterly `reconcile`, with **container-per-step, artifacts handed off via Garage/S3 (never shared
+disk), each step idempotent and re-runnable** — and `ING-RT-STEP-CONTRACTS` *forbids* the app repo
+from writing "orchestration, monitoring, or download-plumbing frameworks." So the platform MUST
+supply the engine.
+
+**Decision:** adopt **Argo Workflows + Argo Events** as THE platform orchestration engine (ArgoCD
+apps under `argocd/platform/`, ADR-083 packaging discipline; **Garage as the S3 artifact
+repository**, reusing the store we already run). Argo's native model — container-per-step, S3
+artifact passing, idempotent re-runnable steps, CronWorkflow scheduling, Sensor event-triggering —
+is a near-drop-in for the ingestion contract, and the reflex loop maps onto CronWorkflow + Sensor
+with the **LLM judgment living *inside* steps** (the coordinator/reviewer run as pod steps; Argo owns
+*when/retry/observe/trigger*, never the LLM's decisions — Argo is a scheduler+DAG, not Temporal-style
+durable-execution of the model's reasoning).
+
+**Rollout is agent-loop-FIRST, phased** (operator call 2026-07-17, reversing the drafter's
+oracle-first lean): oracle ingestion is **unbuilt** (only `snapshot` is spec'd; parse/build/publish
+deferred) and its first step is a **42GB download** — the worst possible first-attempt/retry loop for
+a platform bring-up (two unknowns at once, slowest feedback). The agent loop is the **most mature,
+cheapest-to-iterate** workload, and Argo Events is the direct fix for the FU-084 poll/GraphQL pain.
+- **Phase 1 — agent loop** (validates the CONTROL PLANE: Workflows + Events + EventBus + CronWorkflow
+  + Sensor + pod-steps). First target = **review-reflex → CronWorkflow + Events Sensor**: the worker's
+  `agent-finalize` POSTs an **in-cluster** "PR green, review it" event to the EventBus when it opens
+  an armed green PR → a Sensor fires the review WorkflowTemplate — the ADR-084 `sync.yaml` deploy-
+  webhook trick, generalized (event-driven, near-instant, and the reflex lists PRs only on a real
+  event instead of blindly every 5 min). The `*/5` cron stays as a thin **calendar-EventSource
+  backstop** for anything the edge missed. Then coordinator/scout/ledger port as trivial CronWorkflows.
+- **Phase 2 — ingestion** (when oracle builds it): the snapshot/delta/reconcile DAGs on the by-then-
+  boring Argo, which is where the **artifact-passing path** (Garage as artifact repo, resume-from-
+  completed-parts, big-file handoff) gets validated. Phase 1 deliberately does NOT exercise that path
+  — do not declare "Argo proven" and skip artifact validation when ingestion lands.
+
+**Safety / rollback:** the reflexes are **idempotent + level-triggered**, so the Argo CronWorkflow runs
+**alongside** the existing CronJob during bring-up (idempotency keys `(issue, base-sha, round)` + the
+K-cap dedup double-dispatch), and a botched Argo path flips back to the CronJob in one `kubectl` — no
+window where a broken migration stalls the platform. The EventBus (NATS JetStream StatefulSet) and both
+controllers get **resource requests** at birth (FU-082 discipline — a stateful bus must never be
+BestEffort). Per-namespace `workflow-controller` RBAC is rendered by the **AgentStack Composition**,
+dovetailing FU-080's `<stack>-agents` namespace direction (ingestion DAGs run in the stack workload ns,
+the agent loop in `<stack>-agents`).
+
+**Considered:** **Temporal** — heavier (its own datastore + frontend/history/matching/worker services)
+and its model is SDK code-workflows, a poor fit to the container-per-step-with-S3-handoff contract that
+is Argo's native shape; rejected on weight + fit + it isn't declarative-YAML-from-git the way a
+CronWorkflow is. **Bespoke CRD + controller** — lightest to run, heaviest to build/maintain, reinvents
+scheduling/retry/observability/UI Argo ships; rejected as exactly the wheel-reinvention FU-026 exists to
+avoid. **Stay on CronJob/Job + bash glue** — fine for today's trivial reflexes, but ING-RT-STEP-CONTRACTS
+forbids the app repo from carrying orchestration, so hand-rolling per-stack CronJob-chain glue (S3
+handoff + retry bookkeeping + per-step metrics) builds a bespoke orchestrator AND leaves FU-026 to build
+a *second* one — two substrates, a costlier double-migration later; rejected on "reinvent twice."
+**oracle-ingestion as the first consumer** — rejected (see rollout: unbuilt + 42GB). **GitHub-delivered
+webhook** as the review event source — rejected: argo-server/event webhook is LAN-only and GitHub can't
+reach in (same reason ADR-084 POSTs from an in-cluster runner); the worker POSTs the event locally.
+
+**Consequences:** a new **stateful** platform dependency (JetStream EventBus) — operational surface +
+upgrades + the requests above; mitigated by parallel-run rollback. FU-026 is discharged by Phase 1 and
+the ingestion "open ADR" is resolved even though ingestion builds later. The review reflex drops from
+blind `*/5` GraphQL polling to event-driven, cutting both latency and the GraphQL burn behind FU-084
+(pairs with FU-084's rate-limit *alerting* — the metric watches it, this removes the biggest burner).
+Argo's Prometheus metrics (workflow/step duration, phase, retries) land in the existing kube-prometheus
+stack and the argo-server UI gives DAG/step visibility "for free"; the **agent-domain** metrics (cost,
+model-health ledger, transcripts, the PR-state stall detector) stay on the github-exporter/pushgateway/
+OTLP rails — Argo adds *orchestration* observability, it does **not** replace the domain layer, and both
+keep feeding the shared Grafana (don't fragment observability into the per-stack namespaces — run the
+*compute* per-namespace, keep the *metrics/transcripts* centralized, labelled by stack). Relates
+**FU-026** (discharged), **FU-050** (coordinator reflex ports here), **FU-080** (per-namespace RBAC),
+**FU-084** (the incident motivating the edge-trigger), **ADR-084** (the in-cluster-webhook precedent),
+**ADR-085** (mechanism/policy split — Argo is platform mechanism, the WorkflowTemplates/DAGs are stack
+policy), and oracle-fleet `specs/ingestion` `ING-RT-STEP-CONTRACTS`. Weighed against CONTEXT: declarative
+from git (CronWorkflow/WorkflowTemplate/Sensor YAML, GitOps-synced ✓), open-source/replaceable (Argo is
+CNCF; the artifact repo is our own Garage ✓), local-first (no orchestration SaaS ✓), budget-conscious
+(self-hosted, reuses Garage; the cost is the sized EventBus footprint ✓).
