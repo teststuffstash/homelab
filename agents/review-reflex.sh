@@ -46,6 +46,7 @@ fi
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-agent-coordinator}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
+WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}" # the worker App's PR-author login (C9 re-arm scope)
 ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per PR, ever
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
@@ -104,7 +105,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -118,6 +119,29 @@ for repo in $REPOS; do
     sleep 10
   done
   rm -f "$errfile"
+
+  # C9 repair (TICK-LOG meta-7 retro (a) — the FU-079 class): a WORKER-authored PR that arrived
+  # un-armed is invisible to the ENTIRE merge path (updater, this reflex, auto-merge). Arm it —
+  # decision-free: arming only *requests* auto-merge, every gate (CI, review, CODEOWNERS) still
+  # applies. Root fix = finalize's derived pr_url (agent-runtime#17); this is the level-triggered
+  # belt. Scope: the worker App's PRs ONLY — operator/stacked PRs stay report-only by the FU-079
+  # decision (the scan's orphan clause). Skips drafts + `agent/error` carriers. The just-armed PR
+  # is picked up on the next pass (this tick's list predates the arm; the exporter edge or the
+  # next backstop tick sees it armed).
+  while read -r unarmed_pr; do
+    [ -n "$unarmed_pr" ] || continue
+    if gh pr merge "$unarmed_pr" --repo "$slug" --auto --squash >/dev/null 2>&1; then
+      log "[$repo] C9: armed worker PR #$unarmed_pr (arrived un-armed — invisible to the merge path)"
+    else
+      log "[$repo] C9: arm of #$unarmed_pr FAILED (non-fatal — the scan's orphan clause reports it)"
+    fi
+  done <<EOF_C9
+$(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" '
+    .[] | select(.autoMergeRequest == null and .isDraft == false
+                 and .author.login == $author
+                 and all(.labels[].name; . != "agent/error"))
+        | .number')
+EOF_C9
 
   # Reviewable = armed ∧ not-conflicted ∧ GREEN ∧ ( unreviewed OR changes-requested-with-new-commits )
   #              ∧ NOT `automerge`-labelled ∧ ( not-BEHIND unless it's a RE-review ).

@@ -14,18 +14,18 @@ above, not the author.
 
 ## The emerging reflex pattern (condition → action)
 
-| # | Condition (level-triggered, from labels/pods/PRs) | Action | Owner today |
-|---|---|---|---|
-| C1 | issue `agent/queued` ∧ no worker pod in stack ∧ no open agent PR | fire a tick (it claims, estimates, mints, dispatches) | meta (manual) |
-| C2 | worker pod Running | **wait** — no tick; WIP=1 | meta |
-| C3 | PR open, CI pending/green | wait — updater + review reflexes own it | reflexes (LIVE) |
-| C4 | worker Completed ∧ no PR ∧ no pushed branch | diagnose from run.log → fire a tick (coordinator re-dispatches round N+1 fresh) | meta |
-| C5 | worker Completed ∧ pushed branch ∧ no PR | fire a tick (resume from WIP branch) | meta |
-| C6 | PR merged (`agent/done` due) | fire a tick (bookkeeping + queue-release decision for the next dependency-ordered issue) | meta |
-| C7 | `agent/blocked` | escalate to Rasmus; no tick | human |
-| C8 | systematic failure pattern in run.log | retro-grade fix as PR to process files (recipe/rubric), THEN re-tick | meta→human gate |
-| C9 | PR open ∧ auto-merge NOT armed | arm it (`gh pr merge --auto --squash`) — decision-free; unarmed PRs are invisible to the review reflex | agent-finalize (in-pod) + meta backstop |
-| C10 | human direction reversal (`direction-change` label) | SWEEP before any dispatch: re-scope carrying issues, close invalidated PRs **with `--delete-branch`** (a stale same-named branch non-fast-forwards the next round), re-queue; scan excludes + reports carriers | human (scan reports) |
+| #   | Condition (level-triggered, from labels/pods/PRs)                | Action                                                                                                                                                                                                         | Owner today                             |
+| --- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| C1  | issue `agent/queued` ∧ no worker pod in stack ∧ no open agent PR | fire a tick (it claims, estimates, mints, dispatches)                                                                                                                                                          | meta (manual)                           |
+| C2  | worker pod Running                                               | **wait** — no tick; WIP=1                                                                                                                                                                                      | meta                                    |
+| C3  | PR open, CI pending/green                                        | wait — updater + review reflexes own it                                                                                                                                                                        | reflexes (LIVE)                         |
+| C4  | worker Completed ∧ no PR ∧ no pushed branch                      | diagnose from run.log → fire a tick (coordinator re-dispatches round N+1 fresh)                                                                                                                                | meta                                    |
+| C5  | worker Completed ∧ pushed branch ∧ no PR                         | fire a tick (resume from WIP branch)                                                                                                                                                                           | meta                                    |
+| C6  | PR merged (`agent/done` due)                                     | fire a tick (bookkeeping + queue-release decision for the next dependency-ordered issue)                                                                                                                       | meta                                    |
+| C7  | `agent/blocked`                                                  | escalate to Rasmus; no tick                                                                                                                                                                                    | human                                   |
+| C8  | systematic failure pattern in run.log                            | retro-grade fix as PR to process files (recipe/rubric), THEN re-tick                                                                                                                                           | meta→human gate                         |
+| C9  | PR open ∧ auto-merge NOT armed                                   | arm it (`gh pr merge --auto --squash`) — decision-free; unarmed PRs are invisible to the review reflex                                                                                                         | agent-finalize (in-pod) + meta backstop |
+| C10 | human direction reversal (`direction-change` label)              | SWEEP before any dispatch: re-scope carrying issues, close invalidated PRs **with `--delete-branch`** (a stale same-named branch non-fast-forwards the next round), re-queue; scan excludes + reports carriers | human (scan reports)                    |
 
 Queue-release rule (single-active mode): only ONE issue carries `agent/queued` at a time; the
 next is queued at C6 per the dependency order (TRACKS/gantt: #1 → {#2, #3} → #4).
@@ -605,6 +605,13 @@ policy block in the header.
   proven sufficient by the successful ride).
 - **Retro (not yet built)**: (a) worker finalize did NOT arm auto-merge on PR #48 — un-armed is
   invisible to the review edge-trigger (FU-079 class); the gate armed by hand; fix in finalize.
+  **(a) FIXED 2026-07-17 (same day, deterministic 3/3 root cause):** the pr_url finalize arms
+  from is the goose recipe's `response.json_schema` self-report — a goose-only feature the claude
+  harness never emits. agent-runtime#17: finalize now DERIVES pr_url from the checked-out branch
+  (`gh pr list --head`, probe-failed ≠ no-PR) before salvage/classify/bookkeeping — also cures
+  the strike-instead-of-stats routing and the pointless salvage push on PR-ful claude runs.
+  Belt: review-reflex C9 re-arm (worker-App-authored ∧ un-armed ∧ non-draft ∧ no agent/error →
+  `gh pr merge --auto`; piggybacks the existing pr-list call, +author field only).
   (b) coordinator is cron-only — the C4/C5 re-dispatch waited ~10 min where the reviewer fires
   in seconds; operator filed the edge-trigger FU, deferred. (c) single-action TICK_PROMPT
   serializes lanes; multi-dispatch-per-free-lane is the cheap unlock. (d) issue dependencies are
