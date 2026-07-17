@@ -188,9 +188,15 @@ def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, 
     race. Best-effort: a webhook failure never disturbs the metrics poll (the CronJob is the backstop)."""
     if not REVIEW_WEBHOOK_URL:
         return
+    # review_required = fresh PR; changes_requested = a re-review round (the worker pushed a new
+    # head after CHANGES_REQUESTED — dismiss-stale dismisses approvals, not change-requests, so
+    # reviewDecision stays CHANGES_REQUESTED, exactly review-reflex.sh's `reviewable_again`). The
+    # per-head dedup fires each reviewable HEAD once; if that head was already reviewed, the
+    # reviewer's STEP-0 self-guard trips agent/error (correct anomaly signal), so we don't need the
+    # commit-date compare here (which would need a forbidden private-repo GraphQL field anyway).
     reviewable = (
         ci_state == "success"
-        and review_decision == "review_required"
+        and review_decision in ("review_required", "changes_requested")
         and armed
         and not draft
         and "automerge" not in labels
