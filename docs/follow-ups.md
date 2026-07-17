@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-084**.
+  Next free id: **FU-085**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -381,6 +381,22 @@ _Last updated: 2026-07-16._
 
 ## Monitoring & storage
 
+- [ ] **FU-084** — **GitHub API rate-limit metrics + dashboard + alert.** Motivated by the
+      2026-07-17 incident: the coordinator-git App-installation GraphQL pool (5000/hr, SEPARATE
+      from REST) drained to 9 and the live review-reflex started FATAL-aborting `gh pr list`
+      ("API rate limit exceeded for installation ID 142724430") — nothing was watching it, it was
+      only visible in the reflex's own failure log. Extend the ONE poller
+      (`argocd/resources/github-exporter/`, a `collect_rate_limits()` — `gh api rate_limit` is
+      FREE, doesn't count) to emit `github_rate_limit_remaining{token,resource}` + `_limit` +
+      `_reset` for BOTH the PAT and each App-installation token (coordinator-git, reviewer-git,
+      merge, deploy, agents, labels, …), split `core` vs `graphql` (graphql is the one that bit us
+      and is invisible on the default REST view). Then a dashboard panel (remaining/limit % +
+      reset countdown per token) on `dashboard-github.json` and a PrometheusRule alert
+      (`github_rate_limit_remaining / _limit < 0.1` for 5m, warning) in `prometheusrule.yaml` —
+      the same file as `AgentReviewLoop`/`AgentErrorFlagged`. Prior-art: none matched "rate limit
+      / graphql / quota" in FU/ADR; the exporter has no rate-limit collector today. See
+      [[reflex-graphql-rate-limit]] for the behavioral half (don't poll-loop the reflex). Relates
+      the one-poller doctrine ([[github-exporter]]).
 - [ ] **FU-082** — **wk-01 memory pressure makes Talos's OOMController serially kill BestEffort
       pods — Grafana crashlooped 21 cycles (84 restarts), argocd-application-controller 26.**
       Diagnosed 2026-07-16 (operator noticed Grafana): all four grafana containers exit 137
