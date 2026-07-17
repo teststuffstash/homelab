@@ -895,3 +895,62 @@ policy), and oracle-fleet `specs/ingestion` `ING-RT-STEP-CONTRACTS`. Weighed aga
 from git (CronWorkflow/WorkflowTemplate/Sensor YAML, GitOps-synced ✓), open-source/replaceable (Argo is
 CNCF; the artifact repo is our own Garage ✓), local-first (no orchestration SaaS ✓), budget-conscious
 (self-hosted, reuses Garage; the cost is the sized EventBus footprint ✓).
+
+### ADR-094 — Item-scoped coordinator dispatch: the scan schedules, the LLM judges
+**Status:** Proposed (2026-07-17; drafted at operator direction after the FU-080/FU-085 review and
+the oracle-stack parallelism stress-test — accept on operator read-through). **Problem:** the
+coordinator is the last scope-scoped LLM role. `coordinator-scan.sh` computes the actionable set
+deterministically, then **discards item identity** and spawns a whole-stack tick whose TICK_PROMPT
+says "pick the single highest-priority item" — selection, a scheduling concern with no judgment
+content, is delegated to the LLM. Downstream symptoms: one action per tick; lane parallelism
+throttled at cron cadence; "per-track coordinators" would be scope-partitioning re-invented a
+third time (global → per-stack FU-080 → per-track TRACKS seed); and every real constraint the
+oracle stress-test surfaced — the TRACKS ≤1-open-PR-per-lane rule, repo dispatchability
+(context-only `oracle-iac`, the deliberate FU-052-frame exclusion), the shared subscription-session
+ceiling (found by dying on it, 2026-07-12), inter-issue dependencies living as prose the tick must
+"learn by reading bodies carefully" — is carried as prompt text instead of enforceable code. The
+**reviewer is the counter-model**: a deterministic predicate decides *what/when*,
+`reviewer-session.sh <repo> <PR>` judges *one item* — which is why the review path parallelized and
+edge-triggered trivially and needed no per-stack/per-track story. The platform's history is one
+long migration of decisions out of the LLM (FU-045 wake gate, FU-080 whether-per-stack, ADR-093
+"Argo owns when/retry/observe/trigger, never the LLM's decisions"); item selection is the last one
+still inside.
+
+**Decision:** invert the hot path. (1) **The scan emits work units** — each existing predicate
+clause IS an action class: `(repo, item, clause)`, clause ∈ queued-dispatch | C4/C5 re-dispatch |
+changes-requested round | un-armed major | merge-conflict | arbitrate. (2) **The coordinator
+session gains an item mode** (`coordinator-session.sh --item`): seeded with exactly one unit,
+prompt = "reconcile THIS item; if it is no longer actionable on re-read, exit clean" — doorbell
+semantics at item level, idempotent under at-least-once delivery. Triage (issue self-containment +
+platform facts), budget sizing, and exception arbitration stay inside the item session — judgment
+*about one item* was always the coordinator's real value. (3) **Every scheduling constraint
+becomes a scan predicate** — dispatch a unit iff: lane free (`track/*` labels, ≤1 unit in flight
+per lane — the track label is the human-declared independence assertion, so the scheduler needs no
+judgment) ∧ deps closed (`Depends-on:` body lines, FU-087) ∧ repo dispatchable (the AgentStack
+claim carries a fixer block — context-only repos become a visible predicate, not an implicit
+clone-but-can't-work state) ∧ capacity available (FU-088: global subscription-session semaphore +
+OpenRouter credit gate). (4) **Board-level judgment survives as a rare janitor tick** (~daily,
+report-only: direction-change sweeps, orphan classes, cross-PR smells) — deliberately not the hot
+path. (5) **Parallelism is a latent property, not the goal**: the current chassis-track backlog is
+serial by shape (shared files), so the near-term payoff is constraints-as-code; throughput arrives
+free when the backlog's shape allows it.
+
+**Considered:** multi-dispatch TICK_PROMPT ("reconcile every actionable item, ≤1 per free lane") —
+prompt-level parallelism that keeps selection in the LLM and its constraints as drift-prone prose;
+rejected, and explicitly *skipped* as an interim (the item mode obsoletes it). **Per-track
+coordinator sessions** (the TRACKS seed) — dissolves into "the item executor filtered by lane".
+**GitHub Projects / native sub-issues as the dependency source** — extra GraphQL surface, cross-repo
+edges into context-only repos, and the scan must read ONE canonical greppable source; native
+relations stay an optional UI mirror. **Keeping the free-choice tick for safety-net breadth** —
+retained, demoted to the janitor cadence.
+
+**Consequences:** the scan becomes the single point of liveness — a clause bug silently starves an
+item class where a browsing LLM might have noticed; the mitigations already exist and stay (the
+level-triggered cron sweep, report-only orphan/`⏳ queued-blocked` lines, the `agent/error`
+breaker, the exporter stall detector). Item-parallel sessions multiply concurrent subscription
+burn — the FU-088 semaphore is a **prerequisite** for lifting WIP above 1. FU-080's remaining leg
+loses all scheduling semantics (pure isolation: identity, RBAC, creds ref-rail, namespace).
+FU-085 compounds: an event is already item-shaped, so the edge path submits an item unit directly
+and the cron sweep emits only the units the edge missed. Builds: **FU-086** (units + item mode),
+**FU-087** (`Depends-on`), **FU-088** (capacity semaphores). Relates FU-045/FU-050/FU-052/FU-080/
+FU-085, ADR-093, oracle-fleet `specs/TRACKS.md`.

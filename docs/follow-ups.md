@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-086**.
+  Next free id: **FU-089**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -175,6 +175,47 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+- [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
+      the session judges one item.** `coordinator-scan.sh`: emit `(repo, item, clause)` units
+      (clause = the existing predicate rows: queued-dispatch | C4/C5 re-dispatch |
+      changes-requested round | un-armed major | merge-conflict | arbitrate) instead of a per-stack
+      boolean + whole-stack spawn. `coordinator-session.sh --item`: seeded with one unit,
+      "reconcile THIS item, exit clean if stale on re-read" (idempotent doorbell semantics —
+      triage/budget/arbitration judgment stays inside). Scheduling predicates move into the scan:
+      lane free (`track/*` ≤1 in flight per lane), deps closed (FU-087), repo dispatchable (claim
+      fixer block — makes context-only `oracle-iac` a visible predicate), capacity (FU-088 — a
+      PREREQUISITE before WIP goes above 1). Keep a ~daily report-only **janitor tick** for
+      board-level judgment (direction-change sweeps, orphans, cross-PR smells). Explicitly
+      skipped: multi-dispatch TICK_PROMPT (prompt-level parallelism, obsoleted by this). FU-085's
+      edge then submits units directly (events are item-shaped); the cron sweep emits missed
+      units. Relates FU-050/FU-080/FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
+- [ ] **FU-087** — **`Depends-on:` machine-readable dependency lines + scan enforcement (ADR-094).**
+      Convention, mirroring the `Fixes #N` idiom: `Depends-on: <org>/<repo>#N[, <org>/<repo>#M…]`
+      in the issue body. Scan rule: `agent/queued` ∧ any referenced issue still open → NOT
+      actionable, reported as `⏳ queued-blocked (waiting #N)` — level-triggered (closure is seen
+      next pass; *closed* is the right satisfaction proxy because `Fixes #N` closes issues on
+      merge). Guardrails: cycle detection (A↔B → `agent/error`-style human-first report) and a
+      staleness line when a dependency closed as not-planned (the dependent's premise may have died
+      with it). The EMITTER side is the point: issues are authored by jail LLM sessions from specs
+      — the graph is known exactly then, so the authoring practice/recipes must write the lines
+      (a reader without coverage leaves the graph in prose). Document in
+      `agents/coordinator/README.md` §State machine (the scan MUST track it) + oracle-fleet
+      TRACKS. Native sub-issues/Projects = optional UI mirror, never the source. Today's real
+      graph to encode at build time: oracle-fleet #42/#50→#43, #45→iac#41, #46→SRV P1. Why not a
+      `blocked` label: labels are state someone must remove — they rot; the body line is
+      declarative, blockedness derived fresh each scan.
+- [ ] **FU-088** — **Capacity semaphores in the deterministic layer: subscription sessions +
+      OpenRouter credit (ADR-094).** (a) **Global subscription-session semaphore** — nothing counts
+      concurrent Claude-subscription pods: ticks, reviewers, and interactive rides all draw from
+      the one operator plan, and the ceiling was found by dying on it (2026-07-12 loop, 12
+      approvals until the session limit cut it). Enforce at dispatch: the scheduler defers a unit
+      when ≥N subscription-labelled pods are Running (label-selector count — the same mechanism as
+      the launcher pre-flight belt), report-only line instead of a doomed spawn. (b) **OpenRouter
+      out-of-funds gate** — account-level credit exhaustion today surfaces only as per-pod 402
+      retry storms AFTER spawn (the agent-runtime storm watchdog hard-stops in-pod, agent-runtime#8);
+      add a pre-dispatch probe (credits/key-status via the ADR-081 proxy) so worker dispatch defers
+      while the account is dry. Both are scan predicates under FU-086; (a) is a prerequisite for
+      any WIP >1. Relates FU-062 (registry/proxy), FU-086, ADR-094.
 - [ ] **FU-085** — **Coordinator edge-trigger: a `/coordinate` Sensor so the loop reacts in seconds;
       the `*/10` cron demotes to backstop.** Design + emitter analysis in
       `docs/agents/workflow.md` §Triggers → "The coordinator Sensor" (2026-07-17; motivating sting:
@@ -197,7 +238,9 @@ _Last updated: 2026-07-16._
       (airlock-aligned). Doorbell rule: events scope (`{repo}`), never carry state — the scan
       re-lists and gates (incl. the FU-080 `coordinator.enabled` knob), so a false wake costs `gh`
       calls, never an LLM tick. After proving: cron `*/10 → */30` (FU-084 GraphQL burn);
-      red-beyond-T stays cron-only. Relates FU-050/FU-080/FU-084, ADR-093/ADR-084.
+      red-beyond-T stays cron-only. ADR-094 compounds this: events are item-shaped, so under
+      FU-086 the Sensor submits an item work unit directly and the cron sweep emits only missed
+      units. Relates FU-050/FU-080/FU-084/FU-086, ADR-093/ADR-084/ADR-094.
 - [ ] **FU-080** — **Per-stack coordinator/reviewer rendered from the AgentStack claim → the stack
       jail controls its whole loop.** Decided direction 2026-07-16 (session with the operator; the
       revisit trigger foreseen by agentstack.md §Decisions fired): the oracle stack jail's
@@ -247,7 +290,9 @@ _Last updated: 2026-07-16._
       CronWorkflow running there — moves agents OUT of the project namespace (the airlock's real
       close; needs coordinator-session.sh/coordinator-scan.sh namespace plumbing). model-scout +
       ledger stay GLOBAL. Docker-ride dispatch from the jail additionally waits on FU-072.
-      Relates FU-045/FU-048/FU-050/FU-066, ADR-093.
+      ADR-094 note: this leg carries NO scheduling semantics — the scheduler is item-scoped
+      (FU-086) regardless, so per-stack instances are pure isolation.
+      Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
