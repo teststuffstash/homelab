@@ -217,16 +217,22 @@ _Last updated: 2026-07-16._
       per-stack CronWorkflows + Argo Events Sensors (not the global CronJobs), which requires
       per-stack ref-railing of the coordinator creds (`coordinator-claude` subscription ref +
       `coordinator-git`) into each `<stack>-agents` ns, and flips agentstack.md §Decisions'
-      "one global reflex" to "one per stack jail". **Suspend/unsuspend becomes PER-STACK
-      (decided 2026-07-17):** TWO claim knobs — `coordinator.enabled` (default OFF, opt-in;
-      dispatches workers + spends budget, the FU-050 autonomy switch, now graduated per stack)
-      and `reviewer.enabled` (default ON; only reviews green PRs, safe) — the Composition renders
-      each into that stack's CronWorkflow `spec.suspend` AND gates its Sensor (a suspended stack
-      fires no review workflow on PR events either). The claim is the durable switch; an
-      imperative `kubectl patch … suspend` is a git-revertible brake (ArgoCD/Crossplane selfHeal
-      reverts it). model-scout + ledger stay GLOBAL single CronWorkflows (fleet-wide by nature).
-      Docker-ride dispatch from the jail additionally waits on FU-072 (resolve_ep cross-ns
-      endpoint reads). Relates FU-045/FU-048/FU-050/FU-066, ADR-093.
+      "one global reflex" to "one per stack jail". **TWO KNOBS BUILT 2026-07-17** (delivered via
+      the GLOBAL reflex respecting per-stack claim flags — much simpler + safer than per-stack
+      namespaces, which is a SEPARATE isolation goal below): AgentStack XRD gained stack-level
+      `coordinator.enabled` (default OFF) + `reviewer.enabled` (default ON). **coordinator.enabled
+      ENFORCED:** `coordinator-scan.sh --spawn` skips a stack whose `coordinator.enabled != true`
+      (stacks_json carries it from the claim) — the FU-050 autonomy switch made per-stack, graduate
+      a proven stack while others stay off; supervised `coordinator-session --run-tick` overrides.
+      **reviewer.enabled = FIELD only** (default-on = today's behavior; the exporter has no cluster
+      read, so the opt-out enforcement is a small follow-on — rare case). **REMAINING = the
+      isolation goal (separate from the knobs):** the per-stack `<stack>-agents` namespace + the
+      loop identity + cred ref-rail (coordinator-claude/git ExternalSecrets) + CROSS-NS dispatch
+      RBAC (loop SA → worker pods in the fixer repo ns) + a per-stack coordinator/reviewer
+      CronWorkflow running there — moves agents OUT of the project namespace (the airlock's real
+      close; needs coordinator-session.sh/coordinator-scan.sh namespace plumbing). model-scout +
+      ledger stay GLOBAL. Docker-ride dispatch from the jail additionally waits on FU-072.
+      Relates FU-045/FU-048/FU-050/FU-066, ADR-093.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
