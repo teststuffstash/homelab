@@ -121,9 +121,17 @@ spec:
         args:
           - |
             set -e
+            REPO="{{inputs.parameters.repo}}"; PR="{{inputs.parameters.number}}"
+            # Safe parallel with the CronJob reflex: skip if a reviewer pod for this PR already
+            # exists (the CronJob may have dispatched first) — the same app=agent-reviewer,project,pr
+            # idempotency review-reflex.sh uses. reviewer-session.sh STEP-0 is the final backstop.
+            if kubectl get pods -n agent-coordinator -l "app=agent-reviewer,project=${REPO},pr=${PR}" \
+                 --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name 2>/dev/null | grep -q .; then
+              echo "review: ${REPO}#${PR} already under review — skipping (idempotent)"; exit 0
+            fi
             rm -rf /work/homelab
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
-            exec bash /work/homelab/agents/reviewer-session.sh "{{inputs.parameters.repo}}" "{{inputs.parameters.number}}"
+            exec bash /work/homelab/agents/reviewer-session.sh "$REPO" "$PR"
         env:
           - { name: HOME, value: "/home/node" }
           - { name: ORG, value: "teststuffstash" }

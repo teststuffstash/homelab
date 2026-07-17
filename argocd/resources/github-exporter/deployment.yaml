@@ -28,6 +28,12 @@ spec:
                 secretKeyRef:
                   name: github-exporter-token
                   key: token
+            # ADR-093 review edge-trigger: POST reviewable PRs to the Argo Events webhook so a
+            # review Workflow fires near-instantly (reusing this poll — the one-poller doctrine),
+            # instead of the review-reflex CronJob's */5 GraphQL poll. Runs alongside the CronJob
+            # (safely parallel via the reviewer-pod idempotency guard). Empty = disabled.
+            - name: REVIEW_WEBHOOK_URL
+              value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/review"
           ports:
             - name: http-metrics
               containerPort: 9504

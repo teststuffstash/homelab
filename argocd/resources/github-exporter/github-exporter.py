@@ -37,11 +37,16 @@ ORG = os.environ.get("GITHUB_ORG", "teststuffstash")
 TOKEN = os.environ["GITHUB_TOKEN"].strip()
 INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
 WINDOW_HOURS = int(os.environ.get("RUN_WINDOW_HOURS", "24"))
+# ADR-093 review edge-trigger: POST reviewable PRs to the Argo Events webhook so a review Workflow
+# fires without the review-reflex CronJob's */5 GraphQL poll (this poll already knows the reviewable
+# set — reuse it, the one-poller doctrine). Empty = disabled (dispatch stays with the CronJob).
+REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
 
 _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
+_review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 
 
 def gh(path):
@@ -172,6 +177,44 @@ def ci_state_from_runs(repo, sha):
     return "error"  # stale / unknown mixtures — visible rather than falsely green
 
 
+def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft, labels):
+    """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
+    Workflow fires now, instead of waiting up to 5 min for the review-reflex CronJob's poll. The
+    reviewable predicate mirrors review-reflex.sh (armed ∧ green ∧ review_required, skipping the
+    mechanical `automerge` dep lane and any `agent/error` circuit-breaker). Deduped per
+    (repo, number, head_sha) for this process lifetime — one POST per reviewable head; a restart
+    re-POSTs a still-reviewable PR, which is correct (it genuinely needs a review), and the review
+    Workflow's deterministic name + reviewer-session.sh's STEP-0 self-guard backstop any in-flight
+    race. Best-effort: a webhook failure never disturbs the metrics poll (the CronJob is the backstop)."""
+    if not REVIEW_WEBHOOK_URL:
+        return
+    reviewable = (
+        ci_state == "success"
+        and review_decision == "review_required"
+        and armed
+        and not draft
+        and "automerge" not in labels
+        and "agent/error" not in labels
+    )
+    if not reviewable or not head_sha:
+        return
+    key = (repo, str(number), head_sha)
+    if key in _review_dispatched:
+        return
+    body = json.dumps({"repo": repo, "number": str(number), "head_sha": head_sha}).encode()
+    try:
+        req = urllib.request.Request(
+            REVIEW_WEBHOOK_URL, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+        _review_dispatched.add(key)
+        print(f"review dispatch: {repo}#{number} @{head_sha[:8]} → webhook", flush=True)
+    except Exception as exc:
+        print(f"review dispatch FAILED for {repo}#{number}: {exc}", flush=True)
+
+
 _PR_QUERY = """
 query($org:String!, $cursor:String) {
   organization(login:$org) {
@@ -185,6 +228,7 @@ query($org:String!, $cursor:String) {
             labels(first:15){ nodes { name } }
             reviews(last:30){ nodes { author { login } state submittedAt } }
             headRefOid
+            autoMergeRequest { enabledAt }
             commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
           }
         }
@@ -258,9 +302,21 @@ def collect_open_prs(lines):
                 lines.append(metric("github_pull_request_open", labels, 1))
                 lines.append(metric("github_pull_request_updated_timestamp", labels, epoch(pr["updatedAt"])))
                 ident = {"owner": ORG, "repo": repo["name"], "number": pr["number"]}
+                label_names = {lab["name"] for lab in (pr.get("labels") or {}).get("nodes") or [] if lab}
                 for lab in (pr.get("labels") or {}).get("nodes") or []:
                     if lab:
                         lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
+                # ADR-093 edge-trigger: this PR is REVIEWABLE now — green, unapproved, armed, not a
+                # draft, not broken/mechanical — so POST it to the review Sensor. Same predicate as
+                # review-reflex.sh (armed ∧ green ∧ review_required, minus automerge/agent-error).
+                maybe_dispatch_review(
+                    repo["name"], pr["number"], pr.get("headRefOid") or "",
+                    ci_state=ci_state,
+                    review_decision=(pr["reviewDecision"] or "none").lower(),
+                    armed=pr.get("autoMergeRequest") is not None,
+                    draft=bool(pr["isDraft"]),
+                    labels=label_names,
+                )
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
                 # commits node nulls regardless of which sub-fields are selected), and a dispatch
