@@ -41,6 +41,15 @@ rules:
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [roles, rolebindings]
     verbs: [get, list, watch, create, update, patch, delete]
+  # ADR-093 argo.enabled: the composed workflow Role GRANTS workflowtaskresults, so — per the
+  # escalation-check gotcha above — crossplane must itself hold it. serviceaccounts: compose the
+  # workflow SA. (No agentstack CR uses these; they exist to hand to the composed Role/SA.)
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch, get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get, list, watch, create, update, patch, delete]
   # FU-068 labels tier: the Composition composes provider-upjet-github's IssueLabels.
   - apiGroups: [repo.github.upbound.io]
     resources: [issuelabels, issuelabels/status]

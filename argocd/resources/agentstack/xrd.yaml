@@ -132,6 +132,23 @@ spec:
                               volumes, replica=1 on the bulk disks; the docker-mode dind
                               /var/lib/docker block PVC, FU-081), e.g. "40Gi" — size for
                               20Gi × concurrent docker rides.
+                      argo:
+                        type: object
+                        description: >-
+                          Opt namespace <name> in to run Argo Workflows (ADR-093 — the platform
+                          orchestration engine). The platform renders the workflow ServiceAccount +
+                          `workflowtaskresults` RBAC so the stack's own WorkflowTemplates/CronWorkflows
+                          (authored in its `-iac` repo) run here. MECHANISM only — the DAG + step
+                          images are stack policy (ADR-085). First consumer: oracle-fleet ingestion
+                          (snapshot→parse→build→publish, ING-RT-STEP-CONTRACTS). The S3 artifact
+                          repository (Garage bucket + key + default configmap) is rendered too once a
+                          multi-step DAG needs inter-step handoff — not yet (single-step snapshot
+                          writes straight to oracle's own data bucket).
+                        properties:
+                          enabled:
+                            type: boolean
+                            default: false
+                            description: Render the workflow SA + workflowtaskresults RBAC into this namespace.
                       labels:
                         type: object
                         description: >-

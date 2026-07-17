@@ -20,6 +20,10 @@
 #                                                launch grants (pods/exec/pvc/openrouterkeys), ready
 #                                                for a per-stack coordinator/reviewer to run in-ns.
 #                                                Additive; the reflex CronJob move is the remaining step.
+#   9. argo-workflow SA + Role + Binding         — ADR-093, gated on repos[].argo.enabled: the
+#                                                workflow identity + workflowtaskresults RBAC so the
+#                                                stack's WorkflowTemplates/CronWorkflows run in-ns
+#                                                (first: oracle-fleet ingestion). Artifact repo later.
 # Mirrors (and supersedes, per migrated repo) agents/fixer/<repo>/ and <stack>-iac//<repo>/agent/.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
@@ -463,6 +467,48 @@ spec:
             roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-loop }
             subjects:
               - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $r.name }} }
+            {{- end }}
+            {{- if and $r.argo (get $r.argo "enabled") }}
+            ---
+            # ADR-093 argo.enabled: workflow identity + `workflowtaskresults` RBAC so the stack's
+            # WorkflowTemplates/CronWorkflows run in this namespace (the argo controller is
+            # cluster-wide; the executor needs this grant in-ns to report step results). The stack
+            # authors the DAG + step images in its -iac/app repos — mechanism here, policy there
+            # (ADR-085). First consumer: oracle-fleet ingestion. The S3 artifact repo (Garage bucket
+            # + key + default configmap) renders here too once a multi-step DAG needs it.
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: argo-workflow
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-argo-sa
+                gotemplating.fn.crossplane.io/ready: "True"
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: argo-workflow
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-argo-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [argoproj.io]
+                resources: [workflowtaskresults]
+                verbs: [create, patch]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: argo-workflow
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-argo-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflow }
+            subjects:
+              - { kind: ServiceAccount, name: argo-workflow, namespace: {{ $r.name }} }
             {{- end }}
             {{- end }}
             ---
