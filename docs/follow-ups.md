@@ -218,28 +218,6 @@ _Last updated: 2026-07-16._
       **Remaining:** (a′) worker-recipe breaker — PRs armed 2026-07-16 (oracle-fleet#39 +
       sleep-tracking#21, riding the reflex); close when both merge.
 
-- [ ] **FU-018** — **BUILT + ACCEPTED 2026-07-10 (ADR-087): opaque-ref LLM creds + broker git tokens,
-      acceptance green on oracle-fleet#7/PR#12 (incl. salvage-push + PR-open with zero pod
-      credentials). Goose default ON since 9f12d88 (`AGENT_CRED_INJECT=0` opts out). **Opencode leg
-      VALIDATED LIVE 2026-07-16** (ride adhoc-fu018-opencode-inject r3, transcripts in the
-      bucket): proxy log `[injected:google-vertex+cred]` 200 + `/api/v1/key → 200` — answer
-      produced, `cost_usd` real (not unknown), key_hash in stats. Two findings the validation
-      caught: (i) once the session config custom-configures provider options (baseURL), opencode
-      SKIPS env auto-detection and sends no auth at all — `apiKey: "{env:OPENROUTER_API_KEY}"`
-      must ride the merge explicitly (fixed in agent-session.sh); (ii) the proxy resolves ONLY
-      session-key-labeled refs — an injected ADHOC ride on the standing `<project>-openrouter`
-      key gets `cred-unresolved` 401 BY DESIGN: mint a session key first
-      (`estimate_budget.py --emit-cr` one-liner, coordinator README step 4).
-      REMAINING: drop the env/mount fallbacks with FU-020's deny-all.** Original: **ADR-081 egress proxy**: inject per-job creds (git/LLM never held in the pod)
-      and rewrite the OpenRouter `provider` routing (order / max_price / ignore; prefer *caching*
-      providers) — the biggest cost lever. **Provider-injection v1 LIVE (2026-07-09, E2E-verified):**
-      `argocd/resources/openrouter-proxy/` (ConfigMap python, ns `agent-egress`) injects the
-      per-model pin into goose's chat/completions (`OPENROUTER_HOST` wired in `agent-session.sh`,
-      opt-out `AGENT_OPENROUTER_PROXY=""`); opencode carries the same pin itself via per-session
-      `OPENCODE_CONFIG`. ⚠ `provider.order` matches endpoint-tag base SLUGS (`atlas-cloud`), not
-      display names. REMAINING here: credential minting/injection (the pod still holds its
-      OpenRouter key + GH_TOKEN) — then FU-020's Cilium lockdown makes the proxy the only exit.
-      Cost autopsy: `agents/README.md` → Operational findings.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
@@ -252,24 +230,6 @@ _Last updated: 2026-07-16._
       DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
-- [ ] **FU-020** — **FIRST STACK LIVE 2026-07-10**: oracle-fleet worker pods under deny-all
-      (CiliumNetworkPolicy `agent-worker-egress`, now rendered by the oracle AgentStack claim —
-      allow: dns, agent-egress proxy+broker, nix-cache, garage, monitoring, GitHub/PyPI/nix FQDNs;
-      NO direct openrouter.ai). Gated on ADR-087 inject default-on. **Rollout progressed
-      2026-07-12 (FU-048 claims):** sleep-tracking + openrouter-operator worker CNPs LIVE in
-      MONITOR (`egress.enforce: false`); `hubble.relay` + `drop:sourceContext=namespace` live
-      (tofu/cilium.tf, agents rolled); `AgentWorkerEgressDropped` alert live WITH a positive
-      control (deliberate forbidden egress from a labeled pod → the predicted hang →
-      `hubble_drop_total{source="oracle-fleet",reason="POLICY_DENIED"}` in Prometheus).
-      **VALIDATION RIDE DONE 2026-07-12**: issue #8 round 2 ran CLEAN under enforced deny-all +
-      broker creds + claim-composed infra (441s, $0.0347, exit clean, key_hash in stats).
-      Drop tail **CLASSIFIED LIVE 2026-07-16** (`hubble observe --follow` during the FU-018
-      opencode rides): 94 drops = **models.dev** (opencode's registry fetch, gracefully degraded
-      — run still green) + **direct openrouter.ai** Cloudflare IPs (exactly what the policy
-      exists to stop; the proxied path answered fine). All benign-by-design — NO allowlist
-      change; a run that needs neither still completes. Remaining: harvest+flip the two monitor
-      stacks, then drop the env/mount credential fallbacks. Original: Cilium egress lockdown for worker pods (deny-all +
-      allow the proxy and the nix cache — without the nix allowance `devbox install` hangs).
 - [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
       §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only

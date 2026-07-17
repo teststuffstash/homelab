@@ -224,6 +224,15 @@ if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] \
     GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
   fi
 fi
+# Git-token fallbacks (env + mount) ride ONLY when the broker is NOT in play — with
+# GIT_CRED_BROKER_URL set the pod's git/gh path is the per-op proxy fetch and holding a
+# standing token defeats the airlock (FU-018/FU-020 finale, dropped 2026-07-16).
+GIT_FALLBACK_ENV=$'        - name: GH_TOKEN\n          valueFrom:\n            secretKeyRef: { name: agent-git-token, key: token, optional: true }\n        - name: GIT_TOKEN_FILE\n          value: "/secrets/git/token"'
+GIT_FALLBACK_MOUNT=$'\n        - { name: git-token, mountPath: /secrets/git, readOnly: true }'
+GIT_FALLBACK_VOLUME=$'\n    - name: git-token\n      secret: { secretName: agent-git-token, optional: true }'
+if [ -n "$CRED_BROKER_ENV" ]; then
+  GIT_FALLBACK_ENV="";  GIT_FALLBACK_MOUNT=""; GIT_FALLBACK_VOLUME=""
+fi
 
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
 # provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
@@ -469,19 +478,13 @@ ${UV_ENV}
         - name: GOOSE_MAX_TURNS
           value: "${GOOSE_MAX_TURNS:-200}"
 ${OR_KEY_ENV}
-        # Scoped ~1h GitHub token minted by the ESO GithubAccessToken generator (per-project,
-        # <stack>-iac/<project>/agent/git-token.yaml) → clone private repos + push branch + open PR.
-        # optional:true so sessions still work (public clone) before the agents App exists.
-        # FU-064b: the token is ALSO volume-mounted below — kubelet rewrites the mounted file on ESO
-        # rotation, so the entrypoint's credential helper + gh wrapper read a LIVE token at use time
-        # (the env var is frozen at pod start; a >60-min run's env token is dead at push time —
-        # oracle-fleet#1 attempts 1+3). Env stays as the fallback for pre-mount images.
-        # v2/ADR-081 FU-018: injected by the egress proxy instead of held in the pod at all.
-        - name: GH_TOKEN
-          valueFrom:
-            secretKeyRef: { name: agent-git-token, key: token, optional: true }
-        - name: GIT_TOKEN_FILE
-          value: "/secrets/git/token"
+        # Git credential (three eras, FU-064b → ADR-087/FU-018): under INJECTION the pod holds
+        # NO git token at all — GIT_FALLBACK_* are empty and the entrypoint's credential helper +
+        # gh wrapper fetch a live token per operation from the proxy's /git-token endpoint
+        # (fallbacks dropped 2026-07-16, the FU-020 finale). Without injection (claude harness,
+        # AGENT_CRED_INJECT=0) the ESO-minted ~1h token rides in as before: volume-mounted (live
+        # on rotation) + env (frozen at start, pre-mount-image fallback).
+${GIT_FALLBACK_ENV}
 ${CRED_BROKER_ENV}
         # Ledger-backfill anchor (FU-057): the operator writes the OpenRouter key HASH into the
         # session Secret; finalize surfaces it in stats so cost_unknown runs stay accountable.
@@ -505,12 +508,9 @@ ${CLAUDE_ENV}
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   ${AGENT_LIMITS}
-      volumeMounts:
-        - { name: git-token, mountPath: /secrets/git, readOnly: true }${UV_MOUNT}${DOCKER_MOUNT}
+      volumeMounts:${GIT_FALLBACK_MOUNT}${UV_MOUNT}${DOCKER_MOUNT}
 ${DIND_CONTAINER}
-  volumes:
-    - name: git-token
-      secret: { secretName: agent-git-token, optional: true }${UV_VOLUME}${DOCKER_VOLUMES}
+  volumes:${GIT_FALLBACK_VOLUME}${UV_VOLUME}${DOCKER_VOLUMES}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"

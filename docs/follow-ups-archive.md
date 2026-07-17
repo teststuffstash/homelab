@@ -8,7 +8,27 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
-- **FU-045** *(archived 2026-07-16)* — **Per-stack coordinator context: LIVE since 2026-07-08**
+- **FU-018** *(archived 2026-07-17)* — **ADR-087 credential injection: COMPLETE on the
+  goose+opencode tier.** Opaque-ref LLM creds + broker git tokens; goose default-on since
+  2026-07-10 (acceptance oracle-fleet#7/PR#12); opencode leg validated live 2026-07-16
+  (proxy `[injected+cred]` 200, usage read via proxy, cost known — needed `apiKey:
+  "{env:OPENROUTER_API_KEY}"` explicit in the session config: options-configured providers skip
+  opencode's env auto-detection; and a SESSION-key ref — the proxy refuses standing-key refs by
+  design, adhoc rides mint one via `estimate_budget.py --emit-cr`). Finale 2026-07-17: env/mount
+  git-token fallbacks DROPPED under injection (agent-session.sh `GIT_FALLBACK_*`); canary pod
+  verified holding zero git credentials (env grep 0, only the SA volume) and rode clone → LLM →
+  transcripts green. claude harness keeps env/mount (no broker leg yet — its creds are already
+  refs, FU-066 d). Provider-injection v1 + cost autopsy: agents/README.md.
+
+- **FU-020** *(archived 2026-07-17)* — **Worker egress deny-all: ENFORCED ON ALL THREE STACKS.**
+  oracle since 2026-07-10; sleep-tracking + openrouter-operator flipped 2026-07-17 after clean
+  monitor harvests (`hubble observe --follow` during canary rides; every destination allowlisted
+  or known-benign) + post-flip canaries green under enforce. Known-benign denied set, verified
+  live: **models.dev** (opencode registry fetch, degrades gracefully) + **direct openrouter.ai**
+  (exactly what the policy stops; proxied path unaffected) — deliberately NOT allowlisted.
+  `AgentWorkerEgressDropped` alert + `drop:destinationContext` metrics live since 2026-07-12.
+  Harvest lesson: flows must be captured LIVE (ring buffer rotates in minutes). CNP rendered by
+  the AgentStack claim (`egress.enforce` dial); monitor mode = new-stack onboarding default. **Per-stack coordinator context: LIVE since 2026-07-08**
   (`coordinator-session.sh` clones all the stack's repos to `/work/<repo>`, cwd = the stack's
   `mainRepo`; deterministic `coordinator-scan` gate + `--stack/--repos` scoping; ran live on
   sleep-tracking#18 and the oracle stack since). Everything the entry still carried was other
