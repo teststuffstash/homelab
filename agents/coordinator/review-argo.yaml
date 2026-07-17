@@ -1,0 +1,170 @@
+# Review reflex on Argo (ADR-093 Phase 1) — the event-driven half of the merge path, replacing the
+# */5 GraphQL-polling review-reflex CronJob's latency with a near-instant trigger (the ADR-084
+# sync.yaml-webhook pattern, generalized). PROVEN 2026-07-17: POST {repo,number} → JetStream
+# EventBus → Sensor maps the body into workflow params → Argo submits a `review` Workflow →
+# reviewer-session.sh reviews that exact PR. Runs ALONGSIDE the CronJob (agents/coordinator/
+# review-reflex.yaml) which stays as instant rollback + the level-triggered backstop; double-review
+# is prevented by reviewer-session.sh STEP 0's self-guard. DORMANT until a trigger source POSTs to
+# the webhook (next increment: the github-exporter emits on a PR→reviewable transition, in-cluster,
+# reusing the one poller — no per-repo CI edits, collapses the FU-084 GraphQL burn). FU-080 renders
+# this per-stack from the AgentStack Composition (two knobs: coordinator.enabled off / reviewer.enabled on).
+---
+# JetStream EventBus — the stateful trigger bus (FU-082 requests; 3 replicas for quorum, 1Gi PVCs).
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: agent-coordinator
+spec:
+  jetstream:
+    version: latest # → nats:2.10.10, pinned by the argo-events 2.4.23 controller config
+    replicas: 3
+    persistence:
+      volumeSize: 1Gi
+      storageClassName: longhorn
+    containerTemplate:
+      resources:
+        requests: { cpu: "50m", memory: "64Mi" }
+        limits: { memory: "256Mi" }
+---
+# Webhook EventSource — an in-cluster POST /review {repo,number} endpoint (svc :12000).
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: agent-loop
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  service:
+    ports:
+      - { port: 12000, targetPort: 12000 }
+  webhook:
+    review:
+      port: "12000"
+      endpoint: /review
+      method: POST
+---
+# Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: review
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
+  dependencies:
+    - name: review-dep
+      eventSourceName: agent-loop
+      eventName: review
+  triggers:
+    - template:
+        name: submit-review
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: review-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: review }
+                arguments:
+                  parameters:
+                    - { name: repo, value: "OVERRIDE" }
+                    - { name: number, value: "OVERRIDE" }
+          parameters:
+            - src: { dependencyName: review-dep, dataKey: body.repo }
+              dest: spec.arguments.parameters.0.value
+            - src: { dependencyName: review-dep, dataKey: body.number }
+              dest: spec.arguments.parameters.1.value
+---
+# The review Workflow — one step: clone homelab, run the proven reviewer-session.sh for the PR.
+# Runs as the agent-coordinator SA (pod-create for reviewer-session.sh's reviewer pod + the
+# workflowtaskresults binding below). One level of pod indirection (workflow→reviewer) reuses the
+# battle-tested launcher unchanged; a native-step reviewer is a later refinement.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: review
+  namespace: agent-coordinator
+spec:
+  serviceAccountName: agent-coordinator
+  entrypoint: main
+  arguments:
+    parameters:
+      - name: repo
+      - name: number
+  templates:
+    - name: main
+      inputs:
+        parameters:
+          - name: repo
+          - name: number
+      metadata:
+        labels: { app: review-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -e
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            exec bash /work/homelab/agents/reviewer-session.sh "{{inputs.parameters.repo}}" "{{inputs.parameters.number}}"
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: ORG, value: "teststuffstash" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "512Mi" }
+      volumes:
+        - { name: work, emptyDir: {} }
+        - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+---
+# Sensor identity — submit Workflows from the trigger.
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: sensor-review, namespace: agent-coordinator }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: sensor-review, namespace: agent-coordinator }
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows, workflowtemplates]
+    verbs: [create, get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: sensor-review, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: sensor-review }
+subjects:
+  - { kind: ServiceAccount, name: sensor-review, namespace: agent-coordinator }
+---
+# The review workflow runs as agent-coordinator (pod-create); it also needs the chart's workflow
+# Role (workflowtaskresults create/patch) to report step results.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: argo-workflows-workflow-coordinator, namespace: agent-coordinator }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflows-workflow }
+subjects:
+  - { kind: ServiceAccount, name: agent-coordinator, namespace: agent-coordinator }
