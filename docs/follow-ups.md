@@ -202,11 +202,16 @@ _Last updated: 2026-07-16._
       REMOVED — the coordinator SA now has zero secret access;
       (b) ✅ DONE 2026-07-17 — `oracle-workbench-orkeys` Role+Binding in oracle-iac
       workbench.yaml (openrouterkeys R/W, mint→observe→delete; oracle-iac#34, CI-only merge).
-      **Identity+launch-RBAC render DONE 2026-07-17:** the Composition renders per fixer repo a
-      NAMESPACED `agentstack-loop` SA + Role (pods/exec/pvc/openrouterkeys) + Binding — the
+      **Identity+launch-RBAC render DONE + VERIFIED 2026-07-17:** the Composition renders per fixer
+      repo a NAMESPACED `agentstack-loop` SA + Role (pods/exec/pvc/openrouterkeys) + Binding — the
       in-namespace equivalent of the global coordinator's cluster-scoped grant, ready for a
-      per-stack coordinator/reviewer to run as. Additive (nothing binds a pod to it yet). Airlock
-      pattern documented in docs/agents/platform-and-stacks.md §"The credential-airlock pattern".
+      per-stack coordinator/reviewer to run as. Additive (nothing binds a pod to it yet). Verified
+      live across all 3 fixer namespaces: loop SA CAN create pods+openrouterkeys in-ns, CANNOT
+      create pods cross-ns or read cluster secrets. ⚠ Gotcha (agentstack/rbac.yaml header): k8s
+      privilege-escalation prevention blocks Crossplane from COMPOSING a Role that grants verbs it
+      doesn't itself hold — the pods/exec/pvc verbs had to be mirrored into the
+      crossplane-aggregated ClusterRole (the proxy Role slipped by on core's secrets access).
+      Airlock pattern documented in docs/agents/platform-and-stacks.md §"The credential-airlock pattern".
       **REMAINING (the decision-revisit half):** move the coordinator/reviewer reflex CronJobs
       in-namespace running as `agentstack-loop` — which requires per-stack ref-railing of the
       coordinator creds (`coordinator-claude` subscription ref + `coordinator-git`) into each
