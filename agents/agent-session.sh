@@ -65,6 +65,23 @@ case "$MODEL" in claude/*)
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 NS="$PROJECT"
+
+# --docker is STACK POLICY (the claim's fixer.docker), not a dispatcher memory test: derive it
+# from the AgentStack claim when the caller didn't pass it (found live 2026-07-18: an item
+# session dispatched a docker-repo worker without --docker; the duplicate-dispatch dance cost a
+# pod). Explicit --docker always wins; a failed probe leaves it unset and WARNS (the CI gate
+# catches a wrong-mode ride — degrade loudly, never guess).
+if [ -z "$DOCKER" ] && command -v "$KUBECTL" >/dev/null 2>&1; then
+  if claims_json="$("$KUBECTL" $KUBE get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
+    if [ "$(printf '%s' "$claims_json" | jq -r --arg p "$PROJECT" \
+        '[.items[].spec.repos[] | select(.name == $p and (.fixer.docker == true))] | length' 2>/dev/null)" -gt 0 ] 2>/dev/null; then
+      DOCKER=1
+      echo "→ --docker derived from the AgentStack claim (fixer.docker=true for ${PROJECT})"
+    fi
+  else
+    echo "WARN: agentstacks probe failed — cannot derive --docker; pass it explicitly for docker-gated repos" >&2
+  fi
+fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"

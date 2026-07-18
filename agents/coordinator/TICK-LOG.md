@@ -637,6 +637,12 @@ policy block in the header.
   picked `issue-52 queued-dispatch` per ADR-094 priority and spawned the item session IN
   oracle-agents (broker git creds, sonnet per claim `coordinatorModel`). iac#41 deliverable 4
   (attended validation) run by the meta session directly.
+- **Dual-running race, resolved by the sessions themselves (+ a determinism fix):** the global
+  and per-stack ticks both dispatched issue #52 within ~85s; the global one's worker was missing
+  `--docker`, it RECOGNIZED its own pod as the misconfigured duplicate and deleted it — exactly
+  one correct worker survived. Root determinism gap closed same hour: `agent-session.sh` now
+  DERIVES `--docker` from the claim's `fixer.docker` (explicit flag wins; probe-fail warns) —
+  stack policy stopped being an LLM memory test (ADR-094 constraints-as-code).
 - **FU-089 filed en route:** the per-repo `agents-github-app` PRIVATE KEY ES in fixer namespaces is
   a workbench→org-wide-token escalation hole; the loop-token pattern (central mint + TokenReview
   broker) is the fix shape for worker tokens too.
