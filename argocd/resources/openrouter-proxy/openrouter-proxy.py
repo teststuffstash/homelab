@@ -161,6 +161,69 @@ def _resolve_ref(ref: str) -> dict | None:
 
 
 GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
+# FU-080 loop tokens: per-STACK coordinator/reviewer git tokens (issues:write over one stack's
+# repos — strictly more privilege than a worker token), minted centrally in agent-coordinator by
+# the Composition (`loop-git-<stack>` / `loop-reviewer-git-<stack>`; the App private keys never
+# leave that ns) and served ONLY here — no Secret ever sits in <stack>-agents, so the workbench
+# SA may hold pod-create there without the airlock dying. Serving REQUIRES TokenReview: the
+# caller presents its projected ServiceAccount token and must BE system:serviceaccount:
+# <requested-ns>:agentstack-loop. The legacy worker /git-token path stays honor-system (repo-
+# scoped contents tokens; the FU-020 CNP is its belt) but VERIFIES when a token is offered.
+LOOP_GIT_LABEL = "homelab.teststuff.net/loop-git-token"
+LOOP_NS_LABEL = "platform.teststuff.net/loop-ns"
+
+
+def _token_review(token: str) -> str | None:
+    """TokenReview the caller's SA token -> authenticated username, or None. A failed review is
+    a failed AUTH (deny), never a pass-through — this is the one place rule #6 inverts: the
+    conservative outcome for a credential gate is refusal."""
+    try:
+        sa_token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        body = json.dumps({"apiVersion": "authentication.k8s.io/v1", "kind": "TokenReview",
+                           "spec": {"token": token}}).encode()
+        req = urllib.request.Request(
+            "https://kubernetes.default.svc/apis/authentication.k8s.io/v1/tokenreviews",
+            data=body, method="POST",
+            headers={"Authorization": "Bearer " + sa_token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            status = (json.load(resp).get("status") or {})
+        if status.get("authenticated"):
+            return (status.get("user") or {}).get("username") or None
+    except Exception as e:  # noqa: BLE001
+        log(f"token-review: failed: {e}")
+    return None
+
+
+def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
+    """Read `agent-coordinator/<secret_name>`; honor it only when it carries LOOP_GIT_LABEL and
+    its LOOP_NS_LABEL equals the namespace it is being served to (belt against a mis-mint)."""
+    ref = f"agent-coordinator/{secret_name}#loop"
+    now = time.time()
+    with _refs_lock:
+        hit = _refs.get(ref)
+        if hit and hit[0] > now:
+            return hit[1]
+    token_value = None
+    try:
+        sa_token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        req = urllib.request.Request(
+            f"https://kubernetes.default.svc/api/v1/namespaces/agent-coordinator/secrets/{secret_name}",
+            headers={"Authorization": "Bearer " + sa_token})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            secret = json.load(resp)
+        labels = secret.get("metadata", {}).get("labels") or {}
+        if labels.get(LOOP_GIT_LABEL) == "true" and labels.get(LOOP_NS_LABEL) == for_ns:
+            b64 = (secret.get("data") or {}).get("GH_TOKEN", "")
+            token_value = base64.b64decode(b64).decode() if b64 else None
+        else:
+            log(f"loop-git: {secret_name} exists but labels refuse it for ns {for_ns}")
+    except Exception as e:  # noqa: BLE001
+        log(f"loop-git: resolve failed for {secret_name}: {e}")
+    with _refs_lock:
+        _refs[ref] = (now + REF_CACHE_TTL_S, token_value)
+    return token_value
 
 
 def _resolve_git_token(ns: str) -> str | None:
@@ -509,11 +572,61 @@ class Proxy(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
             return
+        if self.path.startswith("/loop-git-token"):
+            # FU-080: per-stack LOOP token (issues:write over the stack's repos). TokenReview is
+            # MANDATORY — the caller must be the requested namespace's agentstack-loop SA.
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(self.path).query)
+            ns = (q.get("ns") or [""])[0]
+            role = (q.get("role") or ["coordinator"])[0]
+            auth = self.headers.get("Authorization") or ""
+            caller = _token_review(auth[len("Bearer "):]) if auth.startswith("Bearer ") else None
+            expected = f"system:serviceaccount:{ns}:agentstack-loop"
+            token_value = None
+            if ns.endswith("-agents") and caller == expected and role in ("coordinator", "reviewer"):
+                stack = ns[: -len("-agents")]
+                name = f"loop-git-{stack}" if role == "coordinator" else f"loop-reviewer-git-{stack}"
+                token_value = _resolve_loop_git(name, ns)
+            elif caller != expected:
+                log(f"GET /loop-git-token ns={ns} → 403 (caller={caller or 'unauthenticated'})")
+                payload = b"forbidden"
+                self.send_response(403)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            if token_value:
+                payload = token_value.encode()
+                self.send_response(200)
+                log(f"GET /loop-git-token ns={ns} role={role} → served (TokenReview ok)")
+            else:
+                payload = b"unresolvable"
+                self.send_response(404)
+                log(f"GET /loop-git-token ns={ns} role={role} → 404")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path.startswith("/git-token"):
             # ADR-087 leg B — GET /git-token?ns=<worker-namespace> → the live App token, plaintext
             # body. In-cluster only; FU-020's NetworkPolicy narrows callers to worker pods.
+            # A caller MAY offer its SA token (Authorization: Bearer) — then it is VERIFIED to be
+            # from the requested namespace; a bad/foreign token is refused. Offering none stays
+            # legal for the repo-scoped worker tokens (the CNP is that path's belt) — loop tokens
+            # are never served here.
             from urllib.parse import parse_qs, urlparse
             ns = (parse_qs(urlparse(self.path).query).get("ns") or [""])[0]
+            auth = self.headers.get("Authorization") or ""
+            if auth.startswith("Bearer "):
+                caller = _token_review(auth[len("Bearer "):])
+                if not caller or not caller.startswith(f"system:serviceaccount:{ns}:"):
+                    log(f"GET /git-token ns={ns} → 403 (offered token from {caller or 'nobody'})")
+                    payload = b"forbidden"
+                    self.send_response(403)
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
             token_value = _resolve_git_token(ns) if ns else None
             if token_value:
                 payload = token_value.encode()

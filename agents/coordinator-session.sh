@@ -50,6 +50,7 @@ while [ $# -gt 0 ]; do
     --run)             RUN_CMD="$2"; shift 2;;
     --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
     --item)            ITEM="$2"; shift 2;;               # ADR-094/FU-086: reconcile ONE unit — "<repo> <issue-N|pr-N> <clause>"
+    --loop-ns)         LOOP_NS_ARG="$2"; shift 2;;        # FU-080 perStack: run the tick pod in <stack>-agents as agentstack-loop; git creds fetched per-op from the proxy's TokenReview-gated /loop-git-token (no Secrets in that ns)
     --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
     --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
     --stack)           STACK="$2"; shift 2;;              # scope this session to a stack (agents/stacks.json)
@@ -82,7 +83,18 @@ if [ -n "$STACK" ]; then
   [ -n "$SEED" ]    && SEED="${SCOPE}${SEED}"
 fi
 
-NS="agent-coordinator"
+NS="${LOOP_NS_ARG:-agent-coordinator}"
+POD_SA="agent-coordinator"
+if [ -n "${LOOP_NS_ARG:-}" ]; then
+  # FU-080 perStack: the loop home holds NO git Secret — the pod fetches its stack-scoped token
+  # per-run from the proxy (TokenReview against its own SA). coordinator-git secretKeyRef/volume
+  # below are optional:true, so their absence in this ns is inert; GH_TOKEN_FILE won't exist and
+  # the gh wrapper falls back to the env this prep exports.
+  POD_SA="agentstack-loop"
+  LOOP_FETCH="export GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator\")\" || { echo 'FATAL: loop-git token fetch refused/failed — not running blind'; exit 1; }; "
+else
+  LOOP_FETCH=""
+fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"
 POD="coordinator-$(date -u +%H%M%S)"
@@ -103,7 +115,7 @@ COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permi
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 # The /work/session-start marker is the "what did THIS session write" baseline the exit-trap upload
 # diffs the transcripts PVC against (the PVC accumulates across sessions).
-PREP="set -e; touch /work/session-start; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
+PREP="set -e; ${LOOP_FETCH}touch /work/session-start; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
 
 # FU-045: a coordinator is scoped to a STACK, so clone ALL its repos (--repos) shallow into /work/<repo>
 # and run from the stack's MAIN repo (--main-repo, default homelab) — so that repo's CLAUDE.md + specs
@@ -198,7 +210,7 @@ metadata:
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
-  serviceAccountName: agent-coordinator
+  serviceAccountName: ${POD_SA}
   containers:
     - name: coordinator
       image: ${IMAGE}

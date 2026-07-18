@@ -113,6 +113,237 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $xr.metadata.name }}-loop-home-sa
                 gotemplating.fn.crossplane.io/ready: "True"
+            {{- if and $xr.spec.loop (get $xr.spec.loop "perStack") }}
+            {{- $stack := $xr.metadata.name }}
+            {{- $loopns := printf "%s-agents" $stack }}
+            ---
+            # FU-080 loop-token legs (perStack): minted CENTRALLY in agent-coordinator (the App
+            # private keys never enter a stack-reachable namespace — deliberately NOT the per-repo
+            # agents-github-app pattern) and served ONLY by the egress proxy's TokenReview-gated
+            # /loop-git-token. No Secret ever sits in {{ $loopns }}.
+            apiVersion: generators.external-secrets.io/v1alpha1
+            kind: GithubAccessToken
+            metadata:
+              name: loop-git-{{ $stack }}-gen
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-git-gen
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              appID: "4150968"       # homelab-agents App (org constants; repositories does the scoping)
+              installID: "142724430"
+              auth:
+                privateKey:
+                  secretRef: { name: agents-github-app, key: privateKey }
+              permissions:           # the coordinator set (mirror agents/coordinator/git-token.yaml)
+                contents: write
+                pull_requests: write
+                issues: write
+                checks: read
+                statuses: read
+                actions: read
+              repositories:
+                {{- range $rr := $xr.spec.repos }}
+                - {{ $rr.name }}
+                {{- end }}
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: loop-git-{{ $stack }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-git-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 45m
+              target:
+                name: loop-git-{{ $stack }}
+                creationPolicy: Owner
+                template:
+                  engineVersion: v2
+                  metadata:
+                    labels:
+                      homelab.teststuff.net/loop-git-token: "true"
+                      platform.teststuff.net/loop-ns: {{ $loopns }}
+                  data:
+                    GH_TOKEN: {{ `'{{ .token }}'` }}
+              dataFrom:
+                - sourceRef:
+                    generatorRef:
+                      apiVersion: generators.external-secrets.io/v1alpha1
+                      kind: GithubAccessToken
+                      name: loop-git-{{ $stack }}-gen
+            ---
+            apiVersion: generators.external-secrets.io/v1alpha1
+            kind: GithubAccessToken
+            metadata:
+              name: loop-reviewer-git-{{ $stack }}-gen
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-reviewer-git-gen
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              appID: "4199252"       # homelab-reviewer App — DISTINCT identity, self-approval stays blocked
+              installID: "143941082"
+              auth:
+                privateKey:
+                  secretRef: { name: reviewer-github-app, key: privateKey }
+              permissions:           # the reviewer set (mirror agents/coordinator/reviewer-git.yaml)
+                contents: write
+                pull_requests: write
+                checks: read
+                statuses: read
+                actions: read
+              repositories:
+                {{- range $rr := $xr.spec.repos }}
+                - {{ $rr.name }}
+                {{- end }}
+            ---
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: loop-reviewer-git-{{ $stack }}
+              namespace: agent-coordinator
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-reviewer-git-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 45m
+              target:
+                name: loop-reviewer-git-{{ $stack }}
+                creationPolicy: Owner
+                template:
+                  engineVersion: v2
+                  metadata:
+                    labels:
+                      homelab.teststuff.net/loop-git-token: "true"
+                      platform.teststuff.net/loop-ns: {{ $loopns }}
+                  data:
+                    GH_TOKEN: {{ `'{{ .token }}'` }}
+              dataFrom:
+                - sourceRef:
+                    generatorRef:
+                      apiVersion: generators.external-secrets.io/v1alpha1
+                      kind: GithubAccessToken
+                      name: loop-reviewer-git-{{ $stack }}-gen
+            ---
+            # THE one documented Secret exception in {{ $loopns }}: the WRITE-ONLY transcripts S3
+            # key (append-to-bucket only — a leak cannot cross the stack boundary; git/subscription
+            # creds stay ref/broker-only). Same rail as the fixer namespaces.
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: agent-transcripts-s3
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-transcripts-es
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { name: agent-transcripts, kind: ClusterSecretStore }
+              target:
+                name: agent-transcripts-s3
+                creationPolicy: Owner
+              data:
+                - secretKey: writer_access_key_id
+                  remoteRef: { key: agent-transcripts-s3, property: writer_access_key_id }
+                - secretKey: writer_secret_access_key
+                  remoteRef: { key: agent-transcripts-s3, property: writer_secret_access_key }
+            ---
+            # Loop transcripts PVC (the coordinator-transcripts mirror — tick pods hard-require it).
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: coordinator-transcripts
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-transcripts-pvc
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              accessModes: [ReadWriteMany]
+              storageClassName: longhorn
+              resources:
+                requests:
+                  storage: 2Gi
+            ---
+            # Argo workflow execution RBAC in the loop home (the argo-workflows-workflow mirror).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-loop-workflow
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-wf-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [argoproj.io]
+                resources: [workflowtaskresults]
+                verbs: [create, patch]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-loop-workflow
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-wf-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-loop-workflow }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
+            ---
+            # The stack's OWN coordinate backstop (FU-080 endgame shape): scan scoped to this
+            # stack (SCAN_STACK), running in {{ $loopns }} as agentstack-loop, git creds fetched
+            # per-op from the proxy (TokenReview) — zero Secrets in this namespace. The GLOBAL
+            # coordinator-reflex keeps running as the migration belt (idempotency guards make
+            # dual-running safe); retire the stack from the global scan once this soaks.
+            apiVersion: argoproj.io/v1alpha1
+            kind: CronWorkflow
+            metadata:
+              name: coordinate-{{ $stack }}
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-cron
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              schedules:
+                - "*/10 * * * *"
+              concurrencyPolicy: Forbid
+              startingDeadlineSeconds: 60
+              workflowSpec:
+                serviceAccountName: agentstack-loop
+                activeDeadlineSeconds: 1800
+                ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                entrypoint: main
+                volumes:
+                  - { name: work, emptyDir: {} }
+                templates:
+                  - name: main
+                    container:
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      command: ["bash", "-lc"]
+                      args:
+                        - |
+                          set -e
+                          SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                            "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
+                            || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
+                          export GH_TOKEN
+                          rm -rf /work/homelab
+                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }}
+                          exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+                      env:
+                        - { name: HOME, value: "/home/node" }
+                        - { name: ORG, value: "teststuffstash" }
+                      volumeMounts:
+                        - { name: work, mountPath: /work }
+                      resources:
+                        requests: { cpu: "100m", memory: "256Mi" }
+                        limits: { memory: "512Mi" }
+            {{- end }}
             {{- range $r := $xr.spec.repos }}
             {{- if $r.storage }}
             ---

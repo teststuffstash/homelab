@@ -82,6 +82,10 @@ STACKS_CACHE="$(stacks_json)"
 
 any_work=""
 for name in $(stacks_json | jq -r '.stacks[].name'); do
+  # FU-080 perStack: a stack-scoped instance (the coordinate-<stack> CronWorkflow in
+  # <stack>-agents sets SCAN_STACK) scans ONLY its own stack; the global reflex keeps sweeping
+  # everything as the migration belt.
+  [ -n "${SCAN_STACK:-}" ] && [ "$name" != "$SCAN_STACK" ] && continue
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
@@ -290,8 +294,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; uitem="${rest#*|}"
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}, model ${cmodel})…"
+    # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
+    # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" --item "repo=${urepo} item=${uitem} clause=${uclause}"
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --item "repo=${urepo} item=${uitem} clause=${uclause}"
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"

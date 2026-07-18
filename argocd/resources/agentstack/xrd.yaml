@@ -85,6 +85,22 @@ spec:
                       type: boolean
                       default: true
                       description: Auto-review this stack's PRs. Default on.
+                loop:
+                  type: object
+                  default: {}
+                  description: >-
+                    FU-080 per-stack loop isolation. perStack:true renders the stack's OWN
+                    coordinate CronWorkflow in <stack>-agents (running as agentstack-loop,
+                    git creds fetched per-op from the egress proxy's TokenReview-gated
+                    /loop-git-token — no Secret ever sits in the loop namespace) + the
+                    centrally-minted loop-git token legs. Default OFF: the global reflexes
+                    in agent-coordinator drive this stack (and keep running as the backstop
+                    belt during migration either way). Graduate like autonomy: oracle first.
+                  properties:
+                    perStack:
+                      type: boolean
+                      default: false
+                      description: Render the per-stack loop machinery. Default off.
                 workerModel:
                   type: string
                   description: >-

@@ -25,7 +25,7 @@ rules:
     verbs: [create]
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
-    verbs: [get, list]
+    verbs: [get, list, watch, create, update, patch, delete] # get/list = loop-Role mirror; write = FU-080 loop transcripts PVC compose
   - apiGroups: [cilium.io]
     resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
     verbs: [get, list, watch, create, update, patch, delete]
@@ -47,6 +47,10 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [workflowtaskresults]
     verbs: [create, patch, get, list, watch, delete]
+  # FU-080 loop.perStack: the Composition composes the per-stack coordinate CronWorkflow.
+  - apiGroups: [argoproj.io]
+    resources: [cronworkflows]
+    verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch, create, update, patch, delete]
