@@ -267,6 +267,43 @@ spec:
                 requests:
                   storage: 2Gi
             ---
+            # Launch RBAC IN the loop home itself — the item/tick coordinator pods run here
+            # (found live on the first dispatching tick: the SA could reach the fixer namespaces
+            # but not its own).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: agentstack-loop-home
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-home-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [""]
+                resources: [pods, pods/log]
+                verbs: [get, list, watch, create, delete]
+              - apiGroups: [""]
+                resources: [pods/exec]
+                verbs: [create]
+              - apiGroups: [""]
+                resources: [persistentvolumeclaims]
+                verbs: [get, list]
+              - apiGroups: [openrouter.teststuff.net]
+                resources: [openrouterkeys, openrouterkeys/status]
+                verbs: [get, list, watch, create, update, patch, delete]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: agentstack-loop-home
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-home-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: agentstack-loop-home }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
+            ---
             # Claims read for the loop SA (the stack-list/knob source of truth — without it the
             # per-stack scan PROBE-FAILS onto the stacks.json belt; seen live on the first tick).
             apiVersion: rbac.authorization.k8s.io/v1
