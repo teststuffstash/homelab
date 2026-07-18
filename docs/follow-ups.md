@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-089**.
+  Next free id: **FU-090**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -236,29 +236,41 @@ _Last updated: 2026-07-16._
       loop SA: pod-create YES in oracle-fleet, NO in sleep-tracking; all three namespaces
       rendered). Cred note: coordinator-claude needs NO per-stack rail — the opaque
       `ref:agent-coordinator/coordinator-claude` resolves at the egress proxy from any ns.
-      **REMAINING (the decision-revisit half) — now on ADR-093 Argo (agent-loop Phase 1):** move
-      the coordinator/reviewer reflexes in-namespace as `agentstack-loop` — reflexes become
-      per-stack CronWorkflows + Argo Events Sensors (not the global CronJobs), which requires
-      per-stack ref-railing of the coordinator creds (`coordinator-claude` subscription ref +
-      `coordinator-git`) into each `<stack>-agents` ns, and flips agentstack.md §Decisions'
-      "one global reflex" to "one per stack jail". **TWO KNOBS BUILT 2026-07-17** (delivered via
-      the GLOBAL reflex respecting per-stack claim flags — much simpler + safer than per-stack
-      namespaces, which is a SEPARATE isolation goal below): AgentStack XRD gained stack-level
-      `coordinator.enabled` (default OFF) + `reviewer.enabled` (default ON). **coordinator.enabled
-      ENFORCED:** `coordinator-scan.sh --spawn` skips a stack whose `coordinator.enabled != true`
-      (stacks_json carries it from the claim) — the FU-050 autonomy switch made per-stack, graduate
-      a proven stack while others stay off; supervised `coordinator-session --run-tick` overrides.
-      **reviewer.enabled = FIELD only** (default-on = today's behavior; the exporter has no cluster
-      read, so the opt-out enforcement is a small follow-on — rare case). **REMAINING = the
-      isolation goal (separate from the knobs):** the per-stack `<stack>-agents` namespace + the
-      loop identity + cred ref-rail (coordinator-claude/git ExternalSecrets) + CROSS-NS dispatch
-      RBAC (loop SA → worker pods in the fixer repo ns) + a per-stack coordinator/reviewer
-      CronWorkflow running there — moves agents OUT of the project namespace (the airlock's real
-      close; needs coordinator-session.sh/coordinator-scan.sh namespace plumbing). model-scout +
-      ledger stay GLOBAL. Docker-ride dispatch from the jail additionally waits on FU-072.
-      ADR-094 note: this leg carries NO scheduling semantics — the scheduler is item-scoped
-      (FU-086) regardless, so per-stack instances are pure isolation.
+      **PER-STACK LOOP BUILT 2026-07-18 (operator-confirmed decisions):** (1) broker-only creds
+      in `<stack>-agents` — the workbench MAY hold pod-create there because no cross-boundary
+      Secret exists in the ns (one documented exception: the write-only transcripts S3 key);
+      (2) loop git tokens minted CENTRALLY in agent-coordinator (App keys never enter a
+      stack-reachable ns), stack-repo-scoped, both Apps (`loop-git-<stack>` coordinator /
+      `loop-reviewer-git-<stack>` reviewer — distinct identity, self-approval stays blocked);
+      (3) served ONLY by the egress proxy `/loop-git-token` with MANDATORY TokenReview (caller
+      must BE `<ns>:agentstack-loop`; the proxy's only cluster-scoped grant; `/git-token` verifies
+      an offered SA token, legacy tokenless stays worker-scope-only); (4) Argo Events stay GLOBAL
+      (bus+Sensors — dumb pipe; per-stack JetStream = 3×1Gi for ~zero volume); (5) per-stack
+      capacity = subscription-latch only (ConfigMap semaphores can't cross ns; DB locks not
+      worth it). Render (claim `loop.perStack`, default off): `coordinate-<stack>` CronWorkflow
+      in `<stack>-agents` as `agentstack-loop` (broker-fetch preamble, `SCAN_STACK`-scoped scan,
+      item dispatch via `coordinator-session.sh --loop-ns`), workflowtaskresults RBAC, transcripts
+      PVC+key. E2E 2026-07-18: broker 200-as-loop-SA / 403-foreign-ns / 403-unauthenticated with
+      DISTINCT per-App tokens; oracle graduated (`oracle-iac` claim) — see the tick acceptance in
+      the session log. **STILL REMAINING:** per-stack REVIEW backstop (reviewer-session.sh needs
+      the broker-fetch plumbing its coordinator sibling got; the loop-reviewer token leg is
+      already minted+served), retiring a graduated stack from the GLOBAL scan/reflex after soak
+      (today both run — the belt), sleep/platform graduation, and the FU-089 fixer-ns key hole
+      found during this build. model-scout + ledger stay GLOBAL; docker-ride dispatch from the
+      jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
+- [ ] **FU-089** — **Fixer-ns `agents-github-app` private key = workbench escalation hole.**
+      Found 2026-07-18 during the FU-080 loop-token build: the Composition renders the
+      homelab-agents App PRIVATE KEY (`agents-github-app` ExternalSecret) into EVERY fixer
+      namespace so the per-repo `agent-git-token` generator can run in-ns — but a stack
+      workbench SA is namespace-admin there, so it can read the key and mint tokens for ALL
+      repos the App covers (cross-stack contents/PR/issues write — exactly the escalation the
+      airlock exists to prevent). Fix = the loop-token pattern applied to worker tokens: mint
+      per-repo tokens CENTRALLY in agent-coordinator (generators+ES there), serve via the
+      proxy's TokenReview-verified `/git-token` (worker pods already fetch per-op — flip them
+      to send their SA token and make verification mandatory), delete the per-ns key ES from
+      the Composition. Until then the App's blast radius IS the trust boundary between stacks.
+      Relates FU-080, FU-020, ADR-087.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

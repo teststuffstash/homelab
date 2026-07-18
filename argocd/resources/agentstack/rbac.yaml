@@ -58,7 +58,23 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-080 perStack: the Composition composes the per-stack claims-read ClusterRoleBinding.
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterrolebindings]
+    verbs: [get, list, watch, create, update, patch, delete]
   # FU-068 labels tier: the Composition composes provider-upjet-github's IssueLabels.
   - apiGroups: [repo.github.upbound.io]
     resources: [issuelabels, issuelabels/status]
     verbs: [get, list, watch, create, update, patch, delete]
+---
+# FU-080 perStack: the loop SA reads AgentStack claims (the stack-list/knob source of truth) —
+# without this the per-stack scan PROBE-FAILS onto the stacks.json belt (seen live 2026-07-18,
+# first oracle-agents tick). Read-only; bound per stack by the Composition.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agentstack-claims-read
+rules:
+  - apiGroups: [platform.teststuff.net]
+    resources: [agentstacks]
+    verbs: [get, list, watch]

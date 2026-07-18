@@ -267,6 +267,19 @@ spec:
                 requests:
                   storage: 2Gi
             ---
+            # Claims read for the loop SA (the stack-list/knob source of truth — without it the
+            # per-stack scan PROBE-FAILS onto the stacks.json belt; seen live on the first tick).
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: agentstack-loop-claims-read-{{ $stack }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-claims-crb
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agentstack-claims-read }
+            subjects:
+              - { kind: ServiceAccount, name: agentstack-loop, namespace: {{ $loopns }} }
+            ---
             # Argo workflow execution RBAC in the loop home (the argo-workflows-workflow mirror).
             apiVersion: rbac.authorization.k8s.io/v1
             kind: Role

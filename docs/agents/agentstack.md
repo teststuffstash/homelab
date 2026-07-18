@@ -135,9 +135,20 @@ catalog problem.
     stack's PRs. Safe to leave on: reviewing green, unapproved PRs never dispatches new work.
 
   These make suspend/unsuspend **per-stack** (delivered via the global reflex honouring the claim
-  flags); the fuller per-stack `<stack>-agents` namespace isolation from another stack's queue is a
-  separate remaining goal (FU-080). The agent-loop reflexes are Argo **CronWorkflows** (ADR-093),
-  not CronJobs.
+  flags). The agent-loop reflexes are Argo **CronWorkflows** (ADR-093), not CronJobs.
+  **Re-revisited 2026-07-18 — "one global reflex" flips to "one per stack jail", graduated by a
+  third knob:** `spec.loop.perStack` (bool, default **false**) renders the stack's OWN
+  `coordinate-<stack>` CronWorkflow into `<stack>-agents`, running as the `agentstack-loop` SA
+  with **zero Secrets in the namespace** — git creds are fetched per-run from the egress proxy's
+  TokenReview-gated `/loop-git-token` (the caller must *be* `<ns>:agentstack-loop`; tokens are
+  minted centrally in `agent-coordinator`, scoped to the stack's repos; the one documented Secret
+  exception in the loop home is the write-only transcripts S3 key). The scan runs `SCAN_STACK`-
+  scoped; item sessions dispatch into the loop home (`coordinator-session.sh --loop-ns`) and
+  reach the fixer namespaces through the cross-ns loop RoleBindings — no cluster-scoped grant.
+  The GLOBAL reflex keeps sweeping everything as the migration belt (idempotency guards make
+  dual-running safe); Argo Events (bus + Sensors) deliberately stay global — trigger plumbing is
+  dumb pipe, and a per-stack JetStream bus is 3×1Gi of state for near-zero event volume. Oracle
+  graduated first (oracle-iac claim, 2026-07-18).
 - **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided) — refined
   same day by the permission-tier split below (FU-068):** the *Issues-tier* slice (labels) has a
   designed in-cluster path via `provider-upjet-github`; the *Administration-tier* slice
