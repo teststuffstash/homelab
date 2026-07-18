@@ -78,3 +78,9 @@ rules:
   - apiGroups: [platform.teststuff.net]
     resources: [agentstacks]
     verbs: [get, list, watch]
+  # + the launcher's FU-072 kata endpoint-IP rewrites (agent-session.sh resolve_ep — proxy/
+  # garage/pushgateway): the loop SA dispatches workers, so it needs the same read the global
+  # coordinator has. Effectively this ClusterRole = "loop cluster reads", not claims alone.
+  - apiGroups: [""]
+    resources: [endpoints]
+    verbs: [get, list]

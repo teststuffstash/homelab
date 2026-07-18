@@ -71,6 +71,10 @@ _Last updated: 2026-07-16._
       cilium-dbg bpf lb list from the node agent, upstream cilium+kata issues. Workaround in
       place: kata CI-gate pods run `dnsPolicy: None` + the LAN resolver (192.168.2.1) — fine for
       k3d/registry work, blocks in-cluster consumers (garage transcripts upload from kata pods).
+      2026-07-18 (meta-8): the launcher's endpoint-IP rewrites additionally need endpoints-read
+      for IN-CLUSTER dispatchers — granted (agent-coordinator + agentstack-claims-read
+      ClusterRoles); before that, coordinator-dispatched kata rides shipped raw svc URLs and the
+      claude harness died ConnectionRefused (oracle-fleet#52 r1 strike).
 
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
       **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).

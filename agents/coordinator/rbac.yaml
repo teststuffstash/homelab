@@ -34,6 +34,13 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list]
+  # agent-session.sh docker mode resolves in-cluster ENDPOINT IPs (FU-072 kata workaround:
+  # openrouter-proxy/garage/pushgateway rewrites). Without this an IN-CLUSTER dispatcher's
+  # resolve_ep 403s → kata rides ship raw svc URLs → ConnectionRefused (found live meta-8,
+  # oracle-fleet#52 r1 strike). Read-only.
+  - apiGroups: [""]
+    resources: [endpoints]
+    verbs: [get, list]
   # agent-session.sh probes for the optional agent-uv-cache PVC to decide whether to mount the shared
   # uv wheel cache. Without this read the probe 403s, the mount is skipped, and (pre-fix) UV_CACHE_DIR
   # pointed at an unmounted /uv-cache the worker couldn't write. Read-only.
