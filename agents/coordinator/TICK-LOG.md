@@ -617,3 +617,26 @@ policy block in the header.
   serializes lanes; multi-dispatch-per-free-lane is the cheap unlock. (d) issue dependencies are
   prose — proposed `Depends-on: #N` body line + scan predicate (queued-blocked, level-triggered).
   (e) oracle-iac is context-only (no fixer) — its Argo issues (#40/#41) are jail work by design.
+
+### 2026-07-18 — meta-8: FU-080 per-stack loop first live ride (oracle-agents)
+- **Built + confirmed decisions (operator):** broker-only creds in `<stack>-agents` (workbench may
+  hold pod-create; only the write-only transcripts key is a Secret there), central token minting,
+  proxy `/loop-git-token` with MANDATORY TokenReview (caller must BE `<ns>:agentstack-loop`),
+  global EventBus/Sensors, latch-only capacity per stack. Oracle graduated via
+  `loop.perStack: true` (oracle-iac).
+- **Broker E2E:** 200-as-loop-SA with DISTINCT per-App tokens (coordinator/reviewer), 403 foreign-ns,
+  403 unauthenticated.
+- **Three live-found gaps, fixed same hour (each caught by its designed belt):** loop SA couldn't
+  read claims → PROBE-FAILED onto stacks.json (WARN, correct fallback) → `agentstack-claims-read`
+  CRB; loop SA had fixer-ns pod rights but none in its own home → tick failed loudly pre-spawn →
+  loop-home Role; emissary couldn't infer the private ingester image's entrypoint (controller has
+  no cross-ns pull-secret RBAC, correctly) → explicit `command` in the WorkflowTemplate (iac#41
+  validation run doing its job).
+- **Meta exercise (operator-directed):** queued oracle-fleet#52 (chassis free) + #45
+  (`Depends-on: iac#41` → correctly held ⏳ queued-blocked by the FU-087 clause); per-stack tick
+  picked `issue-52 queued-dispatch` per ADR-094 priority and spawned the item session IN
+  oracle-agents (broker git creds, sonnet per claim `coordinatorModel`). iac#41 deliverable 4
+  (attended validation) run by the meta session directly.
+- **FU-089 filed en route:** the per-repo `agents-github-app` PRIVATE KEY ES in fixer namespaces is
+  a workbench→org-wide-token escalation hole; the loop-token pattern (central mint + TokenReview
+  broker) is the fix shape for worker tokens too.
