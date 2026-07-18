@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-090**.
+  Next free id: **FU-091**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -259,6 +259,22 @@ _Last updated: 2026-07-16._
       found during this build. model-scout + ledger stay GLOBAL; docker-ride dispatch from the
       jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
+- [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
+      breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
+      themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers
+      emitter table) and the coordinator files issues only inside meta-4 arbitration — an
+      APPROVED PR's `Follow-ups:` section (the rubric REQUIRES issue-ready bullets) has no owner
+      and dies in the review comment. Design, two surfaces one gate: (a) **follow-up harvest** —
+      the C6/merged item session files each `Follow-ups:` bullet as an issue (provenance links,
+      `Depends-on:` lines per FU-087, track label inherited) — BOT-AUTHORED → INERT per TICK-LOG
+      §Loop-safety breaker #1 (no agent-fix/agent/queued); (b) **spec-driven authoring** — the
+      ADR-094 janitor tick MAY draft issues from specs/TRACKS gaps, same inert gate.
+      **Visibility slice SHIPPED 2026-07-18**: the scan reports 🌱 bot-authored issues lacking
+      `agent-fix` per repo, so harvested drafts surface for human triage instead of rotting.
+      Graduation knob (NOT built): claim `issueAuthoring.selfQueue` (default off) letting the
+      coordinator self-label harvested issues, bounded by the existing breakers + a per-day rate
+      cap — flipping it is the operator's per-stack trust call (it retires breaker #1 for that
+      stack). Relates FU-086/FU-087, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-089** — **Fixer-ns `agents-github-app` private key = workbench escalation hole.**
       Found 2026-07-18 during the FU-080 loop-token build: the Composition renders the
       homelab-agents App PRIVATE KEY (`agents-github-app` ExternalSecret) into EVERY fixer

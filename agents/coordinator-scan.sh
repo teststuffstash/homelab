@@ -118,6 +118,21 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
     busy_tracks="$(printf '%s' "$inprog" | jq -r '.[].labels[].name | select(startswith("track/"))' | sort -u | tr '\n' ' ')"
+    # ADR-094 project-WIP predicate (found live meta-8: two dispatchers raced #52 inside one scan
+    # window): a Running worker in the repo ns HOLDS this repo's queued-dispatch units — the
+    # launcher's WIP=1 pre-flight would refuse the spawn anyway; better to never wake the session.
+    # Probe-first: a FAILED pod probe leaves the units flowing (the launcher refusal is the belt).
+    wip_busy=""
+    if WIPPODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+          --field-selector=status.phase=Running --no-headers 2>/dev/null)"; then
+      [ -n "$WIPPODS" ] && wip_busy=1
+    fi
+    # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
+    # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
+    # they never rot silently.
+    sprouts="$(gh issue list --repo "$slug" --state open --json number,title,author,labels \
+      --jq '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
+    [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
     iss=""; qblocked=""; qcycles=""
     while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps; do
       [ -n "$qnum" ] || continue
@@ -157,6 +172,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       done
       if [ -n "$lane_busy" ]; then
         orphans="${orphans}[$repo] ⏳ lane busy (ADR-094: ≤1 in flight per track):\n  issue #${qnum} — ${qtitle} (lane ${lane_busy} has an in-progress issue)\n"
+        continue
+      fi
+      if [ -n "$wip_busy" ]; then
+        orphans="${orphans}[$repo] ⏳ project WIP busy (a worker is Running in ${repo} — launcher WIP=1):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
       if [ -n "$stale" ]; then
