@@ -40,23 +40,23 @@ jobs:
           - { repo: agent-runtime, dir: "agent-base" }
     steps:
       # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install xz (missing from the ARC runner image)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils
       - name: Install Nix (single-user)
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
         with:
           install_options: --no-daemon
           extra_nix_config: |
             experimental-features = nix-command flakes
       - name: Install devbox (reuse the single-user Nix)
-        uses: jetify-com/devbox-install-action@v0.13.0
+        uses: jetify-com/devbox-install-action@22b0f5500b14df4ea357ce673fbd4ced940ed6a1 # v0.13.0
         with:
           skip-nix-installation: "true"
 
       - name: Mint homelab-renovate token for ${{ matrix.repo }}
         id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}

@@ -34,14 +34,14 @@ jobs:
   update:
     runs-on: ubuntu-latest # GitHub-hosted: the merge path must not depend on the self-hosted tier being awake (API-only, seconds)
     steps:
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         id: app-token
         with:
           app-id: ${{ secrets.MERGE_GH_APP_ID }}
           private-key: ${{ secrets.MERGE_GH_APP_PRIVATE_KEY }}
 
       - name: Update the oldest behind, green, auto-merge-armed PR
-        uses: adRise/update-pr-branch@v0.10
+        uses: adRise/update-pr-branch@a51c014567e5be98445551cce9b8f5ad42dd8acf # v0.10
         with:
           token: ${{ steps.app-token.outputs.token }}
           base: master

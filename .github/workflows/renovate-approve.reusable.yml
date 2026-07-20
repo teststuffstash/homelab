@@ -51,7 +51,7 @@ jobs:
       - name: Mint homelab-reviewer token (scoped to the caller repo)
         if: steps.gate.outputs.ok == 'true'
         id: rev
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.REVIEWER_APP_ID }}
           private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
