@@ -34,7 +34,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -47,6 +47,7 @@ while [ $# -gt 0 ]; do
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
     --round)     ROUND="$2"; shift 2;;  # worker round on that task (prefix worker-r<N>)
     --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
+    --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -63,6 +64,24 @@ case "$MODEL" in claude/*)
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
+
+# ── --recipe: LAUNCHER-OWNED claude run command (ADR-094 constraints-as-code) ──
+# The coordinator brief used to instruct the item session to hand-assemble the base64-carry
+# claude invocation — an LLM memory test that failed live 2026-07-21 (#55 r1: the README's
+# literal `'$B64'` template shipped un-substituted, a haiku session ran on a garbage system
+# prompt until the FU-069 breaker caught it). Now the dispatcher passes the recipe PATH (it has
+# the repo clone) and THIS script builds the command deterministically: the whole recipe file is
+# base64-carried as the system prompt (goose-format YAML — the model reads it fine, and no
+# YAML-parsing dependency exists jail/pod-side), the issue number comes from --task.
+if [ -n "${RECIPE:-}" ]; then
+  [ "$HARNESS" = "claude" ] || { echo "--recipe is the claude-harness path (goose runs recipes natively: --run 'goose run --recipe …')" >&2; exit 2; }
+  [ -f "$RECIPE" ] || { echo "FATAL: --recipe ${RECIPE} not found (pass the dispatcher-side clone's path)" >&2; exit 2; }
+  [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
+  ISSUE_N="${TASK#issue-}"
+  case "$ISSUE_N" in ''|*[!0-9]*) echo "FATAL: --recipe needs --task issue-<N> (got '${TASK}')" >&2; exit 2;; esac
+  RECIPE_B64="$(base64 -w0 "$RECIPE")"
+  RUN_CMD="printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s .agents/fix.yaml recipe (goose format). Follow its instructions exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'"
+fi
 
 NS="$PROJECT"
 

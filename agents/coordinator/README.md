@@ -149,14 +149,13 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    exist **in the worker pod**, not here — base64-carry it through the run command (the proven
    oracle-fleet#22 shape):
    ```sh
-   B64=$(base64 -w0 /tmp/fix-instructions.md)   # ← the recipe's `instructions`, extracted by you
    bash agents/agent-session.sh <project> --model claude/<alias> \
        --task issue-<N> --round <r> \
-       --run "printf '%s' '$B64' | base64 -d > /tmp/fix-system.md; \
-              claude -p --dangerously-skip-permissions --max-turns 200 \
-                --append-system-prompt-file /tmp/fix-system.md \
-                '<the recipe prompt, issue=<N> substituted>'"
+       --recipe /work/<project>/.agents/fix.yaml
    ```
+   `--recipe` makes the LAUNCHER build the claude invocation from the recipe file — never
+   hand-assemble the base64-carry command (the old template shipped un-substituted `$B64`
+   verbatim on #55, 2026-07-21, and burned a session until the FU-069 breaker caught it).
    `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
    haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
    run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
