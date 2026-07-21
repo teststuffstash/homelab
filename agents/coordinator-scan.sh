@@ -227,6 +227,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     prs="$(printf '%s' "$prsjson" | jq -r '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]')"
     # ADR-094 units: each predicate row IS an action class — (clause, repo, item), the LLM never picks.
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+      # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
+      # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
+      # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
+      # re-emits if it dies, and the next bot verdict retires the clause).
+      if [ -n "$wip_busy" ]; then
+        orphans="${orphans}[$repo] ⏳ changes-requested trigger held (worker Running in ${repo} — launcher WIP=1):\n  PR #${u}\n"
+        continue
+      fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
