@@ -86,13 +86,17 @@ transitions:
 
   - id: MP-T04
     name: re-review after changes-requested + new content
-    owner: review reflex (same predicate, reviewable_again arm)
+    owner: review reflex (reviewable_again arm) + exporter edge (same arm since 2026-07-21)
     when: "changes_requested ∧ content_pushed since verdict (BEHIND allowed — the verdict is about the fix, not currency)"
     status: guarded
     guards:
       - desc: "new CONTENT since verdict (non-merge commits only, via newest_commit_at)"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewable_again" }
-    incidents: ["2026-07-09 oracle-fleet#6 (the BEHIND-re-review exception's origin)"]
+      - desc: "the exporter edge carries the SAME arm — delegating it to the STEP-0 belt makes
+          every benign re-POST an agent/error latch that freezes the PR's own MP-T07 fix round
+          (private repos null commit dates → edge stays off, CronWorkflow owns re-reviews)"
+        anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "reviewable_again" }
+    incidents: ["2026-07-09 oracle-fleet#6 (the BEHIND-re-review exception's origin)", "2026-07-21 oracle-fleet#60 (exporter re-POST one poll after the verdict — restart-emptied dedup; STEP-0 tripped, breaker froze the fix round 5h)"]
 
   - id: MP-T05
     name: auto-merge completes

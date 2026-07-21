@@ -12,7 +12,12 @@ agent-coordinator); the `gh pr merge --auto --squash` arming lives in
 > **Update (2026-07-17, ADR-093 — Argo Workflows + Events as the platform orchestration engine):** the
 > review path is now **event-driven** and the reflexes run as **Argo CronWorkflows**, not k8s CronJobs.
 > The github-exporter (the ONE poller) POSTs each reviewable PR (green ∧ unapproved ∧ armed — the same
-> predicate `review-reflex.sh` uses, incl. `changes_requested` re-review rounds) to an Argo Events
+> predicate `review-reflex.sh` uses, incl. `changes_requested` re-review rounds **with the full
+> `reviewable_again` arm since 2026-07-21**: newest NON-MERGE commit must post-date the newest verdict.
+> The first cut delegated that check to the reviewer's STEP-0 guard — and an exporter restart during
+> #60's changes-requested window re-POSTed a just-verdicted head, whose "correct" STEP-0 refusal
+> latched `agent/error` and froze the PR's own fix round for 5 h. MP-T04 in the FSM carries the
+> guard; private repos null commit dates → the edge stays off there, the backstop owns re-reviews) to an Argo Events
 > **webhook EventSource** → a **Sensor** submits a `review` **WorkflowTemplate** → `reviewer-session.sh
 > <repo> <pr>` for that exact PR (near-instant, no GraphQL poll; generalizes the ADR-084 `sync.yaml`
 > webhook). The old `*/5` review-reflex survives only as a **`*/15` CronWorkflow BACKSTOP** for anything

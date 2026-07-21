@@ -706,3 +706,23 @@ The three-day arc after the first per-stack ride, run as a live meta-coordinatio
   rounds per merge, no flip-flops since meta-4). Specs: 9 commits/5d, every worker touch flagged
   + gated, zero rejections. Human touches: ~2/merged-PR (the designed gates) + incident
   interventions that each retired their class. All 12 issues human-authored (breaker #1 intact).
+
+### 2026-07-21 — meta-9: the #60 breaker freeze — the exporter edge learns reviewable_again
+Fresh session (the meta-8 one cleared after 4 days). Found on arrival: oracle-fleet#60's
+CHANGES_REQUESTED (16:24) never got its fix round — the scan had been saying
+`agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched` into unread logs for 5 h.
+Root cause chain, fully pinned: the 16:10 exporter rollout (the leading-slash fix) emptied the
+in-memory review-dispatch dedup set → the next poll after the verdict re-POSTed the same head
+(the edge predicate treated `changes_requested` as reviewable with NO new-content check — the
+code comment explicitly delegated that to the reviewer's STEP-0 guard as "correct anomaly
+signal") → STEP-0 refused the duplicate ($0.22, 6 turns, correct) → its agent/error label
+latched MP-T09 and froze the PR's own MP-T07 fix round. **A belt is not a guard: routing a
+PREDICTABLE benign event through the anomaly breaker turns every exporter restart during a
+changes_requested window into a human-gated freeze.** Fix (85fe0c4): the exporter edge now
+carries review-reflex.sh's `reviewable_again` arm verbatim — newest NON-MERGE commit (the #57
+merge-commit lesson applies here too: SHA-keyed dedup alone would re-trip on every
+update-branch) must post-date the newest verdict; private repos (commit objects
+FORBIDDEN-null) keep the fast path off and the */15 CronWorkflow owns re-reviews. Predicate
+unit-tested against the incident timeline (5 cases) before push. FSM updated: MP-T04 gains the
+exporter-edge guard + the #60 incident row (merge-path-lint green). Breaker cleared after the
+fixed exporter rolled; the loop resumed on its own scan.
