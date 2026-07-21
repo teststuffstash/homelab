@@ -387,9 +387,15 @@ if [ -n "$DOCKER" ]; then
   DOCKER_ENV=$'        - name: DOCKER_HOST\n          value: "unix:///docker-run/docker.sock"\n        - name: NIX_CACHE_URL\n          value: "'"$NIX_CACHE_VIP"$'"\n        - name: REGISTRY_MIRROR_DOCKER_IO\n          value: "'"$MIRROR_DOCKER_IO"$'"\n        - name: REGISTRY_MIRROR_GHCR\n          value: "'"$MIRROR_GHCR"$'"'
   DOCKER_MOUNT=$'\n        - { name: docker-run, mountPath: /docker-run }'
   DOCKER_VOLUMES=$'\n    - name: docker-run\n      emptyDir: {}\n    - name: docker-lib\n      ephemeral:\n        volumeClaimTemplate:\n          spec:\n            accessModes: ["ReadWriteOnce"]\n            volumeMode: Block\n            storageClassName: longhorn-scratch\n            resources: { requests: { storage: 20Gi } }'
+  # NATIVE SIDECAR (initContainers + restartPolicy Always): the kubelet terminates it when the
+  # main container completes — without this the pod sat phase=Running on a live dockerd after the
+  # agent exited, wedging the WIP=1 pre-flight + the scan's project-WIP hold for 3 DAYS (found
+  # 2026-07-21, the post-#56 queue stall).
   DIND_CONTAINER="$(cat <<'DIND'
+  initContainers:
     - name: dind
       image: __DIND_IMAGE__
+      restartPolicy: Always                   # ← what makes it a sidecar, not a blocking init
       securityContext: { privileged: true }   # root in the microVM only, not on the node (kata)
       command: ["sh", "-c"]
       args:
@@ -455,6 +461,7 @@ ${AFFINITY}
 ${KATA_BLOCK}
   securityContext:
     fsGroup: 1000          # make the shared uv-cache RWX volume writable for the non-root (1000) user
+${DIND_CONTAINER}
   containers:
     - name: agent
       image: ${IMAGE}
@@ -557,7 +564,6 @@ ${CLAUDE_ENV}
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   ${AGENT_LIMITS}
       volumeMounts:${GIT_FALLBACK_MOUNT}${UV_MOUNT}${DOCKER_MOUNT}
-${DIND_CONTAINER}
   volumes:${GIT_FALLBACK_VOLUME}${UV_VOLUME}${DOCKER_VOLUMES}
 EOF
 

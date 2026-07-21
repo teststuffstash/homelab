@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-091**.
+  Next free id: **FU-092**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -263,6 +263,20 @@ _Last updated: 2026-07-16._
       found during this build. model-scout + ledger stay GLOBAL; docker-ride dispatch from the
       jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
+- [ ] **FU-091** — **Queue-liveness alert: queued work + idle loop must page, silence must not
+      look like health.** Motivated 2026-07-21: a dind-sidecar zombie held oracle-fleet's
+      project-WIP for 3 DAYS post-#56 — every `*/10` tick correctly reported "⏳ project WIP
+      busy" into logs nobody reads; no PR/label event fired, so the operator's session monitor
+      (output-watching, not liveness-watching) stayed silent. Both mechanism fixes landed
+      same-day (native-sidecar dind — the pod now completes with the agent; scan zombie-reap
+      belt), but the CLASS needs an out-of-band detector: extend the github-exporter with a
+      per-repo `github_agent_queued_issues` gauge (`agent/queued` label count — the exporter is
+      the ONE poller, FU-084 doctrine) + a PrometheusRule pairing it with kube-state-metrics
+      (`AgentQueueStalled`: queued > 0 ∧ zero Running `app=agent-session` pods fleet-wide for
+      2h, warning) in the exporter's prometheusrule.yaml next to AgentReviewLoop. Different
+      code+token than the scan — fires even when the scan itself is the wedged layer (the
+      merge-path §Runaway-dispatch layer-3 principle applied to liveness). Relates FU-084,
+      ADR-094 (scan = single point of liveness, mitigations list).
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
       breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
       themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers

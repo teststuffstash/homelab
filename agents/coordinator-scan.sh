@@ -123,9 +123,24 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # launcher's WIP=1 pre-flight would refuse the spawn anyway; better to never wake the session.
     # Probe-first: a FAILED pod probe leaves the units flowing (the launcher refusal is the belt).
     wip_busy=""
-    if WIPPODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-          --field-selector=status.phase=Running --no-headers 2>/dev/null)"; then
-      [ -n "$WIPPODS" ] && wip_busy=1
+    if WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+          --field-selector=status.phase=Running -o json 2>/dev/null)"; then
+      jq -e . >/dev/null 2>&1 <<<"$WIPPODS_JSON" || WIPPODS_JSON='{"items":[]}'
+      # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
+      # terminated but whose sidecar lives (pre-native-sidecar dind) is phase=Running yet holds
+      # no work — it wedges this hold AND the launcher WIP=1 forever. Reap when the agent
+      # finished >30min ago (in-pod bookkeeping/stats/transcripts are long out by then; the
+      # margin keeps a just-finished pod readable per the meta-2 rule), and never count it busy.
+      for z in $(printf '%s' "$WIPPODS_JSON" | jq -r '.items[]
+          | select([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
+                    | select(. != null and (.finishedAt | fromdateiso8601) < (now - 1800))] | length > 0)
+          | .metadata.name'); do
+        echo "  [$repo] reaping zombie worker ${z} (agent terminated >30m ago; sidecar held the pod Running)"
+        "$KUBECTL" $KUBE -n "$repo" delete pod "$z" --ignore-not-found >/dev/null 2>&1 || true
+      done
+      live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
+          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated] | length) == 0)] | length')"
+      [ "${live:-0}" -gt 0 ] 2>/dev/null && wip_busy=1
     fi
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
