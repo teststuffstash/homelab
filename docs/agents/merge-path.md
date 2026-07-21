@@ -21,6 +21,12 @@ agent-coordinator); the `gh pr merge --auto --squash` arming lives in
 > E2E on oracle-fleet#37, merged). The `CronJob`/polling framing throughout the rest of this doc is the
 > original design; the mechanics below now read as: **edge-trigger primary, `*/15` backstop.**
 
+> **The machine itself is MODELED, not just described:** [`merge-path-fsm.yaml`](merge-path-fsm.yaml)
+> is the machine-readable state/event/guard model — every guard anchored to code (grep-checked by
+> `devbox run merge-path-lint`, drift fails CI), every known-missing guard a dispositioned entry in
+> the gap register. The generated view: [`merge-path-fsm.md`](merge-path-fsm.md). THIS doc is the
+> design narrative (why); the FSM files are the current-state truth (what/where).
+
 The last leg of the NL→auto-merged pipeline ([`workflow.md`](workflow.md)): how an approved, green
 agent PR actually lands on master — **without an LLM making any merge decision**. LLMs author code
 (worker) and author the review verdict (reviewer); everything that *sequences* — when to update a

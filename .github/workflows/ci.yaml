@@ -41,3 +41,5 @@ jobs:
       # per-identity token list). Interim until the AgentStack XRD (FU-048) renders all from one claim.
       - name: Agents registration lint (stacks.json ⊆ coordinator/reviewer token lists)
         run: devbox run agents-registration-lint
+      - name: Merge-path FSM model matches code (devbox run merge-path-lint)
+        run: devbox run merge-path-lint

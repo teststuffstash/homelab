@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-092**.
+  Next free id: **FU-093**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -277,6 +277,14 @@ _Last updated: 2026-07-16._
       code+token than the scan — fires even when the scan itself is the wedged layer (the
       merge-path §Runaway-dispatch layer-3 principle applied to liveness). Relates FU-084,
       ADR-094 (scan = single point of liveness, mitigations list).
+- [ ] **FU-092** — **Reviewer dispatch lacks its deterministic-name idempotency key
+      (merge-path-fsm MP-G02).** Found by MODELING the merge path as an FSM (2026-07-21): the
+      design (merge-path.md §Concurrent triggers) specifies `review-<repo>-<pr>-<headsha8>` as
+      the atomic create key; implemented today = pod-label idempotency + the STEP-0 self-guard
+      (probabilistic, and a STEP-0 catch burns a session). Workers got their key 2026-07-21
+      (`agent-<project>-<task>-r<round>`, atomic `kubectl create`); apply the same to
+      `reviewer-session.sh` — name from (repo, pr, head-sha8), terminal same-key reap, live
+      holder refuses. Relates FU-069, merge-path-fsm.yaml MP-G02.
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
       breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
       themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers

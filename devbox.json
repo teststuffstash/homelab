@@ -135,6 +135,9 @@
       ],
       "new-stack": [
         "bash scripts/new-stack.sh \"$@\""
+      ],
+      "merge-path-lint": [
+        "python3 scripts/merge-path-lint.py \"$@\""
       ]
     }
   }

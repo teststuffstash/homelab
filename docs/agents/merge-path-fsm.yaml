@@ -1,0 +1,176 @@
+# merge-path-fsm.yaml — THE machine-readable model of the PR merge-path state machine.
+#
+# WHY (2026-07-21, after the nine-review loop — the FOURTH unmodeled-transition incident): the
+# de-facto FSM is implemented across review-reflex.sh, the updater action, GitHub's own merge
+# semantics, coordinator-scan clauses, and finalize — and every loop bug was a state×event cell
+# nobody had explicitly disposition'd. Prose drifts; this file is checked against the code by
+# `devbox run merge-path-lint` (scripts/merge-path-lint.py): every guard carries a code ANCHOR
+# (file + regex) that must still grep, every gap must carry an fu:/accepted: disposition, and the
+# human-readable doc (merge-path-fsm.md) is GENERATED from here — never hand-edited.
+#
+# Statuses: guarded (mechanical guard + anchor) | report-only (surfaced, human acts) |
+#           github-native (GitHub's own gate) | gap (known missing guard — needs fu/accepted).
+
+axes:
+  ci: [pending, green, red]                     # statusCheckRollup at head (SKIPPED/NEUTRAL = green-equivalent)
+  currency: [current, behind, conflicted]       # mergeStateStatus (BEHIND / DIRTY)
+  arming: [armed, unarmed]                      # autoMergeRequest != null — ARMING IS THE BOUNDARY
+  bot_review_at_head: [none, approved, changes_requested]  # at the REAL head = newest NON-MERGE commit
+  codeowner_gate: [not_required, pending, approved]        # spec-touching PRs only (/specs/, /.agents/)
+  breaker: [normal, agent_error]
+  lane: [worker, automerge, deps_review, major, major_awaiting_human, operator]
+
+events:
+  pr_opened: "worker/renovate/operator opens a PR"
+  ci_completed: "required checks conclude at head (success | failure)"
+  master_moved: "any merge/push to master"
+  branch_updated: "updater merge commit — brings currency, IS NOT new content"
+  content_pushed: "author commits on the PR branch — IS new content"
+  bot_verdict: "reviewer bot APPROVE or CHANGES_REQUESTED"
+  human_approve: "codeowner (or any human) approval"
+  merge_conflict_422: "update-branch API refuses — DIRTY"
+  merged: "GitHub auto-merge completes; branch deleted; Fixes #N closes"
+  agent_error_set: "breaker trip (any layer) or human kill switch"
+
+transitions:
+  - id: MP-T01
+    name: arm at open
+    owner: agent-finalize (in-pod)
+    when: "pr_opened by a worker → gh pr merge --auto --squash"
+    status: guarded
+    guards:
+      - desc: "pr_url derived from the checked-out branch (goose-only self-report gap closed)"
+        anchor: { repo: agent-runtime, file: agent-base/agent-finalize, pattern: "def derive_pr_url" }
+    belts:
+      - desc: "reflex C9 re-arm for worker-authored un-armed PRs"
+        anchor: { file: agents/review-reflex.sh, pattern: "C9 repair" }
+      - desc: "scan orphan report (any un-armed unowned PR, report-only per FU-079)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "un-armed open PRs" }
+    incidents: ["2026-07-16 oracle-fleet#16 (stacked PR born un-armed)", "2026-07-17 meta-7(a) claude-tier 3/3 un-armed", "FU-079 (archived)"]
+
+  - id: MP-T02
+    name: updater brings a behind PR current
+    owner: update-pr-branch reusable workflow (adRise action, homelab-merge App)
+    when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first, ONE per run"
+    emits: branch_updated
+    status: guarded
+    guards:
+      - desc: "FIFO + one-per-run + armed-only"
+        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "require_auto_merge_enabled" }
+    incidents: ["2026-07-09 oracle-fleet#6 (changes-requested refusal deadlock → MP-T04's BEHIND exception)"]
+
+  - id: MP-T03
+    name: review dispatch
+    owner: exporter edge (POST → Sensor → review WorkflowTemplate) + */15 CronWorkflow backstop
+    when: "green ∧ current ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧ ¬agent_error ∧ reviewer.enabled ∧ capacity"
+    status: guarded
+    guards:
+      - desc: "bot-approval-at-head over NON-MERGE commits (branch_updated ≠ content_pushed)"
+        anchor: { file: agents/review-reflex.sh, pattern: "UPDATER MERGE COMMITS ARE NOT NEW CONTENT" }
+      - desc: "bot login normalized (REST 'x[bot]' vs GraphQL 'x')"
+        anchor: { file: agents/review-reflex.sh, pattern: 'sub\("\\\\\[bot\\\\\]\$"' }
+      - desc: "never reviewDecision (codeowner repos hold it REVIEW_REQUIRED forever)"
+        anchor: { file: agents/review-reflex.sh, pattern: "bot_approved_head" }
+      - desc: "capacity gate (429 latch / 80% utilization / session semaphore)"
+        anchor: { file: agents/review-reflex.sh, pattern: "subscription-latch.sh" }
+      - desc: "per-stack reviewer.enabled knob"
+        anchor: { file: agents/review-reflex.sh, pattern: "reviewer.enabled" }
+    belts:
+      - desc: "reviewer STEP-0 self-guard (own verdict at head → AGENT_ERROR, no duplicate)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "STEP 0" }
+      - desc: "in-band breaker: impossible verdict counts trip agent/error"
+        anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
+      - desc: "out-of-band: AgentReviewLoop / AgentErrorFlagged alerts (different code+token)"
+        anchor: { file: argocd/resources/github-exporter/prometheusrule.yaml, pattern: "AgentReviewLoop" }
+    incidents: ["2026-07-12 oracle-fleet#13 (reviewDecision aliasing, 12 approvals)", "2026-07-21 oracle-fleet#57 (merge-commit staleness, 9 reviews, 88% window burn)"]
+
+  - id: MP-T04
+    name: re-review after changes-requested + new content
+    owner: review reflex (same predicate, reviewable_again arm)
+    when: "changes_requested ∧ content_pushed since verdict (BEHIND allowed — the verdict is about the fix, not currency)"
+    status: guarded
+    guards:
+      - desc: "new CONTENT since verdict (non-merge commits only, via newest_commit_at)"
+        anchor: { file: agents/review-reflex.sh, pattern: "reviewable_again" }
+    incidents: ["2026-07-09 oracle-fleet#6 (the BEHIND-re-review exception's origin)"]
+
+  - id: MP-T05
+    name: auto-merge completes
+    owner: GitHub (native auto-merge)
+    when: "armed ∧ green ∧ current ∧ required approvals (incl. codeowner where gated)"
+    status: github-native
+    accepted: "approval→merge window: master moving in those seconds costs one update + one re-review — rare, self-healing, counted in scenario L"
+
+  - id: MP-T06
+    name: conflict routes to judgment
+    owner: updater labels merge-conflict → coordinator item unit
+    when: "merge_conflict_422"
+    status: guarded
+    guards:
+      - desc: "scan emits the merge-conflict clause as a work unit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'merge-conflict\|' }
+
+  - id: MP-T07
+    name: fix round on the PR's own branch
+    owner: coordinator item session → agent-session --work-branch --recipe
+    when: "changes_requested (or meta-dispatched red fix) → worker resumes THE PR branch, round N+1"
+    status: guarded
+    guards:
+      - desc: "dispatch idempotency: the pod name IS the (task, round) key — atomic create"
+        anchor: { file: agents/agent-session.sh, pattern: "the key IS the pod name" }
+      - desc: "recipe fix-round exception (being ON the PR branch is not the FU-069 anomaly)"
+        anchor: { repo: oracle-fleet, file: .agents/fix.yaml, pattern: "NOT an anomaly" }
+      - desc: "launcher-owned claude run command (--recipe, never LLM-assembled)"
+        anchor: { file: agents/agent-session.sh, pattern: "LAUNCHER-OWNED claude run command" }
+    incidents: ["2026-07-21 #55 ($B64 template shipped raw)", "2026-07-21 #47 (breaker misfire on the fix-round path)", "2026-07-21 #55 (double-dispatch ×3 → pod-name key)"]
+
+  - id: MP-T08
+    name: codeowner park
+    owner: GitHub (require_code_owner_review) — bot approved, human pending
+    when: "bot_review_at_head=approved ∧ codeowner_gate=pending → wait; auto-merge on human_approve"
+    status: github-native
+    guards:
+      - desc: "reflex does NOT re-dispatch while parked (bot_approved_head, not reviewDecision)"
+        anchor: { file: agents/review-reflex.sh, pattern: "bot_approved_head" }
+    incidents: ["2026-07-12 oracle-fleet#13"]
+
+  - id: MP-T09
+    name: breaker trip and clear
+    owner: any layer (reflex counts / reviewer STEP-0 / worker recipe / exporter alerts / human)
+    when: "loop anomaly detected → agent/error + one AGENT_ERROR comment; HUMAN clears"
+    status: guarded
+    guards:
+      - desc: "agent/error excluded from EVERY actionable clause (queued, c4c5, review pick, C9)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/error"\)' }
+    incidents: ["2026-07-21 ×3 (two correct fires, one misfire → MP-T07 recipe exception)"]
+
+gaps:
+  - id: MP-G01
+    name: "red-beyond-T has no owner"
+    detail: "A red armed PR with no review sits invisible: updater skips it, reflex skips it, the
+      scan emits no ci-red unit (needs checks:read at scan level — 'v3 territory'). Live: #58's
+      red e2e needed a MANUAL meta round dispatch (2026-07-21). Design says 'reflex labels →
+      coordinator decides' — nothing implements the timer."
+    fu: "FU-050 v3 note in coordinator-scan.sh header; promote when the next red PR stalls"
+  - id: MP-G02
+    name: "reviewer dispatch lacks the deterministic-name key"
+    detail: "workflow.md/merge-path.md design says review-<repo>-<pr>-<headsha8> as the atomic
+      test-and-set; implemented today: label idempotency + STEP-0 only (probabilistic, and STEP-0
+      costs a burned session). Workers got their key 2026-07-21; reviewers didn't."
+    fu: "FU-092"
+  - id: MP-G03
+    name: "merged → close-the-loop has no mechanical owner"
+    detail: "C6 (verify outcome, agent/done flip, follow-up harvest) was manual meta every time
+      this session (#52, #55, #47 labels by hand). ADR-094 lists no merged-clause unit."
+    fu: "FU-090 (harvest design; the label flip rides the same unit)"
+  - id: MP-G04
+    name: "arbitrate (flip-flop / rounds-exhausted) is breaker-only"
+    detail: "The escalation table's tie-break rows exist as ROUNDS_MAX breaker counts, not as a
+      scan-emitted arbitrate unit — the coordinator never gets the structured tie-break dispatch
+      ADR-094 specifies."
+    fu: "FU-086 (remaining: the arbitrate clause)"
+  - id: MP-G05
+    name: "belt-3 cannot compute since-head"
+    detail: "The exporter PAT can't read commit objects, so AgentReviewLoop uses a trailing-1h
+      window, not verdicts-since-head — a slow loop (<3 verdicts/h) is invisible to layer 3."
+    accepted: "documented degradation; layers 1+2 carry since-head precision (2026-07-12 decision)"
