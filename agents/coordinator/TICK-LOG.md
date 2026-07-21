@@ -646,3 +646,55 @@ policy block in the header.
 - **FU-089 filed en route:** the per-repo `agents-github-app` PRIVATE KEY ES in fixer namespaces is
   a workbench→org-wide-token escalation hole; the loop-token pattern (central mint + TokenReview
   broker) is the fix shape for worker tokens too.
+
+### 2026-07-18→21 — meta-8 (cont.): the stall, the races, the loop — every failure became a mechanism
+The three-day arc after the first per-stack ride, run as a live meta-coordination session
+(operator directive: "keep the loop running; create specs, issues"). Chronicle + the class fixes:
+- **The 3-day silent stall (07-18→21):** the #52 worker's dind sidecar outlived the finished
+  agent container → pod phase=Running forever → launcher WIP=1 + the scan's project-WIP hold both
+  wedged; every `*/10` tick said so into unread logs, and the operator's session monitor watched
+  OUTPUTS (PRs/labels) — a wedged loop emits none. **Silence looked like health.** Fixes, four
+  layers: dind → k8s NATIVE sidecar (pod completes with the agent); scan zombie-reap belt;
+  monitor gained a debounced queue-liveness clause; FU-091 `AgentQueueStalled`
+  (exporter `github_agent_issue_labels` + kube-state pairing — different code+token than the
+  scan, fires when the scan IS the wedged layer). Frugality note: 3 days of ticks woke ZERO LLMs.
+- **Dispatch races ×3 → the API server is the only real lock:** Pending-pod blind spot
+  (kata boot ≫ tick interval; phase=Running filters saw an empty project), the mutex not covering
+  an item session's tail, and the claim-to-spawn gap. Predicate fixes helped; the class died only
+  with the workflow.md hazard finally implemented: **the pod name IS the idempotency key**
+  (`agent-<project>-<task>-r<round>`, atomic `kubectl create`, terminal holders reaped, racers
+  lose loudly).
+- **LLM-assembled dispatch keeps failing; launcher-owned keeps working.** The `$B64` incident
+  (item session shipped the README template un-substituted; FU-069 breaker caught it in 3 min) →
+  `agent-session.sh --recipe` builds the claude invocation in-script. Same week: `--docker`
+  claim-derived, FU-072 endpoint rewrites RBAC'd for in-cluster dispatchers,
+  `DEVBOX_NO_UPDATE_CHECK` for the jetify egress-drop noise. **Constraints-as-code migrations
+  this session: docker mode, endpoint rewrites, run commands, pod naming, merge semantics.**
+- **The breaker fired three times — right twice, wrong once, and the miss taught doctrine:** a
+  worker placed ON the PR's own branch (the designed fix round) read "open PR exists" as the
+  anomaly and refused to work. fix.yaml now distinguishes fork-risk (anomaly) from
+  being-on-the-branch (the round is yours).
+- **The nine-review loop (the session's token fire):** update-branch merge commits kept
+  post-dating a valid head approval on #57 → re-review → approve → merge → repeat; ~9 reviewer
+  sessions drove the 5h window to 88% before the reviewer's STEP-0 tripped `agent/error`. Fix:
+  `newest_commit_at` + the breaker's independent `$head` exclude `Merge branch …` commits — a
+  merge carries no PR-authored diff. Related probe lesson (bit the meta THRICE): REST reviews
+  return `homelab-reviewer[bot]`, GraphQL returns `homelab-reviewer`; a stale captured App token
+  401s into a "verdict"; `wc -l` on a dead probe reads zero pods. **Rule #6 applies to the
+  meta-coordinator's own tooling.**
+- **Capacity gates observed working end-to-end:** the 80% threshold deferred batch dispatch live
+  (tick log: `subscription limited (FU-088, utilization-5h)`), in-flight sessions untouched,
+  everything resumed at window reset with no human step. `SubscriptionDispatchLimited` fired as
+  designed (informative).
+- **Observability caught up to ADR-093:** agent-running dashboard v2 (the old pod regexes counted
+  the always-on eventsource/sensor pods as agents — permanently inflated stats; per-stack ticks
+  and Pending pods invisible), queue-by-state row, Argo phase/firings row, dual stall detectors;
+  **argo.teststuff.net exposed** (native DAG UI = the per-workflow drill-down; Grafana = trends).
+  Exporter gotcha for the books: a missing leading slash made `api.github.comsearch` — and the
+  staleness alert's description asserted "PAT expired", a cause it could not see. Alert
+  descriptions must report SYMPTOMS.
+- **The loop's scoreboard for the session:** #52, #55, #47(+iac#41 arc incl. chart retirement +
+  values sweep), #59, #58 merged autonomously through both gates; #57 approved through the
+  CODEOWNERS delegation; #60 in flight; #46 dep-gated on the graph (FU-087 lines working, incl.
+  the queued-blocked hold and the not-planned staleness path). Issue authoring gap operator-named
+  → FU-090 (harvest surfaces + the 🌱 report slice; selfQueue knob = the operator's future call).
