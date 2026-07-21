@@ -175,7 +175,11 @@ EOF_C9
     def newest_review_at:
       ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") | .submittedAt ] | max) // "";
     def newest_commit_at:
-      ([ .commits[]?.committedDate ] | max) // "";
+      # UPDATER MERGE COMMITS ARE NOT NEW CONTENT (found live 2026-07-21, oracle-fleet#57: the
+      # update-branch merges kept outdating a valid head approval — re-review → merge → re-review,
+      # NINE reviewer sessions before STEP-0 tripped the breaker). A merge brings no PR-authored
+      # diff; CI still re-runs on the new head via the required check either way.
+      ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max) // "";
     def reviewable_again:
       (.reviewDecision == "CHANGES_REQUESTED") and (newest_commit_at > newest_review_at);
     def bot_approved_head:
@@ -200,7 +204,7 @@ EOF_C9
     # A stateless level-triggered reflex turns any predicate bug into an infinite dispatcher (the
     # 2026-07-12 oracle-fleet#13 loop: 12 duplicate approvals), so the shell trips agent/error
     # instead of dispatching when the counts are impossible for a legitimate pick.
-    | ([ .commits[]?.committedDate ] | max // "") as $head
+    | ([ .commits[]? | select(((.messageHeadline // "") | startswith("Merge branch ")) | not) | .committedDate ] | max // "") as $head
     | ([ .reviews[]?
          | select((.author.login // "") | startswith($bot))
          | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts
