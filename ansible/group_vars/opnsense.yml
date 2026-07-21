@@ -42,6 +42,7 @@ acme_cert_specs:                             # name + the service to reload post
   - { name: prometheus.teststuff.net, restart_action: "reload haproxy" }
   - { name: alertmanager.teststuff.net, restart_action: "reload haproxy" }
   - { name: forgejo.teststuff.net, restart_action: "reload haproxy" }
+  - { name: argo.teststuff.net, restart_action: "reload haproxy" }
   - { name: s3.teststuff.net, restart_action: "reload haproxy" }
   - { name: oracle-specs.teststuff.net, restart_action: "reload haproxy" }
   - { name: argocd.teststuff.net, restart_action: "reload haproxy" }
@@ -82,6 +83,7 @@ haproxy_proxied_services:
   - { name: alertmanager, cert_domain: alertmanager.teststuff.net, vip: 192.168.3.14, backend_ip: 192.168.40.14, backend_port: 9093 }
   - { name: forgejo, cert_domain: forgejo.teststuff.net, vip: 192.168.3.15, backend_ip: 192.168.40.15, backend_port: 3000 }
   - { name: garage-s3, cert_domain: s3.teststuff.net, vip: 192.168.3.16, backend_ip: 192.168.40.16, backend_port: 3900 }  # Garage S3 (path-style)
+  - { name: argo, cert_domain: argo.teststuff.net, vip: 192.168.3.24, backend_ip: 192.168.40.24, backend_port: 2746 }  # Argo Workflows UI (agent-loop DAG drill-down; server-auth, LAN-trust)
   # Garage static-website endpoint (3902) — browser-served buckets (oracle-fleet#16 spec site).
   # KEPT LIVE (ADR-092): the spec site stays on this direct 3.20 path as oracle-specs.teststuff.net
   # until the oracle stack migrates it to specs.oracle.teststuff.net via its gateway (oracle-iac,
@@ -145,3 +147,4 @@ ddclient_account_description: "wg endpoint (ansible)"
 # --- opnsense-unbound : static LAN host overrides not created by another role ---
 unbound_hosts:
   - { hostname: ubiquiti, domain: teststuff.net, value: 192.168.40.12, description: "UniFi Network Application (controller VIP)" }
+  - { hostname: argo, domain: teststuff.net, value: 192.168.3.24, description: "Argo Workflows UI (HAProxy VIP; backend LB 40.24)" }

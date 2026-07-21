@@ -35,7 +35,13 @@ spec:
           serviceMonitor: { enabled: true }
         server:
           enabled: true
-          authModes: ["server"] # internal; the server SA authenticates — no SSO/VIP yet (later nicety)
+          authModes: ["server"] # the server SA authenticates — LAN-trust model, same as Longhorn/Grafana UIs
+          # argo.teststuff.net (2026-07-21): BGP LB VIP 40.24 ↔ HAProxy 3.24 (ADR-088 mirror
+          # convention) — the native DAG UI is the agent-loop drill-down; Grafana keeps the trends.
+          # server.secure defaults false in this chart = plain HTTP 2746 behind the TLS frontend.
+          serviceType: LoadBalancer
+          serviceAnnotations: { lbipam.cilium.io/ips: "192.168.40.24" }
+          serviceLabels: { bgp: advertise }
           resources:
             requests: { cpu: "50m", memory: "64Mi" }
             limits: { memory: "128Mi" }
