@@ -105,7 +105,15 @@ fi
 IMAGE="${HARNESS_IMAGE:-${AGENT_BASE_IMAGE:-ghcr.io/teststuffstash/agent-base:latest}}"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/${PROJECT}.git}"
 SECRET="${OR_SECRET:-${PROJECT}-openrouter}"  # operator-minted, budget-capped. Default: the shared standing key; the coordinator passes --openrouter-secret to bind a per-session ephemeral key instead
-POD="agent-${PROJECT}-$(date -u +%H%M%S)"
+# Idempotency: for TASKED runs the key IS the pod name (workflow.md §Hazards — implemented
+# 2026-07-21 after the THIRD double-dispatch escape; tick-level guards all have windows, the API
+# server doesn't). `kubectl create` below is the atomic test-and-set: EXISTS = someone owns
+# (task, round) — a TERMINAL holder is reaped pre-create (its record lives in GitHub by then),
+# a LIVE holder refuses the dispatch. Ad-hoc runs keep timestamp names (no natural key).
+case "$TASK" in
+  issue-[0-9]*|pr-[0-9]*) POD="agent-${PROJECT}-${TASK//[^a-z0-9]/-}-r${ROUND}";;
+  *) POD="agent-${PROJECT}-$(date -u +%H%M%S)";;
+esac
 
 # ── Dispatch pre-flight: deterministic guards (FU-042 + the TTL walls, TICK-LOG meta-2 2026-07-09) ──
 # The brief's soft judgment failed each of these live: a second coordinator pass double-dispatched an
@@ -469,7 +477,22 @@ if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-
   fi
 fi
 
-cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
+# The atomic gate: reap a TERMINAL same-key holder, refuse a LIVE one, then `create` (NOT apply —
+# apply would silently adopt/patch an existing pod and the whole idempotency story dies).
+case "$TASK" in issue-[0-9]*|pr-[0-9]*)
+  EXISTING_PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  case "$EXISTING_PHASE" in
+    Succeeded|Failed)
+      echo "→ reaping terminal same-key pod ${POD} (${EXISTING_PHASE}) before re-dispatch"
+      "$KUBECTL" $KUBE -n "$NS" delete pod "$POD" --ignore-not-found >/dev/null 2>&1 || true;;
+    "") :;;  # no holder — create proceeds
+    *)
+      echo "PREFLIGHT REFUSED: pod ${POD} already ${EXISTING_PHASE} — (task=${TASK}, round=${ROUND}) is owned; resume/wait, don't fork (workflow.md idempotency key)." >&2
+      exit 3;;
+  esac
+;; esac
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
+  || { echo "PREFLIGHT REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (task, round) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:
