@@ -177,26 +177,34 @@ def ci_state_from_runs(repo, sha):
     return "error"  # stale / unknown mixtures — visible rather than falsely green
 
 
-def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft, labels):
+def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
+                          labels, newest_commit_at="", newest_review_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
     Workflow fires now, instead of waiting up to 5 min for the review-reflex CronJob's poll. The
-    reviewable predicate mirrors review-reflex.sh (armed ∧ green ∧ review_required, skipping the
-    mechanical `automerge` dep lane and any `agent/error` circuit-breaker). Deduped per
-    (repo, number, head_sha) for this process lifetime — one POST per reviewable head; a restart
-    re-POSTs a still-reviewable PR, which is correct (it genuinely needs a review), and the review
-    Workflow's deterministic name + reviewer-session.sh's STEP-0 self-guard backstop any in-flight
-    race. Best-effort: a webhook failure never disturbs the metrics poll (the CronJob is the backstop)."""
+    reviewable predicate mirrors review-reflex.sh (armed ∧ green ∧ (review_required ∨
+    reviewable_again), skipping the mechanical `automerge` dep lane and any `agent/error`
+    circuit-breaker). Deduped per (repo, number, head_sha) for this process lifetime — one POST per
+    reviewable head; a restart re-POSTs a still-reviewable PR, which is correct (it genuinely needs
+    a review), and the review Workflow's deterministic name + reviewer-session.sh's STEP-0
+    self-guard backstop any in-flight race. Best-effort: a webhook failure never disturbs the
+    metrics poll (the CronJob is the backstop)."""
     if not REVIEW_WEBHOOK_URL:
         return
-    # review_required = fresh PR; changes_requested = a re-review round (the worker pushed a new
-    # head after CHANGES_REQUESTED — dismiss-stale dismisses approvals, not change-requests, so
-    # reviewDecision stays CHANGES_REQUESTED, exactly review-reflex.sh's `reviewable_again`). The
-    # per-head dedup fires each reviewable HEAD once; if that head was already reviewed, the
-    # reviewer's STEP-0 self-guard trips agent/error (correct anomaly signal), so we don't need the
-    # commit-date compare here (which would need a forbidden private-repo GraphQL field anyway).
+    # review_required = fresh PR; changes_requested = a re-review round ONLY once the worker has
+    # pushed new content after the verdict (dismiss-stale dismisses approvals, not change-requests,
+    # so reviewDecision stays CHANGES_REQUESTED forever). That "new content landed" check is
+    # review-reflex.sh's `reviewable_again` (newest NON-MERGE commit > newest verdict) and it must
+    # live HERE, not be delegated to the reviewer's STEP-0 guard: on 2026-07-21 (oracle-fleet#60)
+    # this poll re-POSTed a head one cycle after its CHANGES_REQUESTED verdict landed (restart at
+    # 16:10 had emptied the dedup set), STEP-0 correctly refused — and its agent/error label then
+    # froze the PR's own FIX round for 5 h behind the human-first breaker. Private repos
+    # FORBIDDEN-null the commit objects → newest_commit_at is "" → the changes_requested fast path
+    # stays off there and the review-reflex CronJob (App token, full visibility) owns re-reviews.
+    reviewable_again = bool(newest_commit_at) and newest_commit_at > newest_review_at
     reviewable = (
         ci_state == "success"
-        and review_decision in ("review_required", "changes_requested")
+        and (review_decision == "review_required"
+             or (review_decision == "changes_requested" and reviewable_again))
         and armed
         and not draft
         and "automerge" not in labels
@@ -235,7 +243,7 @@ query($org:String!, $cursor:String) {
             reviews(last:30){ nodes { author { login } state submittedAt } }
             headRefOid
             autoMergeRequest { enabledAt }
-            commits(last:1){ nodes { commit { statusCheckRollup { state } } } }
+            commits(last:10){ nodes { commit { committedDate messageHeadline statusCheckRollup { state } } } }
           }
         }
       }
@@ -283,10 +291,11 @@ def collect_open_prs(lines):
                 if not pr:
                     continue
                 # Null-safe: on private repos the forbidden statusCheckRollup nulls the whole
-                # commit list element (bubbles to the nullable list item), so commits[0] can be
+                # commit list element (bubbles to the nullable list item), so any commits[i] can be
                 # None — fall through to the workflow-run join rather than crashing the collector.
+                # commits[-1] = the NEWEST commit (GraphQL last:N is chronological ascending).
                 commits = (pr.get("commits") or {}).get("nodes") or []
-                commit = (commits[0] or {}).get("commit") if commits else None
+                commit = (commits[-1] or {}).get("commit") if commits else None
                 rollup = (commit or {}).get("statusCheckRollup")
                 if rollup:
                     ci_state = rollup["state"].lower()
@@ -312,9 +321,23 @@ def collect_open_prs(lines):
                 for lab in (pr.get("labels") or {}).get("nodes") or []:
                     if lab:
                         lines.append(metric("github_pull_request_label", {**ident, "label": lab["name"]}, 1))
+                # reviewable_again inputs, mirroring review-reflex.sh: newest NON-MERGE commit
+                # (updater merge commits are not new content — the #57 nine-review loop) vs newest
+                # APPROVED/CHANGES_REQUESTED verdict by ANY author; ISO-8601 UTC strings compare
+                # correctly as strings. Private repos FORBIDDEN-null the commit objects → "" here.
+                commit_objs = [(c or {}).get("commit") or {} for c in commits]
+                newest_commit_at = max(
+                    (co.get("committedDate") or "" for co in commit_objs
+                     if not (co.get("messageHeadline") or "").startswith("Merge branch ")),
+                    default="")
+                newest_review_at = max(
+                    (rv.get("submittedAt") or "" for rv in (pr.get("reviews") or {}).get("nodes") or []
+                     if rv and rv.get("state") in ("APPROVED", "CHANGES_REQUESTED")),
+                    default="")
                 # ADR-093 edge-trigger: this PR is REVIEWABLE now — green, unapproved, armed, not a
                 # draft, not broken/mechanical — so POST it to the review Sensor. Same predicate as
-                # review-reflex.sh (armed ∧ green ∧ review_required, minus automerge/agent-error).
+                # review-reflex.sh (armed ∧ green ∧ (review_required ∨ reviewable_again), minus
+                # automerge/agent-error).
                 maybe_dispatch_review(
                     repo["name"], pr["number"], pr.get("headRefOid") or "",
                     ci_state=ci_state,
@@ -322,6 +345,8 @@ def collect_open_prs(lines):
                     armed=pr.get("autoMergeRequest") is not None,
                     draft=bool(pr["isDraft"]),
                     labels=label_names,
+                    newest_commit_at=newest_commit_at,
+                    newest_review_at=newest_review_at,
                 )
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
