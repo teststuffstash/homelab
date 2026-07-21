@@ -726,3 +726,24 @@ FORBIDDEN-null) keep the fast path off and the */15 CronWorkflow owns re-reviews
 unit-tested against the incident timeline (5 cases) before push. FSM updated: MP-T04 gains the
 exporter-edge guard + the #60 incident row (merge-path-lint green). Breaker cleared after the
 fixed exporter rolled; the loop resumed on its own scan.
+
+### 2026-07-21 — meta-9 (cont.): the same class fires through the OTHER arm — and a 2026-07-12 belief falls
+The loop ran the designed round clean end-to-end after the unlatch (judge arbitrated → r2 fixed on
+the PR branch → bot APPROVED 21:47 → codeowner park on `specs/conventions.md`, the operator's
+conventions gate). Around it, two more exporter-edge findings, both live within the hour:
+- **The `reviewable_again` fix had silently killed the edge fast path everywhere**: the
+  fine-grained PAT FORBIDDEN-nulls GraphQL commit objects on **public repos too** — the
+  2026-07-12 "commits node nulls (private repos)" finding was actually a GraphQL-only PAT quirk,
+  repo visibility irrelevant. Every `newest_commit_at` came back "" → fail-closed → the */15
+  backstop quietly carried #60's re-review (safe, latency-degraded — and INVISIBLE: verifying the
+  suppression required reading the exporter's own metrics view, not the absence of errors).
+  REST `/pulls/N/commits` reads fine with the same token → lazy fallback, "" on any doubt.
+- **Second breaker latch of the day, same class, other arm (21:49)**: a codeowner-gated PR snaps
+  back to `REVIEW_REQUIRED` after the bot approves — MP-T08's `bot_approved_head` guard existed
+  only in the reflex, so the edge re-POSTed the just-approved head 2 min after the verdict;
+  STEP-0 refused; agent/error latched a PR that was merely waiting for the human. Now mirrored in
+  the exporter (fail-closed without commit dates), 8-case predicate test incl. both incident
+  timelines. **Lesson: when a guard exists in one dispatcher, grep every OTHER dispatcher of the
+  same event for it before shipping — the reflex had BOTH arms (`reviewable_again`,
+  `bot_approved_head`); the edge had neither.** Also this session: changes-requested units now
+  honor the project-WIP hold (a Running worker was re-waking a judge every tick).

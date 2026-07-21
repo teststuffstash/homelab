@@ -136,7 +136,11 @@ transitions:
     guards:
       - desc: "reflex does NOT re-dispatch while parked (bot_approved_head, not reviewDecision)"
         anchor: { file: agents/review-reflex.sh, pattern: "bot_approved_head" }
-    incidents: ["2026-07-12 oracle-fleet#13"]
+      - desc: "exporter edge carries the SAME arm (a parked PR reads REVIEW_REQUIRED — without
+          this, the edge re-POSTs the approved head and STEP-0's refusal latches agent/error on a
+          PR merely waiting for a human; commit dates via REST fallback, fail-closed when unknown)"
+        anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "bot_approved_head" }
+    incidents: ["2026-07-12 oracle-fleet#13", "2026-07-21 oracle-fleet#60 (edge re-POSTed the approved head 2 min after the verdict — second breaker latch of the day, same class both arms)"]
 
   - id: MP-T09
     name: breaker trip and clear
