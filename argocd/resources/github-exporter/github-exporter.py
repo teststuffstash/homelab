@@ -41,6 +41,9 @@ WINDOW_HOURS = int(os.environ.get("RUN_WINDOW_HOURS", "24"))
 # fires without the review-reflex CronJob's */5 GraphQL poll (this poll already knows the reviewable
 # set — reuse it, the one-poller doctrine). Empty = disabled (dispatch stays with the CronJob).
 REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
+# The reviewer App's login (GraphQL bare; REST appends "[bot]" — stripped where compared). Feeds
+# the bot_approved_head arm of the review edge-trigger, mirroring review-reflex.sh's $bot.
+REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
 
 _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
@@ -177,8 +180,29 @@ def ci_state_from_runs(repo, sha):
     return "error"  # stale / unknown mixtures — visible rather than falsely green
 
 
+def newest_nonmerge_commit_at_rest(repo, number):
+    """Newest non-merge commit date for a PR via REST — the fallback where GraphQL commit objects
+    FORBIDDEN-null for this fine-grained PAT (found live 2026-07-21 on PUBLIC oracle-fleet#60:
+    the 2026-07-12 "commits node nulls" quirk is a GraphQL-only restriction, not private-only —
+    REST /pulls/{n}/commits reads fine with the same token). Called lazily, only for a
+    changes_requested PR whose GraphQL dates came back empty — one REST call per such PR per
+    poll, a rare state. Returns "" on any doubt (>=100 commits could hide the newest on page 1;
+    the fast path then stays off and the */15 CronWorkflow backstop owns the re-review)."""
+    try:
+        commits = gh(f"/repos/{ORG}/{repo}/pulls/{number}/commits?per_page=100")
+        if not isinstance(commits, list) or len(commits) >= 100:
+            return ""
+        return max(
+            ((c.get("commit") or {}).get("committer") or {}).get("date") or ""
+            for c in commits
+            if not ((c.get("commit") or {}).get("message") or "").startswith("Merge branch ")
+        ) if commits else ""
+    except Exception:
+        return ""
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
-                          labels, newest_commit_at="", newest_review_at=""):
+                          labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
     Workflow fires now, instead of waiting up to 5 min for the review-reflex CronJob's poll. The
     reviewable predicate mirrors review-reflex.sh (armed ∧ green ∧ (review_required ∨
@@ -201,9 +225,17 @@ def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, 
     # FORBIDDEN-null the commit objects → newest_commit_at is "" → the changes_requested fast path
     # stays off there and the review-reflex CronJob (App token, full visibility) owns re-reviews.
     reviewable_again = bool(newest_commit_at) and newest_commit_at > newest_review_at
+    # bot_approved_head, mirroring review-reflex.sh / MP-T08: a codeowner-gated PR snaps BACK to
+    # review_required after the bot approves (the human's approval is what's pending) — POSTing it
+    # re-reviews an already-approved head, whose STEP-0 refusal latches agent/error on a PR that's
+    # merely parked on a human (found live 2026-07-21, oracle-fleet#60, ~2 min after the verdict).
+    # Fail CLOSED when a bot approval exists but commit dates are unreadable: the backstop
+    # CronWorkflow (App token, full visibility) owns any genuinely-new head.
+    bot_approved_head = bool(bot_approved_at) and (
+        not newest_commit_at or bot_approved_at > newest_commit_at)
     reviewable = (
         ci_state == "success"
-        and (review_decision == "review_required"
+        and ((review_decision == "review_required" and not bot_approved_head)
              or (review_decision == "changes_requested" and reviewable_again))
         and armed
         and not draft
@@ -324,12 +356,24 @@ def collect_open_prs(lines):
                 # reviewable_again inputs, mirroring review-reflex.sh: newest NON-MERGE commit
                 # (updater merge commits are not new content — the #57 nine-review loop) vs newest
                 # APPROVED/CHANGES_REQUESTED verdict by ANY author; ISO-8601 UTC strings compare
-                # correctly as strings. Private repos FORBIDDEN-null the commit objects → "" here.
+                # correctly as strings. This PAT FORBIDDEN-nulls GraphQL commit objects on EVERY
+                # repo (public included, found live 2026-07-21) → "" here, REST fallback below.
                 commit_objs = [(c or {}).get("commit") or {} for c in commits]
                 newest_commit_at = max(
                     (co.get("committedDate") or "" for co in commit_objs
                      if not (co.get("messageHeadline") or "").startswith("Merge branch ")),
                     default="")
+                bot_approved_at = max(
+                    (rv.get("submittedAt") or "" for rv in (pr.get("reviews") or {}).get("nodes") or []
+                     if rv and rv.get("state") == "APPROVED"
+                     and (((rv.get("author") or {}).get("login") or "").removesuffix("[bot]")
+                          == REVIEWER_BOT)),
+                    default="")
+                if not newest_commit_at and (
+                    (pr["reviewDecision"] or "") == "CHANGES_REQUESTED"
+                    or ((pr["reviewDecision"] or "") == "REVIEW_REQUIRED" and bot_approved_at)
+                ):
+                    newest_commit_at = newest_nonmerge_commit_at_rest(repo["name"], pr["number"])
                 newest_review_at = max(
                     (rv.get("submittedAt") or "" for rv in (pr.get("reviews") or {}).get("nodes") or []
                      if rv and rv.get("state") in ("APPROVED", "CHANGES_REQUESTED")),
@@ -347,6 +391,7 @@ def collect_open_prs(lines):
                     labels=label_names,
                     newest_commit_at=newest_commit_at,
                     newest_review_at=newest_review_at,
+                    bot_approved_at=bot_approved_at,
                 )
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
