@@ -5,86 +5,136 @@
   "links": [],
   "title": "Agents — running & stalls",
   "uid": "agent-running",
-  "tags": ["agents", "fu-057"],
+  "tags": ["agents", "fu-057", "fu-091"],
   "schemaVersion": 39,
-  "time": { "from": "now-6h", "to": "now" },
+  "time": { "from": "now-12h", "to": "now" },
   "refresh": "30s",
   "templating": { "list": [] },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Workers running",
+      "id": 1, "type": "stat", "title": "Workers live",
+      "description": "Worker pods, Running OR Pending (kata boot outlives a tick interval). Deterministic task-key names + legacy timestamp names; the always-on Argo Events infra pods (eventsource/sensor) deliberately do not match.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"agent-.*\"}) or vector(0)" } ]
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "instant": true }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
-      "id": 2, "type": "stat", "title": "Reviewers running",
+      "id": 2, "type": "stat", "title": "Reviewers live",
+      "description": "reviewer-<repo>-<pr> session pods (reflex tick or Argo review Sensor dispatch).",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"reviewer-.*\"}) or vector(0)" } ]
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "instant": true }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
-      "id": 3, "type": "stat", "title": "Coordinators running",
+      "id": 3, "type": "stat", "title": "Coordinator sessions live",
+      "description": "LLM coordinator/item sessions (coordinator-HHMMSS) in ANY namespace — the global reflex home and the FU-080 per-stack <stack>-agents homes. The Sensor deployment pod does not match.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"coordinator-.*\"}) or vector(0)" } ]
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)", "instant": true }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
-      "id": 4, "type": "stat", "title": "Green PRs waiting for review",
-      "description": "Open, non-draft PRs whose CI is green but which have no approval yet (review_required). This is the head of the 2.5h-stall: a PR that is ready to merge but nothing is acting on it. Pair with 'Reviewers running' — waiting>0 while reviewers=0 for minutes IS the stall (measured 2026-07-09, docs/agents/observability-and-retro.md §A′). Needs github_pull_request_open from github-exporter.",
+      "id": 4, "type": "stat", "title": "Queued issues",
+      "description": "Open agent/queued issues fleet-wide (github-exporter, FU-091). Nonzero here with zeros everywhere else for 2h fires AgentQueueStalled.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "background", "graphMode": "none" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)" } ]
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)", "instant": true }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
-      "id": 5, "type": "stat", "title": "Oldest waiting PR (age)",
-      "description": "Time since the oldest green-unapproved PR was last updated. Sustained growth here = the review reflex is not progressing an armed PR (the 2.5h silent stall).",
+      "id": 5, "type": "stat", "title": "Green PRs waiting for review",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 900 }, { "color": "red", "value": 3600 } ] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": [ "lastNotNull" ] }, "colorMode": "value", "graphMode": "none" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"})" } ]
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "instant": true }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 2 }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
     },
     {
-      "id": 6, "type": "timeseries", "title": "Agent pods by role (running)",
+      "id": 6, "type": "stat", "title": "Oldest waiting PR (age)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"})", "instant": true }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3600 }, { "color": "red", "value": 10800 }] } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Agent pods by role (live = Running + Pending)",
+      "description": "Sessions only — Argo Events infra excluded; the deterministic reflex ticks (Argo workflow pods) get their own series so LLM work and mechanical work read separately.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull", "max" ] }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"agent-.*\"}) or vector(0)", "legendFormat": "worker" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"reviewer-.*\"}) or vector(0)", "legendFormat": "reviewer" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"coordinator-.*\"}) or vector(0)", "legendFormat": "coordinator" }
-      ]
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "legendFormat": "workers" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "legendFormat": "reviewers" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)", "legendFormat": "coordinator sessions" },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"(coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+)\"}) or vector(0)", "legendFormat": "reflex ticks (argo)" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
     },
     {
-      "id": 7, "type": "timeseries", "title": "Stall detector — green-unapproved PRs vs reviewers running",
-      "description": "When 'green PRs waiting' stays above 0 while 'reviewers running' sits at 0, the loop is stalled on an invisible reflex gap — the single biggest measured time sink. This panel makes that 2.5h silence a glance.",
+      "id": 8, "type": "timeseries", "title": "Queue by agent state (FU-091)",
+      "description": "github_agent_issue_labels — the board as Prometheus sees it. blocked/error are human-first states and should trend to zero; queued climbing while workers stay flat is the stall shape.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 10 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [ "lastNotNull", "max" ] }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "legendFormat": "green PRs waiting" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=\"Running\", pod=~\"reviewer-.*\"}) or vector(0)", "legendFormat": "reviewers running" }
-      ]
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (label) (github_agent_issue_labels)", "legendFormat": "{{label}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
     },
     {
-      "id": 8, "type": "table", "title": "Active agent pods",
+      "id": 9, "type": "timeseries", "title": "Argo loop — workflows by phase (fleet-wide)",
+      "description": "argo_workflows_gauge from the workflow-controller (no per-namespace split in the gauge). Failed/Error creeping = ticks dying; sustained Pending = semaphore/mutex queueing (FU-088 pool).",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
-      "options": { "showHeader": true },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kube_pod_status_phase{phase=\"Running\", pod=~\"agent-.*|reviewer-.*|coordinator-.*\"} == 1", "format": "table", "instant": true } ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (phase) (argo_workflows_gauge{phase=~\"Running|Pending|Failed|Error\"})", "legendFormat": "{{phase}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Reflex firings per hour (CronWorkflows)",
+      "description": "Schedule adherence per reflex (argo_workflows_cronworkflows_triggered_total). A flatlined series = that cron stopped firing (suspended / controller trouble). coordinate-<stack> = the FU-080 per-stack loops.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (name) (increase(argo_workflows_cronworkflows_triggered_total[1h]))", "legendFormat": "{{name}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Stall detectors",
+      "description": "Review stall: green-unapproved PRs vs reviewers acting (the 2.5h-silence class). Queue stall: queued issues vs live workers (the 3-day class — AgentQueueStalled pages at 2h).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "legendFormat": "green PRs unreviewed" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "legendFormat": "reviewers live" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)", "legendFormat": "queued issues" },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "legendFormat": "workers live" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 12, "type": "table", "title": "Active agent pods (sessions + reflex ticks; Argo Events infra excluded)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}|reviewer-.+|coordinator-[0-9]{6}|coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+\"} == 1", "format": "table", "instant": true }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {},
       "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "service": true, "uid": true, "phase": true }, "renameByName": { "namespace": "namespace", "pod": "pod" } } }
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "service": true, "uid": true }, "indexByName": { "namespace": 0, "pod": 1, "phase": 2 } } }
       ]
     }
   ]

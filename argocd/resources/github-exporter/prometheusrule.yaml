@@ -103,3 +103,20 @@ spec:
           annotations:
             summary: "github-exporter polls are failing"
             description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+
+        # FU-091: queued work + a fully idle loop for 2h = a wedged dispatcher (the 2026-07-21
+        # finding: a sidecar zombie held project-WIP for 3 days; every scan said so in logs
+        # nobody reads). Different code + token than the scan — fires even when the scan IS the
+        # wedged layer. Worker-pod regex: deterministic task keys + legacy timestamp names;
+        # eventsource/sensor infra pods deliberately don't match.
+        - alert: AgentQueueStalled
+          expr: >-
+            sum(github_agent_issue_labels{label="agent/queued"}) > 0
+            and sum(kube_pod_status_phase{phase=~"Running|Pending", pod=~"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}"}) == 0
+            and sum(github_pull_request_open) == 0
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Agent queue stalled — queued issues but a fully idle loop"
+            description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'

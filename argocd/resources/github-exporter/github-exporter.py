@@ -344,6 +344,29 @@ def collect_open_prs(lines):
         cursor = repos["pageInfo"]["endCursor"]
 
 
+
+def collect_agent_issues(lines):
+    """FU-091 queue-liveness: per-repo counts of the agent state labels, so "queued work + idle
+    loop" is a Prometheus fact instead of tick-log prose (the 2026-07-18→21 three-day stall: a
+    zombie pod wedged WIP while every scan reported it into unread logs — nothing paged). One
+    REST search per label per poll (4 calls; the Search API's 30/min ceiling is untouched at the
+    120s cadence)."""
+    lines += [
+        "# TYPE github_agent_issue_labels gauge",
+        "# HELP github_agent_issue_labels Open issues per repo carrying each agent state label.",
+    ]
+    from urllib.parse import quote
+    for label in ("agent/queued", "agent/in-progress", "agent/blocked", "agent/error"):
+        data = gh(f"search/issues?q=org:{ORG}+label:%22{quote(label)}%22+state:open+type:issue&per_page=100")
+        counts = {}
+        for item in data.get("items") or []:
+            repo = (item.get("repository_url") or "").rsplit("/", 1)[-1]
+            if repo:
+                counts[repo] = counts.get(repo, 0) + 1
+        for repo, n in sorted(counts.items()):
+            lines.append(metric("github_agent_issue_labels", {"owner": ORG, "repo": repo, "label": label}, n))
+
+
 def collect_billing(lines):
     now = datetime.now(timezone.utc)
     usage = gh(f"/organizations/{ORG}/settings/billing/usage?year={now.year}&month={now.month}")
@@ -376,7 +399,7 @@ def poll_forever():
     while True:
         lines = []
         ok = True
-        for collector in (collect_workflow_runs, collect_open_prs, collect_billing):
+        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
