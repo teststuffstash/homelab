@@ -114,17 +114,23 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-094 lane predicate
     # (`track/*` labels = the human-declared independence assertion; ≤1 in flight per lane) read it.
+    # NB agent/error stays IN this fetch (an error-flagged in-progress issue still holds its
+    # lane — a human is on it) but is excluded from the C4/C5 clause below: FU-069 makes it
+    # invisible to every ACTIONABLE clause (missed on the first item-mode cut — two workers were
+    # dispatched INTO a breaker-flagged issue 2026-07-21 before the breaker was cleared).
     inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
     busy_tracks="$(printf '%s' "$inprog" | jq -r '.[].labels[].name | select(startswith("track/"))' | sort -u | tr '\n' ' ')"
     # ADR-094 project-WIP predicate (found live meta-8: two dispatchers raced #52 inside one scan
-    # window): a Running worker in the repo ns HOLDS this repo's queued-dispatch units — the
+    # window; 2026-07-21 #55: two CRON ticks raced through the phase=Running filter while a kata
+    # pod sat Pending — so the probe counts everything non-terminal): a live worker in the repo
+    # ns HOLDS this repo's queued-dispatch units — the
     # launcher's WIP=1 pre-flight would refuse the spawn anyway; better to never wake the session.
     # Probe-first: a FAILED pod probe leaves the units flowing (the launcher refusal is the belt).
     wip_busy=""
     if WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-          --field-selector=status.phase=Running -o json 2>/dev/null)"; then
+          --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
       jq -e . >/dev/null 2>&1 <<<"$WIPPODS_JSON" || WIPPODS_JSON='{"items":[]}'
       # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
       # terminated but whose sidecar lives (pre-native-sidecar dind) is phase=Running yet holds
@@ -250,16 +256,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     v2=""
     if [ "$(printf '%s' "$inprog" | jq 'length')" -gt 0 ]; then
       if PODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-            --field-selector=status.phase=Running --no-headers 2>/dev/null)"; then
+            --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null || echo '[]')"
           v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-            '.[] | .number as $n
+            '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
           if [ -n "$dispatchable" ]; then
             for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-                '.[] | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0) | .number'); do
+                '.[] | select(((.labels|map(.name))|index("agent/error"))|not)
+                 | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0) | .number'); do
               units="${units}c4c5-redispatch|${repo}|issue-${u}\n"
             done
           fi

@@ -139,8 +139,10 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     # (TRACKS.md) may run one worker per lane — the dispatcher sets AGENT_WIP_LIMIT=<lanes>
     # (added 2026-07-10 when #2/#3 opened the first two-lane parallel dispatch).
     PF_LIMIT="${AGENT_WIP_LIMIT:-1}"
+    # phase!=terminal, NOT phase=Running: a kata pod boots in Pending longer than a tick
+    # interval — the Running filter double-dispatched #55 across consecutive ticks (2026-07-21).
     PF_LIVE="$("$KUBECTL" $KUBE -n "$NS" get pods -l app=agent-session,project="$PROJECT" \
-      --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+      --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null | wc -l | tr -d ' ')"
     if [ "${PF_LIVE:-0}" -ge "$PF_LIMIT" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
