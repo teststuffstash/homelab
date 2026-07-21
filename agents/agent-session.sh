@@ -511,6 +511,11 @@ ${DIND_CONTAINER}
       image: ${IMAGE}
       args: ${ARGS}
       env:
+        # devbox self-update phone-home (releases.jetify.com) is DENIED by the egress CNP —
+        # correctly, but 3 drops/min per ride kept AgentWorkerEgressDropped warm (2026-07-21).
+        # Disable the check instead of widening policy for telemetry.
+        - name: DEVBOX_NO_UPDATE_CHECK
+          value: "1"
         - name: REPO_URL
           value: "${REPO_URL}"
         - name: BASE_REF
