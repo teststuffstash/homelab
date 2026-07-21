@@ -357,7 +357,7 @@ def collect_agent_issues(lines):
     ]
     from urllib.parse import quote
     for label in ("agent/queued", "agent/in-progress", "agent/blocked", "agent/error"):
-        data = gh(f"search/issues?q=org:{ORG}+label:%22{quote(label)}%22+state:open+type:issue&per_page=100")
+        data = gh(f"/search/issues?q=org:{ORG}+label:%22{quote(label)}%22+state:open+type:issue&per_page=100")
         counts = {}
         for item in data.get("items") or []:
             repo = (item.get("repository_url") or "").rsplit("/", 1)[-1]
