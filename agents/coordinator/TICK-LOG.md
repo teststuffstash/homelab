@@ -698,3 +698,11 @@ The three-day arc after the first per-stack ride, run as a live meta-coordinatio
   CODEOWNERS delegation; #60 in flight; #46 dep-gated on the graph (FU-087 lines working, incl.
   the queued-blocked hold and the not-planned staleness path). Issue authoring gap operator-named
   → FU-090 (harvest surfaces + the 🌱 report slice; selfQueue knob = the operator's future call).
+- **Session economics (4d, cost-equivalent):** reviewing $16.4 (23.7M tok, 94% cache-read; ~half
+  of it the nine-review loop) · coordinating $9.6 (17.4M) · CODE $0.79 real OpenRouter + ~2.7M
+  haiku tok — oversight:code ≈ 9:1 by spend, BY DESIGN (cheap workers, subscription safety net),
+  but the ratio's failure mode is loop bugs, not worker spend. Throughput: 10 issues closed vs 12
+  created (4 of 12 = review harvests, 2 of those already closed — follow-ups converge, 1–2 worker
+  rounds per merge, no flip-flops since meta-4). Specs: 9 commits/5d, every worker touch flagged
+  + gated, zero rejections. Human touches: ~2/merged-PR (the designed gates) + incident
+  interventions that each retired their class. All 12 issues human-authored (breaker #1 intact).
