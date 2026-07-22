@@ -796,3 +796,23 @@ The day's mechanisms:
 - Scoreboard by midday: #60/#62/#69/#70/#71 merged (parse spec'd+landed), #45/#49/#63/#41 done,
   #64 build riding, #66/#44/#50 queued, #65/#68 dep-gated. Operator gates exercised: 2 codeowner
   spec reviews (#62, #70), 1 authoring correction (#67).
+
+### 2026-07-22 — meta-9 (cont. 4): the queue drains to one card — and the first real corpus finds its first real bug
+Afternoon arc, mostly hands-off: #75 (the loige_ord decision, codeowner-authored spec-first) →
+#77 implemented it faithfully (positional fallback + mixed-§ no-guess rows, schema required-flip)
+→ #50 done. #66's worker STRIKE was a correct refusal (workflow files are outside the recipe +
+token surface) → operator-implemented as #76 (the merge half pre-existed in allure-publish.sh;
+the missing piece was needs:e2e + artifact download + if:always()). oracle-iac#83 landed the
+full ert-pipeline DAG (suspended cron, start-from=parse). #68 (delta) queued after its operator
+pass — the LAST card; every other oracle-fleet issue is closed.
+**The attended acceptance run** (`ert-pipeline-acceptance-ljdsg`, start-from=parse):
+- **parse: 252,354/252,354 members, 0 failed, 1h43m, digest-stamped** — the real corpus parsed
+  end-to-end through ranged S3 reads on the first attempt. 20,774 aktViide-missing (the ~2%
+  finding, now measured corpus-wide).
+- **build: died on `2002-10-24+03:00`** — eRT-era dates carry TZ OFFSETS, a shape the UC-1
+  fixture never had. Exactly what the acceptance run exists to find. Filed #78 (normalize at
+  parse ⚖ — its stated duty; build stays strict), queued to the loop; re-run after merge.
+- **My own acceptance monitor was a dead probe** (compound jsonpath erroring into 2>/dev/null;
+  silence read as "parse still running" for 2h — the meta-8 lesson, third recurrence, this time
+  MINE). The failure surfaced only on a manual check. Rule #6 has no exemptions for the
+  meta-coordinator's tooling — again.
