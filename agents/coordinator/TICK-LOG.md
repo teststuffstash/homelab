@@ -816,3 +816,33 @@ pass — the LAST card; every other oracle-fleet issue is closed.
   silence read as "parse still running" for 2h — the meta-8 lesson, third recurrence, this time
   MINE). The failure surfaced only on a manual check. Rule #6 has no exemptions for the
   meta-coordinator's tooling — again.
+
+### 2026-07-22 — meta-9 (cont. 5, evening): the acceptance grind — real-corpus shapes, one per run
+The corpus is being earned the hard way: each acceptance attempt surfaces exactly one fixture-
+absent shape, the loop fixes it, repeat. Attempt 1 → tz-suffixed dates (#78 ✓). Attempt 2 →
+**my own guardrail** (the new deny-all-except CNP for workflow pods allowed only the router DNS
+leg; normal-dnsPolicy pods resolve via CoreDNS — the pipeline died on garage svc resolution in
+2m; both legs now, mirroring the composition). Attempt 3 → parse CLEAN (252,354 members, tz-fix
+holds), build died on **None valid_from** (undated redactions — #86, exclude-and-count ⚖, never
+fabricate a date). Iteration cost fixed: `start-from=build` reuses the byte-identical parse
+artifacts (iac#102) — build verdicts in minutes, not 1h50m re-parses.
+Around the grind:
+- **Workload productionization** (operator-requested): iac#95 — deny-all-except egress CNP for
+  pipeline pods (they were UNRESTRICTED) + the first workload PrometheusRules
+  (ErtPipelineStepFailed / ErtPipelineStuck via the kube_pod_owner Workflow join; the argo gauges
+  have no workflow-ns label). Politeness survey closed on iac#97: no per-host rate limit exists
+  in Cilium (CNP `rateLimit` = hallucinated API, verified against the live CRD; CEC
+  local_ratelimit is per-NODE; RLS + Envoy Gateway = gateway-scale BOM) → nginx hop at minimum
+  materials, fails closed. Egress-gateway noted as an identity complement.
+- **Toolchain gaps closed**: hubble (relay wrapper script — in-agent exec sees ONE node's ring
+  buffer) and the argo CLI — both had UIs before CLIs; alert runbooks referenced tools that
+  didn't exist. Jetify telemetry belted (DO_NOT_TRACK — the update-check var alone didn't stop
+  the drops; the egress alert rewritten symptoms-only after "probably HUNG" was wrong twice).
+- **Double claim comments (#45, #81) root-caused**: one session re-composing after an ambiguous
+  gh result — LLM-level retry, not a dispatch race; verify-then-repost added to the brief.
+- **Parse profiled**: ~41 members/s at 11% CPU = sequential Garage round-trip bound; progress
+  heartbeat spec'd+landed same evening (#81 → PR #85). Concurrency deliberately NOT taken
+  (weekly job, 24h wall).
+- **The post-corpus arc filed on the graph** (operator direction): ghcr cred → serve the real
+  corpus behind the gateway (fleet#82) → agentic MCP probe, assertions on tool calls + citation
+  fields never prose (#83) → gap-report 🌱 sprouts closing the usage→issue→worker flywheel (#84).
