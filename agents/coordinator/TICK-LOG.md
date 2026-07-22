@@ -747,3 +747,25 @@ conventions gate). Around it, two more exporter-edge findings, both live within 
   same event for it before shipping — the reflex had BOTH arms (`reviewable_again`,
   `bot_approved_head`); the edge had neither.** Also this session: changes-requested units now
   honor the project-WIP hold (a Running worker was re-waking a judge every tick).
+
+### 2026-07-22 — meta-9 (cont. 2): codeowner delegation + the queue turns over + oracle-iac#40 closed
+Operator delegated the codeowner gate ("act as the codeowner — approve and keep the loop going"):
+- **#60 merged on the delegated conventions review** (diff read first: WIP-note rewrite accurate,
+  labels-on-mock-twins conservative) → #45 closed/`agent/done`. **The queue was invisible until
+  activated**: #41/#44/#49 carried `agent-fix` but not `agent/queued` (the human "go" half) — the
+  loop idled all night on an empty-looking queue. Queued all three; ⏳ lane-held lines proved
+  visibility same tick. The scan picked **#49 over the older #41** — `gh issue list` returns
+  newest-first and the queued fetch never sorted; FIFO'd (`sort_by(.number)`).
+- **First fully-mechanized post-delegation cycle**: #49 queued→claimed→r1 (haiku, ~40 min)→PR #62
+  →CI→edge-dispatched bot APPROVE→codeowner-parked (specs/tools/statute.*)→delegated spec review
+  (nullable `akt_viide` = the right shape vs the ~2% aktViide-less corpus)→merge→`agent/done`.
+  Zero breaker trips — yesterday's exporter guards held through two more head-change windows.
+- **oracle-iac#40 closed with acceptance evidence**: found deliverables 1+3 already live (stale
+  "blocked on homelab" note; ert cap raised to 90Gi 2026-07-17) — the missing half was the
+  Composition's artifact-repo rendering. Shipped `argo.artifacts: {enabled, capGi}` (per-REPO
+  bucket SUPERSEDING the Phase-1 key-mirror note — ADR-089 caps + FU-080 isolation), claim
+  flipped via oracle-iac#64 through its own gate, `iac40-acceptance-j4lc7` ROUNDTRIP-OK through
+  the default repository. Storage-ledger double-booking found in the process → FU-093.
+- **Monitor hygiene**: one stall false-positive (transition window + `|| echo 0` on flaky gh —
+  probe failure reading as empty state, rule #6's softer sibling); replaced by change-dedup'd
+  devbox-run probes. My own "workspace absent" read was the same sin — the resource was READY.

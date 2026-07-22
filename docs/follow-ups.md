@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-093**.
+  Next free id: **FU-094**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -277,6 +277,17 @@ _Last updated: 2026-07-16._
       code+token than the scan — fires even when the scan itself is the wedged layer (the
       merge-path §Runaway-dispatch layer-3 principle applied to liveness). Relates FU-084,
       ADR-094 (scan = single point of liveness, mitigations list).
+- [ ] **FU-093** — **Bulk-tier storage ledger is double-booked — one ledger should own the
+      tier (found 2026-07-22 closing oracle-iac#40).** ADR-089 says every bucket claim states
+      its cap, but nothing owns the SUM: oracle-iac `infra/garage-workspace.yaml` counts
+      loki 40 + agent-transcripts 20 + ert-snapshots 90 = 150Gi against the ~150Gi bulk tier,
+      while oracle-iac#40's accounting counted allure-reports 20 + snapshots + artifact bucket
+      against the same tier — and the Phase-1 `argo-artifacts` 10Gi + the per-repo
+      `argo-artifacts-oracle-fleet` 2Gi (AgentStack `argo.artifacts` knob, 2026-07-22) appear
+      in neither. Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage
+      workspaces). Candidate shape: one ledger table in docs (ip-plan.md-style) or a lint that
+      sums `max_size` across workspace manifests vs the tier budget; per-tier not per-repo.
+      Relates ADR-089, oracle-iac#40 closing comment.
 - [ ] **FU-092** — **Reviewer dispatch lacks its deterministic-name idempotency key
       (merge-path-fsm MP-G02).** Found by MODELING the merge path as an FSM (2026-07-21): the
       design (merge-path.md §Concurrent triggers) specifies `review-<repo>-<pr>-<headsha8>` as
