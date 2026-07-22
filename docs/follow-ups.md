@@ -287,7 +287,12 @@ _Last updated: 2026-07-16._
       in neither. Live caps to reconcile: `kubectl get workspaces.tf.upbound.io` (8 garage
       workspaces). Candidate shape: one ledger table in docs (ip-plan.md-style) or a lint that
       sums `max_size` across workspace manifests vs the tier budget; per-tier not per-repo.
-      Relates ADR-089, oracle-iac#40 closing comment.
+      **Extended 2026-07-22 (the live-meter half):** Garage exports NO metrics to Prometheus at
+      all (checked: zero `garage_*` series) — cap breaches surface only as faulted writes, and
+      the same blindness class hit longhorn-scratch the same day (the #41/#63 Init wedge).
+      Enable Garage's admin-API metrics (:3903) + a ServiceMonitor; per-bucket usage-vs-cap
+      panels + a >80% alert are the ledger's enforcement half. Relates ADR-089, oracle-iac#40
+      closing comment, oracle-iac#95.
 - [ ] **FU-092** — **Reviewer dispatch lacks its deterministic-name idempotency key
       (merge-path-fsm MP-G02).** Found by MODELING the merge path as an FSM (2026-07-21): the
       design (merge-path.md §Concurrent triggers) specifies `review-<repo>-<pr>-<headsha8>` as
