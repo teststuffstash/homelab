@@ -513,8 +513,14 @@ ${DIND_CONTAINER}
       env:
         # devbox self-update phone-home (releases.jetify.com) is DENIED by the egress CNP —
         # correctly, but 3 drops/min per ride kept AgentWorkerEgressDropped warm (2026-07-21).
-        # Disable the check instead of widening policy for telemetry.
+        # Disable the check instead of widening policy for telemetry. 2026-07-22: the update-check
+        # var alone did NOT silence it (live drops to 104.18.18/19.165:443 = releases.jetify.com
+        # from a ride that HAD the var) — devbox telemetry is a separate phone-home; belt both.
         - name: DEVBOX_NO_UPDATE_CHECK
+          value: "1"
+        - name: DO_NOT_TRACK
+          value: "1"
+        - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
         - name: REPO_URL
           value: "${REPO_URL}"

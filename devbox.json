@@ -6,6 +6,7 @@
     "talosctl@latest",
     "kubernetes-helm@latest",
     "cilium-cli@latest",
+    "hubble@latest",
     "k9s@latest",
     "ansible@latest",
     "sops@latest",
@@ -138,6 +139,9 @@
       ],
       "merge-path-lint": [
         "python3 scripts/merge-path-lint.py \"$@\""
+      ],
+      "hubble": [
+        "bash scripts/hubble-observe.sh \"$@\""
       ]
     }
   }

@@ -53,4 +53,4 @@ spec:
             severity: warning
           annotations:
             summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
-            description: "Sustained POLICY_DENIED drops from namespace {{ $labels.source }} — an agent-worker-egress allowlist miss (or an attempted forbidden exit). If a ride is in flight it is probably HUNG on this. Diff the flows: hubble observe -n {{ $labels.source }} --verdict DROPPED (relay). Legit destination → add to the claim's egress.extraFQDNs."
+            description: "Sustained POLICY_DENIED drops from namespace {{ $labels.source }}. SYMPTOM ONLY — observed causes so far: tool phone-home noise (jetify update+telemetry, 2026-07-21/22 — rides ran fine throughout) and genuine allowlist misses; a drop does not imply a hung ride. Identify the flows: `devbox run hubble -- --namespace {{ $labels.source }} --verdict DROPPED` (+ `--protocol dns` for the FQDN). Legit destination → the claim's egress.extraFQDNs; phone-home → kill at the tool (agent-session.sh env), never widen policy."
