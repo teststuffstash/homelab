@@ -769,3 +769,30 @@ Operator delegated the codeowner gate ("act as the codeowner — approve and kee
 - **Monitor hygiene**: one stall false-positive (transition window + `|| echo 0` on flaky gh —
   probe failure reading as empty state, rule #6's softer sibling); replaced by change-dedup'd
   devbox-run probes. My own "workspace absent" read was the same sin — the resource was READY.
+
+### 2026-07-22 — meta-9 (cont. 3): spec-derived issue pass + the scratch-pool incident — the loop absorbs its operator's errors
+Operator directive escalated: "create new issues from specs until the product is finished" —
+breaker #1 (issue authoring) operator-waived for the session. The pass: UC-1 = the definition of
+finished; filed #63 parse → #64 build → #65 publish+DAG (Depends-on chain), #66 e2e evidence
+wiring, #68 delta (dep-gated, deliberately unqueued), adopted #50, superseded the monolithic #4.
+The day's mechanisms:
+- **The scratch-pool exhaustion (the #41/#63 Init wedge):** generic-ephemeral docker-lib PVCs
+  (20Gi longhorn-scratch) die with their POD OBJECT, not their ride — 8 kept-for-reading
+  Completed pods pinned ~160Gi, the pool filled, new volumes FAULTED at replica scheduling, and
+  the fail-open WIP probe + launcher belt let a second ride spawn into the trap. Cleanup freed
+  the pool (both wedged rides recovered IN PLACE — no redispatch); class fix = scan janitor
+  deletes Succeeded ride pods >2h. FU-093's thesis live in a second tier: unowned capacity
+  ledgers fail as faulted workloads, not warnings.
+- **The breaker caught the OPERATOR: #67 (HTTP P1) duplicated already-merged #57** — authored
+  from the conformance Phase table without checking EVIDENCE (the derived truth; 24 tagged tests
+  on master). Worker refused with AGENT_ERROR, one ride burned. Authoring lesson: evidence, never
+  a phase column, is the gap list.
+- **Capacity gate → C4/C5 relay proven**: #67's first item session claimed then DEFERRED at the
+  subscription semaphore cap (3/3); C4/C5 re-fired the claim once capacity freed. Level-triggered
+  recovery, no human step. Accidental parallel lanes (chassis+ingest rides concurrent after the
+  belt failure) = what TRACKS.md wanted anyway; kept.
+- **A reviewer session died mid-ride on #71 (no verdict); the edge re-dispatched, STEP-0 passed
+  the fresh session** (no verdict at head) — the guard's positive space works too.
+- Scoreboard by midday: #60/#62/#69/#70/#71 merged (parse spec'd+landed), #45/#49/#63/#41 done,
+  #64 build riding, #66/#44/#50 queued, #65/#68 dep-gated. Operator gates exercised: 2 codeowner
+  spec reviews (#62, #70), 1 authoring correction (#67).
