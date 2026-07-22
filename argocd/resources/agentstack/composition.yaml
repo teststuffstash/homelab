@@ -821,6 +821,67 @@ spec:
             roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: argo-workflow }
             subjects:
               - { kind: ServiceAccount, name: argo-workflow, namespace: {{ $r.name }} }
+            {{- $art := get $r.argo "artifacts" }}
+            {{- if and $art (get $art "enabled") }}
+            ---
+            # argo.artifacts (oracle-iac#40): the per-namespace S3 artifact repository — Garage
+            # bucket + ONE rw key (Workspace-minted, ADR-076 CREATE-pattern like the transcripts
+            # workspace), connection Secret written IN-NAMESPACE, and the default
+            # `artifact-repositories` ConfigMap Argo resolves. ING-RT-STEP-CONTRACTS boundary:
+            # small step outputs only; large objects pass by reference to the stack's data buckets.
+            apiVersion: tf.upbound.io/v1beta1
+            kind: Workspace
+            metadata:
+              # cluster-scoped CRD — no namespace; the connection secret below lands in-ns
+              name: argo-artifacts-{{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-argo-artifacts-ws
+            spec:
+              providerConfigRef:
+                name: default
+              forProvider:
+                source: Inline
+                module: |
+                  resource "garage_bucket" "artifacts" {
+                    global_alias = "argo-artifacts-{{ $r.name }}"
+                    max_size     = {{ mul (get $art "capGi" | default 2) 1073741824 }} # {{ get $art "capGi" | default 2 }}Gi — ADR-089 quota-as-contract
+                  }
+                  resource "garage_key" "rw" { name = "argo-artifacts-{{ $r.name }}-rw" }
+                  resource "garage_bucket_permission" "rw" {
+                    bucket_id     = garage_bucket.artifacts.id
+                    access_key_id = garage_key.rw.id
+                    read  = true
+                    write = true
+                    owner = false
+                  }
+                  output "bucket" { value = garage_bucket.artifacts.global_alias }
+                  output "access_key_id" { value = garage_key.rw.id }
+                  output "secret_access_key" {
+                    value     = garage_key.rw.secret_access_key
+                    sensitive = true
+                  }
+              writeConnectionSecretToRef:
+                namespace: {{ $r.name }}
+                name: argo-artifacts-s3
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: artifact-repositories
+              namespace: {{ $r.name }}
+              annotations:
+                workflows.argoproj.io/default-artifact-repository: default-v1
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-argo-artifacts-cm
+                gotemplating.fn.crossplane.io/ready: "True"
+            data:
+              default-v1: |
+                s3:
+                  endpoint: garage.garage.svc.cluster.local:3900
+                  insecure: true
+                  bucket: argo-artifacts-{{ $r.name }}
+                  accessKeySecret: { name: argo-artifacts-s3, key: access_key_id }
+                  secretKeySecret: { name: argo-artifacts-s3, key: secret_access_key }
+            {{- end }}
             {{- end }}
             {{- end }}
             ---

@@ -2,7 +2,11 @@
 # the bucket + a read/write key (CREATE-pattern, ADR-076, like the agent-transcripts workspace) and
 # writes them into the `argo-artifacts-s3` Secret. Proven 2026-07-17: a produce→S3→consume workflow
 # round-tripped a real object through this bucket. The write ns is where Phase-1 agent-loop workflows
-# run (agent-coordinator); Phase 2 / per-stack (FU-080) mirrors the key into each workflow namespace.
+# run (agent-coordinator). Phase 2 / per-stack went PER-NAMESPACE BUCKETS, not a key mirror as this
+# note once said (2026-07-22, oracle-iac#40): the AgentStack Composition's `argo.artifacts` knob
+# renders `argo-artifacts-<repo>` + its own rw key + the in-ns `artifact-repositories` ConfigMap —
+# per-stack caps (ADR-089) and no cross-stack key reach (FU-080 isolation). This bucket stays the
+# agent-coordinator loop's own.
 apiVersion: tf.upbound.io/v1beta1
 kind: Workspace
 metadata:

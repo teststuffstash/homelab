@@ -193,6 +193,30 @@ spec:
                             type: boolean
                             default: false
                             description: Render the workflow SA + workflowtaskresults RBAC into this namespace.
+                          artifacts:
+                            type: object
+                            description: >-
+                              Render the per-namespace Argo S3 artifact repository (oracle-iac#40
+                              deliverable 2): a Garage bucket `argo-artifacts-<repo>` + ONE rw key
+                              (provider-terraform Workspace, ADR-076, CREATE-pattern like the
+                              transcripts/loki workspaces), the connection Secret
+                              `argo-artifacts-s3` in-namespace, and the default
+                              `artifact-repositories` ConfigMap Argo resolves for inter-step
+                              handoff. Boundary (ING-RT-STEP-CONTRACTS): SMALL step outputs only —
+                              manifests, checksum records, census reports; large objects pass by
+                              REFERENCE to the stack's own data buckets, so the cap stays small.
+                            properties:
+                              enabled:
+                                type: boolean
+                                default: false
+                                description: Render the bucket + key + configmap.
+                              capGi:
+                                type: integer
+                                default: 2
+                                minimum: 1
+                                description: >-
+                                  Bucket max_size in Gi (ADR-089 quota-as-contract — every bucket
+                                  claim states its cap; count it against the bulk-tier budget).
                       labels:
                         type: object
                         description: >-
