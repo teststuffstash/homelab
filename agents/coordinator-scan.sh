@@ -148,6 +148,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated] | length) == 0)] | length')"
       [ "${live:-0}" -gt 0 ] 2>/dev/null && wip_busy=1
     fi
+    # COMPLETED-POD JANITOR (2026-07-22 — the #41/#63 scratch-pool exhaustion): a Completed ride
+    # pod pins its GENERIC EPHEMERAL docker-lib PVC (20Gi longhorn-scratch each) until the POD
+    # object is deleted — 8 kept-for-reading pods held ~160Gi, the pool filled, and every new
+    # ride's volume FAULTED at replica-scheduling ("insufficient storage"), wedging pods in Init
+    # while both the WIP probe (fail-open) and the launcher belt let more spawn into the trap.
+    # Transcripts/stats upload to S3 in-pod before exit; >2h is far past the meta-2 read window.
+    for c in $("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+        --field-selector=status.phase=Succeeded -o json 2>/dev/null | jq -r '.items[]
+        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601 < (now - 7200))
+        | .metadata.name' 2>/dev/null); do
+      echo "  [$repo] janitor: deleting Completed ride pod ${c} (>2h; releases its ephemeral scratch PVC)"
+      "$KUBECTL" $KUBE -n "$repo" delete pod "$c" --ignore-not-found >/dev/null 2>&1 || true
+    done
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
     # they never rot silently.
