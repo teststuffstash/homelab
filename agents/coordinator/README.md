@@ -110,6 +110,10 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    gh issue edit <N> --repo teststuffstash/<project> --add-label agent/in-progress --remove-label agent/queued
    gh issue comment <N> --repo teststuffstash/<project> --body "🤖 picking this up (round <r>): <one-line plan>"
    ```
+   Post the claim comment **exactly once**. If the comment call errors or the result is
+   ambiguous, `gh issue view <N> --json comments` and CHECK before re-posting — a slow API
+   response is not a missing comment (double claim comments on #45 + #81, 2026-07-22: both were
+   one session re-composing after an ambiguous tool result, ~7–43s apart).
 3. **Read + estimate.** Pipe the issue text into the budget estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
