@@ -26,6 +26,7 @@
     "wireguard-tools@latest",
     "qrencode@latest",
     "argocd@latest",
+    "argo-workflows@latest",
     "infisical@latest",
     "gh@latest"
   ],

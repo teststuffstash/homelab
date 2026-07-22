@@ -113,6 +113,54 @@
         }
       }
     },
+    "argo-workflows@latest": {
+      "last_modified": "2026-07-08T21:13:06Z",
+      "resolved": "github:NixOS/nixpkgs/389ed85304b281ca7f306cf8a1eb4378651ca44e#argo-workflows",
+      "source": "devbox-search",
+      "version": "3.6.10",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4rni7dv1nvpsi7ylaqxdn6h92z51d3j5-argo-workflows-3.6.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4rni7dv1nvpsi7ylaqxdn6h92z51d3j5-argo-workflows-3.6.10"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hln4hbl6xlcgzvfc0l55zy1aq2gmaqla-argo-workflows-3.6.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/hln4hbl6xlcgzvfc0l55zy1aq2gmaqla-argo-workflows-3.6.10"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jnqs14pdl9l0fzrrfy6yfjdqk6b53v02-argo-workflows-3.6.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jnqs14pdl9l0fzrrfy6yfjdqk6b53v02-argo-workflows-3.6.10"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/m4fpz9bz5rdwqqh84fprax9wnf0nhprv-argo-workflows-3.6.10",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/m4fpz9bz5rdwqqh84fprax9wnf0nhprv-argo-workflows-3.6.10"
+        }
+      }
+    },
     "argocd@latest": {
       "last_modified": "2026-06-27T07:37:20Z",
       "resolved": "github:NixOS/nixpkgs/3d46470bb3030020f7e1361f33514854f5bfa86d#argocd",
