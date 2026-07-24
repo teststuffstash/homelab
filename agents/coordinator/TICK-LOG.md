@@ -846,3 +846,18 @@ Around the grind:
 - **The post-corpus arc filed on the graph** (operator direction): ghcr cred → serve the real
   corpus behind the gateway (fleet#82) → agentic MCP probe, assertions on tool calls + citation
   fields never prose (#83) → gap-report 🌱 sprouts closing the usage→issue→worker flywheel (#84).
+
+### 2026-07-24 — meta-9 (cont. 6): publish_done — the first real corpus image, eight attempts deep
+`ert-pipeline-build-9phj5`: build → publish clean over the real corpus. **Image
+`ghcr.io/teststuffstash/oracle-fleet/ert-corpus:2026-07-12`, digest `sha256:275471db…`, 215MB
+OCI archive by-reference in Garage; `push_skipped` (the ghcr write cred is the last gate).**
+The corpus inside: 244,681 statutes / 200,006 redactions / 1,530,460 provisions, digest-stamped,
+with 304 recorded window contradictions + 52,376 recorded exclusions (never fabricated). The
+eight-attempt ledger — every failure a mechanism: tz-suffixed dates (#78), my own CNP's missing
+CoreDNS leg, undated redactions (#86), §-less provisions (#88), single-PUT large objects (#93),
+boto3-vs-Garage flexible checksums (#95), plus the Garage LMDB 1Gi meta volume and the deploy
+path-filter gap found en route. Iteration cost curve: 2h/attempt → minutes (`start-from=build`).
+Also this stretch: billing meter reconciled TO THE MINUTE (visibility labels; public-repo minutes
+are free — the false alarm), updater doorbell dedup (MP-T02 guard, cancel-in-progress pinned
+false by FSM anchor), session-pod janitor (118-pod audit), /meta-coordinate skill + heartbeat
+(two real catches on day one), FU-090 leg (c) goal-budget design, split-candidate lint filed.
