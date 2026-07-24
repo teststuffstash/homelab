@@ -63,6 +63,10 @@ HOSTS = [  # static reservations preserved from ISC
     {"host": "U6Lite2ndfloor", "hwaddr": "f4:92:bf:aa:1b:08", "ip": "192.168.2.12"},
     {"host": "UAP-AC-LiteOffice", "hwaddr": "e0:63:da:70:2e:28", "ip": "192.168.2.14"},
     {"host": "U6LiteBasement", "hwaddr": "f4:92:bf:aa:1e:10", "ip": "192.168.2.63"},
+    # snore-recorder Raspberry Pi — pinned at its leased address so the sleep-iac
+    # ArgoCD deploy hook (ansible over SSH) has a stable target; mDNS (.local)
+    # doesn't resolve from in-cluster pods. FU-051.
+    {"host": "snore-recorder", "hwaddr": "b8:27:eb:fc:e8:7c", "ip": "192.168.2.185"},
     # named leaf devices referenced by IP elsewhere / worth keeping stable.
     {"host": "lwip0", "hwaddr": "c0:f8:53:db:62:80", "ip": "192.168.2.16"},
     {"host": "rockrobo", "hwaddr": "7c:49:eb:9f:bf:f4", "ip": "192.168.2.26"},

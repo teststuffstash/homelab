@@ -124,8 +124,15 @@ _Last updated: 2026-07-16._
         (no pullAlways, cacheable, traceable); each build's deploy-pin bumps images.env → pods use it on next
         spawn (the review-reflex CronJob rolls via the `agent-coordinator` ArgoCD app). PRs: agent-runtime#5,
         agent-coordinator#4.
-      • **snore-recorder** → rides the Renovate flow but its ansible→Pi deploy stays MANUAL (a dep reaches
-        the Pi only on the next playbook run; repo split + deploy automation is a separate cleanup task).
+      • **snore-recorder** → rides the Renovate flow; ansible→Pi deploy automation DECIDED 2026-07-24:
+        **ArgoCD PostSync hook Job** in sleep-iac (ansible-playbook in-cluster; failed playbook = failed
+        sync = red app; `syncPolicy.retry` = backoff; nightly CronJob belt for the offline-Pi gap) +
+        digest-pinned `alpine/ansible` image + self-service ESO ExternalSecret. Platform half DONE:
+        DHCP reservation `snore-recorder` b8:27:eb:fc:e8:7c → 192.168.2.185 (applied), private key in
+        Infisical `SNORE_DEPLOY_SSH_KEY` (needs the arc-github-app `replace "\\n" "\n"` un-escape
+        template). Remaining (sleep-iac side): move `snore-recorder/infra/ansible` + compose into
+        sleep-iac, hook Job + ExternalSecret + CronJob + committed known_hosts, version-pin wiring;
+        plant the deploy pubkey in the Pi's authorized_keys via the existing manual ansible access.
       • **homelab** → a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`).
       Prereqs (done): all agent repos are `github_repository` resources (→ `allow_auto_merge=true`), the
       `homelab-deploy` App installed on homelab, `DEPLOY_APP_*` scoped to the deploy-opening repos.
