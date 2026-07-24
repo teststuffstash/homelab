@@ -40,9 +40,15 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 3. Cluster: latest `coordinate-<stack>` tick logs (`kubectl -n <stack>-agents logs <newest
    coordinate pod> -c main`), running ride/reviewer pods, any Failed workflow pods in workload
    namespaces.
-4. Re-arm the loop watch: `Monitor` (persistent) running `bash agents/meta-watch-loop.sh` —
-   change-dedup'd scan ticks, ride/reviewer pods, open-PR set, 25-min stall clause. Probes must
-   FAIL LOUDLY (rule #6; three dead-probe incidents in meta-9 alone).
+4. Re-arm BOTH standing watches:
+   - The loop watch: `Monitor` (persistent) running `bash agents/meta-watch-loop.sh` —
+     change-dedup'd scan ticks, ride/reviewer pods, open-PR set, 25-min stall clause. Probes must
+     FAIL LOUDLY (rule #6; three dead-probe incidents in meta-9 alone).
+   - The **backstop heartbeat**: `Monitor` (persistent) running
+     `while true; do sleep 7200; echo "META-HEARTBEAT: sweep due"; done` — an unconditional
+     2-hourly wake. The loop watch only fires on CHANGE, and a stalled world produces no
+     changes: on 2026-07-23 a red CI on the tail PR matched no filter and the session sat
+     silent for ~a day. The heartbeat exists so silence can never exceed 2h unexamined.
 5. Check in-flight operator chains: `docs/agents/meta-state.md` (if present) lists any pending
    pin-follow / acceptance-run chains with their next step. Update it when starting/finishing one.
 
@@ -64,6 +70,24 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 - **Session hygiene**: monitors + background chains die with the session — before /clear,
   finish or note in-flight chains in `docs/agents/meta-state.md` (create if needed, keep tiny:
   a bullet per pending chain with its next concrete step).
+
+## Anti-stall discipline (the meta-9 recurring failure class — FOUR incidents)
+
+- **Every wait has an expected-next-event AND a deadline.** When you start waiting on anything
+  (a review, a CI run, a chain step, an acceptance run), know what should happen and by when
+  (review ≈ 15 min after green; CI ≈ 20 min; image build ≈ 20 min; deploy bump ≈ 5 min after
+  its build). Record multi-step chains in `docs/agents/meta-state.md` WITH the next step.
+- **On every META-HEARTBEAT**: re-read `meta-state.md`, then check each pending chain's expected
+  next event against reality (`gh pr checks`, `gh pr list`, newest tick, running pods). Anything
+  past its deadline → investigate NOW (read the failing run's logs, the tick output, the pod
+  events) — do not wait for the next heartbeat.
+- **Monitor silence is NEVER evidence of progress.** A monitor that has emitted nothing is a
+  monitor to verify, not to trust: probe its subject by hand once per heartbeat. Dead probes
+  read as calm (jsonpath erroring into 2>/dev/null; a filter that misses the failure signal;
+  `|| echo 0` fabricating empty state — all three happened in meta-9).
+- **Watch FAILURE signals explicitly.** A watch that only matches the happy path (PR set
+  changes, phase transitions) is blind to red CI, a struck ride, a latched breaker. If the
+  failure signature isn't in the filter, widen the filter or add a check to the heartbeat sweep.
 
 ## Hard lines (unchanged from the platform rules)
 
