@@ -891,3 +891,21 @@ utilization — by design; the */15 backstop re-dispatched, no manual re-ring. R
 non-blocking follow-up (digest regex is prefix-only) for the issue gate. Next: operator pass
 (deliverable 3 acceptance, DEP-* spec-page ⚖, then #83/#84); FU-015 still the next session's
 opener.
+
+### 2026-07-24 — meta-9 (cont. 9): the persistent-runner login poisoning — heartbeat catch #3
+All three riding fleet PRs (#110/#111/#112) sat silently red on e2e: `failed to fetch oauth
+token: denied: denied` pulling the PUBLIC `ghcr.io/astral-sh/uv` base image. **The loop watch
+has no CI-failure filter — the heartbeat sweep found it** (the 2026-07-23 lesson, validated
+again). Isolation: anonymous ghcr token grants worked from the jail (same egress IP) AND from
+the VM as `debian`, but CI jobs run as `runner` — whose `~/.docker/config.json` held a stored
+ghcr auth: `RasmusSoot` + a `ghs_…` job token, mtime **17:53:30** == snore-recorder's
+`build-image` push run (17:53:18, the parallel sleep-session push) — a **manual `docker login`
+with the job GITHUB_TOKEN on the persistent proxmox-vm runner, no logout**. Job tokens die at
+job end; docker sends the corpse on every later ghcr request from ANY repo's job on that VM,
+which turns anonymous-OK pulls into denied. Cleared with `docker logout` as `runner`
+(pull-verified), all three CI runs re-run, and the CLASS fixed at the source per
+a-belt-is-not-a-guard: snore-recorder#8 (merged 20:23) swaps the manual login for
+`docker/login-action@v3` — its post-step logout runs even on job failure, so no credential
+outlives its job on a shared runner. Lesson for ADR-082 consumers: **a persistent runner is
+shared mutable state — any `docker login` outside a guaranteed-logout wrapper poisons every
+tenant.**
