@@ -32,6 +32,15 @@ permissions:
 
 jobs:
   update:
+    # Doorbell dedup (2026-07-24, merge-path-fsm MP-T02): master-push bursts collapse to the
+    # running run + the LATEST queued one — safe because the updater is LEVEL-TRIGGERED (each run
+    # re-reads the world; a push is only a doorbell, so only never-started duplicate runs drop).
+    # cancel-in-progress MUST stay false: killing an in-flight run can drop the 422→merge-conflict
+    # labeling (MP-T06) and silently park a DIRTY PR — the loop-lock class. Billing: each run
+    # rounds up to 1 hosted minute; bursts were ~1,415 min/mo across the private repos.
+    concurrency:
+      group: update-pr-branch-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest # GitHub-hosted: the merge path must not depend on the self-hosted tier being awake (API-only, seconds)
     steps:
       - uses: actions/create-github-app-token@v1

@@ -57,6 +57,10 @@ transitions:
     guards:
       - desc: "FIFO + one-per-run + armed-only"
         anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "require_auto_merge_enabled" }
+      - desc: "doorbell dedup (billing, 2026-07-24): push bursts collapse to running + latest
+          queued — safe because level-triggered; cancel-in-progress DELIBERATELY false (killing an
+          in-flight run can drop the 422→merge-conflict labeling, MP-T06 — the silent-park class)"
+        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "cancel-in-progress: false" }
     incidents: ["2026-07-09 oracle-fleet#6 (changes-requested refusal deadlock → MP-T04's BEHIND exception)"]
 
   - id: MP-T03
