@@ -4,11 +4,10 @@ One bullet per pending meta-coordinator chain with its NEXT concrete step; delet
 done (TICK-LOG carries history — this file carries only what a fresh session must pick up).
 Convention introduced 2026-07-24 with the /meta-coordinate skill.
 
-- **CORPUS MILESTONE 2026-07-24**: attempt 8 (`ert-pipeline-build-9phj5`) ran
-  build→publish clean — image `ert-corpus:2026-07-12` digest `sha256:275471db…`, 215MB OCI
-  archive at `image/2026-07-12/…/corpus-image.oci.tar`, `push_skipped` by design. → NEXT: the
-  ghcr WRITE cred (oracle-iac#82 follow-up) → `PUBLISH_PUSH=1` → image pullable → fleet#82
-  (serve) unblocks.
+- **CORPUS RELEASED 2026-07-24 15:37**: `ert-corpus:2026-07-12@sha256:275471db…` pullable,
+  digest-verified (ADR-095 Actions release path; 5 dispatch iterations: latest.json schema →
+  untar chown → trust policy → preserve-digests). fleet#82 (serve) QUEUED. Release settled →
+  tree-move + FU-015 both unblocked.
 - **specs/docs tree move (operator-approved 2026-07-24)**: PENDING until the corpus release
   settles → then a spec-hygiene PR in oracle-fleet: conventions.md + TRACKS.md + README.md →
   docs/process/ (CODEOWNERS extended to the new path IN THE SAME PR — the gate travels with the

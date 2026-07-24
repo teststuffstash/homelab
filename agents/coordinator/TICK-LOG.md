@@ -861,3 +861,15 @@ Also this stretch: billing meter reconciled TO THE MINUTE (visibility labels; pu
 are free — the false alarm), updater doorbell dedup (MP-T02 guard, cancel-in-progress pinned
 false by FSM anchor), session-pod janitor (118-pod audit), /meta-coordinate skill + heartbeat
 (two real catches on day one), FU-090 leg (c) goal-budget design, split-candidate lint filed.
+
+### 2026-07-24 — meta-9 (cont. 7): the corpus is pullable — ADR-095's first release
+`release-corpus` dispatch 5: **`ert-corpus:2026-07-12 @ sha256:275471db…` on ghcr,
+digest-verified byte-identical to the in-cluster build.** The ADR-095 boundary held its first
+test: no GitHub credential ever entered the cluster; the ARC runner fetched 205MB from Garage
+at 55MiB/s and skopeo pushed with GITHUB_TOKEN. Five micro-iterations, each strictly further
+(latest.json per-file schema → --no-same-owner untar → --insecure-policy → --preserve-digests —
+the LAST one being the verification CATCHING skopeo silently converting the manifest in transit:
+the digest chain earned its keep on first contact). fleet#82 (serve) queued; the loop takes the
+product from here. Also this stretch: operator rulings encoded (split-exempt marker, one
+decision per session), FU-094 tiering proposal written (not accepted), FU-015 measured (454s of
+a 610s ci job is devbox install — queued next), release-path docs in github-setup.md §ghcr.
