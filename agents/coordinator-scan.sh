@@ -34,8 +34,28 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # kubectl for the v2 (C4/C5) predicate — same resolution as agent-session.sh: jail → tofu/kubeconfig;
 # in-cluster (the coordinator-reflex CronJob) → the pod ServiceAccount (KUBE empty).
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
+
 KUBECTL="$(command -v kubectl || true)"
 [ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
+
+# SESSION-POD JANITOR (2026-07-24 — the 118-pod audit): coordinator item/tick pods and reviewer
+# pods are bare `kubectl create` pods (the pod-name idempotency design) — nothing TTLs them, and
+# the reviewer launcher's "remove the pod:" line was a manual instruction nobody ran (55+33 in
+# agent-coordinator, 30 in oracle-agents). Each scan janitors its OWN namespace: terminal
+# session pods >24h (incident-forensics window; transcripts/stats upload in-pod before exit).
+# No PVCs on these — clutter, not the scratch-pool hazard — but clutter compounds.
+OWN_NS="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || true)"
+if [ -n "$OWN_NS" ]; then
+  for c in $("$KUBECTL" $KUBE -n "$OWN_NS" get pods -o json 2>/dev/null | jq -r --arg now "$(date -u +%s)" '
+      .items[]
+      | select(.status.phase == "Succeeded" or .status.phase == "Failed")
+      | select(.metadata.name | test("^(coordinator|reviewer)-"))
+      | select((.metadata.creationTimestamp | fromdateiso8601) < (($now | tonumber) - 86400))
+      | .metadata.name' 2>/dev/null); do
+    echo "janitor: deleting terminal session pod ${OWN_NS}/${c} (>24h; transcripts are in S3)"
+    "$KUBECTL" $KUBE -n "$OWN_NS" delete pod "$c" --ignore-not-found >/dev/null 2>&1 || true
+  done
+fi
 
 # The ONE source of the stack list (FU-048): cluster `AgentStack` claims first, stacks.json for
 # stacks not yet migrated (cluster wins per stack name). PROBE-FIRST (meta-5 principle): a failed
