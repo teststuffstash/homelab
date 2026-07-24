@@ -954,3 +954,23 @@ FU-085 compounds: an event is already item-shaped, so the edge path submits an i
 and the cron sweep emits only the units the edge missed. Builds: **FU-086** (units + item mode),
 **FU-087** (`Depends-on`), **FU-088** (capacity semaphores). Relates FU-045/FU-050/FU-052/FU-080/
 FU-085, ADR-093, oracle-fleet `specs/TRACKS.md`.
+
+### ADR-095 — ghcr pushes happen only in Actions; in-cluster workloads never hold GitHub credentials
+
+**Accepted 2026-07-24.** Found via the corpus pipeline: its publish step assembled the OCI
+archive in-cluster and needed a registry credential to push. Structural facts: fine-grained PATs
+cannot carry the packages scope; an in-cluster pusher therefore needs a broad classic PAT
+(`write:packages` = the whole org's packages) parked in a workload namespace, manually rotated —
+while every Actions workflow has repo-scoped, auto-rotated `packages: write` via `GITHUB_TOKEN`
+for free (the rail ADR-084 deploys and every platform image already ride).
+
+**Decision:** the boundary is the plane, not the credential. In-cluster steps build artifacts
+**into Garage by reference** and stop; thin *release* workflows on the ARC runner (LAN to
+Garage) fetch, digest-verify, and promote to ghcr with `GITHUB_TOKEN`. Release workflows read
+Garage with an EXISTING stack reader key delivered as repo Actions secrets — set imperatively
+from the cluster-minted connection secret (the value's source of truth stays the cluster;
+tofu/github would give it a second home — docs/github-setup.md §ghcr has the rotation recipe).
+First instance: oracle-fleet `release-corpus.yaml` (fleet hosts it, not oracle-iac: the
+`GITHUB_TOKEN` package grant is repo-scoped and the artifact's contract lives in fleet's spec —
+producer = iac policy, promoter = the repo that owns the package). Relates ADR-082, ADR-084,
+ING-RT-PUBLISH.

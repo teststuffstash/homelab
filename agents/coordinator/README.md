@@ -110,6 +110,10 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    gh issue edit <N> --repo teststuffstash/<project> --add-label agent/in-progress --remove-label agent/queued
    gh issue comment <N> --repo teststuffstash/<project> --body "🤖 picking this up (round <r>): <one-line plan>"
    ```
+   **One session, one decision**: a session that posts a "not dispatching"/park verdict is DONE —
+   it never reconsiders in the same run (the #97 flip-flop, 2026-07-24: park at 12:41:27,
+   "picking this up" at 12:42:01 — 34s apart, one session; a reconsideration is the NEXT tick's
+   judgment against the re-read world).
    Post the claim comment **exactly once**. If the comment call errors or the result is
    ambiguous, `gh issue view <N> --json comments` and CHECK before re-posting — a slow API
    response is not a missing comment (double claim comments on #45 + #81, 2026-07-22: both were

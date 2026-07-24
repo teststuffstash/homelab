@@ -142,3 +142,32 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 Not GitHub, but same class of unavoidable manual step: the **OpenRouter provisioning key** (Settings
 → Provisioning Keys → create) feeding the Crossplane key-minting (see `docs/agents/` + the OpenRouter
 key Workspace). Tracked here so the full "manual bootstrap" surface is in one place.
+
+## ghcr — the one rule: pushes happen ONLY in Actions
+
+**Decided 2026-07-24 (ADR-095; found via the corpus pipeline):** no in-cluster workload ever
+holds a GitHub registry credential. Structural reasons: fine-grained PATs cannot carry the
+packages scope at all, so an in-cluster pusher needs a broad classic PAT (`write:packages` = every
+package in the org) parked in a workload namespace with manual rotation — while every Actions
+workflow gets `GITHUB_TOKEN` with repo-scoped `packages: write` free, auto-rotated. The split:
+
+- **In-cluster** (Argo steps, jobs): build artifacts **into Garage** by reference (OCI archives,
+  charts, whatever) — never talk to ghcr.
+- **Actions** (ARC runner = LAN to Garage): thin *release* workflows fetch the artifact, verify
+  its digest, and promote to ghcr with `GITHUB_TOKEN`. First instance:
+  oracle-fleet `.github/workflows/release-corpus.yaml`.
+
+**Garage-read secrets for release workflows** (repo Actions secrets, e.g. oracle-fleet
+`ERT_S3_READER_*`): set imperatively from the cluster-minted key — the value's source of truth is
+the Crossplane Workspace connection secret, NOT KeePass/tofu (codifying the value into
+`tofu/github` would give it a second home; this crosses the cluster↔GitHub barrier by design).
+Set/rotate (repo admin, e.g. from the host):
+
+```sh
+kubectl get secret ert-snapshots-s3 -n oracle-fleet -o jsonpath='{.data.reader_access_key_id}' \
+  | base64 -d | gh secret set ERT_S3_READER_ACCESS_KEY_ID -R teststuffstash/oracle-fleet
+# …and the same for reader_secret_access_key → ERT_S3_READER_SECRET_ACCESS_KEY
+```
+
+The jail PAT deliberately lacks the Secrets permission (verified 403, 2026-07-24) — setting these
+is an operator action, once per stack that grows a release workflow.
