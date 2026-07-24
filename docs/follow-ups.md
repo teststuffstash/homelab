@@ -317,6 +317,14 @@ _Last updated: 2026-07-16._
       coordinator self-label harvested issues, bounded by the existing breakers + a per-day rate
       cap — flipping it is the operator's per-stack trust call (it retires breaker #1 for that
       stack). Relates FU-086/FU-087, ADR-094, TICK-LOG §Loop safety.
+      **Leg (c), goal-budget decomposition (operator direction 2026-07-24 — the meta-9
+      prototype ran 3 days live):** a human-authored+queued `goal` issue (breaker #1 moves UP,
+      not away) carries budgetUSD + acceptance; its item session MAY author+queue child issues
+      citing the parent, with Σ(child estimator budgets) ≤ parent budget enforced in the
+      LAUNCHER pre-flight (deterministic, beside WIP=1 — never LLM-honored). The child-issue
+      set is the reviewable decomposition artifact ("review the result" applied to planning).
+      Scan surfaces children-of-closed-parents as orphans (goal-drift belt). Existing
+      containment (lane WIP, capacity gates, pod-name keys, FSM, agent/error) carries over.
 - [ ] **FU-089** — **Fixer-ns `agents-github-app` private key = workbench escalation hole.**
       Found 2026-07-18 during the FU-080 loop-token build: the Composition renders the
       homelab-agents App PRIVATE KEY (`agents-github-app` ExternalSecret) into EVERY fixer
