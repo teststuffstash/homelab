@@ -40,7 +40,7 @@ spec:
         # "179 min used / 3,000 min included"); alert at 80%. unit=Min.* matches the API's
         # "Minutes" and excludes the GigabyteHours storage SKUs under the same product.
         - alert: GithubActionsMinutesHigh
-          expr: sum(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}) > 2400
+          expr: sum(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}) > 2400
           for: 1h
           labels:
             severity: warning
