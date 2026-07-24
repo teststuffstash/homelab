@@ -172,6 +172,12 @@ _Last updated: 2026-07-16._
 - [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
+      **Measured 2026-07-24 (oracle-fleet ci, run 30101073645): Install devbox = 454s of a 610s
+      job — actual tests 43s. Toolchain tax ≈ 475s × every ARC workflow (ci/deploy/release ×
+      4 repos × every PR AND the agent loop's review round-trips). Estimated post-fix job:
+      ~135s (4.5×). Execution queued (meta-state) behind the corpus release; order: image with
+      xz/gh/nix/devbox + nixcache substituter first (generic), warm-store layer second
+      (lockfile-coupled).**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

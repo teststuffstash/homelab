@@ -14,6 +14,9 @@ Convention introduced 2026-07-24 with the /meta-coordinate skill.
   docs/process/ (CODEOWNERS extended to the new path IN THE SAME PR — the gate travels with the
   files), domain.md → docs/, glossary STAYS in specs/ (it is contract). Reviewer rubric updated
   for the new layout.
+- **FU-015 execution (operator-approved direction 2026-07-24)**: AFTER the corpus release
+  settles — custom ARC runner image (xz/gh/nix/devbox + nixcache substituter, then warm-store
+  layer); measured: 454s/610s ci job is devbox install; target ~135s.
 - **Post-corpus arc** (gated, no action until the corpus image exists): oracle-iac#82 ghcr write
   cred → fleet#82 serve → #83 agentic probe → #84 gap sprouts.
 - **FU-093**: Garage metrics (ServiceMonitor) became URGENT after this incident — the third
