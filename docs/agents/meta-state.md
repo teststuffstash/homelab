@@ -9,14 +9,16 @@ _Session handoff 2026-07-24 ~16:00 (operator break; FU-015 in a fresh session):_
   454s of a 610s ci job is devbox install. Order: custom ARC runner image (xz/gh/nix/devbox +
   nixcache-VIP substituter) first, warm-store layer second. arc-runners.yaml currently runs the
   stock image; the scale set template gains the image override.
-- **Post-corpus arc — serve chart LANDED, operator pass now due.** #104 (specs/docs split) +
-  #106 (#82 serve chart) both merged 2026-07-24 (TICK-LOG meta-9 cont.8 has the session detail;
-  MP-T08 carries the author==sole-codeowner no-park lesson). Open-PR set empty. Waiting on the
-  OPERATOR: (a) #82 deliverable 3 — manual acceptance, UC-1 over the real corpus via
-  MCP-inspector, after the cross-lane bring-up items in the #106 body (CORPUS_DB in the server,
-  a serving image; ImageVolume is verified-live, not a blocker); (b) the ⚖ "DEP-* spec page?"
-  question from #106; (c) the reviewer's non-blocking digest-regex tightening (prefix-only
-  sha256: check) — surface via the C6/FU-090 issue gate; (d) then #83 agentic probe + #84 gap
-  sprouts (prompt corpus + route naming) before agent-fix.
+- **Post-corpus arc — operator pass EXECUTED 2026-07-24 evening** (rulings received in-session;
+  TICK-LOG meta-9 cont.8): bring-up issues **fleet#107** (server CORPUS_DB) + **fleet#108**
+  (serving image) filed + armed (agent-fix, md budget) — the loop dispatches them; when BOTH
+  close, the oracle-iac `mcpServer.enabled=true` flip PR runs the UC-1 MCP-inspector acceptance
+  (#82 deliverable 3 — operator DELEGATED, no ceremony to wait for). Pre-wiring merged/riding:
+  **oracle-iac#147** (mcpServer values, digest-pinned, disabled) + **fleet#110** (DEP-SERVE spec
+  page + full-digest render guard — the #106 review catch), both auto-merge-armed. #83 got the
+  operator direction on-issue: kind-cluster first, NOT in `devbox run ci` (flaky-tolerant
+  separate task). **fleet#109** = the unarmed specs-cleanup bundle (UC-1→named world,
+  real-corpus worlds beyond põhiseadus, DEP-page disposition) — operator's later work alongside
+  the allure-snippets generator. #84 still awaits the operator prompt-corpus/route-naming pass.
 - **Standing watches to re-arm on session start** (they died with the old session): the loop
   monitor (`bash agents/meta-watch-loop.sh`) + the 2h heartbeat — see the skill's bootstrap.
