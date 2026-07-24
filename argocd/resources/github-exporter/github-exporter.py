@@ -33,6 +33,13 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 API = "https://api.github.com"
+# Repo visibility map (refreshed each runs-poll): billing "included minutes" only counts PRIVATE
+# repos — public-repo hosted minutes are free (found 2026-07-24: dashboard said 2927, the GitHub
+# meter 1436 = exactly the private subset). Billing metrics carry visibility=<private|public>.
+_repo_private = {}
+# Run→runner-class memo (completed runs never change; in-flight re-checked). The jobs endpoint is
+# the only place runner labels live — one request per NEW run in the window, then cached.
+_run_runner = {}
 ORG = os.environ.get("GITHUB_ORG", "teststuffstash")
 TOKEN = os.environ["GITHUB_TOKEN"].strip()
 INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
@@ -119,7 +126,9 @@ def metric(name, labels, value):
 
 def collect_workflow_runs(lines):
     since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    repos = [r["name"] for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
+    all_repos = [r for r in gh_paged(f"/orgs/{ORG}/repos?type=all", None) if not r["archived"]]
+    repos = [r["name"] for r in all_repos]
+    _repo_private.update({r["name"]: bool(r.get("private")) for r in all_repos})
     lines += [
         "# TYPE github_workflow_run_updated_timestamp gauge",
         "# HELP github_workflow_run_updated_timestamp Last update (epoch s) of each workflow run in the window; conclusion/status ride as labels.",
@@ -140,12 +149,38 @@ def collect_workflow_runs(lines):
                 "id": run.get("id") or 0,
                 "status": run.get("status") or "",
                 "conclusion": run.get("conclusion") or "",
+                "runner": _runner_class(repo, run),
             }
             updated = epoch(run["updated_at"])
             lines.append(metric("github_workflow_run_updated_timestamp", labels, updated))
             started = run.get("run_started_at")
             if started:
                 lines.append(metric("github_workflow_run_duration_seconds", labels, updated - epoch(started)))
+
+
+def _runner_class(repo, run):
+    """hosted | self-hosted | mixed | unknown — from the run's job runner labels (the runs API
+    itself carries nothing). Memoized for completed runs; a failed probe returns unknown rather
+    than a guess (rule #6)."""
+    rid = run.get("id")
+    done = (run.get("status") == "completed")
+    if rid in _run_runner and done:
+        return _run_runner[rid]
+    try:
+        jobs = gh(f"/repos/{ORG}/{repo}/actions/runs/{rid}/jobs?per_page=100").get("jobs") or []
+        kinds = set()
+        for j in jobs:
+            labs = [str(x).lower() for x in (j.get("labels") or [])]
+            if any("self-hosted" in x or "homelab" in x for x in labs):
+                kinds.add("self-hosted")
+            elif labs:
+                kinds.add("hosted")
+        cls = "unknown" if not kinds else ("mixed" if len(kinds) > 1 else kinds.pop())
+    except Exception:
+        return _run_runner.get(rid, "unknown")
+    if done:
+        _run_runner[rid] = cls
+    return cls
 
 
 def ci_state_from_runs(repo, sha):
@@ -457,7 +492,9 @@ def collect_billing(lines):
         "# HELP github_billing_net_amount Month-to-date USD after discounts (>0 = actually paying).",
     ]
     for (product, sku, unit, repo), (qty, gross, discount, net) in sorted(agg.items()):
-        labels = {"org": ORG, "product": product, "sku": sku, "unit": unit, "repo": repo}
+        vis = "unknown" if repo not in _repo_private else ("private" if _repo_private[repo] else "public")
+        labels = {"org": ORG, "product": product, "sku": sku, "unit": unit, "repo": repo,
+                  "visibility": vis}
         lines.append(metric("github_billing_usage", labels, round(qty, 6)))
         lines.append(metric("github_billing_gross_amount", labels, round(gross, 6)))
         lines.append(metric("github_billing_discount_amount", labels, round(discount, 6)))

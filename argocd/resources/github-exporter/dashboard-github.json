@@ -72,7 +72,7 @@
     {
       "id": 2,
       "type": "gauge",
-      "title": "Hosted minutes (month)",
+      "title": "Included-pool minutes (private repos, month)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -90,7 +90,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})",
+          "expr": "sum(github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\", visibility=\"private\"})",
           "instant": true,
           "range": false
         }
@@ -131,7 +131,7 @@
         },
         "overrides": []
       },
-      "description": "Team plan includes 3000/month; alert at 2400 (80%)."
+      "description": "Only PRIVATE-repo hosted minutes draw from the included pool \u2014 public-repo hosted minutes are free (2026-07-24: the unfiltered sum read 2927 while the GitHub meter said 1436, the private subset). Free public minutes: the stat next to this one."
     },
     {
       "id": 3,
@@ -496,7 +496,7 @@
             "uid": "prometheus"
           },
           "expr": "max by (repo, workflow) (github_workflow_run_duration_seconds{branch=~\"master|main\"})",
-          "legendFormat": "{{repo}}/{{workflow}}"
+          "legendFormat": "{{repo}}/{{workflow}} [{{runner}}]"
         }
       ],
       "options": {
@@ -534,7 +534,8 @@
           "unit": "s"
         },
         "overrides": []
-      }
+      },
+      "description": " Split by runner class since 2026-07-24: hosted (billed if private) vs self-hosted (ARC/VM, free)."
     },
     {
       "id": 9,
@@ -659,6 +660,62 @@
         "overrides": []
       },
       "description": "Count of failed runs inside the rolling 24h poller window; empty = clean."
+    },
+    {
+      "id": 11,
+      "type": "gauge",
+      "title": "Public-repo hosted minutes (free, month)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\", visibility=\"public\"})",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": null,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "description": "Hosted minutes on public repos \u2014 free, not counted against the included pool."
     }
   ],
   "refresh": "5m",
