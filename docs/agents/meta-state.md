@@ -9,15 +9,12 @@ _Session handoff 2026-07-24 ~16:00 (operator break; FU-015 in a fresh session):_
   454s of a 610s ci job is devbox install. Order: custom ARC runner image (xz/gh/nix/devbox +
   nixcache-VIP substituter) first, warm-store layer second. arc-runners.yaml currently runs the
   stock image; the scale set template gains the image override.
-- **fleet PR #104 (specs/docs tree split)** — gate read DONE 2026-07-24 (structural + CODEOWNERS
-  travel ✓, no row semantics ✓), but the move had 19 broken relative links + a stale TRACKS
-  redirect stub (lychee site gate caught it) — fixed on-branch (5de6991 + 62dfbcd, gate-read
-  comment posted). ⚠ author == RasmusSoot == the sole CODEOWNER → self-approval impossible;
-  release = **admin merge once CI green + bot APPROVE at head** (watcher: scratchpad
-  watch-104.sh — Actions-runs + reviews REST; the jail PAT 403s on the Checks API). CI GREEN at
-  62dfbcd 2026-07-24 ~17:00; bot reviews of #104+#106 DEFERRED by the FU-088 subscription gate
-  (utilization-5h 0.93 > 0.80) — by design, the */15 backstop re-dispatches when headroom
-  returns; do NOT manually re-ring the reflex.
+- **fleet PR #104 (specs/docs tree split)** — ✅ MERGED 2026-07-24 17:48 (3d8b0ad). Gate read
+  done pre-merge; move defects (19 broken links + stale TRACKS redirect stub) fixed on-branch
+  (5de6991 + 62dfbcd). Lesson recorded in merge-path-fsm MP-T08: author==sole-codeowner PRs
+  never park (GitHub waives the codeowner review for the author) → on meta-authored spec PRs the
+  delegated read must land BEFORE the bot verdict. FU-088 note: headroom gate deferred both
+  reviews ~1h at utilization 0.93 — worked as designed, backstop re-dispatched.
 - **fleet PR #106 (#82 serve: chart Deployment + HTTPRoute)** — the #105→#82 redispatch worked;
   delegated gate read DONE 2026-07-24 (digest pin enforced + negative rows ✓; comment posted):
   rides bot-review/auto-merge normally (chart/ is not CODEOWNERS-gated). Flagged on the PR: the
