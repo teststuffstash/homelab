@@ -873,3 +873,21 @@ the digest chain earned its keep on first contact). fleet#82 (serve) queued; the
 product from here. Also this stretch: operator rulings encoded (split-exempt marker, one
 decision per session), FU-094 tiering proposal written (not accepted), FU-015 measured (454s of
 a 610s ci job is devbox install — queued next), release-path docs in github-setup.md §ghcr.
+
+### 2026-07-24 — meta-9 (cont. 8): #104 + #106 through the gates — the serve chart lands
+Event-driven stretch (monitors woke a parked session): **both fleet PRs merged.** #104
+(specs/docs split): delegated read found the move semantically clean but mechanically leaky —
+19 relative links broken from the files' NEW locations + the legacy TRACKS redirect stub
+(lychee caught the stub; a repo-wide md-link scan caught the rest) — fixed on-branch
+(5de6991, 62dfbcd), then merged on bot approval. **Mechanics lesson (→ MP-T08):
+author==sole-codeowner PRs NEVER park — GitHub waives the required codeowner review for the
+PR author — so on meta-authored spec PRs the delegated read must land BEFORE the bot
+verdict.** #106 (#82 serve chart, worker-authored off the #105 redispatch): gate read clean —
+digest pin ENFORCED at render (required + sha256: prefix + negative rows); flagged the
+`volumes[].image` runtime dependency, then **verified ImageVolume live** (canary on wk-02:
+k8s 1.36.1 default gates + containerd 2.2.3 mount an OCI image volume fine) — oracle-iac
+`mcpServer` enablement is unblocked. FU-088 headroom gate deferred both reviews ~1h at 0.93
+utilization — by design; the */15 backstop re-dispatched, no manual re-ring. Reviewer left a
+non-blocking follow-up (digest regex is prefix-only) for the issue gate. Next: operator pass
+(deliverable 3 acceptance, DEP-* spec-page ⚖, then #83/#84); FU-015 still the next session's
+opener.
