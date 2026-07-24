@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-094**.
+  Next free id: **FU-095**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -277,6 +277,12 @@ _Last updated: 2026-07-16._
       code+token than the scan — fires even when the scan itself is the wedged layer (the
       merge-path §Runaway-dispatch layer-3 principle applied to liveness). Relates FU-084,
       ADR-094 (scan = single point of liveness, mitigations list).
+- [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
+      once I have more data and cleaned up the specs").** Write-up:
+      `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
+      with 0 rejections — the gate's value migrated to issue-time ⚖ pre-decision; ~half the
+      gates were mechanical diffs (marker flips, event-list syncs, provenance notes). Do NOT
+      implement before the operator re-opens this.
 - [ ] **FU-093** — **Bulk-tier storage ledger is double-booked — one ledger should own the
       tier (found 2026-07-22 closing oracle-iac#40).** ADR-089 says every bucket claim states
       its cap, but nothing owns the SUM: oracle-iac `infra/garage-workspace.yaml` counts
@@ -325,6 +331,9 @@ _Last updated: 2026-07-16._
       set is the reviewable decomposition artifact ("review the result" applied to planning).
       Scan surfaces children-of-closed-parents as orphans (goal-drift belt). Existing
       containment (lane WIP, capacity gates, pod-name keys, FSM, agent/error) carries over.
+      **Operator 2026-07-24: leg (c) NOT YET — rollout continues the old-fashioned way (human
+      goal decomposition) until the current arc settles; revisit when a real goal candidate
+      appears.**
 - [ ] **FU-089** — **Fixer-ns `agents-github-app` private key = workbench escalation hole.**
       Found 2026-07-18 during the FU-080 loop-token build: the Composition renders the
       homelab-agents App PRIVATE KEY (`agents-github-app` ExternalSecret) into EVERY fixer
