@@ -17,10 +17,10 @@ _Session handoff 2026-07-24 ~16:00 (operator break; FU-015 in a fresh session):_
   reviews ~1h at utilization 0.93 — worked as designed, backstop re-dispatched.
 - **fleet PR #106 (#82 serve: chart Deployment + HTTPRoute)** — the #105→#82 redispatch worked;
   delegated gate read DONE 2026-07-24 (digest pin enforced + negative rows ✓; comment posted):
-  rides bot-review/auto-merge normally (chart/ is not CODEOWNERS-gated). Flagged on the PR: the
-  `volumes[].image` corpus mount needs the **ImageVolume feature gate** (+ containerd support)
-  verified on the live cluster BEFORE oracle-iac enables `mcpServer`; the ⚖ "DEP-* spec page?"
-  question awaits the operator.
+  rides bot-review/auto-merge normally (chart/ is not CODEOWNERS-gated). ImageVolume
+  ✅ VERIFIED live 2026-07-24 (canary on wk-02: k8s 1.36.1 default gates + containerd 2.2.3
+  mount an OCI image volume fine — comment on the PR; no Talos change needed before oracle-iac
+  enables `mcpServer`). The ⚖ "DEP-* spec page?" question awaits the operator.
 - **Post-corpus arc** (after serve): #83 agentic probe + #84 gap sprouts await the operator pass
   (prompt corpus + route naming) before agent-fix.
 - **Standing watches to re-arm on session start** (they died with the old session): the loop
