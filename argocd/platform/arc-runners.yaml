@@ -43,8 +43,15 @@ spec:
         # by ADDING ephemeral capacity (another quiet node, or a Proxmox VM runner à la ADR-082), not by
         # overpacking these two.
         maxRunners: 4
-        containerMode:
-          type: dind
+        # NO containerMode: the spec below is the chart's own dind template (rendered at 0.14.2 and
+        # transcribed), owned here because dind customization requires it (the chart APPENDS user
+        # initContainers — a name-merge dupes the dind container; render-verified). We own it to:
+        #   - FU-015: run the custom runner image (docker/arc-runner/ — nix/devbox/gh + warm store
+        #     + LAN nix substituter) instead of unpinned stock :latest (bump the tag per build);
+        #   - FU-073(c): dockerd --registry-mirror → the in-cluster docker.io pull-through mirror
+        #     (BGP VIP, ADR-091; Hub-only by dockerd design, plain http hence insecure-registry);
+        #   - pin docker:dind (was :latest-floating via the chart).
+        # On chart upgrades: re-render with containerMode dind and diff against this spec.
         template:
           spec:
             nodeSelector:
@@ -52,15 +59,62 @@ spec:
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
-            # FU-015: custom runner image (docker/arc-runner/ — nix/devbox/gh baked, LAN nix
-            # substituter) replaces the unpinned stock :latest. The chart merges this by container
-            # name, keeping the dind env/volumeMounts injection (render-verified at 0.14.2); the
-            # init-dind-externals container inherits the same image. Built by runner-image.yaml;
-            # bump the tag after each build — nothing consumes :latest.
+            initContainers:
+              - name: init-dind-externals
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-g171a704c735d
+                command: ["cp"]
+                args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+                volumeMounts:
+                  - name: dind-externals
+                    mountPath: /home/runner/tmpDir
+              - name: dind
+                image: docker:29.6.2-dind
+                args:
+                  - dockerd
+                  - --host=unix:///var/run/docker.sock
+                  - --group=$(DOCKER_GROUP_GID)
+                  - --registry-mirror=http://192.168.40.20
+                  - --insecure-registry=192.168.40.20
+                env:
+                  - name: DOCKER_GROUP_GID
+                    value: "123"
+                securityContext:
+                  privileged: true
+                restartPolicy: Always
+                startupProbe:
+                  exec:
+                    command: [docker, info]
+                  initialDelaySeconds: 0
+                  failureThreshold: 24
+                  periodSeconds: 5
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-gb41fbe05c501
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-g171a704c735d
                 command: ["/home/runner/run.sh"]
+                env:
+                  - name: DOCKER_HOST
+                    value: unix:///var/run/docker.sock
+                  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+                    value: "120"
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+            volumes:
+              - name: work
+                emptyDir: {}
+              - name: dind-sock
+                emptyDir: {}
+              - name: dind-externals
+                emptyDir: {}
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-runners
