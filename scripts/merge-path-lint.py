@@ -113,14 +113,18 @@ def main() -> int:
             for g in t.get(kind, []) or []:
                 verdict = check_anchor(g["anchor"])
                 foreign = g["anchor"].get("repo") not in (None, "homelab")
-                mark = "✅" if verdict == "ok" else ("⏭" if verdict.startswith("SKIPPED") else "❌")
-                if mark == "❌":
-                    if foreign:
-                        # Sibling checkouts drift (branches, staleness) and their guards are their
-                        # own CI's job — report, never fail homelab CI on them.
-                        mark = "⚠"
+                if foreign:
+                    # Sibling checkouts drift (branches, staleness) and their guards are their
+                    # own CI's job — advisory only. The MARK must be constant: the live verdict
+                    # depends on which siblings are checked out (CI has none, the jail has some),
+                    # and an environment-dependent mark makes the generated doc perpetually
+                    # "stale" in whichever environment didn't --write it. Verdict → console.
+                    mark = "🔗"
+                    if verdict != "ok":
                         print(f"  ⚠ {t['id']}: {g['desc']} — {verdict} (foreign repo, advisory)")
-                    else:
+                else:
+                    mark = "✅" if verdict == "ok" else "❌"
+                    if mark == "❌":
                         failures.append(f"{t['id']}: {g['desc']} — {verdict}")
                 loc = f"{g['anchor'].get('repo', 'homelab')}:{g['anchor']['file']}"
                 target.append(f"{mark} {g['desc']} (`{loc}`)")
