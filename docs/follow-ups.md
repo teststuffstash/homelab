@@ -508,12 +508,13 @@ _Last updated: 2026-07-16._
       agent-coordinator (platform claim, taxonomy-only). Gotchas found live: bare hex colors
       parse as YAML scientific notation (`5319e7` → 5.319e10 — QUOTE them; XRD description
       warns), and `labels: {}` gets server-stamped to `{extra: []}` (explicit `extra: []` per
-      the drift convention). **Remaining:** per-repo CLAIM-FIRST migration of the rest
-      (sleep-tracking/snore-recorder/sleep-iac via the sleep claim; homelab has no claim —
-      decide its home); (operator, out-of-jail) drop migrated repos from `label_repos` via
-      **`tofu state rm`** (NOT destroy — it deletes the labels on GitHub and the authoritative
-      claim fights back), delete labels.tf when the list empties. The generated resource is
-      AUTHORITATIVE `github_issue_labels` — it deletes unmanaged labels; two managers fight.
+      the drift convention). **SLEEP MIGRATED 2026-07-25** (sleep-iac#19 + homelab 0cc2380,
+      state rm + apply same day): all three sleep repos claim-owned via `labels: {extra: []}`
+      (pre-migration diff: live == taxonomy exactly); IssueLabels Ready+Synced verified before
+      the label_repos trim; state rm scoped to `^github_issue_label\.` ONLY (the broad grep
+      also matched rulesets — do NOT rm those). **Remaining:** homelab has no claim — decide
+      its home (label_repos=[homelab] keeps labels.tf alive until then). The generated resource
+      is AUTHORITATIVE `github_issue_labels` — it deletes unmanaged labels; two managers fight.
       Design: [`docs/agents/agentstack.md`](agents/agentstack.md) §"The GitHub side". Relates
       FU-048, ADR-085.
 
