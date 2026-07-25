@@ -11,19 +11,16 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   warm measurement (~135s target). Renovate-track image pins = minor residual.
 - **bash-logout class DONE** (ac#8 + ac#9 deploy-pin grep-sweep + homelab#33 rolled all pins;
   skip shape verified Succeeded on 2026.7.25-g141235c93140). Nothing pending.
-- **Oracle corpus rebuild — BUILD LEG DONE, publish = fleet#123 (queued)**: #121 fix
-  (fleet#122, codeowner-gated + merged) verified on run rr65f — bound HELD (peak ≈757Mi,
-  full corpus: 15,087,110 provisions, corpus.sqlite 1.83GB in Garage, digest 1dd2b7ef…);
-  publish then OOMKilled at 1Gi (corpus 8.5× bigger; streaming publish = #123, ⚖ stream
-  don't size-up, third leg of the retention doctrine). Loop owns #123; on its fix merge:
-  deploy bump (iac, auto) → pin-follow workflow-ert refs → sync → `start-from=build`
-  verification run (publish completes ≤1Gi). Limits-trim data: parse ~350Mi under 4Gi,
-  build ~757Mi under 6Gi. On build+publish Succeeded: (1) `release-corpus` dispatch in oracle-fleet (digest-verify vs in-cluster);
-  (2) oracle-iac values digest bump (`values/oracle-fleet-ingester.yaml` mcpServer.corpus,
-  auto-merge); (3) rollout → re-run #82 deliverable-3 acceptance at mcp.oracle.teststuff.net
-  (PS §1 2025-07-01 → 115052015002 WITH full text; 168 §§ per #117) → post on #82, C6
-  #116/#118; (4) THEN trim parse 4Gi AND build 6Gi to observed+margin (rollback leg, #118).
-  If build OOMs at 6Gi: retention bug, file to the loop (parse precedent comment in the yaml).
+- **Oracle corpus chain — release SHIPPED, acceptance REFUSED (3rd): #125 + #126 queued.**
+  Full pipeline green (build ≈757Mi / publish ≤1Gi streaming), `ert-corpus:2026-07-12 @
+  sha256:366d65f1…` released digest-verified, iac#190 rolled, ImageVolume verified. Acceptance:
+  windows/citations CORRECT, rows exist — but body_text EMPTY for ALL 15,087,110 provisions
+  (#125, extract-at-parse + empty-body build gate ⚖) and lookups ~42s warm at 15M rows (#126,
+  build-time indexes ⚖, explain-query-plan first). Loop owns both; both re-verify on ONE
+  `start-from=parse` rebuild → then release → digest bump → acceptance re-run (criteria
+  unchanged: PS §1 full text, <1s, 168 §§) → THEN the limits-trim leg (parse ~350Mi under
+  4Gi, build ~757Mi under 6Gi). C6 #116/#118/#121/#123 all flipped agent/done.
+
 - **Sleep stack**: AFTER FU-015 — the sleep first goal (specs + evidence + Grafana-in-kind
   system testing, FU-095 prereq block); then FU-044 → FU-080 graduation → FU-095 (c)→(b)→(a).
 - **Standing watches re-armed this session** (die with it): meta-watch-loop.sh, 2h heartbeat,
