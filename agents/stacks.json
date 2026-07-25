@@ -8,7 +8,8 @@
       "mainRepo": "homelab",
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash",
-      "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"]
+      "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"],
+      "dockerRepos": ["sleep-tracking"]
     },
     {
       "_migrated": "MIRROR of the claim in agents/fixer/openrouter-operator/agentstack.yaml (see _comment).",

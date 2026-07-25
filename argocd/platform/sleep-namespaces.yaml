@@ -8,6 +8,15 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: sleep-tracking
+  labels:
+    # AgentStack fixer.docker=true (sleep-iac#19, 2026-07-25 — capability parity with oracle for
+    # the coming k3d/Grafana evidence gate): dind rides run privileged only INSIDE the kata
+    # microVM; the kata runtimeClass is PSS-exempt via apiserver admission config (FU-077),
+    # namespace stays baseline; a privileged RUNC pod is still rejected. Mirrors
+    # oracle-namespaces.yaml — posture pinned explicitly so it is visible in git.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
   annotations:
     argocd.argoproj.io/sync-wave: "-1" # before the sleep child apps deploy into it
 ---
