@@ -180,11 +180,16 @@ _Last updated: 2026-07-16._
       per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
       substituter for runner pods. `docs/ci.md` → "residual costs".
       **Measured 2026-07-24 (oracle-fleet ci, run 30101073645): Install devbox = 454s of a 610s
-      job — actual tests 43s. Toolchain tax ≈ 475s × every ARC workflow (ci/deploy/release ×
-      4 repos × every PR AND the agent loop's review round-trips). Estimated post-fix job:
-      ~135s (4.5×). Execution queued (meta-state) behind the corpus release; order: image with
-      xz/gh/nix/devbox + nixcache substituter first (generic), warm-store layer second
-      (lockfile-coupled).**
+      job — actual tests 43s. Toolchain tax ≈ 475s × every ARC workflow.**
+      **Phase 1 LIVE 2026-07-25**: `docker/arc-runner/` image (runner 2.336.0 + xz/gh/jq +
+      single-user nix 2.35.1 + devbox 0.17.5 + nixcache-VIP substituter), built by
+      `runner-image.yaml` on ubuntu-latest (bootstrap: must not depend on the scale set it
+      provisions), scale-set pin in `arc-runners.yaml` (replaces unpinned `:latest`).
+      homelab ci: 70s vs ~180-210s baseline, green. install-nix-action proved idempotent on
+      the baked image (0s) → unslimmed repos keep working. Slimming PRs: oracle-fleet#120,
+      oracle-iac#178, sleep-tracking#28, sleep-iac#20, openrouter-operator#7.
+      **Remaining: phase 2 warm-store layer (lockfile-coupled), agent-coordinator ci slim
+      (after its #8), renovate-track the base-image/devbox/nix pins.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
