@@ -20,20 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # single-user Nix + devbox (the ARC runner has no systemd; slim image lacks xz) — same as sleep-iac.
-      - name: Install xz (missing from the ARC runner image)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils
-      - name: Install Nix (single-user)
-        uses: cachix/install-nix-action@v31
-        with:
-          install_options: --no-daemon
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - name: Install devbox (reuse the single-user Nix)
-        uses: jetify-com/devbox-install-action@v0.13.0
-        with:
-          skip-nix-installation: "true"
-
+      # No toolchain install: the runner image (docker/arc-runner/, FU-015) bakes single-user
+      # Nix + devbox + the LAN nix substituter. `devbox run` fetches the project closure from
+      # the in-cluster cache on first use.
       - name: Validate ArgoCD OCI chart pins (devbox run argocd-validate-pins)
         run: devbox run argocd-validate-pins
 
