@@ -604,7 +604,11 @@ _Last updated: 2026-07-16._
       (verified on this cluster, fleet#106) as a read-only local nix substituter
       (`file://` store in substituters) + eval-cache seed copied at entrypoint. NOT a
       volume-share across pods (single-user nix locking + RWX risk — image layers ARE the
-      share). Scoping: agent-base already bakes its HARNESS closure (`/opt/agent`) and keeps
+      share). CoW note (operator asked 2026-07-25): the k8s ImageVolume API is READ-ONLY by
+      design (KEP-4639, no writable option) — but kata rides own their guest kernel, so an
+      in-guest overlayfs (lower=image volume, upper=scratch) gives a true writable CoW /nix
+      if substitution overhead ever proves real; costs a CAP_SYS_ADMIN entrypoint step in the
+      guest (FU-077 exemption territory). Substituter+seed first; overlay only on evidence. Scoping: agent-base already bakes its HARNESS closure (`/opt/agent`) and keeps
       `~/.cache`; the gap is the TARGET repo's eval in `/work/<repo>` (partial cache overlap;
       VERIFY the build-user cache survives to the runtime `USER 1000:1000` HOME). The
       claude/coordinator image needs nothing (no nix/devbox; repo cloned read-only). Relates
