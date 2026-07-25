@@ -75,19 +75,33 @@ jobs:
           echo "pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
       # The image is consumed by TAG PIN in arc-runners.yaml — a build nobody pins is a no-op
       # (the scheduled Monday rebuild would otherwise bake fresh locks into an image nothing
-      # runs). Self-bump: deterministic sed + push to master; ArgoCD selfHeal rolls the scale
-      # set. No retrigger loop: this workflow's push paths don't include argocd/.
-      - name: Bump the scale-set pin
+      # runs). Bump = a CI-gated auto-merge PR, the homelab deploy-target shape (FU-051): a
+      # direct push is blocked by the master ruleset (GH013, first attempt run 30170507026) —
+      # and rightly, argocd-validate-pins must gate every pin. App token: the workflow's
+      # existing homelab-renovate mint (same App that opens the devbox-update PRs on homelab).
+      - name: Bump the scale-set pin (auto-merge PR)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
             argocd/platform/arc-runners.yaml
           if git diff --quiet argocd/platform/arc-runners.yaml; then
             echo "pin already current" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
+          BRANCH="runner-image-pin"
           git config user.name "runner-image bot"
           git config user.email "noreply@teststuff.net"
+          git checkout -b "$BRANCH"
           git add argocd/platform/arc-runners.yaml
           git commit -m "arc-runners: pin runner image ${{ steps.tag.outputs.tag }} (auto-bump after build)"
-          git pull --rebase origin master
-          git push origin HEAD:master
-          echo "pinned ${{ steps.tag.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" "HEAD:$BRANCH"
+          PR="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$PR" ]; then
+            PR="$(gh pr create --repo "${{ github.repository }}" --base master --head "$BRANCH" \
+              --label automerge,dependencies \
+              --title "arc-runners: pin runner image ${{ steps.tag.outputs.tag }}" \
+              --body "Auto-bump after a runner-image build (FU-015 closed loop): the warm store + eval cache only work if the scale set runs the image baked from current locks. CI-gated (argocd-validate-pins); auto-merges." \
+              | grep -oE '[0-9]+$')"
+          fi
+          gh pr merge --auto --squash "$PR" --repo "${{ github.repository }}"
+          echo "pin PR #$PR armed for ${{ steps.tag.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
