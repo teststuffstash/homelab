@@ -120,3 +120,14 @@ spec:
           annotations:
             summary: "Agent queue stalled — queued issues but a fully idle loop"
             description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
+        # FU-084: the 2026-07-17 class — an installation's pool (GraphQL was the invisible one)
+        # drains and consumers start FATAL-aborting. Symptom-only; per token identity + resource.
+        - alert: GithubRateLimitLow
+          expr: >-
+            min by (token, resource) (github_rate_limit_remaining / github_rate_limit_limit) < 0.10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})"
+            description: '{{ $labels.token }} has {{ $value | humanizePercentage }} of its {{ $labels.resource }} pool left — consumers of this installation will start erroring "API rate limit exceeded" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp.'

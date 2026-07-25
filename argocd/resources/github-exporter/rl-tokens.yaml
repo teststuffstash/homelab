@@ -1,0 +1,118 @@
+# FU-084: per-App-installation rate-limit probe tokens. GitHub rate limits pool PER INSTALLATION
+# (the 2026-07-17 incident: coordinator-git's GraphQL pool drained to 9 and nothing was watching),
+# so the exporter needs a token FROM each installation to read its pool — `/rate_limit` itself is
+# free. Same ESO GithubAccessToken pattern as agents/coordinator/{git,reviewer-git}-token.yaml,
+# replicated into monitoring with the NARROWEST grant (metadata:read on one repo) — the probe
+# token shares the installation's pool regardless of its permissions.
+# Extending to more Apps (merge/deploy/labels…): copy the three blocks, add the Secret to the
+# deployment's rl-tokens projected volume, done — the collector reads every file in the dir.
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-agents-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-agents-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: AGENTS_GH_APP_PRIVATE_KEY }
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-coordinator-git-gen
+  namespace: monitoring
+spec:
+  appID: "4150968" # homelab-agents (same installation as coordinator-git — the pool that bit)
+  installID: "142724430"
+  auth:
+    privateKey:
+      secretRef: { name: rl-agents-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [oracle-fleet]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-coordinator-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-coordinator-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-coordinator-git-gen
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-reviewer-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-reviewer-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: REVIEWER_GH_APP_PRIVATE_KEY }
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-reviewer-git-gen
+  namespace: monitoring
+spec:
+  appID: "4199252" # homelab-reviewer
+  installID: "143941082"
+  auth:
+    privateKey:
+      secretRef: { name: rl-reviewer-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [oracle-fleet]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-reviewer-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-reviewer-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-reviewer-git-gen

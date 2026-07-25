@@ -553,13 +553,9 @@
       },
       "targets": [
         {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum by (sku, unit) (github_billing_usage)",
-          "legendFormat": "{{sku}} ({{unit}})"
+          "expr": "sum by (sku, unit, visibility) (github_billing_usage)",
+          "legendFormat": "{{sku}} ({{unit}}, {{visibility}})",
+          "refId": "A"
         }
       ],
       "options": {
@@ -597,7 +593,7 @@
         },
         "overrides": []
       },
-      "description": "Mixed units per series (Minutes, GigabyteHours, ...) \u2014 trends, not a sum."
+      "description": "Split by repo visibility \u2014 public-repo hosted minutes are FREE; only the private series counts against included minutes (the 2026-07-24 meter reconciliation; summing both over-reads, FU-084)."
     },
     {
       "id": 10,
@@ -716,6 +712,41 @@
         "overrides": []
       },
       "description": "Hosted minutes on public repos \u2014 free, not counted against the included pool."
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "GitHub rate-limit pools (remaining %, per token identity)",
+      "description": "FU-084: pools are PER INSTALLATION and graphql is separate from core \u2014 the 2026-07-17 incident drained coordinator-git's graphql pool to 9 with nothing watching. Alert fires < 10% (GithubRateLimitLow).",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 999
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "github_rate_limit_remaining{resource=~\"core|graphql\"} / github_rate_limit_limit",
+          "legendFormat": "{{token}} {{resource}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "5m",

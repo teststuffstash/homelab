@@ -580,25 +580,18 @@ _Last updated: 2026-07-16._
 
 ## Monitoring & storage
 
-- [ ] **FU-084** — **GitHub API rate-limit metrics + dashboard + alert.** Motivated by the
-      2026-07-17 incident: the coordinator-git App-installation GraphQL pool (5000/hr, SEPARATE
-      from REST) drained to 9 and the live review-reflex started FATAL-aborting `gh pr list`
-      ("API rate limit exceeded for installation ID 142724430") — nothing was watching it, it was
-      only visible in the reflex's own failure log. Extend the ONE poller
-      (`argocd/resources/github-exporter/`, a `collect_rate_limits()` — `gh api rate_limit` is
-      FREE, doesn't count) to emit `github_rate_limit_remaining{token,resource}` + `_limit` +
-      `_reset` for BOTH the PAT and each App-installation token (coordinator-git, reviewer-git,
-      merge, deploy, agents, labels, …), split `core` vs `graphql` (graphql is the one that bit us
-      and is invisible on the default REST view). Then a dashboard panel (remaining/limit % +
-      reset countdown per token) on `dashboard-github.json` and a PrometheusRule alert
-      (`github_rate_limit_remaining / _limit < 0.1` for 5m, warning) in `prometheusrule.yaml` —
-      the same file as `AgentReviewLoop`/`AgentErrorFlagged`. Prior-art: none matched "rate limit
-      / graphql / quota" in FU/ADR; the exporter has no rate-limit collector today. See
-      Inherited from FU-085 (built+archived 2026-07-17): once the /coordinate edge
-      proves itself in live use, relax the coordinator cron `*/10 → */30` (one line in
-      reflexes-argo.yaml) — the edge carries latency, the cron only sweeps. See
-      [[reflex-graphql-rate-limit]] for the behavioral half (don't poll-loop the reflex). Relates
-      the one-poller doctrine ([[github-exporter]]).
+- [ ] **FU-084** — GitHub API rate-limit metrics — **CORE DELIVERED 2026-07-25**: exporter
+      `collect_rate_limits` (`/rate_limit` is free) emits `github_rate_limit_{remaining,limit,
+      reset_timestamp}{token,resource}` for the exporter PAT + per-installation probe tokens
+      (ESO GithubAccessToken pattern, `rl-tokens.yaml` — coordinator-git App 4150968 install
+      142724430, THE pool from the 2026-07-17 incident, + reviewer-git); graphql/core split
+      visible. Dashboard panel (remaining % per token+resource) + `GithubRateLimitLow`
+      (<10% for 5m, warning, symptoms-only). Also fixed the operator-reported SKU-panel bug
+      (private+public minutes summed — split by visibility; public is free).
+      **Remaining:** (a) add merge/deploy/labels/arc installations by the rl-tokens.yaml
+      copy-block pattern; (b) inherited from FU-085: relax the coordinator cron `*/10 → */30`
+      once the /coordinate edge proves itself (edge has run event-driven through meta-9/10 —
+      candidate for the next quiet moment).
 
 ## Hardware & nodes
 

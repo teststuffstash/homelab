@@ -10,6 +10,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - externalsecret.yaml
+  - rl-tokens.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
 

@@ -60,7 +60,23 @@ spec:
             - name: script
               mountPath: /app
               readOnly: true
+            # FU-084: one file per probe-token identity (rl-tokens.yaml); optional so a missing
+            # Secret degrades to fewer series, never a stuck pod.
+            - name: rl-tokens
+              mountPath: /var/run/rl-tokens
+              readOnly: true
       volumes:
         - name: script
           configMap:
             name: github-exporter-script # kustomize rewrites to the hashed name
+        - name: rl-tokens
+          projected:
+            sources:
+              - secret:
+                  name: rl-token-coordinator-git
+                  optional: true
+                  items: [{ key: token, path: coordinator-git }]
+              - secret:
+                  name: rl-token-reviewer-git
+                  optional: true
+                  items: [{ key: token, path: reviewer-git }]

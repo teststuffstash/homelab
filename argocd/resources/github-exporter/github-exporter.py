@@ -51,6 +51,8 @@ REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
 # The reviewer App's login (GraphQL bare; REST appends "[bot]" — stripped where compared). Feeds
 # the bot_approved_head arm of the review edge-trigger, mirroring review-reflex.sh's $bot.
 REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
+# FU-084: dir of per-installation probe tokens (one file per token identity; rl-tokens.yaml).
+RL_TOKEN_DIR = os.environ.get("RL_TOKEN_DIR", "/var/run/rl-tokens")
 
 _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
@@ -59,11 +61,11 @@ _last_success = 0
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 
 
-def gh(path):
+def gh(path, token=None):
     req = urllib.request.Request(
         API + path,
         headers={
-            "Authorization": f"Bearer {TOKEN}",
+            "Authorization": f"Bearer {token or TOKEN}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "homelab-github-exporter",
@@ -501,12 +503,45 @@ def collect_billing(lines):
         lines.append(metric("github_billing_net_amount", labels, round(net, 6)))
 
 
+def collect_rate_limits(lines):
+    """FU-084: remaining/limit/reset per token per resource. Rate-limit pools are PER
+    INSTALLATION (the 2026-07-17 incident drained coordinator-git's GraphQL pool to 9,
+    invisible on any REST view) — probe tokens for each watched installation are ESO-minted
+    into RL_TOKEN_DIR (rl-tokens.yaml, one file per token name); the exporter's own PAT is
+    always included. `/rate_limit` itself never counts against a pool."""
+    tokens = {"exporter-pat": TOKEN}
+    for name in sorted(os.listdir(RL_TOKEN_DIR)) if os.path.isdir(RL_TOKEN_DIR) else []:
+        p = os.path.join(RL_TOKEN_DIR, name)
+        if os.path.isfile(p):
+            tok = open(p).read().strip()
+            if tok:
+                tokens[name] = tok
+    lines += [
+        "# TYPE github_rate_limit_remaining gauge",
+        "# HELP github_rate_limit_remaining Requests left in the pool (per token identity, per resource — graphql is the pool that drained 2026-07-17).",
+        "# TYPE github_rate_limit_limit gauge",
+        "# TYPE github_rate_limit_reset_timestamp gauge",
+    ]
+    for name, tok in tokens.items():
+        try:
+            res = gh("/rate_limit", token=tok).get("resources", {})
+        except Exception as exc:  # one bad/expired token must not hide the others
+            print(f"rate_limit probe {name} failed: {exc}", flush=True)
+            continue
+        for resource, r in res.items():
+            labels = {"token": name, "resource": resource}
+            lines.append(metric("github_rate_limit_remaining", labels, r.get("remaining", 0)))
+            lines.append(metric("github_rate_limit_limit", labels, r.get("limit", 0)))
+            lines.append(metric("github_rate_limit_reset_timestamp", labels, r.get("reset", 0)))
+
+
 def poll_forever():
     global _body, _errors, _last_success
     while True:
         lines = []
         ok = True
-        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing):
+        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing,
+                          collect_rate_limits):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
