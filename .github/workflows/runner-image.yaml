@@ -1,0 +1,43 @@
+# Builds the custom ARC runner image (FU-015) — see docker/arc-runner/Dockerfile for why.
+# Runs on ubuntu-latest BY DESIGN: the runner image must not depend on the scale set it
+# provisions (bootstrap), and hosted minutes are free on a public repo. Raw `docker build` here
+# (not `devbox run`) matches the image-build practice on hosted/VM runners (snore-recorder):
+# docker is the one tool the hosted image provides that devbox can't. Push auth is the job's
+# built-in GITHUB_TOKEN (packages: write) — no external credential (agent-coordinator precedent).
+# The image is pinned by tag (calver-gsha) in argocd/platform/arc-runners.yaml — bump it there
+# after a build; nothing consumes :latest (none is pushed).
+name: runner-image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - docker/arc-runner/**
+      - .github/workflows/runner-image.yaml
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency: runner-image
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute tag (calver-gsha, agent-coordinator convention)
+        id: tag
+        run: echo "tag=$(date +%Y.%-m.%-d)-g$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}/arc-runner:${{ steps.tag.outputs.tag }}"
+          docker build -t "$IMAGE" docker/arc-runner
+          docker push "$IMAGE"
+          echo "pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
