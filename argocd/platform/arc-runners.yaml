@@ -59,7 +59,7 @@ spec:
             # bump the tag after each build — nothing consumes :latest.
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-g14451a4548c9
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-gb41fbe05c501
                 command: ["/home/runner/run.sh"]
   destination:
     server: https://kubernetes.default.svc
