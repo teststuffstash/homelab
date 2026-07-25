@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-095**.
+  Next free id: **FU-096**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -516,6 +516,28 @@ _Last updated: 2026-07-16._
       AUTHORITATIVE `github_issue_labels` — it deletes unmanaged labels; two managers fight.
       Design: [`docs/agents/agentstack.md`](agents/agentstack.md) §"The GitHub side". Relates
       FU-048, ADR-085.
+
+- [ ] **FU-095** — **Sleep stack pilots: task-class model routing + multi-harness evidence**
+      (operator direction 2026-07-25; downstream consumer = the IDP project's research/fixer
+      agents). Three legs, all riding the sleep stack once FU-080 graduates it:
+      (a) **task-class-aware model choice at dispatch** — today the model is static-chain +
+      strike-walk (`agents/stacks.json`, coordinator README §MODEL); availability+price already
+      exist (registry `estimate_budget.py` §M3, provider pinning §M4). The NEW axis: resolve the
+      chain per task class (first approximation: `agent-budget/*` × `track/*` labels) against the
+      registry + the strike/ledger history — the exact gap model-routing.md:50 notes ("failure
+      classes are task-shaped… should carry a task-size/class dimension"; FU-057 pivot is the
+      data seam). No prior art beyond that note (grep 2026-07-25: no FU matches task-type router).
+      (b) **multi-harness evidence** — same task classes across `--harness goose|opencode|claude`,
+      compared on the FU-057 ledger axes {success-rate, harness-death-rate, $/successful-issue}.
+      This IS the recorded ADR-077 trigger ("add Omnigent's meta-harness only if governing
+      multiple harnesses becomes real") — the pilot supplies the evidence that decision awaits.
+      (c) **free-model probing of goose error handling** — extend the model-scout canary shape
+      (ephemeral only-free capped keys) from trivial closed rides to real sleep xs tasks; resolves
+      the live tension between model-routing.md §M2 ("free entries fine anywhere — failure = one
+      strike") and `stacks.json` `_chain_policy` ("free tiers never fix-chain entries").
+      Renovate-majors piloting on sleep is NOT this item — that's FU-046's existing lane.
+      Prereqs: FU-080 sleep graduation (+ FU-044 before unattended deploys); relates ADR-077,
+      ADR-081, FU-057, FU-062 (model-routing.md is the umbrella doc).
 
 ## Monitoring & storage
 

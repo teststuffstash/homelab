@@ -132,6 +132,7 @@ locals {
   reviewer_repos = [
     github_repository.sleep_tracking.repo_id,
     github_repository.snore_recorder.repo_id,
+    github_repository.oracle_fleet.repo_id, # require_approval=true — was missing (sleep/oracle parity audit 2026-07-25): renovate automerge PRs there couldn't get the reflex approval
     github_repository.openrouter_operator.repo_id,
     github_repository.agent_runtime.repo_id,
     github_repository.agent_coordinator.repo_id,

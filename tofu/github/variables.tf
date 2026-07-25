@@ -51,7 +51,7 @@ variable "protected_repos" {
     oracle-iac          = { required_checks = ["ci"], require_approval = false } # same shape as sleep-iac: deploy-bump PRs gate on CI only
     sleep-iac           = { required_checks = ["ci"], require_approval = false }
     sleep-tracking      = { required_checks = ["ci"] }
-    # snore-recorder = { required_checks = ["ci"] }   # enable once its PR `ci` check is confirmed
+    snore-recorder      = { required_checks = ["ci"] } # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)
     # agent-runtime  = { required_checks = [...] }     # needs a pull_request-triggered check first
   }
 }
