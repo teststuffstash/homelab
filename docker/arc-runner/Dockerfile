@@ -57,8 +57,8 @@ ARG WARM_REPOS="homelab oracle-fleet oracle-iac sleep-tracking sleep-iac agent-c
 RUN set -e; export NIX_CONFIG="substituters = https://cache.nixos.org"; \
     for r in ${WARM_REPOS}; do \
       echo "── warming closure: $r"; mkdir -p /tmp/warm/$r; cd /tmp/warm/$r; \
-      if curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/master/devbox.json" \
-         && curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/master/devbox.lock"; then \
+      if curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/HEAD/devbox.json" \
+         && curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/HEAD/devbox.lock"; then \
         devbox install; \
-      else echo "::warning:: $r has no devbox.json/lock on master — skipped"; fi; \
+      else echo "::warning:: $r has no devbox.json/lock on its default branch — skipped"; fi; \
     done; rm -rf /tmp/warm /home/runner/.cache/nix
