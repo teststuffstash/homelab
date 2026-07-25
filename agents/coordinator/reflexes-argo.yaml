@@ -52,7 +52,7 @@ spec:
     templates:
       - name: main
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
           command: ["bash", "-lc"]
           args:
             - |
@@ -117,7 +117,7 @@ spec:
     templates:
       - name: main
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
           command: ["bash", "-lc"]
           args:
             - |
@@ -172,7 +172,7 @@ spec:
     templates:
       - name: main
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
           command: ["bash", "-lc"]
           args:
             - |
