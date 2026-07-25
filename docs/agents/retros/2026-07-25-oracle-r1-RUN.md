@@ -18,3 +18,25 @@ the ledger" — it's ledger.py). Cross-review: nemotron critiques the opus repor
 Mechanism notes for run 2: the finalize classifier stamped the claude ride
 `error_class=goose-32602-truncation` (claude-harness classification gap); the free-key $0.01
 cap can 403 mid-finalize on :free rides — mint 0.05 for report-length tasks.
+
+## Cross-review outcome (final): nemotron FAILED the review shape, 3 attempts
+
+| attempt | harness | duration | outcome |
+|---|---|---|---|
+| 1 | goose | 32s | explored 3-4 turns, ended "clean" with no review |
+| 2 | goose (contract-first brief) | 25s | same early-bail |
+| 3 | opencode | ~35min | spent the wall on devbox bring-up; killed at the tick boundary — it was holding oracle-fleet's WIP=1 slot against the queued #125 corpus fix |
+
+**Pilot conclusions** (feed FU-095):
+1. nemotron-3-ultra:free held a 7.5-min GENERATIVE task (report delivered, decent) but bails
+   in seconds on the review-of-a-report shape — task-class-dependent reliability is real and
+   measurable; exactly the FU-095(a) task-class axis.
+2. Opus report >> nemotron report on artifact grounding (verified file:line cites vs invented
+   APIs) — the dual-model value here was the COMPARISON, not the redundancy.
+3. Mechanism frictions for run 2: retro rides hold the stack's fixer WIP=1 slot (run them in
+   the <stack>-agents ns or off-peak); free-key caps can 403 mid-finalize ($0.05 floor);
+   the finalize classifier mislabels claude rides with goose error classes; ride bring-up
+   (per-pod devbox closure) can dwarf task time — the FU-015 warm-store lesson applies to
+   agent-base too.
+4. Run-2 cross-review candidates: a different large free model (e.g. kimi-k3:free) or
+   subscription haiku as the critic; nemotron stays report-side only.
