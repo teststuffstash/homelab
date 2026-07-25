@@ -9,16 +9,15 @@ _Session handoff 2026-07-24 ~16:00 (operator break; FU-015 in a fresh session):_
   454s of a 610s ci job is devbox install. Order: custom ARC runner image (xz/gh/nix/devbox +
   nixcache-VIP substituter) first, warm-store layer second. arc-runners.yaml currently runs the
   stock image; the scale set template gains the image override.
-- **Serve bring-up — THREE chart bugs found live, fix #3 riding.** #107/#108/#110/#113 merged;
-  flip done (oracle-iac#157) + two values overrides (#158 phantom image repo, #159 wrong
-  Gateway parentRef — stack routes attach to `oracle-gateway` in-ns, NOT cilium/gateway).
-  Bug #3: the corpus data image nests payload under `corpus/` → flat mount ≠ CORPUS_DB contract
-  path → server exits fatal (SRV-CORPUS-DB no-fallback working as spec'd) → envoy 503.
-  Fix = `subPath: corpus` (fleet#114, auto-merge armed) → chart build → iac auto-bump →
-  rollout. Watcher: endpoint-200 probe (initialize at mcp.oracle.teststuff.net). THEN the UC-1
-  acceptance (PS date-travel canonical calls, assert citations) → post on fleet#82. Wins so
-  far: ImageVolume's first production pull (215MB/22s) ✓; both no-fallback + digest guards
-  fired exactly as spec'd.
+- **Serve: endpoint LIVE, acceptance ran — infra PASS / corpus data FAIL → fleet#116 armed.**
+  Four live defects fixed through the gates (#113 phantom image repo, oracle-iac#158/#159
+  values overrides, #114 corpus subPath, #115 image ships tool schemas + .dockerignore
+  exception). mcp.oracle.teststuff.net answers MCP-conformant; date-travel CORRECT on the real
+  corpus (PS §1 2025-07-01 → 115052015002, today → 111042025003); provision retrieval fails —
+  PS carries ~7/168 §§ (NULL-key rows dropped by the #89 exclusion belt?) + stored keys are raw
+  `'§ 104.'` vs the plain address contract. #116 (track/ingest, armed, ⚖ normalize-at-parse)
+  owns the corpus rebuild; RE-RUN the #82 acceptance when its corpus releases (ADR-095 path).
+  Evidence on #82; TICK-LOG cont.9 (runner poisoning) + cont.10 (acceptance).
 - **Post-corpus arc — operator pass EXECUTED 2026-07-24 evening** (rulings received in-session;
   TICK-LOG meta-9 cont.8): bring-up issues **fleet#107** (server CORPUS_DB) + **fleet#108**
   (serving image) filed + armed (agent-fix, md budget) — the loop dispatches them; when BOTH
