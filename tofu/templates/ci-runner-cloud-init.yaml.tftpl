@@ -26,6 +26,16 @@ write_files:
     owner: root:root
     content: |
       ${indent(6, mint_script)}
+  # FU-073(b): docker.io pulls ride the in-cluster pull-through mirror (ADR-091, BGP VIP —
+  # reachable from the LAN). Hub-only by dockerd design (ghcr can't be daemon-mirrored); plain
+  # http, hence insecure-registries. Written before the get.docker.com install, so dockerd
+  # starts with it. Mirror down ⇒ dockerd falls back to Docker Hub (unlike the agent rides,
+  # this host's egress is unrestricted).
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    owner: root:root
+    content: |
+      {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20"]}
 runcmd:
   - systemctl enable --now qemu-guest-agent
   # Persistent journal so a first-boot kernel panic is debuggable next time (it wasn't).
