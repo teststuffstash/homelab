@@ -17,7 +17,9 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   windows/citations CORRECT, rows exist — but body_text EMPTY for ALL 15,087,110 provisions
   (#125, extract-at-parse + empty-body build gate ⚖) and lookups ~42s warm at 15M rows (#126,
   build-time indexes ⚖, explain-query-plan first). Loop owns both; both re-verify on ONE
-  `start-from=parse` rebuild → then release → digest bump → acceptance re-run (criteria
+  `start-from=parse` rebuild — #125 fix (fleet#127) MERGED, #126 in flight: WAIT for #126's
+  merge too, pin-follow ONCE, one ~2h rebuild covers text+indexes → then release → digest
+  bump → acceptance re-run (criteria
   unchanged: PS §1 full text, <1s, 168 §§) → THEN the limits-trim leg (parse ~350Mi under
   4Gi, build ~757Mi under 6Gi). C6 #116/#118/#121/#123 all flipped agent/done.
 
