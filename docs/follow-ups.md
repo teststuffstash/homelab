@@ -408,7 +408,11 @@ _Last updated: 2026-07-16._
       proxy's TokenReview-verified `/git-token` (worker pods already fetch per-op — flip them
       to send their SA token and make verification mandatory), delete the per-ns key ES from
       the Composition. Until then the App's blast radius IS the trust boundary between stacks.
-      **CORE SHIPPED 2026-07-25: the key is out of the fixer namespaces.** Composition now
+      **CORE SHIPPED + E2E-VERIFIED 2026-07-25: the key is out of the fixer namespaces**
+      (in-cluster probe: /git-token?ns=oracle-fleet serves from the central secret; bogus ns
+      404s; old in-ns ES/generators GC'd). Migration lesson: a composed resource cannot MOVE
+      namespaces — rename its composition-resource-name so Crossplane creates-new + GCs-old
+      (first attempt left the old ES stuck with its key already collected). Composition now
       renders `agent-git-<repo>-gen`+`agent-git-<repo>` into agent-coordinator (worker-ns
       label binds token↔ns; the key Secret is the hand-applied coordinator one) + an
       `agentstack-worker` SA per fixer ns (TokenReview identity, no grants);
