@@ -52,6 +52,15 @@ spec:
             tolerations:
               - key: homelab.io/ephemeral
                 operator: Exists
+            # FU-015: custom runner image (docker/arc-runner/ — nix/devbox/gh baked, LAN nix
+            # substituter) replaces the unpinned stock :latest. The chart merges this by container
+            # name, keeping the dind env/volumeMounts injection (render-verified at 0.14.2); the
+            # init-dind-externals container inherits the same image. Built by runner-image.yaml;
+            # bump the tag after each build — nothing consumes :latest.
+            containers:
+              - name: runner
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.25-g14451a4548c9
+                command: ["/home/runner/run.sh"]
   destination:
     server: https://kubernetes.default.svc
     namespace: arc-runners
