@@ -188,8 +188,16 @@ _Last updated: 2026-07-16._
       homelab ci: 70s vs ~180-210s baseline, green. install-nix-action proved idempotent on
       the baked image (0s) → unslimmed repos keep working. Slimming PRs: oracle-fleet#120,
       oracle-iac#178, sleep-tracking#28, sleep-iac#20, openrouter-operator#7.
-      **Remaining: phase 2 warm-store layer (lockfile-coupled), agent-coordinator ci slim
-      (after its #8), renovate-track the base-image/devbox/nix pins.**
+      **Phase 2 warm store 2026-07-25**: workflow stages each repo's devbox.{json,lock} into
+      the build (App-token fetch — repos are private, anonymous raw 404s silently) and bakes
+      the closures (image 586→2260MiB with homelab's alone). NOT lockfile-coupled: stale store
+      degrades to LAN-mirror delta fetches. **OPERATOR ACTION: install the homelab-renovate
+      App on oracle-fleet + oracle-iac + agent-coordinator** (jail PAT can't, 403 by design) —
+      then add them to runner-image.yaml's `repositories:` list so the hot-path oracle-fleet
+      closure warms too (and consider adding the trio to devbox-update.yaml's matrix — same
+      coverage gap). agent-coordinator ci needs no slim (docker verification build, no devbox).
+      **Remaining: the operator App install + re-measure oracle-fleet ci (~135s target);
+      renovate-track the base-image/devbox/nix pins.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
