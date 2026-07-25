@@ -5,10 +5,9 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Session resumed 2026-07-25 ~17:20Z via /meta-coordinate (fresh session, meta-10 cont.):_
 
-- **FU-015 DONE through phase 2** (warm-store image live: homelab ci 38s vs 180-210s
-  baseline). Pending on OPERATOR: install homelab-renovate App on oracle-fleet/oracle-iac/
-  agent-coordinator, then add them to runner-image.yaml repositories + rebuild → oracle-fleet
-  warm measurement (~135s target). Renovate-track image pins = minor residual.
+- **FU-015 COMPLETE 2026-07-25** (App installed by operator; oracle trio warmed in
+  `2026.7.25-g171a704c735d`; oracle-fleet ci warm = 297s, decomposition in the FU entry;
+  devbox-update matrix extended). Only residual: renovate-track the image pins.
 - **Oracle corpus chain — #125+#126 merged, FULL rebuild `ert-pipeline-parse-cvkk8` IN
   FLIGHT** (at 17:15Z: 95k/252k @~47/s, parse ETA ~18:15Z; then build under the 5% empty-body
   floor at 6Gi → publish; terminal watcher armed). On Succeeded: release-corpus dispatch →
