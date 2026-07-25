@@ -79,5 +79,27 @@
       "addLabels": ["major"],
       "automerge": false
     }
+  ],
+
+  "customManagers": [
+    {
+      "description": "arc-runner image toolchain ARGs (FU-015 residual): DEVBOX_VERSION / NIX_VERSION in docker/arc-runner/Dockerfile — pinned binaries outside any stock manager. github-releases datasource; patch/minor ride the normal lanes, majors hit the human gate like everything else.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^docker\\/arc-runner\\/Dockerfile$/"],
+      "matchStrings": [
+        "ARG DEVBOX_VERSION=(?<currentValue>[0-9.]+)"
+      ],
+      "depNameTemplate": "jetify-com/devbox",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^docker\\/arc-runner\\/Dockerfile$/"],
+      "matchStrings": [
+        "ARG NIX_VERSION=(?<currentValue>[0-9.]+)"
+      ],
+      "depNameTemplate": "NixOS/nix",
+      "datasourceTemplate": "github-releases"
+    }
   ]
 }

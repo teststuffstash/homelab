@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-097**.
+  Next free id: **FU-098**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -143,6 +143,24 @@ _Last updated: 2026-07-16._
       app+chart shape is proven (sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
       auto-merged; caller PRs agent-runtime#5 / agent-coordinator#4 merged 2026-07-06; the Renovate
       rollout itself is archived as FU-014).
+- [ ] **FU-097** — **Homelab's own deploy path: the surfaces NOT reconciled by ArgoCD/tofu**
+      (operator 2026-07-25, split out of FU-051 — "homelab needs its own follow-up with
+      everything not covered by iac"). A merged change to these trees deploys NOTHING today;
+      each needs either an automated apply or an explicit human-applied ruling + a drift belt:
+      • **OPNsense** — `ansible/opnsense-*.yml` applied manually via
+        `scripts/opnsense-playbook.sh`; merged group_vars changes sit until someone runs it.
+        Candidate shape = the FU-051 snore precedent (in-cluster ansible Job; PostSync or
+        CronJob), creds via ESO; a nightly `--check` diff → alert is the minimum drift belt.
+      • **Proxmox host (pve)** — host-level config (storage, network bridges, LXC shell)
+        beyond what `tofu/provisioning/` owns; currently pure hands-on-SSH.
+      • **Home Assistant** — `homeassistant/` config applied imperatively (CLAUDE.md).
+      • **Matchbox** — `ansible/matchbox*.yml`, same manual-apply gap as OPNsense.
+      • **`tofu/` roots** — plan/apply from the jail is the DELIBERATE human gate (keep), but
+        nothing detects live-vs-state drift between applies (`tofu plan` cron → alert?).
+      First deliverable: per-surface ruling table (automate / human-applied + belt) in
+      docs, then implement the automated ones one surface at a time. Relates FU-051 (per-repo
+      bump-deploy), ADR-093 (Argo as the orchestration engine — candidate runner for the
+      ansible Jobs).
 - [ ] **FU-052** — **Onboard every APP repo to the agentic loop by DEFAULT** (direction 2026-07-06: the
       full flow — merge-path auto-merge **and** fixer (NL issue → worker → PR → review → merge) — should be
       the default for all app repos, not bespoke per-repo). A repo needs two layers: **(1) merge-path**
@@ -212,8 +230,13 @@ _Last updated: 2026-07-16._
       expect ensure ~10-20s on the ThinkPads. The other two hot spots are queued to the loop:
       fleet#129 (publish uploads at ~1 obj/s — 87s) + fleet#130 (pytest 72s, 36s undecomposed
       in collection+test_build). Agent-base gets the same eval-cache treatment = FU-096.
-      **Remaining: re-measure after the pin bump; renovate-track the base-image/devbox/nix
-      pins in `docker/arc-runner/`.**
+      **Re-measured 2026-07-25 (fleet ci run 30169969318, eval-cache image + fleet#131's
+      parallel uploads): job 127s — ensure 94s→~5s, publish 87s→31s. Target met.** Pin
+      automation closed same day: runner-image.yaml self-bumps the arc-runners.yaml pin after
+      every build + Monday 06:00 cron rebuild (3h after devbox-update's lock bump — without it
+      every weekly bump silently staled the warm store); DEVBOX_VERSION/NIX_VERSION ARGs
+      renovate-tracked via customManagers in renovate-global.json. **Remaining: watch one
+      scheduled Monday cycle E2E (locks → rebuild → self-bump → roll), then archive.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

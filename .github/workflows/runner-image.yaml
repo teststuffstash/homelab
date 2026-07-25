@@ -14,10 +14,16 @@ on:
     paths:
       - docker/arc-runner/**
       - .github/workflows/runner-image.yaml
+  schedule:
+    # Mondays 06:00 UTC — 3h after devbox-update.yaml's synchronized lock bump (Mon 03:00),
+    # so the warm store + eval cache are re-baked against the freshly-merged locks. Without
+    # this the image only rebuilt on docker/arc-runner/ pushes and every weekly bump silently
+    # re-introduced the per-job realization tax the warm layer exists to kill.
+    - cron: "0 6 * * 1"
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write # push the arc-runners.yaml pin bump after a build (see last step)
   packages: write
 
 concurrency: runner-image
@@ -67,3 +73,21 @@ jobs:
           docker build -t "$IMAGE" docker/arc-runner
           docker push "$IMAGE"
           echo "pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      # The image is consumed by TAG PIN in arc-runners.yaml — a build nobody pins is a no-op
+      # (the scheduled Monday rebuild would otherwise bake fresh locks into an image nothing
+      # runs). Self-bump: deterministic sed + push to master; ArgoCD selfHeal rolls the scale
+      # set. No retrigger loop: this workflow's push paths don't include argocd/.
+      - name: Bump the scale-set pin
+        run: |
+          sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
+            argocd/platform/arc-runners.yaml
+          if git diff --quiet argocd/platform/arc-runners.yaml; then
+            echo "pin already current" >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          git config user.name "runner-image bot"
+          git config user.email "noreply@teststuff.net"
+          git add argocd/platform/arc-runners.yaml
+          git commit -m "arc-runners: pin runner image ${{ steps.tag.outputs.tag }} (auto-bump after build)"
+          git pull --rebase origin master
+          git push origin HEAD:master
+          echo "pinned ${{ steps.tag.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
