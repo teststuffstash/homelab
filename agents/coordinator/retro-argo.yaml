@@ -1,0 +1,216 @@
+# FU-058 P3: the scheduled retro session as an Argo CronWorkflow — sibling of the reflexes
+# (reflexes-argo.yaml), BORN SUSPENDED: the schedule is declared, every run is hand-fired
+#   argo -n agent-coordinator submit --from cronworkflow/retro-session
+# until a couple of clean runs earn the unsuspend (the hand-supervised doctrine).
+#
+# Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude+opus,
+# subscription, FU-088 semaphore) → cell B (goose+API model) → harvest→PR. Sequential cells: the
+# claude cell holds a subscription slot and both cells hold the stack's fixer WIP slot (the P3
+# outside-the-fixer-ns placement is future work) — the guard refuses to run while the fixer queue
+# is busy. Cross-review legs stay MANUAL for v1 (agents/retro-session.sh --review) — run them from
+# the harvested PR. Reports land via PR (human-gated); the workflow never merges its own output.
+#
+# Ownership: platform mechanism (observability-and-retro.md §B2); per-stack graduation = an
+# AgentStack `retro` knob later. Params below default to the oracle stack.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: retro-session
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "0 5 * * 1" # Mondays 05:00 UTC — off-peak, after the 03:00 devbox-update, before the day's queue
+  suspend: true # FU-058: hand-fired until proven; unsuspend is an operator decision
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 7200 # two rides + harvest; a stuck ride dies with the workflow
+    ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 259200 }
+    entrypoint: main
+    arguments:
+      parameters:
+        - { name: stack, value: "oracle" }
+        - { name: cellA, value: "claude:opus" }
+        - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
+        # Ephemeral capped OpenRouterKey Secret for the API cell ($0.05 floor); empty = the
+        # stack's fixer budget key (retro-session.sh warns).
+        - { name: retroKeySecret, value: "" }
+        - { name: minNewTasks, value: "8" } # level-trigger: skip when the ledger grew less than this
+    templates:
+      - name: main
+        dag:
+          tasks:
+            - name: guard
+              template: guard
+            - name: cell-a
+              template: retro-cell
+              dependencies: [guard]
+              arguments:
+                parameters:
+                  - { name: cell, value: "{{workflow.parameters.cellA}}" }
+                  - { name: subscription, value: "1" }
+            - name: cell-b
+              template: retro-cell
+              dependencies: [cell-a]
+              arguments:
+                parameters:
+                  - { name: cell, value: "{{workflow.parameters.cellB}}" }
+                  - { name: subscription, value: "0" }
+            - name: harvest
+              template: harvest
+              dependencies: [cell-a, cell-b]
+              arguments:
+                artifacts:
+                  - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}" }
+                  - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}" }
+
+      # Level-trigger + WIP guard. Exit 1 (fail loudly, per rule #6) when there's nothing to
+      # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
+      - name: guard
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              cd /work/homelab
+              STACK="{{workflow.parameters.stack}}"
+              # fixer busy? (both cells hold the stack's WIP slot — refuse, don't contend).
+              # Per-ns checks (the coordinator SA has pod-read in stack namespaces, not -A);
+              # a FAILED check counts as busy, never as idle (rule #6).
+              BUSY=0
+              for ns in $(python3 -c "import json; s=json.load(open('agents/stacks.json')); print(' '.join(r for st in s.get('stacks',[]) if st.get('name')=='${STACK}' for r in st.get('repos',[])))" 2>/dev/null); do
+                out=$(kubectl get pods -n "$ns" -l app=agent-session --no-headers 2>&1) || { echo "GUARD: pod check failed in $ns ($out) — treating as busy"; BUSY=1; }
+                [ -n "$out" ] && BUSY=1
+              done
+              [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) — retro would contend for the fixer WIP slot"; exit 1; }
+              # ledger delta since the last harvested report for this stack
+              export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
+              s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
+              TOTAL=$(wc -l < /tmp/ledger.jsonl)
+              LAST_TS=$(ls docs/agents/retros/ | grep -E "^[0-9]{4}-[0-9]{2}-[0-9]{2}-${STACK}-r[0-9]+" | sort | tail -1 | cut -c1-10 || true)
+              if [ -n "$LAST_TS" ]; then
+                NEW=$(python3 -c "import json,sys; print(sum(1 for l in open('/tmp/ledger.jsonl') if json.loads(l).get('ts','')>'${LAST_TS}'))")
+              else
+                NEW=$TOTAL
+              fi
+              echo "ledger: $TOTAL rows, $NEW since last ${STACK} report (${LAST_TS:-never})"
+              [ "$NEW" -ge "{{workflow.parameters.minNewTasks}}" ] || { echo "GUARD REFUSED: only $NEW new terminal tasks (< {{workflow.parameters.minNewTasks}}) — nothing worth two rides"; exit 1; }
+          env: &tsenv
+            - { name: HOME, value: "/home/node" }
+            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+            - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
+            - name: AGENT_TS_READER_ID
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_access_key_id, optional: true } }
+            - name: AGENT_TS_READER_SECRET
+              valueFrom: { secretKeyRef: { name: agent-transcripts-s3, key: reader_secret_access_key, optional: true } }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
+
+      # One retro cell: pain-rank the ledger, assemble the brief (retro-session.sh), ride, and
+      # capture the streamed ride log as an artifact for harvest. The claude cell declares the
+      # FU-088 subscription semaphore; a goose cell passes straight through.
+      - name: retro-cell
+        inputs:
+          parameters:
+            - { name: cell }
+            - { name: subscription }
+        # Template-level semaphore covers BOTH cells (Argo can't condition it on an input):
+        # correct for the claude cell (the step holds a live subscription session); for the
+        # goose cell it briefly holds a slot it doesn't need — accepted, cells run sequentially
+        # and the pool is 3. Split into two templates if this ever queues a goose cell.
+        synchronization:
+          semaphores:
+            - configMapKeyRef: { name: subscription-capacity, key: claude }
+        outputs:
+          artifacts:
+            - { name: ride-log, path: /work/ride.log, archive: { none: {} } }
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              cd /work/homelab
+              # pain-rank the ledger → the brief's input (blocked first, then rounds/cost/wall)
+              export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
+              s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
+              python3 - <<'PY'
+              import json
+              rows = [json.loads(l) for l in open('/tmp/ledger.jsonl') if l.strip()]
+              rows.sort(key=lambda r: (r.get("terminal_label") != "agent/blocked",
+                                       -(r.get("rounds") or 0),
+                                       -(r.get("total_cost_usd") or 0),
+                                       -(r.get("wall_time_s") or 0)))
+              for i, r in enumerate(rows):
+                  r["rank"] = i + 1
+              json.dump(rows, open('/tmp/ledger-ranked.json', 'w'), indent=1)
+              PY
+              if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
+                export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"
+              fi
+              bash agents/retro-session.sh "{{workflow.parameters.stack}}" \
+                --cell "{{inputs.parameters.cell}}" --ledger /tmp/ledger-ranked.json \
+                2>&1 | tee /work/ride.log
+          env: *tsenv
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "1Gi" }
+
+      # Extract the BEGIN/END-RETRO-REPORT blocks from both ride logs → branch + PR into
+      # docs/agents/retros/ (coordinator-git identity; auto-merge NOT armed — a human reads
+      # retro reports, that's the whole point of the PR gate).
+      - name: harvest
+        inputs:
+          artifacts:
+            - { name: log-a, path: /work/log-a }
+            - { name: log-b, path: /work/log-b }
+        container:
+          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              cd /work/homelab
+              STACK="{{workflow.parameters.stack}}"
+              DATE=$(date +%F)
+              RUN=$(ls docs/agents/retros/ | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+              RUN="r$(( ${RUN:-0} + 1 ))"
+              N=0
+              for src in /work/log-a /work/log-b; do
+                if sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$src" | sed '1d;$d' > /tmp/report.md \
+                   && [ -s /tmp/report.md ]; then
+                  N=$((N+1))
+                  MODEL=$(head -1 /tmp/report.md | grep -oE '[^ ]+$' | tr -cd 'a-zA-Z0-9.-' || echo "cell$N")
+                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${MODEL:-cell$N}.md"
+                else
+                  echo "WARN: no report markers in $src (cell died or contract broken)"
+                fi
+              done
+              [ "$N" -gt 0 ] || { echo "HARVEST FAILED: no cell produced a report"; exit 1; }
+              export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
+              git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
+              BR="retro/${DATE}-${STACK}-${RUN}"
+              git checkout -b "$BR"; git add docs/agents/retros/
+              git commit -m "retros: ${STACK} ${RUN} — $N report(s) from the scheduled retro (FU-058)"
+              git push "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab" "HEAD:$BR"
+              gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
+                --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" \
+                --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report."
+          env:
+            - { name: HOME, value: "/home/node" }
+          volumeMounts:
+            - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { memory: "512Mi" }
+    volumes:
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
