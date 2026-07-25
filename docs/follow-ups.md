@@ -555,6 +555,14 @@ _Last updated: 2026-07-16._
       Renovate-majors piloting on sleep is NOT this item — that's FU-046's existing lane.
       Prereqs: FU-080 sleep graduation (+ FU-044 before unattended deploys); relates ADR-077,
       ADR-081, FU-057, FU-062 (model-routing.md is the umbrella doc).
+      **Spec-creation directive (operator 2026-07-25):** the FIRST sleep specs are authored AND
+      reviewed by multiple large LLMs — the point of that pass is finding bugs/gaps in the
+      system, not documenting existing behavior; this is the natural first consumer of the
+      dual-model review leg. Test-tier terminology ruled: **"system testing"** = logic against
+      real components in kind (Garage + ingester + Grafana + Playwright, ADR-082 shape);
+      "e2e" reserved for the actual target environment (synthetic production traffic). Record
+      the terms in sleep's process docs when the specs land (cf. Fowler microservice-testing:
+      our "system" ≈ his out-of-process component / limited e2e).
 
 ## Monitoring & storage
 
