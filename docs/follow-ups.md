@@ -46,8 +46,11 @@ _Last updated: 2026-07-16._
       a dead mirror/cold boot falls through to upstream). Restart semantics ANSWERED: applies
       in-place, no reboot (canary wk-01 stayed Ready; pull of uncached alpine:3.18.12 rode the
       mirror — containerd/v2.2.3 `?ns=docker.io` in the mirror log, cache-filled + served);
-      (b) ci-runner-01 `daemon.json`;
-      (c) ARC runner pods; (d) ✅ DONE 2026-07-16 — oracle-fleet#35: `e2e-kind.sh` writes a
+      (b) ✅ DONE 2026-07-25 (commit 4661de9): `daemon.json` in the ci-runner cloud-init;
+      VM recreated same morning (boot 11:57Z — hence the rotated SSH host key), live-verified
+      2026-07-25 via `qm guest exec`: dockerd runs with Registry Mirror `http://192.168.40.20/`;
+      (c) ✅ DONE 2026-07-25 (commit a0e59f3): owned dind spec in `arc-runners.yaml` —
+      `--registry-mirror` + `--insecure-registry` on the pinned `docker:dind`; (d) ✅ DONE 2026-07-16 — oracle-fleet#35: `e2e-kind.sh` writes a
       `certs.d/hosts.toml` per registry into the kind node when the ride exports
       `REGISTRY_MIRROR_*` (kindest/node ≥ kind 0.27 preconfigures containerd's `config_path`;
       no-op on the CI VM). Acceptance = the FU-081 r4 green in-pod gate (garage image pulled
