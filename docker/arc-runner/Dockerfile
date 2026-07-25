@@ -56,8 +56,13 @@ ENV PATH="/home/runner/.nix-profile/bin:${PATH}"
 # NIX_CONFIG: the LAN VIP is unreachable from the ubuntu-latest builder — go straight upstream
 # there (runtime keeps the baked nix.conf order).
 COPY --chown=runner:runner warm/ /tmp/warm/
+# KEEP ~/.cache/{nix,devbox} from these installs: with the store fully warm, a job's
+# `devbox install` still burned 94s (oracle-fleet ci, run 30165878479) — measured to be
+# nix EVALUATION, not fetching (cold-cache repro: 127s wall/84s CPU on a fast desktop with
+# a complete /nix; 7.7s with the eval cache warm). Deleting the cache here was phase 2's
+# whole residual cost.
 RUN set -e; export NIX_CONFIG="substituters = https://cache.nixos.org"; \
     for d in /tmp/warm/*/; do \
       [ -f "$d/devbox.json" ] || continue; \
       echo "── warming closure: $(basename "$d")"; cd "$d"; devbox install; \
-    done; rm -rf /tmp/warm /home/runner/.cache/nix
+    done; rm -rf /tmp/warm; du -sh /home/runner/.cache/* || true
