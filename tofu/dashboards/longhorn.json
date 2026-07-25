@@ -2346,37 +2346,47 @@
       "id": 50,
       "panels": [
         {
-          "description": "To get Longhorn Alerts you have to deploy PrometheusRules (more Infos: https://longhorn.io/docs/1.3.1/monitoring/alert-rules-example/)",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
+          "id": 48,
+          "type": "table",
+          "title": "Longhorn Alerts (Prometheus)",
           "gridPos": {
             "h": 13,
             "w": 24,
             "x": 0,
             "y": 82
           },
-          "id": 48,
-          "options": {
-            "alertInstanceLabelFilter": "",
-            "alertName": "Longhorn",
-            "dashboardAlerts": false,
-            "datasource": "prometheus",
-            "groupBy": [],
-            "groupMode": "default",
-            "maxItems": 20,
-            "sortOrder": 1,
-            "stateFilter": {
-              "error": true,
-              "firing": true,
-              "noData": false,
-              "normal": false,
-              "pending": true
-            }
+          "description": "FU-029: the stock panel was a Grafana unified-alerting list \u2014 empty by design here (alerting is Prometheus\u2192Alertmanager). This lists firing/pending Longhorn* alerts from Prometheus.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "title": "Longhorn Alerts",
-          "type": "alertlist"
+          "targets": [
+            {
+              "expr": "ALERTS{alertname=~\"Longhorn.*\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Value": true,
+                  "__name__": true
+                }
+              }
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          }
         }
       ],
       "title": "Alerts",

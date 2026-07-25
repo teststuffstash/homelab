@@ -599,54 +599,9 @@ _Last updated: 2026-07-16._
       reflexes-argo.yaml) — the edge carries latency, the cron only sweeps. See
       [[reflex-graphql-rate-limit]] for the behavioral half (don't poll-loop the reflex). Relates
       the one-poller doctrine ([[github-exporter]]).
-- [ ] **FU-082** — **wk-01 memory pressure makes Talos's OOMController serially kill BestEffort
-      pods — Grafana crashlooped 21 cycles (84 restarts), argocd-application-controller 26.**
-      Diagnosed 2026-07-16 (operator noticed Grafana): all four grafana containers exit 137
-      SIMULTANEOUSLY + `SandboxChanged` — that's the Talos 1.13 userspace OOM controller
-      SIGKILLing whole besteffort pod cgroups (`talosctl dmesg | grep "OOM controller"` — 90
-      triggers on wk-01 since ≥07-13, so chronic, not today's churn). wk-01 sits at ~82% of
-      11.2Gi with the platform heavies (Prometheus ~1Gi, Infisical 815Mi, UniFi 739Mi, ArgoCD
-      app-controller 546Mi, Home Assistant 379Mi) and BOTH victims are QoS BestEffort — first
-      in the kill order. Fix directions: (a) ✅ DONE 2026-07-16 — requests-only
-      (no limits) for grafana + both sidecars + sleep-sqlite-sync (monitoring.tf) and the argocd
-      application controller (argocd.tf); both pods now Burstable. (c) ✅ DONE 2026-07-16 —
-      `PodSigkilled` alert (node-health group, monitoring.tf): exit-137 restarts joined to KSM
-      `last_terminated_exitcode` — Talos OOM kills report reason "Error", so stock
-      OOMKilled-reason alerts never see them; fired immediately on the day's residue (positive
-      control, self-resolves). **(b) mostly DONE 2026-07-16 evening, forced by escalation:** the
-      pressure reached BURSTABLE victims (the requests-bearing grafana pod sandbox-killed) and
-      Prometheus itself sat at 76 kill-restarts (BestEffort, the biggest target — monitoring was
-      blind to its own death, which is why (c) matters). Prometheus got requests
-      (1200Mi, monitoring.tf) and a cordon-nudge moved UniFi→wk-02 + Infisical (app→hp-01,
-      pg/redis→wk-02) off wk-01 (~1.5Gi relief; CNPG refloated cleanly). Remaining (b) residue:
-      unifi-mongo + Home Assistant still on wk-01 unrequested — give them the same requests
-      treatment on next touch; capacity is NOT the constraint (wk-02/hp-01 idle), a new PVE
-      worker VM is a headroom/HA decision only. **CLUSTER-WIDE SWEEP DONE 2026-07-17:** the
-      general missing-requests problem — a BestEffort estate gave the scheduler dishonest
-      (near-empty) numbers so churn kept piling onto wk-01. Requests (sized from live `kubectl
-      top`) + memory limits where bounded added to: both CNPG databases (infisical-pg/forgejo-pg
-      — a BestEffort DB is unacceptable), garage, ALL argo-cd components, cilium
-      operator/envoy/relay, the kube-prometheus sub-charts (node-exporter/operator/KSM),
-      crossplane provider-terraform + upjet-github + both functions (DeploymentRuntimeConfig),
-      the CNPG/ESO/ARC controllers, forgejo-runner. NO memory limits on DBs, repo-server, the
-      terraform/upjet providers, or CI — their spikes must degrade, not OOM. **Deliberately left
-      BestEffort:** Longhorn control-plane sidecars (csi-*/engine-image/manager — on storage
-      nodes not wk-01, and Longhorn is resource-tuning-sensitive; instance-manager already has
-      requests), infisical's bundled Redis (imperative Infisical chart, tofu/infisical), and
-      transient Job/scale-set-runner pods. Relates FU-028 (same node-tier scoping theme).
-- [ ] **FU-028** — Longhorn schedules manager/engine-image/instance-manager onto the ephemeral
-      laptops (compute-only) → `KubeDaemonSetMisScheduled` ×2 + a stale-PDB alert. Scope Longhorn
-      off the ephemeral tier (node selector / taint) or silence the two rules.
-- [ ] **FU-029** — The Longhorn dashboard "Alerts" panel is empty by design (it's a Grafana
-      unified-alerting list; we alert via Prometheus→Alertmanager). Optional: repoint that panel
-      to a Prometheus `ALERTS{alertname=~"Longhorn.*"}` query.
-- [ ] **FU-030** — Loki 7-day retention: revisit after watching usage
-      (`argocd/resources/loki/loki-config.yaml`).
 
 ## Hardware & nodes
 
-- [ ] **FU-031** — thinkcentre BIOS → disk-first (it's PXE-first, so every boot pays a PXE timeout;
-      disk-first would also make a persistent matchbox flag safe again).
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's one unexplained reboot. On recurrence: chase cable/switch-port
       (thinkcentre) resp. battery/power (wk-metal-02, plug `laptop4`).

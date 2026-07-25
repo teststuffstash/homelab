@@ -8,6 +8,24 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-031** — thinkcentre BIOS → disk-first. *(archived 2026-07-25, WON'T DO — operator ruling)*
+  Stays PXE-first: the slow-PXE pain was the bad cable (fixed 2026-06-11), not the boot order;
+  PXE-first keeps machines wipeable without console access, and on a full-lab restart OPNsense
+  (which PXE depends on) is the long pole anyway — the timeout doesn't add wall-clock that matters.
+- **FU-028** — Longhorn on the ephemeral laptops → KubeDaemonSetMisScheduled/stale-PDB. *(archived 2026-07-25)*
+  Overtaken by ADR-089: wk-metal-01 is the bulk storage tier ON PURPOSE (taintToleration +
+  disk-selector fence in longhorn.tf). Live-verified: 0 misscheduled DS pods, no PDB alert
+  firing. wk-metal-02's idle Longhorn system pods (~200Mi) accepted as toleration blast radius.
+- **FU-029** — Longhorn dashboard "Alerts" panel empty by design. *(archived 2026-07-25)*
+  Panel 48 repointed to a Prometheus table over `ALERTS{alertname=~"Longhorn.*"}`
+  (tofu/dashboards/longhorn.json).
+- **FU-030** — Loki 7-day retention: revisit after usage. *(archived 2026-07-25)*
+  Measured: 12MiB used of 10Gi after 26 days (ingest verified queryable via the API).
+  Retention raised 168h→720h — volume trivial, history is what incidents need.
+- **FU-082** — wk-01 OOMController serial kills (BestEffort estate). *(archived 2026-07-25)*
+  All legs done across 07-16/17 (requests+alert+rebalance+cluster-wide sweep — see git);
+  final residue verified live 2026-07-25: Home Assistant (512Mi req) and unifi-mongo (256Mi
+  req) both Burstable, git matches. PodSigkilled alert remains as the sentinel.
 - **FU-085** *(archived 2026-07-17)* — **Coordinator edge-trigger BUILT + E2E-proven same day**
   (design was already in workflow.md §Triggers). `/coordinate` endpoint on the agent-loop
   EventSource + `coordinator` Sensor (rateLimit 2/min, `body.repo` scope with `"all"` fallback)
