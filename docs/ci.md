@@ -124,32 +124,38 @@ flowchart TB
 irrelevant here.) A **VM runner collapses this** to a single kernel + a single dockerd, no nesting —
 which is the other reason the Proxmox-VM option is appealing.
 
-### The fix that works on the ARC pod — single-user Nix
+### The fix that works on the ARC pod — the custom warm runner image (FU-015, LIVE 2026-07-25)
 
-The daemon is the whole problem, so **don't install one.** A *single-user* Nix install (`--no-daemon`)
-runs Nix as the runner user with no daemon, no init, no docker-shim — so it works in the container.
-We install it ourselves and tell `devbox` to reuse it (the action's own installer is daemon-based and
-can't be told otherwise in v0.13.0). Working `ci.yaml` (sleep-tracking, verified green on
-`homelab-ephemeral`):
+The daemon is the whole problem, so **don't install one** — and since FU-015, don't install
+*anything* per job. The scale set runs a **custom runner image** (`docker/arc-runner/`, built by
+`.github/workflows/runner-image.yaml` on `ubuntu-latest` — the runner image must never depend on
+the scale set it provisions — pushed to `ghcr.io/teststuffstash/homelab/arc-runner`, pinned in
+`argocd/platform/arc-runners.yaml`). Baked in:
+
+- `xz`/`gh`/`jq` (the tools the slim upstream image omits),
+- **single-user Nix** (`--no-daemon` — the only install that works in the container; the daemon
+  installer dies under dind) + `nix.conf` with the **LAN pull-through substituter first**
+  (`http://192.168.40.23`, argocd/resources/nix-cache — same upstream signatures, WAN fallback),
+- a pinned **devbox** binary,
+- a **warm /nix store**: the workflow stages every fleet repo's `devbox.{json,lock}` (App-token
+  fetch — the repos are private) and realizes the closures at build time. Deliberately NOT
+  lockfile-coupled: a stale warm store degrades to LAN-mirror delta fetches, so rebuilds are
+  "when drift gets noticeable" (push to `docker/arc-runner/` or `workflow_dispatch`), not per-lock.
+
+Workflows go straight to `devbox run <task>` — no install steps at all:
 
 ```yaml
-# the slim ghcr.io/actions/actions-runner image lacks tools GitHub-hosted runners bundle (xz, gh…)
-- run: sudo apt-get update -qq && sudo apt-get install -y -qq xz-utils   # nix installer needs xz
-- uses: cachix/install-nix-action@v31
-  with: { install_options: --no-daemon }          # single-user → no daemon/systemd/docker-shim
-- uses: jetify-com/devbox-install-action@v0.13.0
-  with: { skip-nix-installation: "true" }          # reuse the nix above
-- run: devbox run ci
+- uses: actions/checkout@v4
+- run: devbox run ci     # nix + devbox + warm store are in the runner image
 ```
 
-Two residual costs, both solvable in-cluster (no VM needed):
+`cachix/install-nix-action` is a 0s no-op on the baked image (it detects existing nix), so
+unmigrated workflows keep working — slimming is a speedup, never a flag-day.
 
-- **Slim runner image.** `ghcr.io/actions/actions-runner` omits `xz`, `gh`, `udevadm`, … We apt-install
-  what's needed per job. The clean fix is a **custom runner image** with `xz`/`gh`/devbox/nix baked in.
-- **Cold-start (~5 min).** The Nix store + devbox CLI download from `cache.nixos.org` (WAN) on every
-  fresh pod. Fix with **caching**: a LAN Nix substituter (attic/harmonia) + the devbox action's
-  `enable-cache` (GitHub Actions cache), and/or bake a warm store into the custom image — then fresh
-  pods restore over LAN, never the WAN. (The custom image solves both costs at once.)
+**Measured** (2026-07-25): homelab `ci` 180-210s → **38s**; oracle-fleet `ci` 610s (454s of it
+toolchain install) → **289s**, all of it real work (the test suite also grew that day). The dind
+sidecar is owned in `arc-runners.yaml` too (the chart appends rather than merges initContainers):
+pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-through VIP (FU-073c).
 
 ### Trade-offs
 
@@ -163,8 +169,9 @@ Two residual costs, both solvable in-cluster (no VM needed):
 | IaC fit | n/a | ArgoCD (built) | tofu Proxmox + cloud-init (like the Talos VMs) |
 | arm64 builds | hosted arm runners | ✗ (no binfmt) | ✓ if VM has binfmt |
 
-**Direction:** the ARC pod path **works** with single-user Nix (current state — all four Tier-A gates
-green on `homelab-ephemeral`). Next, a **custom runner image** (baked `xz`/`gh`/devbox + warm store)
-removes the per-job apt and the cold-start in one move. A **Proxmox VM runner** (`actions/runner` via
-tofu + cloud-init, persistent `/nix`) stays the option if you'd rather a full-VM, GitHub-hosted-like
-environment; `ubuntu-latest` remains the zero-infra escape hatch for CI that needs nothing on-prem.
+**Direction (realized 2026-07-25, FU-015):** the custom warm runner image is the live default —
+per-job apt and cold-start are gone (numbers above). The **Proxmox VM runner** (ADR-082,
+`tofu/ci-runner.tf`) carries the jobs a container can't (binfmt/arm64, full-VM kind gates; its
+dockerd also rides the docker.io mirror via cloud-init `daemon.json`, FU-073b); `ubuntu-latest`
+remains the zero-infra escape hatch — and deliberately builds the runner image itself
+(bootstrap: the image must not depend on the fleet it provisions).
