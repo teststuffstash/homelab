@@ -444,8 +444,11 @@ _Last updated: 2026-07-16._
       compared repo-verified, cross-review landed (deepseek-v4-pro critic). Routing data for
       FU-095: audit tier = deepseek-v4-pro/hy3 (opus-adjacent grounding, $0.02-0.08); kimi =
       wide-net second reader; gpt-oss-120b + nemotron-super = fabricators on evidence work.
-      Remaining for P3 proper: schedule it (cron), MCP transcript slices, act on the reports'
-      queued-issue candidates. **Brief v2 (from runs 1+2 evidence, 2026-07-25):** (a) ✅ DONE
+      Remaining for P3 proper: ~~schedule it (cron)~~ ✅ 2026-07-25: `retro-session`
+      CronWorkflow (agents/coordinator/retro-argo.yaml, BORN SUSPENDED — Mon 05:00 declared,
+      hand-fired via `argo submit --from` until proven; level-triggered guard + WIP refusal +
+      harvest-PR; cross-review legs manual in v1); still remaining: MCP transcript slices,
+      act on the reports' queued-issue candidates, unsuspend after clean runs. **Brief v2 (from runs 1+2 evidence, 2026-07-25):** (a) ✅ DONE
       2026-07-25: run-1 brief recovered VERBATIM from the transcript bucket → committed as
       `docs/agents/retros/BRIEF.md` (v3 template: ledger-blind-spots block, harness-source
       excerpts, task-granularity/wins/predecessor-score sections) + `CROSS-REVIEW.md` +
