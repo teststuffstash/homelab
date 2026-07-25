@@ -391,7 +391,13 @@ _Last updated: 2026-07-16._
       reasoning/audit tier (dual-model spend ruled worth it there). v1 needs NO MCP transcript
       tools — ledger + issue/PR stats/strike comments suffice; reuse model-scout's ephemeral
       capped-key mint. What v1 teaches (prompt shape, cross-review structure, convergence vs
-      anchoring) de-risks the FU-095 sleep spec-creation pass. First run hand-supervised. Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
+      anchoring) de-risks the FU-095 sleep spec-creation pass. First run hand-supervised.
+      **Runs 1+2 DONE 2026-07-25** (docs/agents/retros/2026-07-25-*): mechanism proven, 9 models
+      compared repo-verified, cross-review landed (deepseek-v4-pro critic). Routing data for
+      FU-095: audit tier = deepseek-v4-pro/hy3 (opus-adjacent grounding, $0.02-0.08); kimi =
+      wide-net second reader; gpt-oss-120b + nemotron-super = fabricators on evidence work.
+      Remaining for P3 proper: schedule it (cron), MCP transcript slices, act on the reports'
+      queued-issue candidates. Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. The FU-057 ledger it needs is LIVE (archived
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:

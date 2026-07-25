@@ -40,3 +40,13 @@ cap can 403 mid-finalize on :free rides — mint 0.05 for report-length tasks.
    agent-base too.
 4. Run-2 cross-review candidates: a different large free model (e.g. kimi-k3:free) or
    subscription haiku as the critic; nemotron stays report-side only.
+
+## Run 2 addendum (same day): 8-model bake-off + reliable cross-review — see r2-VERDICT.md
+
+All seats delivered (deepseek-v4-pro, hy3, kimi-k3, mimo-v2.5, gpt-oss-120b, nemotron ultra+super
+:free; opus r1 as baseline). Total API spend ≈ $1.35. Cross-review finally landed: deepseek-v4-pro
+(the rank-2 grounder) reviewed the opus report with per-finding verified verdicts — including a
+real catch (stale `specs/TRACKS.md` path; the file moved to `docs/process/` in fleet#104).
+Ops lessons this run: GOOSE_MAX_TOKENS=16384 cures the -32602 truncation class (mimo proven);
+ride pods must self-clean (the bulk-tier scheduling-cap incident — janitor grace now 30min);
+models misstate their own identity in report headers — score by ride, never by header.
