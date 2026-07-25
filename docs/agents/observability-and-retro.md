@@ -207,6 +207,18 @@ Why not per-tick: the tick must stay cheap and decision-free (level-triggered re
 retro insight has no latency requirement; batching amortizes the context cost of reading
 transcripts. The per-task hook is only the deterministic B1 reflex.
 
+**Ownership (ruled 2026-07-25, operator): the retro is a PLATFORM capability, initially
+homelab-resident, graduating per-stack like the rest of AgentStack.** Mechanism = platform:
+the brief template (`docs/agents/retros/BRIEF.md`), the cross-review contract
+(`CROSS-REVIEW.md`), the launcher (`agents/retro-session.sh`), and the output/report
+conventions are homelab-owned; reports land in `docs/agents/retros/` via PR. Policy = stack:
+which ledger slice, cadence, and model cells. Today running (or skipping) a stack's retro is
+an operator/platform decision; the graduation target is an AgentStack claim knob (e.g.
+`retro.enabled` + cadence), at which point a stack opts in/out in its own `-iac` repo and its
+reports move stack-side — the standard mechanism/policy split (platform-and-stacks.md).
+teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
+is needed for this.
+
 ## Rollout
 
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —

@@ -435,9 +435,13 @@ _Last updated: 2026-07-16._
       FU-095: audit tier = deepseek-v4-pro/hy3 (opus-adjacent grounding, $0.02-0.08); kimi =
       wide-net second reader; gpt-oss-120b + nemotron-super = fabricators on evidence work.
       Remaining for P3 proper: schedule it (cron), MCP transcript slices, act on the reports'
-      queued-issue candidates. **Brief v2 (from runs 1+2 evidence, 2026-07-25):** (a) commit the
-      brief itself to git (`docs/agents/retros/BRIEF.md`, versioned — run 1+2's brief lives only
-      in session transcripts); (b) the cross-run "could not verify" items are mostly LEDGER
+      queued-issue candidates. **Brief v2 (from runs 1+2 evidence, 2026-07-25):** (a) ✅ DONE
+      2026-07-25: run-1 brief recovered VERBATIM from the transcript bucket → committed as
+      `docs/agents/retros/BRIEF.md` (v3 template: ledger-blind-spots block, harness-source
+      excerpts, task-granularity/wins/predecessor-score sections) + `CROSS-REVIEW.md` +
+      `agents/retro-session.sh` (assembles per-cell, delegates to agent-session.sh
+      --harness/--model; ownership ruling → observability-and-retro.md §B2: platform-owned,
+      homelab-resident, graduates to an AgentStack knob); (b) the cross-run "could not verify" items are mostly LEDGER
       gaps, not access gaps — reviewer_rounds=0 despite real review rounds, wall_time_s not
       decomposed active/idle (contradicted by PR lifetimes), retry_storms taxonomy undefined,
       haiku cost $0.00-vs-untracked ambiguity — fix the emitter before adding tools; (c) give
