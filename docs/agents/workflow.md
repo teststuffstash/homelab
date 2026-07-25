@@ -152,13 +152,12 @@ Never suspend a schedule for capacity — `suspend: true` is state that rots.
 
 #### The coordinator Sensor (design 2026-07-17; BUILT same day — FU-085 archived, coordinate-argo.yaml)
 
-Nothing wakes the coordinator early today — the `*/10` `coordinator-reflex` CronWorkflow is the only
-thing that runs `coordinator-scan.sh --spawn` (live sting: the oracle-fleet#29 C4/C5 re-tick sat
-waiting on cron minutes after its `AGENT_STRIKE` comment landed). The next increment mirrors the
-review edge on the SAME machinery — one more endpoint on the existing `agent-loop` webhook
-EventSource, a `coordinator` Sensor, a `coordinate` WorkflowTemplate
-([`../../agents/coordinator/review-argo.yaml`](../../agents/coordinator/review-argo.yaml) is the
-shape; EventBus, sensor-SA pattern, and backstop doctrine all exist):
+LIVE since 2026-07-17: the `/coordinate` doorbell endpoint on the `agent-loop` webhook
+EventSource, the `coordinator` Sensor, and the `coordinate` WorkflowTemplate
+([`../../agents/coordinator/coordinate-argo.yaml`](../../agents/coordinator/coordinate-argo.yaml));
+the `*/10` `coordinator-reflex` CronWorkflow is the level-triggered BACKSTOP, `workflowTemplateRef`ing
+the same template (the design sting that motivated it: oracle-fleet#29's C4/C5 re-tick sat waiting
+on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
 
 - **The event is a doorbell, never a work item.** The Sensor submits a Workflow that re-runs the
   deterministic scan, which re-lists GitHub and applies the FULL predicate — including the C4/C5
@@ -189,14 +188,17 @@ shape; EventBus, sensor-SA pattern, and backstop doctrine all exist):
   test-and-set. Add mechanically: one `synchronization.mutex` (`coordinator-scan`) shared by the
   Sensor-submitted Workflow AND the CronWorkflow — the Cron's `concurrencyPolicy: Forbid` does
   **not** see Sensor submissions — plus a Sensor trigger `rateLimit` as the dumb outer belt.
-- **Refactor that falls out:** extract the cron's inline scan container into the `coordinate`
-  WorkflowTemplate and have both the CronWorkflow and the Sensor `workflowTemplateRef` it (exactly
-  the review-argo shape). A `--repo <r>` scope arg on the scan makes an event cheaper than a full
-  tick; v1 may skip it — an unscoped scan is just an early cron tick.
-- **After it proves out:** relax the coordinator cron `*/10 → */30` (the review reflex's own
-  `*/5 → */15` move) — less GraphQL burn (FU-084). Red-beyond-T (FU-050 v3) stays cron-only by
-  nature (a timer is level-triggered). Under FU-080's per-stack move the Composition renders the
-  Sensor/trigger per stack like the rest of the loop.
+- **Refactor (done):** the cron's inline scan container was extracted into the `coordinate`
+  WorkflowTemplate; CronWorkflow and Sensor both `workflowTemplateRef` it (the review-argo shape).
+  Scoping went further than the planned `--repo`: ADR-094 item-scoped dispatch (FU-086) — the
+  scan emits `(clause, repo, item)` units and the session judges ONE unit via
+  `coordinator-session.sh --item`.
+- **Proven out; pending residue (owned by FU-086):** relax the coordinator cron `*/10 → */30`
+  (the review reflex's own `*/5 → */15` move — less GraphQL burn) and the compound where the
+  Sensor submits item units directly with the cron sweep emitting only missed units.
+  Red-beyond-T stays cron/poller-territory by nature (a timer is level-triggered; the
+  github-exporter's CI metrics carry the out-of-band half). Under FU-080's per-stack move the
+  Composition renders the Sensor/trigger per stack like the rest of the loop.
 
 End state: the whole loop is edge-driven — queued issue → tick → worker → green PR → review Sensor
 → verdict → coordinator Sensor → round N+1 → merge — with cron sweeping behind as the
@@ -219,12 +221,14 @@ level-triggered backstop.
   themselves are auto once the reviewer approves; humans review only the fixer — the operating
   model).
 
-## MVP
+## MVP (superseded by the built loop — kept as the original shape)
 
-A reconcile loop (cron + on-demand) that lists open `agent-fix` issues/PRs, runs the state machine,
-and spawns a **fresh** worker per round via `agent-session.sh`. **Polling only.** Webhooks + the
-fast-CI grace window are phase 2. Each round's cost/outcome already lands on the PR (stats comment)
-and in Loki — the coordinator consumes the same signals.
+The MVP was a reconcile loop (cron + on-demand) listing open `agent-fix` issues/PRs, running the
+state machine, spawning a **fresh** worker per round via `agent-session.sh`, polling only. What
+runs today went past it on both axes: dispatch is **item-scoped** (ADR-094/FU-086 — the scan
+emits units, the session judges one), and the loop is **edge-triggered** (the review webhook +
+the `/coordinate` doorbell, cron as backstop). Each round's cost/outcome still lands on the PR
+(stats comment) and in Loki — the coordinator consumes the same signals.
 
 Related: [`README.md`](README.md) · [`../adr.md`](../adr.md) · [`../../ROADMAP.md`](../../ROADMAP.md)
 · [`../../agents/README.md`](../../agents/README.md)

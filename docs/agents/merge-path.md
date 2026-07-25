@@ -480,6 +480,9 @@ contract-versioning discipline), not a merge-path mechanism.
   it off. The reflex therefore tests "reviewer-bot approval newer than the newest commit"
   directly: the bot approves once, then the PR parks awaiting the code owner (auto-merge fires on
   their approval). Dismissing the bot's review forces a re-review; a new push does too.
+  ⚠ MP-T08 carve-out (2026-07-24, fleet#104): when the PR **author is the sole codeowner**,
+  GitHub waives the required codeowner review — such PRs never park, so on meta-authored
+  spec-touching PRs the delegated gate read must land BEFORE the bot verdict.
 - **Runaway dispatch — the layered breakers** (hardening after the loop above; propagation to
   workers/coordinator = FU-069). A stateless, level-triggered reflex turns ANY predicate bug into
   an infinite dispatcher, and the #13 loop showed nothing watches for that — so no single check is
@@ -586,8 +589,10 @@ you're back to today's coordinator-driven flow).
    to Argo CronWorkflows ([`../../agents/coordinator/reflexes-argo.yaml`](../../agents/coordinator/reflexes-argo.yaml)).
    The original plan for reaching that end-state, for reference: edge-triggers in escalating order of
    effort — every *automated* actor already runs in-cluster (worker pod, reviewer pod, ARC runner incl.
-   the updater workflow's job), so each can wake the reflex with a one-line curl / `kubectl create
-   job --from=cronjob/review-reflex` as its last step: **no public webhook receiver needed**. A
+   the updater workflow's job), so each can wake the reflex with a one-line curl to the webhook
+   EventSource as its last step (in the CronJob era this was `kubectl create job --from=cronjob/…`;
+   the reflexes are Argo CronWorkflows now — the doorbell endpoints are the wake path):
+   **no public webhook receiver needed**. A
    real GitHub webhook (HMAC-verified receiver behind a `cloudflared` tunnel, à la
    `ha.teststuff.net` but signature-gated since GitHub can't mTLS) is only ever needed to react
    fast to *human* actions at github.com — latency-tolerant, covered by the poll; build it last

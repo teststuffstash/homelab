@@ -1,13 +1,16 @@
 # Agent platform — in-cluster MCP capability + ephemeral sandbox harness
 
-> **Status: substrate LIVE, loop reflex-driven, autonomy switch off (2026-07).** The
+> **Status: substrate LIVE, loop autonomous per-stack (2026-07-21).** The
 > launcher/worker/budget/reviewer pieces run for real (`../../agents/README.md`); the coordinator
-> is a scoped brief behind a deterministic scan gate, with the `coordinator-reflex` Argo CronWorkflow
-> (ADR-093 — the loop reflexes are Argo CronWorkflows in `agents/coordinator/reflexes-argo.yaml`, no
-> longer k8s CronJobs; the durable engine, FU-026, is landed+archived) **unsuspended 2026-07-17**,
-> gated per-stack by the FU-080 `coordinator.enabled` claim knob (oracle first; FU-050's red-beyond-T
-> predicate still open); credential injection + the egress proxy are **LIVE default-on** (ADR-087: opaque refs +
-> git-cred broker; Cilium lockdown rollout = FU-020). This is the narrative home for the agent
+> is a scoped brief behind a deterministic scan gate, dispatched **item-scoped** (ADR-094/FU-086 —
+> the scan emits units, a session judges one) and **edge-triggered** (review webhook + `/coordinate`
+> doorbell, ADR-093; the Argo CronWorkflows in `agents/coordinator/reflexes-argo.yaml` are the
+> level-triggered backstop). Graduated stacks (oracle, 2026-07-18) run their own
+> `coordinate-<stack>` CronWorkflow in `<stack>-agents` on broker-fetched stack-scoped tokens
+> (FU-080); autonomy is per-stack via the `coordinator.enabled` claim knob and has been ON for
+> oracle since graduation. Credential injection + the egress proxy are **LIVE default-on**
+> (ADR-087: opaque refs + git-cred broker), and the proxy doubles as the FU-088 subscription
+> headroom gate. This is the narrative home for the agent
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
 > [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in
 > [`../../ROADMAP.md`](../../ROADMAP.md). Where a piece goes LIVE it gets a row in

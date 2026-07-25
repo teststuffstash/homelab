@@ -138,16 +138,14 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 - **How much policy is a claim vs a Composition default?** ✅ Drawn in the built XRD: baseline +
   ecosystem `profile` + `extraFQDNs` for egress, `fixer` block per repo (docker, storage), platform
   defaults for the rest ([`agentstack.md`](agentstack.md) §What a claim renders).
-- **One coordinator per stack vs one that iterates stacks.** ✅ Decided: **one GLOBAL
-  coordinator-reflex** — the gate iterates all claims for cents and spawns scoped ticks; per-stack
-  CronWorkflows only if cadence/isolation ever diverges (a Composition addition, not a redesign).
-  [`agentstack.md`](agentstack.md) §Decisions. **Revisited 2026-07-17 (FU-080):** still one global
-  reflex, but suspend/unsuspend is now PER-STACK via two claim knobs it respects —
-  `spec.coordinator.enabled` (default false; the FU-050 autonomy switch, made per-stack —
-  `coordinator-scan --spawn` skips a stack whose flag isn't set) and `spec.reviewer.enabled`
-  (default true). model-scout + ledger stay global. The fuller per-stack `<stack>-agents` namespace
-  isolation (agents out of the project namespace, cross-namespace dispatch) is a separate remaining
-  FU-080 goal.
+- **One coordinator per stack vs one that iterates stacks.** ✅ Decided 2026-07-17: one global
+  reflex with per-stack claim knobs (`spec.coordinator.enabled` / `spec.reviewer.enabled`).
+  **Superseded 2026-07-18 (FU-080 per-stack build):** the Composition now renders a
+  `coordinate-<stack>` CronWorkflow into `<stack>-agents` (claim `loop.perStack`), running as the
+  namespaced `agentstack-loop` SA with broker-fetched, stack-scoped git tokens (TokenReview'd
+  `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. The GLOBAL scan/reflex
+  still runs as the soak-period belt — retiring a graduated stack from it is FU-080's remaining
+  step. model-scout + ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
 
 ## The credential-airlock pattern (stack jails, FU-080)
 
@@ -166,11 +164,11 @@ Roles** for `tf.upbound.io` workspaces (observe infra provisioning) and `openrou
 openrouterkeys (drive the session-key mint→observe→delete its loop needs) — both hand-added to
 `workbench.yaml` (FU-080 b).
 
-**Endgame (FU-080, revisits the global-reflex decision above):** the Composition renders a per-stack
-`agentstack-loop` SA + a **namespaced** launch Role (pods/exec/pvc/openrouterkeys) INTO each fixer
-namespace, and a per-stack coordinator/reviewer runs there as that SA holding only `ref:` creds — so
-the namespace-admin workbench controls the *whole* loop by construction, with zero cluster-scoped
-grant and zero cross-namespace reach. The identity + RBAC are rendered today (additive), and per-stack
-suspend/unsuspend already ships via the `spec.coordinator.enabled` / `spec.reviewer.enabled` claim
-knobs the global reflex respects (2026-07-17); moving the reflex CronWorkflows in-namespace is the
-remaining step (and the point at which "one global reflex" becomes "one reflex per stack jail").
+**Endgame (FU-080) — REACHED for the coordinator leg 2026-07-18:** the Composition renders the
+per-stack `agentstack-loop` SA + namespaced launch Role (pods/exec/pvc/openrouterkeys) AND the
+`coordinate-<stack>` CronWorkflow in `<stack>-agents` (claim `loop.perStack`) — the per-stack
+coordinator runs there as that SA holding only `ref:` creds + broker-fetched stack-scoped git
+tokens, so the namespace-admin workbench controls the loop by construction, zero cluster-scoped
+grant, zero cross-namespace reach. Oracle graduated 2026-07-18. Remaining (FU-080): the per-stack
+REVIEW backstop (reviewer-session.sh broker-fetch plumbing), retiring graduated stacks from the
+global scan/reflex belt after soak, and sleep/platform graduation.

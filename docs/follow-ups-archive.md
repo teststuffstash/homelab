@@ -8,6 +8,19 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-091** — Queue-liveness alert (queued work + idle loop must page). *(archived 2026-07-25)*
+  Built the day it was filed (2026-07-21) and never closed: `AgentQueueStalled` (queued>0 ∧ zero
+  worker pods ∧ zero open PRs, 2h warning) + the `github_agent_issue_labels` gauge live in the
+  github-exporter's prometheusrule.yaml — matches the item's spec near-verbatim.
+- **FU-050** — coordinator-reflex CronJob + unsuspend autonomy switch. *(archived 2026-07-25)*
+  Superseded by the Argo migration: `coordinator-reflex` is an unsuspended Argo CronWorkflow
+  (reflexes-argo.yaml) ticking */10 for weeks; the acceptance round ran clean 2026-07-12 and the
+  CronJob + suspend switch it documents no longer exist. Red-beyond-T residue moved to FU-086's
+  open list (the exporter's CI metrics carry the out-of-band half).
+- **FU-062** — Model routing umbrella (chains + strikes + registry + scout). *(archived 2026-07-25)*
+  At its own stated close condition: all four legs live (registry, strikes, proxy injection,
+  scout+canary), doctrine home = docs/agents/model-routing.md, and FU-095 carries the next
+  routing evolution (task-class chains). Two open umbrellas over one doctrine invite drift.
 - **FU-031** — thinkcentre BIOS → disk-first. *(archived 2026-07-25, WON'T DO — operator ruling)*
   Stays PXE-first: the slow-PXE pain was the bad cable (fixed 2026-06-11), not the boot order;
   PXE-first keeps machines wipeable without console access, and on a full-lab restart OPNsense

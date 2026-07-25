@@ -218,7 +218,10 @@ _Last updated: 2026-07-16._
       Acceptance: a deliberately stale unit (merged PR#53 as changes-requested) re-read live,
       exited clean, fixed only its own item's label drift (#42 → agent/done). STILL OPEN: the
       `arbitrate` clause (rounds-exhausted/flip-flop detection as a unit), the FU-085 compound
-      (Sensor submits item units directly; cron sweep emits only missed units), lifting WIP>1
+      (Sensor submits item units directly; cron sweep emits only missed units), the coordinator
+      cron relax `*/10 → */30` (edge proven through meta-9/10; consolidated here from FU-084(b)
+      2026-07-25), red-beyond-T as a scan predicate (inherited from FU-050 on its archival —
+      the github-exporter's CI metrics carry the out-of-band half), lifting WIP>1
       (lane-parallel dispatch — FU-088 gates are in), janitor-tick cron demotion. Original spec:
       scheduling predicates were: lane free, deps closed (FU-087), repo dispatchable (claim
       fixer block — makes context-only `oracle-iac` a visible predicate), capacity (FU-088 — a
@@ -290,20 +293,7 @@ _Last updated: 2026-07-16._
       found during this build. model-scout + ledger stay GLOBAL; docker-ride dispatch from the
       jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
-- [ ] **FU-091** — **Queue-liveness alert: queued work + idle loop must page, silence must not
-      look like health.** Motivated 2026-07-21: a dind-sidecar zombie held oracle-fleet's
-      project-WIP for 3 DAYS post-#56 — every `*/10` tick correctly reported "⏳ project WIP
-      busy" into logs nobody reads; no PR/label event fired, so the operator's session monitor
-      (output-watching, not liveness-watching) stayed silent. Both mechanism fixes landed
-      same-day (native-sidecar dind — the pod now completes with the agent; scan zombie-reap
-      belt), but the CLASS needs an out-of-band detector: extend the github-exporter with a
-      per-repo `github_agent_queued_issues` gauge (`agent/queued` label count — the exporter is
-      the ONE poller, FU-084 doctrine) + a PrometheusRule pairing it with kube-state-metrics
-      (`AgentQueueStalled`: queued > 0 ∧ zero Running `app=agent-session` pods fleet-wide for
-      2h, warning) in the exporter's prometheusrule.yaml next to AgentReviewLoop. Different
-      code+token than the scan — fires even when the scan itself is the wedged layer (the
-      merge-path §Runaway-dispatch layer-3 principle applied to liveness). Relates FU-084,
-      ADR-094 (scan = single point of liveness, mitigations list).
+
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
@@ -386,7 +376,14 @@ _Last updated: 2026-07-16._
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
 - [ ] **FU-058** — **Retro P3: the scheduled retro session** (`docs/agents/observability-and-retro.md`
-      §B2). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
+      §B2). **Multi-model pilot direction (operator 2026-07-25):** run the retro as the FIRST
+      multi-large-model tryout — N models over the SAME worst-K ledger slice in parallel, then a
+      cross-review round (each critiques the others' reports; the human reads the critiques).
+      Safest arena for it: read-only inputs, human-gated outputs; task shape = the FU-095
+      reasoning/audit tier (dual-model spend ruled worth it there). v1 needs NO MCP transcript
+      tools — ledger + issue/PR stats/strike comments suffice; reuse model-scout's ephemeral
+      capped-key mint. What v1 teaches (prompt shape, cross-review structure, convergence vs
+      anchoring) de-risks the FU-095 sleep spec-creation pass. First run hand-supervised. Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. The FU-057 ledger it needs is LIVE (archived
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:
@@ -402,45 +399,7 @@ _Last updated: 2026-07-16._
       dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
-- [ ] **FU-062** — **Model routing: chains + strikes + a live registry** — the umbrella that binds
-      FU-018/FU-021/FU-024/FU-057 into one design (they don't work separately). Full doc:
-      [`docs/agents/model-routing.md`](agents/model-routing.md). Core: (1) **rounds ≠ strikes** —
-      infra failures (harness-death/auth-storm/timeout) consume NO round; they blacklist the model
-      *for that task only* and re-dispatch same-tick on the next `workerModelFallbacks` chain entry
-      (`agents/stacks.json`, additive field → the AgentStack "model tiers" slot, FU-048); global
-      blacklists come only from the FU-057 model-health ledger. (2) `estimate_budget.py`'s static
-      price table → a **live registry** (`/api/v1/models` + `/models/:id/endpoints`; effective price
-      = cache-aware per-provider min; interim: the `--price-per-mtok` override recipe now in the
-      coordinator brief). (3) **provider pinning per session** (cache lives at the provider —
-      FU-018's injection leg). (4) a weekly **model-scout reflex** (new free/cheap tool-capable
-      models → canary task → ledger). Routers verified 2026-07-09: `pareto-code`/`fusion` advertise
-      no `tools` (park); `openrouter/auto` = paid lottery (last-resort only); `openrouter/free` =
-      free router WITH tools (scout candidate). DONE: brief policy block, stacks.json chains,
-      tencent/hy3 priced in the estimator; **live registry in `estimate_budget.py` (2026-07-09)** —
-      cached /models + per-model /endpoints, cache-aware effective price, `--lookup` provider-pin
-      verdict, static table kept as the offline fallback; **strike bookkeeping in the launcher
-      (2026-07-09)** — a PR-less run posts `AGENT_STRIKE: model=… error_class=… round=… session=…`
-      + the log tail to the ISSUE (the comment is the strike store; brief reads it to walk the
-      chain), PR runs get `error_class` in the stats comment; **model-scout reflex v1 (2026-07-09,
-      REPORT-ONLY)** — weekly CronJob (`agents/model-scout.sh` + `coordinator/model-scout.yaml`,
-      deployed `suspend: true` pending the first supervised run) diffs /models vs the bucket
-      snapshot and posts a digest issue; canary dispatch + key minting stay TODO in the script,
-      gated on FU-024; **opencode session provider pin (2026-07-09)** — the FU-018 interim leg,
-      per-session `OPENCODE_CONFIG` from the registry's `--lookup` pin; **FU-021 investigated** —
-      no goose config can stop an auth storm → agent-runtime#8 + `GOOSE_MAX_TURNS=200` interim;
-      **goose provider injection LIVE (2026-07-09)** — the ADR-081 v1 egress proxy
-      (`argocd/resources/openrouter-proxy/`, E2E-verified: `injected:atlas-cloud`, slug-matched,
-      graceful 429 fallback); **FU-021 RESOLVED** (watchdog live-accepted on sleep-tracking#20).
-      **Scout first supervised run DONE + UNSUSPENDED 2026-07-16**; **CANARY LEG LIVE 2026-07-17**
-      — `agents/model-scout.sh` v2 `canary_one()` mints an ephemeral capped key per candidate
-      (only-free guardrail for :free ids), dispatches a trivial closed ride, writes the verdict to
-      the ledger + digest, cleans the key. Proven end-to-end: `tencent/hy3:free → clean`. This
-      also live-fired **FU-024** (now archived): only-free key + paid model = proxy 403 pre-spend
-      (`cost_usd:0.0`, both the router's haiku probe and the target rejected), + free model =
-      clean on the same key. **All four legs of the umbrella now live; FU-062 stays open only as
-      the routing-doctrine home** — nothing here is unbuilt, close when the doctrine stabilizes or
-      fold into model-routing.md. ADR-081 cred-injection (FU-018) + egress lockdown (FU-020) both
-      archived 2026-07-17.
+
 - [ ] **FU-044** — **LLM oversight of the deploy path: auto-rollback / roll-forward on a broken
       deploy.** The FU-025 deploy pipeline (app-repo build → chart+image at `<calver>-g<sha>` →
       auto-bump PR in `sleep-iac` → ArgoCD sync, see `docs/sleep-iac.md` §Deploy pipeline) merges on
@@ -462,19 +421,7 @@ _Last updated: 2026-07-16._
       build-time discovery for an app repo with no cluster creds may still want a generated static catalog.
       Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
-- [ ] **FU-050** — **BUILT 2026-07-09 night (98d42f3): CronJob deployed SUSPENDED (unsuspend = the
-      autonomy switch, after a clean supervised acceptance round) + scan v2 C4/C5 predicate (verified
-      live on oracle-fleet#1's real stall). Red-beyond-T stays open (needs checks:read).**
-      **The supervised acceptance round RAN CLEAN 2026-07-12** (manual `coordinator-scan --spawn`,
-      one firing): tick arbitrated #8/PR#13 per the meta-4 doctrine (one blocking finding, three
-      follow-ups scoped out), dispatched round 2, worker clean, reviewer re-approved — the PR now
-      waits only on the CODEOWNERS spec gate (human, by design). The unsuspend precondition is met;
-      flipping it is the operator's call:
-      `kubectl -n agent-coordinator patch cronjob coordinator-reflex -p '{"spec":{"suspend":false}}'` Original:
-      **`coordinator-reflex` CronJob + scan v2.** Run `coordinator-scan --spawn` on a schedule
-      (the LLM sibling of `review-reflex`, gated so it never wakes emptily). Plus the v2 predicate that needs
-      pod/checks access: `agent/in-progress`+worker-done (round finished / worker failed) and red-beyond-T.
-      Relates FU-045/FU-026.
+
 - [ ] **FU-046** — **Agentic dependency upgrades: reviewable dep bumps flow through the merge path, no
       human, no coordinator tick.** Renovate's reviewable bumps (major versions, runtime deps) should NOT
       be assigned to a human; they **arm auto-merge** and get a `deps-review` label, so the existing
@@ -588,10 +535,8 @@ _Last updated: 2026-07-16._
       visible. Dashboard panel (remaining % per token+resource) + `GithubRateLimitLow`
       (<10% for 5m, warning, symptoms-only). Also fixed the operator-reported SKU-panel bug
       (private+public minutes summed — split by visibility; public is free).
-      **Remaining:** (a) add merge/deploy/labels/arc installations by the rl-tokens.yaml
-      copy-block pattern; (b) inherited from FU-085: relax the coordinator cron `*/10 → */30`
-      once the /coordinate edge proves itself (edge has run event-driven through meta-9/10 —
-      candidate for the next quiet moment).
+      **Remaining:** add merge/deploy/labels/arc installations by the rl-tokens.yaml
+      copy-block pattern. (The inherited cron-relax leg moved to FU-086's open list 2026-07-25.)
 
 ## Hardware & nodes
 

@@ -3,8 +3,9 @@
 > **Status: direction set 2026-07-09; core BUILT same week** — the live registry is code
 > (`estimate_budget.py`: cached /models + /endpoints, cache-aware effective price, `--lookup`),
 > strike bookkeeping is in the launcher (`AGENT_STRIKE` comments), goose provider injection is LIVE
-> via the egress proxy, opencode carries the per-session pin, and the model scout v1 is deployed
-> **suspended** (first supervised run = the remaining tail, with FU-024's live-fire canary).
+> via the egress proxy, opencode carries the per-session pin, and the model scout runs
+> WEEKLY (unsuspended 2026-07-16 after its clean supervised run; canary leg live 2026-07-17 —
+> ephemeral capped keys, FU-024's guardrail live-fired).
 > Born from the oracle-fleet issue #1 postmortem + the 2026-06-29 qwen cost autopsy. This doc is
 > the umbrella for **FU-062** and binds together FU-018 (provider injection), FU-021 (retry
 > hard-stop — resolved), FU-024 (only-free guardrail) and FU-057 (ledger/error-class — live)
@@ -106,9 +107,11 @@ uptime floor — Google Vertex at 37% uptime is a trap) and pins `provider: {ord
 allow_fallbacks: true, max_price: {...}}`. Ranked levers from the autopsy stand: **caching provider >
 cheaper provider > fewer requests**. Where to inject (unchanged from FU-018, now load-bearing):
 opencode = `opencode.json` `options.provider` (works today); **goose cannot carry provider prefs** →
-the ADR-081 egress proxy rewriting the request body is the universal home (**v1 LIVE 2026-07-09**,
-provider-injection only: `argocd/resources/openrouter-proxy/`, wired as goose's `OPENROUTER_HOST`;
-creds + Cilium stay FU-018/FU-020). ⚠ Measured: `provider.order` matches the endpoint **tag's base
+the ADR-081 egress proxy rewriting the request body is the universal home (**v1 LIVE 2026-07-09**:
+`argocd/resources/openrouter-proxy/`, wired as goose's `OPENROUTER_HOST`; since 2026-07-17 the
+proxy is ALSO the subscription headroom gate — FU-088: 429 latch, 80%-utilization deferral,
+semaphore, credit floor, the Grafana claude-subscription panels; creds + Cilium stay
+FU-018/FU-020). ⚠ Measured: `provider.order` matches the endpoint **tag's base
 slug** (`atlas-cloud`, `deepinfra`) — display names (`AtlasCloud`) silently no-op. Free models sidestep M4
 entirely ($0 either way) — one more reason they front the chains for small tasks.
 
