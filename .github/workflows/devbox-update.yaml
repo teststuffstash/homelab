@@ -38,6 +38,8 @@ jobs:
           - { repo: snore-recorder, dir: "." }
           - { repo: openrouter-operator, dir: "." }
           - { repo: agent-runtime, dir: "agent-base" }
+          - { repo: oracle-fleet, dir: "." }
+          - { repo: oracle-iac, dir: "." }
     steps:
       # the script lives here; also gives us xz/jq + single-user Nix + devbox (same pattern as ci.yaml)
       - uses: actions/checkout@v4

@@ -194,11 +194,18 @@ _Last updated: 2026-07-16._
       degrades to LAN-mirror delta fetches. **OPERATOR ACTION: install the homelab-renovate
       App on oracle-fleet + oracle-iac + agent-coordinator** (jail PAT can't, 403 by design) —
       then add them to runner-image.yaml's `repositories:` list so the hot-path oracle-fleet
-      closure warms too (and consider adding the trio to devbox-update.yaml's matrix — same
-      coverage gap). agent-coordinator ci needs no slim (docker verification build, no devbox).
+      closure warms too. agent-coordinator ci needs no slim (docker verification build, no devbox).
       Warm image live+measured: homelab ci 38s (baseline 180-210s, slim-only 70s) — ~5x.
-      **Remaining: the operator App install (above) then rebuild + re-measure oracle-fleet ci
-      (~135s target); renovate-track the base-image/devbox/nix pins.**
+      **Oracle trio warmed 2026-07-25** (App installed by operator, github-apps.md regenerated;
+      image `2026.7.25-g171a704c735d` built+pinned; oracle-fleet/oracle-iac added to the
+      devbox-update.yaml matrix same day). **oracle-fleet ci warm-measured (16:33Z run): job
+      297s vs 437s slim-only vs 610s baseline.** Decomposition: 94s devbox ensure-packages
+      (nix profile REALIZATION, CPU-bound — store paths ARE baked; homelab's smaller closure
+      realizes in 28s), ~12s gates+uv, 87s pytest (real work), 87s evidence+specs-site publish
+      (real S3 I/O). The ~135s target assumed ensure→0; the honest floor with today's suite is
+      ~200s. Shrinking ensure further means baking per-repo `.devbox` project state
+      (path-deterministic under `_work/<repo>/<repo>`) — parked, not worth it at 94s.
+      **Remaining: renovate-track the base-image/devbox/nix pins in `docker/arc-runner/`.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
@@ -397,7 +404,20 @@ _Last updated: 2026-07-16._
       FU-095: audit tier = deepseek-v4-pro/hy3 (opus-adjacent grounding, $0.02-0.08); kimi =
       wide-net second reader; gpt-oss-120b + nemotron-super = fabricators on evidence work.
       Remaining for P3 proper: schedule it (cron), MCP transcript slices, act on the reports'
-      queued-issue candidates. Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
+      queued-issue candidates. **Brief v2 (from runs 1+2 evidence, 2026-07-25):** (a) commit the
+      brief itself to git (`docs/agents/retros/BRIEF.md`, versioned — run 1+2's brief lives only
+      in session transcripts); (b) the cross-run "could not verify" items are mostly LEDGER
+      gaps, not access gaps — reviewer_rounds=0 despite real review rounds, wall_time_s not
+      decomposed active/idle (contradicted by PR lifetimes), retry_storms taxonomy undefined,
+      haiku cost $0.00-vs-untracked ambiguity — fix the emitter before adding tools; (c) give
+      the retro read access to the harness source it's asked to improve (coordinator-scan.sh,
+      estimate_budget.py excerpts in the brief, or a homelab checkout) — 6/9 models flagged
+      naming-targets-they-cannot-read; fabricators invented APIs exactly there; (d) add a
+      task-granularity section to the report contract: "which of these worst-K tasks should
+      have been ONE bigger-model task (or a subagent fan-out) instead of chunks; which chunks
+      needed rework at integration" — operator hypothesis 2026-07-25: a large model + subagents
+      might one-shot a project this size in ~48h; the retro should produce the evidence either
+      way. Prometheus/Grafana access NOT needed yet (no report was blocked on metrics). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. The FU-057 ledger it needs is LIVE (archived
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:

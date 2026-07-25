@@ -153,7 +153,11 @@ Workflows go straight to `devbox run <task>` — no install steps at all:
 unmigrated workflows keep working — slimming is a speedup, never a flag-day.
 
 **Measured** (2026-07-25): homelab `ci` 180-210s → **38s**; oracle-fleet `ci` 610s (454s of it
-toolchain install) → **289s**, all of it real work (the test suite also grew that day). The dind
+toolchain install) → **~290-300s**. Decomposition of the warm job (16:33Z run): 94s devbox
+`ensure-packages` — nix profile REALIZATION, CPU-bound; the store paths are baked, homelab's
+smaller closure realizes in 28s — then ~12s gates+uv, 87s pytest, 87s evidence/specs-site S3
+publish. Shrinking realization further means baking per-repo `.devbox` project state; parked
+(FU-015 residual = renovate-tracking the image pins). The dind
 sidecar is owned in `arc-runners.yaml` too (the chart appends rather than merges initContainers):
 pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-through VIP (FU-073c).
 
