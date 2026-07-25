@@ -596,19 +596,20 @@ _Last updated: 2026-07-16._
       isn't. The arc-runner image now keeps the cache (this closed the runner side); agent-base
       (agent-runtime repo) pays the same eval per RIDE pod on top of the LAN-substituter store
       fetch, and retro run 1 flagged bring-up dwarfing task time (opencode attempt 3 spent
-      ~35min of wall on devbox bring-up). Fix shape: bake per-repo closures + KEEP the eval
-      cache in agent-base (same warm/ staging pattern as `docker/arc-runner/`), or mount the
-      arc-runner image's /nix+cache as an ImageVolume (verified working on this cluster,
-      fleet#106). NOT a volume-share across pods (single-user nix locking + RWX risk — the
-      image layer IS the share). Scoping 2026-07-25 (operator asked re goose+claude images):
-      agent-base already bakes the HARNESS closure (`/opt/agent` devbox install) and keeps
-      `~/.cache` — but the TARGET repo's devbox.json realizes in `/work/<repo>` at ride time
-      with only partial eval-cache overlap; the fix = stage fleet repos' devbox.{json,lock}
-      at build (runner-image.yaml warm/ pattern) + VERIFY the build-user cache survives to
-      the runtime `USER 1000:1000` HOME. The **claude/coordinator image needs nothing**: no
-      nix/devbox at all (kubectl/gh/claude via apt+npm; repo cloned read-only) — out of scope
-      unless claude rides ever run repo toolchains. Relates FU-058 (retro mechanism), FU-015
-      (numbers), FU-073e (LAN substituter = the fetch half; this = the eval half).
+      ~35min of wall on devbox bring-up). **⚖ Fix shape RULED by the composition-axes
+      direction (operator 2026-07-25, platform-and-stacks.md §Composition axes): harness
+      images stay STACK-AGNOSTIC — do NOT bake repo closures into agent-base** (that couples
+      harness×stack). Target: the stack repo's CI publishes its own devbox closure cache as
+      an OCI artifact versioned with `devbox.lock`; the launcher mounts it via ImageVolume
+      (verified on this cluster, fleet#106) as a read-only local nix substituter
+      (`file://` store in substituters) + eval-cache seed copied at entrypoint. NOT a
+      volume-share across pods (single-user nix locking + RWX risk — image layers ARE the
+      share). Scoping: agent-base already bakes its HARNESS closure (`/opt/agent`) and keeps
+      `~/.cache`; the gap is the TARGET repo's eval in `/work/<repo>` (partial cache overlap;
+      VERIFY the build-user cache survives to the runtime `USER 1000:1000` HOME). The
+      claude/coordinator image needs nothing (no nix/devbox; repo cloned read-only). Relates
+      FU-058, FU-015 (numbers), FU-073e (substituter = fetch half; this = eval half),
+      FU-095(b) (multi-harness evidence).
 
 - [ ] **FU-084** — GitHub API rate-limit metrics — **CORE DELIVERED 2026-07-25**: exporter
       `collect_rate_limits` (`/rate_limit` is free) emits `github_rate_limit_{remaining,limit,
