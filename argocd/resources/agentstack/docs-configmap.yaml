@@ -35,9 +35,9 @@ data:
 
     | Resource | Name | What it is |
     |---|---|---|
-    | ExternalSecret | `agents-github-app` | GitHub App private key, Infisical → Secret |
-    | GithubAccessToken (ESO generator) | `agent-git-token-gen` | ~1h installation token, scoped to that ONE repo |
-    | ExternalSecret | `agent-git-token` | the token Secret; broker-labeled — the egress proxy's `/git-token` serves it to worker pods |
+    | GithubAccessToken (ESO generator, in agent-coordinator) | `agent-git-<repo>-gen` | ~1h installation token, scoped to that ONE repo — minted CENTRALLY (FU-089: the App private key never enters a stack namespace) |
+    | ExternalSecret (in agent-coordinator) | `agent-git-<repo>` | the token Secret; broker- and ns-labeled — the egress proxy's `/git-token` serves it to that repo's worker pods |
+    | ServiceAccount | `agentstack-worker` | the worker pod's identity for the proxy's TokenReview (no RBAC grants) |
     | OpenRouterKey | `<repo>` | standing budget key; the operator writes Secret `<repo>-openrouter` |
     | CiliumNetworkPolicy | `agent-worker-egress` | worker egress lockdown with a monitor→enforce dial |
     | Role + RoleBinding | `agentstack-proxy-session-keys` | lets the egress proxy resolve opaque-ref session keys here |

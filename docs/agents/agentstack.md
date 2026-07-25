@@ -35,7 +35,7 @@ exist — it belongs to the repo's own deployment, never to the XR):
 
 | Resource | Replaces (hand-written) |
 |---|---|
-| `agents-github-app` ExternalSecret + `agent-git-token-gen` GithubAccessToken + `agent-git-token` ExternalSecret (broker-labeled, ADR-087 leg B) | `agents/fixer/<repo>/git-token.yaml` / `<stack>-iac//<repo>/agent/git-token.yaml` |
+| `agent-git-<repo>-gen` GithubAccessToken + `agent-git-<repo>` ExternalSecret — both rendered into **agent-coordinator** (FU-089: central mint, the App key never enters a stack ns) + the in-ns `agentstack-worker` ServiceAccount (TokenReview identity) | `agents/fixer/<repo>/git-token.yaml` / `<stack>-iac//<repo>/agent/git-token.yaml` |
 | `OpenRouterKey <repo>` (standing budget key) | `<stack>-iac//<repo>/infra/openrouter-key.yaml` |
 | `agent-worker-egress` CiliumNetworkPolicy with the **monitor→enforce dial** | `<stack>-iac//<repo>/agent/netpol.yaml` (FU-020) |
 | `agentstack-proxy-session-keys` Role+RoleBinding (ADR-087 leg A) | the hand-list that lived in `agents/coordinator/openrouter-proxy-rbac.yaml` (deleted 2026-07-12 — all stacks on claims) |

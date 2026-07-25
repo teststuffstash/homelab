@@ -408,6 +408,16 @@ _Last updated: 2026-07-16._
       proxy's TokenReview-verified `/git-token` (worker pods already fetch per-op — flip them
       to send their SA token and make verification mandatory), delete the per-ns key ES from
       the Composition. Until then the App's blast radius IS the trust boundary between stacks.
+      **CORE SHIPPED 2026-07-25: the key is out of the fixer namespaces.** Composition now
+      renders `agent-git-<repo>-gen`+`agent-git-<repo>` into agent-coordinator (worker-ns
+      label binds token↔ns; the key Secret is the hand-applied coordinator one) + an
+      `agentstack-worker` SA per fixer ns (TokenReview identity, no grants);
+      `_resolve_git_token` reads central + label-checked; worker pods run as the SA
+      (agent-session.sh). **Remaining:** (1) agent-runtime entrypoint sends the projected SA
+      token on /git-token (cross-repo PR), (2) after its images.env pin rolls, set
+      `GIT_TOKEN_REQUIRE_AUTH=1` on the proxy (unauthenticated calls are currently
+      served-but-logged — the anonymous window only exposes per-repo tokens, not the key),
+      (3) drop the standing-Secret fallbacks in agent-session.sh.
       Relates FU-080, FU-020, ADR-087.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.

@@ -476,37 +476,17 @@ spec:
                 - secretKey: writer_secret_access_key
                   remoteRef: { key: agent-transcripts-s3, property: writer_secret_access_key }
             ---
-            # GitHub App private key, Infisical → Secret (the generator below reads it).
-            apiVersion: external-secrets.io/v1
-            kind: ExternalSecret
-            metadata:
-              name: agents-github-app
-              namespace: {{ $r.name }}
-              annotations:
-                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-github-app-es
-                gotemplating.fn.crossplane.io/ready: "True"
-            spec:
-              refreshInterval: 1h
-              secretStoreRef: { name: infisical, kind: ClusterSecretStore }
-              target:
-                name: agents-github-app
-                creationPolicy: Owner
-                template:
-                  engineVersion: v2
-                  data:
-                    # un-escape Infisical's literal \n → byte-exact PEM
-                    privateKey: {{ `'{{ .pem | replace "\\n" "\n" }}'` }}
-              data:
-                - secretKey: pem
-                  remoteRef: { key: AGENTS_GH_APP_PRIVATE_KEY }
-            ---
-            # Mint a ~1h installation token scoped to THIS repo. appID/installID are the org-wide
-            # homelab-agents App constants (platform mechanism; the repositories list does the scoping).
+            # FU-089: the worker git token is minted CENTRALLY in agent-coordinator (the FU-080
+            # loop-token pattern) — the App PRIVATE KEY never enters a stack-reachable namespace,
+            # where the namespace-admin workbench SA could read it and mint cross-stack tokens.
+            # The key Secret `agents-github-app` in agent-coordinator is the hand-applied
+            # agents/coordinator/git-token.yaml one; the proxy serves this token to worker pods
+            # via /git-token (label-checked, ns bound by platform.teststuff.net/worker-ns).
             apiVersion: generators.external-secrets.io/v1alpha1
             kind: GithubAccessToken
             metadata:
-              name: agent-git-token-gen
-              namespace: {{ $r.name }}
+              name: agent-git-{{ $r.name }}-gen
+              namespace: agent-coordinator
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-gen
                 gotemplating.fn.crossplane.io/ready: "True"
@@ -527,26 +507,40 @@ spec:
             apiVersion: external-secrets.io/v1
             kind: ExternalSecret
             metadata:
-              name: agent-git-token
-              namespace: {{ $r.name }}
+              name: agent-git-{{ $r.name }}
+              namespace: agent-coordinator
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-es
             spec:
               refreshInterval: 45m
               target:
-                name: agent-git-token
+                name: agent-git-{{ $r.name }}
                 creationPolicy: Owner
                 template:
                   metadata:
                     labels:
                       # ADR-087 leg B: proxy /git-token serves this to worker pods (label-checked).
                       homelab.teststuff.net/agent-git-token: "true"
+                      platform.teststuff.net/worker-ns: {{ $r.name }}
               dataFrom:
                 - sourceRef:
                     generatorRef:
                       apiVersion: generators.external-secrets.io/v1alpha1
                       kind: GithubAccessToken
-                      name: agent-git-token-gen
+                      name: agent-git-{{ $r.name }}-gen
+            ---
+            # FU-089: the worker pod's identity for the proxy's TokenReview on /git-token.
+            # No RBAC grants — the SA exists purely so a worker can PROVE "I am a worker pod in
+            # <ns>" with its projected token (mandatory verification once agent-runtime's
+            # credential helper sends it).
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: agentstack-worker
+              namespace: {{ $r.name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-worker-sa
+                gotemplating.fn.crossplane.io/ready: "True"
             {{- if default false (get $fx "claudeTier") }}
             ---
             # FU-066 leg (a): the claude-tier session secret — the subscription oauth token,

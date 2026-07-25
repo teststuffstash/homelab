@@ -500,6 +500,9 @@ metadata:
   labels: { app: agent-session, project: ${PROJECT}${SUB_LABEL} }
 spec:
   restartPolicy: Never
+  # FU-089: the worker's PROVABLE identity — the proxy's /git-token TokenReviews this SA's
+  # projected token (Composition renders the SA per fixer ns; no RBAC grants attached).
+  serviceAccountName: agentstack-worker
   terminationGracePeriodSeconds: 5
 ${AFFINITY}
 ${KATA_BLOCK}

@@ -171,6 +171,11 @@ GIT_TOKEN_LABEL = "homelab.teststuff.net/agent-git-token"
 # scoped contents tokens; the FU-020 CNP is its belt) but VERIFIES when a token is offered.
 LOOP_GIT_LABEL = "homelab.teststuff.net/loop-git-token"
 LOOP_NS_LABEL = "platform.teststuff.net/loop-ns"
+# FU-089: worker tokens are minted centrally too; this label binds agent-git-<ns> to its ns.
+WORKER_NS_LABEL = "platform.teststuff.net/worker-ns"
+# Migration flag: "1" once the agent-runtime credential helper sends the worker SA token —
+# then an unauthenticated /git-token is refused (until then it is logged loudly, not denied).
+GIT_TOKEN_REQUIRE_AUTH = os.environ.get("GIT_TOKEN_REQUIRE_AUTH", "0") == "1"
 
 
 def _token_review(token: str) -> str | None:
@@ -227,11 +232,12 @@ def _resolve_loop_git(secret_name: str, for_ns: str) -> str | None:
 
 
 def _resolve_git_token(ns: str) -> str | None:
-    """ADR-087 leg B: serve the ESO-minted `agent-git-token` for a worker namespace — the pod
-    stops mounting the Secret entirely and fetches per git operation (ESO keeps it fresh, so run
-    duration is unbounded by token TTL). Honors only Secrets carrying GIT_TOKEN_LABEL; the same
-    per-namespace RBAC as session keys. Cached briefly like refs."""
-    ref = f"{ns}/agent-git-token#git"
+    """ADR-087 leg B, FU-089 central form: serve the worker token for namespace <ns> from the
+    CENTRALLY minted `agent-coordinator/agent-git-<ns>` Secret (the App private key never sits
+    in a stack-reachable namespace any more). Honors only Secrets carrying GIT_TOKEN_LABEL AND
+    whose WORKER_NS_LABEL equals the namespace being served (belt against a mis-mint). Cached
+    briefly like refs."""
+    ref = f"agent-coordinator/agent-git-{ns}#git"
     now = time.time()
     with _refs_lock:
         hit = _refs.get(ref)
@@ -242,16 +248,17 @@ def _resolve_git_token(ns: str) -> str | None:
         sa_token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
         req = urllib.request.Request(
-            f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/agent-git-token",
+            f"https://kubernetes.default.svc/api/v1/namespaces/agent-coordinator/secrets/agent-git-{ns}",
             headers={"Authorization": "Bearer " + sa_token},
         )
         with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
             secret = json.load(resp)
-        if (secret.get("metadata", {}).get("labels") or {}).get(GIT_TOKEN_LABEL) == "true":
+        labels = secret.get("metadata", {}).get("labels") or {}
+        if labels.get(GIT_TOKEN_LABEL) == "true" and labels.get(WORKER_NS_LABEL) == ns:
             b64 = (secret.get("data") or {}).get("token", "")
             token_value = base64.b64decode(b64).decode() if b64 else None
         else:
-            log(f"git-token: {ns} secret lacks {GIT_TOKEN_LABEL} — refusing")
+            log(f"git-token: agent-git-{ns} exists but labels refuse it for ns {ns}")
     except Exception as e:  # noqa: BLE001
         log(f"git-token: resolve failed for {ns}: {e}")
     with _refs_lock:
@@ -608,18 +615,20 @@ class Proxy(BaseHTTPRequestHandler):
             self.wfile.write(payload)
             return
         if self.path.startswith("/git-token"):
-            # ADR-087 leg B — GET /git-token?ns=<worker-namespace> → the live App token, plaintext
-            # body. In-cluster only; FU-020's NetworkPolicy narrows callers to worker pods.
-            # A caller MAY offer its SA token (Authorization: Bearer) — then it is VERIFIED to be
-            # from the requested namespace; a bad/foreign token is refused. Offering none stays
-            # legal for the repo-scoped worker tokens (the CNP is that path's belt) — loop tokens
-            # are never served here.
+            # ADR-087 leg B, FU-089 — GET /git-token?ns=<worker-namespace> → the live App token
+            # (repo-scoped, minted centrally in agent-coordinator), plaintext body. In-cluster
+            # only; FU-020's NetworkPolicy narrows callers to worker pods. A caller offering its
+            # SA token (Authorization: Bearer) is VERIFIED to be the requested namespace's
+            # agentstack-worker SA (any other identity is refused). Until the agent-runtime
+            # credential helper ships the token, unauthenticated calls are served-but-logged;
+            # GIT_TOKEN_REQUIRE_AUTH=1 flips them to 403 (the FU-089 finale).
             from urllib.parse import parse_qs, urlparse
             ns = (parse_qs(urlparse(self.path).query).get("ns") or [""])[0]
             auth = self.headers.get("Authorization") or ""
             if auth.startswith("Bearer "):
                 caller = _token_review(auth[len("Bearer "):])
-                if not caller or not caller.startswith(f"system:serviceaccount:{ns}:"):
+                expected = f"system:serviceaccount:{ns}:agentstack-worker"
+                if caller != expected and not (caller or "").startswith(f"system:serviceaccount:{ns}:"):
                     log(f"GET /git-token ns={ns} → 403 (offered token from {caller or 'nobody'})")
                     payload = b"forbidden"
                     self.send_response(403)
@@ -627,6 +636,17 @@ class Proxy(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(payload)
                     return
+            elif GIT_TOKEN_REQUIRE_AUTH:
+                log(f"GET /git-token ns={ns} → 403 (no SA token; GIT_TOKEN_REQUIRE_AUTH)")
+                payload = b"forbidden"
+                self.send_response(403)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            else:
+                log(f"GET /git-token ns={ns} → UNAUTHENTICATED caller (allowed until "
+                    f"GIT_TOKEN_REQUIRE_AUTH=1 — FU-089 migration)")
             token_value = _resolve_git_token(ns) if ns else None
             if token_value:
                 payload = token_value.encode()
