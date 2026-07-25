@@ -909,3 +909,19 @@ a-belt-is-not-a-guard: snore-recorder#8 (merged 20:23) swaps the manual login fo
 outlives its job on a shared runner. Lesson for ADR-082 consumers: **a persistent runner is
 shared mutable state — any `docker login` outside a guaranteed-logout wrapper poisons every
 tenant.**
+
+### 2026-07-25 — meta-9 (cont. 10): the serve chain closes — acceptance run, honest verdict
+The mcp endpoint went LIVE (initialize 200) after the fourth live fix (#115: the image ships
+specs/tools/*.schema.json — the server IMPORTS its machine half, rule 7; +.dockerignore
+exception, caught by the e2e build itself). **Acceptance (deliverable 3, delegated): the
+infrastructure PASSES end-to-end** — HAProxy wildcard → oracle-gateway → pods, MCP-conformant
+handshake, and date-travel over effective windows CORRECT on the real corpus (PS §1
+2025-07-01 → akt_viide 115052015002; today → 111042025003). **The corpus data FAILS**:
+provision_not_found everywhere — the PS redaction carries ~7 of 168 §§ (the missing rows
+almost certainly NULL-key exclusions from the #89 belt — exclude-and-count masked a parse
+gap, exactly what the count is FOR: 52k exclusions deserve a per-akt ceiling alert), and the
+rows that exist store raw '§ 104.' display keys the query rightly refuses. One extractor
+shape, two symptoms → **#116** (armed, ⚖ normalize-at-parse per #78/#80). Wire evidence +
+in-pod corpus autopsy on #82. The night's tally: 4 chart/image defects fixed through the
+gates, ImageVolume's first production pull, both spec guards fired true, and the acceptance
+did its job — refused to call a live transport a served product.
