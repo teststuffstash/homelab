@@ -925,3 +925,35 @@ shape, two symptoms → **#116** (armed, ⚖ normalize-at-parse per #78/#80). Wi
 in-pod corpus autopsy on #82. The night's tally: 4 chart/image defects fixed through the
 gates, ImageVolume's first production pull, both spec guards fired true, and the acceptance
 did its job — refused to call a live transport a served product.
+
+### 2026-07-25 — meta-10: FU-015 lands fleet-wide + the login-shell corpse in the review skips
+**FU-015 phase 1 LIVE in a morning.** `docker/arc-runner/` (runner 2.336.0 + xz/gh/jq +
+single-user nix 2.35.1 + devbox 0.17.5 + nixcache-VIP substituter baked), built on
+ubuntu-latest by design (the runner image must not depend on the scale set it provisions),
+pinned in `arc-runners.yaml` (retiring stock `:latest`). Two lucky breaks made the rollout
+bloodless: install-nix-action detects the baked nix (0s no-op → unslimmed repos kept working),
+and each slimming PR's own ci was its verification. All six repos slimmed+merged same morning
+(homelab direct; fleet#120 iac#178 sleep-tracking#28 sleep-iac#20 openrouter-operator#7).
+Numbers: homelab ci 180-210s→70s; oracle-fleet ci job 610s→437s — the tax MOVED into
+`devbox run` (per-job ephemeral /nix still fetches+xz-decompresses the closure, LAN mirror
+verified in line but decompression is CPU-bound on the ThinkPads). Phase 2 (warm-store layer)
+is where the 135s target lives. Surfaced en route: merge-path-lint's generated doc embedded
+LIVE foreign-anchor verdicts → environment-dependent staleness (jail has siblings, CI none) —
+foreign marks now constant 🔗, verdicts console-only.
+**The Failed review-skip class, root-caused to bash itself:** `bash -lc` as a pod's direct
+command is a LOGIN shell at SHLVL=1 — explicit `exit 0` triggers `.bash_logout` →
+`clear_console` fails (no tty) → `set -e` overrides the exit status with 1. Only skip paths
+broke; the normal path `exec`s away and never runs logout processing. Bisected with 5 in-cluster
+pods (nested SHLVL≥2 is immune — which is why the jail can't repro it). Class fix at the source:
+agent-coordinator#8 rm's the logout files. That merge then surfaced the NEXT break: deploy-pin
+still sed'ing the 07-21-deleted review-reflex.yaml — first build since the Argo migration, chain
+silently dead (#9: git-grep sweep of pins, which also folded the previously-manual argo-yaml
+bumps into the bump PR). homelab#33 rolled images.env + 5 argo yamls; skip shape verified
+Succeeded on the new tag. Lesson: a deploy chain exercised rarely is a deploy chain broken
+silently — the pin sweep is now derived (grep), not declared (file list).
+**Corpus rebuild:** c92h9 parse CLEAN over the full-subtree corpus (252,354 members — iac#173's
+4Gi + #119 hold, RSS flat ~350Mi), build(0) OOMKilled at 3Gi: post-#116 the corpus carries
+every provision, FTS5 build scales with real act sizes — parse's own 2Gi→4Gi mechanism, one
+step downstream. iac#181 (build→6Gi) + start-from=build resubmit chain armed. Also: a
+prior-session watcher (177-sync/resubmit) outlived its session and delivered the c92h9 FAILED
+verdict here — orphan monitors are a real signal path, read them, don't dismiss them.
