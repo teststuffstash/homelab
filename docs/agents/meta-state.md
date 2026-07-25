@@ -10,10 +10,12 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   phase 2 warm-store layer (the 135s target), agent-coordinator ci slim, renovate pins.
 - **bash-logout class DONE** (ac#8 + ac#9 deploy-pin grep-sweep + homelab#33 rolled all pins;
   skip shape verified Succeeded on 2026.7.25-g141235c93140). Nothing pending.
-- **Oracle corpus rebuild — parse CLEAN, build OOMKilled at 3Gi** (post-#116 full-subtree
-  corpus; parse artifacts reusable). **iac#181 (build 3Gi→6Gi) auto-merge armed; background
-  chain: merge → template sync → submit `start-from=build` → watch.** On build+publish
-  Succeeded: (1) `release-corpus` dispatch in oracle-fleet (digest-verify vs in-cluster);
+- **Oracle corpus rebuild — build is a RETENTION bug, filed fleet#121 (queued)**: OOMKilled
+  at 3Gi AND 6Gi (~54% of artifacts, growth ∝ rows — the #118 twin, build side). iac#181
+  (6Gi) merged — temporary headroom only. Loop owns the fix; on #121 fix merge: deploy bump
+  (iac, auto) → pin-follow workflow-ert image refs → ArgoCD sync → submit `start-from=build`
+  verification (c92h9 parse artifacts reuse, manifest in scratchpad or re-create: template
+  ert-pipeline, param start-from=build). On build+publish Succeeded: (1) `release-corpus` dispatch in oracle-fleet (digest-verify vs in-cluster);
   (2) oracle-iac values digest bump (`values/oracle-fleet-ingester.yaml` mcpServer.corpus,
   auto-merge); (3) rollout → re-run #82 deliverable-3 acceptance at mcp.oracle.teststuff.net
   (PS §1 2025-07-01 → 115052015002 WITH full text; 168 §§ per #117) → post on #82, C6
