@@ -17,11 +17,13 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   windows/citations CORRECT, rows exist — but body_text EMPTY for ALL 15,087,110 provisions
   (#125, extract-at-parse + empty-body build gate ⚖) and lookups ~42s warm at 15M rows (#126,
   build-time indexes ⚖, explain-query-plan first). Loop owns both; both re-verify on ONE
-  `start-from=parse` rebuild — #125 fix (fleet#127) MERGED, #126 in flight: WAIT for #126's
-  merge too, pin-follow ONCE, one ~2h rebuild covers text+indexes → then release → digest
-  bump → acceptance re-run (criteria
+  `start-from=parse` rebuild — BOTH MERGED (fleet#127 text-capture+gate; fleet#128
+  digest-at-build — the 42s was per-query re-digest of the 1.83GB corpus, not an index scan).
+  Deploy gfc4b53737b1a → iac#196 bump + iac#197 pin-follow merged; **FULL rebuild submitted
+  ~16:50Z, watch armed** (~2h: parse re-extract → build under the 5% empty-body floor →
+  publish). On Succeeded: release-corpus dispatch → digest bump → acceptance #4 (criteria
   unchanged: PS §1 full text, <1s, 168 §§) → THEN the limits-trim leg (parse ~350Mi under
-  4Gi, build ~757Mi under 6Gi). C6 #116/#118/#121/#123 all flipped agent/done.
+  4Gi, build ~757Mi under 6Gi) + C6 #125/#126. C6 #116/#118/#121/#123 already flipped.
 
 - **Sleep stack**: AFTER FU-015 — the sleep first goal (specs + evidence + Grafana-in-kind
   system testing, FU-095 prereq block); then FU-044 → FU-080 graduation → FU-095 (c)→(b)→(a).
