@@ -518,8 +518,24 @@ _Last updated: 2026-07-16._
       FU-048, ADR-085.
 
 - [ ] **FU-095** — **Sleep stack pilots: task-class model routing + multi-harness evidence**
-      (operator direction 2026-07-25; downstream consumer = the IDP project's research/fixer
-      agents). Three legs, all riding the sleep stack once FU-080 graduates it:
+      (operator direction 2026-07-25; downstream consumer = the IdP project's REASONING agents —
+      auditing, requirements, monitoring, NOT coding). **Operator corrections 2026-07-25:**
+      • **Sleep specs+evidence are a prerequisite, not optional** — comparable model results
+        across projects need the same evidence discipline; without specs the loop can't run
+        reliably on sleep. Sequencing: specs discipline (oracle-style, adapted) lands WITH or
+        BEFORE graduation.
+      • **The router's candidate source is a maintained ROTATION** (OpenRouter top-weekly or
+        similar), not the scout's new-model diff — the scout missed `nemotron-3-ultra-550b:free`
+        (verified: the registry snapshot predates it AND kimi-k3; diff-only + tools/price filter
+        ≠ "what's currently good"). The rotation feeds chains continuously; the scout's canary
+        leg is kept as the safety probe for rotation entrants.
+      • **Reasoning tier for audit/review/research task types** — coordinator README currently
+        BARS reasoning models (a worker-coding rule); the audit/research lane needs its own
+        rule, including **dual-model review** (two models on one audit is worth the tokens for
+        review/audit tasks, unlike coding). Budget shape for IdP pre-build (EITS/best-practices
+        requirements research): a few review rounds on a large model (e.g. kimi-k3), never
+        N full designs from scratch.
+      Three legs, all riding the sleep stack once FU-080 graduates it:
       (a) **task-class-aware model choice at dispatch** — today the model is static-chain +
       strike-walk (`agents/stacks.json`, coordinator README §MODEL); availability+price already
       exist (registry `estimate_budget.py` §M3, provider pinning §M4). The NEW axis: resolve the
