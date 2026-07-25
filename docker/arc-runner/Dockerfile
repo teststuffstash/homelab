@@ -44,3 +44,21 @@ RUN curl -fsSL "https://releases.nixos.org/nix/nix-${NIX_VERSION}/install" \
 
 COPY --chown=runner:runner nix.conf /home/runner/.config/nix/nix.conf
 ENV PATH="/home/runner/.nix-profile/bin:${PATH}"
+
+# Phase 2 (FU-015): warm /nix with the fleet's devbox closures so jobs skip realization
+# (~340s of oracle-fleet's ci was closure fetch+xz-decompress on the ThinkPads). Lockfiles are
+# fetched from each repo's master AT BUILD TIME — deliberately not hard-coupled: a stale warm
+# store still works, jobs realize the delta via the LAN mirror. Rebuild (push to this dir or
+# workflow_dispatch) whenever the drift gets noticeable. The store paths persist without GC
+# roots (no nix GC ever runs in the image); /tmp/warm profiles are discarded on purpose.
+ARG WARM_REPOS="homelab oracle-fleet oracle-iac sleep-tracking sleep-iac agent-coordinator openrouter-operator"
+# NIX_CONFIG: the LAN VIP is unreachable from the ubuntu-latest builder — go straight upstream
+# there (runtime keeps the baked nix.conf order).
+RUN set -e; export NIX_CONFIG="substituters = https://cache.nixos.org"; \
+    for r in ${WARM_REPOS}; do \
+      echo "── warming closure: $r"; mkdir -p /tmp/warm/$r; cd /tmp/warm/$r; \
+      if curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/master/devbox.json" \
+         && curl -fsSLO "https://raw.githubusercontent.com/teststuffstash/$r/master/devbox.lock"; then \
+        devbox install; \
+      else echo "::warning:: $r has no devbox.json/lock on master — skipped"; fi; \
+    done; rm -rf /tmp/warm /home/runner/.cache/nix
