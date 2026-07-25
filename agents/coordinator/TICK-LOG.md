@@ -957,3 +957,28 @@ every provision, FTS5 build scales with real act sizes — parse's own 2Gi→4Gi
 step downstream. iac#181 (build→6Gi) + start-from=build resubmit chain armed. Also: a
 prior-session watcher (177-sync/resubmit) outlived its session and delivered the c92h9 FAILED
 verdict here — orphan monitors are a real signal path, read them, don't dismiss them.
+
+### 2026-07-25 — meta-10 (cont.): retro pilots, the observability build-out, corpus fixes 3+4
+**FU-058 retro runs 1+2 (operator-directed)**: the mechanism (identical ledger-brief → capped
+ephemeral-key rides → marker harvest) proved out across 9 models; repo-verified comparison ranked
+opus #1 (line-exact grounding), **deepseek-v4-pro/hy3 = the API audit tier** ($0.02-0.08,
+opus-adjacent grounding), kimi = wide-net second reader, gpt-oss-120b + nemotron-super =
+fabricators on evidence work; five distinct unique finds = multi-model buys coverage. deepseek's
+cross-review of the opus report materially improved the change-set (workflows-scope = blocking
+dep; the truncation is the proxy max_tokens bug, not a model trait; cap-1-rounds overcorrects).
+Ops lessons: GOOSE_MAX_TOKENS=16384 cures -32602 truncation; rides must self-clean (the
+**bulk-tier scheduling-cap incident**: 9×20Gi orphaned scratch allocations → both bulk disks
+Schedulable=False → every Init wedged; janitor grace 2h→30min, FU-093 third sighting); the
+FU-069 breaker fired TRUE on the ride batch starving #126 (15 checks/61min) — cleared with
+audit; NOTE the clear must re-add agent/queued (error consumed it). Retro rides belong outside
+the fixer ns — FU-058 P3 constraint.
+**FU-084 delivered** + the SKU-visibility bug (operator-reported) fixed; agents docs de-staled
+(workflow.md/platform-and-stacks/README to the Argo-era), FU-091/050/062 archived, FU-031
+won't-do (operator), Monitoring & storage sweep archived 4.
+**Corpus acceptance #3 refused → fixes 3+4 through the loop same-day**: #125 (body_text empty
+for ALL 15,087,110 provisions — the #116 walk read <sisuTekst>.text, real text nests as
+<tavatekst>/<HTMLKonteiner>; fix = itertext capture + the 5% empty-body BUILD GATE the
+exclude-and-count doctrine was missing) and #126 (the 42s "index scan" was per-query re-digest
+of the 1.83GB corpus — digest now baked at build; the issue's ⚖ "profile first, don't trust the
+guess" did its job). Both merged (#127 codeowner-gated, #128), batched pin-follow, **full
+start-from=parse rebuild in flight at handoff** (cvkk8, 50/s — faster than the morning's 33).

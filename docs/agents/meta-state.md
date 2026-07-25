@@ -3,7 +3,7 @@
 One bullet per pending meta-coordinator chain with its NEXT concrete step; delete bullets when
 done (TICK-LOG carries history — this file carries only what a fresh session must pick up).
 
-_Updated 2026-07-25 ~07:50Z (meta-10 session):_
+_Session handoff 2026-07-25 ~17:15Z (operator /clear; resume = /meta-coordinate):_
 
 - **FU-015 DONE through phase 2** (warm-store image live: homelab ci 38s vs 180-210s
   baseline). Pending on OPERATOR: install homelab-renovate App on oracle-fleet/oracle-iac/
@@ -19,8 +19,8 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   build-time indexes ⚖, explain-query-plan first). Loop owns both; both re-verify on ONE
   `start-from=parse` rebuild — BOTH MERGED (fleet#127 text-capture+gate; fleet#128
   digest-at-build — the 42s was per-query re-digest of the 1.83GB corpus, not an index scan).
-  Deploy gfc4b53737b1a → iac#196 bump + iac#197 pin-follow merged; **FULL rebuild submitted
-  ~16:50Z, watch armed** (~2h: parse re-extract → build under the 5% empty-body floor →
+  Deploy gfc4b53737b1a → iac#196 bump + iac#197 pin-follow merged; **FULL rebuild `ert-pipeline-parse-cvkk8` IN FLIGHT** (at handoff ~17:15Z: 90k/252k @50.6/s,
+  ETA parse ~18:10Z; RE-ARM a terminal watcher on session start) (~2h total: parse re-extract → build under the 5% empty-body floor →
   publish). On Succeeded: release-corpus dispatch → digest bump → acceptance #4 (criteria
   unchanged: PS §1 full text, <1s, 168 §§) → THEN the limits-trim leg (parse ~350Mi under
   4Gi, build ~757Mi under 6Gi) + C6 #125/#126. C6 #116/#118/#121/#123 already flipped.
