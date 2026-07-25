@@ -65,7 +65,10 @@ locals {
   #   devbox run github-tofu state list | grep 'github_issue_label.track' \
   #     | while read -r res; do devbox run github-tofu state rm "$res"; done
   # Delete this file entirely when the list below empties (sleep repos + homelab remain).
-  label_repos = ["sleep-tracking", "snore-recorder", "sleep-iac", "homelab"]
+  # sleep repos migrated to claim-owned labels 2026-07-25 (FU-068, sleep-iac#19 — IssueLabels
+  # Ready+Synced verified before this edit). Operator: `tofu state rm` their entries BEFORE the
+  # next apply (never destroy). homelab stays here — it has no claim (home undecided, FU-068).
+  label_repos = ["homelab"]
 
   # Track-lane labels are per-STACK, not global (oracle-fleet specs/TRACKS.md): exclusive
   # directory ownership per coordinator track — meaningless on repos outside the stack, so scoped.
