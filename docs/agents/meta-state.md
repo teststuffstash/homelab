@@ -11,12 +11,14 @@ _Updated 2026-07-25 ~07:50Z (meta-10 session):_
   warm measurement (~135s target). Renovate-track image pins = minor residual.
 - **bash-logout class DONE** (ac#8 + ac#9 deploy-pin grep-sweep + homelab#33 rolled all pins;
   skip shape verified Succeeded on 2026.7.25-g141235c93140). Nothing pending.
-- **Oracle corpus rebuild — build is a RETENTION bug, filed fleet#121 (queued)**: OOMKilled
-  at 3Gi AND 6Gi (~54% of artifacts, growth ∝ rows — the #118 twin, build side). iac#181
-  (6Gi) merged — temporary headroom only. Loop owns the fix; on #121 fix merge: deploy bump
-  (iac, auto) → pin-follow workflow-ert image refs → ArgoCD sync → submit `start-from=build`
-  verification (c92h9 parse artifacts reuse, manifest in scratchpad or re-create: template
-  ert-pipeline, param start-from=build). On build+publish Succeeded: (1) `release-corpus` dispatch in oracle-fleet (digest-verify vs in-cluster);
+- **Oracle corpus rebuild — BUILD LEG DONE, publish = fleet#123 (queued)**: #121 fix
+  (fleet#122, codeowner-gated + merged) verified on run rr65f — bound HELD (peak ≈757Mi,
+  full corpus: 15,087,110 provisions, corpus.sqlite 1.83GB in Garage, digest 1dd2b7ef…);
+  publish then OOMKilled at 1Gi (corpus 8.5× bigger; streaming publish = #123, ⚖ stream
+  don't size-up, third leg of the retention doctrine). Loop owns #123; on its fix merge:
+  deploy bump (iac, auto) → pin-follow workflow-ert refs → sync → `start-from=build`
+  verification run (publish completes ≤1Gi). Limits-trim data: parse ~350Mi under 4Gi,
+  build ~757Mi under 6Gi. On build+publish Succeeded: (1) `release-corpus` dispatch in oracle-fleet (digest-verify vs in-cluster);
   (2) oracle-iac values digest bump (`values/oracle-fleet-ingester.yaml` mcpServer.corpus,
   auto-merge); (3) rollout → re-run #82 deliverable-3 acceptance at mcp.oracle.teststuff.net
   (PS §1 2025-07-01 → 115052015002 WITH full text; 168 §§ per #117) → post on #82, C6
