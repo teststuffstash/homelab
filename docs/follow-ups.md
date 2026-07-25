@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-096**.
+  Next free id: **FU-097**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -202,10 +202,15 @@ _Last updated: 2026-07-16._
       297s vs 437s slim-only vs 610s baseline.** Decomposition: 94s devbox ensure-packages
       (nix profile REALIZATION, CPU-bound — store paths ARE baked; homelab's smaller closure
       realizes in 28s), ~12s gates+uv, 87s pytest (real work), 87s evidence+specs-site publish
-      (real S3 I/O). The ~135s target assumed ensure→0; the honest floor with today's suite is
-      ~200s. Shrinking ensure further means baking per-repo `.devbox` project state
-      (path-deterministic under `_work/<repo>/<repo>`) — parked, not worth it at 94s.
-      **Remaining: renovate-track the base-image/devbox/nix pins in `docker/arc-runner/`.**
+      (real S3 I/O). **The 94s root-caused by experiment (2026-07-25): nix EVALUATION, not
+      fetching** — cold `~/.cache/{nix,devbox}` costs 127s wall/84s CPU even on a fast desktop
+      with a complete store (warm cache: 7.7s; warm `.devbox` project: 0.09s). The image was
+      deleting its own eval cache post-warming; fixed (keep the cache, commit ddbd9d9) —
+      expect ensure ~10-20s on the ThinkPads. The other two hot spots are queued to the loop:
+      fleet#129 (publish uploads at ~1 obj/s — 87s) + fleet#130 (pytest 72s, 36s undecomposed
+      in collection+test_build). Agent-base gets the same eval-cache treatment = FU-096.
+      **Remaining: re-measure after the pin bump; renovate-track the base-image/devbox/nix
+      pins in `docker/arc-runner/`.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
@@ -558,8 +563,18 @@ _Last updated: 2026-07-16._
       "e2e" reserved for the actual target environment (synthetic production traffic). Record
       the terms in sleep's process docs when the specs land (cf. Fowler microservice-testing:
       our "system" ≈ his out-of-process component / limited e2e).
-
-## Monitoring & storage
+- [ ] **FU-096** — **Warm the agent-base ride bring-up the FU-015 way — it's the EVAL CACHE,
+      not the store** (measured 2026-07-25 closing FU-015): with a fully-warm /nix store,
+      `devbox install` still costs 127s wall / 84s CPU when `~/.cache/{nix,devbox}` is cold
+      (7.7s warm, 0.09s with `.devbox` project state) — nix evaluation is the tax, fetching
+      isn't. The arc-runner image now keeps the cache (this closed the runner side); agent-base
+      (agent-runtime repo) pays the same eval per RIDE pod on top of the LAN-substituter store
+      fetch, and retro run 1 flagged bring-up dwarfing task time (opencode attempt 3 spent
+      ~35min of wall on devbox bring-up). Fix shape: bake per-repo closures + KEEP the eval
+      cache in agent-base (same warm/ staging pattern as `docker/arc-runner/`), or mount the
+      arc-runner image's /nix+cache as an ImageVolume (verified working on this cluster,
+      fleet#106). NOT a volume-share across pods (single-user nix locking + RWX risk — the
+      image layer IS the share). Relates FU-058 (retro mechanism), FU-015 (archived numbers).
 
 - [ ] **FU-084** — GitHub API rate-limit metrics — **CORE DELIVERED 2026-07-25**: exporter
       `collect_rate_limits` (`/rate_limit` is free) emits `github_rate_limit_{remaining,limit,
