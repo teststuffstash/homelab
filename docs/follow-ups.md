@@ -196,8 +196,9 @@ _Last updated: 2026-07-16._
       then add them to runner-image.yaml's `repositories:` list so the hot-path oracle-fleet
       closure warms too (and consider adding the trio to devbox-update.yaml's matrix — same
       coverage gap). agent-coordinator ci needs no slim (docker verification build, no devbox).
-      **Remaining: the operator App install + re-measure oracle-fleet ci (~135s target);
-      renovate-track the base-image/devbox/nix pins.**
+      Warm image live+measured: homelab ci 38s (baseline 180-210s, slim-only 70s) — ~5x.
+      **Remaining: the operator App install (above) then rebuild + re-measure oracle-fleet ci
+      (~135s target); renovate-track the base-image/devbox/nix pins.**
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

@@ -5,9 +5,10 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Updated 2026-07-25 ~07:50Z (meta-10 session):_
 
-- **FU-015 phase 1 DONE fleet-wide** (image + scale-set pin; all 6 repos slimmed+merged;
-  homelab 70s, oracle-fleet 437s — tax moved into per-job closure realization). Remaining:
-  phase 2 warm-store layer (the 135s target), agent-coordinator ci slim, renovate pins.
+- **FU-015 DONE through phase 2** (warm-store image live: homelab ci 38s vs 180-210s
+  baseline). Pending on OPERATOR: install homelab-renovate App on oracle-fleet/oracle-iac/
+  agent-coordinator, then add them to runner-image.yaml repositories + rebuild → oracle-fleet
+  warm measurement (~135s target). Renovate-track image pins = minor residual.
 - **bash-logout class DONE** (ac#8 + ac#9 deploy-pin grep-sweep + homelab#33 rolled all pins;
   skip shape verified Succeeded on 2026.7.25-g141235c93140). Nothing pending.
 - **Oracle corpus rebuild — build is a RETENTION bug, filed fleet#121 (queued)**: OOMKilled
