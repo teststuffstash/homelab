@@ -32,6 +32,36 @@ per-stack `-iac` model (FU-025, ADR-084). Two moves fall out:
    query (`kubectl get xrd` / `kubectl explain`), and the human-readable catalog is *generated* from the
    XRDs rather than curated by hand. The XRD is catalog + schema + provisioning API in one.
 
+## Composition axes (operator direction 2026-07-25)
+
+A ride is a point in a **four-axis space**, and the axes must stay orthogonal — any combination
+must be launchable ("an opencode ride, idp stack, coordinator role, kimi model"):
+
+| axis | values today | future | owned by |
+|---|---|---|---|
+| **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
+| **role** | fixer, coordinator, reviewer, retro, scout | meta-coordinator, auditor, large-job | recipes/briefs (`.agents/*`, coordinator runbook, retro brief) + the role's ns/credential boundary |
+| **stack** | sleep, oracle, idp | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
+| **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
+
+Known constraint couplings (encode them, don't fight them):
+
+- **Subscription models bind to their harness's auth path** (the Claude subscription is only
+  reachable through the claude CLI + OAuth token; a future opencode subscription likewise) —
+  the free harness×model matrix is the API-billing half; subscription cells are fixed pairs.
+- **Roles carry boundaries, not images**: retro rides must not hold the fixer WIP slot
+  (FU-058 P3), the coordinator's toolchain is fixed (§below), the reviewer needs full-repo
+  read. Role = recipe + RBAC + ns, never a baked image variant.
+- **The stack's toolchain cache belongs to the STACK, not the harness image** (FU-096): baking
+  repo closures into agent-base would couple harness×stack. Target shape: the stack repo's CI
+  publishes its own devbox closure cache as an OCI artifact (versioned with `devbox.lock`),
+  and the launcher mounts it via ImageVolume (verified on this cluster, fleet#106) as a local
+  nix substituter + eval-cache seed. Harness images stay stack-blind; caches ride the stack.
+
+The launcher (dispatch params are launcher-owned — ADR-094) is where an axis combination is
+assembled into a pod. FU-095(b) supplies the multi-harness evidence; ADR-077's meta-harness
+trigger fires only if governing multiple harnesses becomes real.
+
 ## Ownership, target state
 
 ```
