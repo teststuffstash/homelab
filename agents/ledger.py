@@ -119,6 +119,10 @@ def summarize(project, issue, rid, rsec):
     total_cost = round(sum(float((w.get("stats", {}) or {}).get("cost_usd") or 0) for w in workers), 4)
     retry_storms = sum(1 for e in exit_statuses if e in ("auth-storm", "budget-403"))
     ts = [t for t in timestamps if t]
+    # Retro r1 F6: split queue from compute where the manifests carry it (agent-runtime#19 adds
+    # queue_wait_s + duration_s per round; older manifests lack them → fields stay 0/absent-honest).
+    queue_wait = sum(int((w.get("stats", {}) or {}).get("queue_wait_s") or 0) for w in workers)
+    active = sum(int((w.get("stats", {}) or {}).get("duration_s") or 0) for w in workers)
     return {
         "rounds": len(workers),
         "reviewer_rounds": len(reviewers),
@@ -126,6 +130,8 @@ def summarize(project, issue, rid, rsec):
         "retry_storms": retry_storms,
         "ci_sequence": ci_sequence,
         "wall_time_s": (max(ts) - min(ts)) if len(ts) >= 2 else 0,
+        "queue_wait_s": queue_wait,
+        "active_run_s": active,
         "total_cost_usd": total_cost,
         "models": sorted(models),
         "pr_url": pr_url,

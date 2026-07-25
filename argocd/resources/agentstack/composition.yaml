@@ -488,7 +488,7 @@ spec:
               name: agent-git-{{ $r.name }}-gen
               namespace: agent-coordinator
               annotations:
-                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-gen
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-central-git-gen
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
               appID: "4150968"
@@ -510,7 +510,7 @@ spec:
               name: agent-git-{{ $r.name }}
               namespace: agent-coordinator
               annotations:
-                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-git-token-es
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $r.name }}-central-git-es
             spec:
               refreshInterval: 45m
               target:

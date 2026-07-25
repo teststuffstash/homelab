@@ -544,6 +544,10 @@ ${DIND_CONTAINER}
           value: "${TASK}"
         - name: AGENT_ROUND
           value: "${ROUND}"
+        # Retro r1 F6: dispatch timestamp — finalize records queue_wait_s = dispatch → pod
+        # start, so ledger wall times stop conflating queue with compute.
+        - name: AGENT_DISPATCH_EPOCH
+          value: "$(date +%s)"
         - name: AGENT_SESSION_KEY
           value: "${SECRET}"
         - name: AGENT_TS_ENDPOINT
