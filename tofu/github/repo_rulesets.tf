@@ -20,11 +20,11 @@ resource "github_repository_ruleset" "required_checks" {
   # required check (which only reports on a PR) blocks even the owner's direct-to-master, since a bare
   # push has no check run. The agents App is deliberately NOT listed, so its PRs must still go green.
   bypass_actors {
-    # 0, not the documented 1: for OrganizationAdmin the API ignores actor_id semantically and
-    # READS BACK 0, so 1 in config was a perma-diff on every plan (observed on all four
-    # required-approval rulesets, 2026-07-25). Config matches the read-back → no drift. If a
-    # future CREATE rejects 0, fall back to lifecycle ignore_changes = [bypass_actors].
-    actor_id    = 0
+    # actor_id noise: for OrganizationAdmin the API's read-back is INCONSISTENT — measured
+    # 2026-07-25, four rulesets read 0 while ten read 1 for the identical write. No literal
+    # converges the fleet, so the lifecycle block below ignores bypass_actors drift entirely;
+    # 1 stays as the create value (every existing ruleset was created with it successfully).
+    actor_id    = 1
     actor_type  = "OrganizationAdmin"
     bypass_mode = "always"
   }
@@ -42,6 +42,12 @@ resource "github_repository_ruleset" "required_checks" {
       }
     }
   }
+  lifecycle {
+    # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
+    # without this, every plan re-diffs whichever cohort disagrees with the literal.
+    ignore_changes = [bypass_actors]
+  }
+
 }
 
 # Per-repo REQUIRED APPROVAL — the reviewer half of the agentic merge gate. The org structural ruleset
@@ -70,11 +76,11 @@ resource "github_repository_ruleset" "required_approval" {
   # Org admins (you) bypass, matching the org structural ruleset — so an owner's direct-to-master isn't
   # blocked for want of an approval. The agents App is deliberately NOT listed, so its PRs still need one.
   bypass_actors {
-    # 0, not the documented 1: for OrganizationAdmin the API ignores actor_id semantically and
-    # READS BACK 0, so 1 in config was a perma-diff on every plan (observed on all four
-    # required-approval rulesets, 2026-07-25). Config matches the read-back → no drift. If a
-    # future CREATE rejects 0, fall back to lifecycle ignore_changes = [bypass_actors].
-    actor_id    = 0
+    # actor_id noise: for OrganizationAdmin the API's read-back is INCONSISTENT — measured
+    # 2026-07-25, four rulesets read 0 while ten read 1 for the identical write. No literal
+    # converges the fleet, so the lifecycle block below ignores bypass_actors drift entirely;
+    # 1 stays as the create value (every existing ruleset was created with it successfully).
+    actor_id    = 1
     actor_type  = "OrganizationAdmin"
     bypass_mode = "always"
   }
@@ -94,4 +100,10 @@ resource "github_repository_ruleset" "required_approval" {
       require_code_owner_review = each.value.require_code_owner_review
     }
   }
+  lifecycle {
+    # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
+    # without this, every plan re-diffs whichever cohort disagrees with the literal.
+    ignore_changes = [bypass_actors]
+  }
+
 }
