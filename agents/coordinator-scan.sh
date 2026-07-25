@@ -173,12 +173,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # object is deleted — 8 kept-for-reading pods held ~160Gi, the pool filled, and every new
     # ride's volume FAULTED at replica-scheduling ("insufficient storage"), wedging pods in Init
     # while both the WIP probe (fail-open) and the launcher belt let more spawn into the trap.
-    # Transcripts/stats upload to S3 in-pod before exit; >2h is far past the meta-2 read window.
+    # Transcripts/stats upload to S3 in-pod before exit. 30min grace (was 2h): on 2026-07-25
+    # nine rides inside 2h held 9x20Gi scratch allocations and pushed BOTH bulk-tier disks past
+    # the scheduling cap — new scratch PVCs faulted (ReplicaSchedulingFailure) and wedged every
+    # subsequent ride+worker Init. The grace only protects log reads; stats/transcripts are in S3.
     for c in $("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
         --field-selector=status.phase=Succeeded -o json 2>/dev/null | jq -r '.items[]
-        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601 < (now - 7200))
+        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601 < (now - 1800))
         | .metadata.name' 2>/dev/null); do
-      echo "  [$repo] janitor: deleting Completed ride pod ${c} (>2h; releases its ephemeral scratch PVC)"
+      echo "  [$repo] janitor: deleting Completed ride pod ${c} (>30min; releases its ephemeral scratch PVC)"
       "$KUBECTL" $KUBE -n "$repo" delete pod "$c" --ignore-not-found >/dev/null 2>&1 || true
     done
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work

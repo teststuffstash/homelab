@@ -314,7 +314,15 @@ _Last updated: 2026-07-16._
       all (checked: zero `garage_*` series) — cap breaches surface only as faulted writes, and
       the same blindness class hit longhorn-scratch the same day (the #41/#63 Init wedge).
       Enable Garage's admin-API metrics (:3903) + a ServiceMonitor; per-bucket usage-vs-cap
-      panels + a >80% alert are the ledger's enforcement half. Relates ADR-089, oracle-iac#40
+      panels + a >80% alert are the ledger's enforcement half.
+      **Third sighting 2026-07-25 (the blindness class again, twice in one day):** (a) Garage
+      LMDB-full at 03:42 surfaced only as a failed sleep-ingester Job (meta volume since 10Gi);
+      (b) the bulk-tier LONGHORN cap: 9 retro rides' 20Gi scratch allocations pushed both bulk
+      disks past storageScheduled cap → new scratch PVCs faulted (ReplicaSchedulingFailure) and
+      wedged all ride/worker Inits. Immediate fixes: scan janitor grace 2h→30min + launcher-side
+      pod self-clean in the retro orchestrator. The ledger/metrics this FU wants must include
+      LONGHORN per-disk storageScheduled-vs-cap (kubelet metrics exist: longhorn_disk_* — add
+      the >80% alert alongside the Garage one). Relates ADR-089, oracle-iac#40
       closing comment, oracle-iac#95.
 - [ ] **FU-092** — **Reviewer dispatch lacks its deterministic-name idempotency key
       (merge-path-fsm MP-G02).** Found by MODELING the merge path as an FSM (2026-07-21): the
