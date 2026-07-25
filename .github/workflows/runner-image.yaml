@@ -27,6 +27,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Most fleet repos are private — the warm-store lockfiles need an App token (the
+      # devbox-update.yaml pattern); this job's own GITHUB_TOKEN is homelab-scoped.
+      - uses: actions/create-github-app-token@v1
+        id: app
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          owner: teststuffstash
+          repositories: homelab,oracle-fleet,oracle-iac,sleep-tracking,sleep-iac,agent-coordinator,openrouter-operator
+      - name: Fetch fleet devbox lockfiles into the build context (FU-015 warm store)
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          for r in homelab oracle-fleet oracle-iac sleep-tracking sleep-iac agent-coordinator openrouter-operator; do
+            mkdir -p "docker/arc-runner/warm/$r"
+            for f in devbox.json devbox.lock; do
+              if ! gh api "repos/teststuffstash/$r/contents/$f" -H "Accept: application/vnd.github.raw" \
+                   > "docker/arc-runner/warm/$r/$f"; then
+                echo "::warning:: $r/$f not fetchable — closure skipped"
+                rm -rf "docker/arc-runner/warm/$r"; break
+              fi
+            done
+          done
+          echo "closures staged: $(ls docker/arc-runner/warm/)"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
