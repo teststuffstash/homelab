@@ -55,7 +55,10 @@ Open items: FU-015 (custom runner image + LAN substituter), FU-014 (Renovate) �
 
 `tofu/forgejo-runner.tf` — unchanged. Use it for a project that should never touch GitHub: host the
 repo on Forgejo, push images to the Forgejo registry, run `.forgejo/workflows/` (same `devbox run`
-seam). This is also where the self-hosted **SLSA** story continues (cosign + SBOM on a hosted,
+seam). ⚠ **Pull-mirrors of Tier-A repos must have Actions DISABLED** (`PATCH …/repos/<r>
+{"has_actions": false}`): Forgejo Actions also reads `.github/workflows/`, so an enabled mirror
+shows the GitHub workflows as perpetually-waiting runs (no runner serves them; found on the
+sleep-lab mirrors 2026-07-25, both disabled). This is also where the self-hosted **SLSA** story continues (cosign + SBOM on a hosted,
 not-a-laptop builder) — see `slsa.md`.
 
 ## Execution environments — VM vs container, and the nix-in-CI problem
