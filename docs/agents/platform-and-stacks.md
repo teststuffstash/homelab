@@ -46,9 +46,12 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 
 Known constraint couplings (encode them, don't fight them):
 
-- **Subscription models bind to their harness's auth path** (the Claude subscription is only
-  reachable through the claude CLI + OAuth token; a future opencode subscription likewise) —
-  the free harness×model matrix is the API-billing half; subscription cells are fixed pairs.
+- **Models are harness-free under API billing — it's the SUBSCRIPTION billing path that binds**
+  (operator correction 2026-07-25): claude-family models on goose via OpenRouter is a real
+  cell; only the Claude *subscription* is reachable solely through the claude CLI + OAuth
+  token (a future opencode subscription likewise, with its own hard limits). Harness↔model
+  *affinity* ("some harnesses work better with some models") is empirical, not structural —
+  FU-095(b) is the evidence instrument, the ledger axes the metric.
 - **Roles carry boundaries, not images**: retro rides must not hold the fixer WIP slot
   (FU-058 P3), the coordinator's toolchain is fixed (§below), the reviewer needs full-repo
   read. Role = recipe + RBAC + ns, never a baked image variant.

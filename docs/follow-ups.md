@@ -448,7 +448,20 @@ _Last updated: 2026-07-16._
       have been ONE bigger-model task (or a subagent fan-out) instead of chunks; which chunks
       needed rework at integration" — operator hypothesis 2026-07-25: a large model + subagents
       might one-shot a project this size in ~48h; the retro should produce the evidence either
-      way. Prometheus/Grafana access NOT needed yet (no report was blocked on metrics). Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
+      way. Prometheus/Grafana access NOT needed yet (no report was blocked on metrics).
+      **Run-3 shape (operator direction 2026-07-25, composition-axes frame):** two retro
+      rides off the SAME agent-base image + SAME committed BRIEF.md — A = claude harness +
+      opus (subscription via the ADR-081 proxy, FU-088-gated), B = goose harness +
+      deepseek-v4-pro (ephemeral capped key, provider-pinned) — then CROSS-review with the
+      cells SWAPPED (A reviews B's report, B reviews A's). Tooling parity is already
+      structural: agent-base ships claude-code@latest alongside goose/opencode + the full
+      toolkit (gh/git/jq/python/uv/kubectl/s5cmd), so retro-er and reviewer are freely
+      mixable; rotating cells run-over-run separates harness effect from model effect on the
+      FU-057 ledger axes — this doubles as FU-095(b) evidence. Repo scope for the retro
+      token = the stack jail's REPOS boundary (tools/stack-jail.sh: oracle-fleet oracle-iac
+      allure-behavior-snippets), read-only, App-minted. Standing guardrails: outside the
+      fixer ns/WIP slot (P3 constraint), $0.05 key floor, GOOSE_MAX_TOKENS=16384, reports
+      land in docs/agents/retros/ via PR. Budget-capped batched LLM retro over the worst-K ledger tasks: transcript slices via the
       MCP tools (not yet built), dated report in `docs/agents/retros/`, process-file PRs only
       (human-gated), scores its predecessor first. The FU-057 ledger it needs is LIVE (archived
       2026-07-16) and accumulating; first run hand-supervised. Absorbs FU-057's small residue:
