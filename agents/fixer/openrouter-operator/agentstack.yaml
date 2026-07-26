@@ -9,6 +9,15 @@ metadata:
 spec:
   mainRepo: homelab
   coordinatorModel: opus # platform coordination = highest-stakes arbitration (stacks.json carry-over)
+  # FU-080 graduation (2026-07-26, third stack): platform runs its own per-stack loop in
+  # platform-agents. Thin by design — only openrouter-operator has a fixer block, and little
+  # agentic activity happens here yet (operator note). coordinator.enabled + loop.perStack render
+  # the loop; loop.graduated cuts over (global scan skips platform, doorbell + per-stack review in-ns).
+  coordinator:
+    enabled: true
+  loop:
+    perStack: true
+    graduated: true
   workerModel: openrouter/deepseek/deepseek-v4-flash
   workerModelFallbacks: [tencent/hy3, qwen/qwen3-coder]
   repos:
