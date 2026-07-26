@@ -51,6 +51,12 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [cronworkflows]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-080 doorbell: the composed sensor-submit-coordinate Role GRANTS workflows-create to the
+  # global Sensor (so it can submit a per-stack coordinate Workflow into <loop_ns>) — the same
+  # escalation-check gotcha, so crossplane must itself hold these verbs to compose that Role.
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [create, get, list, watch]
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch, create, update, patch, delete]
