@@ -17,6 +17,14 @@ this is the broader catalog.
 
 ## 2. GitHub Apps installed on the org
 
+> **Permissions are DECLARED in [`docs/github-apps.yaml`](github-apps.yaml) (FU-098) — that file
+> is the source of truth and the change flow** (PR it first with a `why` per permission → the
+> github-exporter `GithubAppPermissionDrift` alert rings until the UI click + install approval
+> land → clears). `scripts/github-apps.sh` verifies live-vs-declared into
+> [`github-apps.md`](github-apps.md); `devbox run github-apps-lint` (in ci) proves every mint
+> site's request ⊆ the declaration. The table below keeps the narrative WHYs; on conflict the
+> yaml wins.
+
 | App | Purpose | Permissions | Repo access | IDs |
 |---|---|---|---|---|
 | **homelab-arc-…** | the in-cluster **Actions Runner Controller** registers the org-level `homelab-ephemeral` scale set as this App | Org → *Self-hosted runners: R/W*; Metadata: read | **All repositories** + **Allow public repositories** | install `142353606` |

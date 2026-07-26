@@ -53,6 +53,12 @@ REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
 REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
 # FU-084: dir of per-installation probe tokens (one file per token identity; rl-tokens.yaml).
 RL_TOKEN_DIR = os.environ.get("RL_TOKEN_DIR", "/var/run/rl-tokens")
+# FU-098: dir of App PRIVATE KEYS for the permission-drift belt (one subdir per declared slug,
+# file `privateKey` — deployment.yaml mounts the rl-* App-key Secrets it already holds). The
+# declared state rides the script ConfigMap as github-apps.json (GENERATED from
+# docs/github-apps.yaml; github-apps-lint keeps them in sync).
+APP_KEYS_DIR = os.environ.get("APP_KEYS_DIR", "/var/run/app-keys")
+APPS_DECLARED = os.environ.get("APPS_DECLARED", "/app/github-apps.json")
 
 _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
@@ -474,6 +480,65 @@ def collect_agent_issues(lines):
             lines.append(metric("github_agent_issue_labels", {"owner": ORG, "repo": repo, "label": label}, n))
 
 
+def _app_jwt(app_id, key_path):
+    """RS256 App JWT via the openssl BINARY (python:slim has no crypto lib; openssl ships in the
+    image). 5-min expiry — minted per poll, never stored."""
+    import base64
+    import subprocess
+
+    def b64(b):
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+    now = int(time.time())
+    header = b64(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+    payload = b64(json.dumps({"iat": now - 60, "exp": now + 300, "iss": str(app_id)}).encode())
+    signing = f"{header}.{payload}".encode()
+    sig = subprocess.run(["openssl", "dgst", "-sha256", "-sign", key_path],
+                         input=signing, stdout=subprocess.PIPE, check=True).stdout
+    return f"{header}.{payload}.{b64(sig)}"
+
+
+def collect_app_permission_drift(lines):
+    """FU-098: live App permissions (`GET /app`, App JWT — the API can READ but never WRITE
+    permissions) vs the declared state (github-apps.json). Drift in EITHER direction is a
+    mismatch: a missing declared grant blocks a consumer (the fleet#134 422 class); an
+    undeclared live grant is unreviewed blast radius. Coverage = declared apps whose key is
+    mounted under APP_KEYS_DIR; the change flow is: PR docs/github-apps.yaml FIRST, the alert
+    rings until the operator's UI click (+ install approval) lands, then clears."""
+    try:
+        declared = json.load(open(APPS_DECLARED)).get("apps", [])
+    except Exception as exc:
+        print(f"app-permission-drift: declared file unreadable: {exc}", flush=True)
+        return
+    lines.append("# TYPE github_app_permission_drift gauge")
+    lines.append("# HELP github_app_permission_drift 1 = the App's LIVE permissions differ from docs/github-apps.yaml (either direction); the per-permission detail rides github_app_permission_mismatch.")
+    lines.append("# TYPE github_app_permission_mismatch gauge")
+    for app in declared:
+        slug = app.get("slug", "")
+        key_path = os.path.join(APP_KEYS_DIR, slug, "privateKey")
+        if not (slug and app.get("app_id") and os.path.exists(key_path)):
+            continue  # no key mounted → this App rides the offline verify leg only
+        jwt = _app_jwt(app["app_id"], key_path)
+        req = urllib.request.Request("https://api.github.com/app", headers={
+            "Authorization": f"Bearer {jwt}", "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            live = (json.load(resp).get("permissions") or {})
+        want = {k.replace("org:", "organization_"): v["level"]
+                for k, v in (app.get("permissions") or {}).items()}
+        mismatches = []
+        for perm, level in want.items():
+            if live.get(perm) != level:
+                mismatches.append((perm, level, live.get(perm, "absent")))
+        for perm, level in live.items():
+            if perm not in want and perm != "metadata":
+                mismatches.append((perm, "absent", level))
+        lines.append(f'github_app_permission_drift{{app="{esc(slug)}"}} {1 if mismatches else 0}')
+        for perm, decl, liv in mismatches:
+            lines.append(
+                f'github_app_permission_mismatch{{app="{esc(slug)}",permission="{esc(perm)}",'
+                f'declared="{esc(decl)}",live="{esc(liv)}"}} 1')
+
+
 def collect_billing(lines):
     now = datetime.now(timezone.utc)
     usage = gh(f"/organizations/{ORG}/settings/billing/usage?year={now.year}&month={now.month}")
@@ -541,7 +606,7 @@ def poll_forever():
         lines = []
         ok = True
         for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing,
-                          collect_rate_limits):
+                          collect_rate_limits, collect_app_permission_drift):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below

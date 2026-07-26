@@ -82,6 +82,7 @@ cmd_manifest() {
   manifest=$(jq -nc --arg n "$APP_NAME" --arg url "https://github.com/$ORG" \
     --arg redir "http://localhost:$REDIRECT_PORT/callback" '{
       name:$n, url:$url, redirect_url:$redir, public:false,
+      # FU-098: keep IN SYNC with docs/github-apps.yaml (the declared state — PR it first; the ⊆-lint does not scan this creation-time block)
       default_permissions:{ metadata:"read", contents:"write", pull_requests:"write" },
       default_events:[] }')
   cat > "$out" <<HTML

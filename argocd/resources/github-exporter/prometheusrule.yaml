@@ -14,6 +14,19 @@ spec:
   groups:
     - name: github
       rules:
+        # FU-098: fires while an App's LIVE permissions differ from docs/github-apps.yaml in
+        # EITHER direction. This IS the change flow's turn signal: a permission PR rings it
+        # until the operator's UI click + install approval land; a click nobody PR'd rings it
+        # until declared. 30m for-window: a scrape blip is not drift.
+        - alert: GithubAppPermissionDrift
+          expr: github_app_permission_drift == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitHub App {{ $labels.app }} permissions differ from the declared state"
+            description: "Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"{{ $labels.app }}\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+
         - alert: GithubWorkflowRunFailed
           expr: (time() - github_workflow_run_updated_timestamp{conclusion=~"failure|startup_failure|timed_out", branch=~"master|main"}) < 3600
           labels:

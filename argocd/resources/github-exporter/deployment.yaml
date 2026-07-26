@@ -65,6 +65,12 @@ spec:
             - name: rl-tokens
               mountPath: /var/run/rl-tokens
               readOnly: true
+            # FU-098: App private keys for the permission-drift belt (subdir per DECLARED slug —
+            # collect_app_permission_drift matches on docs/github-apps.yaml slugs). Optional:
+            # a missing key degrades to that App riding the offline verify leg only.
+            - name: app-keys
+              mountPath: /var/run/app-keys
+              readOnly: true
       volumes:
         - name: script
           configMap:
@@ -80,3 +86,14 @@ spec:
                   name: rl-token-reviewer-git
                   optional: true
                   items: [{ key: token, path: reviewer-git }]
+        - name: app-keys
+          projected:
+            sources:
+              - secret:
+                  name: rl-agents-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-agents/privateKey }]
+              - secret:
+                  name: rl-reviewer-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-reviewer/privateKey }]

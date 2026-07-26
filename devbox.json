@@ -141,6 +141,9 @@
       "merge-path-lint": [
         "python3 scripts/merge-path-lint.py \"$@\""
       ],
+      "github-apps-lint": [
+        "python3 scripts/github-apps-lint.py"
+      ],
       "hubble": [
         "bash scripts/hubble-observe.sh \"$@\""
       ]

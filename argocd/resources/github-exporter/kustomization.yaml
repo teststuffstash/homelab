@@ -18,6 +18,9 @@ configMapGenerator:
   - name: github-exporter-script
     files:
       - github-exporter.py
+      # FU-098: the declared App-permission state — GENERATED from docs/github-apps.yaml
+      # (yq -o=json; github-apps-lint enforces the sync). collect_app_permission_drift reads it.
+      - github-apps.json
   - name: grafana-dashboard-github
     files:
       - github.json=dashboard-github.json

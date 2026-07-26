@@ -261,6 +261,19 @@ _Last updated: 2026-07-16._
       BOTH hope-paths (click-without-PR, PR-without-click) become visible. Install repo
       selection stays click-only (user-to-server API, tried+removed 2026-07-01 — setup.md).
       Relates FU-017 (over-grant trimming falls out of the per-permission why), FU-084.
+      **BUILT 2026-07-26** (same session): `docs/github-apps.yaml` (8 apps, per-permission
+      why, decided ABSENCES — incl. renovate's no-vulnerability_alerts per the renovate.md
+      OSV ruling), `scripts/github-apps-lint.py` (⊆-invariant over 7 mint sites + exporter
+      JSON-copy sync; in devbox + ci), verify leg in `scripts/github-apps.sh` (per-App JWT →
+      GET /app → drift matrix in github-apps.md, --lint exits nonzero), exporter
+      `collect_app_permission_drift` (agents+reviewer keys mounted; openssl-subprocess JWT)
+      + `GithubAppPermissionDrift` alert (30m for). `workflows: write` DECLARED for
+      homelab-agents — **the alert rings until the operator's inaugural grant lands**; then:
+      add workflows:write to the composition worker gens + queue fleet#134. Remaining:
+      template the 7 bootstrap scripts' default_permissions FROM the yaml (headers point
+      there for now); fill the null app_ids on the next outside-jail --verify run; consider
+      adding merge/renovate/deploy keys to the exporter belt (one ES + one projected-volume
+      entry each).
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
