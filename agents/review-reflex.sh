@@ -43,8 +43,27 @@ else
 ' ' ')
   REPOS="${REPOS:-sleep-tracking snore-recorder}"
 fi
+# FU-080 per-stack review cutover (mirror of coordinator-scan's graduated skip): a GRADUATED stack
+# is reviewed by its OWN per-stack reflex — SCAN_STACK set → scope to that stack's repos and dispatch
+# the reviewer pod INTO <stack>-agents as agentstack-loop (--loop-ns, broker role=reviewer). The
+# GLOBAL reflex (SCAN_STACK unset) SKIPS graduated stacks so the two never double-review. graduated
+# from stacks.json (the committed mirror — always present here; the reviewer.enabled knob below is
+# orthogonal: "review at all" vs "review here-vs-per-stack").
+_HERE="${_HERE:-$(cd "$(dirname "$0")" && pwd)}"
+LOOP_NS_ARG=""
+if [ -n "${SCAN_STACK:-}" ]; then
+  REPOS=$(jq -r --arg s "$SCAN_STACK" '.stacks[]|select(.name==$s)|.repos[]' "$_HERE/stacks.json" 2>/dev/null | sort -u | tr '\n' ' ')
+  LOOP_NS_ARG="${SCAN_STACK}-agents"
+else
+  grad_repos=$(jq -r '.stacks[]|select((.graduated // false)==true)|.repos[]' "$_HERE/stacks.json" 2>/dev/null | sort -u | tr '\n' ' ')
+  if [ -n "$grad_repos" ]; then
+    kept=""
+    for r in $REPOS; do case " $grad_repos " in *" $r "*) ;; *) kept="$kept $r";; esac; done
+    REPOS="$kept"
+  fi
+fi
 K="${REVIEW_CONCURRENCY:-2}"
-NS="${REVIEWER_NS:-agent-coordinator}"
+NS="${REVIEWER_NS:-${LOOP_NS_ARG:-agent-coordinator}}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
 WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}" # the worker App's PR-author login (C9 re-arm scope)
 ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per PR, ever
@@ -250,8 +269,8 @@ running=0
 for pair in "${dispatch[@]}"; do
   # shellcheck disable=SC2086
   set -- $pair; repo="$1"; pr="$2"
-  log "→ dispatch reviewer: ${repo} #${pr}"
-  bash "$HERE/reviewer-session.sh" "$repo" "$pr" &
+  log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}"
+  bash "$HERE/reviewer-session.sh" "$repo" "$pr" ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
   running=$((running + 1))
   if [ "$running" -ge "$K" ]; then wait -n || true; running=$((running - 1)); fi
 done

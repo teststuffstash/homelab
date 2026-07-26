@@ -407,6 +407,57 @@ spec:
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
+            {{- if get $xr.spec.loop "graduated" }}
+            ---
+            # FU-080 per-stack REVIEW backstop: the stack's OWN review reflex — SCAN_STACK-scoped, dispatching
+            # reviewer pods INTO {{ $loopns }} as agentstack-loop (reviewer-session.sh --loop-ns; the
+            # review-bot token fetched per-run from the broker role=reviewer). Mirrors the global review
+            # cron but per-stack; the polling token is broker role=coordinator (read). The GLOBAL review
+            # reflex SKIPS graduated stacks (review-reflex.sh) so exactly one reflex reviews this stack.
+            apiVersion: argoproj.io/v1alpha1
+            kind: CronWorkflow
+            metadata:
+              name: review-{{ $stack }}
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-review-cron
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              schedules:
+                - "*/15 * * * *"
+              concurrencyPolicy: Forbid
+              startingDeadlineSeconds: 60
+              workflowSpec:
+                serviceAccountName: agentstack-loop
+                activeDeadlineSeconds: 1800
+                ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                entrypoint: main
+                volumes:
+                  - { name: work, emptyDir: {} }
+                templates:
+                  - name: main
+                    container:
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      command: ["bash", "-lc"]
+                      args:
+                        - |
+                          set -e
+                          export GH_TOKEN="$(curl -fsS -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+                            "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
+                            || { echo "FATAL: loop-git token fetch refused/failed — not polling blind"; exit 1; }
+                          rm -rf /work/homelab
+                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          export SCAN_STACK={{ $stack }}
+                          exec bash /work/homelab/agents/review-reflex.sh
+                      env:
+                        - { name: HOME, value: "/home/node" }
+                        - { name: ORG, value: "teststuffstash" }
+                      volumeMounts:
+                        - { name: work, mountPath: /work }
+                      resources:
+                        requests: { cpu: "100m", memory: "256Mi" }
+                        limits: { memory: "512Mi" }
+            {{- end }}
             ---
             # FU-080 doorbell RBAC: let the GLOBAL `coordinator` Sensor (sensor-review SA in
             # agent-coordinator) SUBMIT a per-stack coordinate Workflow into {{ $loopns }} when a

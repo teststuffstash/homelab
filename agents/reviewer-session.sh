@@ -70,11 +70,22 @@ while [ $# -gt 0 ]; do
     --rubric)          RUBRIC="$2"; shift 2;;      # project-relative path to the review system prompt
     --permission-mode) PERM_MODE="$2"; shift 2;;
     --round)           ROUND="$2"; shift 2;;       # review iteration on this PR (transcript prefix reviewer-r<N>)
+    --loop-ns)         LOOP_NS_ARG="$2"; shift 2;;  # FU-080 perStack: run the reviewer pod in <stack>-agents as agentstack-loop; the review-bot token is fetched per-run from the proxy's TokenReview-gated /loop-git-token?role=reviewer (no Secret in that ns)
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
 
-NS="agent-coordinator"
+# FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
+# loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
+# from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
+# GH_TOKEN_FILE won't exist so the gh wrapper falls back to the env LOOP_FETCH exports.
+NS="${LOOP_NS_ARG:-agent-coordinator}"
+POD_SA="default"
+LOOP_FETCH=""
+if [ -n "${LOOP_NS_ARG:-}" ]; then
+  POD_SA="agentstack-loop"
+  LOOP_FETCH="export GH_TOKEN=\"\$(curl -fsS -H \"Authorization: Bearer \$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" \"http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=reviewer\")\" || { echo 'FATAL: loop-reviewer token fetch refused/failed — not reviewing blind'; exit 1; }; "
+fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"
@@ -88,7 +99,7 @@ POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
 # --append-system-prompt-file path is a hard error — the coordinator hit exactly that).
 PREP=$(cat <<PREP
 set -e
-gh repo clone ${REPO_SLUG} /work/repo -- --quiet
+${LOOP_FETCH}gh repo clone ${REPO_SLUG} /work/repo -- --quiet
 cd /work/repo
 gh pr checkout ${PR}
 # FU-061: key the transcript by the ISSUE the PR fixes (not the PR), so a PR's reviews land beside
@@ -187,6 +198,7 @@ metadata:
   name: ${POD}
   labels: { app: agent-reviewer, project: ${PROJECT}, pr: "${PR}", "homelab.teststuff.net/subscription-session": claude }
 spec:
+  serviceAccountName: ${POD_SA}
   restartPolicy: Never
   terminationGracePeriodSeconds: 5
   containers:
