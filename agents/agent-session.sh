@@ -255,6 +255,14 @@ CRED_BROKER_ENV=""; OC_INJECT=""
 if [ "$HARNESS" = "claude" ]; then
   OR_KEY_ENV=""   # subscription tier: no OpenRouter key at all — the pod's only cred is the claude ref
 fi
+if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
+  # FU-089: claude rides join the broker path too — they used to lean on the standing in-ns
+  # agent-git-token Secret via the optional fallback below, which FU-089 deleted (found live:
+  # issue-135 r1, clone died tokenless — the goose/opencode-only gate was the gap).
+  echo "→ cred-inject (claude): git tokens fetched per-op from the proxy (FU-089)"
+  CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
+          value: \"${PROXY_URL}/git-token?ns=${NS}\""
+fi
 if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] \
    && { [ "$HARNESS" = "goose" ] || [ "$HARNESS" = "opencode" ]; }; then
   echo "→ cred-inject: pod holds ref:${NS}/${SECRET}; git tokens fetched per-op from the proxy (ADR-087)"
