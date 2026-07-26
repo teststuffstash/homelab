@@ -26,6 +26,11 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   Expect parse ~3h, build ~5h. NEXT on Succeeded: check build_progress heartbeat events
   fired, then decide the corpus release/digest-roll (titles now captured → a new release +
   iac ImageVolume roll is worthwhile); on Failed: read the step's own JSON events + traceback.
+- **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
+  agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
+  odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
+  the operator only if it looks like unnoticed real damage. Remove this bullet when FU-080
+  lands.
 - **retro-session CronWorkflow** (FU-058) deployed SUSPENDED — first hand-fire wants: idle
   fixer queue, an ephemeral capped OpenRouterKey (param `retroKeySecret`), subscription
   headroom for cell A. Cross-review legs manual (`agents/retro-session.sh --review`).
