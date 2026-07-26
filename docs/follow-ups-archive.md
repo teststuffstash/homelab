@@ -10,8 +10,11 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
 
 - **FU-084** *(archived 2026-07-26)* — **GitHub API rate-limit metrics, COMPLETE.** Exporter
   `collect_rate_limits` over the exporter PAT + per-installation probe tokens for ALL six
-  key-reachable Apps (agents/coordinator — THE 2026-07-17 pool — reviewer, merge, deploy,
-  renovate, labels; rl-tokens.yaml GithubAccessToken pattern, metadata-read probes), dashboard
+  key-reachable Apps (agents/coordinator — THE 2026-07-17 pool — reviewer, renovate, labels LIVE-verified;
+  merge + deploy wired but PENDING one operator command each — their keys were never actually
+  pushed to Infisical despite setup.md's claim: run `scripts/github-app-bootstrap.sh
+  homelab-merge secrets` + `… homelab-deploy secrets` where the cred dirs live, ESO does the
+  rest; rl-tokens.yaml GithubAccessToken pattern, metadata-read probes), dashboard
   panel + `GithubRateLimitLow` symptoms alert; SKU-panel visibility split fixed. DECIDED
   out-of-scope: the arc/runner-registrar pools — their keys are deliberately not in Infisical
   (KeePass/in-cluster only) and their sole consumers are the runner controllers, whose
