@@ -43,11 +43,14 @@ spec:
       eventName: coordinate
       filters:
         data:
+          # Argo string data-filter values are REGEXes (value must be non-empty — ""/"!=" is
+          # rejected). ".+" matches any non-empty loop_ns; a missing/empty path extracts to "" and
+          # fails the match, so plain {repo} POSTs and legacy emitters take the global trigger alone.
           - path: body.loop_ns
             type: string
-            comparator: "!="
+            comparator: "="
             value:
-              - ""
+              - ".+"
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 2 } # dumb outer belt vs emitter storms
       template:
