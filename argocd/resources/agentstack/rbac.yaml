@@ -72,6 +72,12 @@ rules:
   - apiGroups: [repo.github.upbound.io]
     resources: [issuelabels, issuelabels/status]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-072: agentstack-claims-read (bound per-stack) also grants endpoints get/list (the loop SA's
+  # kata endpoint-IP rewrites), so crossplane must hold it to compose that binding. Latent since the
+  # FU-072 grant landed — oracle's existing CRB masked it; graduating sleep (a NEW CRB) surfaced it.
+  - apiGroups: [""]
+    resources: [endpoints]
+    verbs: [get, list]
 ---
 # FU-080 perStack: the loop SA reads AgentStack claims (the stack-list/knob source of truth) —
 # without this the per-stack scan PROBE-FAILS onto the stacks.json belt (seen live 2026-07-18,
