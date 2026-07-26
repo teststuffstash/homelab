@@ -325,11 +325,29 @@ _Last updated: 2026-07-16._
       item dispatch via `coordinator-session.sh --loop-ns`), workflowtaskresults RBAC, transcripts
       PVC+key. E2E 2026-07-18: broker 200-as-loop-SA / 403-foreign-ns / 403-unauthenticated with
       DISTINCT per-App tokens; oracle graduated (`oracle-iac` claim) — see the tick acceptance in
-      the session log. **STILL REMAINING:** per-stack REVIEW backstop (reviewer-session.sh needs
-      the broker-fetch plumbing its coordinator sibling got; the loop-reviewer token leg is
-      already minted+served), retiring a graduated stack from the GLOBAL scan/reflex after soak
-      (today both run — the belt), and sleep/platform graduation. (The FU-089 fixer-ns key hole
-      found during this build is CLOSED — archived 2026-07-26.) model-scout + ledger stay GLOBAL;
+      the session log.
+      **DOORBELL + CUTOVER BUILT + SLEEP GRADUATED 2026-07-26:** the cutover is one flag
+      (`loop.graduated`, XRD): the GLOBAL scan skips a graduated stack (coordinator-scan.sh) and
+      the `/coordinate` doorbell EDGE routes to `<stack>-agents` — data-driven (the emitters
+      agent-session.sh/reviewer-session.sh carry `{stack,loop_ns}`; a filtered `coordinate-perstack`
+      Sensor dependency inlines a per-stack Workflow into `<loop_ns>`; a per-stack `coordinator-scan`
+      mutex serializes cron↔doorbell). A per-stack Sensor was impossible (Argo buses are namespaced
+      — decision (4)'s 3×1Gi rejection), so the global Sensor reaches in; RBAC = composed
+      `sensor-submit-coordinate` Role/Binding. Cron stays INLINE (oracle re-renders as a no-op
+      mutex — undisturbed, verified `Synced=True` throughout). **sleep graduated** (coordinator.enabled
+      + loop.perStack + loop.graduated; `sleep-iac` claim + stacks.json mirror) and TESTED E2E: the
+      sleep-scoped loop dispatched a coordinator on sleep-tracking#30 (broker `loop-git-sleep`
+      auth OK) → worker `agent-sleep-tracking-issue-30-r1` → PR #31 (auto-merge armed; review rides
+      the GLOBAL reflex — see below). Two LATENT crossplane-escalation gaps surfaced+fixed (a new
+      stack composes new Roles/Bindings the aggregated ClusterRole must cover): `argoproj.io/workflows`
+      create (the sensor Role) + `endpoints` get/list (the FU-072 claims-read binding — oracle's old
+      CRB had masked it). Argo gotcha: string data-filter values are REGEX, `""`/`!=` rejected (use `.+`).
+      **STILL REMAINING:** per-stack REVIEW backstop (reviewer-session.sh needs the broker-fetch
+      plumbing its coordinator sibling got; loop-reviewer token already minted+served) — sleep+oracle
+      reviews ride the GLOBAL reflex until then; ORACLE cutover (deferred by choice — stays
+      perStack-only/dual-run for now); platform graduation (thin `repos[]` OK — a stack models its
+      loop surface, not its dependency graph; idp consumes ory/hydra unforked, not in `repos[]`).
+      (FU-089 fixer-ns key hole CLOSED — archived 2026-07-26.) model-scout + ledger stay GLOBAL;
       docker-ride dispatch from the
       jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
