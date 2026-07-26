@@ -56,6 +56,10 @@ apps:
       actions: { level: read, why: "reviewer reads run logs on private repos (loop-reviewer gens)" }
       code_quality: { level: read, why: "OPERATOR RULING 2026-07-26: deliberate future-proof read — a reviewer probing a surface that 422s mid-review reads as 'something is there'; harmless reads are pre-granted so review probes fail honest-empty, not permission-denied" }
       discussions: { level: read, why: "same ruling — deliberate future-proof reviewer read" }
+      license_compliance_alerts: { level: read, why: "operator future-proof-reads ruling 2026-07-26 (see code_quality)" }
+      repository_advisories: { level: read, why: "same ruling" }
+      repo_secret_scanning_dismissal_requests: { level: read, why: "same ruling" }
+      security_events: { level: read, why: "same ruling" }
     absent:
       issues: "reviewer never labels/comments issues — the coordinator lane owns that; keeps the reviewer's blast radius review-only"
     installs: selected

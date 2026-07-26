@@ -35,6 +35,10 @@ _app_id `4199252` · install_id `143941082` · installs: **selected** · keys: I
 | `actions` | read | reviewer reads run logs on private repos (loop-reviewer gens) |
 | `code_quality` | read | OPERATOR RULING 2026-07-26: deliberate future-proof read — a reviewer probing a surface that 422s mid-review reads as 'something is there'; harmless reads are pre-granted so review probes fail honest-empty, not permission-denied |
 | `discussions` | read | same ruling — deliberate future-proof reviewer read |
+| `license_compliance_alerts` | read | operator future-proof-reads ruling 2026-07-26 (see code_quality) |
+| `repository_advisories` | read | same ruling |
+| `repo_secret_scanning_dismissal_requests` | read | same ruling |
+| `security_events` | read | same ruling |
 | `issues` | **absent (decided)** | reviewer never labels/comments issues — the coordinator lane owns that; keeps the reviewer's blast radius review-only |
 
 ## `homelab-merge`

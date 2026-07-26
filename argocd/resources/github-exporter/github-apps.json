@@ -87,6 +87,22 @@
         "discussions": {
           "level": "read",
           "why": "same ruling — deliberate future-proof reviewer read"
+        },
+        "license_compliance_alerts": {
+          "level": "read",
+          "why": "operator future-proof-reads ruling 2026-07-26 (see code_quality)"
+        },
+        "repository_advisories": {
+          "level": "read",
+          "why": "same ruling"
+        },
+        "repo_secret_scanning_dismissal_requests": {
+          "level": "read",
+          "why": "same ruling"
+        },
+        "security_events": {
+          "level": "read",
+          "why": "same ruling"
         }
       },
       "absent": {
