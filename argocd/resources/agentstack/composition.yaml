@@ -500,6 +500,7 @@ spec:
                 contents: write
                 pull_requests: write
                 issues: write # fixer reads the issue; agent-finalize posts strike/stats IN-POD (FU-064/043)
+                workflows: write # fleet#134: track/chassis issues may edit .github/workflows/ci.yaml (App grant 2026-07-26, github-apps.yaml)
               repositories:
                 - {{ $r.name }}
             ---

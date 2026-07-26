@@ -91,7 +91,11 @@ resource "helm_release" "kube_prometheus_stack" {
         # No point scraping faster than HA reports (devices report at 60s).
         scrapeInterval = "60s"
         retention      = "90d"
-        retentionSize  = "18GB"
+        # 16GB on the 20Gi PVC (was 18GB): the size cap self-limits the TSDB, but 18/20 left a
+        # perpetual ~13% headroom — KubePersistentVolumeFillingUp extrapolated that into a
+        # standing warning, and a WAL spike over the cap would fill the disk outright
+        # (2026-07-26; the metric-count growth is agents+ert step series, organic).
+        retentionSize  = "16GB"
         # Defensive: ensure the data dir is owned by the Prometheus user (uid 1000/gid
         # 2000). Longhorn respects fsGroup so this is usually redundant, but it's cheap
         # insurance and re-runs on every pod/node rebuild.

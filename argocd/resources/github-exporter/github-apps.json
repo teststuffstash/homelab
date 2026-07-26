@@ -74,6 +74,14 @@
         "actions": {
           "level": "read",
           "why": "reviewer reads run logs on private repos (loop-reviewer gens)"
+        },
+        "code_quality": {
+          "level": "read",
+          "why": "OPERATOR RULING 2026-07-26: deliberate future-proof read — a reviewer probing a surface that 422s mid-review reads as 'something is there'; harmless reads are pre-granted so review probes fail honest-empty, not permission-denied"
+        },
+        "discussions": {
+          "level": "read",
+          "why": "same ruling — deliberate future-proof reviewer read"
         }
       },
       "absent": {
