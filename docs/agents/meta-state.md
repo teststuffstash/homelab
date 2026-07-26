@@ -32,7 +32,11 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   testing, FU-095 prereq block); then FU-044 → FU-080 graduation → FU-095 (c)→(b)→(a).
 - **Standing watches (die with the session — re-arm per the skill)**: meta-watch-loop.sh,
   2h heartbeat, plus chain watchers (this session: jbtlm run monitor). Probe lessons live in
-  the skill + here: zsh no-word-split in inline Monitors, probe-the-pod-not-the-deploy,
+  the skill + here: zsh no-word-split hits inline Monitors AND inline Bash — put probes in
+  bash script files and DRY-RUN the exact probe under the same interpreter before arming
+  (meta-11 burned two monitor generations on this + an invalid jsonpath together); kubectl
+  jsonpath canNOT range Argo's .status.nodes (a map) — probe step pods via the
+  `workflows.argoproj.io/workflow=<name>` label instead; probe-the-pod-not-the-deploy,
   orphan monitors from dead sessions duplicate events — stop on sight; `mergeStateStatus:
   BLOCKED` is the NORMAL checks-pending state, not stuck (meta-11 false alarm — only DIRTY /
   closed-unmerged / deadline-passed are alarms). Noted benign single: coordinator dispatch
