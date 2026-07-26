@@ -5,20 +5,18 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed):_
 
-- **UC-1 agentic arc (operator directive: agent drives UC-1 — kind, then prod)**: #83
-  DELIVERED same-day — fleet#146 merged through the codeowner gate (gate comment = the
-  operator prompt-corpus pass; concern noted on #84: two meta-prompt cases need per-corpus
-  named provisions), #147 (evidence-link depth) merged. **fleet#148 IN FLIGHT** (watcher
-  armed, 45-min deadline): CI e2e job now runs `scripts/e2e-serve.sh` — the serve leg's
-  FIRST live exercise (the worker couldn't edit ci.yaml under track/server; operator wired
-  uv 0.11.28 user-local + skopeo from the runner VM image + evidence merge/upload in
-  allure-publish.sh). skopeo: live-converged on ci-runner-01 (1.9.3 via qm guest exec) +
-  declared in cloud-init tftpl, tofu-applied (snippet only), homelab eb40c8e. NEXT after
-  #148 green: **kind agentic leg** — `devbox run probe-e2e` needs docker (NOT the jail):
-  run as an agent ride (dind) or on the VM runner with OPENROUTER key + PROBE_MODEL from
-  registry pins; THEN the prod leg (MCP_ENDPOINT=https://mcp.oracle.teststuff.net/mcp real
-  ride + suspended `mcp-probe` CronWorkflow in oracle-iac). #84 (gap harvester) next in
-  queue order; #109 operator-paced. Prod baseline: initialize 200 in 0.6s.
+- **UC-1 agentic arc (operator directive: agent drives UC-1 — kind, then prod)**:
+  deterministic kind leg DONE + CI-gated (fleet#146/#147/#148 merged; serve leg green on
+  run 3 after two class fixes — containerd-2.x certs.d wiring + rootless oci-archive untar;
+  TICK-LOG meta-11 has the detail). **#149 QUEUED** (drive_agent goose wiring — the
+  NotImplementedError seam; recorded-session fixture tests; live probe run stays out of ci):
+  NEXT = coordinator dispatch → ride → PR → review. AFTER #149 merges: (1) kind agentic
+  leg — `devbox run probe-e2e` with OPENROUTER key + PROBE_MODEL registry pin + spend cap
+  (docker needed: ride-with-dind or ci-runner-01, NOT the jail); (2) prod leg —
+  MCP_ENDPOINT=https://mcp.oracle.teststuff.net/mcp real ride + the suspended `mcp-probe`
+  CronWorkflow manifest in oracle-iac (operator lane). #84 (gap harvester) after; #109
+  operator-paced. Prod baseline: initialize 200 in 0.6s. Gate note on #84: two meta-prompt
+  corpus cases need per-corpus named provisions.
 - **Pipeline verification run `ert-pipeline-parse-jbtlm`** (submitted ~15:30Z, Monitor armed):
   re-verifies latent fleet#140/#141/#143/#144 + first exercise of the #140 build heartbeat +
   first run on the TRIMMED limits (iac#223 MERGED: pins → 2026.7.26-g52e1d41d74d0, parse
