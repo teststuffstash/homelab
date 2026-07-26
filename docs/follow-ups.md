@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-100**.
+  Next free id: **FU-101**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -36,29 +36,6 @@ _Last updated: 2026-07-16._
 
 ## GitOps & platform
 
-- [ ] **FU-073** — **Pull-through OCI registry mirrors — CORE LIVE 2026-07-14 (ADR-091):**
-      `registry-cache` ns, registry:3 pair (docker.io + ghcr), longhorn-bulk cache PVCs, BGP
-      VIPs `.40.20/.21`; docker-mode agent rides wired (dind `registry-mirrors` + the
-      `REGISTRY_MIRROR_*` env contract) and the docker.io FQDNs dropped from the agentstack
-      egress (E2E under enforced deny-all: alpine 2s cold / 1s warm from a kata ride).
-      **Remaining consumers:** (a) ✅ DONE 2026-07-16 — `machine.registries.mirrors` on all 8
-      nodes (`local.registry_mirrors_patch`, talos.tf + metal.tf; skipFallback default=false so
-      a dead mirror/cold boot falls through to upstream). Restart semantics ANSWERED: applies
-      in-place, no reboot (canary wk-01 stayed Ready; pull of uncached alpine:3.18.12 rode the
-      mirror — containerd/v2.2.3 `?ns=docker.io` in the mirror log, cache-filled + served);
-      (b) ✅ DONE 2026-07-25 (commit 4661de9): `daemon.json` in the ci-runner cloud-init;
-      VM recreated same morning (boot 11:57Z — hence the rotated SSH host key), live-verified
-      2026-07-25 via `qm guest exec`: dockerd runs with Registry Mirror `http://192.168.40.20/`;
-      (c) ✅ DONE 2026-07-25 (commit a0e59f3): owned dind spec in `arc-runners.yaml` —
-      `--registry-mirror` + `--insecure-registry` on the pinned `docker:dind`; (d) ✅ DONE 2026-07-16 — oracle-fleet#35: `e2e-kind.sh` writes a
-      `certs.d/hosts.toml` per registry into the kind node when the ride exports
-      `REGISTRY_MIRROR_*` (kindest/node ≥ kind 0.27 preconfigures containerd's `config_path`;
-      no-op on the CI VM). Acceptance = the FU-081 r4 green in-pod gate (garage image pulled
-      through the mirror under the enforced CNP); (e) ✅ DONE
-      2026-07-16 — `nixcache` LB VIP `192.168.40.23` (+ CNP belt in the agentstack Composition);
-      the launcher passes `NIX_CACHE_URL=<VIP>` on docker rides (the agent-base entrypoint
-      already honored the env — no agent-runtime change needed). Verify on the next kata ride:
-      `devbox install` should be LAN-speed, not the ~4-min WAN fallback observed 2026-07-14.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl
@@ -353,13 +330,21 @@ _Last updated: 2026-07-16._
       stack composes new Roles/Bindings the aggregated ClusterRole must cover): `argoproj.io/workflows`
       create (the sensor Role) + `endpoints` get/list (the FU-072 claims-read binding — oracle's old
       CRB had masked it). Argo gotcha: string data-filter values are REGEX, `""`/`!=` rejected (use `.+`).
-      **STILL REMAINING:** per-stack REVIEW backstop (reviewer-session.sh needs the broker-fetch
-      plumbing its coordinator sibling got; loop-reviewer token already minted+served) — sleep+oracle
-      reviews ride the GLOBAL reflex until then; ORACLE cutover (deferred by choice — stays
-      perStack-only/dual-run for now); platform graduation (thin `repos[]` OK — a stack models its
-      loop surface, not its dependency graph; idp consumes ory/hydra unforked, not in `repos[]`).
-      (FU-089 fixer-ns key hole CLOSED — archived 2026-07-26.) model-scout + ledger stay GLOBAL;
-      docker-ride dispatch from the
+      **REVIEW BACKSTOP DONE + ALL THREE STACKS GRADUATED 2026-07-26:** reviewer-session.sh got
+      `--loop-ns` (pod in `<stack>-agents` as agentstack-loop, broker role=reviewer); review-reflex.sh
+      is SCAN_STACK-scoped + skips graduated in global mode; composition renders a `review-<stack>`
+      cron GATED ON graduated (perStack-but-not-graduated would double-review); the global review
+      edge+cron both DEFER graduated (the agent-coordinator edge can't create pods in `<stack>-agents`).
+      PROVEN E2E on sleep: reviewer-sleep-tracking-33 ran IN sleep-agents, approved, auto-merged.
+      **sleep + oracle + platform all graduated** (loop.perStack+graduated+coordinator.enabled; oracle
+      in oracle-iac, platform in homelab, mirrors in stacks.json) — the dual-run belt is retired for
+      all three, each runs its own coordinate + review loop in-ns; oracle's coordinate cron verified
+      undisturbed through the cutover. Platform is thin (only openrouter-operator has a fixer block).
+      **REMAINING (latency-only, non-blocking):** the per-stack REVIEW edge — a graduated stack's PR
+      review currently waits for the `*/15` review-<stack> cron (the exporter edge defers to it);
+      routing the /review edge per-stack like the /coordinate doorbell would restore near-instant
+      review. Tracked as FU-100. (FU-089 fixer-ns key hole CLOSED — archived 2026-07-26.) model-scout
+      + ledger stay GLOBAL; docker-ride dispatch from the
       jail additionally waits on FU-072. ADR-094 note: this leg carries NO scheduling semantics.
       Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
 
@@ -401,6 +386,16 @@ _Last updated: 2026-07-16._
       (`agent-<project>-<task>-r<round>`, atomic `kubectl create`); apply the same to
       `reviewer-session.sh` — name from (repo, pr, head-sha8), terminal same-key reap, live
       holder refuses. Relates FU-069, merge-path-fsm.yaml MP-G02.
+- [ ] **FU-100** — **Per-stack REVIEW edge routing (latency).** FU-080 graduated all three stacks;
+      a graduated stack's per-stack review runs via its `review-<stack>` `*/15` cron because the
+      exporter /review EDGE (global `review` Sensor, agent-coordinator SA) can't create reviewer
+      pods in `<stack>-agents` and so DEFERS graduated stacks to the cron (agents/coordinator/
+      review-argo.yaml). Result: correct but up to ~15 min review latency for graduated stacks vs
+      near-instant before. Fix = mirror the /coordinate doorbell's data-driven routing: the exporter
+      emits `{repo,number,loop_ns}` for a graduated repo, and a filtered `review-perstack` Sensor
+      dependency inlines a review Workflow INTO `<loop_ns>` running `reviewer-session.sh --loop-ns`
+      (RBAC: extend the composed sensor-submit Role to `create workflows`, already present for
+      coordinate). Non-blocking — the cron backstop reviews+merges meanwhile. Relates FU-080, FU-085.
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
       breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
       themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers

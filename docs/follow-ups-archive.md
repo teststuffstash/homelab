@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-073** *(archived 2026-07-26)* — **Pull-through OCI registry mirrors, COMPLETE (ADR-091).**
+  `registry-cache` ns + registry:3 pair (docker.io+ghcr) on BGP VIPs `.40.20/.21`, longhorn-bulk
+  cache PVCs; docker-mode rides use the dind `registry-mirrors` + `REGISTRY_MIRROR_*` contract with
+  the docker.io FQDNs dropped from the agentstack egress. All consumers shipped: (a) `machine.registries.mirrors`
+  on all 8 nodes (in-place, no reboot); (b) ci-runner `daemon.json`; (c) arc-runners owned dind spec;
+  (d) `e2e-kind.sh` per-registry `hosts.toml`; (e) `nixcache` LB VIP `192.168.40.23` (launcher passes
+  `NIX_CACHE_URL`). Final validation 2026-07-26: a sleep-tracking#32 KATA ride's `devbox install`
+  copied nix paths from `http://192.168.40.23` (LAN-speed substitution, not the ~4-min WAN fallback).
+  The eval-cache half (nix evaluation tax, not fetch) is separate = FU-096.
 - **FU-089** *(archived 2026-07-26)* — **Fixer-ns App private key = workbench escalation hole, CLOSED.**
   The homelab-agents App PRIVATE KEY used to render into every fixer namespace (so the in-ns
   `agent-git-token` generator could run) — but a workbench SA is namespace-admin there, so it
