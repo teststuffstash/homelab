@@ -91,7 +91,17 @@ jobs:
           BRANCH="runner-image-pin"
           git config user.name "runner-image bot"
           git config user.email "noreply@teststuff.net"
-          git checkout -b "$BRANCH"
+          # The pin branch must sit on CURRENT master, not this job's checkout: if master moved
+          # (or a stale pin branch lingers), the pushed tree's .github/workflows/* differ from
+          # master's and GitHub rejects the App push as "updating a workflow file without
+          # workflows permission" — over files this bump never touches (live 2026-07-26: a
+          # renovate.yaml comment edit that landed on master mid-build). Re-apply the sed on
+          # fresh master; delete any stale branch first.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" --delete "$BRANCH" 2>/dev/null || true
+          git fetch origin master && git checkout -B "$BRANCH" origin/master
+          sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
+            argocd/platform/arc-runners.yaml
+          git diff --quiet argocd/platform/arc-runners.yaml && { echo "pin already current on fresh master" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
           git add argocd/platform/arc-runners.yaml
           git commit -m "arc-runners: pin runner image ${{ steps.tag.outputs.tag }} (auto-bump after build)"
           git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" "HEAD:$BRANCH"

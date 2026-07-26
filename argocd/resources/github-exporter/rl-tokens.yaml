@@ -116,3 +116,63 @@ spec:
           apiVersion: generators.external-secrets.io/v1alpha1
           kind: GithubAccessToken
           name: rl-reviewer-git-gen
+---
+# FU-098 belt completion (2026-07-26): renovate/merge/deploy App keys for the permission-drift
+# collector — this exact gap bit the same day (the renovate App's live workflows grant was
+# unverifiable in-cluster; the pin-bump push rejection was the symptom). Same key, one ES each.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-renovate-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-renovate-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: RENOVATE_GH_APP_PRIVATE_KEY }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-merge-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-merge-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: MERGE_GH_APP_PRIVATE_KEY }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-deploy-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-deploy-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: DEPLOY_GH_APP_PRIVATE_KEY }

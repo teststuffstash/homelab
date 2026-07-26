@@ -97,3 +97,15 @@ spec:
                   name: rl-reviewer-github-app
                   optional: true
                   items: [{ key: privateKey, path: homelab-reviewer/privateKey }]
+              - secret:
+                  name: rl-renovate-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-renovate/privateKey }]
+              - secret:
+                  name: rl-merge-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-merge/privateKey }]
+              - secret:
+                  name: rl-deploy-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-deploy/privateKey }]
