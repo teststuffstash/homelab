@@ -35,11 +35,11 @@ _app_id `4199252` · install_id `143941082` · installs: **selected** · keys: I
 | `actions` | read | reviewer reads run logs on private repos (loop-reviewer gens) |
 | `code_quality` | read | OPERATOR RULING 2026-07-26: deliberate future-proof read — a reviewer probing a surface that 422s mid-review reads as 'something is there'; harmless reads are pre-granted so review probes fail honest-empty, not permission-denied |
 | `discussions` | read | same ruling — deliberate future-proof reviewer read |
+| `issues` | write | FU-069(b), granted 2026-07-16: the reviewer's SELF-GUARD breaker labels agent/error + posts the AGENT_ERROR comment on the PR — both ride the Issues API (reviewer-session.sh STEP 0). Exercised live ≥3× (oracle-fleet#39/#60, sleep-tracking#21). NOT for authoring issues — follow-ups stay bullets-in-review, filed by the coordinator lane (review.md, FU-090) |
 | `license_compliance_alerts` | read | operator future-proof-reads ruling 2026-07-26 (see code_quality) |
 | `repository_advisories` | read | same ruling |
 | `repo_secret_scanning_dismissal_requests` | read | same ruling |
 | `security_events` | read | same ruling |
-| `issues` | **absent (decided)** | reviewer never labels/comments issues — the coordinator lane owns that; keeps the reviewer's blast radius review-only |
 
 ## `homelab-merge`
 
