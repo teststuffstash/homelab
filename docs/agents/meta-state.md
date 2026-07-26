@@ -16,9 +16,12 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   QUEUED: #152 (respawn/die-fast + honest readiness + stream child stderr), #153 (topology
   spread — dispatched), #155 (corpus schema_version contract — the guard); #151 delivered
   (PR #154 in review); FU-099 filed (synthetic blackbox monitoring — nothing alerted).
-  Remediation: iac#233 MERGED rolls the server back to 2026.7.25-gfc4b537 (r4 combo) —
-  verification watcher running (tools/call 200 = restored). NEXT: (1) on jbtlm corpus
-  release, roll corpus digest + server forward TOGETHER in one iac PR; (2) re-run the prod
+  Remediation v2: iac#233's targetRevision rollback was SILENTLY OVERRIDDEN in minutes by
+  the evening merges' auto deploy-bumps (lesson: a rollback via the bumped knob loses to the
+  next bump) → iac#239 pins mcpServer.image.tag=2026.7.25-gfc4b537 in $values (bumps can't
+  move it; loudly commented). Verify watcher running (tools/call 200 = restored). NEXT:
+  (1) on jbtlm corpus release, ONE iac PR: new corpus digest + REMOVE the values tag pin
+  (server rolls forward to the bumped targetRevision); (2) re-run the prod
   agentic probe (probe-prod.sh on ci-runner-01; ephemeral key
   oracle-fleet-adhoc-probe-uc1-kind expires ~00:50Z — remint if needed) for the true prod
   verdict; (3) then the suspended `mcp-probe` CronWorkflow manifest (operator lane) + #84
