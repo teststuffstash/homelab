@@ -778,7 +778,10 @@ if [ -n "$RUN_CMD" ]; then
     else
       _door="{\"repo\":\"${PROJECT}\"}"
     fi
-    curl -m 5 -s -X POST -d "$_door" \
+    # Content-Type: application/json so the eventsource PARSES body.repo/stack/loop_ns as fields —
+    # without it curl sends form-urlencoded and the whole JSON becomes one body KEY (the Sensor's
+    # data filters then can't see body.loop_ns, so the per-stack routing never fires).
+    curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_door" \
       "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
       >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
   fi

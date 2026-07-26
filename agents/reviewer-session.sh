@@ -297,6 +297,6 @@ if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
 else
   _door="{\"repo\":\"${PROJECT}\"}"
 fi
-curl -m 5 -s -X POST -d "$_door" \
+curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_door" \
   "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
   >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
