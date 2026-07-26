@@ -329,6 +329,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
     jq -e . >/dev/null 2>&1 <<<"$heads" || heads='[]'
     jq -e . >/dev/null 2>&1 <<<"$prheads" || prheads='[]'
+    # A branch owned by a RUNNING ride is not stale — the worker pushes its branch before the PR
+    # opens, and the flag fired on active rides' branches twice on 2026-07-26 (issues 129, 138).
+    # Probe failure keeps run_iss empty → no exclusion → at worst the old (noisy) behavior.
+    run_iss="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session --no-headers 2>/dev/null | grep -oE 'issue-[0-9]+' | sort -u | paste -sd'|' -)" || run_iss=""
+    if [ -n "$run_iss" ]; then
+      heads="$(jq --arg re "(^|[^0-9])(${run_iss})([^0-9]|$)" '[.[] | select(test($re) | not)]' <<<"$heads")"
+    fi
     stale="$(jq -rn --argjson h "$heads" --argjson p "$prheads" '$h - $p | .[] | "  branch \(.) — no open PR (stale; delete or resume)"')"
     [ -n "$stale" ] && orphans="${orphans}[$repo] ⚠ stale agent branches:\n${stale}\n"
     [ -n "$iss" ]  && items="${items}[$repo]\n${iss}\n"
