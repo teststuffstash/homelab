@@ -5,12 +5,15 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Updated 2026-07-26 ~01:15Z (meta-10 cont., same session as the 07-25 resume):_
 
-- **Oracle corpus chain — ✅ ACCEPTANCE #4 PASSED 2026-07-26 ~01:30Z** (PS §1 full text, p50
-  21ms, 168/168 §§, date-travel + normalized keys correct; TICK-LOG has the arc). C6
-  #125/#126 flipped. Acceptance anomalies filed+queued: fleet#136 (casefold) #137 (TsÜS
-  coverage gap) #138 (titles) #139 (latency histogram); #135 (silent build) queued, its ride
-  running. **Remaining leg: limits-trim** — parse peaked ~350Mi (limit 4Gi), build ~785Mi
-  (limit 6Gi): trim via oracle-iac workflow-ert yaml PR when convenient.
+- **Oracle corpus chain — ✅ ACCEPTANCE #4 PASSED 2026-07-26 ~01:30Z**, and ALL FIVE follow-on
+  fixes (fleet#135 silent build, #136 casefold, #137→#143 coverage_end, #138→#144 titles,
+  #139→#142 histogram) merged through ride→review→codeowner-gate by ~05:45Z; C6 flipped on
+  all. Codeowner gate rejected #140 r1 on fabricated cadence arithmetic (fixed r2 with a
+  time-throttle — better than asked). **Latent until the next pipeline run**: the parse-side
+  fixes (#144 titles, #136 casefold, #140 populate heartbeat) only enter the corpus on the
+  next build+release cycle — verify titles/casefold/heartbeat on that run, then acceptance
+  criteria can grow (title in citation). **Remaining leg: limits-trim** — parse peaked
+  ~350Mi (limit 4Gi), build ~785Mi (limit 6Gi): trim via oracle-iac workflow-ert yaml PR.
 - **FU-089 — one flip left: `GIT_TOKEN_REQUIRE_AUTH=1` on the openrouter-proxy Deployment,
   ONLY at an idle window** (no agent-session pods running — the helper has no retry; a fetch
   during the proxy restart kills a ride). Evidence complete 01:12Z: a real ride's fetches
