@@ -422,12 +422,13 @@ _Last updated: 2026-07-16._
       label binds token↔ns; the key Secret is the hand-applied coordinator one) + an
       `agentstack-worker` SA per fixer ns (TokenReview identity, no grants);
       `_resolve_git_token` reads central + label-checked; worker pods run as the SA
-      (agent-session.sh). **Remaining:** (1) agent-runtime entrypoint sends the projected SA
-      token on /git-token (cross-repo PR), (2) after its images.env pin rolls, set
-      `GIT_TOKEN_REQUIRE_AUTH=1` on the proxy (unauthenticated calls are currently
-      served-but-logged — the anonymous window only exposes per-repo tokens, not the key),
-      (3) drop the standing-Secret fallbacks in agent-session.sh.
-      Relates FU-080, FU-020, ADR-087.
+      (agent-session.sh). (1) ✅ agent-runtime#19/#20 merged + pin rolled — the credential
+      helper sends the SA bearer; (2) ✅ **ENFORCED 2026-07-26 01:30Z**:
+      `GIT_TOKEN_REQUIRE_AUTH=1` flipped at an idle window on live ride evidence; anonymous
+      probe verified HTTP 403 on the ROLLED pod (first probe hit the old pod mid-rollout and
+      read 200 — probe the pod, not the deploy). **Remaining:** drop the dead standing-Secret
+      fallback lines in agent-session.sh (reference the deleted Secret, optional:true —
+      inert), then archive. Relates FU-080, FU-020, ADR-087.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
