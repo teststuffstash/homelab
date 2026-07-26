@@ -982,3 +982,27 @@ exclude-and-count doctrine was missing) and #126 (the 42s "index scan" was per-q
 of the 1.83GB corpus — digest now baked at build; the issue's ⚖ "profile first, don't trust the
 guess" did its job). Both merged (#127 codeowner-gated, #128), batched pin-follow, **full
 start-from=parse rebuild in flight at handoff** (cvkk8, 50/s — faster than the morning's 33).
+
+### 2026-07-26 — meta-10 (cont.): ACCEPTANCE #4 PASSES — the corpus is a served product
+**The chain from refusal to PASS ran end-to-end in one night.** cvkk8 rebuilt the full corpus
+through #125+#126 (parse 3h — rate decays 50→22/s as acts grow; build 4.8h: 16,437,964
+provisions, empty-body 0.018 vs the 0.05 floor — the #125 gate PASSED honestly on first
+exercise; 6.0GB, digest baked), released digest-verified (`4d07f3e78749…`, 6GB through the
+ADR-095 boundary), iac#205 rolled the ImageVolume, and the delegated acceptance came back
+**PASS on all criteria**: PS §1's real sovereignty text, p50 21ms (r2 was 42,000ms), all 168
+§§ (r3 had 7), date-travel + normalized keys correct. The acceptance still earned its keep:
+4 new shapes filed+queued (#136 non-ASCII casefold, #137 TsÜS 2.5y coverage gap — the
+exclude-and-count per-akt alert's first named consumer, #138 titles-not-captured, #139 the
+missing latency histogram). Also: the rebuilt build step emits ZERO progress events for its
+4.8h populate phase (diagnosed alive via /proc/<pid>/io, 23GB written) — #135 queued; its
+FIRST dispatch died tokenless and exposed that claude-harness rides had silently leaned on
+the standing in-ns git Secret FU-089 deleted (cred-inject was goose/opencode-only) — fixed
+6c3fd88, breaker cleared with audit, re-dispatch clean. Meanwhile FU-089's core shipped the
+same night (central mint, worker SA, TokenReview'd serve — two live lessons: composed
+resources can't move namespaces, and audit fallback CONSUMERS before deleting a Secret),
+retro run-3 mechanism landed (BRIEF.md verbatim-recovered from transcripts + CROSS-REVIEW.md
++ retro-session.sh + the suspended retro-session CronWorkflow), the FU-015 loop closed
+(eval-cache fix: ensure 94s→5s, fleet ci 610→127s; Monday cron + self-bump PR + renovate'd
+ARG pins), and the opus-retro change-set finished (F2 blocked-deliberate class + F6
+queue/active split via agent-runtime#19/#20; F1 waits on the App's Workflows permission —
+operator). Remaining on the corpus chain: the limits-trim leg + watching #136-#139 flow.
