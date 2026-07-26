@@ -59,6 +59,15 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
 > failure, missing access, the estimator says `⚠ ESCALATE` — **label `agent/blocked` and comment
 > exactly what's blocking, then move on**. Investigating quietly and then doing nothing is the **one
 > unacceptable outcome**: a blocked issue a human can see beats a silent stall every time.
+>
+> **Re-read labels immediately before EVERY label mutation — your read is stale the moment you
+> took it** (live race 2026-07-26, #134/#145: an instance investigated a still-`agent/queued`
+> issue, and by the time it wrote `agent/blocked` a sibling had claimed + dispatched a worker —
+> contradictory labels over a live round; the FU-069 breaker had to untangle it). The discipline
+> is compare-then-write: `gh issue view --json labels` right before the edit; if the state moved
+> from what your judgment was formed on (someone claimed, a worker is riding, a terminal label
+> appeared), DROP your mutation and re-enter at the top with the fresh state. A judgment formed
+> on stale state is not yours to write.
 
 > **Issues must be self-contained — the issue is the context channel.** The worker pod clones ONLY
 > the project repo: no `../homelab` checkout, no `SERVICES.md`, no kubeconfig. App repos deliberately
