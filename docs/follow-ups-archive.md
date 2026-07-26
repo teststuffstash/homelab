@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-084** *(archived 2026-07-26)* — **GitHub API rate-limit metrics, COMPLETE.** Exporter
+  `collect_rate_limits` over the exporter PAT + per-installation probe tokens for ALL six
+  key-reachable Apps (agents/coordinator — THE 2026-07-17 pool — reviewer, merge, deploy,
+  renovate, labels; rl-tokens.yaml GithubAccessToken pattern, metadata-read probes), dashboard
+  panel + `GithubRateLimitLow` symptoms alert; SKU-panel visibility split fixed. DECIDED
+  out-of-scope: the arc/runner-registrar pools — their keys are deliberately not in Infisical
+  (KeePass/in-cluster only) and their sole consumers are the runner controllers, whose
+  exhaustion surfaces directly as registration/scale failures. Cron-relax leg lives in FU-086.
 - **FU-098** *(archived 2026-07-26)* — **GitHub App permissions: declared state + drift
   verification, COMPLETE.** `docs/github-apps.yaml` = the single source (per-permission why,
   decided absences, all app_ids filled); ONE creation script (`github-app-bootstrap.sh <slug>`,

@@ -656,16 +656,7 @@ _Last updated: 2026-07-16._
       FU-058, FU-015 (numbers), FU-073e (substituter = fetch half; this = eval half),
       FU-095(b) (multi-harness evidence).
 
-- [ ] **FU-084** — GitHub API rate-limit metrics — **CORE DELIVERED 2026-07-25**: exporter
-      `collect_rate_limits` (`/rate_limit` is free) emits `github_rate_limit_{remaining,limit,
-      reset_timestamp}{token,resource}` for the exporter PAT + per-installation probe tokens
-      (ESO GithubAccessToken pattern, `rl-tokens.yaml` — coordinator-git App 4150968 install
-      142724430, THE pool from the 2026-07-17 incident, + reviewer-git); graphql/core split
-      visible. Dashboard panel (remaining % per token+resource) + `GithubRateLimitLow`
-      (<10% for 5m, warning, symptoms-only). Also fixed the operator-reported SKU-panel bug
-      (private+public minutes summed — split by visibility; public is free).
-      **Remaining:** add merge/deploy/labels/arc installations by the rl-tokens.yaml
-      copy-block pattern. (The inherited cron-relax leg moved to FU-086's open list 2026-07-25.)
+
 
 ## Hardware & nodes
 

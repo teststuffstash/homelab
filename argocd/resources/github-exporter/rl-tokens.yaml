@@ -176,3 +176,170 @@ spec:
   data:
     - secretKey: pem
       remoteRef: { key: DEPLOY_GH_APP_PRIVATE_KEY }
+---
+# FU-084 completion (2026-07-26): per-installation rate-limit probe — merge pool.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-merge-git-gen
+  namespace: monitoring
+spec:
+  appID: "4207260" # homelab-merge
+  installID: "144155950"
+  auth:
+    privateKey:
+      secretRef: { name: rl-merge-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [homelab]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-merge-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-merge-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-merge-git-gen
+---
+# FU-084 completion (2026-07-26): per-installation rate-limit probe — deploy pool.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-deploy-git-gen
+  namespace: monitoring
+spec:
+  appID: "4214796" # homelab-deploy
+  installID: "144355858"
+  auth:
+    privateKey:
+      secretRef: { name: rl-deploy-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [homelab]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-deploy-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-deploy-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-deploy-git-gen
+---
+# FU-084 completion (2026-07-26): per-installation rate-limit probe — renovate pool.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-renovate-git-gen
+  namespace: monitoring
+spec:
+  appID: "4215862" # homelab-renovate
+  installID: "144389013"
+  auth:
+    privateKey:
+      secretRef: { name: rl-renovate-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [homelab]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-renovate-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-renovate-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-renovate-git-gen
+---
+# FU-084 completion (2026-07-26): per-installation rate-limit probe — labels pool.
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: rl-labels-git-gen
+  namespace: monitoring
+spec:
+  appID: "4314419" # homelab-labels
+  installID: "146964959"
+  auth:
+    privateKey:
+      secretRef: { name: rl-labels-github-app, key: privateKey }
+  permissions:
+    metadata: read
+  repositories: [homelab]
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-token-labels-git
+  namespace: monitoring
+spec:
+  refreshInterval: 45m
+  target:
+    name: rl-token-labels-git
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        token: '{{ .token }}'
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: rl-labels-git-gen
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: rl-labels-github-app
+  namespace: monitoring
+spec:
+  refreshInterval: 1h
+  secretStoreRef: { name: infisical, kind: ClusterSecretStore }
+  target:
+    name: rl-labels-github-app
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        privateKey: '{{ .pem | replace "\\n" "\n" }}'
+  data:
+    - secretKey: pem
+      remoteRef: { key: LABELS_GH_APP_PRIVATE_KEY }

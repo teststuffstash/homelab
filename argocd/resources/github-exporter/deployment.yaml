@@ -86,6 +86,22 @@ spec:
                   name: rl-token-reviewer-git
                   optional: true
                   items: [{ key: token, path: reviewer-git }]
+              - secret:
+                  name: rl-token-merge-git
+                  optional: true
+                  items: [{ key: token, path: merge-git }]
+              - secret:
+                  name: rl-token-deploy-git
+                  optional: true
+                  items: [{ key: token, path: deploy-git }]
+              - secret:
+                  name: rl-token-renovate-git
+                  optional: true
+                  items: [{ key: token, path: renovate-git }]
+              - secret:
+                  name: rl-token-labels-git
+                  optional: true
+                  items: [{ key: token, path: labels-git }]
         - name: app-keys
           projected:
             sources:
@@ -109,3 +125,7 @@ spec:
                   name: rl-deploy-github-app
                   optional: true
                   items: [{ key: privateKey, path: homelab-deploy/privateKey }]
+              - secret:
+                  name: rl-labels-github-app
+                  optional: true
+                  items: [{ key: privateKey, path: homelab-labels/privateKey }]
