@@ -499,6 +499,47 @@ def _app_jwt(app_id, key_path):
 
 
 _apps_md = "# GitHub Apps — no poll completed yet\n"
+_apps_html = "<!doctype html><title>GitHub Apps</title><p>no poll completed yet</p>\n"
+
+
+def _md_to_html(md):
+    """Tiny converter for exactly the shape _render_apps_view emits (h1/h2, pipe tables,
+    paragraphs) — python:slim has no markdown lib and this page needs no more. Drift rows
+    (⚠) get a highlight class."""
+    import html as _h
+    out = ["<!doctype html><html><head><meta charset='utf-8'><title>GitHub Apps — declared vs live</title><style>",
+           "body{font-family:system-ui,sans-serif;max-width:60rem;margin:2rem auto;padding:0 1rem;line-height:1.5;background:#fff;color:#1a1a1a}",
+           "@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}th{background:#222}td,th{border-color:#333}}",
+           "table{border-collapse:collapse;margin:.5rem 0 1.5rem}td,th{border:1px solid #ccc;padding:.3rem .6rem;text-align:left}",
+           "th{background:#f3f3f3}tr.drift td{background:rgba(255,160,0,.18)}h2{margin-top:2rem;border-bottom:1px solid #8884;padding-bottom:.2rem}",
+           "code{font-family:ui-monospace,monospace}</style></head><body>"]
+    in_table, past_header = False, False
+    for line in md.splitlines():
+        if line.startswith("|"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if all(set(c) <= {"-"} for c in cells):
+                past_header = True
+                continue
+            if not in_table:
+                out.append("<table>")
+                in_table, past_header = True, False
+            tag = "td" if past_header else "th"
+            cls = " class='drift'" if "⚠" in line else ""
+            out.append(f"<tr{cls}>" + "".join(f"<{tag}>{_h.escape(c)}</{tag}>" for c in cells) + "</tr>")
+            continue
+        if in_table:
+            out.append("</table>")
+            in_table = False
+        if line.startswith("## "):
+            out.append(f"<h2><code>{_h.escape(line[3:])}</code></h2>")
+        elif line.startswith("# "):
+            out.append(f"<h1>{_h.escape(line[2:])}</h1>")
+        elif line.strip():
+            out.append(f"<p>{_h.escape(line)}</p>")
+    if in_table:
+        out.append("</table>")
+    out.append("</body></html>")
+    return "\n".join(out)
 
 
 def _render_apps_view(declared, live_by_slug, installs_by_id, repos_by_slug):
@@ -609,8 +650,9 @@ def collect_app_permission_drift(lines):
             installs_by_id[str(inst.get("app_id"))] = inst
     except Exception as exc:  # noqa: BLE001
         print(f"app-permission-drift: installations list unavailable: {exc}", flush=True)
-    global _apps_md
+    global _apps_md, _apps_html
     _apps_md = _render_apps_view(declared, live_by_slug, installs_by_id, repos_by_slug)
+    _apps_html = _md_to_html(_apps_md)
 
 
 def collect_billing(lines):
@@ -703,18 +745,22 @@ def poll_forever():
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in ("/metrics", "/healthz", "/", "/apps"):
+        if self.path not in ("/metrics", "/healthz", "/", "/apps", "/apps.md"):
             self.send_error(404)
             return
         with _lock:
             body = _body.encode()
+        ctype = "text/plain; version=0.0.4; charset=utf-8"
         if self.path == "/healthz":
             body = b"ok\n"
         elif self.path == "/apps":
-            # FU-098: the served (never committed) declared-vs-live Apps page
+            # FU-098: the served (never committed) declared-vs-live Apps page — HTML for humans
+            body = _apps_html.encode()
+            ctype = "text/html; charset=utf-8"
+        elif self.path == "/apps.md":
             body = _apps_md.encode()
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
