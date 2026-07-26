@@ -22,16 +22,11 @@ this is the broader catalog.
 > github-exporter `GithubAppPermissionDrift` alert rings until the UI click + install approval
 > land → clears). `scripts/github-apps.sh` verifies live-vs-declared into
 > [`github-apps.md`](github-apps.md); `devbox run github-apps-lint` (in ci) proves every mint
-> site's request ⊆ the declaration. The table below keeps the narrative WHYs; on conflict the
-> yaml wins.
+> site's request ⊆ the declaration. Creation is ONE script — `scripts/github-app-bootstrap.sh
+> <slug> manifest|catch|convert` — whose manifest is built FROM the yaml (the six per-App
+> scripts keep only their secrets/verify plumbing; their creation subcommands are retired stubs).
 
-| App | Purpose | Permissions | Repo access | IDs |
-|---|---|---|---|---|
-| **homelab-arc-…** | the in-cluster **Actions Runner Controller** registers the org-level `homelab-ephemeral` scale set as this App | Org → *Self-hosted runners: R/W*; Metadata: read | **All repositories** + **Allow public repositories** | install `142353606` |
-| **homelab-runner-registrar** | the Proxmox **CI-runner VM** (ADR-082) mints its own Actions registration tokens at boot | Org → *Self-hosted runners: R/W* | (as installed) | App `4141567`, install `142515626` |
-| **homelab-agents** | mints the worker + coordinator git tokens (clone/push/PR, label issues, merge) — `homelab-agents[bot]`, the PR **author** | Repo → Contents: R/W, Pull requests: R/W, Issues: R/W; Metadata: read | the agent repos | App `4150968`, install `142724430` — `scripts/github-agents-app-bootstrap.sh` |
-| **homelab-reviewer** | the review bot's identity — `homelab-reviewer[bot]` submits `--approve`/`--request-changes` on the worker's PR. **Distinct App on purpose**: GitHub blocks self-approval, so the reviewer must not be the PR author | Repo → Contents: **R/W** (required so the approval *counts* — GitHub only counts reviews from a repo writer; contents:read ⇒ authorAssociation NONE, ignored), Pull requests: R/W; Metadata: read (no manual merge — auto-merge does that) | the agent repos | `scripts/github-reviewer-app-bootstrap.sh` → `agents/coordinator/reviewer-git.yaml` |
-| **homelab-merge** | the merge-serializer identity — `homelab-merge[bot]` runs the FU-041 updater's branch-update push (`update-pr-branch.yml`). **Dedicated (not homelab-agents) on purpose**: its key must be copied into a GitHub org Actions secret readable by the semi-trusted CI plane, so it's kept minimal — a leak only grants branch-updates, not the coordinator's issues/merge grant | Repo → Contents: **R/W** + Pull requests: **R/W** (update-branch is a `/pulls/` mutation — an App needs BOTH, or it 403s "not accessible by integration"; PR:read is *not* enough), **Checks: Read** + **Commit statuses: Read** (`require_passed_checks`); Metadata: read. *No Issues* — the conflict-labeling step uses `GITHUB_TOKEN` | the agent repos **+ `homelab`** (a deploy target — its own updater caller mints this token) | `scripts/github-merge-app-bootstrap.sh` → org Actions secrets via `tofu/github/actions_secrets.tf` |
+**The per-App table is GENERATED now** → [`github-apps-declared.md`](github-apps-declared.md) (from the yaml; `devbox run github-apps-md`). The narrative WHYs live in the yaml's per-permission `why:` fields — this section keeps only what stays click-only.
 
 **Click-only (per the runner bootstrap doc):** *creating* an App (driven to a single Create via the
 App-manifest REST flow), **Installing** it on the org, generating its **private key**. The private

@@ -268,12 +268,20 @@ _Last updated: 2026-07-16._
       GET /app → drift matrix in github-apps.md, --lint exits nonzero), exporter
       `collect_app_permission_drift` (agents+reviewer keys mounted; openssl-subprocess JWT)
       + `GithubAppPermissionDrift` alert (30m for). `workflows: write` DECLARED for
-      homelab-agents — **the alert rings until the operator's inaugural grant lands**; then:
-      add workflows:write to the composition worker gens + queue fleet#134. Remaining:
-      template the 7 bootstrap scripts' default_permissions FROM the yaml (headers point
-      there for now); fill the null app_ids on the next outside-jail --verify run; consider
-      adding merge/renovate/deploy keys to the exporter belt (one ES + one projected-volume
-      entry each).
+      homelab-agents — the inaugural grant landed 2026-07-26 (drift 1→0 confirmed live);
+      workflows:write on the composition worker gens; fleet#134 queued.
+      **Single-source completion (operator direction 2026-07-26):** ONE creation entrypoint
+      `scripts/github-app-bootstrap.sh <slug>` builds the manifest FROM the yaml (the six
+      per-App scripts' creation subcommands are retired stubs; they keep only app-specific
+      secrets/verify plumbing, delegated via `bootstrap.legacy`); the per-App markdown is
+      GENERATED (`devbox run github-apps-md` → docs/github-apps-declared.md, lint-enforced
+      sync — the author-runs-generator pattern, NOT CI-auto-commit: a GITHUB_TOKEN push
+      deliberately triggers no workflows, so a CI-added commit would leave the PR head
+      without the required ci check and wedge auto-merge; an App-token push re-triggers but
+      invites ping-pong with the updater). setup.md §2's hand table replaced by the pointer.
+      Remaining: port the six secrets/verify flows into the single script one-by-one as each
+      App next needs them; fill the null app_ids on the next outside-jail --verify run;
+      consider adding merge/renovate/deploy keys to the exporter belt.
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

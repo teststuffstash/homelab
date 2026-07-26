@@ -39,6 +39,7 @@ apps:
       workflows: { level: write, why: "fleet#134 — track/chassis carve-out needs workers pushing .github/workflows/ci.yaml; DECLARED 2026-07-26 ahead of the grant (the drift alert rings until the operator clicks)" }
     installs: selected # the agent repos — see docs/github-apps.md (install matrix, generated)
     key_locations: [Infisical AGENTS_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-agents/"]
+    bootstrap: { legacy: github-agents-app-bootstrap.sh, redirect_port: 8766, cred_dir: "~/.claude/homelab-github-agents" }
 
   - slug: homelab-reviewer
     app_id: 4199252
@@ -59,6 +60,7 @@ apps:
       issues: "reviewer never labels/comments issues — the coordinator lane owns that; keeps the reviewer's blast radius review-only"
     installs: selected
     key_locations: [Infisical REVIEWER_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-reviewer/"]
+    bootstrap: { legacy: github-reviewer-app-bootstrap.sh, redirect_port: 8767, cred_dir: "~/.claude/homelab-github-reviewer" }
 
   - slug: homelab-merge
     app_id: null # fill from the cred dir on the next --verify run outside the jail
@@ -76,6 +78,7 @@ apps:
       issues: "the conflict-labeling step uses GITHUB_TOKEN instead — a leaked merge key must not grant issue writes"
     installs: selected # agent repos + homelab (deploy target)
     key_locations: [org Actions secret via tofu/github/actions_secrets.tf, KeePass]
+    bootstrap: { legacy: github-merge-app-bootstrap.sh, redirect_port: 8768, cred_dir: "~/.claude/homelab-github-merge" }
 
   - slug: homelab-renovate
     app_id: null
@@ -91,6 +94,7 @@ apps:
       vulnerability_alerts: "DECIDED — vulnerability data comes from Renovate's OSV alerts, not GitHub Dependabot (docs/renovate.md §OSV: 'we use OSV instead and ignore that warning'; self-host ethos, no repo Dependency-graph settings needed)"
     installs: selected
     key_locations: [org Actions secrets RENOVATE_APP_ID/RENOVATE_APP_PRIVATE_KEY, KeePass]
+    bootstrap: { legacy: github-renovate-app-bootstrap.sh, redirect_port: 8770, cred_dir: "~/.claude/homelab-github-renovate" }
 
   - slug: homelab-labels
     app_id: null
@@ -101,6 +105,7 @@ apps:
       issues: { level: write, why: "create/update labels (labels ride the Issues permission)" }
     installs: all
     key_locations: [KeePass]
+    bootstrap: { legacy: github-labels-app-bootstrap.sh, redirect_port: 8768, cred_dir: "~/.claude/homelab-github-labels" }
 
   - slug: homelab-deploy
     app_id: null
@@ -112,6 +117,7 @@ apps:
       pull_requests: { level: write, why: "open + auto-merge the bump PR" }
     installs: selected
     key_locations: [org Actions secrets DEPLOY_APP_*, KeePass]
+    bootstrap: { legacy: github-deploy-app-bootstrap.sh, redirect_port: 8769, cred_dir: "~/.claude/homelab-github-deploy" }
 
   - slug: homelab-arc
     app_id: null

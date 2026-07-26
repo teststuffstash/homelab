@@ -145,8 +145,7 @@ cmd_verify() {
 
 case "${1:-check}" in
   check)    cmd_check ;;
-  manifest) cmd_manifest ;;
-  convert)  shift; cmd_convert "$@" ;;
+  manifest|catch|convert) die "creation moved: scripts/github-app-bootstrap.sh <slug> $1 — the manifest is built FROM docs/github-apps.yaml (FU-098); this script keeps only the app-specific secrets/verify plumbing" ;;
   secrets)  cmd_secrets ;;
   verify)   cmd_verify ;;
   *) die "unknown subcommand '$1' (check|manifest|convert|secrets|verify)" ;;

@@ -43,7 +43,12 @@
       "key_locations": [
         "Infisical AGENTS_GH_APP_PRIVATE_KEY",
         "~/.claude/homelab-github-agents/"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-agents-app-bootstrap.sh",
+        "redirect_port": 8766,
+        "cred_dir": "~/.claude/homelab-github-agents"
+      }
     },
     {
       "slug": "homelab-reviewer",
@@ -91,7 +96,12 @@
       "key_locations": [
         "Infisical REVIEWER_GH_APP_PRIVATE_KEY",
         "~/.claude/homelab-github-reviewer/"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-reviewer-app-bootstrap.sh",
+        "redirect_port": 8767,
+        "cred_dir": "~/.claude/homelab-github-reviewer"
+      }
     },
     {
       "slug": "homelab-merge",
@@ -127,7 +137,12 @@
       "key_locations": [
         "org Actions secret via tofu/github/actions_secrets.tf",
         "KeePass"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-merge-app-bootstrap.sh",
+        "redirect_port": 8768,
+        "cred_dir": "~/.claude/homelab-github-merge"
+      }
     },
     {
       "slug": "homelab-renovate",
@@ -163,7 +178,12 @@
       "key_locations": [
         "org Actions secrets RENOVATE_APP_ID/RENOVATE_APP_PRIVATE_KEY",
         "KeePass"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-renovate-app-bootstrap.sh",
+        "redirect_port": 8770,
+        "cred_dir": "~/.claude/homelab-github-renovate"
+      }
     },
     {
       "slug": "homelab-labels",
@@ -183,7 +203,12 @@
       "installs": "all",
       "key_locations": [
         "KeePass"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-labels-app-bootstrap.sh",
+        "redirect_port": 8768,
+        "cred_dir": "~/.claude/homelab-github-labels"
+      }
     },
     {
       "slug": "homelab-deploy",
@@ -208,7 +233,12 @@
       "key_locations": [
         "org Actions secrets DEPLOY_APP_*",
         "KeePass"
-      ]
+      ],
+      "bootstrap": {
+        "legacy": "github-deploy-app-bootstrap.sh",
+        "redirect_port": 8769,
+        "cred_dir": "~/.claude/homelab-github-deploy"
+      }
     },
     {
       "slug": "homelab-arc",
