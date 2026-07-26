@@ -412,7 +412,12 @@ _Last updated: 2026-07-16._
       (in-cluster probe: /git-token?ns=oracle-fleet serves from the central secret; bogus ns
       404s; old in-ns ES/generators GC'd). Migration lesson: a composed resource cannot MOVE
       namespaces — rename its composition-resource-name so Crossplane creates-new + GCs-old
-      (first attempt left the old ES stuck with its key already collected). Composition now
+      (first attempt left the old ES stuck with its key already collected). Second live lesson
+      (issue-135 r1×2, same night): deleting the standing in-ns Secret broke CLAUDE-harness
+      rides — the cred-inject gate was goose/opencode-only, so claude rides had silently relied
+      on the optional Secret fallback the whole time; fixed 6c3fd88 (claude rides get
+      GIT_CRED_BROKER_URL too). Audit-the-fallback-CONSUMERS, not just the resource's named
+      readers, before deleting a Secret. Composition now
       renders `agent-git-<repo>-gen`+`agent-git-<repo>` into agent-coordinator (worker-ns
       label binds token↔ns; the key Secret is the hand-applied coordinator one) + an
       `agentstack-worker` SA per fixer ns (TokenReview identity, no grants);
