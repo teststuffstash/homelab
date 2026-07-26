@@ -144,9 +144,6 @@
       "github-apps-lint": [
         "python3 scripts/github-apps-lint.py"
       ],
-      "github-apps-md": [
-        "python3 scripts/github-apps-md.py"
-      ],
       "hubble": [
         "bash scripts/hubble-observe.sh \"$@\""
       ]

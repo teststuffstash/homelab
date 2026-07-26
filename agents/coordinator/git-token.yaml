@@ -59,12 +59,12 @@ spec:
                                    #       whole GraphQL query 403s and gh returns empty. Read-only.
   repositories:                    # ALL stack repos the coordinator lists/labels/merges/clones
     - sleep-tracking               # (FU-045 clones + FU-060; the homelab-agents App installation
-    - snore-recorder               #  must cover each — verify docs/github-apps.md BEFORE adding,
+    - snore-recorder               #  must cover each — verify the App covers it BEFORE adding (the SERVED live Apps page: github-exporter /apps (in-cluster http://github-exporter.monitoring.svc:9504/apps; humans: kubectl -n monitoring port-forward svc/github-exporter 9504)),
     - sleep-iac                    #  or ESO token generation 422s and breaks the live token)
     - openrouter-operator
     - oracle-fleet
     - oracle-iac
-    - agent-runtime          # platform stack context-only (2026-07-16); App covers it (github-apps.md)
+    - agent-runtime          # platform stack context-only (2026-07-16); App covers it (exporter /apps page)
     - agent-coordinator      # ditto — trailing comments only, the lint parser stops at non-item lines
     - allure-behavior-snippets # oracle stack context-only; Apps installed 2026-07-16
 ---

@@ -6,7 +6,7 @@
 #   2. docs/github-setup.md §2's permission column defers here;
 #   3. the LIVE App settings (the only truth GitHub holds; API is read-only for permissions —
 #      `GET /app` with the App JWT — so this file can be VERIFIED against live but never applied:
-#      scripts/github-apps.sh --verify renders the drift matrix into docs/github-apps.md);
+#      scripts/github-apps.sh renders a deep-verify report to /tmp; the ALWAYS-CURRENT view is SERVED — github-exporter /apps);
 #   4. every MINT SITE's requested permissions must be ⊆ the App's declaration
 #      (scripts/github-apps-lint.py, in ci — a request the App can't grant 422s in prod, which is
 #      exactly how the fleet#134 workflows-scope gap surfaced 2026-07-25).
@@ -37,7 +37,7 @@ apps:
       statuses: { level: read, why: "merge-path require_passed_checks reads (loop-git gens)" }
       actions: { level: read, why: "coordinator `gh run watch`/rerun on agent repos (loop-git gens)" }
       workflows: { level: write, why: "fleet#134 — track/chassis carve-out needs workers pushing .github/workflows/ci.yaml; DECLARED 2026-07-26 ahead of the grant (the drift alert rings until the operator clicks)" }
-    installs: selected # the agent repos — see docs/github-apps.md (install matrix, generated)
+    installs: selected # the agent repos — live matrix: the exporter /apps page
     key_locations: [Infisical AGENTS_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-agents/"]
     bootstrap: { legacy: github-agents-app-bootstrap.sh, redirect_port: 8766, cred_dir: "~/.claude/homelab-github-agents" }
 

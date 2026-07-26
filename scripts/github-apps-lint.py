@@ -113,21 +113,6 @@ def main():
             copy = None
         if copy != canonical:
             problems.append(f"{rel} out of sync with docs/github-apps.yaml — regenerate: devbox run -- yq -o=json docs/github-apps.yaml > {rel}")
-    # the declared markdown is generated too — stale doc = the lint tells you the command
-    md = os.path.join(ROOT, "docs", "github-apps-declared.md")
-    gen = subprocess.run(["python3", os.path.join(HERE, "github-apps-md.py")],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         env={**os.environ, "GITHUB_APPS_MD_STDOUT": "1"})
-    current = open(md).read() if os.path.exists(md) else ""
-    # regenerate into place and compare — the generator is deterministic, so a diff means the
-    # committed doc is stale (restore is a no-op when in sync)
-    if gen.returncode == 0:
-        fresh = open(md).read() if os.path.exists(md) else ""
-        if fresh != current:
-            open(md, "w").write(current)  # restore the committed state; the author regenerates
-            problems.append("docs/github-apps-declared.md stale — regenerate: devbox run github-apps-md")
-    else:
-        problems.append(f"github-apps-md.py failed: {gen.stderr.strip()[:200]}")
     if problems:
         print("github-apps-lint: FAIL", file=sys.stderr)
         for p in problems:

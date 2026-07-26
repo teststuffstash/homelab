@@ -50,7 +50,7 @@ spec:
     statuses: read           #   widened by the operator 2026-07-10 — the PR #6 re-review had to
     actions: read            #   caveat "CI not independently confirmed"; these three close that)
   repositories:              #   the repos where agent PRs land (mirror coordinator-git; verify
-    - sleep-tracking         #   docs/github-apps.md covers each BEFORE adding — ESO 422s otherwise)
+    - sleep-tracking         #   the exporter /apps page confirms coverage BEFORE adding — ESO 422s otherwise)
     - snore-recorder         #   NB comments in this list go TRAILING — the registration lint's
     - sleep-iac              #   parser stops at the first non-item line (found 2026-07-16)
     - openrouter-operator

@@ -42,7 +42,7 @@ of this repo._
    disallows private forking → create-time PATCH fails after the repo is fully configured,
    tainting the resource) — untainted; gotcha documented in `scripts/new-agent-repo.sh` step 2.
 2. Click-only: both repos added to the `homelab-agents`, `homelab-reviewer`, `homelab-merge` App
-   installations, plus `homelab-deploy` on oracle-iac (matrix: `docs/github-apps.md`).
+   installations, plus `homelab-deploy` on oracle-iac (live matrix: the github-exporter `/apps` page).
 3. Pushed the seeded `oracle-iac` content to master (its `sync.yaml` run went green on the first
    push — the in-cluster ArgoCD-nudge path works).
 4. Merged the homelab changes → the `platform` app-of-apps synced the `oracle` AppProject +

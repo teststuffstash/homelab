@@ -185,7 +185,7 @@ _Last updated: 2026-07-16._
       `stacks.json` entry, and the GitHub-side
       (`new-agent-repo.sh` merge-path) — the `AgentStack` XRD (FU-048) is the full collapse. The
       `homelab-agents` App is already installed on all four to-onboard repos (matrix in
-      `docs/github-apps.md`). **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer
+      the exporter `/apps` page). **Onboarded so far:** sleep-tracking (reference), openrouter-operator (fixer
       infra + `.agents` PR #5). **Still to onboard:** snore-recorder, agent-runtime, agent-coordinator.
       **EXCLUDED — different workflow (per Rasmus):** sleep-iac (CI-only deploy repo, no
       fixer) and homelab (platform/base-infra, dep policy unresolved). Unattended running still needs the
@@ -274,14 +274,18 @@ _Last updated: 2026-07-16._
       `scripts/github-app-bootstrap.sh <slug>` builds the manifest FROM the yaml (the six
       per-App scripts' creation subcommands are retired stubs; they keep only app-specific
       secrets/verify plumbing, delegated via `bootstrap.legacy`); the per-App markdown is
-      GENERATED (`devbox run github-apps-md` → docs/github-apps-declared.md, lint-enforced
-      sync — the author-runs-generator pattern, NOT CI-auto-commit: a GITHUB_TOKEN push
-      deliberately triggers no workflows, so a CI-added commit would leave the PR head
-      without the required ci check and wedge auto-merge; an App-token push re-triggers but
-      invites ping-pong with the updater). setup.md §2's hand table replaced by the pointer.
-      Remaining: port the six secrets/verify flows into the single script one-by-one as each
-      App next needs them; fill the null app_ids on the next outside-jail --verify run;
-      consider adding merge/renovate/deploy keys to the exporter belt.
+      GENERATED — **final form (operator direction 2026-07-26): SERVED, never committed.**
+      The CI-auto-commit route was rejected (a GITHUB_TOKEN push triggers no workflows → the
+      PR head loses its required ci check; an App-token push re-triggers but invites updater
+      ping-pong); instead the github-exporter renders the declared-vs-live page per poll at
+      **GET /apps** (in-cluster `github-exporter.monitoring.svc:9504/apps`) including the
+      keyed Apps' live install-repo enumeration (the git-token.yaml "verify coverage BEFORE
+      adding" guard). docs/github-apps{-declared,}.md + the md generator DELETED — the yaml
+      is the readable declared source; github-apps.sh remains the outside-jail deep verify
+      (report to /tmp). Remaining: port the six secrets/verify flows into the single script
+      as each App next needs them; fill the null app_ids (next deep-verify run); consider
+      adding merge/renovate/deploy keys to the exporter belt; optionally a LAN name for
+      /apps (rides the next opnsense change).
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

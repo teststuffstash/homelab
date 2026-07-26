@@ -498,6 +498,51 @@ def _app_jwt(app_id, key_path):
     return f"{header}.{payload}.{b64(sig)}"
 
 
+_apps_md = "# GitHub Apps — no poll completed yet\n"
+
+
+def _render_apps_view(declared, live_by_slug, installs_by_id, repos_by_slug):
+    """FU-098 finale: the human-readable Apps page, SERVED (GET /apps) instead of committed —
+    a generated doc in the repo needed either a CI auto-commit (a GITHUB_TOKEN push triggers no
+    workflows → the PR head loses its required ci check) or manual regeneration; here it simply
+    cannot go stale. Declared source stays docs/github-apps.yaml (readable, whys inline)."""
+    out = ["# GitHub Apps — declared vs live",
+           "",
+           "Declared source: homelab docs/github-apps.yaml (change flow: PR it first; the",
+           "GithubAppPermissionDrift alert rings until the grant lands). Rendered per poll by",
+           "github-exporter — never committed, cannot go stale.", ""]
+    for app in declared:
+        slug = app.get("slug", "")
+        out.append(f"## {slug}")
+        out.append(str(app.get("purpose", "")).strip())
+        inst = installs_by_id.get(str(app.get("app_id") or ""), {})
+        sel = inst.get("repository_selection") or app.get("installs", "?")
+        repos = repos_by_slug.get(slug)
+        out.append(f"installs: {sel}" + (f" → {', '.join(repos)}" if repos else ""))
+        live = live_by_slug.get(slug)
+        out.append("")
+        out.append("| permission | declared | live |")
+        out.append("|---|---|---|")
+        want = {k.replace("org:", "organization_"): v["level"]
+                for k, v in (app.get("permissions") or {}).items()}
+        seen = set()
+        for perm, lvl in sorted(want.items()):
+            lv = (live or {}).get(perm, "absent" if live is not None else "?")
+            mark = "" if (live is None or lv == lvl) else " ⚠"
+            out.append(f"| {perm} | {lvl} | {lv}{mark} |")
+            seen.add(perm)
+        for perm, why in (app.get("absent") or {}).items():
+            lv = (live or {}).get(perm, "absent" if live is not None else "?")
+            mark = "" if (live is None or lv == "absent") else " ⚠ (decided absent)"
+            out.append(f"| {perm} | absent (decided) | {lv}{mark} |")
+            seen.add(perm)
+        for perm, lv in sorted((live or {}).items()):
+            if perm not in seen and perm != "metadata":
+                out.append(f"| {perm} | UNDECLARED | {lv} ⚠ |")
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
 def collect_app_permission_drift(lines):
     """FU-098: live App permissions (`GET /app`, App JWT — the API can READ but never WRITE
     permissions) vs the declared state (github-apps.json). Drift in EITHER direction is a
@@ -513,6 +558,7 @@ def collect_app_permission_drift(lines):
     lines.append("# TYPE github_app_permission_drift gauge")
     lines.append("# HELP github_app_permission_drift 1 = the App's LIVE permissions differ from docs/github-apps.yaml (either direction); the per-permission detail rides github_app_permission_mismatch.")
     lines.append("# TYPE github_app_permission_mismatch gauge")
+    live_by_slug, repos_by_slug = {}, {}
     for app in declared:
         slug = app.get("slug", "")
         key_path = os.path.join(APP_KEYS_DIR, slug, "privateKey")
@@ -523,6 +569,7 @@ def collect_app_permission_drift(lines):
             "Authorization": f"Bearer {jwt}", "Accept": "application/vnd.github+json"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             live = (json.load(resp).get("permissions") or {})
+        live_by_slug[slug] = live
         want = {k.replace("org:", "organization_"): v["level"]
                 for k, v in (app.get("permissions") or {}).items()}
         mismatches = []
@@ -537,6 +584,33 @@ def collect_app_permission_drift(lines):
             lines.append(
                 f'github_app_permission_mismatch{{app="{esc(slug)}",permission="{esc(perm)}",'
                 f'declared="{esc(decl)}",live="{esc(liv)}"}} 1')
+        # /apps view: enumerate this keyed App's installed repos (the token-list guard in
+        # git-token.yaml/reviewer-git.yaml — "verify the App covers each repo BEFORE adding").
+        try:
+            tok_req = urllib.request.Request(
+                f"https://api.github.com/app/installations/{app['install_id']}/access_tokens",
+                data=b"{}", method="POST",
+                headers={"Authorization": f"Bearer {jwt}", "Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(tok_req, timeout=15) as resp:
+                itok = json.load(resp).get("token", "")
+            if itok:
+                rr = urllib.request.Request(
+                    "https://api.github.com/installation/repositories?per_page=100",
+                    headers={"Authorization": f"Bearer {itok}", "Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(rr, timeout=15) as resp:
+                    repos_by_slug[slug] = sorted(
+                        r["name"] for r in json.load(resp).get("repositories", []))
+        except Exception as exc:  # noqa: BLE001 — the view degrades, the metrics never
+            print(f"app-permission-drift: repo enumeration failed for {slug}: {exc}", flush=True)
+    # org installations (the exporter PAT's Administration:read) — selection per app_id
+    installs_by_id = {}
+    try:
+        for inst in gh(f"/orgs/{ORG}/installations?per_page=100").get("installations", []):
+            installs_by_id[str(inst.get("app_id"))] = inst
+    except Exception as exc:  # noqa: BLE001
+        print(f"app-permission-drift: installations list unavailable: {exc}", flush=True)
+    global _apps_md
+    _apps_md = _render_apps_view(declared, live_by_slug, installs_by_id, repos_by_slug)
 
 
 def collect_billing(lines):
@@ -629,13 +703,16 @@ def poll_forever():
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in ("/metrics", "/healthz", "/"):
+        if self.path not in ("/metrics", "/healthz", "/", "/apps"):
             self.send_error(404)
             return
         with _lock:
             body = _body.encode()
         if self.path == "/healthz":
             body = b"ok\n"
+        elif self.path == "/apps":
+            # FU-098: the served (never committed) declared-vs-live Apps page
+            body = _apps_md.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

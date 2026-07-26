@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# github-apps.sh — generate docs/github-apps.md: which GitHub Apps are installed on which org repos.
+# github-apps.sh — deep-verify report (/tmp): install matrix + declared-vs-live permissions.
+# The ALWAYS-CURRENT view is SERVED by the github-exporter at /apps (FU-098) — never committed.
 # App installs are CLICK-ONLY (not tofu), so this discovers the live state. Run OUTSIDE the jail.
 #
 # Auth is two-layer, because a plain admin PAT can list installations but NOT a `selected` install's
@@ -11,7 +12,7 @@
 set -euo pipefail
 ORG="${ORG:-teststuffstash}"
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${OUT:-${HERE}/docs/github-apps.md}"
+OUT="${OUT:-/tmp/github-apps.md}" # FU-098 finale: the live view is SERVED (exporter /apps) — this deep-verify report is never committed
 API="https://api.github.com"
 
 command -v gh >/dev/null && command -v openssl >/dev/null && command -v jq >/dev/null && command -v curl >/dev/null \

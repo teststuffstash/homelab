@@ -36,7 +36,7 @@ jobs:
       # Most fleet repos are private — the warm-store lockfiles need an App token (the
       # devbox-update.yaml pattern); this job's own GITHUB_TOKEN is homelab-scoped.
       # ⚠ The list below is the homelab-renovate App INSTALLATION set, not the wishlist:
-      # minting for an uninstalled repo 422s the whole step (docs/github-apps.md has the matrix).
+      # minting for an uninstalled repo 422s the whole step (the exporter /apps page has the live matrix).
       - uses: actions/create-github-app-token@v1
         id: app
         with:

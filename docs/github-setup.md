@@ -20,13 +20,13 @@ this is the broader catalog.
 > **Permissions are DECLARED in [`docs/github-apps.yaml`](github-apps.yaml) (FU-098) — that file
 > is the source of truth and the change flow** (PR it first with a `why` per permission → the
 > github-exporter `GithubAppPermissionDrift` alert rings until the UI click + install approval
-> land → clears). `scripts/github-apps.sh` verifies live-vs-declared into
-> [`github-apps.md`](github-apps.md); `devbox run github-apps-lint` (in ci) proves every mint
+> land → clears). `scripts/github-apps.sh` is the outside-jail deep verify (report to /tmp); the always-current view is SERVED at
+> the github-exporter `/apps` page (in-cluster `github-exporter.monitoring.svc:9504/apps`; humans port-forward). `devbox run github-apps-lint` (in ci) proves every mint
 > site's request ⊆ the declaration. Creation is ONE script — `scripts/github-app-bootstrap.sh
 > <slug> manifest|catch|convert` — whose manifest is built FROM the yaml (the six per-App
 > scripts keep only their secrets/verify plumbing; their creation subcommands are retired stubs).
 
-**The per-App table is GENERATED now** → [`github-apps-declared.md`](github-apps-declared.md) (from the yaml; `devbox run github-apps-md`). The narrative WHYs live in the yaml's per-permission `why:` fields — this section keeps only what stays click-only.
+**The per-App detail lives in the yaml itself** (readable, whys inline) and the served `/apps` page (declared-vs-live, per poll) — no committed generated table.
 
 **Click-only (per the runner bootstrap doc):** *creating* an App (driven to a single Create via the
 App-manifest REST flow), **Installing** it on the org, generating its **private key**. The private
