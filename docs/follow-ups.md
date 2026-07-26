@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-099**.
+  Next free id: **FU-100**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -143,6 +143,17 @@ _Last updated: 2026-07-16._
       app+chart shape is proven (sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
       auto-merged; caller PRs agent-runtime#5 / agent-coordinator#4 merged 2026-07-06; the Renovate
       rollout itself is archived as FU-014).
+- [ ] **FU-099** — **Synthetic (blackbox) endpoint monitoring — no alert fired during a real
+      prod outage** (meta-11, 2026-07-26): both mcp.oracle.teststuff.net replicas served only
+      5xx (dead stdio children, pods Ready throughout — fleet#152/#153 own the app-side guards)
+      and NOTHING alerted — the only detector was a manually-run agentic probe. No FU/ADR
+      covers blackbox/synthetic checks (grep 2026-07-26: blackbox|synthetic|uptime → none).
+      Deliverable: blackbox-exporter (or equivalent) in `monitoring` + Probe/scrape for the
+      public LAN endpoints that carry a product contract — first consumer
+      `mcp.oracle.teststuff.net/mcp` (needs an http POST module: MCP initialize + 200 assert),
+      then the other `*.teststuff.net` fronts (apps, grafana, argo…) as cheap GETs. Alert
+      descriptions = symptoms ("endpoint serving non-2xx for 10m"). Belt, not guard: the
+      app-side readiness fix stays the guard (fleet#152).
 - [ ] **FU-097** — **Homelab's own deploy path: the surfaces NOT reconciled by ArgoCD/tofu**
       (operator 2026-07-25, split out of FU-051 — "homelab needs its own follow-up with
       everything not covered by iac"). A merged change to these trees deploys NOTHING today;
