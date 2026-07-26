@@ -5,15 +5,12 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Updated 2026-07-26 ~01:15Z (meta-10 cont., same session as the 07-25 resume):_
 
-- **Oracle corpus chain — REBUILD SUCCEEDED, acceptance #4 IS THE NEXT STEP.** cvkk8 went
-  3/3 (parse 252,354 members; build 4.8h: 16,437,964 provisions, empty-body ratio 0.018 vs
-  0.05 floor PASSED, corpus 6.0GB, digest baked; publish clean). Released
-  `ert-corpus:2026-07-12 @ sha256:4d07f3e78749…` digest-verified; iac#205 bump auto-merging →
-  mcp pods roll the new ImageVolume (watcher armed). **On rolled pods: run acceptance #4**
-  (criteria unchanged: PS §1 full text, <1s, 168 §§; prior refusals: r1 transport, r2 42s+keys,
-  r3 empty body_text). THEN: limits-trim leg (parse ~350Mi under 4Gi; build peaked ~785Mi under
-  6Gi — trim both) + C6 flips for #125/#126. Filed en route: fleet#135 (build emits no progress
-  events for the whole populate phase — regression vs pre-#127; loop owns it).
+- **Oracle corpus chain — ✅ ACCEPTANCE #4 PASSED 2026-07-26 ~01:30Z** (PS §1 full text, p50
+  21ms, 168/168 §§, date-travel + normalized keys correct; TICK-LOG has the arc). C6
+  #125/#126 flipped. Acceptance anomalies filed+queued: fleet#136 (casefold) #137 (TsÜS
+  coverage gap) #138 (titles) #139 (latency histogram); #135 (silent build) queued, its ride
+  running. **Remaining leg: limits-trim** — parse peaked ~350Mi (limit 4Gi), build ~785Mi
+  (limit 6Gi): trim via oracle-iac workflow-ert yaml PR when convenient.
 - **FU-089 — one flip left: `GIT_TOKEN_REQUIRE_AUTH=1` on the openrouter-proxy Deployment,
   ONLY at an idle window** (no agent-session pods running — the helper has no retry; a fetch
   during the proxy restart kills a ride). Evidence complete 01:12Z: a real ride's fetches
