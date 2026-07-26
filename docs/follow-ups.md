@@ -237,55 +237,7 @@ _Last updated: 2026-07-16._
       every weekly bump silently staled the warm store); DEVBOX_VERSION/NIX_VERSION ARGs
       renovate-tracked via customManagers in renovate-global.json. **Remaining: watch one
       scheduled Monday cycle E2E (locks → rebuild → self-bump → roll), then archive.**
-- [ ] **FU-098** — **GitHub App permissions: declared-state + drift verification (operator
-      2026-07-26, prompted by the F1 workflows-scope block).** Permissions live in FOUR
-      unsynchronized places today: the 7 bootstrap scripts' inline `default_permissions`
-      (creation only), github-setup.md §2's hand table (holds the per-permission WHYs),
-      the live App settings (truth, UI-only — the API can READ via `GET /app` JWT but never
-      WRITE, so verify-only IaC is the honest ceiling), and every MINT SITE that requests
-      permissions (Composition `GithubAccessToken` blocks, `create-github-app-token` steps —
-      a request ⊄ App grant 422s in prod, which is exactly how F1 surfaced). Design:
-      (a) ONE declared file `github-apps.yaml` — per App: ids, purpose, permissions each
-      with `why:` naming its consumer, events, install scope; bootstrap scripts template
-      their manifest FROM it; setup.md §2's permission column becomes generated.
-      (b) `github-apps.sh` grows the verify leg: per-App JWT → `GET /app` (+ installation
-      permissions) → diff vs declared → github-apps.md gains a permissions matrix with ⚠
-      drift marks → nonzero exit = `devbox run github-apps-lint`.
-      (c) **the ⊆-invariant lint**: statically collect every mint site's requested
-      permissions (composition.yaml, workflows, agents/coordinator/*.yaml) and check
-      request ⊆ declared per App — tonight's class fails in CI, not as a prod 422.
-      (d) **continuous belt via github-exporter** (holds App keys in-cluster already,
-      FU-084): collector emits live-vs-declared drift gauge → symptoms-only alert ("App
-      <x> permissions differ from github-apps.yaml"). Change flow inverts to: PR the yaml
-      (why included) → alert fires until the UI click + install approval land → clears —
-      BOTH hope-paths (click-without-PR, PR-without-click) become visible. Install repo
-      selection stays click-only (user-to-server API, tried+removed 2026-07-01 — setup.md).
-      Relates FU-017 (over-grant trimming falls out of the per-permission why), FU-084.
-      **BUILT 2026-07-26** (same session): `docs/github-apps.yaml` (8 apps, per-permission
-      why, decided ABSENCES — incl. renovate's no-vulnerability_alerts per the renovate.md
-      OSV ruling), `scripts/github-apps-lint.py` (⊆-invariant over 7 mint sites + exporter
-      JSON-copy sync; in devbox + ci), verify leg in `scripts/github-apps.sh` (per-App JWT →
-      GET /app → drift matrix in github-apps.md, --lint exits nonzero), exporter
-      `collect_app_permission_drift` (agents+reviewer keys mounted; openssl-subprocess JWT)
-      + `GithubAppPermissionDrift` alert (30m for). `workflows: write` DECLARED for
-      homelab-agents — the inaugural grant landed 2026-07-26 (drift 1→0 confirmed live);
-      workflows:write on the composition worker gens; fleet#134 queued.
-      **Single-source completion (operator direction 2026-07-26):** ONE creation entrypoint
-      `scripts/github-app-bootstrap.sh <slug>` builds the manifest FROM the yaml (the six
-      per-App scripts' creation subcommands are retired stubs; they keep only app-specific
-      secrets/verify plumbing, delegated via `bootstrap.legacy`); the per-App markdown is
-      GENERATED — **final form (operator direction 2026-07-26): SERVED, never committed.**
-      The CI-auto-commit route was rejected (a GITHUB_TOKEN push triggers no workflows → the
-      PR head loses its required ci check; an App-token push re-triggers but invites updater
-      ping-pong); instead the github-exporter renders the declared-vs-live page per poll at
-      **GET /apps** (in-cluster `github-exporter.monitoring.svc:9504/apps`) including the
-      keyed Apps' live install-repo enumeration (the git-token.yaml "verify coverage BEFORE
-      adding" guard). docs/github-apps{-declared,}.md + the md generator DELETED — the yaml
-      is the readable declared source; github-apps.sh remains the outside-jail deep verify
-      (report to /tmp). Remaining: port the six secrets/verify flows into the single script
-      as each App next needs them; fill the null app_ids (next deep-verify run); consider
-      adding merge/renovate/deploy keys to the exporter belt; optionally a LAN name for
-      /apps (rides the next opnsense change).
+
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)

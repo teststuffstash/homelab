@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-098** *(archived 2026-07-26)* — **GitHub App permissions: declared state + drift
+  verification, COMPLETE.** `docs/github-apps.yaml` = the single source (per-permission why,
+  decided absences, all app_ids filled); ONE creation script (`github-app-bootstrap.sh <slug>`,
+  manifest from the yaml, all six secrets/verify flows ported, legacy scripts deleted); the
+  ⊆-invariant lint in ci (mint-request ⊆ declaration — the fleet#134 422 class); the exporter
+  drift belt + `GithubAppPermissionDrift` alert (change flow: PR the yaml → alert rings →
+  operator clicks → clears; proven on the workflows:write grant AND it caught the reviewer's
+  forgotten grants same day); the human view SERVED at **apps.teststuff.net** (/apps,
+  never committed — CI-auto-commit rejected: GITHUB_TOKEN pushes trigger no workflows).
 - **FU-091** — Queue-liveness alert (queued work + idle loop must page). *(archived 2026-07-25)*
   Built the day it was filed (2026-07-21) and never closed: `AgentQueueStalled` (queued>0 ∧ zero
   worker pods ∧ zero open PRs, 2h warning) + the `github_agent_issue_labels` gauge live in the
