@@ -1030,3 +1030,30 @@ scope → recipe carve-out). Disk sweep: ghcr mirror at 100% (6GB-corpus working
 prometheus retention 18→16GB headroom, 12 stale Failed workflows cleared.
 **Handoff**: next session = oracle-fleet until an AGENT drives UC-1 on the MCP server, kind
 then prod (meta-state has the shape; anchor fleet#83/#84).
+
+### 2026-07-26 — meta-11: the UC-1 kind chain — queued→delivered→CI-gated in one afternoon
+**The operator directive's kind leg is half-landed same-day.** #83 queued at 15:20 with the
+4-deliverable shape ⚖ pre-decided (fixture-corpus-through-real-publish for CI / real-digest
+override; deterministic UC-1 wire client into e2e; agentic probe-e2e never merge-blocking;
+spec-first evidence). A haiku worker delivered all four in a 25-min ride (#146, 1456 adds);
+the codeowner gate doubled as the operator prompt-corpus pass (concern filed on #84: two
+meta-prompt cases describe their trap instead of naming a provision → noise-gap risk) plus a
+link-depth nit (#147). **The operator wiring (#148) was where the truth lived**: ci.yaml is
+operator-lane for track/server, and the serve leg had run NOWHERE — its first CI exercise
+surfaced two latent classes in a row: (1) containerdConfigPatches with the 1.x key
+`io.containerd.grpc.v1.cri` kills the CRI plugin on containerd-2.x kindest/node (kubelet
+crashloops "unknown service runtime.v1.RuntimeService") — repro'd + bisected live on
+ci-runner-01 via `qm guest exec` (create fails with patch, EXIT=0 without), fix = the repo's
+own kind_mirror certs.d/hosts.toml pattern; (2) rootless Debian skopeo 1.9.3 EPERMs chowning
+blobs while untarring the oci-archive — fix = untar ourselves (non-root tar never chowns),
+push from the `oci:` layout dir. Third run GREEN: kind+ImageVolume+real-publish fixture
+corpus+gateway+UC-1 wire assertions are now a standing merge gate. `drive_agent` shipped as
+a deliberate NotImplementedError seam → **#149 queued** (goose wiring, recorded-session
+fixture tests, live run stays out of ci). skopeo declared in the runner cloud-init + live
+apt-converged (VM recreate avoided). Meanwhile jbtlm rebuilds the corpus on the trimmed
+limits (parse 1536Mi/build 2Gi) with the #140-#144 fixes; garage-0 on wk-01 thrashed
+(majfault+sdb-IO warnings) under the pipeline's S3 load — attributed, load-shaped, watch on
+clear. Probe lessons paid twice more: gh's statusCheckRollup is BLIND for the jail PAT
+(watch runs via `gh run list`, REST), and two monitor generations died on zsh-no-word-split
++ an invalid jsonpath (Argo `.status.nodes` is a map — probe pods by workflow label).
+Two more orphan monitors from dead sessions stopped on sight.
