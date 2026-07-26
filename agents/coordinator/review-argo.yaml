@@ -142,6 +142,14 @@ spec:
             fi
             rm -rf /work/homelab
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+            # FU-080: a graduated stack is reviewed by its OWN per-stack review-<stack> cron (in
+            # <stack>-agents as agentstack-loop). This global workflow runs as agent-coordinator and
+            # CAN'T create reviewer pods in that ns, so DEFER — the per-stack cron picks this PR up
+            # (up to */15; per-stack review edge-routing is a later leg). Keeps the global + per-stack
+            # reviewers from racing the same PR. The global review-reflex cron skips graduated too.
+            if jq -e --arg r "$REPO" '.stacks[]|select((.graduated//false)==true)|select([.repos[]]|index($r))' /work/homelab/agents/stacks.json >/dev/null 2>&1; then
+              echo "review: $REPO belongs to a graduated stack — deferring to its per-stack review cron"; exit 0
+            fi
             exec bash /work/homelab/agents/reviewer-session.sh "$REPO" "$PR"
         env:
           - { name: HOME, value: "/home/node" }
