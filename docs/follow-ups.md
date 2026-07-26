@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-098**.
+  Next free id: **FU-099**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -237,6 +237,30 @@ _Last updated: 2026-07-16._
       every weekly bump silently staled the warm store); DEVBOX_VERSION/NIX_VERSION ARGs
       renovate-tracked via customManagers in renovate-global.json. **Remaining: watch one
       scheduled Monday cycle E2E (locks → rebuild → self-bump → roll), then archive.**
+- [ ] **FU-098** — **GitHub App permissions: declared-state + drift verification (operator
+      2026-07-26, prompted by the F1 workflows-scope block).** Permissions live in FOUR
+      unsynchronized places today: the 7 bootstrap scripts' inline `default_permissions`
+      (creation only), github-setup.md §2's hand table (holds the per-permission WHYs),
+      the live App settings (truth, UI-only — the API can READ via `GET /app` JWT but never
+      WRITE, so verify-only IaC is the honest ceiling), and every MINT SITE that requests
+      permissions (Composition `GithubAccessToken` blocks, `create-github-app-token` steps —
+      a request ⊄ App grant 422s in prod, which is exactly how F1 surfaced). Design:
+      (a) ONE declared file `github-apps.yaml` — per App: ids, purpose, permissions each
+      with `why:` naming its consumer, events, install scope; bootstrap scripts template
+      their manifest FROM it; setup.md §2's permission column becomes generated.
+      (b) `github-apps.sh` grows the verify leg: per-App JWT → `GET /app` (+ installation
+      permissions) → diff vs declared → github-apps.md gains a permissions matrix with ⚠
+      drift marks → nonzero exit = `devbox run github-apps-lint`.
+      (c) **the ⊆-invariant lint**: statically collect every mint site's requested
+      permissions (composition.yaml, workflows, agents/coordinator/*.yaml) and check
+      request ⊆ declared per App — tonight's class fails in CI, not as a prod 422.
+      (d) **continuous belt via github-exporter** (holds App keys in-cluster already,
+      FU-084): collector emits live-vs-declared drift gauge → symptoms-only alert ("App
+      <x> permissions differ from github-apps.yaml"). Change flow inverts to: PR the yaml
+      (why included) → alert fires until the UI click + install approval land → clears —
+      BOTH hope-paths (click-without-PR, PR-without-click) become visible. Install repo
+      selection stays click-only (user-to-server API, tried+removed 2026-07-01 — setup.md).
+      Relates FU-017 (over-grant trimming falls out of the per-permission why), FU-084.
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
