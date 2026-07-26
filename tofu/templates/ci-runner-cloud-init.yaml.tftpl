@@ -2,7 +2,7 @@
 hostname: ci-runner-01
 package_update: true
 # qemu-guest-agent: so Proxmox sees the agent/IP + clean shutdowns (the VM sets agent.enabled=true).
-packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent]
+packages: [curl, jq, ca-certificates, git, sudo, openssl, qemu-guest-agent, skopeo]
 users:
   - name: debian
     groups: [sudo, docker]
