@@ -123,10 +123,101 @@ PY
   _save_conversion "$(_convert_code "$code")"
 }
 
-delegate() { # secrets/verify → the app's legacy plumbing until individually ported
-  [ -n "$LEGACY" ] || die "no app-specific '$1' wiring declared for $SLUG (bootstrap.legacy in $DECLARED)"
-  [ -f "scripts/$LEGACY" ] || die "scripts/$LEGACY missing"
-  exec bash "scripts/$LEGACY" "$1"
+# ── secrets: generic scaffold (cred-dir reads + install-id resolve) + per-slug pushes ──
+# All six flows ported from the legacy per-App scripts 2026-07-26 (FU-098 completion): the
+# variation is WHICH Infisical/Actions secrets each app feeds and what gets pasted where.
+_load_creds() {
+  APP_ID="${APP_ID:-$(cat "$CRED_DIR/app-id" 2>/dev/null || true)}"
+  PEM="${APP_PRIVATE_KEY_FILE:-$CRED_DIR/private-key.pem}"
+  [ -n "$APP_ID" ] || die "no App id (run 'convert' or pass APP_ID=)"
+  [ -f "$PEM" ]    || die "no private key at $PEM (run 'convert' or pass APP_PRIVATE_KEY_FILE=)"
+}
+_resolve_install_id() { # needs gh with org read; writes CRED_DIR/installation-id
+  INSTALL_ID="${INSTALL_ID:-$(gh api "/orgs/$ORG/installations" --jq ".installations[] | select(.app_id==($APP_ID|tonumber)) | .id" 2>/dev/null || true)}"
+  [ -n "$INSTALL_ID" ] || die "installation not found — is the App INSTALLED on $ORG? Or pass INSTALL_ID="
+  echo "$INSTALL_ID" > "$CRED_DIR/installation-id"
+}
+
+cmd_secrets() {
+  need devbox; _load_creds
+  case "$SLUG" in
+    homelab-agents)
+      need gh; _resolve_install_id
+      say "Pushing the App private key into Infisical (homelab/prod)"
+      # Infisical CLI escapes the PEM newlines; ESO un-escapes (template replace) — ARC pattern.
+      devbox run infisical-secret "AGENTS_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      say "Wire the generators (non-secret ids): appID=$APP_ID installID=$INSTALL_ID"
+      echo "  → agents/coordinator/git-token.yaml + the agentstack composition constants" ;;
+    homelab-reviewer)
+      need gh; _resolve_install_id
+      say "Pushing the review App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "REVIEWER_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      say "Paste appID=$APP_ID installID=$INSTALL_ID into agents/coordinator/reviewer-git.yaml, then apply it" ;;
+    homelab-merge)
+      # No install-id: the updater's create-github-app-token resolves it from app-id+key+repo.
+      say "Pushing the merge App private key into Infisical (homelab/prod) — source of truth"
+      devbox run infisical-secret "MERGE_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      echo "  Then publish the org Actions secrets:  devbox run github-tofu apply   (reads $CRED_DIR)" ;;
+    homelab-renovate)
+      say "Pushing the renovate App private key into Infisical (homelab/prod)"
+      devbox run infisical-secret "RENOVATE_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      echo "  Then publish the Actions secrets:  devbox run github-tofu apply   (RENOVATE_APP_*)" ;;
+    homelab-deploy)
+      say "Pushing the deploy App private key into Infisical (homelab/prod) — source of truth"
+      devbox run infisical-secret "DEPLOY_GH_APP_PRIVATE_KEY=$(cat "$PEM")"
+      echo "  Then:  devbox run github-tofu apply   (DEPLOY_APP_* secrets + the bypass_actors)" ;;
+    homelab-labels)
+      need gh; need awk; _resolve_install_id
+      # provider-upjet-github wants the PEM \n-ESCAPED as one line — escape ONCE at mint time.
+      local pem_escaped; pem_escaped=$(awk 'NR>1{printf "\\n"} {printf "%s", $0}' "$PEM")
+      say "Pushing the labels App credentials into Infisical (homelab/prod)"
+      devbox run infisical-secret "LABELS_GH_APP_ID=$APP_ID" >/dev/null
+      devbox run infisical-secret "LABELS_GH_APP_INSTALLATION_ID=$INSTALL_ID" >/dev/null
+      devbox run infisical-secret "LABELS_GH_APP_PRIVATE_KEY=$pem_escaped" >/dev/null
+      echo "  ESO materializes github-labels-provider-creds (crossplane-system) on its refresh" ;;
+    *) die "no secrets flow for $SLUG (runner apps ride scripts/github-runner-bootstrap.sh)" ;;
+  esac
+}
+
+cmd_verify() {
+  local KC="devbox run --quiet -- kubectl --kubeconfig tofu/kubeconfig"
+  case "$SLUG" in
+    homelab-agents)
+      need devbox
+      say "Central worker-token chain (FU-089: agent-coordinator ns)"
+      $KC -n agent-coordinator get secret agents-github-app 2>/dev/null || warn "key Secret missing (secrets + git-token.yaml applied?)"
+      $KC -n agent-coordinator get secret 2>/dev/null | grep -E "^agent-git-" || warn "no central agent-git-<repo> secrets (composition rendered? ESO synced?)" ;;
+    homelab-reviewer)
+      need devbox
+      say "reviewer-git ESO chain (ns agent-coordinator)"
+      $KC -n agent-coordinator get externalsecret reviewer-github-app reviewer-git 2>/dev/null || warn "ExternalSecrets not applied (reviewer-git.yaml)"
+      $KC -n agent-coordinator get secret reviewer-git 2>/dev/null && echo "  → reviewer-git Secret present" || warn "no reviewer-git Secret yet" ;;
+    homelab-merge)
+      need gh
+      # The one END-TO-END signal: a green updater run needs install + secrets + perms at once.
+      say "Updater workflow per repo (green ⇒ installed + secrets + permissions all correct)"
+      for r in $(yq -r '.apps[] | select(.slug=="homelab-merge") | .bootstrap.verify_repos[]?' "$DECLARED" 2>/dev/null); do
+        line="$(gh run list --repo "$ORG/$r" --workflow update-pr-branch.yml --limit 1 --json conclusion,createdAt --jq '.[0] | "\(.conclusion) \(.createdAt)"' 2>/dev/null || true)"
+        case "$line" in success*) echo "  $r: ✅ $line";; "") warn "  $r: no updater run yet";; *) warn "  $r: ❌ $line";; esac
+      done ;;
+    homelab-renovate)
+      need gh
+      say "Renovate runner — last run"
+      gh run list --repo "$ORG/homelab" --workflow renovate.yaml --limit 1 --json conclusion,createdAt --jq '.[0] | "  \(.conclusion)  \(.createdAt)"' 2>/dev/null || warn "no renovate run yet" ;;
+    homelab-deploy)
+      need gh
+      say "Deploy-pin flow — newest deploy-authored PR per target"
+      for r in $(yq -r '.apps[] | select(.slug=="homelab-deploy") | .bootstrap.verify_repos[]?' "$DECLARED" 2>/dev/null); do
+        gh pr list --repo "$ORG/$r" --author "app/homelab-deploy" --state all --limit 1 --json number,state,title --jq ".[0] | \"  $r: #\(.number) \(.state) \(.title)\"" 2>/dev/null || echo "  $r: none yet"
+      done ;;
+    homelab-labels)
+      need devbox
+      say "provider-upjet-github + credentials chain"
+      $KC get provider.pkg provider-upjet-github 2>/dev/null || warn "Provider not installed"
+      $KC -n crossplane-system get secret github-labels-provider-creds 2>/dev/null && echo "  → creds Secret present" || warn "no creds Secret (run 'secrets')"
+      $KC get issuelabels 2>/dev/null || echo "  (no claim carries a labels: block yet)" ;;
+    *) die "no verify flow for $SLUG" ;;
+  esac
 }
 
 case "${1:-check}" in
@@ -134,6 +225,7 @@ case "${1:-check}" in
   manifest) cmd_manifest ;;
   catch)    cmd_catch ;;
   convert)  shift; _save_conversion "$(_convert_code "${1:?usage: convert <code>}")" ;;
-  secrets|verify) delegate "$1" ;;
+  secrets)  cmd_secrets ;;
+  verify)   cmd_verify ;;
   *) die "unknown subcommand '$1' (check|manifest|catch|convert|secrets|verify)" ;;
 esac

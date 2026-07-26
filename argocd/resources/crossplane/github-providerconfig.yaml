@@ -1,7 +1,7 @@
 # Credentials + ProviderConfig for provider-upjet-github (FU-068 labels tier).
 #
 # The ExternalSecret assembles the terraform-provider-github credentials JSON from the three
-# Infisical keys minted by scripts/github-labels-app-bootstrap.sh (the homelab-labels App:
+# Infisical keys minted by scripts/github-app-bootstrap.sh homelab-labels (the homelab-labels App:
 # Issues:R/W + metadata:read, installed org-wide on All repositories). The PEM is stored
 # \n-ESCAPED as a single line (the terraform provider's required form — the JSON document must
 # carry literal \n sequences, which JSON-decode into real newlines provider-side).

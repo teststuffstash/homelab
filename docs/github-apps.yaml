@@ -39,7 +39,7 @@ apps:
       workflows: { level: write, why: "fleet#134 — track/chassis carve-out needs workers pushing .github/workflows/ci.yaml; DECLARED 2026-07-26 ahead of the grant (the drift alert rings until the operator clicks)" }
     installs: selected # the agent repos — live matrix: the exporter /apps page
     key_locations: [Infisical AGENTS_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-agents/"]
-    bootstrap: { legacy: github-agents-app-bootstrap.sh, redirect_port: 8766, cred_dir: "~/.claude/homelab-github-agents" }
+    bootstrap: { redirect_port: 8766, cred_dir: "~/.claude/homelab-github-agents" }
 
   - slug: homelab-reviewer
     app_id: 4199252
@@ -63,11 +63,11 @@ apps:
       security_events: { level: read, why: "same ruling" }
     installs: selected
     key_locations: [Infisical REVIEWER_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-reviewer/"]
-    bootstrap: { legacy: github-reviewer-app-bootstrap.sh, redirect_port: 8767, cred_dir: "~/.claude/homelab-github-reviewer" }
+    bootstrap: { redirect_port: 8767, cred_dir: "~/.claude/homelab-github-reviewer" }
 
   - slug: homelab-merge
-    app_id: null # fill from the cred dir on the next --verify run outside the jail
-    install_id: null
+    app_id: 4207260
+    install_id: 144155950
     purpose: >-
       The merge-serializer identity — update-pr-branch.yml's branch-update push. Dedicated App:
       its key sits in an org Actions secret readable by the semi-trusted CI plane, so minimal.
@@ -81,11 +81,11 @@ apps:
       issues: "the conflict-labeling step uses GITHUB_TOKEN instead — a leaked merge key must not grant issue writes"
     installs: selected # agent repos + homelab (deploy target)
     key_locations: [org Actions secret via tofu/github/actions_secrets.tf, KeePass]
-    bootstrap: { legacy: github-merge-app-bootstrap.sh, redirect_port: 8768, cred_dir: "~/.claude/homelab-github-merge" }
+    bootstrap: { redirect_port: 8768, cred_dir: "~/.claude/homelab-github-merge", verify_repos: [homelab, sleep-tracking, sleep-iac, snore-recorder, openrouter-operator, oracle-fleet, oracle-iac, agent-runtime, agent-coordinator, allure-behavior-snippets] }
 
   - slug: homelab-renovate
-    app_id: null
-    install_id: null
+    app_id: 4215862
+    install_id: 144389013
     purpose: Self-hosted Renovate's identity (renovate.yaml) + devbox-update/runner-image lockfile fetches.
     permissions:
       metadata: { level: read, why: "baseline" }
@@ -97,22 +97,22 @@ apps:
       vulnerability_alerts: "DECIDED — vulnerability data comes from Renovate's OSV alerts, not GitHub Dependabot (docs/renovate.md §OSV: 'we use OSV instead and ignore that warning'; self-host ethos, no repo Dependency-graph settings needed)"
     installs: selected
     key_locations: [org Actions secrets RENOVATE_APP_ID/RENOVATE_APP_PRIVATE_KEY, KeePass]
-    bootstrap: { legacy: github-renovate-app-bootstrap.sh, redirect_port: 8770, cred_dir: "~/.claude/homelab-github-renovate" }
+    bootstrap: { redirect_port: 8770, cred_dir: "~/.claude/homelab-github-renovate" }
 
   - slug: homelab-labels
-    app_id: null
-    install_id: null
+    app_id: 4314419
+    install_id: 146964959
     purpose: Label-sync identity (agent label set across repos).
     permissions:
       metadata: { level: read, why: "baseline" }
       issues: { level: write, why: "create/update labels (labels ride the Issues permission)" }
     installs: all
     key_locations: [KeePass]
-    bootstrap: { legacy: github-labels-app-bootstrap.sh, redirect_port: 8768, cred_dir: "~/.claude/homelab-github-labels" }
+    bootstrap: { redirect_port: 8768, cred_dir: "~/.claude/homelab-github-labels" }
 
   - slug: homelab-deploy
-    app_id: null
-    install_id: null
+    app_id: 4214796
+    install_id: 144355858
     purpose: Deploy-pin bump PRs into deploy-target repos (FU-051; homelab, sleep-iac, oracle-iac).
     permissions:
       metadata: { level: read, why: "baseline" }
@@ -120,10 +120,10 @@ apps:
       pull_requests: { level: write, why: "open + auto-merge the bump PR" }
     installs: selected
     key_locations: [org Actions secrets DEPLOY_APP_*, KeePass]
-    bootstrap: { legacy: github-deploy-app-bootstrap.sh, redirect_port: 8769, cred_dir: "~/.claude/homelab-github-deploy" }
+    bootstrap: { redirect_port: 8769, cred_dir: "~/.claude/homelab-github-deploy", verify_repos: [homelab, sleep-iac, oracle-iac] }
 
   - slug: homelab-arc
-    app_id: null
+    app_id: 4133695
     install_id: 142353606
     purpose: Actions Runner Controller registers the org homelab-ephemeral scale set.
     permissions:

@@ -553,7 +553,7 @@ contract-versioning discipline), not a merge-path mechanism.
   workflow that reads org secrets). The dedicated App keeps that CI-exposed key least-privilege: a
   leak grants only branch-updates. No self-approval conflict (the updater only pushes + reads, never
   approves; `require_last_push_approval = false`) — so the distinct identity is for blast-radius +
-  audit legibility, not a hard GitHub constraint. Bootstrap: `scripts/github-merge-app-bootstrap.sh`;
+  audit legibility, not a hard GitHub constraint. Bootstrap: `scripts/github-app-bootstrap.sh homelab-merge`;
   published to Actions by `tofu/github/actions_secrets.tf` via `devbox run github-tofu apply`.
 - **Review reflex dies** — PRs accumulate approved=0; nothing merges; nothing breaks. The `*/15`
   CronWorkflow backstop re-lists next tick and resumes (and covers a missed exporter POST too).

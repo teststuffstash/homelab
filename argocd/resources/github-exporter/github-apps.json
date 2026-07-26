@@ -45,7 +45,6 @@
         "~/.claude/homelab-github-agents/"
       ],
       "bootstrap": {
-        "legacy": "github-agents-app-bootstrap.sh",
         "redirect_port": 8766,
         "cred_dir": "~/.claude/homelab-github-agents"
       }
@@ -115,15 +114,14 @@
         "~/.claude/homelab-github-reviewer/"
       ],
       "bootstrap": {
-        "legacy": "github-reviewer-app-bootstrap.sh",
         "redirect_port": 8767,
         "cred_dir": "~/.claude/homelab-github-reviewer"
       }
     },
     {
       "slug": "homelab-merge",
-      "app_id": null,
-      "install_id": null,
+      "app_id": 4207260,
+      "install_id": 144155950,
       "purpose": "The merge-serializer identity — update-pr-branch.yml's branch-update push. Dedicated App: its key sits in an org Actions secret readable by the semi-trusted CI plane, so minimal.",
       "permissions": {
         "metadata": {
@@ -156,15 +154,26 @@
         "KeePass"
       ],
       "bootstrap": {
-        "legacy": "github-merge-app-bootstrap.sh",
         "redirect_port": 8768,
-        "cred_dir": "~/.claude/homelab-github-merge"
+        "cred_dir": "~/.claude/homelab-github-merge",
+        "verify_repos": [
+          "homelab",
+          "sleep-tracking",
+          "sleep-iac",
+          "snore-recorder",
+          "openrouter-operator",
+          "oracle-fleet",
+          "oracle-iac",
+          "agent-runtime",
+          "agent-coordinator",
+          "allure-behavior-snippets"
+        ]
       }
     },
     {
       "slug": "homelab-renovate",
-      "app_id": null,
-      "install_id": null,
+      "app_id": 4215862,
+      "install_id": 144389013,
       "purpose": "Self-hosted Renovate's identity (renovate.yaml) + devbox-update/runner-image lockfile fetches.",
       "permissions": {
         "metadata": {
@@ -197,15 +206,14 @@
         "KeePass"
       ],
       "bootstrap": {
-        "legacy": "github-renovate-app-bootstrap.sh",
         "redirect_port": 8770,
         "cred_dir": "~/.claude/homelab-github-renovate"
       }
     },
     {
       "slug": "homelab-labels",
-      "app_id": null,
-      "install_id": null,
+      "app_id": 4314419,
+      "install_id": 146964959,
       "purpose": "Label-sync identity (agent label set across repos).",
       "permissions": {
         "metadata": {
@@ -222,15 +230,14 @@
         "KeePass"
       ],
       "bootstrap": {
-        "legacy": "github-labels-app-bootstrap.sh",
         "redirect_port": 8768,
         "cred_dir": "~/.claude/homelab-github-labels"
       }
     },
     {
       "slug": "homelab-deploy",
-      "app_id": null,
-      "install_id": null,
+      "app_id": 4214796,
+      "install_id": 144355858,
       "purpose": "Deploy-pin bump PRs into deploy-target repos (FU-051; homelab, sleep-iac, oracle-iac).",
       "permissions": {
         "metadata": {
@@ -252,14 +259,18 @@
         "KeePass"
       ],
       "bootstrap": {
-        "legacy": "github-deploy-app-bootstrap.sh",
         "redirect_port": 8769,
-        "cred_dir": "~/.claude/homelab-github-deploy"
+        "cred_dir": "~/.claude/homelab-github-deploy",
+        "verify_repos": [
+          "homelab",
+          "sleep-iac",
+          "oracle-iac"
+        ]
       }
     },
     {
       "slug": "homelab-arc",
-      "app_id": null,
+      "app_id": 4133695,
       "install_id": 142353606,
       "purpose": "Actions Runner Controller registers the org homelab-ephemeral scale set.",
       "permissions": {

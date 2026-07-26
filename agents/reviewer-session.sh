@@ -42,7 +42,7 @@
 # leave the merge to a human. Absent .agents/review.md, we just run the generic reviewer.
 #
 # Operator-side, ONCE (see docs/github-setup.md §2/§5):
-#   • homelab-reviewer App + reviewer-git Secret:  scripts/github-reviewer-app-bootstrap.sh
+#   • homelab-reviewer App + reviewer-git Secret:  scripts/github-app-bootstrap.sh homelab-reviewer
 #       (check|manifest|convert|secrets|verify) → then apply agents/coordinator/reviewer-git.yaml
 #   • merge gate = tofu/github/ (rulesets, NOT a shell script): the reviewer-approval gate is a per-repo
 #       `pull_request` rule in repo_rulesets.tf → `tofu -chdir=tofu/github apply` (outside the jail).

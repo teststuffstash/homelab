@@ -95,7 +95,7 @@ data:
     diff `gh label list` against the taxonomy and move keepers into `extra`. Migration is
     claim-first: verify `kubectl get issuelabels <repo>-labels` synced, THEN drop the repo from
     tofu/github `label_repos`. Needs the homelab-labels App credential
-    (`scripts/github-labels-app-bootstrap.sh`).
+    (`scripts/github-app-bootstrap.sh homelab-labels`).
 
     ## Egress rollout (the enforce dial)
 

@@ -74,7 +74,7 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   | secret | value |
   |---|---|
   | `MERGE_GH_APP_ID` | the `homelab-merge` App id — not sensitive (`~/.claude/homelab-github-merge/app-id`) |
-  | `MERGE_GH_APP_PRIVATE_KEY` | the App private key — **durable source is Infisical** `MERGE_GH_APP_PRIVATE_KEY` (pushed by `github-merge-app-bootstrap.sh`); local copy at `~/.claude/homelab-github-merge/private-key.pem` |
+  | `MERGE_GH_APP_PRIVATE_KEY` | the App private key — **durable source is Infisical** `MERGE_GH_APP_PRIVATE_KEY` (pushed by `github-app-bootstrap.sh homelab-merge`); local copy at `~/.claude/homelab-github-merge/private-key.pem` |
 
   **Managed as code** in [`tofu/github/actions_secrets.tf`](../tofu/github/actions_secrets.tf) (same root
   as the rulesets/repos/labels), and applied via **one wrapper** that loads the org admin token + both
@@ -129,7 +129,7 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
 5. Runner group **Default**: All repositories **+ Allow public repositories**.
 6. **Fork-PR approval** = require approval for outside collaborators.
 7. Create + install the **homelab-agents** and **homelab-reviewer** Apps (manifest flow) → keys →
-   Infisical (`scripts/github-agents-app-bootstrap.sh`, `scripts/github-reviewer-app-bootstrap.sh`).
+   Infisical (`scripts/github-app-bootstrap.sh homelab-agents`, `scripts/github-app-bootstrap.sh homelab-reviewer`).
    Install each as **"Only select repositories"** and pick the agent repos — the install's repo scope
    is click-only (fine-grained PATs 403 on the `/user/installations` API; see §2).
 8. **Branch protection** is code in [`tofu/github/`](../tofu/github/) (org ruleset targets `~ALL`, so

@@ -6,7 +6,7 @@
 #
 # Sibling of scripts/tf.sh (main root), same dual-path cred resolution. Sources, in order:
 #   1. TF_VAR_merge_gh_app_id + TF_VAR_merge_gh_app_private_key  ← the homelab-merge cred dir
-#      (~/.claude/homelab-github-merge/{app-id,private-key.pem}), written by github-merge-app-bootstrap.sh.
+#      (~/.claude/homelab-github-merge/{app-id,private-key.pem}), written by github-app-bootstrap.sh homelab-merge.
 #      Durable source of truth for the key stays Infisical (MERGE_GH_APP_PRIVATE_KEY); this file is the copy.
 #   2. GITHUB_TOKEN  ← the teststuffstash ORG ADMIN token (Administration:R/W on repos+rulesets +
 #      Issues:R/W for labels), from a SEPARATE KeePass wallet. An already-set GITHUB_TOKEN wins (wallet skipped).
@@ -39,7 +39,7 @@ _find_cred() { # $1 = subdir (e.g. homelab-github-reviewer) → echo the dir hol
 MERGE_DIR="${MERGE_CRED_DIR:-$(_find_cred homelab-github-merge || true)}"
 [ -n "$MERGE_DIR" ] && [ -f "$MERGE_DIR/app-id" ] && [ -f "$MERGE_DIR/private-key.pem" ] || {
   echo "github-tf: homelab-merge creds not found (homelab-github-merge/{app-id,private-key.pem} in ~/.claude or" >&2
-  echo "           ~/Projects/.claude-data) — run scripts/github-merge-app-bootstrap.sh, or restore from Infisical" >&2
+  echo "           ~/Projects/.claude-data) — run scripts/github-app-bootstrap.sh homelab-merge, or restore from Infisical" >&2
   echo "           MERGE_GH_APP_PRIVATE_KEY + the app-id from the App page." >&2
   exit 1; }
 TF_VAR_merge_gh_app_id="$(cat "$MERGE_DIR/app-id")"

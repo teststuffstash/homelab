@@ -19,7 +19,7 @@ reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automer
 ```
 
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
-Bootstrap: `scripts/github-renovate-app-bootstrap.sh`.
+Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
 
 ## Threat model — mitigate a Trivy-style compromise
 

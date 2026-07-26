@@ -5,7 +5,7 @@
 # long-lived secret (Infisical). Short-lived (~1h), refreshed by ESO.
 #
 # ⚠️ SCAFFOLD — prereqs (one-time): the App is bootstrapped + its key is in Infisical
-# (scripts/github-agents-app-bootstrap.sh) AND it has issues:write + checks:read + statuses:read +
+# (scripts/github-app-bootstrap.sh homelab-agents) AND it has issues:write + checks:read + statuses:read +
 # actions:read granted and RE-ACCEPTED on the teststuffstash installation (a permission add pends until
 # the install is re-approved). The three read grants let review-reflex.sh read statusCheckRollup;
 # without them `gh pr list --json statusCheckRollup` 403s (checks/statuses for the check+status signals,
@@ -43,7 +43,7 @@ metadata:
   name: coordinator-git-gen
   namespace: agent-coordinator
 spec:
-  appID: "4150968"          # same App as the worker token — from `…app-bootstrap.sh secrets` output
+  appID: "4150968"          # same App as the worker token — from `github-app-bootstrap.sh homelab-agents secrets` output
   installID: "142724430"    # the teststuffstash installation (must now carry the issues:write grant)
   auth:
     privateKey:

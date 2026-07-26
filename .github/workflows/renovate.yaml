@@ -5,7 +5,7 @@
 #
 # Per-repo behaviour (e.g. sleep-tracking/renovate.json): dev-dep/actions/pre-commit bumps are
 # `automerge` (the reviewer bot auto-approves the labelled PR → GitHub merges on CI-green → auto-deploy);
-# runtime-dep/docker/devbox bumps are manual review. Bootstrap: scripts/github-renovate-app-bootstrap.sh.
+# runtime-dep/docker/devbox bumps are manual review. Bootstrap: scripts/github-app-bootstrap.sh homelab-renovate.
 name: renovate
 
 on:

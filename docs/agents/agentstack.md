@@ -196,7 +196,7 @@ one wins by deleting.
 **Credential:** a dedicated **labels GitHub App** — `Issues:R/W` only, installed org-wide on *All
 repositories* (new repos covered without a click; the install itself is the one click ever, per
 the "only App installations are click-only" goal). Bootstrap like the other apps
-(`scripts/github-*-app-bootstrap.sh` pattern), PEM → Infisical → ESO → the ProviderConfig
+(`scripts/github-app-bootstrap.sh <slug>` — one script, manifest from docs/github-apps.yaml), PEM → Infisical → ESO → the ProviderConfig
 credential Secret. Do **not** widen the agents App with `Issues:write` — credentials stay
 per-purpose.
 
@@ -206,7 +206,7 @@ per-purpose.
 **Mechanism BUILT + FIRST MIGRATION LIVE 2026-07-16**
 (`argocd/resources/crossplane/github-provider{,config}.yaml`, the XRD's `repos[].labels` + the
 Composition's `IssueLabels` block with the platform taxonomy inline,
-`scripts/github-labels-app-bootstrap.sh`; homelab-labels App installed org-wide same day). The
+`scripts/github-app-bootstrap.sh homelab-labels`; homelab-labels App installed org-wide same day). The
 taxonomy = GitHub defaults + the agent state machine (mirror of `tofu/github/labels.tf` — keep
 the two in sync until every repo is claim-owned and labels.tf dies) + the Renovate/merge-path
 lanes (`dependencies`/`automerge`/`deps-review`). Claim-owned so far: the three oracle repos

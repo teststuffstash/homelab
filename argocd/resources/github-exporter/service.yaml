@@ -6,7 +6,13 @@ metadata:
   name: github-exporter
   labels:
     app: github-exporter
+    # FU-098: LAN exposure of the /apps page — apps.teststuff.net rides HAProxy 3.25 → this
+    # LB VIP (ip-plan mirror convention 3.25↔40.25; entries in ansible/group_vars/opnsense.yml).
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.25"
 spec:
+  type: LoadBalancer
   selector:
     app: github-exporter
   ports:

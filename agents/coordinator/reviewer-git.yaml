@@ -4,8 +4,8 @@
 # are homelab-agents[bot] (the PR author), and GitHub blocks self-approval. This is homelab-reviewer[bot].
 #
 # ⚠️ SCAFFOLD — prereqs (one-time): the homelab-reviewer App is bootstrapped + its key is in Infisical
-# (scripts/github-reviewer-app-bootstrap.sh) and installed on the agent repos. Fill appID/installID
-# below from `…reviewer-app-bootstrap.sh secrets`. Applied with kubectl (not ArgoCD), AFTER rbac.yaml:
+# (scripts/github-app-bootstrap.sh homelab-reviewer) and installed on the agent repos. Fill appID/installID
+# below from `github-app-bootstrap.sh homelab-reviewer secrets`. Applied with kubectl (not ArgoCD), AFTER rbac.yaml:
 #   kubectl --kubeconfig tofu/kubeconfig apply -f agents/coordinator/reviewer-git.yaml
 ---
 # 1) App private key: Infisical → a k8s Secret in this namespace the generator reads.
@@ -38,7 +38,7 @@ metadata:
   name: reviewer-git-gen
   namespace: agent-coordinator
 spec:
-  appID: "4199252"           # homelab-reviewer App (github-reviewer-app-bootstrap.sh, 2026-07-02)
+  appID: "4199252"           # homelab-reviewer App (github-app-bootstrap.sh homelab-reviewer, 2026-07-02)
   installID: "143941082"     # the teststuffstash installation of homelab-reviewer
   auth:
     privateKey:

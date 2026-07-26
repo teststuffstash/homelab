@@ -206,7 +206,7 @@ app-repo build drives the bump PR instead. Renovate stays in its lane (app deps,
 
 **One-time setup (the only manual bits):**
 
-- The **`homelab-deploy` GitHub App** — bootstrap with `scripts/github-deploy-app-bootstrap.sh`
+- The **`homelab-deploy` GitHub App** — bootstrap with `scripts/github-app-bootstrap.sh homelab-deploy`
   (sibling of the agents/reviewer/merge App scripts: `manifest`/`catch` → one Create click →
   `install` on **sleep-iac** → `secrets` → `devbox run github-tofu apply`). Minimal grant
   (`contents:write` + `pull_requests:write` on sleep-iac). The workflow mints a short-lived,

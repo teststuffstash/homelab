@@ -614,7 +614,7 @@ _Last updated: 2026-07-16._
       (`github-providerconfig.yaml` — inert/SecretSyncedError until the App exists); XRD
       `repos[].labels` + Composition `IssueLabels` block with the platform taxonomy inline
       (GitHub defaults + agent state machine + Renovate lanes; mirrors labels.tf until it dies);
-      `scripts/github-labels-app-bootstrap.sh` (check|manifest|catch|convert|secrets|verify —
+      `scripts/github-app-bootstrap.sh homelab-labels` (check|manifest|catch|convert|secrets|verify —
       mints the three `LABELS_GH_APP_*` Infisical keys). **FIRST MIGRATION LIVE 2026-07-16**
       (same day): homelab-labels App installed org-wide (All repositories), creds chain green,
       and FIVE repos claim-owned — oracle-iac + oracle-fleet + allure-behavior-snippets
