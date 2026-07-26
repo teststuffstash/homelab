@@ -4,6 +4,7 @@
     {
       "_migrated": "MIRROR of the claim in sleep-iac//sleep-tracking/agent/agentstack.yaml (see _comment).",
       "name": "sleep",
+      "graduated": true,
       "repos": ["sleep-iac", "sleep-tracking", "snore-recorder"],
       "mainRepo": "homelab",
       "coordinatorModel": "sonnet",

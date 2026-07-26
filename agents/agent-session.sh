@@ -257,8 +257,8 @@ if [ "$HARNESS" = "claude" ]; then
 fi
 if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] && [ "$HARNESS" = "claude" ]; then
   # FU-089: claude rides join the broker path too — they used to lean on the standing in-ns
-  # agent-git-token Secret via the optional fallback below, which FU-089 deleted (found live:
-  # issue-135 r1, clone died tokenless — the goose/opencode-only gate was the gap).
+  # agent-git-token Secret (the optional fallback FU-089 deleted; found live: issue-135 r1,
+  # clone died tokenless — the goose/opencode-only gate was the gap).
   echo "→ cred-inject (claude): git tokens fetched per-op from the proxy (FU-089)"
   CRED_BROKER_ENV="        - name: GIT_CRED_BROKER_URL
           value: \"${PROXY_URL}/git-token?ns=${NS}\""
@@ -280,15 +280,10 @@ if [ "${AGENT_CRED_INJECT:-1}" = "1" ] && [ -n "$PROXY_URL" ] \
     GOOSE_PROXY_ENV=$'        - name: OPENROUTER_HOST\n          value: "'"$PROXY_URL"'"'
   fi
 fi
-# Git-token fallbacks (env + mount) ride ONLY when the broker is NOT in play — with
-# GIT_CRED_BROKER_URL set the pod's git/gh path is the per-op proxy fetch and holding a
-# standing token defeats the airlock (FU-018/FU-020 finale, dropped 2026-07-16).
-GIT_FALLBACK_ENV=$'        - name: GH_TOKEN\n          valueFrom:\n            secretKeyRef: { name: agent-git-token, key: token, optional: true }\n        - name: GIT_TOKEN_FILE\n          value: "/secrets/git/token"'
-GIT_FALLBACK_MOUNT=$'\n        - { name: git-token, mountPath: /secrets/git, readOnly: true }'
-GIT_FALLBACK_VOLUME=$'\n    - name: git-token\n      secret: { secretName: agent-git-token, optional: true }'
-if [ -n "$CRED_BROKER_ENV" ]; then
-  GIT_FALLBACK_ENV="";  GIT_FALLBACK_MOUNT=""; GIT_FALLBACK_VOLUME=""
-fi
+# Git credentials are broker-only (FU-089): every ride sets GIT_CRED_BROKER_URL and the pod holds
+# no standing git Secret at all — the in-ns agent-git-token fallback was deleted with FU-089 (a
+# standing token in a workbench-admin namespace was the cross-stack escalation the airlock exists
+# to prevent). The per-op proxy fetch TokenReviews the pod's SA (GIT_TOKEN_REQUIRE_AUTH=1).
 
 # FU-018 interim leg (FU-062 / model-routing.md §M4, OPENCODE ONLY): the prompt cache lives at the
 # provider, so per-request provider roulette destroys it — pin the SESSION to the registry's
@@ -603,13 +598,10 @@ ${UV_ENV}
         - name: GOOSE_MAX_TURNS
           value: "${GOOSE_MAX_TURNS:-200}"
 ${OR_KEY_ENV}
-        # Git credential (three eras, FU-064b → ADR-087/FU-018): under INJECTION the pod holds
-        # NO git token at all — GIT_FALLBACK_* are empty and the entrypoint's credential helper +
-        # gh wrapper fetch a live token per operation from the proxy's /git-token endpoint
-        # (fallbacks dropped 2026-07-16, the FU-020 finale). Without injection (claude harness,
-        # AGENT_CRED_INJECT=0) the ESO-minted ~1h token rides in as before: volume-mounted (live
-        # on rotation) + env (frozen at start, pre-mount-image fallback).
-${GIT_FALLBACK_ENV}
+        # Git credential (ADR-087 leg B / FU-089): the pod holds NO git token — the entrypoint's
+        # credential helper + gh wrapper fetch a live token per operation from the proxy's
+        # /git-token endpoint, which TokenReviews the pod's SA (GIT_TOKEN_REQUIRE_AUTH=1). The
+        # old standing in-ns agent-git-token fallback was deleted with FU-089.
 ${CRED_BROKER_ENV}
         # Ledger-backfill anchor (FU-057): the operator writes the OpenRouter key HASH into the
         # session Secret; finalize surfaces it in stats so cost_unknown runs stay accountable.
@@ -633,8 +625,8 @@ ${CLAUDE_ENV}
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${GIT_FALLBACK_MOUNT}${UV_MOUNT}${DOCKER_MOUNT}
-  volumes:${GIT_FALLBACK_VOLUME}${UV_VOLUME}${DOCKER_VOLUMES}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
@@ -776,9 +768,19 @@ if [ -n "$RUN_CMD" ]; then
   # re-lists and re-applies the full predicate; a false wake costs `gh` calls, not an LLM tick.
   # Fail-open: unreachable off-cluster (jail runs — the cron backstop covers those).
   if [ -n "$STRIKE_APPLIES" ]; then
-    curl -m 5 -s -X POST -d "{\"repo\":\"${PROJECT}\"}" \
+    # FU-080 doorbell routing: if PROJECT belongs to a GRADUATED stack, carry {stack,loop_ns} so the
+    # global `coordinator` Sensor's per-stack trigger inlines a Workflow INTO <loop_ns> (data-driven).
+    # Non-graduated / unresolvable → plain {repo} (the global scan handles it). Best-effort: a miss
+    # only costs edge latency — the stack's */10 cron still ticks. loop_ns is <stack>-agents by convention.
+    _grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+    if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
+      _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"}"
+    else
+      _door="{\"repo\":\"${PROJECT}\"}"
+    fi
+    curl -m 5 -s -X POST -d "$_door" \
       "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
-      >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate repo=${PROJECT})" || true
+      >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
   fi
   rm -f "$RUNLOG"
 else

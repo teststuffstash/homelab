@@ -289,6 +289,14 @@ echo "  remove the pod:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete po
 # FU-085: a verdict is scan-actionable (CHANGES_REQUESTED → round N+1 is the coordinator's move) —
 # ring the doorbell instead of waiting out the */10 cron. Cheap over-approximation: ring on every
 # verdict, the scan re-applies the full predicate. Fail-open off-cluster.
-curl -m 5 -s -X POST -d "{\"repo\":\"${PROJECT}\"}" \
+# FU-080 doorbell routing: carry {stack,loop_ns} for a GRADUATED stack so the coordinator Sensor's
+# per-stack trigger inlines into <loop_ns>; else plain {repo}. Best-effort (miss → */10 cron covers).
+_grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
+  _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"}"
+else
+  _door="{\"repo\":\"${PROJECT}\"}"
+fi
+curl -m 5 -s -X POST -d "$_door" \
   "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
-  >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate repo=${PROJECT})" || true
+  >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true

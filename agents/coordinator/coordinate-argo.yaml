@@ -33,10 +33,26 @@ spec:
     - name: coordinate-dep
       eventSourceName: agent-loop
       eventName: coordinate
+    # FU-080 per-stack routing: the SAME coordinate event, matched only when the emitter carried a
+    # non-empty loop_ns (a GRADUATED stack — agent-session.sh / reviewer-session.sh add {stack,
+    # loop_ns}). Missing/empty loop_ns is filtered out here, so plain {repo} POSTs and legacy
+    # emitters fire the global trigger ALONE. A graduated POST satisfies BOTH deps: the global scan
+    # runs but SKIPS the graduated stack (coordinator-scan.sh), and this trigger scans it in its ns.
+    - name: coordinate-perstack
+      eventSourceName: agent-loop
+      eventName: coordinate
+      filters:
+        data:
+          - path: body.loop_ns
+            type: string
+            comparator: "!="
+            value:
+              - ""
   triggers:
     - rateLimit: { unit: Minute, requestsPerUnit: 2 } # dumb outer belt vs emitter storms
       template:
         name: submit-coordinate
+        conditions: "coordinate-dep" # scope to the global dep so a graduated POST can't gate it
         argoWorkflow:
           operation: submit
           source:
@@ -55,6 +71,71 @@ spec:
             # dataKey missing from the POST body → the static `value` above stays (unscoped scan).
             - src: { dependencyName: coordinate-dep, dataKey: body.repo, value: "all" }
               dest: spec.arguments.parameters.0.value
+    # FU-080: submit an inline coordinate Workflow INTO <loop_ns> as agentstack-loop (SCAN_STACK
+    # scoped, broker-fetch role=coordinator). Inlined rather than referencing a per-stack
+    # WorkflowTemplate so the composition cron stays byte-identical per stack; the coordinator-scan
+    # mutex (rendered in <loop_ns> on the cron) serializes this doorbell against the */10 tick.
+    # RBAC: sensor-submit-coordinate Role/Binding rendered per graduated ns (agentstack composition).
+    - rateLimit: { unit: Minute, requestsPerUnit: 2 }
+      template:
+        name: submit-coordinate-perstack
+        conditions: "coordinate-perstack"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: coordinate-perstack-
+                namespace: PLACEHOLDER # ← body.loop_ns (parameters below)
+              spec:
+                serviceAccountName: agentstack-loop
+                activeDeadlineSeconds: 1800
+                ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                synchronization:
+                  mutexes:
+                    - name: coordinator-scan
+                arguments:
+                  parameters:
+                    - { name: stack, value: PLACEHOLDER }
+                    - { name: loop_ns, value: PLACEHOLDER }
+                entrypoint: main
+                volumes:
+                  - { name: work, emptyDir: {} }
+                templates:
+                  - name: main
+                    container:
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+                      command: ["bash", "-lc"]
+                      args:
+                        - |
+                          set -e
+                          echo "coordinate(perstack): stack={{workflow.parameters.stack}} ns={{workflow.parameters.loop_ns}} (doorbell edge)"
+                          SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                            "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{workflow.parameters.loop_ns}}&role=coordinator")" \
+                            || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
+                          export GH_TOKEN
+                          rm -rf /work/homelab
+                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          export SCAN_STACK={{workflow.parameters.stack}} LOOP_NS={{workflow.parameters.loop_ns}}
+                          exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+                      env:
+                        - { name: HOME, value: "/home/node" }
+                        - { name: ORG, value: "teststuffstash" }
+                      volumeMounts:
+                        - { name: work, mountPath: /work }
+                      resources:
+                        requests: { cpu: "100m", memory: "256Mi" }
+                        limits: { memory: "512Mi" }
+          parameters:
+            - src: { dependencyName: coordinate-perstack, dataKey: body.loop_ns }
+              dest: metadata.namespace
+            - src: { dependencyName: coordinate-perstack, dataKey: body.stack }
+              dest: spec.arguments.parameters.0.value
+            - src: { dependencyName: coordinate-perstack, dataKey: body.loop_ns }
+              dest: spec.arguments.parameters.1.value
 ---
 # The coordinate Workflow — the coordinator-reflex CronWorkflow's inline container, extracted so
 # the cron backstop and the Sensor edge both workflowTemplateRef ONE definition (the review-argo

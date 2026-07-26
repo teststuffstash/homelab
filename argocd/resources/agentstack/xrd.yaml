@@ -101,6 +101,19 @@ spec:
                       type: boolean
                       default: false
                       description: Render the per-stack loop machinery. Default off.
+                    graduated:
+                      type: boolean
+                      default: false
+                      description: >-
+                        FU-080 cutover. graduated:true RETIRES the migration belt for this stack:
+                        the GLOBAL coordinator scan skips it (coordinator-scan.sh) and the
+                        /coordinate doorbell edge routes to <stack>-agents (the emitters carry
+                        {stack,loop_ns}, the coordinator Sensor inlines a per-stack Workflow). Set
+                        it ONLY with perStack:true and coordinator.enabled:true — otherwise the
+                        global belt is the only thing running this stack and skipping it silences
+                        the loop. Default off (perStack renders the loop; graduated retires the
+                        belt — soak the former before the latter). oracle stays perStack-only for
+                        now; sleep is the first fully-graduated stack (2026-07-26).
                 workerModel:
                   type: string
                   description: >-

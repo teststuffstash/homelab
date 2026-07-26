@@ -79,6 +79,10 @@ stacks_json() {
         # FU-080 per-stack autonomy knob: only spawn the LLM coordinator for a stack that opted in
         # (default false). Graduated autonomy — enable a proven stack while newer ones stay off.
         coordinatorEnabled: (.spec.coordinator.enabled // false),
+        # FU-080 cutover: a graduated stack is OWNED by its own per-stack loop (coordinate-<stack>
+        # in <stack>-agents + the doorbell edge); the GLOBAL scan skips it below so the two never
+        # double-run. Default false — perStack renders the loop, graduated retires the global belt.
+        graduated: ((.spec.loop.graduated) // false),
         # repos whose fixer declared docker=true: dispatch their workers with
         # agent-session.sh --docker (kata microVM + dind — the CI-gate runtime choice)
         dockerRepos: [.spec.repos[] | select(.fixer.docker == true) | .name],
@@ -106,6 +110,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # <stack>-agents sets SCAN_STACK) scans ONLY its own stack; the global reflex keeps sweeping
   # everything as the migration belt.
   [ -n "${SCAN_STACK:-}" ] && [ "$name" != "$SCAN_STACK" ] && continue
+  # FU-080 cutover: the GLOBAL instance (SCAN_STACK unset) skips a graduated stack — its own
+  # per-stack coordinate loop (cron + doorbell edge) owns it, so scanning here too would double-run
+  # (the #134 label-race class). The per-stack instance (SCAN_STACK == name) reaches this line only
+  # for its own stack and proceeds. Graduation is retirable in one flag flip (claim loop.graduated).
+  if [ -z "${SCAN_STACK:-}" ] \
+     && [ "$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
+    echo "  [$name] graduated — owned by its per-stack loop; skipped in the global scan" >&2
+    continue
+  fi
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.

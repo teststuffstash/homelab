@@ -8,6 +8,23 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-089** *(archived 2026-07-26)* — **Fixer-ns App private key = workbench escalation hole, CLOSED.**
+  The homelab-agents App PRIVATE KEY used to render into every fixer namespace (so the in-ns
+  `agent-git-token` generator could run) — but a workbench SA is namespace-admin there, so it
+  could read the key and mint tokens for ALL of the App's repos (cross-stack write). Fix = the
+  loop-token pattern for worker tokens: the Composition now renders `agent-git-<repo>-gen` +
+  `agent-git-<repo>` ExternalSecret CENTRALLY in `agent-coordinator` (never a fixer ns) + an
+  `agentstack-worker` SA per fixer ns (TokenReview identity, no grants); the egress proxy's
+  `/git-token` serves the label-checked central secret and TokenReviews the pod SA. E2E-verified
+  2026-07-25 (probe: /git-token?ns=oracle-fleet serves; bogus ns 404s; old in-ns ES/generators
+  GC'd) and ENFORCED 2026-07-26 (`GIT_TOKEN_REQUIRE_AUTH=1`; anon probe → 403 on the rolled pod).
+  Final cleanup 2026-07-26: dead standing-Secret fallback (`GIT_FALLBACK_*` → deleted
+  `agent-git-token`) dropped from agent-session.sh + composition header corrected. Lessons: a
+  composed resource can't MOVE namespaces (rename its composition-resource-name → create-new +
+  GC-old); audit the fallback CONSUMERS not just named readers before deleting a Secret (the
+  cred-inject gate was goose/opencode-only, so claude rides had silently leaned on the optional
+  fallback — issue-135 r1×2, fixed 6c3fd88); probe the POD not the deploy mid-rollout. Relates
+  FU-080, FU-020, ADR-087.
 - **FU-084** *(archived 2026-07-26)* — **GitHub API rate-limit metrics, COMPLETE.** Exporter
   `collect_rate_limits` over the exporter PAT + per-installation probe tokens for ALL six
   key-reachable Apps (agents/coordinator — THE 2026-07-17 pool — reviewer, renovate, labels LIVE-verified;

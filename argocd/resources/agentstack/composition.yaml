@@ -1,10 +1,14 @@
 # AgentStack Composition (FU-048 / ADR-085) — renders the per-repo fixer MECHANISM from a stack's
 # AgentStack POLICY. For every spec.repos[] entry with a `fixer` block, into namespace <repo.name>
 # (which must already exist — the repo's own deployment owns it, never this XR):
-#   1. agents-github-app ExternalSecret        — the GitHub App private key, Infisical → Secret
-#   2. agent-git-token-gen GithubAccessToken   — ESO generator: ~1h installation token, THIS repo only
-#   3. agent-git-token ExternalSecret          — drives the generator; broker-label on the Secret
-#                                                (ADR-087 leg B: proxy /git-token serves it to workers)
+#   1. agentstack-worker ServiceAccount        — FU-089: the worker pod's TokenReview identity for
+#                                                the proxy's /git-token (no RBAC grants). The App
+#                                                private key + per-repo generator + agent-git-<repo>
+#                                                ExternalSecret live CENTRALLY in agent-coordinator
+#                                                (rendered below into that ns, never a fixer ns —
+#                                                a standing key in a workbench-admin ns was the
+#                                                cross-stack escalation FU-089 closed); the proxy's
+#                                                TokenReview-gated /git-token serves it (ADR-087 leg B)
 #   4. OpenRouterKey <repo>                    — standing budget key; operator writes <repo>-openrouter
 #   5. agent-worker-egress CiliumNetworkPolicy — FU-020 lockdown, baseline+profile+extraFQDNs, with the
 #                                                monitor→enforce dial (enableDefaultDeny.egress)
@@ -346,8 +350,11 @@ spec:
             # The stack's OWN coordinate backstop (FU-080 endgame shape): scan scoped to this
             # stack (SCAN_STACK), running in {{ $loopns }} as agentstack-loop, git creds fetched
             # per-op from the proxy (TokenReview) — zero Secrets in this namespace. The GLOBAL
-            # coordinator-reflex keeps running as the migration belt (idempotency guards make
-            # dual-running safe); retire the stack from the global scan once this soaks.
+            # coordinator-reflex keeps running as the migration belt (compare-then-write +
+            # idempotency guards make dual-run safe) UNTIL a stack sets loop.graduated: the global
+            # scan then SKIPS it (coordinator-scan.sh) and the doorbell edge routes here (the global
+            # `coordinator` Sensor inlines a per-stack Workflow from the emitter body — see
+            # coordinate-argo.yaml §per-stack routing). The two flip together off ONE flag.
             apiVersion: argoproj.io/v1alpha1
             kind: CronWorkflow
             metadata:
@@ -365,6 +372,13 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                # Serialize the */10 cron tick against the doorbell edge's inline Workflow (both
+                # take this namespaced mutex) so a graduated stack can't double-scan itself. A
+                # no-op for a non-graduated stack (the cron is the sole contender). Per-stack
+                # capacity stays subscription-latch only (FU-080 (5): ConfigMap semaphores can't cross ns).
+                synchronization:
+                  mutexes:
+                    - name: coordinator-scan
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
@@ -393,6 +407,37 @@ spec:
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
+            ---
+            # FU-080 doorbell RBAC: let the GLOBAL `coordinator` Sensor (sensor-review SA in
+            # agent-coordinator) SUBMIT a per-stack coordinate Workflow into {{ $loopns }} when a
+            # graduated repo's edge fires. A per-stack Sensor is impossible without a per-stack
+            # EventBus (Argo Events buses are namespaced — decision (4) rejected 3×1Gi JetStreams),
+            # so the platform Sensor reaches in (platform→stack direction, airlock-aligned). Inert
+            # until the routing trigger in coordinate-argo.yaml targets this ns.
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: sensor-submit-coordinate
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-sensor-submit-role
+                gotemplating.fn.crossplane.io/ready: "True"
+            rules:
+              - apiGroups: [argoproj.io]
+                resources: [workflows]
+                verbs: [create, get, list, watch]
+            ---
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: sensor-submit-coordinate
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-sensor-submit-rolebinding
+                gotemplating.fn.crossplane.io/ready: "True"
+            roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: sensor-submit-coordinate }
+            subjects:
+              - { kind: ServiceAccount, name: sensor-review, namespace: agent-coordinator }
             {{- end }}
             {{- range $r := $xr.spec.repos }}
             {{- if $r.storage }}
