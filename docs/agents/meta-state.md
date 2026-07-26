@@ -10,7 +10,9 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   run 3 after two class fixes — containerd-2.x certs.d wiring + rootless oci-archive untar;
   TICK-LOG meta-11 has the detail). **#149 QUEUED** (drive_agent goose wiring — the
   NotImplementedError seam; recorded-session fixture tests; live probe run stays out of ci):
-  NEXT = coordinator dispatch → ride → PR → review. AFTER #149 merges: (1) kind agentic
+  NEXT = coordinator dispatch → ride → PR → review. (First dispatch self-blocked: the FU-087
+  `Depends-on:` line is MACHINE-read — "none (all of #146/#147/#148 merged)" parsed as three
+  blockers, PR-number closure probe failed. Body fixed; lesson: no #refs on that line ever.) AFTER #149 merges: (1) kind agentic
   leg — `devbox run probe-e2e` with OPENROUTER key + PROBE_MODEL registry pin + spend cap
   (docker needed: ride-with-dind or ci-runner-01, NOT the jail); (2) prod leg —
   MCP_ENDPOINT=https://mcp.oracle.teststuff.net/mcp real ride + the suspended `mcp-probe`
