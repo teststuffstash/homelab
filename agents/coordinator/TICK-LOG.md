@@ -1006,3 +1006,27 @@ retro run-3 mechanism landed (BRIEF.md verbatim-recovered from transcripts + CRO
 ARG pins), and the opus-retro change-set finished (F2 blocked-deliberate class + F6
 queue/active split via agent-runtime#19/#20; F1 waits on the App's Workflows permission —
 operator). Remaining on the corpus chain: the limits-trim leg + watching #136-#139 flow.
+
+### 2026-07-26 — meta-10 (cont.): the App-permission machine + the drained follow-ups
+**FU-098 built end-to-end in a day and archived with zero residuals**: docs/github-apps.yaml
+(declared state, per-permission why, decided absences — incl. the renovate OSV/no-Dependabot
+ruling recovered from renovate.md), ONE creation script (manifest FROM the yaml; six legacy
+scripts' secrets/verify flows ported, scripts deleted), the ⊆-invariant lint in ci (11 mint
+sites), the exporter drift belt + alert, and the human view SERVED (apps.teststuff.net/apps,
+HTML + raw md; SERVICES.md row) — the CI-auto-commit route rejected on the
+GITHUB_TOKEN-triggers-no-workflows fact. The mechanism proved itself same-day, repeatedly:
+the operator's workflows:write grant rode the declare→ring→click→clear flow; the belt caught
+the reviewer's forgotten grants (4 reads declared under the future-proof ruling; issues:write
+archaeology → FU-069(b) breaker consumer, exercised on fleet#39/#60 + sleep#21); it
+EXONERATED renovate in one poll during the pin-push incident; and the failing rl-token ES
+exposed that merge/deploy keys were NEVER in Infisical despite setup.md's claim (operator
+pushed via the new unified flow; all six key-reachable Apps now drift-0 with rate-limit
+probes — FU-084 archived). Incidents en route, each class-fixed: the #134 coordinator label
+race (compare-then-write runbook clause), the runner-image pin push rejected as a
+workflow-file update because master moved mid-build (pin branch now rebases onto fresh
+master; pin PR #39 merged through the fixed path). Also: fleet#145 merged through the
+codeowner gate — the #66 .github/ deadlock class is UNBLOCKED end-to-end (App grant → token
+scope → recipe carve-out). Disk sweep: ghcr mirror at 100% (6GB-corpus working set) wiped,
+prometheus retention 18→16GB headroom, 12 stale Failed workflows cleared.
+**Handoff**: next session = oracle-fleet until an AGENT drives UC-1 on the MCP server, kind
+then prod (meta-state has the shape; anchor fleet#83/#84).

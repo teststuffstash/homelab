@@ -3,34 +3,44 @@
 One bullet per pending meta-coordinator chain with its NEXT concrete step; delete bullets when
 done (TICK-LOG carries history — this file carries only what a fresh session must pick up).
 
-_Updated 2026-07-26 ~01:15Z (meta-10 cont., same session as the 07-25 resume):_
+_Session handoff 2026-07-26 ~17:00Z (operator /clear; resume = /meta-coordinate):_
 
-- **Oracle corpus chain — ✅ ACCEPTANCE #4 PASSED 2026-07-26 ~01:30Z**, and ALL FIVE follow-on
-  fixes (fleet#135 silent build, #136 casefold, #137→#143 coverage_end, #138→#144 titles,
-  #139→#142 histogram) merged through ride→review→codeowner-gate by ~05:45Z; C6 flipped on
-  all. Codeowner gate rejected #140 r1 on fabricated cadence arithmetic (fixed r2 with a
-  time-throttle — better than asked). **Latent until the next pipeline run**: the parse-side
-  fixes (#144 titles, #136 casefold, #140 populate heartbeat) only enter the corpus on the
-  next build+release cycle — verify titles/casefold/heartbeat on that run, then acceptance
-  criteria can grow (title in citation). **Remaining leg: limits-trim** — parse peaked
-  ~350Mi (limit 4Gi), build ~785Mi (limit 6Gi): trim via oracle-iac workflow-ert yaml PR.
-- **FU-089 — one flip left: `GIT_TOKEN_REQUIRE_AUTH=1` on the openrouter-proxy Deployment,
-  ONLY at an idle window** (no agent-session pods running — the helper has no retry; a fetch
-  during the proxy restart kills a ride). Evidence complete 01:12Z: a real ride's fetches
-  served WITH TokenReview (SA bearer works); claude rides joined the broker path (6c3fd88,
-  after the issue-135 tokenless-clone incident). After the flip: drop the standing-Secret
-  fallback lines in agent-session.sh (they reference the deleted Secret).
-- **F1 / fleet#134 — waiting on OPERATOR: homelab-agents App needs Workflows R/W** (UI +
-  install approval). Then: add `workflows: write` to the `agent-git-<repo>-gen` blocks in the
-  agentstack Composition, and add `agent/queued` to fleet#134.
-- **FU-015**: complete; residual = renovate-tracked ARG pins (live) + observe one scheduled
-  Monday cycle (lock bump 03:00 → image cron 06:00 → self-bump PR → roll), then archive.
-- **retro-session CronWorkflow** (FU-058) deployed SUSPENDED — first hand-fire needs: idle
+- **NEXT SESSION GOAL (operator directive): build oracle-fleet until an AGENT has driven the
+  new MCP server and UC-1 WORKS — first in kind, then in the prod homelab cluster.**
+  - Anchor issue: **fleet#83** (agentic MCP probe — harness-driven UC-1 prompts against the
+    served corpus; track/server, NOT yet queued) and **#84** behind it (probe gaps → 🌱
+    triage sprouts, the FU-090 surface). #109 (specs cleanup) stays operator-paced.
+  - Shape to decide at queue time (⚖ pre-decide in the issue): the KIND leg extends the
+    repo's `devbox run e2e` system-test gate — mcp server + corpus in kind, a DETERMINISTIC
+    MCP-client UC-1 script there (no LLM spend in CI); the PROD leg is a real agent ride
+    (retro-session/agent-session machinery, goose or claude cell) pointed at
+    `https://mcp.oracle.teststuff.net` with UC-1 prompts, evidence harvested per #84's
+    gap-report shape. Kind + ImageVolume: verified live on the CLUSTER (k8s 1.36 default
+    gates); verify the kind node image supports it before assuming (fleet#106 notes).
+  - Acceptance r4 (2026-07-26) is the baseline: transport + corpus PASS (PS §1 full text,
+    p50 21ms, 168 §§, date-travel, normalized keys); the agent probe is the NEXT bar.
+  - Relevant fresh platform state: workers CAN edit `.github/workflows/ci.yaml` under
+    `track/chassis` (#145 carve-out + the App's workflows:write — live); FU-089 enforced
+    (SA-bearer mandatory on /git-token); corpus parse-side fixes (#144 titles, #141
+    casefold, #140 populate heartbeat) are LATENT until the next pipeline run — that run
+    also re-verifies them.
+
+- **Corpus pipeline limits-trim leg** (from the acceptance chain): parse peaked ~350Mi
+  (limit 4Gi), build ~785Mi (limit 6Gi) — trim via oracle-iac workflow-ert yaml PR.
+- **retro-session CronWorkflow** (FU-058) deployed SUSPENDED — first hand-fire wants: idle
   fixer queue, an ephemeral capped OpenRouterKey (param `retroKeySecret`), subscription
-  headroom for cell A. Cross-review legs manual (retro-session.sh --review).
+  headroom for cell A. Cross-review legs manual (`agents/retro-session.sh --review`).
+- **FU-015**: observe Monday's automated cycle (lock bump 03:00 → image cron 06:00 →
+  self-bump PR → roll; the self-bump is now fresh-master-rebased after the 2026-07-26
+  workflow-file-check rejection) — then archive.
 - **Sleep stack**: unchanged — sleep first goal (specs + evidence + Grafana-in-kind system
   testing, FU-095 prereq block); then FU-044 → FU-080 graduation → FU-095 (c)→(b)→(a).
-- **Standing watches (die with the session)**: meta-watch-loop.sh, 2h heartbeat, corpus-roll
-  watcher. Probe lessons this session: inline Monitor scripts run under ZSH (no word-split —
-  use functions, keep stderr visible); orphan monitors from dead sessions duplicate events —
-  stop them on sight (4 killed this session).
+- **New standing surfaces (2026-07-26, all verified live)**: `apps.teststuff.net/apps` —
+  GitHub Apps declared-vs-live (HTML; /apps.md raw; SERVICES.md row); drift belt + rate-limit
+  probes cover all six key-reachable Apps (drift 0 across the board); `github-app-bootstrap.sh
+  <slug>` is the ONE App script. FU-084 + FU-098 archived complete.
+- **Standing watches (die with the session — re-arm per the skill)**: meta-watch-loop.sh,
+  2h heartbeat, plus any chain watchers the session needs. Probe lessons live in the skill +
+  this file's history: zsh no-word-split in inline Monitors, probe-the-pod-not-the-deploy,
+  orphan monitors from dead sessions duplicate events (5 killed across meta-10) — stop them
+  on sight.
