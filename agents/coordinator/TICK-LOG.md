@@ -1057,3 +1057,37 @@ clear. Probe lessons paid twice more: gh's statusCheckRollup is BLIND for the ja
 (watch runs via `gh run list`, REST), and two monitor generations died on zsh-no-word-split
 + an invalid jsonpath (Argo `.status.nodes` is a map — probe pods by workflow label).
 Two more orphan monitors from dead sessions stopped on sight.
+
+### 2026-07-26 — meta-11 (cont.): the agentic bar — kind PASSES, and the prod probe's first catch is a real outage
+**Kind agentic leg MET the operator bar**: goose 1.28 + deepseek-v4-flash ($1 ephemeral
+operator-minted OpenRouterKey) drove UC-1 against the kind-served fixture corpus on
+ci-runner-01 — canonical + 2 hard cases clean, 4 gaps triaged on #84 (2 real shapes, 2 the
+meta-prompt noise the codeowner gate predicted). En route: bzip2 absent → tar wrote an EMPTY
+goose that PASSED `--version` (empty script = exit 0 — check version OUTPUT, not status), the
+ETXTBSY of exec-during-reextract, and the discovery that a probe crash triggers probe-e2e's
+cleanup trap → cluster deleted → the rerun probed a DEAD endpoint and "completed" with
+plausible gaps (goose downgrades a dead MCP transport to a warning) → #151 filed+fixed
+same-evening by the loop (#154: preflight initialize + hard abort).
+**Then the prod leg earned its keep on run 1: a REAL silent outage.** Both replicas' stdio
+children dead, pods Ready (tcpSocket probes the parent), HAProxy 503, zero alerts — and my
+own post-restart "verified 200" was HOLLOW (initialize is answered without exercising the
+child; verify with tools/call). Root cause recovered by DRAINING THE UNREAD stderr PIPE via
+/proc/1/fd/7 (stderr=subprocess.PIPE, never read — the child's dying words were sitting in
+the buffer): `sqlite3.OperationalError: no such column: short_name_fold` — **server/corpus
+schema skew**: the deploy chain rolled the server to post-#141 code (casefold = a SCHEMA
+change) ~06:00Z, minutes after r4's acceptance, while the chart kept serving the pre-#141
+corpus digest. First real traffic (the probe, 13h later) crashed the children on every
+statute call. My first OOM/memory-pressure hypothesis was WRONG (Talos dmesg: no kills) —
+corrected on the record in #152. Remediation: iac#233 rolled the server back to the
+r4-accepted combo (verified via tools/call, PS §1 text). Filed+queued the guards: #152
+(respawn/die-fast + backend-exercising readiness + STREAM child stderr), #153 (topology
+spread — both replicas sat on wk-01, delivered as #156 same evening), #155 (corpus
+schema_version contract — THE guard for this class); FU-099 (synthetic blackbox monitoring —
+nothing else would have caught a Ready-but-dead service). Prod probe run 3 on the rolled-back
+combo: agentic path works end-to-end, 2/7 clean (the meta-prompt cases — the REAL corpus has
+findable instances; the kind noise was fixture poverty), 5 gaps all plausibly artifacts of
+the rollback (missing casefold, latent coverage-ceiling) — run 4 after the PAIRED roll-forward
+(jbtlm corpus + server together, the new deploy rule this outage bought) is the definitive
+verdict. Lessons banked: paired rolls for schema-coupled artifacts; verify restorations
+through the deepest component; an unread stderr PIPE is both a diagnosis-blocker and the
+best black box in the building.
