@@ -24,8 +24,11 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   (server rolls forward to the bumped targetRevision); (2) re-run the prod
   agentic probe (probe-prod.sh on ci-runner-01; ephemeral key
   oracle-fleet-adhoc-probe-uc1-kind expires ~00:50Z — remint if needed) for the true prod
-  verdict; (3) then the suspended `mcp-probe` CronWorkflow manifest (operator lane) + #84
-  harvester via the loop. VM cleanup owed: /tmp/probe-* on ci-runner-01 (probe-run.sh holds
+  verdict; (3) after the roll-forward: QUEUE fleet#158 (chart httpGet /healthz readiness — held
+  unqueued because the values pin's old image has no /healthz; queueing it earlier = a
+  self-inflicted NotReady outage); (4) then the suspended `mcp-probe` CronWorkflow manifest
+  (operator lane) + #84 harvester via the loop. #152 DELIVERED (#157 merged through the
+  codeowner gate — SRV-SERVE-READINESS contract; respawn+latch, /healthz, stderr streamed). VM cleanup owed: /tmp/probe-* on ci-runner-01 (probe-run.sh holds
   the key+PAT — shred when the prod leg closes), kind cluster `oracle-serve-local` + registry.
 - **Pipeline verification run `ert-pipeline-parse-jbtlm`** (Monitor armed): parse SLOW under
   the garage contention (12.6/s at 170k/252k ~19:15Z; ETA parse ~21:00Z, build +~5h).
