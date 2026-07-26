@@ -5,27 +5,32 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed):_
 
-- **UC-1 agentic arc (operator directive: agent drives UC-1 — kind, then prod)**:
-  deterministic kind leg DONE + CI-gated (fleet#146/#147/#148 merged; serve leg green on
-  run 3 after two class fixes — containerd-2.x certs.d wiring + rootless oci-archive untar;
-  TICK-LOG meta-11 has the detail). **#149 QUEUED** (drive_agent goose wiring — the
-  NotImplementedError seam; recorded-session fixture tests; live probe run stays out of ci):
-  NEXT = coordinator dispatch → ride → PR → review. (First dispatch self-blocked: the FU-087
-  `Depends-on:` line is MACHINE-read — "none (all of #146/#147/#148 merged)" parsed as three
-  blockers, PR-number closure probe failed. Body fixed; lesson: no #refs on that line ever.) AFTER #149 merges: (1) kind agentic
-  leg — `devbox run probe-e2e` with OPENROUTER key + PROBE_MODEL registry pin + spend cap
-  (docker needed: ride-with-dind or ci-runner-01, NOT the jail); (2) prod leg —
-  MCP_ENDPOINT=https://mcp.oracle.teststuff.net/mcp real ride + the suspended `mcp-probe`
-  CronWorkflow manifest in oracle-iac (operator lane). #84 (gap harvester) after; #109
-  operator-paced. Prod baseline: initialize 200 in 0.6s. Gate note on #84: two meta-prompt
-  corpus cases need per-corpus named provisions.
-- **Pipeline verification run `ert-pipeline-parse-jbtlm`** (submitted ~15:30Z, Monitor armed):
-  re-verifies latent fleet#140/#141/#143/#144 + first exercise of the #140 build heartbeat +
-  first run on the TRIMMED limits (iac#223 MERGED: pins → 2026.7.26-g52e1d41d74d0, parse
-  1536Mi, build 2Gi — from cvkk8 peaks 350Mi/785Mi; OOM below = retention regression).
-  Expect parse ~3h, build ~5h. NEXT on Succeeded: check build_progress heartbeat events
-  fired, then decide the corpus release/digest-roll (titles now captured → a new release +
-  iac ImageVolume roll is worthwhile); on Failed: read the step's own JSON events + traceback.
+- **UC-1 agentic arc — KIND BAR MET, prod blocked on the corpus roll-forward.** Kind:
+  deterministic leg CI-gated (#146/#147/#148) AND the agentic leg PASSED live (goose 1.28 +
+  deepseek-v4-flash on ci-runner-01, fixture corpus: canonical UC-1 + 2 hard cases clean,
+  4 gaps posted on #84 — 2 real shapes, 2 predicted meta-prompt noise). **PROD: the first
+  agentic probe found a REAL OUTAGE** — server/corpus schema skew (#141's `short_name_fold`
+  in the rolled server, pre-#141 corpus digest served) crashed the stdio child on every
+  statute call, both replicas, pods Ready throughout, no alert. Root-caused by draining the
+  gateway's unread child-stderr PIPE via /proc/1/fd/7 (TICK-LOG will carry the day). Filed +
+  QUEUED: #152 (respawn/die-fast + honest readiness + stream child stderr), #153 (topology
+  spread — dispatched), #155 (corpus schema_version contract — the guard); #151 delivered
+  (PR #154 in review); FU-099 filed (synthetic blackbox monitoring — nothing alerted).
+  Remediation: iac#233 MERGED rolls the server back to 2026.7.25-gfc4b537 (r4 combo) —
+  verification watcher running (tools/call 200 = restored). NEXT: (1) on jbtlm corpus
+  release, roll corpus digest + server forward TOGETHER in one iac PR; (2) re-run the prod
+  agentic probe (probe-prod.sh on ci-runner-01; ephemeral key
+  oracle-fleet-adhoc-probe-uc1-kind expires ~00:50Z — remint if needed) for the true prod
+  verdict; (3) then the suspended `mcp-probe` CronWorkflow manifest (operator lane) + #84
+  harvester via the loop. VM cleanup owed: /tmp/probe-* on ci-runner-01 (probe-run.sh holds
+  the key+PAT — shred when the prod leg closes), kind cluster `oracle-serve-local` + registry.
+- **Pipeline verification run `ert-pipeline-parse-jbtlm`** (Monitor armed): parse SLOW under
+  the garage contention (12.6/s at 170k/252k ~19:15Z; ETA parse ~21:00Z, build +~5h).
+  Re-verifies latent #140/#141/#143/#144 + first exercise of the #140 build heartbeat + the
+  trimmed limits (iac#223). NEXT on Succeeded: verify heartbeat events fired → release the
+  corpus (digest-verified through the ADR-095 boundary) → the PAIRED iac roll (corpus digest
+  + server forward together — see the schema-skew lesson above); on Failed: read the step's
+  JSON events + traceback. wk-01 garage warnings (majfault/sdb IO) expected to clear after.
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
