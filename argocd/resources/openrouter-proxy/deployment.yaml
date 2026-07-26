@@ -23,6 +23,13 @@ spec:
         - name: proxy
           image: python:3.13-slim
           command: ["python3", "/app/openrouter-proxy.py"]
+          env:
+            # FU-089 finale (2026-07-26): /git-token refuses unauthenticated callers. Flipped
+            # after live evidence — a full ride lifecycle (issue-135 r1 redispatch) fetched
+            # with the agentstack-worker SA bearer, TokenReview-verified. Set "0" only for a
+            # rollback window.
+            - name: GIT_TOKEN_REQUIRE_AUTH
+              value: "1"
           ports:
             - name: http
               containerPort: 8080
