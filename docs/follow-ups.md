@@ -276,6 +276,10 @@ _Last updated: 2026-07-16._
       ⚠ Deliberately re-opens two standing exclusions — `fixerRepos` context-only (FU-086
       predicate) and "sleep-iac excluded, CI-only deploy repo" — via a distinct dispatch class,
       not by silently flipping them. Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
+      **Detector BUILT 2026-07-27:** `agents/infra-schema-diff.sh` (POSIX sh + jq; old/new
+      values.schema.json → dotted-path delta + `enrichment_needed`; identity + new-required
+      cases verified against sleep's real schema). No callers yet — REMAINING: the scan infra
+      clause (one unit per -iac target on enrichment_needed) + the enrich-the-bump-PR dispatch.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch

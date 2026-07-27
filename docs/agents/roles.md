@@ -163,7 +163,9 @@ tier allowed, dual-model worth it) are FU-095's.
   typed infra delta), fulfillment = enriched **bump PR** (chart pin + claim change in ONE -iac
   commit — atomic at the deploy boundary, the meta-11 paired-rolls rule generalized); mechanical
   (schema-valid, within FU-093 quota) rides the ADR-084 CI-only lane, judgment stays
-  codeowner-gated. Hard boundary: wires secret *references*, never values.
+  codeowner-gated. Hard boundary: wires secret *references*, never values. Detector built
+  2026-07-27 (`agents/infra-schema-diff.sh` — the typed delta + `enrichment_needed` bit);
+  scan clause + dispatch = the remaining machinery.
 - **audit-pass** — not a role: reviewer machinery × e-ITS lens × schedule predicate (dissolved
   the planned "auditor").
 
