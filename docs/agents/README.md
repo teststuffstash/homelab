@@ -1,14 +1,15 @@
 # Agent platform — in-cluster MCP capability + ephemeral sandbox harness
 
-> **Status: substrate LIVE, loop autonomous per-stack (2026-07-21).** The
+> **Status: substrate LIVE, loop fully autonomous per-stack (2026-07-27 — FU-080 complete).** The
 > launcher/worker/budget/reviewer pieces run for real (`../../agents/README.md`); the coordinator
 > is a scoped brief behind a deterministic scan gate, dispatched **item-scoped** (ADR-094/FU-086 —
 > the scan emits units, a session judges one) and **edge-triggered** (review webhook + `/coordinate`
 > doorbell, ADR-093; the Argo CronWorkflows in `agents/coordinator/reflexes-argo.yaml` are the
-> level-triggered backstop). Graduated stacks (oracle, 2026-07-18) run their own
-> `coordinate-<stack>` CronWorkflow in `<stack>-agents` on broker-fetched stack-scoped tokens
-> (FU-080); autonomy is per-stack via the `coordinator.enabled` claim knob and has been ON for
-> oracle since graduation. Credential injection + the egress proxy are **LIVE default-on**
+> level-triggered backstop). ALL THREE stacks (oracle 2026-07-18; sleep + platform 2026-07-26) run
+> their own `coordinate-<stack>` + `review-<stack>` CronWorkflows in `<stack>-agents` on
+> broker-fetched stack-scoped tokens (FU-080), with per-stack review **edge** routing since
+> FU-100 (2026-07-27); the global belts skip graduated stacks. The role inventory (brief +
+> boundary + activation machinery per role) is [`roles.md`](roles.md). Credential injection + the egress proxy are **LIVE default-on**
 > (ADR-087: opaque refs + git-cred broker), and the proxy doubles as the FU-088 subscription
 > headroom gate. This is the narrative home for the agent
 > platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
@@ -228,6 +229,11 @@ Recorded as thin ADRs in [`../adr.md`](../adr.md):
 | ADR-085 | **AgentStack + platform-service XRDs** — mechanism=platform, policy=stack | open direction (AgentStack BUILT — [`agentstack.md`](agentstack.md); service XRDs = FU-049) |
 | ADR-086 | Coordinator write tier **W1: ⚑ spec gap-flags** on open agent PR branches | accepted (W2+ needs its own ADR — FU-059) |
 | ADR-087 | **Opaque-ref creds**: egress proxy resolves LLM refs; git-cred broker mints per-request tokens | accepted (default-on; fallbacks drop with FU-020) |
+| ADR-093 | **Argo Workflows + Events is the loop engine** — reflexes as CronWorkflows, review/coordinate as event-driven Sensors | accepted (LIVE; per-stack since FU-080/FU-100) |
+| ADR-094 | **Item-scoped dispatch** — the scan emits work units, a session judges ONE; dispatch params launcher-owned | accepted (core shipped, FU-086 legs remain) |
+
+> ⚠ This table is a hand-maintained mirror of [`../adr.md`](../adr.md) and drifts (093/094 were
+> missing for 10 days) — treat `../adr.md` as truth; generation is FU-107.
 
 ## Open / deferred
 

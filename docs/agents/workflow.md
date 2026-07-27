@@ -1,6 +1,7 @@
 # Agent workflow — issue → tested PR → merge
 
-> **Status: running hand-driven (2026-07).** The *substrate* (scoped pods, recipes, scoped tokens,
+> **Status: autonomous per-stack (2026-07-27; originally hand-driven 2026-07).** The *substrate*
+> (scoped pods, recipes, scoped tokens,
 > branch protection, stats) is LIVE — see [`README.md`](README.md) and
 > [`../../agents/README.md`](../../agents/README.md). The **coordinator**
 > ([`../../agents/coordinator/`](../../agents/coordinator/README.md)) now runs as the durable,

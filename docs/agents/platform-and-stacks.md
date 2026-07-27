@@ -40,7 +40,7 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 | axis | values today | future | owned by |
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
-| **role** | fixer, coordinator, reviewer, retro, scout | meta-coordinator, auditor, large-job | recipes/briefs (`.agents/*`, coordinator runbook, retro brief) + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
+| **role** | fixer, coordinator, reviewer(+lenses), retro, scout | prober, responder, researcher, infra-fixer, meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
 | **stack** | sleep, oracle, idp | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
 | **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
 
@@ -71,6 +71,14 @@ Known constraint couplings (encode them, don't fight them):
   publishes its own devbox closure cache as an OCI artifact (versioned with `devbox.lock`),
   and the launcher mounts it via ImageVolume (verified on this cluster, fleet#106) as a local
   nix substituter + eval-cache seed. Harness images stay stack-blind; caches ride the stack.
+- **App charts are TARGET-agnostic; platform fulfillment rides the -iac wrapper** (operator
+  2026-07-27, the same coupling rule's third instance): an app chart carries only its
+  consumption *contract* (`values.schema.json`, `existingSecret`, endpoint values, default-off
+  flags for ecosystem-standard CRDs) and provisions nothing — it must deploy anywhere,
+  including outside homelab. Platform-specific provisioning (Crossplane claims, ExternalSecrets)
+  lives in the per-target **wrapper chart** in the stack's `-iac` repo, atomic with the chart
+  pin (one -iac commit = pin bump + fulfillment = one sync — the meta-11 paired-rolls rule by
+  construction). See FU-106 (infra-fixer role, `roles.md`).
 
 The launcher (dispatch params are launcher-owned — ADR-094) is where an axis combination is
 assembled into a pod. FU-095(b) supplies the multi-harness evidence; ADR-077's meta-harness
@@ -187,9 +195,10 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   **Superseded 2026-07-18 (FU-080 per-stack build):** the Composition now renders a
   `coordinate-<stack>` CronWorkflow into `<stack>-agents` (claim `loop.perStack`), running as the
   namespaced `agentstack-loop` SA with broker-fetched, stack-scoped git tokens (TokenReview'd
-  `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. The GLOBAL scan/reflex
-  still runs as the soak-period belt — retiring a graduated stack from it is FU-080's remaining
-  step. model-scout + ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
+  `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. **COMPLETE 2026-07-27:
+  all three stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global scan/reflex
+  skips graduated stacks; the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
+  ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
 
 ## The credential-airlock pattern (stack jails, FU-080)
 
@@ -208,11 +217,11 @@ Roles** for `tf.upbound.io` workspaces (observe infra provisioning) and `openrou
 openrouterkeys (drive the session-key mint→observe→delete its loop needs) — both hand-added to
 `workbench.yaml` (FU-080 b).
 
-**Endgame (FU-080) — REACHED for the coordinator leg 2026-07-18:** the Composition renders the
-per-stack `agentstack-loop` SA + namespaced launch Role (pods/exec/pvc/openrouterkeys) AND the
-`coordinate-<stack>` CronWorkflow in `<stack>-agents` (claim `loop.perStack`) — the per-stack
-coordinator runs there as that SA holding only `ref:` creds + broker-fetched stack-scoped git
-tokens, so the namespace-admin workbench controls the loop by construction, zero cluster-scoped
-grant, zero cross-namespace reach. Oracle graduated 2026-07-18. Remaining (FU-080): the per-stack
-REVIEW backstop (reviewer-session.sh broker-fetch plumbing), retiring graduated stacks from the
-global scan/reflex belt after soak, and sleep/platform graduation.
+**Endgame (FU-080) — REACHED 2026-07-27, all legs:** the Composition renders the per-stack
+`agentstack-loop` SA + namespaced launch Role (pods/exec/pvc/openrouterkeys) AND the
+`coordinate-<stack>` + `review-<stack>` CronWorkflows in `<stack>-agents` (claim
+`loop.perStack`/`loop.graduated`) — the per-stack loops run there as that SA holding only `ref:`
+creds + broker-fetched stack-scoped git tokens, so the namespace-admin workbench controls the
+loop by construction, zero cluster-scoped grant, zero cross-namespace reach. Oracle graduated
+2026-07-18; sleep + platform 2026-07-26; the global belts skip graduated stacks; the per-stack
+review edge (FU-100) closed the last latency gap 2026-07-27.

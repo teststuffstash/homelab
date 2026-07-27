@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-101**.
+  Next free id: **FU-108**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -233,6 +233,86 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+- [ ] **FU-101** — **Review lenses: external-standard briefs on the reviewer machinery**
+      (operator direction 2026-07-27, the meta-11 SDLC half — nothing in the dev cycle carried
+      k8s-prod practice to the app; all four outage contributors were checklist items). A lens =
+      the built reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard
+      (staleness outsourced; we pin versions, a standard's new release = a re-baseline issue),
+      selected by a deterministic diff-class predicate, ADVISORY first with a per-stack claim
+      knob to blocking. First lenses: k8s-prod (Deployment/probe/chart manifests touched),
+      helm (`charts/`), OWASP ASVS (auth/input code, new public endpoint), e-ITS (stack-level
+      scheduled audit-pass — dissolves the planned "auditor" role). Local platform-specific
+      rules stay incident-evidenced (merge-path-fsm.yaml style), maintained by the retro role.
+      Audit-lane model rules (reasoning tier, dual-model) = FU-095's. Design: `docs/agents/roles.md`
+      §Lenses. Elicit-don't-inject + mechanism>advice rules recorded there.
+- [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
+      the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
+      lyhend-only resolution catch, 🌱#160). Brief exists (oracle probe-e2e/UC-1); missing =
+      activation machinery: predicate = post-deploy + schedule; edge = deploy doorbell; backstop
+      = cron; key = (endpoint, artifact digest); boundary = prod-read + report-only, $1 ephemeral
+      keys (meta-11-proven cell); breaker = inert 🌱 issues (loop-safety #1) + rate cap.
+      Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes, contract-deep)
+      → FU-103 responder. Composes with FU-044 as its deep post-deploy gate. `roles.md`.
+- [ ] **FU-103** — **Responder role: alert-triggered triage** (meta-11: diagnosis — the
+      stderr-pipe drain, schema-skew root cause — was pure meta-coordinator judgment; no
+      machinery reacts to a firing alert). predicate = Alertmanager firing; edge = Sensor
+      `/alert` (third webhook on the agent-loop EventSource); backstop = none (alerts are
+      level-triggered); key = alert fingerprint + window; boundary = namespace read + issue
+      write, NO remediation initially — report-only evidence bundle → issue; a remediation
+      WHITELIST (restart, ArgoCD rollback) is the graduation knob (FU-090 `selfQueue` pattern).
+      `roles.md`.
+- [ ] **FU-104** — **SLO as claim policy + error-budget deploy gate.** The stack declares
+      `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim; the
+      Composition renders the FU-099 blackbox probe, burn-rate alerts, the FU-103 alert edge —
+      and the teeth: a stack that burnt its error budget gets its auto-merge lane demoted to
+      codeowner-gated until the budget recovers. "Harder to ship something that breaks" by
+      contract, zero opinions in briefs. Probe content rule from meta-11: readiness/probes must
+      exercise the deepest path (schema version, not `SELECT 1`, never tcpSocket-on-parent) —
+      also a k8s-prod lens entry (FU-101). Relates FU-099, FU-044, ADR-085.
+- [ ] **FU-105** — **Researcher/planner role** (operator 2026-07-27). Consumers in order:
+      sleep spec retrofit (FU-095's spec-creation directive — authored AND reviewed by multiple
+      large LLMs), then IdP greenfield requirements research (EITS/best-practices — whose output
+      seeds the FU-101 e-ITS lens). dispatch-on-goal (human-queued `goal` issue, FU-090(c)
+      shape, budget on the issue); model = reasoning tier + dual-model review rounds (FU-095
+      rules); output = spec PRs through the codeowner gate; rounds-max breaker. **Boundary is
+      the new machinery: open-web egress** — a `research` egress profile on the claim
+      (proxy-routed, logged) or claude-harness server-side WebSearch (only WebFetch needs the
+      broad dial); safe because the pod holds NO cluster creds and a spec-branch-only git token.
+      `roles.md`.
+- [ ] **FU-106** — **Infra-fixer role: the -iac wrapper devops worker** (operator 2026-07-27;
+      the provider-side PR — new secret ref/bucket/config — had no author every time). Design
+      RULED by the target-agnostic-chart constraint (platform-and-stacks.md §Composition axes,
+      4th bullet): app charts carry only the consumption CONTRACT (`values.schema.json`,
+      `existingSecret`, endpoint values, default-off flags for ecosystem-standard CRDs) and
+      deploy anywhere; platform fulfillment (Crossplane claims, ExternalSecrets) lives in the
+      per-target WRAPPER chart in `-iac`. Rollout matrix (docs/agents/roles.md + the 2026-07-27
+      session): (a) provisionables → wrapper claim, atomic with the pin bump; (b) new value w/
+      default → chart default, no -iac change; (c) new REQUIRED value → the `values.schema.json`
+      DIFF between chart versions IS the typed infra delta → scan emits one infra unit per
+      -iac target dir → homelab's dispatches this role to ENRICH the ADR-084 bump PR (chart pin
+      + fulfillment in ONE commit = deploy-atomic, the meta-11 paired-rolls rule generalized);
+      (d) expand/contract for code-level compat, with a scan AGING predicate on undropped
+      expands (debt timer; contract task born via FU-090 harvest); (e) runtime wedge
+      (`optional: false` → new RS wedges, old serves) as the occasional visible-stall variant;
+      (f) quota/judgment → codeowner-gated, provider-first hold (the only surviving hold).
+      Mechanical = schema-valid + within FU-093 quota → CI-only auto-merge lane (ADR-084
+      precedent); the FU-093 ledger becomes the guardrail DEFINING "mechanical". Hard boundary:
+      wires secret REFERENCES, never values (Infisical writes stay operator/ESO-push).
+      ⚠ Deliberately re-opens two standing exclusions — `fixerRepos` context-only (FU-086
+      predicate) and "sleep-iac excluded, CI-only deploy repo" — via a distinct dispatch class,
+      not by silently flipping them. Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
+- [ ] **FU-107** — **Agents docs refactor, remaining passes** (survey 2026-07-27; roles.md +
+      stale-fix + axes bullets landed same day). Remaining: (a) dedup — FU-088 capacity story
+      told 3× (README/workflow/merge-path), review-edge path 2× (platform-and-stacks/
+      observability), ledger schema 2× (model-routing/observability) — one home + cross-links
+      each; (b) generate the hand-drawn FSM views (workflow.md reconciler list, merge-path.md's
+      two diagrams) from merge-path-fsm.yaml, and the README ADR-table mirror from docs/adr.md
+      (it drifted 10 days missing 093/094); (c) archive the knowingly-superseded tracts
+      (merge-path.md CronJob-era design/rollout/open-questions, workflow.md §MVP + §Triggers
+      polling-first) to history with TICK-LOG refs; (d) move merge-path.md §Scaling model (stack
+      economics) to the stack axis doc; (e) generated tables (agentstack claim-renders from the
+      XRD, stacks-state from `kubectl get agentstacks`) — FU-049 adjacency. Keep meta-state.md's
+      transient-vs-durable discipline as the norm.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch
@@ -402,6 +482,9 @@ _Last updated: 2026-07-16._
       coordinator self-label harvested issues, bounded by the existing breakers + a per-day rate
       cap — flipping it is the operator's per-stack trust call (it retires breaker #1 for that
       stack). Relates FU-086/FU-087, ADR-094, TICK-LOG §Loop safety.
+      **Consumers registered 2026-07-27:** the harvest leg (a) is the birth path for FU-106's
+      expand/contract debt tasks; the goal-issue shape of leg (c) is the FU-105 researcher's
+      dispatch trigger.
       **Leg (c), goal-budget decomposition (operator direction 2026-07-24 — the meta-9
       prototype ran 3 days live):** a human-authored+queued `goal` issue (breaker #1 moves UP,
       not away) carries budgetUSD + acceptance; its item session MAY author+queue child issues
@@ -493,7 +576,12 @@ _Last updated: 2026-07-16._
       deploy.** The FU-025 deploy pipeline (app-repo build → chart+image at `<calver>-g<sha>` →
       auto-bump PR in `sleep-iac` → ArgoCD sync, see `docs/sleep-iac.md` §Deploy pipeline) merges on
       CI-green but has **no post-deploy health gate** — a chart that renders + passes kubeconform can
-      still break at runtime (bad migration, crashlooping CronJob, failing probe). Add a
+      still break at runtime (bad migration, crashlooping CronJob, failing probe).
+      **Sharpened by meta-11 (2026-07-26): ArgoCD health is NOT the gate** — the schema-skew
+      outage stayed GREEN in Argo throughout (pods Ready on tcpSocket); the post-deploy gate must
+      run the FU-102 prober's deep contract probe (tools/call-level, "verify through the deepest
+      component"), and the deterministic half of prevention is the paired-roll / schema-gate
+      contract (oracle-fleet#159 shape) + readiness that exercises the backend (#157). Add a
       coordinator-style overseer that watches the ArgoCD app health after a deploy PR merges and, on
       a broken sync/degraded health: **roll back** (revert the `sleep-iac` bump PR — deterministic,
       no LLM needed for this half) or, better, **roll forward** — dispatch a worker against the app
@@ -608,7 +696,9 @@ _Last updated: 2026-07-16._
       **Spec-creation directive (operator 2026-07-25):** the FIRST sleep specs are authored AND
       reviewed by multiple large LLMs — the point of that pass is finding bugs/gaps in the
       system, not documenting existing behavior; this is the natural first consumer of the
-      dual-model review leg. Test-tier terminology ruled: **"system testing"** = logic against
+      dual-model review leg. **(2026-07-27: the ROLE executing this — boundary incl. open-web
+      egress, dispatch, breakers — is FU-105 researcher/planner; this item keeps the model
+      rules + evidence legs.)** Test-tier terminology ruled: **"system testing"** = logic against
       real components in kind (Garage + ingester + Grafana + Playwright, ADR-082 shape);
       "e2e" reserved for the actual target environment (synthetic production traffic). Record
       the terms in sleep's process docs when the specs land (cf. Fowler microservice-testing:

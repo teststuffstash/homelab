@@ -145,10 +145,13 @@ catalog problem.
   exception in the loop home is the write-only transcripts S3 key). The scan runs `SCAN_STACK`-
   scoped; item sessions dispatch into the loop home (`coordinator-session.sh --loop-ns`) and
   reach the fixer namespaces through the cross-ns loop RoleBindings — no cluster-scoped grant.
-  The GLOBAL reflex keeps sweeping everything as the migration belt (idempotency guards make
-  dual-running safe); Argo Events (bus + Sensors) deliberately stay global — trigger plumbing is
-  dumb pipe, and a per-stack JetStream bus is 3×1Gi of state for near-zero event volume. Oracle
-  graduated first (oracle-iac claim, 2026-07-18).
+  The GLOBAL reflex SKIPS graduated stacks (a fourth knob, `loop.graduated`, also renders the
+  per-stack `review-<stack>` cron); Argo Events (bus + Sensors) deliberately stay global —
+  trigger plumbing is dumb pipe, and a per-stack JetStream bus is 3×1Gi of state for near-zero
+  event volume; the global Sensors route graduated events INTO `<stack>-agents` data-driven
+  (`body.loop_ns` — coordinate doorbell, and the review edge since FU-100, 2026-07-27). Oracle
+  graduated first (oracle-iac claim, 2026-07-18); sleep + platform followed 2026-07-26 —
+  **all three per-stack since**. Per-role machinery inventory: [`roles.md`](roles.md).
 - **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided) — refined
   same day by the permission-tier split below (FU-068):** the *Issues-tier* slice (labels) has a
   designed in-cluster path via `provider-upjet-github`; the *Administration-tier* slice
