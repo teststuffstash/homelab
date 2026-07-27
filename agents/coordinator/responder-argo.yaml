@@ -1,20 +1,25 @@
-# responder-argo — the FU-103 responder role's activation machinery (roles.md §Planned roles).
+# responder-argo — the FU-103 responder role's activation machinery (roles.md §responder).
 #
-# V1 IS DELIBERATELY DETERMINISTIC + REPORT-ONLY: Alertmanager POSTs a firing group to the
-# agent-loop EventSource's /alert endpoint (review-argo.yaml) → the `responder` Sensor submits a
-# `respond` Workflow → a SCRIPT (no LLM) dedupes by alert fingerprint and files ONE evidence
-# issue per new alert on the platform repo. The bot-authored issue is INERT (no agent-fix /
-# agent/queued — TICK-LOG §Loop-safety breaker #1); the scan's 🌱 clause surfaces it for human
-# triage. The LLM triage session (diagnosis judgment) and the remediation WHITELIST are the
-# graduation knobs — they slot in BEHIND this same edge without touching the machinery.
+# V2 (operator direction 2026-07-27): TRIAGE-FIRST, ISSUES ONLY WHEN TRIAGE DECIDES. V1 filed one
+# evidence issue per alert on homelab — rejected: machine-rate issue creation pollutes the tracker
+# (one bug from 4000 issues overnight), and a stack workload's alert belongs to the STACK's ops
+# surface (its -iac repo), reaching homelab only when the stack needs something from the platform.
+# Now a firing alert fingerprint gets ONE inline LLM triage session (sonnet, subscription-gated),
+# whose cheapest-sufficient outcome is: report-only → GitOps quick fix on the stack's -iac
+# (revert/pin PR through the CI-only auto-merge lane) → ONE issue in the stack's -iac/app repo →
+# a homelab issue ONLY for platform namespaces or needs-platform. Same autonomy the jail
+# meta-sessions exercise, scoped to GitOps verbs + issue writes (no kubectl mutations).
 #
-# Machinery inventory (the roles.md checklist):
-#   predicate  = Alertmanager firing (routing/matchers live in the Alertmanager config)
-#   edge       = /alert webhook → this Sensor
-#   backstop   = NONE by design — alerts are level-triggered and refire on group_interval
-#   key        = alert fingerprint (dedup: an open issue carrying the fingerprint = owned)
-#   capacity   = Sensor rateLimit (the dumb outer belt; no subscription draw in v1 — no LLM)
-#   breakers   = inert bot-authored issues (breaker #1); alert-storm bounded by the rateLimit
+# Machinery inventory:
+#   predicate  = Alertmanager firing (fan-out route in tofu/monitoring.tf)
+#   edge       = /alert webhook (review-argo.yaml EventSource) → this Sensor
+#   backstop   = NONE by design — alerts are level-triggered (repeat_interval refires ≤3h)
+#   key        = alert fingerprint: responder-seen ConfigMap ledger (24h window) + an
+#                `alert-fp:<fp>` open-issue search belt in the brief
+#   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore + the FU-088 latch
+#                + a mechanical 12-triages/day cap (unique-fp storms, e.g. label churn)
+#   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
+#                issues (inert, breaker #1); loop-smell → report-only stop
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -53,7 +58,7 @@ spec:
             - src: { dependencyName: alert-dep, dataKey: body }
               dest: spec.arguments.parameters.0.value
 ---
-# The respond WorkflowTemplate — fingerprint-dedup + evidence-bundle issue, pure bash+gh+jq.
+# The respond WorkflowTemplate — per NEW fingerprint: one inline sonnet triage session.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -61,53 +66,99 @@ metadata:
   namespace: agent-coordinator
 spec:
   entrypoint: respond
-  serviceAccountName: argo-workflow
+  serviceAccountName: agent-coordinator
+  # Queue behind the shared subscription pool like review/coordinate workflows (FU-088 Argo layer).
+  synchronization:
+    semaphores:
+      - configMapKeyRef: { name: subscription-capacity, key: claude }
   ttlStrategy: { secondsAfterCompletion: 86400 }
   arguments:
     parameters:
       - { name: payload, value: "{}" }
   volumes:
+    - { name: work, emptyDir: {} }
     - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
   templates:
     - name: respond
       inputs:
         parameters:
           - { name: payload }
+      metadata:
+        labels: { app: respond-workflow }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
         env:
-          - name: GH_TOKEN
-            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
-          - { name: RESPONDER_REPO, value: "teststuffstash/homelab" }
+          - { name: HOME, value: "/home/node" }
+          - { name: ORG, value: "teststuffstash" }
           # Payload rides an env var, NOT shell interpolation — an apostrophe in an alert
           # annotation must not break quoting (k8s env delivery is byte-safe).
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
-        command: [bash, -c]
+          # Subscription auth via the ADR-087 ref rail (the reviewer pattern — never the raw token).
+          - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
+          - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
+          - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
         args:
           - |
             set -euo pipefail
             printf '%s' "$PAYLOAD" > /tmp/alerts.json
-            COUNT="$(jq -r '.alerts | length' /tmp/alerts.json 2>/dev/null || echo 0)"
-            [ "${COUNT:-0}" -gt 0 ] || { echo "no alerts in payload — nothing to do"; exit 0; }
+            COUNT="$(jq -r '[.alerts[]? | select(.status == "firing")] | length' /tmp/alerts.json 2>/dev/null || echo 0)"
+            [ "${COUNT:-0}" -gt 0 ] || { echo "no firing alerts in payload — nothing to do"; exit 0; }
+
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+
+            # FU-088: a parked triage loses nothing — Alertmanager refires the group (≤3h).
+            if ! bash /work/homelab/agents/subscription-latch.sh; then
+              echo "triage deferred — subscription limited (FU-088; the alert refires)"; exit 0
+            fi
+
+            TODAY="$(date -u +%Y-%m-%d)"
+            kubectl -n agent-coordinator get cm responder-seen >/dev/null 2>&1 \
+              || kubectl -n agent-coordinator create cm responder-seen >/dev/null 2>&1 || true
+
             jq -c '.alerts[] | select(.status == "firing")' /tmp/alerts.json | while read -r a; do
               FP="$(printf '%s' "$a" | jq -r '.fingerprint // empty')"
               NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
               [ -n "$FP" ] || FP="$(printf '%s' "$a" | jq -r '.labels | tostring' | sha256sum | cut -c1-16)"
-              # Idempotency key: an OPEN issue carrying this fingerprint owns the alert. Search is
-              # eventually-consistent — the residual race costs a duplicate 🌱 issue, never a loop.
-              if gh issue list --repo "$RESPONDER_REPO" --state open --search "alert-fp:$FP in:body" \
-                   --json number --jq 'length' 2>/dev/null | grep -qv '^0$'; then
-                echo "→ $NAME ($FP): open issue exists — skip (level-triggered refire)"
-                continue
-              fi
-              SUMMARY="$(printf '%s' "$a" | jq -r '.annotations.summary // .annotations.description // "no summary"')"
-              BODY="$(printf '%s' "$a" | jq -r --arg fp "$FP" '"🚨 **Alert evidence bundle** (FU-103 responder v1 — deterministic, report-only; triage is human/LLM follow-up)\n\n**Alert:** \(.labels.alertname // "?")  \n**Summary:** \(.annotations.summary // "—")  \n**Description:** \(.annotations.description // "—")  \n**Started:** \(.startsAt // "?")  \n**Source:** \(.generatorURL // "—")\n\n**Labels:**\n```json\n\(.labels | tostring)\n```\n\n`alert-fp:\($fp)`\n\n_Bot-authored → inert by loop-safety breaker #1; the scan surfaces it as 🌱 for triage._"')"
-              gh issue create --repo "$RESPONDER_REPO" \
-                --title "🚨 ${NAME}: ${SUMMARY:0:80}" \
-                --body "$BODY" \
-                && echo "→ filed evidence issue for $NAME ($FP)" \
-                || echo "WARN: issue create failed for $NAME ($FP) — token scope? (loud, non-fatal)"
+
+              # Ledger dedup: one triage per fingerprint per 24h (cm value = last-triaged date).
+              SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
+              if [ "$SEEN" = "$TODAY" ]; then echo "→ $NAME ($FP): triaged today — skip"; continue; fi
+              # Daily cap: unique-fp storms (label churn) must not buy unbounded sessions.
+              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value == $t)] | length')"
+              if [ "${N_TODAY:-0}" -ge 12 ]; then echo "⚠ responder daily cap (12) reached — $NAME ($FP) NOT triaged (loud; raise the cap or fix the storm)"; continue; fi
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY\"}}" >/dev/null 2>&1 \
+                || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
+
+              printf '%s' "$a" > /tmp/alert-one.json
+              echo "── triaging $NAME ($FP)"
+              claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
+
+            THE ALERT (JSON): $(cat /tmp/alert-one.json)
+
+            Context available: /work/homelab is a fresh homelab clone (docs/, agents/stacks.json). kubectl READS may work (degrade gracefully if RBAC-denied). gh is authenticated (issues + PRs + contents on the agent repos). Shallow-clone a stack repo under /work/ if you need code context.
+
+            STEP 1 — route: map the alert's namespace label to a stack via agents/stacks.json (a namespace matching a stack's repos[] entry, or '<stack>-agents', belongs to that stack). Anything else (monitoring, garage, argocd, agent-coordinator, kube-*, …) is the PLATFORM.
+
+            STEP 2 — diagnose from the alert labels/annotations + whatever context you can actually reach. Say what you verified vs assumed.
+
+            STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
+            (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.
+            (b) a GitOps quick fix on the stack's -iac repo (bad pin → revert/bump PR; the CI-only lane auto-merges): do it now — branch, PR, 'gh pr merge --auto --squash' — and report.
+            (c) needs real work → file EXACTLY ONE issue on the stack's -iac repo (or the app repo if it is clearly app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP'. NO agent labels — the issue is inert; the stack loop/human triages it.
+            (d) the namespace is platform, or the stack needs something only the platform can change → the issue goes on teststuffstash/homelab instead.
+
+            HARD RULES: before filing, search the target repo for an OPEN issue containing 'alert-fp:$FP' — if found, add ONE comment there instead of a new issue. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
+                --model sonnet --permission-mode bypassPermissions --max-turns 40 \
+                || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
             done
         resources:
-          requests: { cpu: "50m", memory: "64Mi" }
-          limits: { memory: "256Mi" }
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "1Gi" }

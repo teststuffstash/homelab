@@ -75,3 +75,32 @@ subjects:
 # the AgentStack Composition now mirrors the write-only key into each fixer namespace via the
 # `agent-transcripts` ClusterSecretStore, and worker pods secretKeyRef it in-ns. No launcher
 # reads Secret values anymore; this SA has zero secret access.)
+---
+# Responder fingerprint ledger (responder-argo.yaml): one triage per alert fp per 24h + the
+# daily cap live in the responder-seen ConfigMap — NAMESPACED on purpose (a cluster-wide cm
+# patch grant could touch other namespaces' config; the pods grant above is cluster-wide only
+# because worker spawning genuinely crosses namespaces). A denied write degrades to the
+# fp-issue search belt (loud, never blocking).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: responder-ledger
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, list, create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: responder-ledger
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: responder-ledger
+subjects:
+  - kind: ServiceAccount
+    name: agent-coordinator
+    namespace: agent-coordinator
