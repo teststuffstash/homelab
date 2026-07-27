@@ -1,0 +1,25 @@
+# ReferenceGrant: lets the sleep stack's Gateway (ns sleep-tracking) route the spec site to the
+# Garage web endpoint (Service garage-s3 in ns garage) across namespaces (ADR-092, mirroring
+# oracle-gateway-refgrant.yaml). Gateway API forbids cross-namespace backend refs unless the
+# TARGET namespace grants them — so this lives in ns `garage` and is PLATFORM-owned: the sleep
+# AppProject can't write to the garage ns, and garage is platform (tofu) territory.
+#
+# Scope is deliberately tight: only HTTPRoutes from ns sleep-tracking, only the garage-s3
+# Service — it exists solely for the Garage-served specs.sleep.teststuff.net site
+# (sleep-tracking#38's specs/ tree). In-namespace sleep surfaces need no grant.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: sleep-tracking-httproute-to-garage-s3
+  namespace: garage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after the gateway-api-crds app (ReferenceGrant CRD)
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: sleep-tracking
+  to:
+    - group: ""
+      kind: Service
+      name: garage-s3
