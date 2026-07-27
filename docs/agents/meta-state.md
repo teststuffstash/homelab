@@ -24,6 +24,13 @@ _Session meta-12 resumed 2026-07-27 ~13:20Z on the heartbeat (fresh session; bot
   prompt-corpus parameterization (the evidenced prerequisite for scheduled prod probing);
   after #84's corpus is prod-valid, the suspended mcp-probe CronWorkflow manifest in
   oracle-iac (operator lane) + #84's gap harvester. #109 operator-paced.
+- **FU-096 tail (role-build session, 2026-07-27)**: everything built+live; REMAINING is one
+  automated chain — agent-runtime#24 (seed cp -rf fix) merges → image build → deploy-pin PR
+  bumps images.env → dispatch ONE no-LLM measure ride (`agent-session.sh sleep-tracking
+  --harness goose --run "true"`), read the entrypoint timings (expect "eval-cache seeded" +
+  install ≲10s; substituter-only run measured 25s vs ~55s cold) → archive FU-096 with the
+  numbers. If picking this up fresh: the FU entry carries full state. Remove this bullet at
+  archive.
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to

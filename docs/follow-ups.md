@@ -665,9 +665,12 @@ _Last updated: 2026-07-16._
       docker/kata rides skip until canaried; `AGENT_STACK_CACHE=0` opt-out). Jail numbers on
       oracle-fleet's real lock: `devbox install` 54.7s (cold eval, warm store) → **7.1s**
       seeded incl. copy; cache portable across path AND HOME by plain copy; store half 868M
-      zstd (219 paths). REMAINING: oracle-fleet caller PR (pilot) → first publish → operator
-      flips the ghcr package PUBLIC (it inherits repo visibility; ride pods pull without
-      imagePullSecrets) → in-pod measure → roll to the other stack repos → kata canary.
+      zstd (219 paths). Both stacks publish (fleet#162, sleep#37 — merged); packages flipped
+      PUBLIC (operator, 2026-07-27); kata+ImageVolume canaried GREEN → the mount rides every
+      ride. First live ride: probe+mount+lock-guard+substituter all worked (install 25s vs
+      ~55s cold); the eval SEED failed on 0444 collisions with the harness image's own caches
+      → cp -rf fix = agent-runtime#24. REMAINING: #24 merges → pin bump → one measure ride
+      with the seed working → archive with numbers.
 
 
 
