@@ -641,7 +641,12 @@ _Last updated: 2026-07-16._
       enhancements adopted from the survey: (1) provider QUANTIZATION/staleness filter in the
       §M4 pin (the /endpoints field — never pin an fp8/stale serving for eval-sensitive lanes);
       (2) "sales" need nothing — live effective-price recompute per dispatch already captures
-      price drops; the rotation covers currently-good drift.
+      price drops; the rotation covers currently-good drift. **(3) `openrouter/fusion`
+      (operator find, same day): panel-deliberation router = the audit/research CLASS chain
+      head candidate — mechanizes the dual-model directive in one ~4-5× call, server-side web
+      reach solves part of the FU-105 egress dial on the OpenRouter rail; §M6 re-assessed
+      (the 07-09 no-tools parking was stale). Panel pinned via `analysis_models`
+      launcher-side; never a fixer-lane entry.**
       (b) **multi-harness evidence** — same task classes across `--harness goose|opencode|claude`,
       compared on the FU-057 ledger axes {success-rate, harness-death-rate, $/successful-issue}.
       This IS the recorded ADR-077 trigger ("add Omnigent's meta-harness only if governing

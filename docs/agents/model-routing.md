@@ -125,8 +125,17 @@ the OpenRouter activity/generation API (already in FU-057's scope for per-reques
 
 ### M6. Routers — verdict (verified against the API 2026-07-09)
 
-- **`openrouter/pareto-code`**, `fusion`, `bodybuilder`: do **not** advertise `tools` → presumed
+- **`openrouter/pareto-code`**, `bodybuilder`: do **not** advertise `tools` → presumed
   unable to drive a goose/opencode worker. One manual probe to confirm the metadata, then park.
+- **`openrouter/fusion`** — RE-ASSESSED 2026-07-27 (operator find; the 07-09 "no tools" parking
+  is stale — the fusion tool now attaches to the outer model): server-side PANEL deliberation
+  (≤8 models parallel + judge synthesis, panel models get server-side web_search/web_fetch),
+  ~4-5× single-completion cost. **Candidate chain HEAD for the audit/research/planning task
+  class only** (FU-095(a)/FU-105): it mechanizes the dual-model directive in one call and gives
+  the researcher web reach WITHOUT widening pod egress on the OpenRouter rail. `analysis_models`
+  is a REQUEST param → panel pinned launcher-side (ADR-094), recorded for M5 attribution;
+  retro evidence suggests a cheaper panel (deepseek-v4-pro + kimi + one premium) over the
+  premium default. NEVER a fixer-lane entry (cost; tool-driving through goose untested).
 - **`openrouter/auto`**: advertises tools, but it's a paid model lottery — you cede provider AND
   model choice, i.e. the $5.79 incident as policy. Last chain slot at most, cap-bounded.
 - **`openrouter/free`**: a **free router with tools** — the provider/price lottery is harmless at $0,
