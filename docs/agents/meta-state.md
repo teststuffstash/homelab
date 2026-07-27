@@ -5,44 +5,23 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed):_
 
-- **UC-1 agentic arc — KIND BAR MET, prod blocked on the corpus roll-forward.** Kind:
-  deterministic leg CI-gated (#146/#147/#148) AND the agentic leg PASSED live (goose 1.28 +
-  deepseek-v4-flash on ci-runner-01, fixture corpus: canonical UC-1 + 2 hard cases clean,
-  4 gaps posted on #84 — 2 real shapes, 2 predicted meta-prompt noise). **PROD: the first
-  agentic probe found a REAL OUTAGE** — server/corpus schema skew (#141's `short_name_fold`
-  in the rolled server, pre-#141 corpus digest served) crashed the stdio child on every
-  statute call, both replicas, pods Ready throughout, no alert. Root-caused by draining the
-  gateway's unread child-stderr PIPE via /proc/1/fd/7 (TICK-LOG will carry the day). Filed +
-  QUEUED: #152 (respawn/die-fast + honest readiness + stream child stderr), #153 (topology
-  spread — dispatched), #155 (corpus schema_version contract — the guard); #151 delivered
-  (PR #154 in review); FU-099 filed (synthetic blackbox monitoring — nothing alerted).
-  Remediation v2: iac#233's targetRevision rollback was SILENTLY OVERRIDDEN in minutes by
-  the evening merges' auto deploy-bumps (lesson: a rollback via the bumped knob loses to the
-  next bump) → iac#239 pins mcpServer.image.tag=2026.7.25-gfc4b537 in $values (bumps can't
-  move it; loudly commented). Prod pinned+stable (tools/call 200). ⚠ #159 (schema gate,
-  gated+merging) makes post-#159 servers REFUSE unstamped corpora — and jbtlm's corpus is
-  built by a pre-#159 image = unstamped (user_version 0). REFINED ROLL SEQUENCE:
-  (1) jbtlm Succeeded → release corpus → ONE iac PR: new corpus digest + values pin MOVED to
-  the post-#157/pre-#159 server tag (casefold schema + /healthz + respawn, NO version gate —
-  find it via the deploy-bump for #157's merge commit) — NOT removed;
-  (1b) prod probe run 4 = the definitive verdict; then QUEUE fleet#158 (chart healthz);
-  (1c) pin-follow workflow-ert to a post-#159 image → start-from=build rerun → FIRST STAMPED
-  corpus → second paired iac PR (digest + REMOVE pin entirely) → schema gate live E2E; (2) re-run the prod
-  agentic probe (probe-prod.sh on ci-runner-01; ephemeral key
-  oracle-fleet-adhoc-probe-uc1-kind expires ~00:50Z — remint if needed) for the true prod
-  verdict; (3) after the roll-forward: QUEUE fleet#158 (chart httpGet /healthz readiness — held
-  unqueued because the values pin's old image has no /healthz; queueing it earlier = a
-  self-inflicted NotReady outage); (4) then the suspended `mcp-probe` CronWorkflow manifest
-  (operator lane) + #84 harvester via the loop. #152 DELIVERED (#157 merged through the
-  codeowner gate — SRV-SERVE-READINESS contract; respawn+latch, /healthz, stderr streamed). VM cleanup owed: /tmp/probe-* on ci-runner-01 (probe-run.sh holds
-  the key+PAT — shred when the prod leg closes), kind cluster `oracle-serve-local` + registry.
-- **Pipeline verification run `ert-pipeline-parse-jbtlm`** (Monitor armed): parse SLOW under
-  the garage contention (12.6/s at 170k/252k ~19:15Z; ETA parse ~21:00Z, build +~5h).
-  Re-verifies latent #140/#141/#143/#144 + first exercise of the #140 build heartbeat + the
-  trimmed limits (iac#223). NEXT on Succeeded: verify heartbeat events fired → release the
-  corpus (digest-verified through the ADR-095 boundary) → the PAIRED iac roll (corpus digest
-  + server forward together — see the schema-skew lesson above); on Failed: read the step's
-  JSON events + traceback. wk-01 garage warnings (majfault/sdb IO) expected to clear after.
+- **UC-1 agentic arc — OPERATOR BAR MET IN BOTH ENVIRONMENTS (2026-07-27 ~03:45Z).**
+  Kind: deterministic leg CI-gated + agentic leg passed (fixture corpus). Prod: agentic
+  spot-check PASSED on the real corpus — goose+deepseek-v4-flash resolved PS §1 dated
+  01.07.2025 → akt_viide 115052015002, correct window + verbatim text (evidence on fleet#84;
+  session export in the jail scratchpad). En route the probes caught + the loop fixed a real
+  silent outage (schema skew; guards #154/#156/#157/#159 ALL merged same night) and two
+  findings landed: the PROMPT CORPUS IS FIXTURE-SHAPED (AndTS is a fictional act — per-corpus
+  parameterization is the #84 prerequisite, evidenced) and 🌱#160 (act resolution is
+  lyhend-only; titles don't resolve — operator triage). Roll 1 LIVE: jbtlm corpus
+  (sha256:75a7cfc4…, casefold+titles) + server pinned gc019e15 (newest pre-#159). VM + keys
+  cleaned. REMAINING CHAIN: **rsd7z** (start-from=build on the stamping builder g60ef627,
+  Monitor armed, ~5h) → release-corpus workflow_dispatch → ROLL 2 iac PR (new digest + DELETE
+  the values tag pin — server current, schema gate live E2E) → verify (tools/call via jq,
+  NEVER grep — the roll-1 verifier false-greened on a mangled grep pattern) → QUEUE fleet#158
+  (chart /healthz probe) → then the suspended mcp-probe CronWorkflow manifest (operator lane,
+  wants the parameterized prompt corpus first) + #84 harvester via the loop. #109/#160
+  operator-paced.
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
