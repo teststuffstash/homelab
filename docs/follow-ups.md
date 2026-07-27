@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-113**.
+  Next free id: **FU-114**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -252,6 +252,19 @@ _Last updated: 2026-07-16._
       re-dispatch rides (a); an in-VM dind cgroup OOM (gate too fat for 2560Mi) is the
       CORRECT residual failure mode — pod fails, node survives. FU-082 (archived 2026-07-25),
       FU-081, FU-072 lineage.
+- [ ] **FU-113** — **Responder latch-defer silently drops an alert until Alertmanager
+      `repeat_interval`** (caught live 2026-07-27 21:10Z by meta-alert-crosscheck — its second
+      real catch): KubePersistentVolumeFillingUp (fp c7bd21a6, the ghcr-mirror filling) fired
+      20:03Z → EventSource + Sensor delivered correctly → respond-8mwqw hit the FU-088 latch
+      (0.83) and exited "triage deferred — the alert refires". It DOESN'T: webhook delivery is
+      edge-triggered per `repeat_interval` (hours), so the deferral = a drop with NO ledger
+      entry, invisible except to the crosscheck. Fix legs: (a) a latch-deferred respond writes
+      a `deferred` MARKER into responder-seen (crosscheck then reads "seen-deferred, retry
+      pending", not silence) and (b) self-requeues (Argo retry/backoff or resubmit-on-defer)
+      instead of trusting the edge; (c) FU-109's tier would have let this ~30s bounded triage
+      run at 0.83 anyway — the three compose. Alert content itself was handled operator-lane
+      same hour (mirror cache wiped; second fill of the day — the FU-093 sighting family).
+      Relates FU-088 (archived), FU-109, FU-103 (archived).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
