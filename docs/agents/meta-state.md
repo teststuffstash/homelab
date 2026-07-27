@@ -9,13 +9,13 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
-- **FU-096 chain (ACTIVE — measure leg)**: latch lifted; agent-runtime#23+#24 MERGED
-  (12:31/12:45Z 2026-07-27), agent-base deploy-pins homelab#53+#54 MERGED (13:03Z) — the
-  `cp -rf` seed fix is in the live agent-base image. NEXT: in-pod measure — the first sleep
-  ride (from the re-enabled coordinator, #48 first) runs on this image with both ghcr cache
-  packages public; read its entrypoint log for the seed timing (expect ~7s warm vs ~55s cold
-  eval) and NO 0444-collision cp errors. Then: roll `devbox-cache.reusable.yml` to remaining
-  stack repos → kata canary → archive FU-096.
+- **FU-096 chain — MEASURE LEG DONE 2026-07-27 17:33Z**: first real cache-seeded ride
+  (sleep-tracking#39 r1): `eval-cache seeded (lock match)` + local substituter mounted, NO cp
+  collisions, **devbox install → ready in 23.6s** in-pod. One benign warning to keep an eye
+  on: nix `creating directory /stack-cache/store/realisations: Read-only file system`
+  (expected — the ImageVolume store is RO; warning-only, proceeded clean). REMAINING before
+  archive: roll `devbox-cache.reusable.yml` to the remaining stack repos (loop-workable
+  issues; oracle-fleet + sleep-tracking already publish).
 
 - **UC-1 agentic arc + schema arc: CLOSED (2026-07-27 ~09:50Z).** Operator bar met kind+prod
   (TICK-LOG carries the full story). Roll 2 live: stamped corpus sha256:3e45daea… + current

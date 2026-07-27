@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-109**.
+  Next free id: **FU-111**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -213,6 +213,17 @@ _Last updated: 2026-07-16._
       the latch measuring "us" is by design (FU-088), but the Grafana claude-subscription panel
       should split utilization by consumer (proxy already labels callers?) so a stall like
       today's is attributable at a glance.
+- [ ] **FU-110** — **Within-repo dispatch order has no operator knob** (born 2026-07-27: the
+      sleep re-enable's stated plan was "#48 dispatches FIRST" — but that intent lived only in
+      a claim comment; the scan orders queued-dispatch units by ascending issue number
+      (`sort_by(.number)`, coordinator-scan.sh), so #39 dispatched first and the lg system-test
+      gate #48 lands LAST of the wave, inverting gate-first into gate-last). In-flight-before-new
+      already exists; this is only ordering WITHIN queued-dispatch. Design lean: one extra sort
+      key — an `agent/priority` label the scan hoists to the front of the unit list (label =
+      operator-ownable, visible on the board, no new state). REJECTED alternative: encoding
+      order as fake `Depends-on` (FU-087 blocks on CLOSURE — that's a dependency, not a
+      preference, and it would freeze the queue if the prioritized item parks). Relates FU-086
+      (scan predicates), FU-087.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
