@@ -1091,3 +1091,28 @@ the rollback (missing casefold, latent coverage-ceiling) — run 4 after the PAI
 verdict. Lessons banked: paired rolls for schema-coupled artifacts; verify restorations
 through the deepest component; an unread stderr PIPE is both a diagnosis-blocker and the
 best black box in the building.
+
+### 2026-07-27 — meta-11 (cont.): the operator bar lands — an agent drives UC-1 in kind AND prod
+**The directive is met.** After roll 1 (jbtlm corpus sha256:75a7cfc4… paired with the newest
+PRE-#159 server gc019e15 — because jbtlm's corpus is unstamped and the fresh #159 gate would
+refuse it; no post-#157/pre-#159 image was ever built, deploy.yaml skipped #157's merge), the
+prod agentic spot-check PASSED: goose+deepseek-v4-flash asked for PS §1 on 01.07.2025, tried
+SEVEN title spellings (all act_not_found), found `PS`, and returned akt_viide 115052015002
+with the correct validity window and verbatim text. That eighth call is the operator bar:
+a real agent, the real server, the real corpus, correct date-travel citation. The same
+session demonstrated the night's best product gap live — **resolution is lyhend-only,
+titles don't resolve** → 🌱#160 (unlabeled, FU-090 flow). And probe run 4 decomposed to ONE
+root cause: **the prompt corpus is fixture-shaped** — AndTS is a fictional act; every
+AndTS case is unwinnable in prod by construction. Per-corpus parameterization is #84's
+prerequisite, now evidenced, not assumed.
+**Two more probe-integrity lessons paid for in blood:** the roll-1 verifier FALSE-GREENED
+(a grep pattern mangled through quoting layers matched nothing and ! declared success on an
+act_not_found) — JSON checks go through jq/python, never grep, and the matcher gets dry-run
+like any probe; and an empty goose binary passed `--version` (empty script = exit 0) after
+a bzip2-less tar — check version OUTPUT. The guards all merged same-night through the loop
+(#154 preflight, #156 spread, #157 respawn+/healthz+stderr-streamed [codeowner-gated
+SRV-SERVE-READINESS], #159 schema gate [SRV-CORPUS-SCHEMA; composes with the #157 latch]).
+Roll 2 armed at handoff: pin-follow iac#245 → **rsd7z** start-from=build on the stamping
+builder → first user_version-stamped corpus → roll-2 iac PR deletes the values pin (server
+current, gate live E2E) → queue #158 (chart /healthz — held to avoid probing an image that
+lacks the endpoint). VM + ephemeral keys cleaned; evidence on #84.
