@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-015** *(archived 2026-07-27)* — **Custom ARC runner image, DONE + cycle proven E2E.**
+  `docker/arc-runner/` (runner+xz/gh/jq+nix+devbox+nixcache substituter, warm store + KEPT eval
+  cache) built by `runner-image.yaml`, self-bumping the `arc-runners.yaml` pin. Measured: homelab
+  ci 180-210s→38s; fleet ci 610s→127s (ensure 94s→5s eval-cache, publish 87s→31s w/ fleet#131).
+  First automated Monday cycle observed 2026-07-27: lock-bump cron drifted 3h19m (GitHub
+  scheduler) → HARDENED same day (a91de64): the image rebuilds on `devbox.{json,lock}` landing
+  on master — the merge IS the trigger; the Monday cron is a freshness fallback only. Full-chain
+  proof: build on a91de64 → self-bump PR homelab#43 (fresh-master-rebased path) → auto-merged.
+  Gotcha for the record: fixed-offset cron pairs guarantee NO ordering on GitHub — trigger on
+  the upstream artifact landing instead. Residuals live elsewhere: FU-096 (agent-base eval
+  cache), fleet#129/#130 legacies already merged.
 - **FU-107** *(archived 2026-07-27, same day as filed)* — **Agents docs refactor passes, DONE.**
   (a) dedup: capacity story → ONE home (workflow.md §Capacity gates; merge-path compressed to a
   pointer), review-edge path → roles.md/merge-path-fsm pointers, scout → roles.md pointer;

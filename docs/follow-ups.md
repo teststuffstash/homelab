@@ -185,47 +185,6 @@ _Last updated: 2026-07-16._
       (`is_template = true` in repos.tf), instantiate via `gh repo create --template` before
       `new-agent-repo.sh` (which then emits the adopt-import). stack-lint's REPO-03/04/05 already
       verify the result. Relates FU-052.
-- [ ] **FU-015** — Custom ARC runner image: bake `xz`/`gh`/devbox + a warm nix store (kills the
-      per-job `apt-get` and the ~5 min cold start), and wire the in-cluster nix cache as a
-      substituter for runner pods. `docs/ci.md` → "residual costs".
-      **Measured 2026-07-24 (oracle-fleet ci, run 30101073645): Install devbox = 454s of a 610s
-      job — actual tests 43s. Toolchain tax ≈ 475s × every ARC workflow.**
-      **Phase 1 LIVE 2026-07-25**: `docker/arc-runner/` image (runner 2.336.0 + xz/gh/jq +
-      single-user nix 2.35.1 + devbox 0.17.5 + nixcache-VIP substituter), built by
-      `runner-image.yaml` on ubuntu-latest (bootstrap: must not depend on the scale set it
-      provisions), scale-set pin in `arc-runners.yaml` (replaces unpinned `:latest`).
-      homelab ci: 70s vs ~180-210s baseline, green. install-nix-action proved idempotent on
-      the baked image (0s) → unslimmed repos keep working. Slimming PRs: oracle-fleet#120,
-      oracle-iac#178, sleep-tracking#28, sleep-iac#20, openrouter-operator#7.
-      **Phase 2 warm store 2026-07-25**: workflow stages each repo's devbox.{json,lock} into
-      the build (App-token fetch — repos are private, anonymous raw 404s silently) and bakes
-      the closures (image 586→2260MiB with homelab's alone). NOT lockfile-coupled: stale store
-      degrades to LAN-mirror delta fetches. **OPERATOR ACTION: install the homelab-renovate
-      App on oracle-fleet + oracle-iac + agent-coordinator** (jail PAT can't, 403 by design) —
-      then add them to runner-image.yaml's `repositories:` list so the hot-path oracle-fleet
-      closure warms too. agent-coordinator ci needs no slim (docker verification build, no devbox).
-      Warm image live+measured: homelab ci 38s (baseline 180-210s, slim-only 70s) — ~5x.
-      **Oracle trio warmed 2026-07-25** (App installed by operator, github-apps.md regenerated;
-      image `2026.7.25-g171a704c735d` built+pinned; oracle-fleet/oracle-iac added to the
-      devbox-update.yaml matrix same day). **oracle-fleet ci warm-measured (16:33Z run): job
-      297s vs 437s slim-only vs 610s baseline.** Decomposition: 94s devbox ensure-packages
-      (nix profile REALIZATION, CPU-bound — store paths ARE baked; homelab's smaller closure
-      realizes in 28s), ~12s gates+uv, 87s pytest (real work), 87s evidence+specs-site publish
-      (real S3 I/O). **The 94s root-caused by experiment (2026-07-25): nix EVALUATION, not
-      fetching** — cold `~/.cache/{nix,devbox}` costs 127s wall/84s CPU even on a fast desktop
-      with a complete store (warm cache: 7.7s; warm `.devbox` project: 0.09s). The image was
-      deleting its own eval cache post-warming; fixed (keep the cache, commit ddbd9d9) —
-      expect ensure ~10-20s on the ThinkPads. The other two hot spots are queued to the loop:
-      fleet#129 (publish uploads at ~1 obj/s — 87s) + fleet#130 (pytest 72s, 36s undecomposed
-      in collection+test_build). Agent-base gets the same eval-cache treatment = FU-096.
-      **Re-measured 2026-07-25 (fleet ci run 30169969318, eval-cache image + fleet#131's
-      parallel uploads): job 127s — ensure 94s→~5s, publish 87s→31s. Target met.** Pin
-      automation closed same day: runner-image.yaml self-bumps the arc-runners.yaml pin after
-      every build + Monday 06:00 cron rebuild (3h after devbox-update's lock bump — without it
-      every weekly bump silently staled the warm store); DEVBOX_VERSION/NIX_VERSION ARGs
-      renovate-tracked via customManagers in renovate-global.json. **Remaining: watch one
-      scheduled Monday cycle E2E (locks → rebuild → self-bump → roll), then archive.**
-
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
