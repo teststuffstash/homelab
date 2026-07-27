@@ -1249,3 +1249,21 @@ flip planned), FU-109 filed (latch tiering: a 30s dispatch unit deferred like a 
 — the queue sat capacity-stalled 1h16m+ on OUR OWN afternoon burn), and the #25-before-#48
 scheduling wrinkle noted (cross-repo Depends-on invisible to the pre-dispatch predicate; unit
 caught it clean — livelock question still open pending the first post-latch dispatching tick).
+
+### 2026-07-27 (cont.) — meta-13: the #48 ride global-OOMs a node; overcommit was the hole, not the ceiling
+The lg system-test ride (k3d-in-dind, kata) killed wk-metal-03 at 18:39Z: limits were CORRECT
+(agent 2Gi + dind 2560Mi + 512Mi RuntimeClass overhead) but memory REQUESTS totalled 2Gi — the
+scheduler placed a ~5.1Gi-growing microVM onto ~2Gi free and the KERNEL global-OOM took
+longhorn-manager + cilium-agent as collateral (operator triage: 3 alerts = 1 incident). The
+"one docker ride per node" envelope lived in a comment, not in requests. Sequence that worked:
+breaker FIRST (agent/error on #48 — the pod died pre-finalize, no strike comment, C4/C5 would
+have re-run the node-killer), class fix second (launcher: memory requests == limits, both
+modes + dind; CPU stays burstable — 2-core kata nodes), clear third; r2 re-dispatched on the
+new spec and SCHEDULED (the footprint fits a ThinkPad alone — as designed, now enforced).
+FU-112 carries the residual: platform-daemon OOM posture (requests→usage so oom_score_adj
+prefers the tenant). Responder filed the collateral alerts as homelab#56/#57 — dispositioned
+into FU-112/FU-093 (#56 = the FOURTH bulk-tier blindness sighting) and closed: alerts clear
+themselves, issues don't. Also this arc: FU-110 shipped-and-archived same day (pin = the
+priority knob; label REJECTED at implementation — IssueLabels authority would delete it),
+FU-111 filed (native blockedBy migration), the tab-IFS dep-gate fix proved itself (#25/#42/#43
+blocked correctly), and the queue kept eating: #39/#40/#41 all merged+closed unsupervised.

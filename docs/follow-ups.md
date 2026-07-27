@@ -461,7 +461,10 @@ _Last updated: 2026-07-16._
       wedged all ride/worker Inits. Immediate fixes: scan janitor grace 2h→30min + launcher-side
       pod self-clean in the retro orchestrator. The ledger/metrics this FU wants must include
       LONGHORN per-disk storageScheduled-vs-cap (kubelet metrics exist: longhorn_disk_* — add
-      the >80% alert alongside the Garage one). Relates ADR-089, oracle-iac#40
+      the >80% alert alongside the Garage one). **Fourth sighting 2026-07-27** (homelab#56,
+      responder-filed): NodeDiskIOSaturation on wk-02 sdl — aqu-sz ~15-17 sustained 2h+, no
+      rebuilds/degraded volumes, plain workload IO grinding a near-full bulk disk; the alert
+      is the only visibility, again. Relates ADR-089, oracle-iac#40
       closing comment, oracle-iac#95.
 
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
