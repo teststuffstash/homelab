@@ -78,6 +78,7 @@ spec:
                   (dict "name" "agent/blocked" "color" "b60205" "description" "Needs a human — budget escalate / max rounds / ambiguous")
                   (dict "name" "agent/done" "color" "0b6b3a" "description" "Merged")
                   (dict "name" "agent/error" "color" "b60205" "description" "Automation anomaly — circuit breaker; agents skip this item until a human clears it")
+                  (dict "name" "agent/arbitrate" "color" "d93f0b" "description" "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)")
                   (dict "name" "agent-budget/xs" "color" "c5def5" "description" "Estimator cap-tier override: xs")
                   (dict "name" "agent-budget/sm" "color" "c5def5" "description" "Estimator cap-tier override: sm")
                   (dict "name" "agent-budget/md" "color" "c5def5" "description" "Estimator cap-tier override: md")

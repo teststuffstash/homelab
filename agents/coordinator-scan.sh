@@ -13,7 +13,8 @@
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
 # `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
 # report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
-# boundary (docs/agents/merge-path.md). Still v3 territory: red-beyond-T (needs checks:read). The
+# boundary (docs/agents/merge-path.md). red-beyond-T = the ci-red-stale clause (guarded checks
+# probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). The
 # `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
 # schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
 # -n agent-coordinator -p '{"spec":{"suspend":false}}').
@@ -275,7 +276,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
     prs="$(printf '%s' "$prsjson" | jq -r '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]')"
     # ADR-094 units: each predicate row IS an action class — (clause, repo, item), the LLM never picks.
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
       # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
@@ -286,7 +287,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
     done
-    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
       units="${units}merge-conflict|${repo}|pr-${u}\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ($L|index("major")) and (.autoMergeRequest==null) and (.reviewDecision!="CHANGES_REQUESTED") and (($L|index("merge-conflict"))|not))|.number'); do
@@ -332,6 +333,43 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
     fi
+    # arbitrate (FU-086 / MP-G04, built 2026-07-27): the review reflex labels a rounds-exhausted
+    # PR `agent/arbitrate` (escalation, NOT anomaly — agent/error stays for impossible states).
+    # The coordinator is the designed tie-breaker: one unit per labeled PR; the item session
+    # rules per the escalation table (brief §arbitrate).
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")))|.number'); do
+      units="${units}arbitrate|${repo}|pr-${u}\n"
+    done
+
+    # ci-red-stale (FU-086 / MP-G01, built 2026-07-27): an ARMED PR that is CI-red and QUIET for
+    # > RED_STALE_HOURS (default 4) is invisible to the whole merge path (updater + reflex skip
+    # red) — the timer nobody owned. Guarded probe: statusCheckRollup needs checks:read; a 403 /
+    # bad read SKIPS the clause loudly (rule #6 — never fail INTO a wake). Cap 2/repo/scan;
+    # held while a worker is Running (the fix round IS this unit's in-flight work).
+    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,autoMergeRequest,updatedAt,statusCheckRollup 2>/dev/null)" || red_probe=''
+    if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"$red_probe"; then
+      red_n=0
+      for u in $(printf '%s' "$red_probe" | jq -r --arg cutoff "$(date -u -d "-${RED_STALE_HOURS:-4} hours" +%Y-%m-%dT%H:%M:%SZ)" '
+          .[]|(.labels|map(.name)) as $L
+          | select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not)
+                   and (($L|index("major"))|not) and (($L|index("major/awaiting-human"))|not))
+          | select(.autoMergeRequest != null)
+          | select(.updatedAt < $cutoff)
+          | select([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0)
+          | .number'); do
+        if [ -n "$wip_busy" ]; then
+          orphans="${orphans}[$repo] ⏳ ci-red-stale held (worker Running in ${repo} — the fix round owns it):\n  PR #${u}\n"
+          continue
+        fi
+        if [ "$red_n" -lt 2 ]; then
+          units="${units}ci-red-stale|${repo}|pr-${u}\n"
+          red_n=$((red_n+1))
+        fi
+      done
+    else
+      echo "  [$repo] PROBE_FAILED reading check rollups — ci-red-stale clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
+    fi
+
     # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
     # but still carrying `agent/in-progress` is a loop nobody closed — outcome unverified, label
     # stale, and the merged PR's review `Follow-ups:` bullets die in the comment. Emit ONE unit
@@ -412,7 +450,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     unit=""
     # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
     # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
-    for clause in c4c5-redispatch changes-requested merge-conflict unarmed-major merged-closeout queued-dispatch; do
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major ci-red-stale merged-closeout queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done

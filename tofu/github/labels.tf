@@ -48,6 +48,10 @@ locals {
     # automation skips an item carrying it until a human removes it. Pre-created via gh on the
     # label_repos 2026-07-12 — import before apply (see header).
     "agent/error" = { color = "b60205", description = "Automation anomaly — circuit breaker; agents skip this item until a human clears it" }
+    # FU-086 arbitrate (2026-07-27): rounds-exhausted escalation — coordinator tie-break, NOT an
+    # anomaly. The reflex also `gh label create --force`s it at trip time (belt), so a missing
+    # apply never blocks the escalation.
+    "agent/arbitrate" = { color = "d93f0b", description = "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)" }
   }
 
   # Repos that carry the agent state-machine + merge-path labels as code — a repo can be managed in

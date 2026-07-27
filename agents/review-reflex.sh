@@ -213,6 +213,7 @@ EOF_C9
       | select(.isDraft | not)
       | select(([ .labels[]?.name ] | index("automerge")) | not)
       | select(([ .labels[]?.name ] | index("agent/error")) | not)
+      | select(([ .labels[]?.name ] | index("agent/arbitrate")) | not)
       | select(.autoMergeRequest != null)
       | select(.mergeStateStatus != "DIRTY")
       | select((.mergeStateStatus != "BEHIND") or reviewable_again)
@@ -244,13 +245,30 @@ EOF_C9
   # removes the label to resume automation. Label add failing (missing label/scope) is logged loud
   # every tick on purpose — the dispatch is still skipped, and the exporter's AgentReviewLoop alert
   # (github_pull_request_reviews_recent) is the independent backstop.
-  if [ "$v_head_approved" -ge 1 ] || [ "$v_head" -ge 2 ] || [ "$v_total" -ge "$ROUNDS_MAX" ]; then
-    log "[$repo] BREAKER on #$pick (verdicts: total=$v_total at-head=$v_head approved-at-head=$v_head_approved, max=$ROUNDS_MAX) — agent/error, NOT dispatching"
+  # FU-086 arbitrate split (MP-G04, 2026-07-27): ROUNDS-EXHAUSTED is an ESCALATION, not an
+  # anomaly — the coordinator is the designed tie-breaker (merge-path.md escalation table), so it
+  # gets `agent/arbitrate` (scan-actionable: the arbitrate clause dispatches an item session).
+  # The two IMPOSSIBLE-STATE signatures (approval at head / duplicate verdicts at head) stay
+  # `agent/error` — those mean the MACHINERY misbehaved, human-first.
+  if [ "$v_head_approved" -ge 1 ] || [ "$v_head" -ge 2 ]; then
+    log "[$repo] BREAKER on #$pick (verdicts: total=$v_total at-head=$v_head approved-at-head=$v_head_approved) — agent/error, NOT dispatching"
     if gh pr edit "$pick" --repo "$slug" --add-label "agent/error" >/dev/null 2>&1; then
-      gh pr comment "$pick" --repo "$slug" --body "AGENT_ERROR: review-reflex circuit breaker tripped — this PR was selected for review with an impossible state (bot verdicts: ${v_total} total, ${v_head} since the newest commit, ${v_head_approved} of those approvals; rounds cap ${ROUNDS_MAX}). Automation now skips this PR. A human: inspect the review thread + reflex logic, then remove the \`agent/error\` label to resume." >/dev/null 2>&1 \
+      gh pr comment "$pick" --repo "$slug" --body "AGENT_ERROR: review-reflex circuit breaker tripped — this PR was selected for review with an impossible state (bot verdicts: ${v_total} total, ${v_head} since the newest commit, ${v_head_approved} of those approvals). Automation now skips this PR. A human: inspect the review thread + reflex logic, then remove the \`agent/error\` label to resume." >/dev/null 2>&1 \
         || log "[$repo] WARN: breaker comment on #$pick failed"
     else
       log "[$repo] WARN: could not add agent/error to #$pick (label missing on repo? token scope?) — dispatch still skipped"
+    fi
+    continue
+  fi
+  if [ "$v_total" -ge "$ROUNDS_MAX" ]; then
+    log "[$repo] ROUNDS EXHAUSTED on #$pick (${v_total} bot verdicts ≥ cap ${ROUNDS_MAX}) — agent/arbitrate (coordinator tie-break), NOT dispatching"
+    gh label create "agent/arbitrate" --repo "$slug" --color "d93f0b" --force \
+      --description "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)" >/dev/null 2>&1 || true
+    if gh pr edit "$pick" --repo "$slug" --add-label "agent/arbitrate" >/dev/null 2>&1; then
+      gh pr comment "$pick" --repo "$slug" --body "ARBITRATE: ${v_total} bot review verdicts on this PR (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+        || log "[$repo] WARN: arbitrate comment on #$pick failed"
+    else
+      log "[$repo] WARN: could not add agent/arbitrate to #$pick — dispatch still skipped"
     fi
     continue
   fi

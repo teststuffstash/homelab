@@ -263,11 +263,16 @@ _Last updated: 2026-07-16._
       (`track/*` ≤1 in-progress per lane), repo dispatchable (claim `fixerRepos` — context-only
       repos report as visible ⚠, never dispatch), capacity (subscription-latch pre-spawn).
       Acceptance: a deliberately stale unit (merged PR#53 as changes-requested) re-read live,
-      exited clean, fixed only its own item's label drift (#42 → agent/done). STILL OPEN: the
-      `arbitrate` clause (rounds-exhausted/flip-flop detection as a unit), the FU-085 compound
+      exited clean, fixed only its own item's label drift (#42 → agent/done). **arbitrate + red-beyond-T SHIPPED 2026-07-27 (MP-G01/G04 closed — the FSM gap
+      register is now empty of open gaps):** the reflex splits rounds-exhausted (escalation →
+      `agent/arbitrate`, a new state label in labels.tf + the Composition taxonomy + create
+      --force at trip time) from impossible-state (anomaly → agent/error); the scan emits
+      `arbitrate` units + `ci-red-stale` units (guarded statusCheckRollup probe, 403 skips
+      loudly, cap 2/repo, 4h quiet threshold, WIP-held); plays in the brief (§arbitrate =
+      the meta-4 tie-break doctrine; §ci-red-stale). STILL OPEN: the FU-085 compound
       (Sensor submits item units directly; cron sweep emits only missed units), the coordinator
       cron relax `*/10 → */30` (edge proven through meta-9/10; consolidated here from FU-084(b)
-      2026-07-25), red-beyond-T as a scan predicate (inherited from FU-050 on its archival —
+      2026-07-25 its archival —
       the github-exporter's CI metrics carry the out-of-band half), lifting WIP>1
       (lane-parallel dispatch — FU-088 gates are in), janitor-tick cron demotion. Original spec:
       scheduling predicates were: lane free, deps closed (FU-087), repo dispatchable (claim

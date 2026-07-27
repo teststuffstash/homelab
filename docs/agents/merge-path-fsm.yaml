@@ -160,6 +160,34 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "merged-closeout. clause" }
     incidents: ["MP-G03 origin: #52/#55/#47 label flips + harvest all manual through meta-9..11"]
 
+  - id: MP-T11
+    name: arbitrate — rounds-exhausted escalation
+    owner: review reflex labels agent/arbitrate → scan arbitrate unit → coordinator item session
+    when: "bot verdicts ≥ ROUNDS_MAX ∧ NOT an impossible-state signature (those stay agent/error)"
+    status: guarded
+    guards:
+      - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
+        anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
+      - desc: "reflex pick excludes agent/arbitrate (no re-trip loop)"
+        anchor: { file: agents/review-reflex.sh, pattern: 'index\("agent/arbitrate"\)' }
+      - desc: "scan emits arbitrate units; sibling clauses exclude the label"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'arbitrate\|' }
+      - desc: "the play: re-dispatch-with-clarification / close-not-mergeable / escalate (meta-4 doctrine)"
+        anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
+    incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
+
+  - id: MP-T12
+    name: red-beyond-T detection → judgment
+    owner: scan ci-red-stale clause (guarded checks probe) → coordinator item session
+    when: "armed ∧ CI-red ∧ quiet > RED_STALE_HOURS (4h) ∧ no Running worker"
+    status: guarded
+    guards:
+      - desc: "guarded statusCheckRollup probe — a 403/bad read SKIPS the clause loudly (rule #6), cap 2/repo/scan"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red-stale" }
+      - desc: "the play: fix round with the failing log in context / park / close; red-master = platform incident, not a fix round"
+        anchor: { file: agents/coordinator/README.md, pattern: "ci-red-stale. clause" }
+    incidents: ["MP-G01 origin: #58's red e2e needed a MANUAL meta round dispatch (2026-07-21)"]
+
   - id: MP-T09
     name: breaker trip and clear
     owner: any layer (reflex counts / reviewer STEP-0 / worker recipe / exporter alerts / human)
@@ -171,19 +199,6 @@ transitions:
     incidents: ["2026-07-21 ×3 (two correct fires, one misfire → MP-T07 recipe exception)"]
 
 gaps:
-  - id: MP-G01
-    name: "red-beyond-T has no owner"
-    detail: "A red armed PR with no review sits invisible: updater skips it, reflex skips it, the
-      scan emits no ci-red unit (needs checks:read at scan level — 'v3 territory'). Live: #58's
-      red e2e needed a MANUAL meta round dispatch (2026-07-21). Design says 'reflex labels →
-      coordinator decides' — nothing implements the timer."
-    fu: "FU-050 v3 note in coordinator-scan.sh header; promote when the next red PR stalls"
-  - id: MP-G04
-    name: "arbitrate (flip-flop / rounds-exhausted) is breaker-only"
-    detail: "The escalation table's tie-break rows exist as ROUNDS_MAX breaker counts, not as a
-      scan-emitted arbitrate unit — the coordinator never gets the structured tie-break dispatch
-      ADR-094 specifies."
-    fu: "FU-086 (remaining: the arbitrate clause)"
   - id: MP-G05
     name: "belt-3 cannot compute since-head"
     detail: "The exporter PAT can't read commit objects, so AgentReviewLoop uses a trailing-1h

@@ -27,6 +27,7 @@ rather than a rewrite. Until then, "the engine" is this brief + your judgement.
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
+| `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
@@ -315,6 +316,37 @@ job, in order (re-read live state first, exit clean if someone already closed it
    spec ID or key phrase); say which you skipped and why in the closing comment.
 4. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
    harvested (links), anything skipped.
+
+## The `arbitrate` clause (FU-086 / merge-path MP-G04, built 2026-07-27)
+
+The reflex labels a PR `agent/arbitrate` when its bot-verdict count hits ROUNDS_MAX — a
+worker↔reviewer loop that will not converge unaided. This is YOUR tie-break duty (the meta-4
+doctrine, merge-path.md escalation table). Re-read live state first (a human may have ruled).
+Read the diff + the whole review thread, then rule — exactly one of:
+
+- **Re-dispatch with clarified instructions**: the loop is stuck on a misunderstanding you can
+  name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
+  round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
+  into the worker's context. This RESETS nothing — if it comes back a third time, escalate.
+- **Close as not-mergeable**: master is better off without it. Close the PR with the reasoning,
+  relabel the issue `agent/queued` only if a fresh attempt with a re-scoped issue makes sense
+  (edit the issue first), else `agent/blocked` + why.
+- **Escalate**: genuinely ambiguous / policy-level → `agent/blocked` + one comment framing the
+  decision for the human. Leave `agent/arbitrate` in place (the label pair records the path).
+
+Never re-dispatch the reviewer directly from this play — fix rounds re-enter the reviewable
+path on their own once new content lands.
+
+## The `ci-red-stale` clause (FU-086 / merge-path MP-G01, built 2026-07-27)
+
+An ARMED PR that is CI-red and quiet for >4h is invisible to the whole merge path (updater and
+reflex both skip red — by design). The scan's guarded checks probe emits it to you. Re-read
+live state; then rule: **re-dispatch a fix round** on the PR's branch with the failing check's
+log excerpt in context (the usual case — a worker's own Gate-A escape or a flaky base);
+**park** it (`agent/blocked` + why) when the red is environmental and a human must act; or
+**close** per the not-mergeable rule above. If CI is red because master itself is broken,
+that's a platform incident — say so on the PR and stop (the responder/operator lane owns
+master health, not a PR fix round).
 
 ## Dependency major bumps (coordinator-owned, NOT the review reflex)
 
