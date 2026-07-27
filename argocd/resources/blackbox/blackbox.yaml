@@ -1,0 +1,141 @@
+# blackbox-exporter (FU-099) — synthetic endpoint monitoring. Born from the meta-11 outage:
+# both mcp replicas served only 5xx for 13h (pods Ready on tcpSocket) and NOTHING alerted.
+# This is the dumb seconds-belt: "does the front answer HTTP at all" — the deep product-contract
+# probe (tools/call level) is the FU-102 prober's job, and the app-side readiness fix stays the
+# guard (fleet#152/#157). Alert descriptions are SYMPTOMS (agent-observability rule).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-config
+  namespace: monitoring
+data:
+  blackbox.yml: |
+    modules:
+      http_2xx_lan:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: ip4
+          follow_redirects: true
+      # MCP gateway aliveness: a JSON-RPC initialize POST. 401 is a PASS — it proves the gateway
+      # PROCESS answered (auth-gate before the stdio child); the outage signature was 5xx/503
+      # from HAProxy over dead children. The child-exercising tools/call check is the PROBER
+      # (FU-102), which carries credentials; this belt deliberately carries none.
+      mcp_post:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: ip4
+          method: POST
+          headers:
+            Content-Type: application/json
+            Origin: https://mcp.oracle.teststuff.net
+          body: '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"blackbox-fu099","version":"1.0"}}}'
+          valid_status_codes: [200, 400, 401, 403, 406]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels: { app: blackbox-exporter }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: blackbox-exporter }
+  template:
+    metadata:
+      labels: { app: blackbox-exporter }
+    spec:
+      containers:
+        - name: blackbox-exporter
+          image: quay.io/prometheus/blackbox-exporter:v0.27.0
+          args: ["--config.file=/etc/blackbox/blackbox.yml"]
+          ports:
+            - { name: http, containerPort: 9115 }
+          volumeMounts:
+            - { name: config, mountPath: /etc/blackbox }
+          readinessProbe:
+            httpGet: { path: /-/healthy, port: 9115 }
+          resources:
+            requests: { cpu: "20m", memory: "32Mi" }
+            limits: { memory: "128Mi" }
+      volumes:
+        - name: config
+          configMap: { name: blackbox-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blackbox-exporter
+  namespace: monitoring
+  labels: { app: blackbox-exporter }
+spec:
+  selector: { app: blackbox-exporter }
+  ports:
+    - { name: http, port: 9115, targetPort: 9115 }
+---
+# Probe targets. Ownership feeds the responder's routing precedence: the RULES below stamp
+# stack labels; FU-104 will render per-stack probes+rules from the AgentStack claim instead.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: lan-fronts
+  namespace: monitoring
+spec:
+  jobName: blackbox-lan
+  interval: 60s
+  module: http_2xx_lan
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - https://grafana.teststuff.net
+        - https://argo.teststuff.net
+        - https://transcripts.local.teststuff.net
+        - https://specs.oracle.teststuff.net
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: mcp-gateway
+  namespace: monitoring
+spec:
+  jobName: blackbox-mcp
+  interval: 60s
+  module: mcp_post
+  prober: { url: blackbox-exporter.monitoring.svc:9115 }
+  targets:
+    staticConfig:
+      static:
+        - https://mcp.oracle.teststuff.net/mcp
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blackbox
+  namespace: monitoring
+  labels: { app: blackbox-exporter }
+spec:
+  groups:
+    - name: blackbox
+      rules:
+        # Oracle-owned endpoints: explicit stack label = the responder's routing precedence
+        # (explicit label wins over namespace derivation — roles.md §responder).
+        - alert: EndpointProbeFailing
+          expr: probe_success{instance=~"https://(mcp|specs)\\.oracle\\..*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+            stack: oracle
+          annotations:
+            summary: "Synthetic probe failing: {{ $labels.instance }}"
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
+        - alert: EndpointProbeFailing
+          expr: probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Synthetic probe failing: {{ $labels.instance }}"
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
