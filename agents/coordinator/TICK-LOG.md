@@ -1188,3 +1188,17 @@ dispositioned; #47 (the one real work item) closed only after the mirror PVC rea
 — the expansion was blocked by Longhorn bulk-tier allocation (wk-02 231/235Gi), resolved by
 accepting recorded co-location for the rebuildable cache. InfoInhibitor null-routed beside
 Watchdog.
+
+### 2026-07-27 — meta-12: a heartbeat-length session — sleep delegation + the gauge that was never watching
+Short arc, closed same day. (1) `*.sleep.teststuff.net` delegated per ADR-092 (wildcard cert,
+sleep-gw `3.26↔40.26`, FRR cycled + 16 routes verified, garage ReferenceGrant synced, SERVICES.md
+row un-staled to LIVE) — sleep-iac#22 carries the stack half; the sleep spec-bug queue (#39-47,
+from merged sleep#38) landed in the same hour. (2) Shutdown sweep caught a standing belt hole:
+`github_agent_issue_labels` rides `/search/issues`, and the REST Search API **silently omits
+private repos under the fine-grained PAT** — no error, poll "fully successful", 30d of history
+show the gauge never once saw oracle-fleet/sleep-tracking. AgentQueueStalled has only ever
+watched the public repos → FU-108 (fix = count labels in the GraphQL walk the PAT already does).
+Lesson, same family as the hollow-200 and the false-green grep: **a probe that returns cleanly
+is not a probe that looked** — verify a belt by making it SEE something at least once
+(`max_over_time(...) > 0` while known work is queued), not by its error counter staying zero.
+FU-088 latch lifted mid-session; #24's review dispatched — the FU-096 tail runs itself from here.

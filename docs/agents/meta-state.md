@@ -3,7 +3,11 @@
 One bullet per pending meta-coordinator chain with its NEXT concrete step; delete bullets when
 done (TICK-LOG carries history — this file carries only what a fresh session must pick up).
 
-_Session meta-12 resumed 2026-07-27 ~13:20Z on the heartbeat (fresh session; both watches re-armed)._
+_Session meta-12 ENDED 2026-07-27 ~13:10Z (operator-directed stop; watches stopped). Sleep
+`*.sleep` delegation applied+verified (64c781f); sleep spec-bug queue (#39-47) + sleep-iac#22
+are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispatched — FU-096
+tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
+before trusting AgentQueueStalled)._
 
 - **FU-096 chain (ACTIVE)**: operator flipped both devbox-cache ghcr packages PUBLIC (verified
   by anonymous manifest probe 13:20Z — HTTP 200 on oracle-fleet + sleep-tracking). In-pod

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-108**.
+  Next free id: **FU-109**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -192,6 +192,22 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
+
+- [ ] **FU-108** — **Queue-liveness gauge is blind to private repos — replace the exporter's
+      Search-API call** (found 2026-07-27 shutting down meta-12: 11 `agent/queued` issues live,
+      gauge showed only `sleep-iac=1`). `collect_agent_issues()` uses `/search/issues`, and the
+      REST **Search API silently omits private-repo results under the fine-grained PAT** (no
+      error — `errors_total` untouched, poll "fully successful"); GraphQL PR queries and plain
+      REST on the same repos work fine under the same token. 30d Prometheus history confirms
+      `github_agent_issue_labels` has NEVER emitted a series for oracle-fleet/sleep-tracking
+      (both private) — so `AgentQueueStalled` (FU-091, born from the 3-day stall) has only ever
+      watched the public repos. Fix shape: drop search; count `agent/*` labels from a per-repo
+      source the PAT already reads — cheapest is a `labels(first:…)` addition to the existing
+      GraphQL issue/PR walk (0 extra calls), else per-repo REST
+      `/repos/{org}/{r}/issues?state=open&per_page=100` (~10 calls/poll). Verify: gauge shows
+      the private-repo counts within one poll; `max_over_time(...{repo="oracle-fleet"}[1h]) > 0`
+      while anything is queued there. Same class as FU-063 (PAT-blind data path, exporter-side
+      join fixed it).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
