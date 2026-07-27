@@ -210,21 +210,7 @@ _Last updated: 2026-07-16._
       contract, zero opinions in briefs. Probe content rule from meta-11: readiness/probes must
       exercise the deepest path (schema version, not `SELECT 1`, never tcpSocket-on-parent) —
       also a k8s-prod lens entry (FU-101). Relates FU-099, FU-044, ADR-085.
-- [ ] **FU-105** — **Researcher/planner role** (operator 2026-07-27). Consumers in order:
-      sleep spec retrofit (FU-095's spec-creation directive — authored AND reviewed by multiple
-      large LLMs), then IdP greenfield requirements research (EITS/best-practices — whose output
-      seeds the FU-101 e-ITS lens). dispatch-on-goal (human-queued `goal` issue, FU-090(c)
-      shape, budget on the issue); model = reasoning tier + dual-model review rounds (FU-095
-      rules); output = spec PRs through the codeowner gate; rounds-max breaker. **Boundary is
-      the new machinery: open-web egress** — a `research` egress profile on the claim
-      (proxy-routed, logged) or claude-harness server-side WebSearch (only WebFetch needs the
-      broad dial); safe because the pod holds NO cluster creds and a spec-branch-only git token.
-      `roles.md`. **First mode BUILT 2026-07-27** (roles.md has the inventory): sleep-tracking
-      `.agents/research.yaml` + `goal` label + goal issue sleep-tracking#36 (the FU-095 spec
-      retrofit), claim claudeTier (sleep-iac#21); un-armed PR = the human gate (no CODEOWNERS
-      ruleset on sleep yet); dispatch operator-manual until FU-090(c). OPEN GAPS: git token is
-      the standing per-repo broker token (spec-branch-only narrowing not built); `goal` label
-      is gh-created, graduates into the claim labels when sleep repos go claim-owned (FU-068).
+
 - [ ] **FU-106** — **Infra-fixer role: the -iac wrapper devops worker** (operator 2026-07-27;
       the provider-side PR — new secret ref/bucket/config — had no author every time). Design
       RULED by the target-agnostic-chart constraint (platform-and-stacks.md §Composition axes,
@@ -634,10 +620,11 @@ _Last updated: 2026-07-16._
       Renovate-majors piloting on sleep is NOT this item — that's FU-046's existing lane.
       Prereqs: FU-080 sleep graduation (+ FU-044 before unattended deploys); relates ADR-077,
       ADR-081, FU-057, FU-062 (model-routing.md is the umbrella doc).
-      **Spec-creation directive (operator 2026-07-25):** the FIRST sleep specs are authored AND
-      reviewed by multiple large LLMs — the point of that pass is finding bugs/gaps in the
-      system, not documenting existing behavior; this is the natural first consumer of the
-      dual-model review leg. **(2026-07-27: the ROLE executing this — boundary incl. open-web
+      **Spec-creation directive (operator 2026-07-25): EXECUTED 2026-07-27** via the FU-105
+      researcher mechanism (claude+opus authored, sonnet+Fable reviewed) — spec PR
+      sleep-tracking#38 (9 pages, 17 ⚖, 9 suspected bugs, 2 code-verified) awaits the HUMAN
+      merge; harvest the 9 Follow-ups bullets as issues post-merge (tz-ignored + snore-only
+      data-loss first). **(2026-07-27: the ROLE executing this — boundary incl. open-web
       egress, dispatch, breakers — is FU-105 researcher/planner; this item keeps the model
       rules + evidence legs.)** Test-tier terminology ruled: **"system testing"** = logic against
       real components in kind (Garage + ingester + Grafana + Playwright, ADR-082 shape);

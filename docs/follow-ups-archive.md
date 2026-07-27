@@ -25,6 +25,18 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   alert → homelab#44 in ~30s; dedup query returns the live issue; Alertmanager reload verified.
   Graduation dials (LLM triage behind the same edge, per-stack routing, remediation whitelist)
   recorded in roles.md §responder — options, not loose ends.
+- **FU-105** *(archived 2026-07-27, same day as filed)* — **Researcher/planner role: first mode
+  BUILT + RUN E2E.** sleep-tracking `.agents/research.yaml` + `goal` label + goal issue #36 →
+  `agent-session --harness claude --model opus --recipe .agents/research.yaml` (kata ride,
+  server-side WebSearch, no egress change) → spec PR sleep-tracking#38: 9 spec pages, 8 SLP-*
+  ID areas, **17 ⚖ ambiguities + 9 suspected bugs** (2 independently code-verified: cfg.tz
+  never reaches keying; repo dashboard 6×rawSql/0×queryText), ci green, 806s/109 turns on
+  subscription. Dual-model review contract ran: sonnet bot APPROVED + Fable second-pass;
+  HUMAN merge = the gate. Machinery lesson paid live: finalize's arm-at-open armed the
+  human-gated PR → `--no-arm` (launcher-derived from research* recipes, ADR-094) +
+  agent-runtime#23 `AGENT_ARM_PR=0` + C9 skips `research/*` branches. Machinery inventory +
+  open dials (FU-090(c) dispatch graduation, spec-branch token narrowing) live in roles.md
+  §researcher.
 - **FU-015** *(archived 2026-07-27)* — **Custom ARC runner image, DONE + cycle proven E2E.**
   `docker/arc-runner/` (runner+xz/gh/jq+nix+devbox+nixcache substituter, warm store + KEPT eval
   cache) built by `runner-image.yaml`, self-bumping the `arc-runners.yaml` pin. Measured: homelab

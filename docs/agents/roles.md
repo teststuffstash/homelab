@@ -43,7 +43,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
 | dispatch-on-schedule | cron (level-triggered) | scout; retro (suspended) | prober (FU-102), audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v1 (deterministic, report-only) | responder LLM-triage leg |
-| dispatch-on-goal | human-queued `goal` issue | researcher first mode (operator-dispatched) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
+| dispatch-on-goal | human-queued `goal` issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
 ## Live roles
 
@@ -157,7 +157,10 @@ tier allowed, dual-model worth it) are FU-095's.
   `goal` label + goal issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
   claude server-side WebSearch (no dial change — WebFetch stays blocked and the brief says so).
   Dispatch is operator-manual until FU-090(c) graduates; git token is the standing per-repo
-  broker token (branch-scope narrowing = open gap, noted in FU-105).
+  broker token (branch-scope narrowing = an open hardening dial). **Proven E2E 2026-07-27**
+  (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
+  gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
+  `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
 - **infra-fixer** (FU-106) — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic — §contract/fulfillment in FU-106); input = `values.schema.json` diff (the
   typed infra delta), fulfillment = enriched **bump PR** (chart pin + claim change in ONE -iac
