@@ -386,16 +386,6 @@ _Last updated: 2026-07-16._
       (`agent-<project>-<task>-r<round>`, atomic `kubectl create`); apply the same to
       `reviewer-session.sh` — name from (repo, pr, head-sha8), terminal same-key reap, live
       holder refuses. Relates FU-069, merge-path-fsm.yaml MP-G02.
-- [ ] **FU-100** — **Per-stack REVIEW edge routing (latency).** FU-080 graduated all three stacks;
-      a graduated stack's per-stack review runs via its `review-<stack>` `*/15` cron because the
-      exporter /review EDGE (global `review` Sensor, agent-coordinator SA) can't create reviewer
-      pods in `<stack>-agents` and so DEFERS graduated stacks to the cron (agents/coordinator/
-      review-argo.yaml). Result: correct but up to ~15 min review latency for graduated stacks vs
-      near-instant before. Fix = mirror the /coordinate doorbell's data-driven routing: the exporter
-      emits `{repo,number,loop_ns}` for a graduated repo, and a filtered `review-perstack` Sensor
-      dependency inlines a review Workflow INTO `<loop_ns>` running `reviewer-session.sh --loop-ns`
-      (RBAC: extend the composed sensor-submit Role to `create workflows`, already present for
-      coordinate). Non-blocking — the cron backstop reviews+merges meanwhile. Relates FU-080, FU-085.
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
       breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
       themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers

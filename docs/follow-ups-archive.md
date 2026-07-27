@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-100** *(archived 2026-07-27)* — **Per-stack review edge routing, SHIPPED** (the last FU-080
+  leg). github-exporter `graduated_loop_ns()` (raw `agents/stacks.json`, 600s TTL, fail-soft to the
+  plain POST → global-defer-to-cron) adds `{stack, loop_ns}` to /review POSTs; `review-perstack`
+  Sensor dep (`body.loop_ns` `.+` regex) inlines a review Workflow INTO `<loop_ns>` as
+  `agentstack-loop` running `reviewer-session.sh --loop-ns`; global trigger pinned
+  `conditions: review-dep`. Zero new RBAC (the composed `sensor-submit-coordinate` Role's generic
+  workflows-create covers it). Verified 2026-07-27 by synthetic graduated POST: perstack workflow
+  ran the full chain in `sleep-agents` (broker token → reviewer pod → doorbell) while the global
+  twin deferred; in-pod raw fetch confirmed. `*/15` cron stays as the routing-miss backstop.
 - **FU-073** *(archived 2026-07-26)* — **Pull-through OCI registry mirrors, COMPLETE (ADR-091).**
   `registry-cache` ns + registry:3 pair (docker.io+ghcr) on BGP VIPs `.40.20/.21`, longhorn-bulk
   cache PVCs; docker-mode rides use the dind `registry-mirrors` + `REGISTRY_MIRROR_*` contract with
