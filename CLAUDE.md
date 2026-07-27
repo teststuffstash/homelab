@@ -45,6 +45,7 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `hp-01` (metal, PXE) | 192.168.2.54 | worker + Longhorn (WoL-capable) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted) |
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted) |
+| `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | worker, ephemeral/compute tier (tainted; kata node) |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |

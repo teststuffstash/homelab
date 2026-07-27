@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-112**.
+  Next free id: **FU-113**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -234,6 +234,24 @@ _Last updated: 2026-07-16._
       archived); grouping/reporting = milestones (monthly-retro burndown candidate) and
       sub-issues (spec→bugs + FU-090 harvest lineage, parked until board scale pays).
       Relates FU-086, FU-087 (archived), FU-110 (archived).
+- [ ] **FU-112** — **Agent memory overcommit global-OOMed a node (FU-082 recurring, new
+      trigger)** (2026-07-27 18:39Z, wk-metal-03): the #48 docker ride (k3d-in-dind integration
+      gate) carried correct LIMITS (agent 2Gi + dind 2560Mi, kata) but memory REQUESTS of only
+      2Gi total — the kata VM grows toward limits+overhead (~5.1Gi), the scheduler placed it
+      on ~2Gi free, and the KERNEL global-OOMed the node: longhorn-manager + cilium-agent
+      SIGKILLed as collateral (3 alerts = 1 incident; operator timeline on sleep-tracking#48).
+      The "one docker ride per node" envelope was a comment, not a request. (a) ✅ FIXED
+      same-day (launcher, agents/agent-session.sh): memory requests = limits for BOTH ride
+      modes + dind (CPU stays overcommitted — throttling is safe; RuntimeClass podFixed 512Mi
+      makes scheduler accounting match the real VM). (b) REMAINING — platform-pod OOM posture,
+      the operator's "agents must not be able to kill cilium" ruling: audit worker-node
+      daemons — nothing platform-critical BestEffort (the FU-082 estate discipline), and raise
+      cilium-agent/longhorn-manager memory REQUESTS toward observed usage so their kubelet
+      oom_score_adj drops (the kernel then prefers the overcommitted tenant, not the platform,
+      even in an unforeseen global OOM). (c) note: clearing #48's agent/error breaker = the
+      re-dispatch rides (a); an in-VM dind cgroup OOM (gate too fat for 2560Mi) is the
+      CORRECT residual failure mode — pod fails, node survives. FU-082 (archived 2026-07-25),
+      FU-081, FU-072 lineage.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the

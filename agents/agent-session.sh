@@ -439,8 +439,17 @@ fi
 # ceiling on the 8G laptops (one docker ride per node; kata.tf).
 KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
 AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
+# ⚠ MEMORY requests MUST EQUAL limits (no overcommit) for agent workloads — 2026-07-27
+# incident: the #48 docker ride requested 2Gi total but its kata VM grows to limits (~5Gi
+# incl. RuntimeClass overhead); the scheduler placed it on a node with ~2Gi free and the
+# KERNEL global-OOMed wk-metal-03, SIGKILLing longhorn-manager + cilium-agent as collateral.
+# The "one docker ride per node" envelope (comment above) is only real if requests SAY so.
+# CPU stays overcommitted deliberately: throttling is safe, and cpu=2 requests can't fit
+# 2-core kata nodes.
+AGENT_REQUESTS='{ cpu: "500m", memory: "4Gi" }'
 if [ -n "$DOCKER" ]; then
   AGENT_LIMITS='{ cpu: "2", memory: "2Gi" }'    # heavy lifting moves into the dind sidecar
+  AGENT_REQUESTS='{ cpu: "500m", memory: "2Gi" }'
   KATA_BLOCK=$'  runtimeClassName: kata\n  dnsPolicy: "None"\n  dnsConfig:\n    nameservers: ["192.168.2.1"]'
   # Pull-through mirrors (FU-073, argocd/resources/registry-cache/): docker.io rides the mirror
   # via dockerd registry-mirrors (Hub-only by dockerd design); the ghcr mirror is exported for
@@ -485,7 +494,7 @@ if [ -n "$DOCKER" ]; then
       volumeDevices:
         - { name: docker-lib, devicePath: /dev/docker-scratch }
       resources:
-        requests: { cpu: "500m", memory: "1Gi" }
+        requests: { cpu: "500m", memory: "2560Mi" }  # = limit (no memory overcommit; wk-metal-03 global-OOM 2026-07-27)
         limits:   { cpu: "2",    memory: "2560Mi" }
 DIND
 )"
@@ -661,7 +670,7 @@ ${CLAUDE_ENV}
         capabilities: { drop: ["ALL"] }
         seccompProfile: { type: RuntimeDefault }
       resources:
-        requests: { cpu: "500m", memory: "1Gi" }
+        requests: ${AGENT_REQUESTS}
         limits:   ${AGENT_LIMITS}
       volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}
   volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}
