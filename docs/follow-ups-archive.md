@@ -17,14 +17,17 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   trigger (ASVS: a code-class predicate + first public-endpoint consumer; e-ITS: seeded by the
   FU-105 IdP research output) — not deferred work. Per-stack advisory→blocking knob: build when
   the first lens earns teeth.
-- **FU-103** *(archived 2026-07-27, same day as filed)* — **Responder role v1 LIVE + E2E-proven.**
-  Deterministic, report-only: Alertmanager fan-out route (`continue: true`, tofu/monitoring.tf)
-  → `/alert` webhook (agent-loop EventSource) → `responder` Sensor → `respond` WorkflowTemplate
-  (`agents/coordinator/responder-argo.yaml`) — fingerprint-dedup (`alert-fp:` in open-issue
-  body) + one inert evidence issue per new alert, rateLimit 6/min. Smoke 2026-07-27: synthetic
-  alert → homelab#44 in ~30s; dedup query returns the live issue; Alertmanager reload verified.
-  Graduation dials (LLM triage behind the same edge, per-stack routing, remediation whitelist)
-  recorded in roles.md §responder — options, not loose ends.
+- **FU-103** *(archived 2026-07-27, same day as filed; v2 same day)* — **Responder role LIVE.**
+  v1 (issue-per-alert on homelab) was E2E-proven (synthetic → homelab#44 in ~30s) then
+  REJECTED by the operator same day: machine-rate issue creation pollutes the tracker, and a
+  stack alert belongs on the STACK's -iac, homelab only when the stack needs the platform.
+  **v2 (live)**: Alertmanager fan-out (`continue: true`) → `/alert` → `responder` Sensor →
+  `respond` WorkflowTemplate — per NEW fingerprint ONE inline sonnet triage session
+  (subscription semaphore + FU-088 latch + 12/day cap + 24h fp ledger in the `responder-seen`
+  cm, namespaced RBAC), cheapest-sufficient outcome: report-only → GitOps quick fix on -iac
+  (revert/pin PR, CI-only lane) → ONE inert issue on the stack's -iac/app repo → homelab only
+  for platform ns / needs-platform. Belts: fp-issue search before filing, one-issue-max, no
+  kubectl mutations, loop-smell → stop. Machinery + graduation dials: roles.md §responder.
 - **FU-105** *(archived 2026-07-27, same day as filed)* — **Researcher/planner role: first mode
   BUILT + RUN E2E.** sleep-tracking `.agents/research.yaml` + `goal` label + goal issue #36 →
   `agent-session --harness claude --model opus --recipe .agents/research.yaml` (kata ride,

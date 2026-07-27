@@ -42,7 +42,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 | dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer | infra-fixer (FU-106) |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
 | dispatch-on-schedule | cron (level-triggered) | scout; retro (suspended) | prober (FU-102), audit-pass (FU-101 e-ITS) |
-| dispatch-on-alert | Alertmanager firing | responder v1 (deterministic, report-only) | responder LLM-triage leg |
+| dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
 | dispatch-on-goal | human-queued `goal` issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
 ## Live roles
@@ -136,16 +136,20 @@ tier allowed, dual-model worth it) are FU-095's.
   schedule; edge = deploy doorbell; backstop = cron; key = (endpoint, artifact digest);
   breaker = inert 🌱 issues + rate cap. Detection belts stack: FU-099 blackbox (seconds, dumb)
   → prober (minutes, contract-deep) → responder.
-- **responder** (FU-103) — alert-triggered triage. **v1 machinery LIVE 2026-07-27
-  (deterministic, report-only):** predicate = Alertmanager firing (fan-out route `continue:
-  true` in `tofu/monitoring.tf` → the `/alert` webhook); edge = Sensor `/alert` (third webhook
-  on the agent-loop EventSource) → `respond` WorkflowTemplate
-  (`agents/coordinator/responder-argo.yaml`) — a SCRIPT (no LLM) that fingerprint-dedupes and
-  files ONE evidence issue per new alert (bot-authored → inert, breaker #1; scan 🌱 surfaces
-  it); backstop = none (alerts are level-triggered); key = `alert-fp:<fingerprint>` in the open
-  issue body; capacity = Sensor rateLimit 6/min (no subscription draw in v1). Graduation knobs
-  (NOT built): the LLM triage session behind the same edge, then the remediation whitelist
-  (the FU-090 `selfQueue` pattern).
+- **responder** (FU-103) — alert-triggered triage. **v2 LIVE 2026-07-27 (triage-first —
+  operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
+  predicate = Alertmanager firing (fan-out route `continue: true` in `tofu/monitoring.tf`);
+  edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
+  — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
+  report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)
+  → ONE inert issue on the stack's -iac/app repo → homelab only for platform namespaces or
+  needs-platform (routing = alert namespace → stacks.json); backstop = none (alerts refire
+  ≤3h); key = 24h fp ledger (`responder-seen` cm, namespaced RBAC) + fp-issue search belt;
+  capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
+  cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
+  (inert, breaker #1), loop-smell → report-only stop. Graduation dials (NOT built): imperative
+  remediation whitelist (needs a scoped Role per stack ns), self-queueing filed issues into
+  the fixer loop (the FU-090 `selfQueue` knob).
 - **researcher/planner** (FU-105) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
