@@ -198,6 +198,21 @@ _Last updated: 2026-07-16._
       the private-repo counts within one poll; `max_over_time(...{repo="oracle-fleet"}[1h]) > 0`
       while anything is queued there. Same class as FU-063 (PAT-blind data path, exporter-side
       join fixed it).
+- [ ] **FU-109** — **Tier the subscription-latch threshold by consumer weight** (born 2026-07-27:
+      the sleep rollout sat capacity-stalled 1h16m+ at 5h-utilization 0.83 with a 9-item queue
+      whose WORK is all OpenRouter — only the ~30s sonnet dispatch UNIT needs subscription; the
+      80% deferral treats it like a full review session). FU-088's `ANTHROPIC_UTIL_THRESHOLD` is
+      one global value on the proxy. Shape: per-caller threshold — tiny bounded units (item
+      dispatch, closeout) defer at ~0.90, heavy sessions (review, researcher, retro) keep 0.80;
+      either the latch probe passes its tier (`subscription-latch.sh --tier`, client-side
+      compare against the proxy's raw utilization) or the proxy exposes per-tier verdicts.
+      Coupling to keep: a dispatched worker's PR later wants a subscription REVIEW — dispatching
+      at 0.80-0.90 builds review debt, but reviews defer independently and C4/C5 re-fire, so
+      consistency holds; the tier gap just drains the queue's OpenRouter half while the
+      subscription half waits. Also worth capturing: the meta/operator sessions share the pool —
+      the latch measuring "us" is by design (FU-088), but the Grafana claude-subscription panel
+      should split utilization by consumer (proxy already labels callers?) so a stall like
+      today's is attributable at a glance.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
