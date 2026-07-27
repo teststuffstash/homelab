@@ -13,7 +13,7 @@ spec:
   storageClassName: longhorn-bulk
   resources:
     requests:
-      storage: 10Gi
+      storage: 20Gi # 10Gi filled 2026-07-27 (fresh agent-base builds + the FU-096 devbox-cache artifacts): a full disk TRUNCATES in-flight proxy writes → nodes see layer digest mismatches + 500s, and dead _uploads pile up uncleaned. Purge recipe: rm -rf .../repositories/*/*/_uploads/* in the pod.
 ---
 apiVersion: apps/v1
 kind: Deployment
