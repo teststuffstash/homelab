@@ -5,23 +5,15 @@ done (TICK-LOG carries history — this file carries only what a fresh session m
 
 _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed):_
 
-- **UC-1 agentic arc — OPERATOR BAR MET IN BOTH ENVIRONMENTS (2026-07-27 ~03:45Z).**
-  Kind: deterministic leg CI-gated + agentic leg passed (fixture corpus). Prod: agentic
-  spot-check PASSED on the real corpus — goose+deepseek-v4-flash resolved PS §1 dated
-  01.07.2025 → akt_viide 115052015002, correct window + verbatim text (evidence on fleet#84;
-  session export in the jail scratchpad). En route the probes caught + the loop fixed a real
-  silent outage (schema skew; guards #154/#156/#157/#159 ALL merged same night) and two
-  findings landed: the PROMPT CORPUS IS FIXTURE-SHAPED (AndTS is a fictional act — per-corpus
-  parameterization is the #84 prerequisite, evidenced) and 🌱#160 (act resolution is
-  lyhend-only; titles don't resolve — operator triage). Roll 1 LIVE: jbtlm corpus
-  (sha256:75a7cfc4…, casefold+titles) + server pinned gc019e15 (newest pre-#159). VM + keys
-  cleaned. REMAINING CHAIN: **rsd7z** (start-from=build on the stamping builder g60ef627,
-  Monitor armed, ~5h) → release-corpus workflow_dispatch → ROLL 2 iac PR (new digest + DELETE
-  the values tag pin — server current, schema gate live E2E) → verify (tools/call via jq,
-  NEVER grep — the roll-1 verifier false-greened on a mangled grep pattern) → QUEUE fleet#158
-  (chart /healthz probe) → then the suspended mcp-probe CronWorkflow manifest (operator lane,
-  wants the parameterized prompt corpus first) + #84 harvester via the loop. #109/#160
-  operator-paced.
+- **UC-1 agentic arc + schema arc: CLOSED (2026-07-27 ~09:50Z).** Operator bar met kind+prod
+  (TICK-LOG carries the full story). Roll 2 live: stamped corpus sha256:3e45daea… + current
+  server g60ef627, no pins, #159 gate validating, replicas spread across nodes (6GB
+  ImageVolume per node — rollouts ~15-20 min, size deadlines accordingly). IN THE LOOP:
+  fleet#158 (chart /healthz probe) QUEUED — watch it flow (touches chart+tests only, no
+  codeowner gate expected). OPERATOR-PACED NEXT: triage 🌱#160 (title resolution) + #84
+  prompt-corpus parameterization (the evidenced prerequisite for scheduled prod probing);
+  after #84's corpus is prod-valid, the suspended mcp-probe CronWorkflow manifest in
+  oracle-iac (operator lane) + #84's gap harvester. #109 operator-paced.
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
