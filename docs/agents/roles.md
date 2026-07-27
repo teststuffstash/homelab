@@ -42,8 +42,8 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 | dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer | infra-fixer (FU-106) |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
 | dispatch-on-schedule | cron (level-triggered) | scout; retro (suspended) | prober (FU-102), audit-pass (FU-101 e-ITS) |
-| dispatch-on-alert | Alertmanager firing | — | responder (FU-103) |
-| dispatch-on-goal | human-queued `goal` issue | — (meta-coordinator does this by hand) | researcher (FU-105); meta-coordinator machinery (FU-086/FU-090) |
+| dispatch-on-alert | Alertmanager firing | responder v1 (deterministic, report-only) | responder LLM-triage leg |
+| dispatch-on-goal | human-queued `goal` issue | researcher first mode (operator-dispatched) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
 ## Live roles
 

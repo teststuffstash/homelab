@@ -8,6 +8,23 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-101** *(archived 2026-07-27, same day as filed)* — **Review lenses: first two LIVE +
+  verified.** `agents/lenses/{k8s-prod,helm}.md` (externally-pinned sources + meta-11 incident
+  evidence), selected in-pod by `reviewer-session.sh` — deterministic path+diff predicate,
+  raw-fetch from public homelab, advisory contract inside the lens file, loud skip on fetch
+  failure. Predicate+fetch verified against fleet#106 (chart PR → [helm k8s-prod], 2 briefs
+  attached). ASVS + e-ITS stay DESIGN OPTIONS in roles.md §Lenses, each gated on a concrete
+  trigger (ASVS: a code-class predicate + first public-endpoint consumer; e-ITS: seeded by the
+  FU-105 IdP research output) — not deferred work. Per-stack advisory→blocking knob: build when
+  the first lens earns teeth.
+- **FU-103** *(archived 2026-07-27, same day as filed)* — **Responder role v1 LIVE + E2E-proven.**
+  Deterministic, report-only: Alertmanager fan-out route (`continue: true`, tofu/monitoring.tf)
+  → `/alert` webhook (agent-loop EventSource) → `responder` Sensor → `respond` WorkflowTemplate
+  (`agents/coordinator/responder-argo.yaml`) — fingerprint-dedup (`alert-fp:` in open-issue
+  body) + one inert evidence issue per new alert, rateLimit 6/min. Smoke 2026-07-27: synthetic
+  alert → homelab#44 in ~30s; dedup query returns the live issue; Alertmanager reload verified.
+  Graduation dials (LLM triage behind the same edge, per-stack routing, remediation whitelist)
+  recorded in roles.md §responder — options, not loose ends.
 - **FU-015** *(archived 2026-07-27)* — **Custom ARC runner image, DONE + cycle proven E2E.**
   `docker/arc-runner/` (runner+xz/gh/jq+nix+devbox+nixcache substituter, warm store + KEPT eval
   cache) built by `runner-image.yaml`, self-bumping the `arc-runners.yaml` pin. Measured: homelab

@@ -192,23 +192,7 @@ _Last updated: 2026-07-16._
 
 ## Agents
 
-- [ ] **FU-101** — **Review lenses: external-standard briefs on the reviewer machinery**
-      (operator direction 2026-07-27, the meta-11 SDLC half — nothing in the dev cycle carried
-      k8s-prod practice to the app; all four outage contributors were checklist items). A lens =
-      the built reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard
-      (staleness outsourced; we pin versions, a standard's new release = a re-baseline issue),
-      selected by a deterministic diff-class predicate, ADVISORY first with a per-stack claim
-      knob to blocking. First lenses: k8s-prod (Deployment/probe/chart manifests touched),
-      helm (`charts/`), OWASP ASVS (auth/input code, new public endpoint), e-ITS (stack-level
-      scheduled audit-pass — dissolves the planned "auditor" role). Local platform-specific
-      rules stay incident-evidenced (merge-path-fsm.yaml style), maintained by the retro role.
-      Audit-lane model rules (reasoning tier, dual-model) = FU-095's. Design: `docs/agents/roles.md`
-      §Lenses. Elicit-don't-inject + mechanism>advice rules recorded there. **First two lenses
-      LIVE 2026-07-27:** `agents/lenses/{k8s-prod,helm}.md` (sources pinned; meta-11 incident
-      evidence inline), selected in-pod by `reviewer-session.sh` (deterministic path+diff
-      predicate, raw-fetch from public homelab, advisory contract inside each lens file, fetch
-      failure = loud skip). REMAINING: ASVS (needs a code-class predicate), e-ITS (seeded by
-      FU-105's IdP output), the per-stack advisory→blocking claim knob.
+
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
       lyhend-only resolution catch, 🌱#160). Brief exists (oracle probe-e2e/UC-1); missing =
@@ -217,20 +201,7 @@ _Last updated: 2026-07-16._
       keys (meta-11-proven cell); breaker = inert 🌱 issues (loop-safety #1) + rate cap.
       Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes, contract-deep)
       → FU-103 responder. Composes with FU-044 as its deep post-deploy gate. `roles.md`.
-- [ ] **FU-103** — **Responder role: alert-triggered triage** (meta-11: diagnosis — the
-      stderr-pipe drain, schema-skew root cause — was pure meta-coordinator judgment; no
-      machinery reacts to a firing alert). predicate = Alertmanager firing; edge = Sensor
-      `/alert` (third webhook on the agent-loop EventSource); backstop = none (alerts are
-      level-triggered); key = alert fingerprint + window; boundary = namespace read + issue
-      write, NO remediation initially — report-only evidence bundle → issue; a remediation
-      WHITELIST (restart, ArgoCD rollback) is the graduation knob (FU-090 `selfQueue` pattern).
-      `roles.md`. **v1 machinery LIVE 2026-07-27 (deterministic, report-only — no LLM yet):**
-      Alertmanager fan-out route (`continue: true`, tofu/monitoring.tf, applied + reload
-      verified) → `/alert` webhook on the agent-loop EventSource → `responder` Sensor →
-      `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`): fingerprint-dedup
-      (`alert-fp:` in open-issue body) + ONE evidence issue per new alert on homelab
-      (bot-authored → inert, breaker #1; scan 🌱 surfaces). rateLimit 6/min. REMAINING: the LLM
-      triage session behind the same edge, per-stack issue routing, then the whitelist.
+
 - [ ] **FU-104** — **SLO as claim policy + error-budget deploy gate.** The stack declares
       `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim; the
       Composition renders the FU-099 blackbox probe, burn-rate alerts, the FU-103 alert edge —
