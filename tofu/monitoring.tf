@@ -235,6 +235,12 @@ resource "helm_release" "kube_prometheus_stack" {
               matchers = ["alertname = \"Watchdog\""]
             },
             {
+              # Alertmanager inhibition MACHINERY (kube-prometheus-stack helper), never a work
+              # item — it reached the v1 responder as homelab#51.
+              receiver = "null"
+              matchers = ["alertname = \"InfoInhibitor\""]
+            },
+            {
               receiver = "agent-responder"
               continue = true
             },
