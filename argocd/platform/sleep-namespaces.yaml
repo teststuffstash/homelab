@@ -26,3 +26,18 @@ metadata:
   name: snore-recorder
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
+---
+# FU-106 (2026-07-27): the sleep-iac FIXER namespace — fixer ns == repo by platform convention;
+# the AgentStack Composition renders worker infra into it (SA/keys/CNP) once the claim carries a
+# fixer block. Platform-precreated like its siblings (the tenant deliberately cannot create
+# namespaces). docker=false ⇒ plain runc rides ⇒ baseline enforce is right.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sleep-iac
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

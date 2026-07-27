@@ -31,6 +31,10 @@ spec:
       namespace: sleep-tracking
     - server: https://kubernetes.default.svc
       namespace: snore-recorder
+    # FU-106: the sleep-iac fixer namespace is a tenant destination (worker rides + any future
+    # tenant-owned resources there). Namespace itself stays platform-precreated.
+    - server: https://kubernetes.default.svc
+      namespace: sleep-iac
   clusterResourceWhitelist:
     - group: tf.upbound.io
       kind: Workspace
