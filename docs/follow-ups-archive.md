@@ -27,7 +27,11 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   cm, namespaced RBAC), cheapest-sufficient outcome: report-only → GitOps quick fix on -iac
   (revert/pin PR, CI-only lane) → ONE inert issue on the stack's -iac/app repo → homelab only
   for platform ns / needs-platform. Belts: fp-issue search before filing, one-issue-max, no
-  kubectl mutations, loop-smell → stop. Machinery + graduation dials: roles.md §responder.
+  kubectl mutations, loop-smell → stop. **Full E2E PASSED 2026-07-27 ~12:32Z** (respond-r8sf4):
+  deterministic route computed script-side (oracle-fleet → oracle → oracle-iac), fp belts
+  checked, synthetic identified, outcome (a) report-only chosen, zero side effects; the latch
+  defer leg + ledger dedup verified on the earlier firing. Machinery + graduation dials:
+  roles.md §responder.
 - **FU-105** *(archived 2026-07-27, same day as filed)* — **Researcher/planner role: first mode
   BUILT + RUN E2E.** sleep-tracking `.agents/research.yaml` + `goal` label + goal issue #36 →
   `agent-session --harness claude --model opus --recipe .agents/research.yaml` (kata ride,

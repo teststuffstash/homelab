@@ -136,7 +136,7 @@ tier allowed, dual-model worth it) are FU-095's.
   schedule; edge = deploy doorbell; backstop = cron; key = (endpoint, artifact digest);
   breaker = inert 🌱 issues + rate cap. Detection belts stack: FU-099 blackbox (seconds, dumb)
   → prober (minutes, contract-deep) → responder.
-- **responder** (FU-103) — alert-triggered triage. **v2 LIVE 2026-07-27 (triage-first —
+- **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in `tofu/monitoring.tf`);
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
