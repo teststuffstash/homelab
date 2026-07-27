@@ -8,9 +8,8 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
 - **UC-1 agentic arc + schema arc: CLOSED (2026-07-27 ~09:50Z).** Operator bar met kind+prod
   (TICK-LOG carries the full story). Roll 2 live: stamped corpus sha256:3e45daea… + current
   server g60ef627, no pins, #159 gate validating, replicas spread across nodes (6GB
-  ImageVolume per node — rollouts ~15-20 min, size deadlines accordingly). IN THE LOOP:
-  fleet#158 (chart /healthz probe) QUEUED — watch it flow (touches chart+tests only, no
-  codeowner gate expected). OPERATOR-PACED NEXT: triage 🌱#160 (title resolution) + #84
+  ImageVolume per node — rollouts ~15-20 min, size deadlines accordingly). #158 DELIVERED (#163
+  merged; /healthz readiness verified LIVE in prod, 2/2 Ready) — ALL outage guards enforced. OPERATOR-PACED NEXT: triage 🌱#160 (title resolution) + #84
   prompt-corpus parameterization (the evidenced prerequisite for scheduled prod probing);
   after #84's corpus is prod-valid, the suspended mcp-probe CronWorkflow manifest in
   oracle-iac (operator lane) + #84's gap harvester. #109 operator-paced.
