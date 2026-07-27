@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-099** *(archived 2026-07-27)* — **Blackbox synthetic monitoring LIVE + verified.** DIY
+  blackbox-exporter (argocd/resources/blackbox/, pinned v0.27.0) + Probe CRs: `mcp_post` module
+  (JSON-RPC initialize POST; 401=PASS — credential-free gateway-process aliveness, the 5xx/503
+  outage signature is the target; the child-exercising tools/call check is the FU-102 prober)
+  + cheap GETs on the LAN fronts (grafana/argo/transcripts/specs-oracle). Verified live same
+  hour: probe_success=1 on mcp + grafana. `EndpointProbeFailing` (10m, symptom wording) stamps
+  `stack: oracle` on oracle endpoints — feeds the responder's explicit-label routing; FU-104
+  renders per-stack probes+rules from claims and supersedes the hand list.
 - **FU-096** *(archived 2026-07-27)* — **Stack devbox-cache: DONE, target met.** The stack's CI
   publishes `/devbox.lock` + xdg eval seed + the closure as a signed-upstream `file://` nix
   cache (`devbox-cache.reusable.yml`; both stacks publish, packages public); the launcher

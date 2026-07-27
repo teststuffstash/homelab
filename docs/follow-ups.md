@@ -120,17 +120,7 @@ _Last updated: 2026-07-16._
       app+chart shape is proven (sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
       auto-merged; caller PRs agent-runtime#5 / agent-coordinator#4 merged 2026-07-06; the Renovate
       rollout itself is archived as FU-014).
-- [ ] **FU-099** — **Synthetic (blackbox) endpoint monitoring — no alert fired during a real
-      prod outage** (meta-11, 2026-07-26): both mcp.oracle.teststuff.net replicas served only
-      5xx (dead stdio children, pods Ready throughout — fleet#152/#153 own the app-side guards)
-      and NOTHING alerted — the only detector was a manually-run agentic probe. No FU/ADR
-      covers blackbox/synthetic checks (grep 2026-07-26: blackbox|synthetic|uptime → none).
-      Deliverable: blackbox-exporter (or equivalent) in `monitoring` + Probe/scrape for the
-      public LAN endpoints that carry a product contract — first consumer
-      `mcp.oracle.teststuff.net/mcp` (needs an http POST module: MCP initialize + 200 assert),
-      then the other `*.teststuff.net` fronts (apps, grafana, argo…) as cheap GETs. Alert
-      descriptions = symptoms ("endpoint serving non-2xx for 10m"). Belt, not guard: the
-      app-side readiness fix stays the guard (fleet#152).
+
 - [ ] **FU-097** — **Homelab's own deploy path: the surfaces NOT reconciled by ArgoCD/tofu**
       (operator 2026-07-25, split out of FU-051 — "homelab needs its own follow-up with
       everything not covered by iac"). A merged change to these trees deploys NOTHING today;
@@ -531,8 +521,15 @@ _Last updated: 2026-07-16._
       coordinator-style overseer that watches the ArgoCD app health after a deploy PR merges and, on
       a broken sync/degraded health: **roll back** (revert the `sleep-iac` bump PR — deterministic,
       no LLM needed for this half) or, better, **roll forward** — dispatch a worker against the app
-      repo to fix the breakage. Prereq the operator is doing first: **harden app CI so prod breakages
-      are rare** (the roll-back is the safety net, not the primary control). **Direction: do this
+      repo to fix the breakage. **Deterministic half SHIPPED 2026-07-27:** argocd-notifications
+      (oncePer revision) POSTs a post-sync Degraded app → `/deploy-degraded` edge →
+      `deploy-revert` Sensor/Workflow (agents/coordinator/deploy-revert-argo.yaml, no LLM):
+      reverts the newest `deploy/*` bump merged ≤120m that touches the app's path, as an
+      auto-merging PR (branch + cm-ledger idempotency; non--iac / no-recent-bump / revert-
+      conflict all fail-closed report-only). Roll-FORWARD (worker on the app repo) = the
+      remaining LLM half; the DEEP post-deploy acceptance stays the FU-102 prober (ArgoCD
+      health is a shallow gate — meta-11). Prereq the operator is doing first: **harden app CI
+      so prod breakages are rare** (the roll-back is the safety net, not the primary control). **Direction: do this
       IN-CLUSTER off ArgoCD app-health events, NOT in the GitHub Actions deploy run** — the deploy job
       now ends at "auto-merge armed" (deploy-pin.sh), so post-deploy health/rollback is decoupled from
       CI (e.g. ArgoCD notifications / a small controller watching `Application` health → revert the
