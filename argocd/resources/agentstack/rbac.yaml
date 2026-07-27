@@ -60,6 +60,12 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch, create, update, patch, delete]
+  # FU-104: the Composition composes the SLO Probe + PrometheusRule (blackbox belt) —
+  # Crossplane must hold every composed kind's verbs (the FU-080 workflows/endpoints lesson:
+  # a missing kind grant surfaces as "failed waiting for Informer to sync" on the whole XR).
+  - apiGroups: [monitoring.coreos.com]
+    resources: [probes, prometheusrules]
+    verbs: [get, list, watch, create, update, patch, delete]
   # FU-080 loop-home: the Composition composes the per-stack <stack>-agents Namespace.
   - apiGroups: [""]
     resources: [namespaces]
