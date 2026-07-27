@@ -124,7 +124,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""
+  items=""; orphans=""; units=""; punits=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -143,7 +143,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # but flagged stale (the dependent's premise may have died with it). A direct A↔B cycle →
     # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
     # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
-    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-094 lane predicate
@@ -210,7 +210,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps qpin; do
       [ -n "$qnum" ] || continue
       [ "$qtracks" = "-" ] && qtracks=""
       [ "$qdeps" = "-" ] && qdeps=""
@@ -261,8 +261,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       else
         iss="${iss}  issue #${qnum} — ${qtitle}\n"
       fi
-      units="${units}queued-dispatch|${repo}|issue-${qnum}\n"
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end) ] | @tsv')
+      # FU-110 operator priority = the GitHub issue PIN (`gh issue pin N`): pinned queued issues
+      # dispatch before unpinned — board-native, max 3 pins/repo caps the ladder, zero platform
+      # surface. A taxonomy label was REJECTED: the claim's IssueLabels set is authoritative
+      # ("anything else gets deleted"), so an ad-hoc label self-destructs. All other predicates
+      # (deps, lane, WIP) still apply — a pinned blocked issue stays blocked.
+      if [ "$qpin" = "P" ]; then
+        punits="${punits}queued-dispatch|${repo}|issue-${qnum}\n"
+      else
+        units="${units}queued-dispatch|${repo}|issue-${qnum}\n"
+      fi
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
@@ -463,6 +472,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       continue
     fi
     unit=""
+    # FU-110: pinned queued-dispatch units go FIRST WITHIN their clause — prepending is safe
+    # because the clause loop below greps by clause name, so higher-priority clauses (in-flight
+    # recovery etc.) still win regardless of position.
+    units="${punits}${units}"
     # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
     # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
     for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red-stale merged-closeout queued-dispatch; do
