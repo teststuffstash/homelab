@@ -1116,3 +1116,21 @@ Roll 2 armed at handoff: pin-follow iac#245 → **rsd7z** start-from=build on th
 builder → first user_version-stamped corpus → roll-2 iac PR deletes the values pin (server
 current, gate live E2E) → queue #158 (chart /healthz — held to avoid probing an image that
 lacks the endpoint). VM + ephemeral keys cleaned; evidence on #84.
+
+### 2026-07-27 — meta-11 (cont.): roll 2 closes the schema arc; FU-015 archived on a hardened trigger
+**The schema-skew arc is CLOSED end-to-end.** rsd7z (start-from=build on the stamping builder)
+produced the first `user_version=1` corpus — same 16.4M-provision content as roll 1 (content
+digest unchanged), new file/OCI digest 3e45daea… — released digest-verified, and roll 2
+(iac#250) paired it with the CURRENT server while deleting the values tag pin: targetRevision
+is the only knob again, and the #159 open-time gate now validates every future server/corpus
+pairing. Converged verified: 2/2 replicas on g60ef627 + stamped corpus on DISTINCT nodes
+(#156's spread working — each node pulls its own 6GB ImageVolume; rollouts now take ~15-20min
+of pull, plan deadlines accordingly), dated ps §1 → 115052015002 via jq-parsed check.
+fleet#158 (chart /healthz probe) queued the moment the ordering hazard died. **FU-015
+archived same morning**: the first automated Monday cycle exposed GitHub cron drift (03:00
+fired 06:19; the 06:00 image cron hadn't fired at ALL by 07:30) → hardened to
+trigger-on-lock-merge (a91de64, operator-directed) and the full chain re-proven on it
+(build → self-bump homelab#43 → roll). Transferable: fixed-offset cron pairs guarantee no
+ordering — trigger on the upstream artifact landing. Session steady state at handoff: loop
+queue = #158 only; sprouts #160 + #84's parameterization await operator triage; the
+mcp-probe CronWorkflow manifest (operator lane) wants the parameterized prompt corpus first.
