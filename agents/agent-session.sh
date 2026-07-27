@@ -383,10 +383,11 @@ fi
 # the :latest manifest is anonymously pullable (a missing/PRIVATE package would otherwise fail
 # the whole pod at image-pull — probe-then-mount, degrade loudly to a cold ride). Anonymous is
 # the same auth the kubelet pull uses (no imagePullSecrets on ride pods), so probe ≈ pullable.
-# Docker/kata rides skip it until ImageVolume-under-kata is canaried (runtimeClass owns mounts).
+# Kata rides included: ImageVolume-under-kata canaried green 2026-07-27 (read-only mount
+# readable inside the microVM — both pilot stacks run fixer.docker, so kata IS the common case).
 # AGENT_STACK_CACHE=0 opts out.
 SC_MOUNT=""; SC_VOLUME=""
-if [ -z "$DOCKER" ] && [ "${AGENT_STACK_CACHE:-1}" = "1" ]; then
+if [ "${AGENT_STACK_CACHE:-1}" = "1" ]; then
   SC_IMAGE="ghcr.io/teststuffstash/${PROJECT}/devbox-cache:latest"
   SC_TOKEN="$(curl -fsS --max-time 5 "https://ghcr.io/token?scope=repository:teststuffstash/${PROJECT}/devbox-cache:pull" 2>/dev/null | jq -r '.token // empty')" || SC_TOKEN=""
   if [ -n "$SC_TOKEN" ] && curl -fsSI --max-time 5 -H "Authorization: Bearer $SC_TOKEN" \
