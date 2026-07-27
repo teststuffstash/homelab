@@ -208,14 +208,6 @@ _Last updated: 2026-07-16._
       Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes, contract-deep)
       → FU-103 responder. Composes with FU-044 as its deep post-deploy gate. `roles.md`.
 
-- [ ] **FU-104** — **SLO as claim policy + error-budget deploy gate.** The stack declares
-      `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim; the
-      Composition renders the FU-099 blackbox probe, burn-rate alerts, the FU-103 alert edge —
-      and the teeth: a stack that burnt its error budget gets its auto-merge lane demoted to
-      codeowner-gated until the budget recovers. "Harder to ship something that breaks" by
-      contract, zero opinions in briefs. Probe content rule from meta-11: readiness/probes must
-      exercise the deepest path (schema version, not `SELECT 1`, never tcpSocket-on-parent) —
-      also a k8s-prod lens entry (FU-101). Relates FU-099, FU-044, ADR-085.
 
 - [ ] **FU-106** — **Infra-fixer role: the -iac wrapper devops worker** (operator 2026-07-27;
       the provider-side PR — new secret ref/bucket/config — had no author every time). Design

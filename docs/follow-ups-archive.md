@@ -28,6 +28,16 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   Paid lessons: cp -rf (image 0444 collisions, agent-runtime#24), `$SEED/devbox` optional,
   probe-then-mount ≈ credless kubelet pull, and the mirror-full corruption incident
   (10Gi PVC → truncated layer writes; purge + 20Gi). Store artifact 852M zstd + 75M xdg.
+- **FU-104** *(archived 2026-07-27, same day as filed)* — **SLO as claim policy + teeth: LIVE
+  E2E.** Claim `spec.slo {endpoint, module, availability}` → the Composition renders a blackbox
+  Probe (FU-099 exporter) + stack-labeled `EndpointProbeFailing` (responder routing precedence)
+  + `stack:error_budget_burnt:bool` recording rule + `ErrorBudgetBurnt` (triage:none — the
+  teeth act, triage would restate). Teeth: review-reflex parks a burnt stack's repos (both
+  global + per-stack paths; fail-open on a dead Prometheus). First consumer oracle
+  (oracle-iac#255): composed + rule evaluating (`oracle: burnt=0` verified). Paid lesson (the
+  FU-080 class recurring): every composed KIND needs a crossplane RBAC grant or the whole XR
+  fails on Informer sync. Single-endpoint v1; an `slos` array is natural XRD growth when a
+  second endpoint claims (specs.oracle stays hand-listed in blackbox.yaml until then).
 - **FU-092** *(archived 2026-07-27)* — **Reviewer deterministic-name key, DONE (MP-G02 closed).**
   `reviewer-session.sh` pod name = `reviewer-<project>-<pr>-<headsha8>` (head-sha probe with a
   loud timestamp fallback), atomic `kubectl create` (was `apply` — the silent-adopt
