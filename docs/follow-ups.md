@@ -301,18 +301,6 @@ _Last updated: 2026-07-16._
       ⚠ Deliberately re-opens two standing exclusions — `fixerRepos` context-only (FU-086
       predicate) and "sleep-iac excluded, CI-only deploy repo" — via a distinct dispatch class,
       not by silently flipping them. Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
-- [ ] **FU-107** — **Agents docs refactor, remaining passes** (survey 2026-07-27; roles.md +
-      stale-fix + axes bullets landed same day). Remaining: (a) dedup — FU-088 capacity story
-      told 3× (README/workflow/merge-path), review-edge path 2× (platform-and-stacks/
-      observability), ledger schema 2× (model-routing/observability) — one home + cross-links
-      each; (b) generate the hand-drawn FSM views (workflow.md reconciler list, merge-path.md's
-      two diagrams) from merge-path-fsm.yaml, and the README ADR-table mirror from docs/adr.md
-      (it drifted 10 days missing 093/094); (c) archive the knowingly-superseded tracts
-      (merge-path.md CronJob-era design/rollout/open-questions, workflow.md §MVP + §Triggers
-      polling-first) to history with TICK-LOG refs; (d) move merge-path.md §Scaling model (stack
-      economics) to the stack axis doc; (e) generated tables (agentstack claim-renders from the
-      XRD, stacks-state from `kubectl get agentstacks`) — FU-049 adjacency. Keep meta-state.md's
-      transient-vs-durable discipline as the norm.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch
@@ -596,6 +584,9 @@ _Last updated: 2026-07-16._
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
       build-time discovery for an app repo with no cluster creds may still want a generated static catalog.
+      **Inherited from FU-107 (2026-07-27), same generation class:** agentstack.md's "what a claim
+      renders" table generated from the XRD/Composition, and the stacks-state table from
+      `kubectl get agentstacks` (plus `agents/stacks.json` itself — the original mirror problem).
       Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 

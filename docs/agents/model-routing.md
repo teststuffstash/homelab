@@ -135,8 +135,9 @@ the OpenRouter activity/generation API (already in FU-057's scope for per-reques
 
 ### M7. The model scout (new, small)
 
-A weekly reflex (Argo CronWorkflow sibling of review-reflex, per ADR-093 — the loop reflexes moved
-k8s CronJob → Argo CronWorkflow): diff `/models` against the known set; filter
+The scout is a **role** (dispatch-on-schedule family — machinery inventory in
+[`roles.md`](roles.md)); its routing content stays here. A weekly reflex (Argo CronWorkflow
+sibling of review-reflex, per ADR-093): diff `/models` against the known set; filter
 tools-capable + (free or ≤ price ceiling); run each newcomer on a **canary task** (a small, closed,
 known-good issue — same pattern as the oracle free-tier canary); write the outcome to the ledger.
 Newcomers graduate into chains with evidence, not vibes. Free scout keys want **FU-024**

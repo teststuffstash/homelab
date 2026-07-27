@@ -215,25 +215,10 @@ sleep-tracking/
 
 ## Decisions
 
-Recorded as thin ADRs in [`../adr.md`](../adr.md):
-
-| ADR | Decision | Status |
-|---|---|---|
-| ADR-077 | Agent runtime = **Goose** (in agent-sandbox); meta-harness/egress pattern from Omnigent | proposed (Goose running in practice) |
-| ADR-078 | Isolation layer = **agent-sandbox** (k8s-native), not Omnibox/Istio | accepted (plain Pod until it lands — FU-019) |
-| ADR-079 | **Strict-PR write policy** — agents propose, GitOps applies | accepted |
-| ADR-080 | **Durable git/S3 state is truth; context/vectors/snapshots are cache** (may rise to CONTEXT.md) | accepted |
-| ADR-081 | Per-job identity — minted budget-capped LLM keys + 1h GitHub App tokens; Cilium FQDN + injection proxy | accepted (proxy v1 LIVE 2026-07-09; refined by ADR-087) |
-| ADR-082 | **CI runners = Tofu'd Proxmox VMs** running ephemeral k3d (not privileged ARC, not off-cluster pop-os) | accepted (ci-runner-01 live) |
-| ADR-084 | **Three-layer repo topology + automated deploy** (chart = the deployable unit; `-iac` pins one number) | accepted (live E2E) |
-| ADR-085 | **AgentStack + platform-service XRDs** — mechanism=platform, policy=stack | open direction (AgentStack BUILT — [`agentstack.md`](agentstack.md); service XRDs = FU-049) |
-| ADR-086 | Coordinator write tier **W1: ⚑ spec gap-flags** on open agent PR branches | accepted (W2+ needs its own ADR — FU-059) |
-| ADR-087 | **Opaque-ref creds**: egress proxy resolves LLM refs; git-cred broker mints per-request tokens | accepted (default-on; fallbacks drop with FU-020) |
-| ADR-093 | **Argo Workflows + Events is the loop engine** — reflexes as CronWorkflows, review/coordinate as event-driven Sensors | accepted (LIVE; per-stack since FU-080/FU-100) |
-| ADR-094 | **Item-scoped dispatch** — the scan emits work units, a session judges ONE; dispatch params launcher-owned | accepted (core shipped, FU-086 legs remain) |
-
-> ⚠ This table is a hand-maintained mirror of [`../adr.md`](../adr.md) and drifts (093/094 were
-> missing for 10 days) — treat `../adr.md` as truth; generation is FU-107.
+Recorded as thin ADRs in [`../adr.md`](../adr.md) — the agent-platform range is **ADR-077..082 +
+ADR-084..087 + ADR-093/094**. No mirror table here: the hand-maintained copy that used to sit in
+this section drifted (093/094 missing for 10 days) and was removed 2026-07-27 (FU-107) —
+`../adr.md` is the single source.
 
 ## Open / deferred
 

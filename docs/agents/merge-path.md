@@ -265,25 +265,11 @@ reviews it because it can never become "current").
 
 ### PR lifecycle
 
-```mermaid
-stateDiagram-v2
-    [*] --> Open: worker opens PR + arms auto-merge
-    Open --> Green: ci passes
-    Open --> Red: ci fails
-    Red --> Green: worker/human pushes fix
-    Green --> Behind: master moved
-    Behind --> Green: updater merges master in (ci re-runs)
-    Green --> UnderReview: review reflex picks it (oldest current+green+unapproved)
-    UnderReview --> Approved: reviewer approves
-    UnderReview --> ChangesRequested: reviewer requests changes
-    ChangesRequested --> Green: worker addresses + pushes (re-enters queue)
-    Approved --> Merged: GitHub auto-merge (green ∧ current ∧ approved)
-    Approved --> Behind: master moved in the approval→merge window (rare)
-    Merged --> [*]: branch auto-deleted
-    note right of Behind
-        conflicted PRs stall here by design — flagged, never forced
-    end note
-```
+The state machine lives in ONE maintained place: **[`merge-path-fsm.md`](merge-path-fsm.md)**
+(generated from `merge-path-fsm.yaml`, guard-anchored, lint-checked — the hand-drawn copy that
+used to sit here drifted against it and was removed 2026-07-27, FU-107). Design-narrative
+reading of it: conflicted PRs stall at Behind by design (flagged, never forced), and the
+approval→merge window can bounce a PR back to Behind (rare, self-healing — scenario L).
 
 ## Worked examples
 
@@ -366,83 +352,13 @@ Levers that shrink L before it ever hurts (FU-014, decide at Renovate setup):
   removes 10 of the 12 reviewer runs — but weakens Gate B for supply-chain-shaped changes. Decide
   when FU-014 lands; default to reviewing everything.
 
-## Scaling model — from today to multiple IDP-sized stacks
+## Scaling model
 
-### Per-repo invariant
-
-Per merged PR in steady state: `CI cycles = 1 initial + 1 update` (the update is skipped when
-master hasn't moved) and `reviewer runs = 1`, plus one extra of each per master-interruption that
-lands in an approval→merge window. For a batch of N concurrent PRs *in one repo*:
-
-| N concurrent (one repo) | serializer CI / reviews | blanket CI / reviews |
-|---|---|---|
-| 1 | 1 / 1 | 1 / 1 |
-| 3 | 5 / 3 | 6 / up to 6 |
-| 10 | 19 / 10 | 55 / up to 55 |
-
-This O(N) vs O(N²) difference is *within-repo*; across repos everything composes linearly because
-each repo has its own master, its own updater chain, and its own review queue.
-
-### Platform extrapolation
-
-Reference stack ≈ **IDP** (`/workspace/idp`): TARA-Login fork (Java/Spring), identity-store
-service, passkey component, `idp-iac` → **~4–5 repos**, of which the service repos carry the
-ADR-082 **full-stack ephemeral gate** in CI (k3d bring-up + decision-table suite): call it
-**~20 min/cycle**, vs ~8 min for a lint-and-unit repo. Platform target for sizing: **sleep stack +
-IDP + one more IDP-sized stack ≈ 12–15 agent-target repos.**
-
-Weekly load assumptions (deliberately round; the point is which resource saturates first):
-
-| source | volume/week | reviews | CI cycles |
-|---|---|---|---|
-| agent PRs, ~2 per repo × 14 repos | 28 | 28 | ~50 (initial + update) |
-| Renovate, grouped weekly, ~1.5 PRs per repo | 21 | 21 (if reviewed — see below) | ~40 |
-| re-cycles (interruptions, flakes, ~10 %) | — | ~5 | ~9 |
-| **total** | **~50 merges** | **~54** | **~100** |
-
-Against the three shared resources:
-
-- **Reviewer throughput (the binding constraint).** ~54 reviews × ~4–8 min ≈ **4–7 h of reviewer
-  wall time per week**, all drawn from ONE operator subscription that also feeds the coordinator.
-  Weekly average: fine. The failure mode is the **burst**: Renovate Monday across 14 repos =
-  ~21 reviews in one morning ≈ 1.5–3 h at K=2, and subscription rate-limit windows (5-hour
-  blocks) mean a big enough burst starves the coordinator for the rest of the window. Levers, in
-  order: Renovate **grouping + per-stack schedule staggering** (Mon=sleep, Tue=IDP, …) — flattens
-  the burst for free; **CI-only merges for dep-bump PRs** (the review reflex skips `renovate[bot]`,
-  approval waived per-class — requires making the approval gate label- or author-conditional,
-  i.e. a ruleset bypass for a "deps" App or dropping required-approval on dep PRs; policy decision,
-  weakens Gate B for supply-chain changes); a **second subscription** or paid-API reviewer for
-  overflow (decorrelation doctrine says the reviewer model must stay ≥ author model — an
-  OpenRouter cheap-model reviewer is NOT an acceptable overflow). The serializer already pins
-  reviews to the theoretical floor (1/PR); past that floor, only policy and scheduling help —
-  **no merge-path mechanism can reduce it further**, which is exactly why the O(N²) options are
-  disqualified at this scale (Monday would cost ~200+ reviews instead of ~21).
-- **ARC runner pool.** ~100 CI cycles/week, dominated by the ~20-min full-stack gates ≈ **~25 h
-  of runner wall time**, burstable across the ephemeral compute tier (the tainted ThinkPads) —
-  capacity is fine, but **queueing latency** compounds with serialization: within one busy repo,
-  drain rate ≈ 1 merge per (CI + review) ≈ 25–30 min for a full-stack repo. A 10-PR backlog in
-  ONE such repo takes a working day to drain. Mitigations: FU-015 (warm image, halves the
-  constant), splitting the full-stack gate to run only on the update-cycle (not the initial push)
-  — NOT recommended, it reintroduces skew — or simply accepting that autonomous throughput of
-  ~15–20 merges/day/repo is far above any realistic single-repo demand.
-- **Updater / API.** Free at any plausible scale (one API call per merge). The per-repo workflow
-  file is identical everywhere → extract to a **reusable org workflow** at the 3rd repo, so 15
-  repos = 15 three-line callers, one implementation.
-
-### What breaks first, and what to watch
-
-1. **Reviewer quota on burst days** → stagger Renovate; decide the dep-bump review policy
-   *before* onboarding the second stack.
-2. **Single-repo drain latency** in full-stack-gate repos → FU-015; keep batches small (the
-   coordinator already runs few workers concurrently).
-3. Nothing in the merge mechanics itself — per-repo chains are independent, the reflexes are
-   stateless (level-triggered re-list every tick), and adding a repo = adding a workflow caller +
-   a `protected_repos` entry in `tofu/github/`.
-
-**Out of scope here:** cross-repo *coordinated* changes (e.g. an IDP schema change + the
-sleep-tracking "Others" page consuming it). The serializer lands PRs per-repo; ordering across
-repos is a coordinator/human concern (land provider first, consumer after — standard
-contract-versioning discipline), not a merge-path mechanism.
+Stack economics (per-repo O(N) invariant, IDP-sized platform extrapolation, what saturates
+first) MOVED to [`platform-and-stacks.md`](platform-and-stacks.md) §Stack economics
+(2026-07-27, FU-107) — it is stack-axis sizing, not merge mechanics. The merge-path-relevant
+conclusion stays here: the serializer pins reviews to the theoretical floor (1/PR); past that
+floor only policy and scheduling help, which is why the O(N²) options above are disqualified.
 
 ## Failure modes & edge cases
 
@@ -506,19 +422,11 @@ contract-versioning discipline), not a merge-path mechanism.
   PR; removing it resumes. Budget framing: workers are cost-capped by their per-round OpenRouter
   keys, but reviewer/coordinator sessions ride the flat-rate subscription where no $-cap exists —
   there the budget IS a dispatch bound, which is what the breakers enforce.
-- **Subscription/OpenRouter capacity — the FU-088 dispatch gates** (2026-07-17, after the second
-  429 incident; archived same day). Orthogonal to the breakers above: those bound *how often* a
-  buggy predicate can dispatch, these bound dispatch against the *shared account's headroom*.
-  All subscription launchers (reflex tick step 0a, `reviewer-session.sh` incl. the Sensor path,
-  `coordinator-session.sh`, `agent-session.sh --harness claude`) run
-  `agents/subscription-latch.sh` pre-spawn: defer (report-only, exit 0) when the egress proxy's
-  `GET /anthropic-limit` says limited — a 429 latch OR ≥80% utilization in the 5h/7d window
-  (harvested passively from `anthropic-ratelimit-unified-*` response headers) — or when ≥3
-  subscription-labelled pods are already Running. OpenRouter workers get the account-credit
-  floor instead. Fail-open off-cluster; schedules never suspend — a deferred spawn simply
-  re-probes on the next level-triggered pass. Walkthrough of the deferred-tick flow:
-  [`workflow.md`](workflow.md) §Capacity gates. Alerts: `SubscriptionDispatchLimited`,
-  `SubscriptionWeeklyPoolLow`; dashboard `claude-subscription`.
+- **Subscription/OpenRouter capacity — the FU-088 dispatch gates.** Orthogonal to the breakers
+  above: those bound *how often* a buggy predicate can dispatch, these bound dispatch against
+  the *shared account's headroom*. Every subscription launcher probes the latch pre-spawn and
+  defers report-only. The ONE home of the full story (latch, thresholds, semaphore layering,
+  credit floor, alerts) is [`workflow.md`](workflow.md) §Capacity gates.
 - **Flaky CI** — a flaky red steals the PR's queue slot (next PR gets updated first). Acceptable:
   FIFO is a fairness preference, not a correctness requirement.
 - **Concurrent triggers / locking** — cron tick + wake-up ping firing together must never
@@ -565,59 +473,20 @@ contract-versioning discipline), not a merge-path mechanism.
   mid-push; worst case a merge-commit lands under it and `git pull` resolves (merge, never rebase —
   no rewritten history, no force-push confusion).
 
-## Rollout
+## Rollout — COMPLETE (all four phases shipped by 2026-07-17, ADR-093)
 
-Each phase is independently shippable and reversible (delete the workflow / suspend the CronJob →
-you're back to today's coordinator-driven flow).
+Updater reusable workflow → review reflex → arm-at-open hygiene → Argo-native edge-trigger
+(exporter POST → Sensor → `review` WorkflowTemplate, `*/15` CronWorkflow backstop), extended
+per-stack by FU-080/FU-100 (2026-07-27). The phased plan and the CronJob-era wake mechanics:
+git history (pre-2026-07-17) + TICK-LOG meta-7.
 
-1. **Phase 1 — updater.** Add `.github/workflows/update-pr-branch.yml` to both agent repos
-   (identical file; extract to a reusable org workflow if a third repo appears). Org secrets for
-   the App token mint. *Observable win: behind-PRs stop stalling, even with the coordinator still
-   triggering reviews.*
-2. **Phase 2 — review reflex.** CronJob manifest in `agents/coordinator/` (ns `agent-coordinator`,
-   reuses `coordinator-claude` + `reviewer-git` Secrets + `reviewer-session.sh`) — explicitly part
-   of the coordinator subsystem, not a peer controller. Coordinator brief: replace the mechanical
-   "trigger the reviewer" step with the exception plays from the escalation table (conflict →
-   close + re-dispatch fresh; round limit / flip-flop / stale-red → decide or escalate).
-3. **Phase 3 — hygiene.** `agent-session.sh`: make `gh pr merge --auto --squash` a mandatory
-   post-PR step. Updater labels conflicted PRs. `tofu/github/repos.tf`: leave
-   `allow_update_branch = false` (irrelevant to the API; the UI suggestion stays off).
-4. **Phase 4 — DONE (2026-07-17, ADR-093).** The review reflex is edge-triggered: the
-   github-exporter POSTs each reviewable PR to an Argo Events webhook EventSource → Sensor → `review`
-   WorkflowTemplate ([`../../agents/coordinator/review-argo.yaml`](../../agents/coordinator/review-argo.yaml)),
-   with the `*/15` CronWorkflow as the level-triggered backstop; the reflexes moved from k8s CronJobs
-   to Argo CronWorkflows ([`../../agents/coordinator/reflexes-argo.yaml`](../../agents/coordinator/reflexes-argo.yaml)).
-   The original plan for reaching that end-state, for reference: edge-triggers in escalating order of
-   effort — every *automated* actor already runs in-cluster (worker pod, reviewer pod, ARC runner incl.
-   the updater workflow's job), so each can wake the reflex with a one-line curl to the webhook
-   EventSource as its last step (in the CronJob era this was `kubectl create job --from=cronjob/…`;
-   the reflexes are Argo CronWorkflows now — the doorbell endpoints are the wake path):
-   **no public webhook receiver needed**. A
-   real GitHub webhook (HMAC-verified receiver behind a `cloudflared` tunnel, à la
-   `ha.teststuff.net` but signature-gated since GitHub can't mTLS) is only ever needed to react
-   fast to *human* actions at github.com — latency-tolerant, covered by the poll; build it last
-   if at all. Either way the receiver is a **stateless doorbell**: verify, wake the reflex,
-   which re-lists from GitHub — never act on payload content (deliveries are at-least-once and
-   missable; `workflow.md` §Triggers). Plus: Renovate config per the L-scenario levers (FU-014),
-   FU-015 runner image (halves cycle time).
+## Decisions (formerly open questions — all resolved)
 
-## Open questions
-
-- ~~Review dep-bump PRs with the LLM reviewer, or CI-only?~~ **Resolved (FU-046): a *split by class.***
-  Trivial/digest/dev-dep bumps (Renovate `automerge` label) get **mechanical CI-only approval** (the
-  `renovate-approve` reflex, no reviewer run); **reviewable** bumps (major versions, runtime deps;
-  `deps-review` label) **arm auto-merge** and flow through **this** review reflex (§Scenario S) — the LLM
-  reviewer approves the harmless ones and requests changes on the rest, which spawns a worker to adapt
-  the code (agentic major upgrades). The review reflex must therefore **skip `automerge`-labelled PRs**
-  (they're the mechanical path). This keeps the burst-day reviewer count off the digest noise while still
-  reviewing supply-chain-shaped changes. See [`../renovate.md`](../renovate.md).
-- Squash vs merge for auto-merge: squash keeps master linear and is what the worker arms today —
-  any reason for merge commits on agent PRs? (Default: squash.)
-- Review reflex in-cluster vs a GitHub Actions cron: in-cluster chosen because the reviewer secrets
-  live in ns `agent-coordinator` and must not become GitHub org secrets — and because the reflex is
-  coordinator machinery, so it belongs in the coordinator's namespace and label vocabulary. Revisit
-  only if the cluster/GitHub trust boundary changes. (Realized as an Argo CronWorkflow backstop +
-  Argo Events edge-trigger, ADR-093 — not a k8s CronJob.)
-- The staleness timer T (escalation table): start 24 h, tune from transcripts. The fix-round
-  bound already lives in [`workflow.md`](workflow.md) §Hazards ("max review rounds, e.g. 3") —
-  that stays the single knob; this doc doesn't define its own.
+- **Dep-bump review = split by class (FU-046):** `automerge`-labelled bumps get mechanical
+  CI-only approval (the reflex SKIPS them); `deps-review`/major bumps ride the LLM review path.
+  See [`../renovate.md`](../renovate.md).
+- **Squash** for auto-merge (linear master; what the worker arms).
+- **Reflex runs in-cluster** (reviewer secrets stay in ns `agent-coordinator`, never GitHub org
+  secrets; realized as Argo CronWorkflow + Events edge, ADR-093).
+- **Staleness timer T**: still unowned in code — that's gap **MP-G01** (red-beyond-T, FU-086
+  leg); the fix-round bound stays the single knob in [`workflow.md`](workflow.md) §Hazards.

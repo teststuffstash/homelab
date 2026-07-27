@@ -136,10 +136,9 @@ first. Ranked reality:
    stall into a glance. Highest-leverage speed work = FU-057, not caching.
 2. **Orchestration latency — ~50 min** (then a 5-min review-reflex cron + manual meta-ticks + CI
    cycles). The documented levers apply: hot-tick + CI-green→coordinator ping + webhook edge-trigger
-   ([workflow.md](workflow.md) §Triggers). Since ADR-093 the review path is **event-driven** — the
-   github-exporter POSTs a reviewable PR to an Argo Events webhook → Sensor → `review`
-   WorkflowTemplate (near-instant vs the old `*/5` poll; a `*/15` review-reflex CronWorkflow is only
-   the backstop). Real but second-order.
+   ([workflow.md](workflow.md) §Triggers). Since ADR-093 the review path is **event-driven**
+   (near-instant edge + `*/15` backstop — machinery home: [`roles.md`](roles.md) §reviewer /
+   [`merge-path-fsm.md`](merge-path-fsm.md)). Real but second-order.
 3. **The model — ~48 min of pod compute** (deepseek-v4-flash: 400–1170s LLM loops, and 2 of 4
    rounds *died* to truncation/retry-storms). Cheap per token but slow (many round-trips) and
    error-prone → slow AND wasteful per *successful* issue. The model-health dashboard (below) makes

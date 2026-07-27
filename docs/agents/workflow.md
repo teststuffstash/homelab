@@ -75,18 +75,12 @@ issue/PR lifecycle). Code, approvals, and merges are always delegated (ADR-079),
 transitions run as deterministic reflexes without an LLM turn
 ([`merge-path.md`](merge-path.md) §Reflexes vs judgment).
 
-```
-triaged (labelled, has repro + synthetic data table)  → spawn worker (round 1)
-pr-open                                                → await CI + review
-pr-behind-master                                       → updater reflex brings it current  (merge-path.md)
-ci-green + current + unapproved                        → review reflex dispatches the reviewer  (merge-path.md)
-ci-red | changes-requested                            → spawn worker (round N+1, fresh, PR+comments in)
-ci-green + current + approved                          → GitHub auto-merge completes  (the NL→auto-merge goal)
-cant-repro | max-rounds-exceeded | review flip-flop    → coordinator tie-breaks / escalates to a human
-```
-
-Spawning a round = the existing `agents/agent-session.sh` mechanism (→ an `agent-sandbox` `Sandbox`
-CR once that lands, ADR-078/081).
+The state machine itself is maintained in ONE place — **[`merge-path-fsm.md`](merge-path-fsm.md)**
+(generated, lint-anchored; transitions MP-T01…T09 + gap register). The coordinator's two
+entry/exit arcs around it: `triaged` (labelled, repro + synthetic data table) → spawn worker
+round 1; `cant-repro | max-rounds | flip-flop` → tie-break/escalate to a human. Spawning a
+round = `agents/agent-session.sh` (→ an `agent-sandbox` `Sandbox` CR once that lands,
+ADR-078/081).
 
 ### Capacity gates — a tick vs a hot subscription (FU-088, 2026-07-17)
 
@@ -132,24 +126,20 @@ not redundancy: Argo counts only Argo-run *workflows* (interactive rides and jai
 invisible to it, and one reflex tick can hold two reviewer pods on a single slot), while the
 probe script's proxy verdict + pod-label count see all subscription traffic — Argo provides
 queueing semantics, the latch provides ground truth. ConfigMap semaphores are namespace-scoped,
-so the FU-080 per-stack world needs the DB-backed lock flavor or per-stack pools (decide there).
+so per-stack workflows carry the latch only (decided with FU-080: per-stack capacity =
+subscription-latch, no cross-ns semaphore — the Composition's rendered crons rely on the probe).
 Never suspend a schedule for capacity — `suspend: true` is state that rots.
+**This section is the ONE home of the FU-088 capacity story** — README/merge-path link here.
 
 ### Triggers: polling first, webhooks as an edge-trigger on top
 
 - **Don't build a pure-webhook system.** Deliveries get missed and the coordinator can be down.
   Build a reconciler that **periodically re-lists** open `agent-fix` issues/PRs and drives the state
   machine (level-triggered, robust). Webhooks then merely *wake it sooner* (edge-triggered) — the
-  standard k8s "edge + level" wisdom. The **review path already runs this way** (2026-07-17, ADR-093):
-  the github-exporter POST is the edge-trigger into an Argo Events webhook, backed by a `*/15`
-  CronWorkflow that re-lists — see [`merge-path.md`](merge-path.md).
-- **Start with polling** (every 1–2 min — trivial at this volume); add webhooks when latency annoys.
-  Events worth subscribing to: `pull_request` (opened/synchronize), `pull_request_review`,
-  `check_suite` completed, `issues`/`issue_comment` (label/comment).
-- **CI-green needs no GitHub webhook** — CI runs in-cluster on ARC, so the workflow's final step can
-  ping the coordinator directly. Webhooks are really only for *human* actions originating at GitHub.
-- **Delivery into the homelab** — reuse the Cloudflare Tunnel pattern (a small `cloudflared` ingress
-  to an in-cluster coordinator); no inbound ports.
+  standard k8s "edge + level" wisdom. Both paths run this way today (ADR-093): the
+  github-exporter POST is the edge into the in-cluster Argo Events webhook (no external
+  delivery, no tunnel needed), the CronWorkflows re-list behind it. (The original
+  polling-first/GitHub-webhook design considerations: git history, pre-2026-07-17.)
 
 #### The coordinator Sensor (design 2026-07-17; BUILT same day — FU-085 archived, coordinate-argo.yaml)
 
@@ -198,8 +188,10 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   (the review reflex's own `*/5 → */15` move — less GraphQL burn) and the compound where the
   Sensor submits item units directly with the cron sweep emitting only missed units.
   Red-beyond-T stays cron/poller-territory by nature (a timer is level-triggered; the
-  github-exporter's CI metrics carry the out-of-band half). Under FU-080's per-stack move the
-  Composition renders the Sensor/trigger per stack like the rest of the loop.
+  github-exporter's CI metrics carry the out-of-band half). Per-stack routing landed the OTHER
+  way (decided with FU-080/FU-100): Sensors/EventBus stay GLOBAL (a per-stack JetStream is 3×1Gi
+  for near-zero volume) and route graduated events INTO `<stack>-agents` data-driven
+  (`body.loop_ns` — coordinate doorbell AND the review edge).
 
 End state: the whole loop is edge-driven — queued issue → tick → worker → green PR → review Sensor
 → verdict → coordinator Sensor → round N+1 → merge — with cron sweeping behind as the
@@ -222,14 +214,6 @@ level-triggered backstop.
   themselves are auto once the reviewer approves; humans review only the fixer — the operating
   model).
 
-## MVP (superseded by the built loop — kept as the original shape)
-
-The MVP was a reconcile loop (cron + on-demand) listing open `agent-fix` issues/PRs, running the
-state machine, spawning a **fresh** worker per round via `agent-session.sh`, polling only. What
-runs today went past it on both axes: dispatch is **item-scoped** (ADR-094/FU-086 — the scan
-emits units, the session judges one), and the loop is **edge-triggered** (the review webhook +
-the `/coordinate` doorbell, cron as backstop). Each round's cost/outcome still lands on the PR
-(stats comment) and in Loki — the coordinator consumes the same signals.
-
-Related: [`README.md`](README.md) · [`../adr.md`](../adr.md) · [`../../ROADMAP.md`](../../ROADMAP.md)
+Related: [`README.md`](README.md) · [`roles.md`](roles.md) · [`merge-path-fsm.md`](merge-path-fsm.md)
+· [`../adr.md`](../adr.md) · [`../../ROADMAP.md`](../../ROADMAP.md)
 · [`../../agents/README.md`](../../agents/README.md)

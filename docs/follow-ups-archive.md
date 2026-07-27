@@ -8,6 +8,18 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-107** *(archived 2026-07-27, same day as filed)* — **Agents docs refactor passes, DONE.**
+  (a) dedup: capacity story → ONE home (workflow.md §Capacity gates; merge-path compressed to a
+  pointer), review-edge path → roles.md/merge-path-fsm pointers, scout → roles.md pointer;
+  (b) resolved by DE-DUPLICATION not generation — fewer copies beats generated copies: the
+  hand-drawn PR-lifecycle diagram + workflow.md reconciler list replaced with merge-path-fsm.md
+  pointers, README ADR mirror table replaced with a link to docs/adr.md (the updater decision-logic
+  flowchart KEPT — it documents one transition's logic, not the FSM, no drift pair); (c)
+  superseded tracts deleted with git-history pointers (merge-path §Rollout → 6-line done-summary,
+  §Open questions → §Decisions, workflow §MVP + polling-first bullets); (d) §Scaling model moved
+  → platform-and-stacks.md §Stack economics; (e) generated-tables leg moved into FU-049 (same
+  generation class). Deviation note: (b)'s "generate" intent satisfied by removing the drift
+  pairs instead of building generators.
 - **FU-100** *(archived 2026-07-27)* — **Per-stack review edge routing, SHIPPED** (the last FU-080
   leg). github-exporter `graduated_loop_ns()` (raw `agents/stacks.json`, 600s TTL, fail-soft to the
   plain POST → global-defer-to-cron) adds `{stack, loop_ns}` to /review POSTs; `review-perstack`

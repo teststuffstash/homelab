@@ -170,10 +170,10 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 
 1. **Now:** `stacks.json` + `coordinator-scan` (report) + `--stack` scoping. Supervised interactive ticks.
 2. **coordinator-reflex** — an Argo **CronWorkflow** (ADR-093; was a k8s CronJob) running
-   `coordinator-scan --spawn` per schedule (FU-050); the gate keeps the LLM off empty wakes. The review
-   path is now event-driven: github-exporter POSTs reviewable PRs to an Argo Events webhook → Sensor →
-   review WorkflowTemplate → reviewer (the ADR-084 sync.yaml pattern generalized), with a */15
-   CronWorkflow backstop. Graduating to autonomy is a scheduler swap, not a behavior change.
+   `coordinator-scan --spawn` per schedule (FU-050); the gate keeps the LLM off empty wakes. The
+   review path is event-driven (machinery home: [`roles.md`](roles.md) §reviewer +
+   [`merge-path-fsm.md`](merge-path-fsm.md)). Graduating to autonomy is a scheduler swap, not a
+   behavior change.
 3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack to a claim in its `-iac`;
    `stacks_json()` → `kubectl get agentstacks` (FU-048). **✅ DONE 2026-07-12 — first claim = oracle
    (not sleep: oracle's `-iac` agent dir was already GitOps-owned). See
@@ -199,6 +199,38 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   all three stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global scan/reflex
   skips graduated stacks; the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
   ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
+
+## Stack economics — scaling the merge path (moved from merge-path.md, 2026-07-27 / FU-107)
+
+**Per-repo invariant:** per merged PR in steady state, `CI cycles = 1 initial + 1 update`
+(update skipped when master hasn't moved) and `reviewer runs = 1`, plus one extra of each per
+master-interruption in an approval→merge window. A batch of N concurrent PRs in one repo costs
+~2N−1 CI / N reviews (the serializer); across repos everything composes linearly (own master,
+own updater chain, own review queue).
+
+**Platform extrapolation** (reference stack ≈ IDP: TARA-Login fork, identity-store, passkey,
+`idp-iac` → ~4–5 repos, service repos on the ~20-min ADR-082 full-stack gate; sizing target =
+sleep + IDP + one more ≈ 12–15 agent repos, ~50 merges/~54 reviews/~100 CI cycles per week).
+What saturates first:
+
+- **Reviewer throughput (the binding constraint):** ~4–7h reviewer wall/week on ONE operator
+  subscription shared with the coordinator. The failure mode is the BURST (Renovate Monday ≈
+  21 reviews); levers in order: Renovate grouping + per-stack schedule staggering (Mon=sleep,
+  Tue=IDP, …), CI-only merges per dep class (FU-046 split — shipped), a second subscription for
+  overflow (decorrelation doctrine: reviewer model ≥ author model — a cheap-model reviewer is
+  NOT acceptable overflow). Reviews are already at the theoretical floor (1/PR); past it only
+  policy and scheduling help.
+- **ARC runner pool:** ~25h runner wall/week, capacity fine; the compounding cost is
+  single-repo DRAIN LATENCY on full-stack-gate repos (~25–30 min/merge serialized) — FU-015
+  (shipped) halves the constant; keep batches small.
+- **Updater/API:** free at any plausible scale (reusable org workflow, 3-line callers).
+
+**What breaks first:** reviewer quota on burst days (stagger Renovate; dep-bump policy decided
+— FU-046) → single-repo drain latency → nothing in the merge mechanics itself (per-repo chains
+independent; onboarding a repo = a workflow caller + a `protected_repos` entry).
+
+**Out of scope:** cross-repo coordinated changes — ordering across repos is the coordinator's
+job (provider before consumer), now typed by the FU-106 contract/fulfillment split above.
 
 ## The credential-airlock pattern (stack jails, FU-080)
 
