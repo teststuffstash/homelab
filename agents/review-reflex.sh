@@ -124,7 +124,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -158,7 +158,10 @@ for repo in $REPOS; do
 $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" '
     .[] | select(.autoMergeRequest == null and .isDraft == false
                  and .author.login == $author
-                 and all(.labels[].name; . != "agent/error"))
+                 and all(.labels[].name; . != "agent/error")
+                 # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
+                 # human gate IS the un-armed state (roles.md §researcher); never re-arm.
+                 and ((.headRefName // "") | startswith("research/") | not))
         | .number')
 EOF_C9
 

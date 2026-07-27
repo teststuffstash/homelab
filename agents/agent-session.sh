@@ -34,7 +34,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""; NO_ARM=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -49,6 +49,7 @@ while [ $# -gt 0 ]; do
     --work-branch) WORK_BRANCH="$2"; shift 2;;  # resume an EXISTING remote branch (fix round on a PR branch / a salvaged WIP branch) — the entrypoint checks it out tracking origin, deterministically (old finding C)
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
+    --no-arm)    NO_ARM=1; shift;;      # human-gated PR (FU-105 researcher): finalize skips arm-at-open (AGENT_ARM_PR=0); C9 skips research/* branches
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -79,6 +80,10 @@ if [ -n "${RECIPE:-}" ]; then
   [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
   ISSUE_N="${TASK#issue-}"
   case "$ISSUE_N" in ''|*[!0-9]*) echo "FATAL: --recipe needs --task issue-<N> (got '${TASK}')" >&2; exit 2;; esac
+  # A research recipe's PR is human-gated BY DESIGN (FU-105) — derive --no-arm from the recipe
+  # name so the un-armed gate is launcher-owned, never a dispatcher memory test (ADR-094; the
+  # first live ride was armed by finalize right past the recipe's "do not arm").
+  case "$(basename "$RECIPE")" in research*) NO_ARM=1; echo "→ --no-arm derived from research recipe (human-gated PR)";; esac
   RECIPE_B64="$(base64 -w0 "$RECIPE")"
   RUN_CMD="printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s .agents/fix.yaml recipe (goose format). Follow its instructions exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'"
 fi
@@ -189,6 +194,14 @@ esac
 WORK_BRANCH_ENV=""
 if [ -n "$WORK_BRANCH" ]; then
   WORK_BRANCH_ENV=$'        - name: WORK_BRANCH\n          value: "'"$WORK_BRANCH"'"'
+fi
+
+# FU-105: human-gated PR — finalize must NOT arm auto-merge (needs the agent-runtime build with
+# AGENT_ARM_PR support; an older image ignores the env and the C9 research/* exclusion still
+# keeps the PR un-armed after a manual disarm).
+ARM_ENV=""
+if [ -n "${NO_ARM:-}" ]; then
+  ARM_ENV=$'        - name: AGENT_ARM_PR\n          value: "0"'
 fi
 
 GOOSE_PROXY_ENV=""; PROXY_URL=""
@@ -635,6 +648,7 @@ ${CRED_BROKER_ENV}
         # Resume an existing remote branch deterministically (fix rounds / salvaged WIP — finding C).
         # Empty ⇒ the entrypoint forks a fresh agent/<ts> branch from BASE_REF as before.
 ${WORK_BRANCH_ENV}
+${ARM_ENV}
         # docker mode only: the repo's own docker CLI (devbox.json) talks to the dind sidecar.
 ${DOCKER_ENV}
         # claude harness only (FU-066): proxy base URL + the opaque session ref — no real creds.
