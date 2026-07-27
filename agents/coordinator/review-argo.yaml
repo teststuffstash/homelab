@@ -73,9 +73,28 @@ spec:
     - name: review-dep
       eventSourceName: agent-loop
       eventName: review
+    # FU-100 per-stack review edge routing: the SAME review event, matched only when the exporter
+    # carried a non-empty loop_ns (a GRADUATED repo — github-exporter.py graduated_loop_ns, from
+    # agents/stacks.json). Mirrors coordinate-perstack (coordinate-argo.yaml): the ".+" regex
+    # data-filter fails on a missing/empty loop_ns, so plain {repo,number} POSTs take the global
+    # trigger ALONE. A graduated POST satisfies BOTH deps: the global review workflow defers it
+    # (stacks.json guard below) and this trigger reviews it in its own ns.
+    - name: review-perstack
+      eventSourceName: agent-loop
+      eventName: review
+      filters:
+        data:
+          # Argo string data-filter values are REGEXes (""/"!=" rejected — the coordinate-argo
+          # lesson). ".+" = any non-empty loop_ns; missing/empty extracts to "" and fails.
+          - path: body.loop_ns
+            type: string
+            comparator: "="
+            value:
+              - ".+"
   triggers:
     - template:
         name: submit-review
+        conditions: "review-dep" # scope to the global dep so a graduated POST can't gate it
         argoWorkflow:
           operation: submit
           source:
@@ -96,6 +115,86 @@ spec:
               dest: spec.arguments.parameters.0.value
             - src: { dependencyName: review-dep, dataKey: body.number }
               dest: spec.arguments.parameters.1.value
+    # FU-100: submit an inline review Workflow INTO <loop_ns> as agentstack-loop — the
+    # coordinate-perstack routing applied to reviews, closing the ~15-min cron-only latency for
+    # graduated stacks. Inlined (not a per-stack WorkflowTemplate) so the agentstack Composition
+    # stays byte-identical per stack; RBAC = the composed sensor-submit-coordinate Role/Binding
+    # in <loop_ns> (generic `workflows create` for the sensor-review SA — already rendered).
+    # No rateLimit, matching the global review trigger: the exporter dedups per reviewable head,
+    # so bursts are structurally bounded. Capacity = reviewer-session's subscription latch
+    # (ConfigMap semaphores can't cross ns — the composition's FU-080 (5) note); idempotency =
+    # the reviewer-pod check below + STEP-0, same belts as the global path + the */15 cron.
+    - template:
+        name: submit-review-perstack
+        conditions: "review-perstack"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: review-perstack-
+                namespace: PLACEHOLDER # ← body.loop_ns (parameters below)
+              spec:
+                serviceAccountName: agentstack-loop
+                activeDeadlineSeconds: 1800 # matches the review-<stack> cron's belt
+                ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                arguments:
+                  parameters:
+                    - { name: repo, value: PLACEHOLDER }
+                    - { name: number, value: PLACEHOLDER }
+                    - { name: loop_ns, value: PLACEHOLDER }
+                entrypoint: main
+                volumes:
+                  - { name: work, emptyDir: {} }
+                templates:
+                  - name: main
+                    metadata:
+                      labels: { app: review-perstack-workflow }
+                    container:
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+                      command: ["bash", "-lc"]
+                      args:
+                        - |
+                          set -e
+                          REPO="{{workflow.parameters.repo}}"; PR="{{workflow.parameters.number}}"; NS="{{workflow.parameters.loop_ns}}"
+                          echo "review(perstack): ${REPO}#${PR} ns=${NS} (exporter edge)"
+                          # Same idempotency guard as the global review workflow, scoped to OUR
+                          # ns — the */15 review-<stack> cron may have dispatched first;
+                          # reviewer-session.sh STEP-0 is the final backstop.
+                          if kubectl get pods -n "${NS}" -l "app=agent-reviewer,project=${REPO},pr=${PR}" \
+                               --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name 2>/dev/null | grep -q .; then
+                            echo "review(perstack): ${REPO}#${PR} already under review — skipping (idempotent)"; exit 0
+                          fi
+                          # Broker-fetched stack-scoped git token for the session's gh reads (the
+                          # review-<stack> cron's pattern); reviewer-session.sh --loop-ns fetches
+                          # its own role=reviewer token for the pod's verdict writes.
+                          SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                            "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns=${NS}&role=coordinator")" \
+                            || { echo "FATAL: loop-git token fetch refused/failed — not reviewing blind"; exit 1; }
+                          export GH_TOKEN
+                          rm -rf /work/homelab
+                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          exec bash /work/homelab/agents/reviewer-session.sh "${REPO}" "${PR}" --loop-ns "${NS}"
+                      env:
+                        - { name: HOME, value: "/home/node" }
+                        - { name: ORG, value: "teststuffstash" }
+                      volumeMounts:
+                        - { name: work, mountPath: /work }
+                      resources:
+                        requests: { cpu: "100m", memory: "256Mi" }
+                        limits: { memory: "512Mi" }
+          parameters:
+            - src: { dependencyName: review-perstack, dataKey: body.loop_ns }
+              dest: metadata.namespace
+            - src: { dependencyName: review-perstack, dataKey: body.repo }
+              dest: spec.arguments.parameters.0.value
+            - src: { dependencyName: review-perstack, dataKey: body.number }
+              dest: spec.arguments.parameters.1.value
+            - src: { dependencyName: review-perstack, dataKey: body.loop_ns }
+              dest: spec.arguments.parameters.2.value
 ---
 # The review Workflow — one step: clone homelab, run the proven reviewer-session.sh for the PR.
 # Runs as the agent-coordinator SA (pod-create for reviewer-session.sh's reviewer pod + the
@@ -144,9 +243,11 @@ spec:
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
             # FU-080: a graduated stack is reviewed by its OWN per-stack review-<stack> cron (in
             # <stack>-agents as agentstack-loop). This global workflow runs as agent-coordinator and
-            # CAN'T create reviewer pods in that ns, so DEFER — the per-stack cron picks this PR up
-            # (up to */15; per-stack review edge-routing is a later leg). Keeps the global + per-stack
-            # reviewers from racing the same PR. The global review-reflex cron skips graduated too.
+            # CAN'T create reviewer pods in that ns, so DEFER — the review-perstack trigger above
+            # (FU-100) reviews it near-instantly in <loop_ns>, the */15 cron backstops a routing
+            # miss (e.g. a degraded exporter stacks.json fetch → plain POST lands only here).
+            # Keeps the global + per-stack reviewers from racing the same PR. The global
+            # review-reflex cron skips graduated too.
             if jq -e --arg r "$REPO" '.stacks[]|select((.graduated//false)==true)|select([.repos[]]|index($r))' /work/homelab/agents/stacks.json >/dev/null 2>&1; then
               echo "review: $REPO belongs to a graduated stack — deferring to its per-stack review cron"; exit 0
             fi

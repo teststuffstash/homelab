@@ -51,6 +51,19 @@ REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
 # The reviewer App's login (GraphQL bare; REST appends "[bot]" — stripped where compared). Feeds
 # the bot_approved_head arm of the review edge-trigger, mirroring review-reflex.sh's $bot.
 REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
+# FU-100 per-stack review edge routing: repo → loop_ns for GRADUATED stacks, read from
+# agents/stacks.json (the committed mirror — fetched raw from the public repo, the same source
+# the shell emitters read from their homelab clone; this pod has no clone, and the raw fetch is
+# rate-limit-free). A graduated repo's POST carries {stack, loop_ns} so the review Sensor's
+# per-stack trigger inlines the review INTO <loop_ns>; a failed/absent lookup fails SOFT to a
+# plain {repo} POST = the global trigger, which DEFERS graduated repos to their */15 cron
+# (latency, never a wrong review). Empty STACKS_URL disables the routing entirely.
+STACKS_URL = os.environ.get(
+    "STACKS_URL",
+    "https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/stacks.json",
+).strip()
+STACKS_TTL = int(os.environ.get("STACKS_TTL_SECONDS", "600"))
+_stacks_cache = {"at": None, "map": {}}  # repo → {"stack": ..., "loop_ns": "<stack>-agents"}
 # FU-084: dir of per-installation probe tokens (one file per token identity; rl-tokens.yaml).
 RL_TOKEN_DIR = os.environ.get("RL_TOKEN_DIR", "/var/run/rl-tokens")
 # FU-098: dir of App PRIVATE KEYS for the permission-drift belt (one subdir per declared slug,
@@ -244,6 +257,33 @@ def newest_nonmerge_commit_at_rest(repo, number):
         return ""
 
 
+def graduated_loop_ns(repo):
+    """repo → {"stack", "loop_ns"} when it belongs to a GRADUATED stack, else None (FU-100).
+    stacks.json is cached STACKS_TTL seconds; a failed refresh keeps the last-good map and
+    retries next TTL (stale beats absent — graduation flips are rare, and the */15 per-stack
+    cron backstops any routing miss). Poll-loop-only caller, so no lock needed."""
+    if not STACKS_URL:
+        return None
+    now = time.monotonic()
+    if _stacks_cache["at"] is None or now - _stacks_cache["at"] >= STACKS_TTL:
+        _stacks_cache["at"] = now  # even on failure — never hammer the fetch inside one TTL
+        try:
+            req = urllib.request.Request(
+                STACKS_URL, headers={"User-Agent": "homelab-github-exporter"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.load(resp)
+            _stacks_cache["map"] = {
+                r: {"stack": s["name"], "loop_ns": f"{s['name']}-agents"}
+                for s in data.get("stacks", [])
+                if s.get("graduated")
+                for r in s.get("repos", [])
+            }
+        except Exception as exc:
+            print(f"stacks.json refresh FAILED (per-stack review routing degraded to the "
+                  f"global path): {exc}", flush=True)
+    return _stacks_cache["map"].get(repo)
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
                           labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
@@ -290,7 +330,14 @@ def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, 
     key = (repo, str(number), head_sha)
     if key in _review_dispatched:
         return
-    body = json.dumps({"repo": repo, "number": str(number), "head_sha": head_sha}).encode()
+    payload = {"repo": repo, "number": str(number), "head_sha": head_sha}
+    # FU-100: a graduated repo's event carries {stack, loop_ns} so the review Sensor's per-stack
+    # trigger routes it INTO <loop_ns>; plain payloads take the global trigger alone (which
+    # defers graduated repos to their */15 cron — the belt when this lookup degrades).
+    grad = graduated_loop_ns(repo)
+    if grad:
+        payload.update(grad)
+    body = json.dumps(payload).encode()
     try:
         req = urllib.request.Request(
             REVIEW_WEBHOOK_URL, data=body,
@@ -299,7 +346,8 @@ def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, 
         with urllib.request.urlopen(req, timeout=10):
             pass
         _review_dispatched.add(key)
-        print(f"review dispatch: {repo}#{number} @{head_sha[:8]} → webhook", flush=True)
+        print(f"review dispatch: {repo}#{number} @{head_sha[:8]} → webhook"
+              f"{' (loop_ns ' + grad['loop_ns'] + ')' if grad else ''}", flush=True)
     except Exception as exc:
         print(f"review dispatch FAILED for {repo}#{number}: {exc}", flush=True)
 
