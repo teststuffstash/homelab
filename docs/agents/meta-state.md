@@ -9,16 +9,13 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
-- **FU-096 chain (ACTIVE)**: operator flipped both devbox-cache ghcr packages PUBLIC (verified
-  by anonymous manifest probe 13:20Z — HTTP 200 on oracle-fleet + sleep-tracking). In-pod
-  measure is BLOCKED on agent-runtime#24 (seed `cp -rf` fix) reaching the agent-base image:
-  #23+#24 sit CI-green with auto-merge armed but review is DEFERRED by the FU-088 subscription
-  latch (5h utilization 0.82 at 11:15Z tick — level-triggered, do NOT bypass/poll). Expected:
-  once a review-platform tick shows utilization <0.80 → homelab-reviewer approves ≈15 min →
-  auto-merge → agent-base image build (~20 min) → deploy-pin PR into homelab images.env (like
-  #49) → THEN in-pod measure → roll to remaining stack repos → kata canary → archive FU-096.
-  Per-heartbeat check: `gh pr list --repo teststuffstash/agent-runtime` + newest
-  review-platform tick log.
+- **FU-096 chain (ACTIVE — measure leg)**: latch lifted; agent-runtime#23+#24 MERGED
+  (12:31/12:45Z 2026-07-27), agent-base deploy-pins homelab#53+#54 MERGED (13:03Z) — the
+  `cp -rf` seed fix is in the live agent-base image. NEXT: in-pod measure — the first sleep
+  ride (from the re-enabled coordinator, #48 first) runs on this image with both ghcr cache
+  packages public; read its entrypoint log for the seed timing (expect ~7s warm vs ~55s cold
+  eval) and NO 0444-collision cp errors. Then: roll `devbox-cache.reusable.yml` to remaining
+  stack repos → kata canary → archive FU-096.
 
 - **UC-1 agentic arc + schema arc: CLOSED (2026-07-27 ~09:50Z).** Operator bar met kind+prod
   (TICK-LOG carries the full story). Roll 2 live: stamped corpus sha256:3e45daea… + current
