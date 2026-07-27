@@ -55,6 +55,11 @@
     "dispatch": 0.9,
     "heavy": 0.8
   },
+  "selection": {
+    "_comment": "The /route ordering rule (operator 2026-07-27, built in P3): among same-class/same-tier candidates the EFFECTIVE-cheapest wins, with a small randomization — a uniform pick among candidates within jitter_band_pct of the cheapest — so evidence keeps accruing across near-priced models instead of a monoculture. Price basis order (ADR-096 addendum 2): MARKET effective price (frontend stats/effective-pricing — 30d traffic-weighted, real cache rates; same basis the pins use) → harvested /generation billed costs as the cross-check → registry list-blend as cold-start fallback.",
+    "rule": "cheapest-effective-jitter",
+    "jitter_band_pct": 15
+  },
   "model_tiers": {
     "claude/haiku": "cheap",
     "claude/sonnet": "large",

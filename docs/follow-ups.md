@@ -742,7 +742,22 @@ _Last updated: 2026-07-16._
       router-self-test). Known P1 coverage gap: /report posts from the LAUNCHER finalizer only
       — rides where the launcher exits early (coordinator path) rely on the in-pod
       agent-finalize twin, which doesn't POST yet (agent-runtime change; do with P3 so shadow
-      coverage is honest).
+      coverage is honest). **P1.5 same day (operator): ground-truth cost harvest** — the data
+      plane captures each completion's generation id and fetches `/api/v1/generation` (billed
+      total_cost + served model/provider + native_tokens_cached → `generations` table, M5 live
+      at request granularity); selection rule recorded for P3: effective-cheapest wins within a
+      class with a ~15% jitter band (`model-classes.json` `selection`). **P1.6 same day
+      (operator): MARKET price basis + rotation un-dead** — pins (proxy `compute_pin` +
+      estimator `pinned_provider(market=)`, twins) now price each provider by the model page's
+      effective-pricing data (`/api/frontend/v1/stats/effective-pricing?permaslug=` — 30d
+      traffic-weighted effective input price + REAL cache hit rate; permaslug parsed from
+      `/endpoints` entry names), `basis: market|list` reported, h-blend only for unmeasured
+      providers (live: v4-flash pin → DeepSeek $0.033/M @ 78% real cache). Rotation source =
+      OpenRouter's DOCUMENTED MCP server (`list-daily-model-rankings`, standard key — probed):
+      router daemon pulls dailyish via ROUTER_ACCOUNT_REF → rotation store; git
+      `rotation_fallback` demoted to belt. Class ordering price for /route: market weighted →
+      harvested generations cross-check → registry blend cold-start. Pareto-router plugin
+      (`price_source: weighted_avg`) noted as a P3 serverside candidate, parked.
       **Spec-creation directive (operator 2026-07-25): EXECUTED 2026-07-27** via the FU-105
       researcher mechanism (claude+opus authored, sonnet+Fable reviewed) — spec PR
       sleep-tracking#38 (9 pages, 17 ⚖, 9 suspected bugs, 2 code-verified) awaits the HUMAN

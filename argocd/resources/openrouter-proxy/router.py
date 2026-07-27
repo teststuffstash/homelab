@@ -53,6 +53,10 @@ CREATE TABLE IF NOT EXISTS run_reports(
   ts REAL, session TEXT PRIMARY KEY, task TEXT, stack TEXT, role TEXT, round INTEGER,
   model TEXT, served_model TEXT, served_provider TEXT, cache_hit REAL, cost_usd REAL,
   error_class TEXT, outcome TEXT);
+CREATE TABLE IF NOT EXISTS generations(
+  id TEXT PRIMARY KEY, ts REAL, requested_model TEXT, served_model TEXT, provider TEXT,
+  tokens_prompt INTEGER, tokens_completion INTEGER, tokens_cached INTEGER,
+  cost_usd REAL, latency_ms INTEGER, finish TEXT);
 CREATE TABLE IF NOT EXISTS decisions(
   ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
   model TEXT, reason TEXT, detail TEXT);
@@ -134,6 +138,8 @@ def _write(sql: str, params: tuple) -> bool:
                               (now - RETAIN_REPORTS_D * 86400,))
                 _conn.execute("DELETE FROM strikes WHERE ts < ?",
                               (now - RETAIN_REPORTS_D * 86400,))
+                _conn.execute("DELETE FROM generations WHERE ts < ?",
+                              (now - RETAIN_REPORTS_D * 86400,))
             _conn.commit()
         return True
     except sqlite3.Error as e:
@@ -176,6 +182,22 @@ def record_report(d: dict) -> tuple[bool, bool]:
             (now, str(d.get("task") or ""), str(d.get("stack") or ""), str(d.get("model") or ""),
              err, int(d.get("round") or 1), str(d.get("session") or "")))
     return stored, striked
+
+
+def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
+    """One /api/v1/generation record → ground-truth cost/attribution (probed 2026-07-27:
+    total_cost is the BILLED figure, provider_name/model are what actually SERVED — the M5
+    'served model/provider' the ledger wanted — and native_tokens_cached measures the real
+    cache hit the h=0.8 pin math assumes). Harvested passively by the data plane per forwarded
+    completion; idempotent per generation id — OR IGNORE, so a lookup retry can never
+    overwrite a stored record with a thinner one."""
+    return _write(
+        "INSERT OR IGNORE INTO generations VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        (gen_id, time.time(), requested_model, str(data.get("model") or ""),
+         str(data.get("provider_name") or ""), int(data.get("native_tokens_prompt") or 0),
+         int(data.get("native_tokens_completion") or 0),
+         int(data.get("native_tokens_cached") or 0), float(data.get("total_cost") or 0.0),
+         int(data.get("latency") or 0), str(data.get("finish_reason") or "")))
 
 
 def record_provider_event(model: str, provider: str, status: int) -> None:
@@ -232,7 +254,12 @@ def status_summary() -> dict:
     """GET /router-status — the human/debug view."""
     now = time.time()
     counts = {t: (_read(f"SELECT COUNT(*) FROM {t}") or [(0,)])[0][0]
-              for t in ("run_reports", "strikes", "provider_events", "rotation", "decisions")}
+              for t in ("run_reports", "strikes", "provider_events", "rotation", "decisions",
+                        "generations")}
+    gen_24h = _read(
+        "SELECT requested_model, provider, COUNT(*), ROUND(SUM(cost_usd), 6), "
+        "SUM(tokens_cached), SUM(tokens_prompt) FROM generations WHERE ts > ? "
+        "GROUP BY requested_model, provider ORDER BY 4 DESC LIMIT 20", (now - 86400,))
     recent_strikes = _read(
         "SELECT model, error_class, COUNT(*) FROM strikes WHERE ts > ? "
         "GROUP BY model, error_class ORDER BY 3 DESC LIMIT 20", (now - 7 * 86400,))
@@ -246,6 +273,10 @@ def status_summary() -> dict:
         "rows": counts,
         "strikes_7d": [{"model": m, "error_class": e, "n": n} for m, e, n in recent_strikes],
         "provider_errors_24h": [{"provider": p, "class": c, "n": n} for p, c, n in provider_errs],
+        "generations_24h": [
+            {"model": m, "provider": p, "n": n, "cost_usd": c,
+             "observed_cache_hit": round((tc or 0) / tp, 3) if tp else None}
+            for m, p, n, c, tc, tp in gen_24h],
         "rotation": [{"source": s, "entries": n,
                       "age_s": round(now - (ts or now))} for s, n, ts in rot],
         "classes_loaded": bool(_classes),
@@ -280,6 +311,26 @@ def metrics_lines() -> list[str]:
               "# HELP router_rotation_age_seconds Age of the newest entry per rotation source (RouterRotationStale alert)."]
     for s, _n, ts in _read("SELECT source, COUNT(*), MAX(updated_ts) FROM rotation GROUP BY source"):
         lines.append(f'router_rotation_age_seconds{{source="{s}"}} {now - (ts or now):.0f}')
+    # Ground-truth spend at request granularity (the generation harvest) — the billed figure,
+    # labelled by what actually served. Complements the launcher-pushed per-run agent_run_cost_usd.
+    lines += ["# TYPE router_generation_cost_usd_total counter",
+              "# HELP router_generation_cost_usd_total Billed cost summed from harvested /generation records (ground truth).",
+              "# TYPE router_generations_total counter"]
+    gen = _read("SELECT requested_model, provider, COUNT(*), SUM(cost_usd) "
+                "FROM generations GROUP BY requested_model, provider")
+    if gen:
+        for m, p, n, c in gen:
+            lines.append(f'router_generations_total{{model="{m}",provider="{p}"}} {n}')
+            lines.append(f'router_generation_cost_usd_total{{model="{m}",provider="{p}"}} {c or 0:.8f}')
+    else:
+        lines += ["router_generations_total 0", "router_generation_cost_usd_total 0"]
+    lines += ["# TYPE router_observed_cache_hit gauge",
+              "# HELP router_observed_cache_hit Measured cached/prompt token ratio per model over 7d — the check on the pin math's CACHE_HIT assumption."]
+    for m, tc, tp in _read("SELECT requested_model, SUM(tokens_cached), SUM(tokens_prompt) "
+                           "FROM generations WHERE ts > ? GROUP BY requested_model",
+                           (now - 7 * 86400,)):
+        if tp:
+            lines.append(f'router_observed_cache_hit{{model="{m}"}} {(tc or 0) / tp:.3f}')
     return lines
 
 
@@ -307,6 +358,13 @@ def self_test() -> int:
     assert strikes_for("issue-9", "sleep") == ["deepseek/deepseek-v4-flash"]
     record_provider_event("qwen/qwen3-coder", "deepinfra", 500)
     record_provider_event("qwen/qwen3-coder", "deepinfra", 200)
+    assert record_generation("gen-test-1", "deepseek/deepseek-v4-flash", {
+        "model": "deepseek/deepseek-v4-flash-20260423", "provider_name": "Fireworks",
+        "native_tokens_prompt": 100, "native_tokens_completion": 20,
+        "native_tokens_cached": 80, "total_cost": 9.8e-07, "latency": 1022,
+        "finish_reason": "stop"})
+    assert record_generation("gen-test-1", "deepseek/deepseek-v4-flash", {
+        "total_cost": 9.8e-07}), "generation re-record must stay idempotent (no-op)"
     assert record_rotation("scout-canary",
                            [{"model": "moonshotai/kimi-k3", "canary_verdict": "clean"}]) == 1
     latch_save({"until": 123.0, "last_429": 100.0, "windows": {"5h": {"utilization": 0.5}},
@@ -315,6 +373,11 @@ def self_test() -> int:
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
+    assert (_read("SELECT COUNT(*) FROM generations") or [(0,)])[0][0] == 1
+    assert 'router_generations_total{model="deepseek/deepseek-v4-flash",provider="Fireworks"} 1' in body
+    summary_gen = status_summary()["generations_24h"]
+    assert summary_gen and summary_gen[0]["observed_cache_hit"] == 0.8, \
+        "first full record wins; measured cache hit = 80/100"
     summary = status_summary()
     assert summary["rows"]["run_reports"] == 2 and summary["rows"]["strikes"] == 1
     if _classes:

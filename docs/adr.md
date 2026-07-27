@@ -1030,3 +1030,33 @@ owns billing/subscription knowledge: decisions/deferrals/budget gauges on `/metr
 RouterRotationStale + RouterDbEphemeral (capacity states `triage: none`). Builds FU-095(a),
 absorbs FU-109. Relates ADR-081, ADR-087, ADR-094, FU-057, FU-088 (archived), model-routing.md
 (§M8 = the router).
+
+**Addendum (same day, operator direction):** cost knowledge is GROUND TRUTH, not estimates —
+the data plane harvests each forwarded completion's generation id and a daemon thread fetches
+`GET /api/v1/generation?id=` with the same session key (probed: `total_cost` = the billed
+figure, `provider_name`/`model` = what actually SERVED — the M5 attribution — and
+`native_tokens_cached` measures the real cache hit behind the pin math's h=0.8). Rows land in
+`generations` (90d); series `router_generation_cost_usd_total{model,provider}` +
+`router_observed_cache_hit{model}`. The account-wide `/api/v1/activity` API is management-key
+-only — rejected (the proxy holds no management credential by design). And the /route ordering
+rule within a class: **effective-cheapest wins with a small jitter band** (uniform pick among
+candidates within ~15% of the cheapest — exploration keeps evidence accruing across near-priced
+models; `model-classes.json` `selection`).
+
+**Addendum 2 (same day): market pricing + the MCP rankings feed.** The pin's price basis is now
+the **market effective price** — the model page's "Effective Pricing" data
+(`GET /api/frontend/v1/stats/effective-pricing?permaslug=<dated>`, found 2026-07-27: per-provider
+30d traffic-weighted `effectiveInputPrice` + REAL `cacheHitRate` + token share; the dated
+permaslug rides in every `/endpoints` entry's `name`). `compute_pin` (proxy) and
+`pinned_provider(market=)` (estimate_budget.py — twins kept in step) price each provider by its
+market row when one exists, list-blend at h=0.8 otherwise; pins report `basis: market|list`
+(verified live: deepseek-v4-flash pin flipped to DeepSeek @ $0.033/M measured, 78% real cache
+rate). This supersedes the assumed-h blend as primary and is the /route class-ordering price
+source (harvested generations validate it; registry blend = cold-start fallback). **Rotation
+un-dead:** OpenRouter's DOCUMENTED MCP server (`mcp.openrouter.ai/mcp`) accepts a standard API
+key (probed — no OAuth dance) and `list-daily-model-rankings` returns daily model popularity by
+token volume — the router pulls it dailyish via `ROUTER_ACCOUNT_REF` into the rotation store
+(source `openrouter-daily-rankings`, top-30), superseding the git-curated `rotation_fallback` as
+primary (the fallback list stays as the belt). Also noted for P3: OpenRouter's `pareto-router`
+request plugin (`price_source: weighted_avg`, server-side Pareto frontier over coding models) —
+a candidate serverside twin of our class ordering, parked until API manageability is clear.

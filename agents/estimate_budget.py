@@ -35,8 +35,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -242,20 +244,36 @@ def effective_price(
     return min(e["prompt"] for e in pool), note
 
 
+def market_row(market: dict | None, endpoint: dict) -> dict | None:
+    """The endpoint's market effective-pricing row ({'in': $/M, 'hit': rate}), matched by slug
+    then display name (ADR-096: rows are keyed by both, lowercased)."""
+    if not market:
+        return None
+    return (market.get((endpoint.get("slug") or "").lower())
+            or market.get((endpoint.get("provider") or "").lower()))
+
+
 def pinned_provider(
     endpoints: list[dict],
     *,
     h: float = REGISTRY_CACHE_HIT,
     uptime_floor: float = REGISTRY_UPTIME_FLOOR,
+    market: dict | None = None,
 ) -> dict | None:
     """The M4 session pin: the effective-cheapest provider to put first in `provider.order`.
     Unlike `effective_price`, tools support is REQUIRED here — the pin exists to serve a
     tool-driving worker, and per-endpoint tools support varies (GMICloud serves hy3 without it).
     Preference order: cached+tools ≥ floor → tools ≥ floor → any tools endpoint.
-    Consumers put the entry's `slug` (not `provider`) into OpenRouter's provider.order."""
+    Consumers put the entry's `slug` (not `provider`) into OpenRouter's provider.order.
+    `market` (ADR-096, mirrors the proxy's compute_pin — keep in step): per-provider MARKET
+    effective input prices (30d traffic-weighted, real cache hit baked in) override the h-blend
+    of list prices wherever a provider has a row."""
     tooled = [e for e in endpoints if e.get("tools")]
 
     def eff(e: dict) -> float:
+        row = market_row(market, e)
+        if row and row.get("in", 0) > 0:
+            return row["in"]
         if e.get("input_cache_read") is not None:
             return _blend(e["prompt"], e["input_cache_read"], h)
         return e["prompt"]
@@ -267,7 +285,8 @@ def pinned_provider(
     ):
         if pool:
             best = min(pool, key=eff)
-            return {**best, "effective_per_mtok": round(eff(best), 4)}
+            return {**best, "effective_per_mtok": round(eff(best), 4),
+                    "basis": "market" if market_row(market, best) else "list"}
     return None
 
 
@@ -420,8 +439,12 @@ def ensure_endpoints(registry: dict, model: str, path: str, *, refresh: bool = F
     try:
         data = _fetch_json(f"{OPENROUTER_API}/models/{model_id}/endpoints")
         endpoints = []
+        permaslug = None
         for e in (data.get("data") or {}).get("endpoints") or []:
             pricing = e.get("pricing") or {}
+            if permaslug is None:  # "StreamLake | deepseek/deepseek-v4-flash-20260423" (ADR-096)
+                m = re.search(r"\|\s*([a-z0-9-]+/[A-Za-z0-9._:-]+)\s*$", e.get("name") or "")
+                permaslug = m.group(1) if m else None
             endpoints.append(
                 {
                     "provider": e.get("provider_name") or e.get("name"),
@@ -438,6 +461,7 @@ def ensure_endpoints(registry: dict, model: str, path: str, *, refresh: bool = F
             )
         registry["endpoints"][model_id] = {
             "fetched_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "permaslug": permaslug,
             "endpoints": endpoints,
         }
         _save_registry(registry, path)
@@ -446,6 +470,35 @@ def ensure_endpoints(registry: dict, model: str, path: str, *, refresh: bool = F
             f"registry: endpoints fetch failed for {model_id} ({e}) — using the model-level price",
             file=sys.stderr,
         )
+
+
+def fetch_market(registry: dict, model: str) -> dict | None:
+    """ADR-096 market effective pricing for `pinned_provider(market=)` — the model page's chart
+    data (per-provider 30d traffic-weighted effective input price + REAL cache hit rate), keyed
+    by lowercased providerSlug AND providerName. Live fetch at lookup time (never cached in the
+    registry file: 30d averages don't belong in a 24h cache shape), fail-soft → None (list-blend
+    basis). Twin of the proxy's market_for — keep in step."""
+    entry = (registry.get("endpoints") or {}).get(normalize_model(model)) or {}
+    permaslug = entry.get("permaslug")
+    if not permaslug:
+        return None
+    try:
+        data = _fetch_json(
+            "https://openrouter.ai/api/frontend/v1/stats/effective-pricing?"
+            + urllib.parse.urlencode({"permaslug": permaslug})
+        ).get("data") or {}
+        rows: dict = {}
+        for s in data.get("providerSummaries") or []:
+            row = {"in": float(s.get("effectiveInputPrice") or 0.0),
+                   "hit": float(s.get("cacheHitRate") or 0.0)}
+            for key in (s.get("providerSlug"), s.get("providerName")):
+                if key:
+                    rows[str(key).lower()] = row
+        return rows or None
+    except Exception as e:  # noqa: BLE001
+        print(f"market: effective-pricing fetch failed for {permaslug} ({e}) — list-price basis",
+              file=sys.stderr)
+        return None
 
 
 def session_secret_name(project: str, session: str) -> str:
@@ -555,7 +608,8 @@ def _run_cli(argv: list[str]) -> int:
 
     if args.lookup:
         endpoints = registry_endpoints(registry, args.model) if registry else None
-        pin = pinned_provider(endpoints, h=h) if endpoints else None
+        market = fetch_market(registry, args.model) if registry and endpoints else None
+        pin = pinned_provider(endpoints, h=h, market=market) if endpoints else None
         print(
             json.dumps(
                 {
@@ -566,6 +620,7 @@ def _run_cli(argv: list[str]) -> int:
                     "cache_hit": h,
                     "tools": registry_tools(registry, args.model) if registry else None,
                     "provider_count": len(endpoints) if endpoints else 0,
+                    "market_providers": len({id(v) for v in market.values()}) if market else 0,
                     "pinned_provider": pin,
                 },
                 indent=2,
@@ -692,6 +747,9 @@ def _self_test() -> None:
                     {"provider": "Google", "slug": "google-ai-studio", "prompt": 0.22, "input_cache_read": None, "uptime": 99.9, "tools": True},
                     # Vertex: cheapest of all but 37% uptime → the trap the floor exists for
                     {"provider": "Vertex", "slug": "vertex", "prompt": 0.05, "input_cache_read": 0.01, "uptime": 37.0, "tools": True},
+                    # WandB: cache-read = full price (the 2026-07-09 measurement) → blend $1.00;
+                    # only a MARKET row can ever make it win (the ADR-096 basis test).
+                    {"provider": "WandB", "slug": "wandb", "prompt": 1.00, "input_cache_read": 1.00, "uptime": 99.0, "tools": True},
                 ],
             },
             "acme/chatty": {
@@ -721,8 +779,20 @@ def _self_test() -> None:
     # The pin carries the ROUTING slug (provider.order matches tags, not display names).
     pin = pinned_provider(fixture["endpoints"]["acme/coder"]["endpoints"], h=0.8)
     assert pin and pin["provider"] == "DeepInfra" and abs(pin["effective_per_mtok"] - 0.14) < 1e-9
-    assert pin["slug"] == "deepinfra"
+    assert pin["slug"] == "deepinfra" and pin["basis"] == "list"
     assert pinned_provider(fixture["endpoints"]["acme/chatty"]["endpoints"], h=0.8) is None
+
+    # ADR-096 market basis: a MARKET effective price overrides the list blend per provider —
+    # WandB's measured $0.05 beats DeepInfra's $0.14 blend, flipping the pin; matched by slug
+    # or display name (lowercased), and the pin reports basis=market.
+    mkt = {"wandb": {"in": 0.05, "hit": 0.7}, "deepinfra": {"in": 0.30, "hit": 0.6}}
+    pin = pinned_provider(fixture["endpoints"]["acme/coder"]["endpoints"], h=0.8, market=mkt)
+    assert pin and pin["provider"] == "WandB" and pin["basis"] == "market"
+    assert abs(pin["effective_per_mtok"] - 0.05) < 1e-9
+    # a zero/absent market row falls back to the blend for that provider
+    pin = pinned_provider(fixture["endpoints"]["acme/coder"]["endpoints"], h=0.8,
+                          market={"wandb": {"in": 0.0, "hit": 0.0}})
+    assert pin and pin["provider"] == "DeepInfra" and pin["basis"] == "list"
 
     # registry price via endpoints; model-level fallback when endpoints are missing
     price, note = registry_price(fixture, "acme/coder", h=0.8)

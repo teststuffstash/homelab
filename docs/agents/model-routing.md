@@ -95,6 +95,13 @@ Measured 2026-07-09 for qwen3-coder, why this ordering matters — effective @ h
 (headline $0.35) < DeepInfra $0.14 ($0.30) < Google $0.22 ($0.22, no cache) < WandB $1.00 (cache-read
 = full price). Neither the headline-cheapest nor the reliability pick is the effective-cheapest.
 
+**Upgraded 2026-07-27 (ADR-096 addendum 2): the primary price basis is now the MARKET effective
+price**, not the assumed-h blend — `/api/frontend/v1/stats/effective-pricing?permaslug=` returns
+each provider's 30d traffic-weighted effective input price with its REAL cache hit rate (what
+customers actually paid). `compute_pin` (proxy) and `pinned_provider(market=)` (estimator) use a
+provider's market row when present and the h-blend only for unmeasured providers; pins carry
+`basis: market|list`. The harvested per-request `/generation` costs (M5) validate it end-to-end.
+
 **Until the registry is code**, the estimator's `--price-per-mtok` override already unblocks any
 model today: fetch the price live and pass it (the brief carries the recipe). A `$1.0/M` default in
 the verdict means "unpriced", not "forbidden".
@@ -121,7 +128,11 @@ Dynamic routing without attribution would blind the very ledger that makes black
 AGENT_RUN_STATS/manifest/ledger must record: requested model, **served model** (router runs resolve
 to a real model), **served provider**, measured **cache-hit %**, `error_class`, strike count. Source:
 the OpenRouter activity/generation API (already in FU-057's scope for per-request splits). Worker
-`cost_usd` → Prometheus stays as planned.
+`cost_usd` → Prometheus stays as planned. **LIVE at request granularity 2026-07-27 (ADR-096):**
+the egress proxy harvests every forwarded completion's `/api/v1/generation` record — billed
+`total_cost`, served model+provider, `native_tokens_cached` (the measured check on the h=0.8
+assumption) — into its router store (`router_generation_cost_usd_total{model,provider}`,
+`router_observed_cache_hit{model}`); the account `activity` API is management-key-only, rejected.
 
 ### M6. Routers — verdict (verified against the API 2026-07-09)
 
@@ -150,7 +161,11 @@ sibling of review-reflex, per ADR-093): diff `/models` against the known set; fi
 tools-capable + (free or ≤ price ceiling); run each newcomer on a **canary task** (a small, closed,
 known-good issue — same pattern as the oracle free-tier canary); write the outcome to the ledger.
 Newcomers graduate into chains with evidence, not vibes. Free scout keys want **FU-024**
-(`guardrail: only-free` actually enforced) so a scout key can't spend.
+(`guardrail: only-free` actually enforced) so a scout key can't spend. **The FU-095 rotation
+("what's currently good", not just "what's new") is fed since 2026-07-27 by the router pulling
+OpenRouter's documented MCP `list-daily-model-rankings`** (daily popularity by token volume,
+standard API key — ADR-096 addendum 2) into its rotation store; the scout's canary stays the
+safety probe for rotation entrants, and canary verdicts land in the same store (`POST /rotation`).
 
 ## The bundle — why these FUs resolve together
 

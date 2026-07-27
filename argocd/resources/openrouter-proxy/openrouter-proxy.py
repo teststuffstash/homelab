@@ -31,11 +31,13 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 import base64
 import json
 import os
+import re
 import ssl
 import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -317,6 +319,53 @@ _DROP_RESP = {"connection", "keep-alive", "transfer-encoding", "content-length"}
 _pins: dict[str, tuple[float, dict | None]] = {}  # model -> (expires_epoch, provider block|None)
 _pins_lock = threading.Lock()
 
+# ADR-096 market pricing (operator direction 2026-07-27): the pin's price basis upgrades from a
+# LIST-price blend at an assumed cache-hit to the MARKET effective price — what customers actually
+# paid per provider over the rolling 30d, incl. each provider's REAL cache hit rate. Source: the
+# model page's "Effective Pricing" chart data at
+# GET /api/frontend/v1/stats/effective-pricing?permaslug=<dated-permaslug>
+# (unofficial frontend route, found 2026-07-27; the dated permaslug rides in every /endpoints
+# entry's name "Provider | vendor/model-YYYYMMDD"). Fail-soft: no market data → the list blend.
+MARKET_ENABLE = os.environ.get("MARKET_ENABLE", "1") == "1"
+MARKET_TTL_S = int(os.environ.get("MARKET_TTL_S", "21600"))  # 30d rolling averages drift slowly
+_market: dict[str, tuple[float, dict | None]] = {}  # model -> (expires, {slug/name: row}|None)
+_market_lock = threading.Lock()
+_PERMASLUG_RE = re.compile(r"\|\s*([a-z0-9-]+/[A-Za-z0-9._:-]+)\s*$")
+
+
+def market_for(model: str, permaslug: str | None) -> dict | None:
+    """{lowercased providerSlug AND providerName: {"in": effective $/M input, "hit": cache rate}}
+    from the market effective-pricing stats, or None (no permaslug / fetch failed / no traffic)."""
+    if not (MARKET_ENABLE and permaslug):
+        return None
+    now = time.time()
+    with _market_lock:
+        hit = _market.get(model)
+        if hit and hit[0] > now:
+            return hit[1]
+    rows = None
+    try:
+        req = urllib.request.Request(
+            f"{UPSTREAM}/api/frontend/v1/stats/effective-pricing?"
+            + urllib.parse.urlencode({"permaslug": permaslug}),
+            headers={"User-Agent": "homelab-openrouter-proxy"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = (json.load(resp).get("data") or {})
+        summaries = data.get("providerSummaries") or []
+        if summaries:
+            rows = {}
+            for s in summaries:
+                row = {"in": float(s.get("effectiveInputPrice") or 0.0),
+                       "hit": float(s.get("cacheHitRate") or 0.0)}
+                for key in (s.get("providerSlug"), s.get("providerName")):
+                    if key:
+                        rows[str(key).lower()] = row
+    except Exception as e:  # noqa: BLE001 — market data is an upgrade, never a dependency
+        log(f"market: effective-pricing fetch failed for {permaslug}: {e} — list-price basis")
+    with _market_lock:
+        _market[model] = (now + (MARKET_TTL_S if rows else 1800), rows)
+    return rows
+
 
 def log(msg: str) -> None:
     print(f"{time.strftime('%H:%M:%S', time.gmtime())} {msg}", flush=True)
@@ -347,8 +396,12 @@ def compute_pin(model: str) -> dict | None:
     with urllib.request.urlopen(req, timeout=15) as resp:
         data = json.load(resp)
     endpoints = []
+    permaslug = None
     for e in (data.get("data") or {}).get("endpoints") or []:
         pricing = e.get("pricing") or {}
+        if permaslug is None:  # "StreamLake | deepseek/deepseek-v4-flash-20260423"
+            m = _PERMASLUG_RE.search(e.get("name") or "")
+            permaslug = m.group(1) if m else None
         endpoints.append(
             {
                 "provider": e.get("provider_name") or e.get("name"),
@@ -366,11 +419,22 @@ def compute_pin(model: str) -> dict | None:
         )
 
     tooled = [e for e in endpoints if e["tools"]]
+    market = market_for(model, permaslug)
 
     def eff(e: dict) -> float:
+        # Market basis first: the provider's REAL 30d effective input price (their measured
+        # cache hit baked in). List blend at the assumed CACHE_HIT only when unmeasured.
+        if market:
+            row = market.get((e["slug"] or "").lower()) or market.get((e["provider"] or "").lower())
+            if row and row["in"] > 0:
+                return row["in"]
         if e["cache_read"] is not None:
             return (1.0 - CACHE_HIT) * e["prompt"] + CACHE_HIT * e["cache_read"]
         return e["prompt"]
+
+    def is_market(e: dict) -> bool:
+        return bool(market and (market.get((e["slug"] or "").lower())
+                                or market.get((e["provider"] or "").lower())))
 
     for pool in (
         [e for e in tooled if e["cache_read"] is not None and (e["uptime"] or 0.0) >= UPTIME_FLOOR],
@@ -389,6 +453,7 @@ def compute_pin(model: str) -> dict | None:
                     "max_price": max_price,
                 },
                 "max_completion": best["max_completion"],
+                "basis": "market" if is_market(best) else "list",
             }
     return None
 
@@ -413,6 +478,106 @@ def pin_for(model: str) -> dict | None:
     with _pins_lock:
         _pins[model] = (now + ttl, pin)
     return pin
+
+
+_GEN_ID_RE = re.compile(rb'"id"\s*:\s*"(gen-[A-Za-z0-9_-]+)"')
+GEN_LOOKUP = os.environ.get("GEN_LOOKUP", "1") == "1"
+
+
+def _generation_lookup(gen_id: str, auth_value: str, requested_model: str) -> None:
+    """ADR-096 ground-truth cost harvest: GET /api/v1/generation?id= with the SAME key that made
+    the request (probed 2026-07-27: a session key reads its own generations — total_cost is the
+    billed figure, provider_name/model are what actually served, native_tokens_cached is the
+    real cache hit). Runs on a daemon thread AFTER the response closed; the record needs a
+    beat to exist upstream, so one delayed retry. Best-effort: a miss only leaves the ledger's
+    launcher-reported figures as the fallback. The auth value is used and dropped — never
+    logged, never stored."""
+    for delay in (2.0, 5.0):
+        time.sleep(delay)
+        try:
+            req = urllib.request.Request(
+                f"{UPSTREAM}/api/v1/generation?id={gen_id}",
+                headers={"Authorization": auth_value,
+                         "User-Agent": "homelab-openrouter-proxy"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = (json.load(resp).get("data") or {})
+            if data:
+                router.record_generation(gen_id, requested_model, data)
+                log(f"generation {gen_id}: ${data.get('total_cost') or 0:.6f} "
+                    f"via {data.get('provider_name') or '?'} "
+                    f"cached={data.get('native_tokens_cached') or 0}/"
+                    f"{data.get('native_tokens_prompt') or 0}")
+                return
+        except urllib.error.HTTPError as e:
+            if e.code != 404:  # 404 = not indexed yet — retry once; anything else, give up quietly
+                log(f"generation {gen_id}: lookup {e.code} — skipped")
+                return
+        except OSError as e:
+            log(f"generation {gen_id}: lookup failed: {e} — skipped")
+            return
+    log(f"generation {gen_id}: never appeared — skipped")
+
+
+# ADR-096 rotation feed: OpenRouter's DOCUMENTED MCP server (docs/guides/overview/mcp-server)
+# accepts a STANDARD API key (probed 2026-07-27 — no OAuth dance, no session id) and its
+# `list-daily-model-rankings` tool returns daily model popularity by token volume with dated
+# permaslugs. That IS the FU-095 "maintained rotation" the REST surface lacks (P0 probe: no
+# rankings API; `order=top-weekly` ignored). A daemon loop pulls it dailyish with the router's
+# own account key (ROUTER_ACCOUNT_REF → the labeled router-account-key Secret) and upserts the
+# top of the list into the rotation store (source openrouter-daily-rankings). Chain policy is
+# untouched: rotation entries are candidate DATA; graduation stays human (scout canary probes
+# entrants per FU-095).
+MCP_UPSTREAM = os.environ.get("MCP_UPSTREAM", "https://mcp.openrouter.ai/mcp")
+RANKINGS_POLL_S = int(os.environ.get("RANKINGS_POLL_S", "86400"))
+RANKINGS_TOP_N = int(os.environ.get("RANKINGS_TOP_N", "30"))
+ROUTER_ACCOUNT_REF = os.environ.get("ROUTER_ACCOUNT_REF", "")
+_RANK_DATE_RE = re.compile(r"-\d{8}$")
+
+
+def _mcp_call(key: str, tool: str, arguments: dict) -> dict:
+    """One MCP tools/call as plain JSON-RPC over HTTP (initialize handshake included — the server
+    is stateless enough to take both in sequence without a session header)."""
+    headers = {"Content-Type": "application/json",
+               "Accept": "application/json, text/event-stream",
+               "Authorization": "Bearer " + key}
+    init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                       "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                                  "clientInfo": {"name": "homelab-router", "version": "1"}}}).encode()
+    urllib.request.urlopen(
+        urllib.request.Request(MCP_UPSTREAM, data=init, headers=headers), timeout=20).close()
+    call = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                       "params": {"name": tool, "arguments": arguments}}).encode()
+    with urllib.request.urlopen(
+            urllib.request.Request(MCP_UPSTREAM, data=call, headers=headers), timeout=30) as resp:
+        reply = json.load(resp)
+    text = ((reply.get("result") or {}).get("content") or [{}])[0].get("text") or "{}"
+    return json.loads(text)
+
+
+def _rankings_tick() -> int:
+    """Pull the latest daily rankings into the rotation store. Returns entries written."""
+    resolved = _resolve_ref(ROUTER_ACCOUNT_REF) if ROUTER_ACCOUNT_REF else None
+    if not resolved:
+        return 0  # off-cluster / key not minted yet — quiet no-op, the loop retries
+    data = _mcp_call(resolved["key"], "list-daily-model-rankings", {}).get("data") or []
+    latest = max((str(r.get("date") or "") for r in data), default="")
+    day = [r for r in data if str(r.get("date") or "") == latest and r.get("model_permaslug")]
+    day.sort(key=lambda r: -int(r.get("total_tokens") or 0))
+    entries = [{"model": _RANK_DATE_RE.sub("", str(r["model_permaslug"])), "rank": i + 1}
+               for i, r in enumerate(day[:RANKINGS_TOP_N])]
+    n = router.record_rotation("openrouter-daily-rankings", entries)
+    log(f"rankings: {latest} → {n} rotation entries (top {RANKINGS_TOP_N} by tokens)")
+    return n
+
+
+def _rankings_loop() -> None:
+    time.sleep(60)  # let the pod settle (readiness, ref RBAC) before the first pull
+    while True:
+        try:
+            _rankings_tick()
+        except Exception as e:  # noqa: BLE001 — the feed is an upgrade, never a crash source
+            log(f"rankings: pull failed: {e} — next tick in {RANKINGS_POLL_S}s")
+        time.sleep(RANKINGS_POLL_S)
 
 
 def _anthropic_latch_update(status: int, resp_headers) -> str:
@@ -515,15 +680,29 @@ class Proxy(BaseHTTPRequestHandler):
         self.send_header("X-Openrouter-Proxy", note)
         self.end_headers()
         sent = 0
+        head = b""  # first bytes of the response — the generation id lives here (JSON and SSE both)
         try:
             while chunk := resp.read(8192):
                 self.wfile.write(chunk)
                 self.wfile.flush()
+                if or_model and len(head) < 16384:
+                    head += chunk
                 sent += len(chunk)
         except OSError as e:
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
             resp.close()
+        if GEN_LOOKUP and or_model and 200 <= status < 300:
+            # ADR-096 cost harvest: fire the /generation lookup for this completion. A client
+            # that dropped mid-stream still spent money — harvest regardless of how we exited.
+            m = _GEN_ID_RE.search(head)
+            auth_value = next((v for k, v in headers.items() if k.lower() == "authorization"), "")
+            if m and auth_value and not auth_value.startswith("Bearer ref:"):
+                threading.Thread(
+                    target=_generation_lookup,
+                    args=(m.group(1).decode(), auth_value, or_model),
+                    daemon=True,
+                ).start()
         self.close_connection = True
         log(f"{self.command} {self.path} → {status} [{note}] {sent}B {time.time() - started:.1f}s")
 
@@ -781,7 +960,8 @@ class Proxy(BaseHTTPRequestHandler):
                     if pin and "provider" not in payload:
                         payload["provider"] = pin["provider"]
                         or_provider = pin["provider"]["order"][0]
-                        notes.append(f"injected:{pin['provider']['order'][0]}")
+                        notes.append(f"injected:{pin['provider']['order'][0]}"
+                                     + (":mkt" if pin.get("basis") == "market" else ""))
                     # max_tokens floor (goose -32602 truncation class): raise a missing/low
                     # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
                     # max_completion_tokens when known. An explicit value ABOVE the floor wins.
@@ -813,9 +993,12 @@ def main() -> int:
                     _latch[k] = saved[k]
         if float(saved.get("until") or 0) > time.time():
             log(f"restored ACTIVE 429 latch from store (until={saved['until']:.0f})")
+    if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0:
+        threading.Thread(target=_rankings_loop, daemon=True).start()
     log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
         f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
-        f"max_tokens_floor={MAX_TOKENS_FLOOR})")
+        f"max_tokens_floor={MAX_TOKENS_FLOOR}, market={'on' if MARKET_ENABLE else 'off'}, "
+        f"rankings={'on' if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0 else 'off'})")
     ThreadingHTTPServer(("", PORT), Proxy).serve_forever()
     return 0
 
