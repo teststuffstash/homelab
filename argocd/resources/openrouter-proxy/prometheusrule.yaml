@@ -18,6 +18,10 @@ spec:
           for: 15m
           labels:
             severity: warning
+            # Self-describing capacity state: it self-resolves when the window drops, the
+            # deferral IS the correct behavior, and triaging it would defer on the same latch
+            # (circular). The responder skips triage:none deterministically.
+            triage: none
           annotations:
             summary: "Claude subscription dispatch is deferred"
             description: 'Agent dispatch (reviewers/coordinator/claude-tier workers) has been deferring for 15m — 5h utilization {{ with query "anthropic_subscription_utilization{window=''5h''}" }}{{ . | first | value | humanizePercentage }}{{ end }}, 7d {{ with query "anthropic_subscription_utilization{window=''7d''}" }}{{ . | first | value | humanizePercentage }}{{ end }}. Probe: GET openrouter-proxy.agent-egress:8080/anthropic-limit.'
@@ -31,6 +35,7 @@ spec:
           for: 30m
           labels:
             severity: warning
+            triage: none # same class: a capacity fact the operator reads on Grafana, not a triage target
           annotations:
             summary: "Claude subscription weekly pool above 90%"
             description: '7d utilization is {{ $value | humanizePercentage }} with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'

@@ -128,6 +128,14 @@ spec:
               NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
               [ -n "$FP" ] || FP="$(printf '%s' "$a" | jq -r '.labels | tostring' | sha256sum | cut -c1-16)"
 
+              # triage:none — the rule AUTHOR declared this alert self-describing (capacity
+              # states, heartbeats): no session, no ledger slot, no daily-cap spend. The label
+              # rides in the payload, so this costs zero lookups. Rule-side convention:
+              # argocd/resources/*/prometheusrule.yaml.
+              if [ "$(printf '%s' "$a" | jq -r '.labels.triage // empty')" = "none" ]; then
+                echo "→ $NAME ($FP): triage:none (self-describing by rule author) — skip"; continue
+              fi
+
               # Ledger dedup: one triage per fingerprint per 24h (cm value = last-triaged date).
               SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
               if [ "$SEEN" = "$TODAY" ]; then echo "→ $NAME ($FP): triaged today — skip"; continue; fi
