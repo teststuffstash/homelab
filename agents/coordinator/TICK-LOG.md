@@ -1202,3 +1202,24 @@ Lesson, same family as the hollow-200 and the false-green grep: **a probe that r
 is not a probe that looked** — verify a belt by making it SEE something at least once
 (`max_over_time(...) > 0` while known work is queued), not by its error counter staying zero.
 FU-088 latch lifted mid-session; #24's review dispatched — the FU-096 tail runs itself from here.
+
+### 2026-07-27 (cont. 2) — the 1-7 program: gap register emptied, belts stacked, sleep re-enabled on the new platform
+Items 1-6 built+tested in one arc: C6 merged-closeout+harvest (MP-G03/FU-090a), reviewer
+(pr,head-sha8) key (MP-G02/FU-092 — and the apply→create silent-adopt fix), arbitrate split
+(escalation ≠ anomaly; new agent/arbitrate label) + ci-red-stale guarded probe (MP-G01/G04 —
+**the FSM gap register is EMPTY**, 12 transitions anchored), FU-099 blackbox (live-verified;
+archived), FU-044's deterministic revert chain (argocd-notifications → /deploy-degraded →
+auto-revert PR), FU-104 SLO-as-claim (oracle first consumer, burnt=0 verified live; teeth in
+the reflex both paths; archived — the FU-080 composed-kind RBAC lesson recurred on cue),
+FU-106 infra-enrich class + sleep-iac deliberately re-opened as a fixer (reviewed claim diff;
+ns PLATFORM-precreated after the stack-side attempt was correctly rejected by the AppProject —
+the tenancy design working). Operator rulings mid-arc, all encoded: dashboard lives+tests in
+sleep-tracking and ships via the chart (#48 gate issue authored, #42/#43 dep-held, sleep-iac#25
+companion); FU-095(a) = build the small lookup (external routers solve per-prompt difficulty,
+not label×ledger routing; fusion re-assessed as the audit-class chain head, §M6); the platform
+queue (homelab 🚨 issues) is meta bootstrap step 2; meta-alert-crosscheck.sh is the belt FOR
+the belts — **its first run caught the responder's multi-alert stdin bug** (claude -p ate the
+while-read pipe; </dev/null). The responder handled its first real alerts unsupervised
+(NodeRebooted report-only with sound reasoning; #55 wk-01 memory squeeze — operator remediated
+12→16Gi, tofu-codified, no drift). Sleep re-enabled (sleep-iac#27) over the #48-first queue —
+the next session's job is WATCHING the first unsupervised cycles, per meta-state.

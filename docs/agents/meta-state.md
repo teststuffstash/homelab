@@ -28,6 +28,20 @@ before trusting AgentQueueStalled)._
   prompt-corpus parameterization (the evidenced prerequisite for scheduled prod probing);
   after #84's corpus is prod-valid, the suspended mcp-probe CronWorkflow manifest in
   oracle-iac (operator lane) + #84's gap harvester. #109 operator-paced.
+- **SLEEP ROLLOUT — FIRST UNSUPERVISED CYCLES OF THE NEW MACHINERY (role-build session,
+  2026-07-27 ~15:30Z).** The sleep coordinator re-enabled (sleep-iac#27) over a queue that
+  exercises everything built today: sleep-tracking#48 (system-test gate, lg, chart/.github
+  authorized) dispatches FIRST → spec bugs #39-41/#44-47 (xs-sm; #42/#43 dep-held on #48) →
+  sleep-iac#22/#25 through the NEW -iac dispatch class (sleep-iac is a fixer since FU-106).
+  WATCH posture, not drive: every new clause pays a lesson on its first live run — C6
+  merged-closeout+harvest fires on the first merge; arbitrate/ci-red-stale/infra-enrich on
+  their triggers; the responder v2 + SLO teeth + deterministic revert run underneath. Sweep
+  the platform queue (homelab 🚨 issues) FIRST and run `agents/meta-alert-crosscheck.sh` each
+  heartbeat (it caught the multi-alert stdin bug on run 1). Known residuals: FU-095 legs
+  a/b/c (evidence program; fusion canary queued as the audit-class candidate), FU-058 first
+  hand-fire (wants idle fixer queue + headroom), FU-090 legs b/c, FU-086 compound + cron
+  relax, FU-102 blocked on the UC-1 corpus (other lane). Remove this bullet when the first
+  full cycle (issue→merge→C6→deploy) is observed clean.
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
