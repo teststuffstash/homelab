@@ -14,11 +14,17 @@ on:
     paths:
       - docker/arc-runner/**
       - .github/workflows/runner-image.yaml
+      # The lock bump itself is the rebuild signal (level-triggered): the Monday devbox-update
+      # PR merging re-bakes the warm store + eval cache against the fresh locks. This replaced
+      # the fixed-offset cron ordering (lock 03:00 → image 06:00): GitHub cron drifts by HOURS
+      # independently per workflow (2026-07-27: the 03:00 lock bump fired 06:19 — the 06:00
+      # image cron would have rebaked LAST week's locks), so offsets guarantee nothing.
+      - devbox.json
+      - devbox.lock
   schedule:
-    # Mondays 06:00 UTC — 3h after devbox-update.yaml's synchronized lock bump (Mon 03:00),
-    # so the warm store + eval cache are re-baked against the freshly-merged locks. Without
-    # this the image only rebuilt on docker/arc-runner/ pushes and every weekly bump silently
-    # re-introduced the per-job realization tax the warm layer exists to kill.
+    # Monday fallback rebake only (base-image freshness + the OTHER repos' lock drift — their
+    # lockfiles are fetched live at build time, so no master push signals them). Ordering with
+    # the lock bump no longer matters: the push trigger above owns that case.
     - cron: "0 6 * * 1"
   workflow_dispatch: {}
 
