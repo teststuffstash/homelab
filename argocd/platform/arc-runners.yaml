@@ -61,7 +61,7 @@ spec:
                 operator: Exists
             initContainers:
               - name: init-dind-externals
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.27-ga91de6489c1b
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.27-g69c8dc0ef598
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -96,7 +96,7 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.27-ga91de6489c1b
+                image: ghcr.io/teststuffstash/homelab/arc-runner:2026.7.27-g69c8dc0ef598
                 command: ["/home/runner/run.sh"]
                 env:
                   - name: DOCKER_HOST
