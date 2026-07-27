@@ -19,9 +19,15 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
   Remediation v2: iac#233's targetRevision rollback was SILENTLY OVERRIDDEN in minutes by
   the evening merges' auto deploy-bumps (lesson: a rollback via the bumped knob loses to the
   next bump) → iac#239 pins mcpServer.image.tag=2026.7.25-gfc4b537 in $values (bumps can't
-  move it; loudly commented). Verify watcher running (tools/call 200 = restored). NEXT:
-  (1) on jbtlm corpus release, ONE iac PR: new corpus digest + REMOVE the values tag pin
-  (server rolls forward to the bumped targetRevision); (2) re-run the prod
+  move it; loudly commented). Prod pinned+stable (tools/call 200). ⚠ #159 (schema gate,
+  gated+merging) makes post-#159 servers REFUSE unstamped corpora — and jbtlm's corpus is
+  built by a pre-#159 image = unstamped (user_version 0). REFINED ROLL SEQUENCE:
+  (1) jbtlm Succeeded → release corpus → ONE iac PR: new corpus digest + values pin MOVED to
+  the post-#157/pre-#159 server tag (casefold schema + /healthz + respawn, NO version gate —
+  find it via the deploy-bump for #157's merge commit) — NOT removed;
+  (1b) prod probe run 4 = the definitive verdict; then QUEUE fleet#158 (chart healthz);
+  (1c) pin-follow workflow-ert to a post-#159 image → start-from=build rerun → FIRST STAMPED
+  corpus → second paired iac PR (digest + REMOVE pin entirely) → schema gate live E2E; (2) re-run the prod
   agentic probe (probe-prod.sh on ci-runner-01; ephemeral key
   oracle-fleet-adhoc-probe-uc1-kind expires ~00:50Z — remint if needed) for the true prod
   verdict; (3) after the roll-forward: QUEUE fleet#158 (chart httpGet /healthz readiness — held
