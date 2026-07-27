@@ -418,6 +418,14 @@ _Last updated: 2026-07-16._
       ADR-094 janitor tick MAY draft issues from specs/TRACKS gaps, same inert gate.
       **Visibility slice SHIPPED 2026-07-18**: the scan reports 🌱 bot-authored issues lacking
       `agent-fix` per repo, so harvested drafts surface for human triage instead of rotting.
+      **Leg (a) harvest BUILT 2026-07-27 (with the C6 merged-closeout clause — MP-G03 closed):**
+      the scan emits `merged-closeout` units for issues CLOSED by a merged PR but still
+      `agent/in-progress` (21-day window, cap 3/repo/scan, agent/error excluded); the item
+      session's play (coordinator README §merged-closeout) = verify the outcome on master → flip
+      `agent/done` → file each review `Follow-ups:` bullet as an INERT issue (provenance +
+      inherited track label; breaker #1 — selfQueue stays the graduation knob) → one closing
+      comment. Clause verified empty-safe on all three stacks; first live candidates arrive when
+      the sleep spec-bug fixes merge.
       Graduation knob (NOT built): claim `issueAuthoring.selfQueue` (default off) letting the
       coordinator self-label harvested issues, bounded by the existing breakers + a per-day rate
       cap — flipping it is the operator's per-stack trust call (it retires breaker #1 for that

@@ -332,6 +332,28 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2
       fi
     fi
+    # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
+    # but still carrying `agent/in-progress` is a loop nobody closed — outcome unverified, label
+    # stale, and the merged PR's review `Follow-ups:` bullets die in the comment. Emit ONE unit
+    # per such issue (the item session verifies, flips agent/done, harvests the bullets as INERT
+    # issues — breaker #1). Level-triggered off closed-issue state; capped at 3/repo/scan (a
+    # housekeeping trickle — first run meets history) with the overflow reported, 21-day window
+    # (older closeouts are archaeology, not reconciliation).
+    closed_ip="$(gh issue list --repo "$slug" --state closed --label agent/in-progress --limit 20 \
+      --json number,title,labels,updatedAt 2>/dev/null)" || closed_ip='[]'
+    jq -e . >/dev/null 2>&1 <<<"$closed_ip" || closed_ip='[]'
+    c6_all="$(printf '%s' "$closed_ip" | jq -r --arg cutoff "$(date -u -d '-21 days' +%Y-%m-%dT%H:%M:%SZ)" \
+      '[.[] | select(((.labels|map(.name))|index("agent/error"))|not) | select(.updatedAt >= $cutoff) | .number] | .[]')"
+    c6_n=0
+    for u in $c6_all; do
+      if [ "$c6_n" -lt 3 ]; then
+        units="${units}merged-closeout|${repo}|issue-${u}\n"
+        c6_n=$((c6_n+1))
+      else
+        orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"
+      fi
+    done
+
     # BACKSTOP (C10 leftover class): an agent-pattern branch (fix/*, feat/*, agent/*) with NO open
     # PR is a closed-PR leftover — a same-named future round dies non-fast-forward on it (live
     # 2026-07-09, defused by hand). Report-only; the fix is `gh pr close --delete-branch` hygiene.
@@ -388,7 +410,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       continue
     fi
     unit=""
-    for clause in c4c5-redispatch changes-requested merge-conflict unarmed-major queued-dispatch; do
+    # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
+    # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
+    for clause in c4c5-redispatch changes-requested merge-conflict unarmed-major merged-closeout queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done

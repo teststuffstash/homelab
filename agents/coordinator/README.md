@@ -291,6 +291,31 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    health/rollback is FU-044, handled in-cluster. See homelab `docs/sleep-iac.md` §"Deploy pipeline".
 8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
 
+## The `merged-closeout` clause (C6 — FU-090a / merge-path MP-G03, built 2026-07-27)
+
+The scan dispatches this unit for an issue **closed by its merged PR but still labelled
+`agent/in-progress`** — the loop's last leg that used to be manual meta work every time. Your
+job, in order (re-read live state first, exit clean if someone already closed it out):
+
+1. **Verify the outcome holds.** Find the merged PR (`gh pr list --state merged
+   --search "<issue> in:body"` or the issue timeline). Confirm it merged and master's `ci` on
+   the merge commit is green (`gh run list --commit <sha>`). If the outcome looks WRONG (merged
+   but the fix demonstrably didn't take), comment the evidence on the issue and reopen it with
+   `agent/queued` removed — a human or the next triage decides; do NOT dispatch anything.
+2. **Flip the label**: add `agent/done`, then remove `agent/in-progress` (add-before-remove;
+   compare-then-write per the label discipline above).
+3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
+   (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
+   issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
+   (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
+   issue, and a `Depends-on:` body line only if the bullet states one. **INERT by loop-safety
+   breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
+   for human triage (the claim's `issueAuthoring.selfQueue` knob is the graduation, not yours).
+   Dedup before filing: skip a bullet whose substance already has an open issue (search by the
+   spec ID or key phrase); say which you skipped and why in the closing comment.
+4. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
+   harvested (links), anything skipped.
+
 ## Dependency major bumps (coordinator-owned, NOT the review reflex)
 
 The weekly `devbox update` (FU-022) opens a bump PR per repo. A **non-major** bump arms auto-merge and
