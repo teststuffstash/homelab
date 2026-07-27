@@ -14,6 +14,11 @@ spec:
   resources:
     requests:
       storage: 20Gi # 10Gi filled 2026-07-27 (fresh agent-base builds + the FU-096 devbox-cache artifacts): a full disk TRUNCATES in-flight proxy writes → nodes see layer digest mismatches + 500s, and dead _uploads pile up uncleaned. Purge recipe: rm -rf .../repositories/*/*/_uploads/* in the pod.
+      # ⚠ Replica placement (2026-07-27): the bulk tier is only wk-02 + wk-metal-01, and wk-02's
+      # allocation couldn't fit the expansion — the volume's replicas are CO-LOCATED on
+      # wk-metal-01 by explicit choice (replicaSoftAntiAffinity=enabled on the volume). For a
+      # pull-through cache that's acceptable (upstream is the redundancy; loss = re-pull); real
+      # spread returns when bulk capacity grows.
 ---
 apiVersion: apps/v1
 kind: Deployment
