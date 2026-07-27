@@ -8,6 +8,12 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-092** *(archived 2026-07-27)* — **Reviewer deterministic-name key, DONE (MP-G02 closed).**
+  `reviewer-session.sh` pod name = `reviewer-<project>-<pr>-<headsha8>` (head-sha probe with a
+  loud timestamp fallback), atomic `kubectl create` (was `apply` — the silent-adopt
+  anti-pattern), terminal same-key reap (the dispatch predicate guarantees no verdict at head),
+  live holder refuses exit 3. A new push mints a new name; redelivery collides at the API
+  server. FSM: MP-T03 gained the anchored guard, gap register down to G01/G04 (+G05 accepted).
 - **FU-101** *(archived 2026-07-27, same day as filed)* — **Review lenses: first two LIVE +
   verified.** `agents/lenses/{k8s-prod,helm}.md` (externally-pinned sources + meta-11 incident
   evidence), selected in-pod by `reviewer-session.sh` — deterministic path+diff predicate,

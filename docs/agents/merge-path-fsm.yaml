@@ -77,6 +77,8 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: "bot_approved_head" }
       - desc: "capacity gate (429 latch / 80% utilization / session semaphore)"
         anchor: { file: agents/review-reflex.sh, pattern: "subscription-latch.sh" }
+      - desc: "deterministic-name key: reviewer pod = (repo, pr, head-sha8), atomic create — was gap MP-G02 (FU-092, 2026-07-27)"
+        anchor: { file: agents/reviewer-session.sh, pattern: "pod name IS the .repo, pr, head-sha8. idempotency key" }
       - desc: "per-stack reviewer.enabled knob"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewer.enabled" }
     belts:
@@ -176,12 +178,6 @@ gaps:
       red e2e needed a MANUAL meta round dispatch (2026-07-21). Design says 'reflex labels →
       coordinator decides' — nothing implements the timer."
     fu: "FU-050 v3 note in coordinator-scan.sh header; promote when the next red PR stalls"
-  - id: MP-G02
-    name: "reviewer dispatch lacks the deterministic-name key"
-    detail: "workflow.md/merge-path.md design says review-<repo>-<pr>-<headsha8> as the atomic
-      test-and-set; implemented today: label idempotency + STEP-0 only (probabilistic, and STEP-0
-      costs a burned session). Workers got their key 2026-07-21; reviewers didn't."
-    fu: "FU-092"
   - id: MP-G04
     name: "arbitrate (flip-flop / rounds-exhausted) is breaker-only"
     detail: "The escalation table's tie-break rows exist as ROUNDS_MAX breaker counts, not as a

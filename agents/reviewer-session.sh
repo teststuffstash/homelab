@@ -90,7 +90,18 @@ fi
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"   # ships Claude Code + gh wrapper
 REPO_SLUG="${REPO_SLUG:-teststuffstash/${PROJECT}}"
 REVIEWER_GIT="${REVIEWER_GIT:-reviewer-git}"   # Secret w/ the review-bot App token — MUST differ from the PR author's App
-POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
+# FU-092 (merge-path MP-G02): the pod name IS the (repo, pr, head-sha8) idempotency key — the
+# same atomic-create test-and-set workers got 2026-07-21. A new push mints a new name (a
+# legitimate re-review); event redelivery / edge+backstop races collide on the SAME name and the
+# API server arbitrates. Head-sha probe failure degrades to the old timestamp name, loudly —
+# the pod-label check + STEP-0 remain the belts on that path.
+HEADSHA8="$(gh pr view "$PR" --repo "$REPO_SLUG" --json headRefOid -q '.headRefOid' 2>/dev/null | cut -c1-8)" || HEADSHA8=""
+if [ -n "$HEADSHA8" ]; then
+  POD="reviewer-${PROJECT}-${PR}-${HEADSHA8}"
+else
+  echo "WARN: head-sha probe failed — timestamp pod name (idempotency belts: pod-label check + STEP-0 only)" >&2
+  POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
+fi
 
 # In-pod prep, run under `bash -lc` so the image's gh-wrapper (reads the LIVE ~1h token from
 # GH_TOKEN_FILE) is on PATH. gh repo clone → a full clone (master present) so /code-review can diff
@@ -213,7 +224,23 @@ if ! bash "$HERE/subscription-latch.sh"; then
   exit 0
 fi
 
-cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
+# FU-092 atomic gate (the worker pattern): a TERMINAL same-key holder is reaped — the dispatch
+# predicate (reflex/Sensor: bot_review_at_head=none) already guarantees this head has no verdict,
+# so the dead pod is a failed/refused attempt whose record lives in GitHub. A LIVE holder refuses
+# — that IS the double-dispatch this key exists to kill. `create` (never `apply` — apply silently
+# ADOPTS an existing pod and the idempotency story dies) is the test-and-set.
+EXISTING_PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+case "$EXISTING_PHASE" in
+  Succeeded|Failed)
+    echo "→ reaping terminal same-key reviewer pod ${POD} (${EXISTING_PHASE}) before re-dispatch"
+    "$KUBECTL" $KUBE -n "$NS" delete pod "$POD" --ignore-not-found >/dev/null 2>&1 || true;;
+  "") :;;
+  *)
+    echo "REVIEW REFUSED: pod ${POD} already ${EXISTING_PHASE} — this (pr, head) is under review (FU-092 key)." >&2
+    exit 3;;
+esac
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
+  || { echo "REVIEW REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (pr, head) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:

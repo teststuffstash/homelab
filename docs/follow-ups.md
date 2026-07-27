@@ -398,14 +398,7 @@ _Last updated: 2026-07-16._
       LONGHORN per-disk storageScheduled-vs-cap (kubelet metrics exist: longhorn_disk_* — add
       the >80% alert alongside the Garage one). Relates ADR-089, oracle-iac#40
       closing comment, oracle-iac#95.
-- [ ] **FU-092** — **Reviewer dispatch lacks its deterministic-name idempotency key
-      (merge-path-fsm MP-G02).** Found by MODELING the merge path as an FSM (2026-07-21): the
-      design (merge-path.md §Concurrent triggers) specifies `review-<repo>-<pr>-<headsha8>` as
-      the atomic create key; implemented today = pod-label idempotency + the STEP-0 self-guard
-      (probabilistic, and a STEP-0 catch burns a session). Workers got their key 2026-07-21
-      (`agent-<project>-<task>-r<round>`, atomic `kubectl create`); apply the same to
-      `reviewer-session.sh` — name from (repo, pr, head-sha8), terminal same-key reap, live
-      holder refuses. Relates FU-069, merge-path-fsm.yaml MP-G02.
+
 - [ ] **FU-090** — **Coordinator-authored issues: harvest + authoring surfaces behind the
       breaker-#1 gate (design 2026-07-18, operator-flagged: "coordinators don't create issues
       themselves yet").** Today issue AUTHORING is a jail-LLM practice (workflow.md §Triggers
