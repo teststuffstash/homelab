@@ -123,6 +123,9 @@ spec:
             kubectl -n agent-coordinator get cm responder-seen >/dev/null 2>&1 \
               || kubectl -n agent-coordinator create cm responder-seen >/dev/null 2>&1 || true
 
+            # </dev/null on the claude call below: a piped while-read loop's stdin IS the
+            # remaining alerts — claude eats them and a multi-alert group triages only its
+            # first member (found live 2026-07-27 by meta-alert-crosscheck.sh, run 1).
             jq -c '.alerts[] | select(.status == "firing")' /tmp/alerts.json | while read -r a; do
               FP="$(printf '%s' "$a" | jq -r '.fingerprint // empty')"
               NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
@@ -183,7 +186,7 @@ spec:
             (d) platform-ward escalation only (see STEP 1): the issue goes on teststuffstash/homelab with the stated reason.
 
             HARD RULES: before filing, search the target repo for an OPEN issue containing 'alert-fp:$FP' — if found, add ONE comment there instead of a new issue. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
-                --model sonnet --permission-mode bypassPermissions --max-turns 40 \
+                --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
             done
         resources:

@@ -59,7 +59,13 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
      FAIL LOUDLY (rule #6; three dead-probe incidents in meta-9 alone).
    - The **backstop heartbeat**: `Monitor` (persistent) running
      `while true; do sleep 7200; echo "META-HEARTBEAT: sweep due"; done` — an unconditional
-     2-hourly wake. The loop watch only fires on CHANGE, and a stalled world produces no
+     2-hourly wake. **Each heartbeat sweep runs `bash agents/meta-alert-crosscheck.sh`** — the
+     belt FOR the belts (operator direction 2026-07-27): level-triggered, it diffs Alertmanager's
+     firing set against the responder-seen ledger; an UNTRIAGED line means the responder
+     MACHINERY is stuck (EventSource/Sensor/latch/loop bug) — investigate the chain, never
+     hand-triage the alert first (it caught the multi-alert stdin bug on run 1). Also sweep the
+     responder's OUTPUT surface: open 🚨/alert-fp issues on homelab + the -iac repos are part of
+     the board (step 2), not just events to await. The loop watch only fires on CHANGE, and a stalled world produces no
      changes: on 2026-07-23 a red CI on the tail PR matched no filter and the session sat
      silent for ~a day. The heartbeat exists so silence can never exceed 2h unexamined.
 5. Check in-flight operator chains: `docs/agents/meta-state.md` (if present) lists any pending
