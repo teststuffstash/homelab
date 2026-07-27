@@ -75,7 +75,10 @@ jobs:
           mkdir -p "$OUT/xdg" "$SEED"
           time XDG_CACHE_HOME="$SEED" devbox install
           cp -a "$SEED/nix" "$OUT/xdg/nix"
-          cp -a "$SEED/devbox" "$OUT/xdg/devbox"
+          # $SEED/devbox exists only when devbox self-downloads a pinned version (absent when the
+          # runner binary already matches — first live run failed on an unconditional cp). The
+          # nix EVAL cache above is the measured payload; the devbox dir is a bonus.
+          if [ -d "$SEED/devbox" ]; then cp -a "$SEED/devbox" "$OUT/xdg/devbox"; else echo "no \$SEED/devbox (runner devbox matches the pin) — skipping"; fi
           PROFILE="$(readlink -f .devbox/nix/profile/default)"
           nix copy --to "file://$OUT/store?compression=zstd" "$PROFILE"
           cp devbox.lock "$OUT/devbox.lock"
