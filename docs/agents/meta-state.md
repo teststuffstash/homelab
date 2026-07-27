@@ -30,8 +30,6 @@ _Session meta-11 live 2026-07-26 (~15:30Z bootstrap; both standing watches armed
 - **retro-session CronWorkflow** (FU-058) deployed SUSPENDED — first hand-fire wants: idle
   fixer queue, an ephemeral capped OpenRouterKey (param `retroKeySecret`), subscription
   headroom for cell A. Cross-review legs manual (`agents/retro-session.sh --review`).
-- **FU-015**: observe Monday 2026-07-27's automated cycle (lock bump 03:00 → image cron
-  06:00 → self-bump PR → roll; the self-bump is fresh-master-rebased) — then archive.
 - **Sleep stack**: unchanged — sleep first goal (specs + evidence + Grafana-in-kind system
   testing, FU-095 prereq block); then FU-044 → FU-080 graduation → FU-095 (c)→(b)→(a).
 - **Standing watches (die with the session — re-arm per the skill)**: meta-watch-loop.sh,
