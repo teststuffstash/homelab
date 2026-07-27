@@ -245,13 +245,18 @@ _Last updated: 2026-07-16._
       the hole: ADR-084 (sleep-iac `require_approval=false` — App bypass can't waive approval,
       bumps need the CI-only lane) + fleet#134 (`workflows: write` on ALL fixer git tokens,
       composition.yaml, safe only under a review gate) + this FU (sleep-iac became a fixer).
-      Net: an -iac worker can rewrite its own CI gate and instant-merge, unreviewed. Operator
-      ruling needed; candidate fixes, composable: (a) launcher-owned no-arm for -iac FIXER
-      rides (AGENT_ARM_PR=0 precedent, agent-runtime#23) + C9/reviewer arms only on APPROVED
-      (keeps the ADR-084 bump lane instant; the FU-105 lesson applies — the class must be
-      VISIBLE to the re-arm belt); (b) make `workflows: write` per-repo claim policy instead
-      of blanket (only review-gated repos get it). Window bounded meanwhile: sleep-iac#25 is
-      the only queued -iac item and is Depends-on-held behind sleep-tracking#48.
+      Net: an -iac worker can rewrite its own CI gate and instant-merge, unreviewed. **Gate
+      design must be per DISPATCH-CLASS, not per-repo (operator direction 2026-07-27 — think
+      together with roles.md §infra-fixer):** the -iac merge lanes are (1) deploy bumps
+      (deploy-App PRs) — CI-only instant, ADR-084, KEEP; (2) infra-enrich — commits INTO the
+      bump PR, mechanical rides lane 1 / judgment parks for the codeowner, KEEP; (3)
+      fixer-ISSUE PRs (the #28 class) — the gap: fix = launcher-owned no-arm for this class
+      (AGENT_ARM_PR=0 precedent, agent-runtime#23) + C9/reviewer arms only on APPROVED (the
+      FU-105 lesson: the class must be VISIBLE to the re-arm belt, not just absent). Token
+      narrowing (`workflows: write` per-repo) is DEMOTED to optional belt: #22 legitimately
+      needed workflows:write (operator-authored CI task) — issue authoring gates INTENT,
+      review gates OUTPUT. Window bounded meanwhile: sleep-iac#25 is the only queued -iac
+      item and is Depends-on-held behind sleep-tracking#48.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch

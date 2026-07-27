@@ -39,6 +39,12 @@ before trusting AgentQueueStalled)._
   hand-fire (wants idle fixer queue + headroom), FU-090 legs b/c, FU-086 compound + cron
   relax, FU-102 blocked on the UC-1 corpus (other lane). Remove this bullet when the first
   full cycle (issue→merge→C6→deploy) is observed clean.
+- **Sleep chain post-#48 flip (operator directive 2026-07-27 ~16:00Z)**: scout-#40 entrants
+  graduated — sleep-iac#29 (fallbacks + sleep-iac claudeTier:true) auto-merge armed,
+  stacks.json mirror synced. NEXT: when sleep-tracking#48 MERGES → one-liner PR to sleep-iac
+  flipping `workerModel: claude/haiku` (comment in the claim marks the plan). Operator starts
+  the FU-095 router arc themselves. Also pending the operator's FU-106 gate ruling: the
+  fixer-issue -iac class gets no-arm + arm-on-APPROVED (design recorded on FU-106).
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to

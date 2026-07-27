@@ -9,7 +9,7 @@
       "mainRepo": "homelab",
       "coordinatorModel": "sonnet",
       "workerModel": "openrouter/deepseek/deepseek-v4-flash",
-      "workerModelFallbacks": ["tencent/hy3", "qwen/qwen3-coder"],
+      "workerModelFallbacks": ["poolside/laguna-s-2.1:free", "inclusionai/ling-3.0-flash:free", "poolside/laguna-s-2.1", "tencent/hy3", "qwen/qwen3-coder", "claude/haiku"],
       "dockerRepos": ["sleep-tracking"]
     },
     {
