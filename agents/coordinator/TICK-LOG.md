@@ -1134,3 +1134,37 @@ trigger-on-lock-merge (a91de64, operator-directed) and the full chain re-proven 
 ordering — trigger on the upstream artifact landing. Session steady state at handoff: loop
 queue = #158 only; sprouts #160 + #84's parameterization await operator triage; the
 mcp-probe CronWorkflow manifest (operator lane) wants the parameterized prompt corpus first.
+
+### 2026-07-27 — role-axis build-out: FU-096 shipped, three roles born+tested+archived same day, the researcher's first real run
+**FU-096 (stack devbox-cache) built E2E in a day**: jail experiments proved the eval cache
+portable across path AND HOME by plain copy (54.7s cold → 7.1s seeded on oracle's real lock;
+store half 868M zstd with upstream sigs intact) → `devbox-cache.reusable.yml` + agent-base
+entrypoint seed (exact-lock guard; chmod-after-copy — cp keeps ImageVolume's read-only modes,
+caught in pre-ship simulation) + launcher probe-then-mount (anonymous ghcr probe ≈ the
+kubelet's credless pull — a private package = loud cold ride, never ImagePullBackOff). Both
+stacks publish (fleet#162, sleep#37); kata+ImageVolume canaried GREEN so the mount rides every
+ride (both pilot stacks are docker-mode — the cautious kata exclusion would have excluded
+EVERYTHING). Remaining: operator flips the ghcr packages public → in-pod measure → archive.
+First publish failed on an unconditional cp of `$SEED/devbox` (exists only when devbox
+self-downloads a pinned version) — fixed same hour.
+**The loop ate its own dogfood all day**: agent-runtime#22 + fleet#162 + sleep#35/#37 +
+sleep-iac#21 all bot-reviewed/auto-merged; the agent-base deploy-pin PR (#49) landed the
+FU-096 hook into images.env untouched by hand.
+**Roles (operator directive "test the new machinery, don't leave FUs open")**: FU-101 lenses
+(k8s-prod+helm, advisory, in-pod predicate + raw-fetch — verified against fleet#106) and
+FU-103 responder v1 (Alertmanager fan-out → /alert → Sensor → deterministic evidence issue;
+synthetic alert → homelab#44 in ~30s, fingerprint dedup verified) both LIVE and archived
+same day. FU-105 researcher: first mode BUILT and RUN — goal issue sleep#36 → claude+opus
+kata ride (806s, 109 turns) → spec PR **sleep#38: 17 ⚖ + 9 suspected bugs, 2 code-verified**
+(cfg.tz never reaches keying; repo dashboard 6×rawSql/0×queryText) → sonnet APPROVED + Fable
+second-pass → HUMAN merge gate. Archived; FU-095 keeps its model/evidence legs.
+**Machinery lessons paid live**: (1) finalize's arm-at-open armed the deliberately un-armed
+researcher PR and C9 would have re-armed it after the manual disarm — human-gating is now
+launcher-owned (`--no-arm` auto-derived from research* recipes → AGENT_ARM_PR=0,
+agent-runtime#23) + C9 skips `research/*`; an un-armed-by-design PR class must be VISIBLE to
+the re-arm belt, not just absent from it. (2) The ghcr mirror's 10Gi PVC hit 100% and
+TRUNCATED an in-flight agent-base layer → digest-mismatch pulls + 500s + 2.6G of dead
+_uploads nobody cleans; purged + PVC→20Gi (a full proxy disk corrupts silently — the mirror
+needs a usage alert). (3) FU-106: detector shipped (`agents/infra-schema-diff.sh`, tested);
+scan clause + enrich dispatch remain. FU-102/104 stay design-complete in roles.md (corpus
+prerequisite / FU-099+Composition lane).
