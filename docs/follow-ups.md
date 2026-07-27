@@ -237,8 +237,21 @@ _Last updated: 2026-07-16._
       diff, and enriches THE SAME PR (pin+fulfillment atomic; mechanical/references-only rides
       the CI lane, judgment parks for the codeowner — brief §infra-enrich). The sleep-iac
       exclusion re-opened DELIBERATELY via the reviewed claim diff (sleep-iac#24: fixer block,
-      stack-declared fixer ns, -iac fix.yaml + PROD-SERVING rubric). REMAINING: first live
-      dispatch (#22 after the coordinator re-enable) + the oracle-iac twin when oracle wants it.
+      stack-declared fixer ns, -iac fix.yaml + PROD-SERVING rubric). First live dispatch DONE
+      2026-07-27 (#22 → PR#28 merged, deliverables verified by the C6 closeout). REMAINING:
+      the oracle-iac twin when oracle wants it, and ⚠ **the -iac fixer REVIEW-GATE GAP**
+      (found on that first dispatch, 2026-07-27): PR#28 self-merged 38s after open — CI-gated
+      but ZERO review, and it edited `.github/workflows/`. Three sound decisions compose into
+      the hole: ADR-084 (sleep-iac `require_approval=false` — App bypass can't waive approval,
+      bumps need the CI-only lane) + fleet#134 (`workflows: write` on ALL fixer git tokens,
+      composition.yaml, safe only under a review gate) + this FU (sleep-iac became a fixer).
+      Net: an -iac worker can rewrite its own CI gate and instant-merge, unreviewed. Operator
+      ruling needed; candidate fixes, composable: (a) launcher-owned no-arm for -iac FIXER
+      rides (AGENT_ARM_PR=0 precedent, agent-runtime#23) + C9/reviewer arms only on APPROVED
+      (keeps the ADR-084 bump lane instant; the FU-105 lesson applies — the class must be
+      VISIBLE to the re-arm belt); (b) make `workflows: write` per-repo claim policy instead
+      of blanket (only review-gated repos get it). Window bounded meanwhile: sleep-iac#25 is
+      the only queued -iac item and is Depends-on-held behind sleep-tracking#48.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch
