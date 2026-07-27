@@ -48,9 +48,17 @@ bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/d
     --run "goose run --recipe .agents/fix.yaml --params issue=42"
 ```
 
-Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode` ·
-`--model <provider/model>` · `--no-attach`. The image must exist in ghcr first — build/push it from
+Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode|claude` ·
+`--model <provider/model>` · `--recipe <path>` (claude: launcher-built run command, ADR-094) ·
+`--task issue-N|pr-N` + `--round N` (idempotency key + transcript prefix) · `--work-branch <br>`
+(resume a PR branch) · `--docker` (kata+dind; auto-derived from the claim's `fixer.docker`) ·
+`--openrouter-secret <name>` · `--no-arm` (human-gated PR, FU-105 researcher; auto-derived from a
+`research*` recipe) · `--no-attach`. The image must exist in ghcr first — build/push it from
 the `agent-runtime` repo.
+
+Every ride also mounts the stack's CI-published **devbox-cache** (eval seed + `file://` store)
+via ImageVolume when its ghcr package is anonymously pullable — FU-096 / platform-and-stacks.md
+§Composition axes; `AGENT_STACK_CACHE=0` opts out, absence degrades to a loud cold ride.
 
 ## Per-session budget (the breaker)
 

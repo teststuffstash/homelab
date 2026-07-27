@@ -1168,3 +1168,23 @@ _uploads nobody cleans; purged + PVC→20Gi (a full proxy disk corrupts silently
 needs a usage alert). (3) FU-106: detector shipped (`agents/infra-schema-diff.sh`, tested);
 scan clause + enrich dispatch remain. FU-102/104 stay design-complete in roles.md (corpus
 prerequisite / FU-099+Composition lane).
+
+### 2026-07-27 (cont.) — responder v1→v2 the same day: three operator rulings become machinery
+The v1 responder (issue-per-alert on homelab) proved itself wrong in production within 35
+minutes: 6 machine issues (#45–#51), THREE of them one alertname (KubePodNotReady — per-pod
+fingerprints; how 3 becomes 300 overnight), one pure Alertmanager machinery (InfoInhibitor).
+Operator rulings, each now encoded: (1) **issues are triage-gated, never alert-mapped** —
+"alerts clear themselves, issues don't": an issue may exist only when triage decides durable
+work exists, and its lifecycle belongs to the loop, not the alert; (2) **a stack alert's ops
+surface is its -iac repo**, homelab only when the stack needs the platform; (3) **ownership is
+a lookup, not a judgment** — workload alerts carry their true namespace (claims-mappable),
+node alerts carry the EXPORTER's namespace (in no claim → platform, correct by the same rule);
+routing moved out of the LLM brief into the respond script; (4) **triage:none rule-label** —
+self-describing capacity alerts (SubscriptionDispatchLimited would have triaged its own cause
+circularly) never buy a session. v2 full E2E PASSED (respond-r8sf4): deterministic route
+oracle-fleet→oracle-iac, fp belts checked, synthetic identified, report-only, zero side
+effects; the latch-defer leg validated itself on the 82%-window firing. All v1 issues
+dispositioned; #47 (the one real work item) closed only after the mirror PVC really read 20Gi
+— the expansion was blocked by Longhorn bulk-tier allocation (wk-02 231/235Gi), resolved by
+accepting recorded co-location for the rebuildable cache. InfoInhibitor null-routed beside
+Watchdog.
