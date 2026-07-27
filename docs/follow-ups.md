@@ -632,6 +632,16 @@ _Last updated: 2026-07-16._
       registry + the strike/ledger history — the exact gap model-routing.md:50 notes ("failure
       classes are task-shaped… should carry a task-size/class dimension"; FU-057 pivot is the
       data seam). No prior art beyond that note (grep 2026-07-25: no FU matches task-type router).
+      **Buy-vs-build surveyed 2026-07-27 (operator question): BUILD the small lookup.** External
+      routers solve per-PROMPT difficulty inference (RouteLLM/NotDiamond/openrouter-auto —
+      popularity/classifier-based, can't read our ledger; M6 verdict on auto stands) or gateway
+      mechanics (LiteLLM/Portkey — would un-solve our proxy's subscription gate + cred/pin
+      injection). Closest fit = OpenRouter PRESETS (@preset/<class>, server-side chains) —
+      dashboard-managed today = click-ops, watch for API manageability. Two registry
+      enhancements adopted from the survey: (1) provider QUANTIZATION/staleness filter in the
+      §M4 pin (the /endpoints field — never pin an fp8/stale serving for eval-sensitive lanes);
+      (2) "sales" need nothing — live effective-price recompute per dispatch already captures
+      price drops; the rotation covers currently-good drift.
       (b) **multi-harness evidence** — same task classes across `--harness goose|opencode|claude`,
       compared on the FU-057 ledger axes {success-rate, harness-death-rate, $/successful-issue}.
       This IS the recorded ADR-077 trigger ("add Omnigent's meta-harness only if governing
