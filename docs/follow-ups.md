@@ -715,7 +715,13 @@ _Last updated: 2026-07-16._
       no rankings API (`order=top-weekly` ignored, frontend 404) → git-curated
       `rotation_fallback` fed by the scout digest, staleness-alerted). Phases: P1 observe-only
       store → P2 budgeter/tiers → P3 shadow → P4 authoritative-for-workers → P5 rotation-fed
-      class chains. This builds leg (a)'s substrate; legs (b)/(c) unchanged.
+      class chains. This builds leg (a)'s substrate; legs (b)/(c) unchanged. **P1 SHIPPED
+      2026-07-27** (commit c9e909e: router.py store + /report + /rotation + /router-status +
+      router_* metrics + latch persistence + model-classes.json + PVC/Recreate/key CR; CI
+      router-self-test). Known P1 coverage gap: /report posts from the LAUNCHER finalizer only
+      — rides where the launcher exits early (coordinator path) rely on the in-pod
+      agent-finalize twin, which doesn't POST yet (agent-runtime change; do with P3 so shadow
+      coverage is honest).
       **Spec-creation directive (operator 2026-07-25): EXECUTED 2026-07-27** via the FU-105
       researcher mechanism (claude+opus authored, sonnet+Fable reviewed) — spec PR
       sleep-tracking#38 (9 pages, 17 ⚖, 9 suspected bugs, 2 code-verified) awaits the HUMAN

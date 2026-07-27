@@ -11,8 +11,11 @@ spec:
   replicas: 1
   # ADR-096: the router store PVC is RWO — RollingUpdate would deadlock on the volume attach.
   # Cost: ~10-20s data-plane blackout per script roll; launchers fail-open/retry by design.
+  # rollingUpdate: null is LOAD-BEARING under ServerSideApply: the live object carries defaulted
+  # rollingUpdate fields, and switching type without clearing them is rejected as invalid.
   strategy:
     type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       app: openrouter-proxy
