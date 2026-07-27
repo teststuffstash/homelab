@@ -43,8 +43,9 @@ before trusting AgentQueueStalled)._
   graduated — sleep-iac#29 (fallbacks + sleep-iac claudeTier:true) auto-merge armed,
   stacks.json mirror synced. NEXT: when sleep-tracking#48 MERGES → one-liner PR to sleep-iac
   flipping `workerModel: claude/haiku` (comment in the claim marks the plan). Operator starts
-  the FU-095 router arc themselves. Also pending the operator's FU-106 gate ruling: the
-  fixer-issue -iac class gets no-arm + arm-on-APPROVED (design recorded on FU-106).
+  the FU-095 router arc themselves. FU-106 gate design SETTLED (2026-07-27 rulings): no human,
+  no blocking review — docs/agents/iac-lane.md + iac-lane-fsm.yaml carry it; build list =
+  IAC-G01..G06 (rung-0 sleep PostSync smoke first).
 - **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to

@@ -21,7 +21,7 @@ stateDiagram-v2
     BotApproved --> CodeownerPark: spec-gated (MP-T08)
     CodeownerPark --> Merged: human_approve → auto-merge (MP-T05)
     BotApproved --> Merged: auto-merge (MP-T05)
-    Merged --> [*]: Fixes closes issue — ⚠ MP-G03 close-the-loop is manual
+    Merged --> [*]: Fixes closes issue → merged-closeout (MP-T10, C6)
     note right of Green
         agent_error (MP-T09) freezes any state
         for automation until a human clears it

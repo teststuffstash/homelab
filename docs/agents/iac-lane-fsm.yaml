@@ -1,0 +1,147 @@
+# iac-lane-fsm.yaml — the machine-readable model of the -IAC repo lifecycle (FU-106).
+#
+# WHY (2026-07-27, born from sleep-iac#28 — the first live -iac fixer dispatch self-merged in
+# 38s, unreviewed, editing .github/workflows/): the -iac wrapper repos run a DIFFERENT machine
+# than the app repos (merge-path-fsm.yaml). There, CI carries the evidence (tests) and Merged is
+# terminal; here CI can only prove FORM (render/schema/policy) and the behavioral truth arrives
+# POST-merge as ArgoCD sync → health → SLO. Merge is the midpoint. Operator ruling 2026-07-27:
+# NO human in the deploy path — the platform enforces budgets, happiness is measured, degradation
+# rolls back automatically; humans appear monthly (retro/sprout triage) and on product-contract
+# specs only. Design narrative: iac-lane.md. Same lint as the app machine
+# (scripts/merge-path-lint.py): anchors must grep, gaps must carry fu:/accepted:.
+#
+# Statuses: guarded (mechanical guard + anchor) | report-only (surfaced, human acts) |
+#           github-native | platform-native (ArgoCD/Crossplane's own reconcile) |
+#           gap (belongs in the register).
+
+title: "-iac lane FSM"
+narrative: iac-lane.md
+diagram: |
+  stateDiagram-v2
+      [*] --> Open: pr_opened — the LANE decides the gate (IAC-T01/T03)
+      Open --> Green: ci success (FORM only — render/schema/policy)
+      Open --> Red: ci failure
+      Red --> Enriched: RED deploy bump → infra-enrich unit (IAC-T02)
+      Enriched --> Green: fulfillment commit into the SAME PR (pin+claim atomic)
+      Green --> Merged: CI-only auto-merge (IAC-T01/T03) — ⚠ IAC-G01/G04 fixer-issue lane unpoliced
+      Merged --> Syncing: ArgoCD selfHeal (IAC-T04)
+      Syncing --> Healthy: synced + health — ⚠ IAC-G05 no observation window
+      Syncing --> Degraded: health/probe fails
+      Degraded --> Reverted: deterministic revert PR (IAC-T05) — ⚠ IAC-G02 bumps only
+      Healthy --> [*]: closeout (IAC-T06) — ⚠ IAC-G03 verifies GitHub, not cluster
+      note right of Merged
+          merge is the MIDPOINT here — evidence
+          arrives post-merge (inverted vs the app lane)
+      end note
+
+axes:
+  lane: [deploy_bump, infra_enrich, fixer_issue, operator, revert, renovate]  # the PR classes — each gets its own gate
+  ci: [pending, green, red]              # form checks only: render, schema, policy
+  merge: [open, merged]                  # ADR-084: CI-only auto-merge, require_approval=false BY DESIGN
+  sync: [syncing, synced, degraded, reverted]   # the post-merge half — where the real evidence lives
+  window: [none, observing, promoted]    # progressive-delivery rung (IAC-G05 — future)
+  policy: [unchecked, pass, fail]        # the tamper-proof cluster-side sentinel (IAC-G04 — future)
+
+events:
+  pr_opened: "deploy App / worker / operator / Renovate opens a PR — lane assignment"
+  ci_completed: "required check `ci` concludes (strict, ruleset-enforced)"
+  bump_red: "deploy/* bump PR red on the values.schema.json delta — typed infra gap"
+  merged: "GitHub auto-merge on CI green (no approval requirement on -iac, ADR-084)"
+  argocd_synced: "app(s) reach Synced at the merge revision"
+  health_degraded: "app Degraded / SLO probe fails / claim not Ready"
+  window_elapsed: "observation window over — promote (future, IAC-G05)"
+  revert_pr_opened: "deterministic revert PR lands (FU-044 chain)"
+  alert_fired: "stack alert → responder → the -iac repo is the ops surface"
+
+transitions:
+  - id: IAC-T01
+    name: deploy bump auto-merges on CI (ADR-084)
+    owner: app-repo deploy.yaml (bump PR, auto-merge armed) + required-checks ruleset
+    when: "deploy/* bump PR green → instant merge; NO approval requirement — App bypass can't waive one, so it was dropped, not bypassed"
+    status: guarded
+    guards:
+      - desc: "-iac repos opt OUT of required-approval BY DESIGN (CI gates the bump)"
+        anchor: { file: tofu/github/variables.tf, pattern: "sleep-iac.*require_approval = false" }
+      - desc: "strict required ci check on the default branch"
+        anchor: { file: tofu/github/repo_rulesets.tf, pattern: "strict_required_status_checks_policy = true" }
+
+  - id: IAC-T02
+    name: RED bump → infra-enrich (typed delta, same-PR fulfillment)
+    owner: scan ci-red-stale probe → infra-enrich class → coordinator item unit
+    when: "deploy/* bump red in a *-iac repo → values.schema.json diff IS the infra delta; mechanical rides the CI lane, judgment parks"
+    status: guarded
+    guards:
+      - desc: "scan routes RED -iac bump PRs to the distinct infra-enrich class"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "infra-enrich" }
+      - desc: "typed schema-delta detector (enrichment_needed bit)"
+        anchor: { file: agents/infra-schema-diff.sh, pattern: "enrichment_needed" }
+
+  - id: IAC-T03
+    name: fixer-issue dispatch (the FU-106 re-opened lane)
+    owner: scan queued-dispatch (fixerRepos predicate) → worker → PR
+    when: "agent-fix+queued issue in an -iac repo with a fixer block → normal worker ride; the MERGE side of this lane is IAC-G01"
+    status: guarded
+    guards:
+      - desc: "dispatchability is a claim predicate (fixer block present), never implicit"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "fixerRepos" }
+    incidents: ["2026-07-27 sleep-iac#28 (first live dispatch: PR open→self-merge in 38s, zero review, .github/workflows edited — IAC-G01's origin)"]
+
+  - id: IAC-T04
+    name: merged master syncs to the cluster
+    owner: ArgoCD (selfHeal, app-of-apps)
+    when: "merged → Syncing → Synced/Degraded; tenancy (AppProject) rejects out-of-boundary resources server-side"
+    status: platform-native
+
+  - id: IAC-T05
+    name: Degraded after a deploy bump → deterministic revert PR
+    owner: argocd-notifications → /deploy-degraded → auto-revert PR (FU-044 chain)
+    when: "app Degraded ≤120m after a deploy/* bump merge → revert PR through the CI-only lane; fix-forward = a NEW issue with the revert evidence"
+    status: guarded
+    guards:
+      - desc: "the revert chain (notification → sensor → revert PR)"
+        anchor: { file: agents/coordinator/deploy-revert-argo.yaml, pattern: "revert" }
+
+  - id: IAC-T06
+    name: merged closeout (C6)
+    owner: scan merged-closeout clause → coordinator item unit
+    when: "closed/merged -iac work → verify → agent/done flip → Follow-ups harvest (inert)"
+    status: guarded
+    guards:
+      - desc: "scan emits merged-closeout units"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "merged-closeout" }
+    incidents: ["2026-07-27 sleep-iac#22 closeout verified deliverables+CI on GitHub while Gateway/Workspace reconciled unobserved (IAC-G03's origin — the outcome happened to be good)"]
+
+  - id: IAC-T07
+    name: stack alert → the -iac repo is the ops surface
+    owner: responder v2 (deterministic namespace→claim ownership lookup)
+    when: "workload alert in a claimed ns → triage session → issue in the stack's -iac when durable work exists"
+    status: guarded
+    guards:
+      - desc: "responder routes a stack alert to its -iac repo (ownership is a lookup)"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "its -iac repo" }
+
+gaps:
+  - id: IAC-G01
+    name: fixer-issue merge gate
+    detail: "Nothing stands between a worker's push and master on the fixer-issue lane (38s self-merge, sleep-iac#28) — and the fixer token carries workflows:write (composition, fleet#134 grant), so a worker can edit CI itself. Ruling 2026-07-27: the fix is NOT a human and NOT a blocking LLM review — it is IAC-G04's deterministic policy sentinel + IAC-G06's advisory lens; this gap closes when G04 does."
+    fu: FU-106
+  - id: IAC-G02
+    name: revert trigger scoped to deploy/* bumps
+    detail: "IAC-T05 watches deploy/* bump merges only; a fixer-issue merge (IAC-T03) that degrades the stack is invisible to the revert chain. Widen to: any -iac merge preceding Degraded ≤T."
+    fu: FU-106
+  - id: IAC-G03
+    name: C6 closeout verifies GitHub, not the cluster
+    detail: "The -iac definition of done is reconciled-and-healthy, not merged-and-CI-green: closeout must check app Synced AT the merge revision + Healthy + composed claims Ready (+ SLO burn unchanged) before flipping agent/done."
+    fu: FU-106
+  - id: IAC-G04
+    name: no tamper-proof policy check
+    detail: "In-repo CI runs the PR's own workflow code — a required check the PR can rewrite (the #28 workflows-edit made this concrete). The platform contract (ip-plan ranges, ADR-076 bucket ownership, tenancy boundaries, secret references-never-values, workflow-path rules, deletionPolicy guards) must be enforced by a CLUSTER-SIDE sentinel evaluating rendered manifests and posting a commit status the PR cannot touch (exporter/Argo Events shape, homelab-owned rules)."
+    fu: FU-106
+  - id: IAC-G05
+    name: no observation window / progressive rung
+    detail: "Healthy is instantaneous — sync-succeeded is treated as done with zero traffic evidence. Rung 0 (sleep, now): ArgoCD PostSync smoke Job (curl healthz + one real read) so a bad deploy fails the sync loudly into the existing degraded path. Rung 1 (in-cluster): Gateway API weighted backendRefs (Cilium) stable/canary split. Rung 2 (edge): Cloudflare in front of all services — key-tier routing, weighted LB, shadow mirroring. Design: iac-lane.md §Progressive delivery."
+    fu: FU-106
+  - id: IAC-G06
+    name: advisory review lens absent
+    detail: "With no blocking review, nothing reads -iac diffs at all: an async post-merge lens (cheap grounding-tier model, FU-095 evidence class) reviewing merged -iac changes and filing findings as INERT issues — evidence generation, never a gate."
+    fu: FU-106

@@ -11,6 +11,31 @@
 # Statuses: guarded (mechanical guard + anchor) | report-only (surfaced, human acts) |
 #           github-native (GitHub's own gate) | gap (known missing guard — needs fu/accepted).
 
+title: "Merge-path FSM"
+narrative: merge-path.md   # the design-narrative doc this machine models
+# THE APP-REPO machine. The -iac wrapper repos run a DIFFERENT machine (merge is the midpoint
+# there, evidence arrives post-merge): iac-lane-fsm.yaml / iac-lane.md (FU-106).
+diagram: |
+  stateDiagram-v2
+      [*] --> Open: pr_opened + arm (MP-T01)
+      Open --> Green: ci success
+      Open --> Red: ci failure
+      Red --> Green: fix round lands (MP-T07) — ⚠ MP-G01 no timer owner
+      Green --> Behind: master_moved
+      Behind --> Green: branch_updated (MP-T02) — NOT new content
+      Behind --> Conflicted: merge_conflict_422 (MP-T06)
+      Green --> BotApproved: review dispatch + APPROVE (MP-T03)
+      Green --> ChangesRequested: review dispatch + CHANGES (MP-T03)
+      ChangesRequested --> Green: content_pushed, re-reviewable (MP-T04/T07)
+      BotApproved --> CodeownerPark: spec-gated (MP-T08)
+      CodeownerPark --> Merged: human_approve → auto-merge (MP-T05)
+      BotApproved --> Merged: auto-merge (MP-T05)
+      Merged --> [*]: Fixes closes issue → merged-closeout (MP-T10, C6)
+      note right of Green
+          agent_error (MP-T09) freezes any state
+          for automation until a human clears it
+      end note
+
 axes:
   ci: [pending, green, red]                     # statusCheckRollup at head (SKIPPED/NEUTRAL = green-equivalent)
   currency: [current, behind, conflicted]       # mergeStateStatus (BEHIND / DIRTY)

@@ -260,18 +260,20 @@ _Last updated: 2026-07-16._
       the hole: ADR-084 (sleep-iac `require_approval=false` — App bypass can't waive approval,
       bumps need the CI-only lane) + fleet#134 (`workflows: write` on ALL fixer git tokens,
       composition.yaml, safe only under a review gate) + this FU (sleep-iac became a fixer).
-      Net: an -iac worker can rewrite its own CI gate and instant-merge, unreviewed. **Gate
-      design must be per DISPATCH-CLASS, not per-repo (operator direction 2026-07-27 — think
-      together with roles.md §infra-fixer):** the -iac merge lanes are (1) deploy bumps
-      (deploy-App PRs) — CI-only instant, ADR-084, KEEP; (2) infra-enrich — commits INTO the
-      bump PR, mechanical rides lane 1 / judgment parks for the codeowner, KEEP; (3)
-      fixer-ISSUE PRs (the #28 class) — the gap: fix = launcher-owned no-arm for this class
-      (AGENT_ARM_PR=0 precedent, agent-runtime#23) + C9/reviewer arms only on APPROVED (the
-      FU-105 lesson: the class must be VISIBLE to the re-arm belt, not just absent). Token
-      narrowing (`workflows: write` per-repo) is DEMOTED to optional belt: #22 legitimately
-      needed workflows:write (operator-authored CI task) — issue authoring gates INTENT,
-      review gates OUTPUT. Window bounded meanwhile: sleep-iac#25 is the only queued -iac
-      item and is Depends-on-held behind sleep-tracking#48.
+      Net: an -iac worker can rewrite its own CI gate and instant-merge, unreviewed. **DESIGN
+      SETTLED 2026-07-27 (operator rulings; supersedes the same-day arm-on-APPROVED sketch):
+      the -iac lane is its own machine — `docs/agents/iac-lane.md` + `iac-lane-fsm.yaml`
+      (lint-checked like the app FSM); NO human and NO blocking LLM review in the deploy
+      path.** Cheap CI assertions stay (they explain themselves; post-merge failures cost a
+      revert + an investigation session); the security class moves to a TAMPER-PROOF
+      cluster-side policy sentinel (in-repo CI runs the PR's own workflow code — IAC-G04);
+      the post-merge half (observation window, widened revert, cluster-verifying closeout)
+      is the primary gate; review demotes to an async advisory lens on the cheap grounding
+      tier; humans = monthly retro + product-contract specs only. The gap register
+      (IAC-G01..G06) is the build list; suggested order in iac-lane.md §Build order
+      (rung-0 sleep PostSync smoke first). -iac model chain ≠ app coding chain (grounding
+      evidence, FU-095(a) first axis = repo-type). Window bounded meanwhile: sleep-iac#25
+      is the only queued -iac item and is Depends-on-held behind sleep-tracking#48.
 - [ ] **FU-086** — **Item-scoped coordinator dispatch (ADR-094 build): the scan emits work units,
       the session judges one item.** **CORE SHIPPED 2026-07-17, E2E-verified:**
       `coordinator-scan.sh` emits `(clause, repo, item)` units (queued-dispatch | c4c5-redispatch
