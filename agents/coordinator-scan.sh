@@ -205,8 +205,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       --jq '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
     [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
     iss=""; qblocked=""; qcycles=""
+    # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
+    # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
+    # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
+    # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
+    # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
     while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps; do
       [ -n "$qnum" ] || continue
+      [ "$qtracks" = "-" ] && qtracks=""
+      [ "$qdeps" = "-" ] && qdeps=""
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
         dnum="${dep##*#}"; dslug="$slug"
@@ -255,7 +262,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         iss="${iss}  issue #${qnum} — ${qtitle}\n"
       fi
       units="${units}queued-dispatch|${repo}|issue-${qnum}\n"
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",")), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ")) ] | @tsv')
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
