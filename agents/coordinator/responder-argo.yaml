@@ -1,0 +1,113 @@
+# responder-argo — the FU-103 responder role's activation machinery (roles.md §Planned roles).
+#
+# V1 IS DELIBERATELY DETERMINISTIC + REPORT-ONLY: Alertmanager POSTs a firing group to the
+# agent-loop EventSource's /alert endpoint (review-argo.yaml) → the `responder` Sensor submits a
+# `respond` Workflow → a SCRIPT (no LLM) dedupes by alert fingerprint and files ONE evidence
+# issue per new alert on the platform repo. The bot-authored issue is INERT (no agent-fix /
+# agent/queued — TICK-LOG §Loop-safety breaker #1); the scan's 🌱 clause surfaces it for human
+# triage. The LLM triage session (diagnosis judgment) and the remediation WHITELIST are the
+# graduation knobs — they slot in BEHIND this same edge without touching the machinery.
+#
+# Machinery inventory (the roles.md checklist):
+#   predicate  = Alertmanager firing (routing/matchers live in the Alertmanager config)
+#   edge       = /alert webhook → this Sensor
+#   backstop   = NONE by design — alerts are level-triggered and refire on group_interval
+#   key        = alert fingerprint (dedup: an open issue carrying the fingerprint = owned)
+#   capacity   = Sensor rateLimit (the dumb outer belt; no subscription draw in v1 — no LLM)
+#   breakers   = inert bot-authored issues (breaker #1); alert-storm bounded by the rateLimit
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: responder
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review # same submit-only Role as review/coordinate Sensors
+  dependencies:
+    - name: alert-dep
+      eventSourceName: agent-loop
+      eventName: alert
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 6 } # dumb outer belt vs alert storms
+      template:
+        name: submit-respond
+        conditions: "alert-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: respond-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: respond }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: alert-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+---
+# The respond WorkflowTemplate — fingerprint-dedup + evidence-bundle issue, pure bash+gh+jq.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: respond
+  namespace: agent-coordinator
+spec:
+  entrypoint: respond
+  serviceAccountName: argo-workflow
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  volumes:
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: respond
+      inputs:
+        parameters:
+          - { name: payload }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+        env:
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: RESPONDER_REPO, value: "teststuffstash/homelab" }
+          # Payload rides an env var, NOT shell interpolation — an apostrophe in an alert
+          # annotation must not break quoting (k8s env delivery is byte-safe).
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+        command: [bash, -c]
+        args:
+          - |
+            set -euo pipefail
+            printf '%s' "$PAYLOAD" > /tmp/alerts.json
+            COUNT="$(jq -r '.alerts | length' /tmp/alerts.json 2>/dev/null || echo 0)"
+            [ "${COUNT:-0}" -gt 0 ] || { echo "no alerts in payload — nothing to do"; exit 0; }
+            jq -c '.alerts[] | select(.status == "firing")' /tmp/alerts.json | while read -r a; do
+              FP="$(printf '%s' "$a" | jq -r '.fingerprint // empty')"
+              NAME="$(printf '%s' "$a" | jq -r '.labels.alertname // "unknown-alert"')"
+              [ -n "$FP" ] || FP="$(printf '%s' "$a" | jq -r '.labels | tostring' | sha256sum | cut -c1-16)"
+              # Idempotency key: an OPEN issue carrying this fingerprint owns the alert. Search is
+              # eventually-consistent — the residual race costs a duplicate 🌱 issue, never a loop.
+              if gh issue list --repo "$RESPONDER_REPO" --state open --search "alert-fp:$FP in:body" \
+                   --json number --jq 'length' 2>/dev/null | grep -qv '^0$'; then
+                echo "→ $NAME ($FP): open issue exists — skip (level-triggered refire)"
+                continue
+              fi
+              SUMMARY="$(printf '%s' "$a" | jq -r '.annotations.summary // .annotations.description // "no summary"')"
+              BODY="$(printf '%s' "$a" | jq -r --arg fp "$FP" '"🚨 **Alert evidence bundle** (FU-103 responder v1 — deterministic, report-only; triage is human/LLM follow-up)\n\n**Alert:** \(.labels.alertname // "?")  \n**Summary:** \(.annotations.summary // "—")  \n**Description:** \(.annotations.description // "—")  \n**Started:** \(.startsAt // "?")  \n**Source:** \(.generatorURL // "—")\n\n**Labels:**\n```json\n\(.labels | tostring)\n```\n\n`alert-fp:\($fp)`\n\n_Bot-authored → inert by loop-safety breaker #1; the scan surfaces it as 🌱 for triage._"')"
+              gh issue create --repo "$RESPONDER_REPO" \
+                --title "🚨 ${NAME}: ${SUMMARY:0:80}" \
+                --body "$BODY" \
+                && echo "→ filed evidence issue for $NAME ($FP)" \
+                || echo "WARN: issue create failed for $NAME ($FP) — token scope? (loud, non-fatal)"
+            done
+        resources:
+          requests: { cpu: "50m", memory: "64Mi" }
+          limits: { memory: "256Mi" }

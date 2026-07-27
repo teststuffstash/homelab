@@ -111,12 +111,20 @@ Staleness is outsourced (OWASP/RIA maintain content; we pin versions and treat a
 release like a dep bump); the local delta (platform-specific lessons, e.g. paired rolls) stays
 incident-evidenced in merge-path-fsm.yaml style — the retro role maintains it.
 
-| lens | source (pinned) | selection predicate | first mode |
-|---|---|---|---|
-| k8s-prod | k8s production checklist class | Deployment/probe/chart manifests touched; first prod exposure | advisory |
-| helm | helm-best-practices | `charts/` touched | advisory |
-| ASVS | OWASP ASVS (pinned major) | auth/input/session code; new public endpoint | advisory |
-| e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report |
+| lens | source (pinned) | selection predicate | first mode | status |
+|---|---|---|---|---|
+| k8s-prod | k8s production checklist class | `chart*/templates/` or manifest dirs touched, or diff adds a workload `kind:` | advisory | **LIVE 2026-07-27** (`agents/lenses/k8s-prod.md`) |
+| helm | helm-best-practices | `chart*/` touched | advisory | **LIVE 2026-07-27** (`agents/lenses/helm.md`) |
+| ASVS | OWASP ASVS (pinned major) | auth/input/session code; new public endpoint | advisory | pending (predicate needs a code-class detector, not paths) |
+| e-ITS | RIA e-ITS baseline | stack-level, scheduled audit-pass | audit report | pending (seeded by FU-105's IdP research output) |
+
+Mechanism (built with FU-101's first two lenses): `reviewer-session.sh` computes the diff class
+in-pod (deterministic — changed paths + `gh pr diff` grep), fetches matching
+`agents/lenses/<lens>.md` from the public homelab repo raw (platform-owned, no image rebuild),
+and appends them to the system prompt after the project rubric. The advisory contract lives
+INSIDE each lens file (`LENS(<name>):` findings are Follow-ups, never the verdict); fetch
+failure skips the lens loudly. The per-stack advisory→blocking knob is not yet rendered (needs
+the AgentStack claim + a launcher read — do it when the first lens earns teeth).
 
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.
@@ -128,16 +136,28 @@ tier allowed, dual-model worth it) are FU-095's.
   schedule; edge = deploy doorbell; backstop = cron; key = (endpoint, artifact digest);
   breaker = inert 🌱 issues + rate cap. Detection belts stack: FU-099 blackbox (seconds, dumb)
   → prober (minutes, contract-deep) → responder.
-- **responder** (FU-103) — alert-triggered triage. predicate = Alertmanager firing; edge =
-  Sensor `/alert` (third webhook on the agent-loop EventSource); backstop = none (alerts are
-  level-triggered); key = alert fingerprint + window; report-only first (evidence bundle →
-  issue), remediation whitelist as a graduation knob (the FU-090 `selfQueue` pattern).
+- **responder** (FU-103) — alert-triggered triage. **v1 machinery LIVE 2026-07-27
+  (deterministic, report-only):** predicate = Alertmanager firing (fan-out route `continue:
+  true` in `tofu/monitoring.tf` → the `/alert` webhook); edge = Sensor `/alert` (third webhook
+  on the agent-loop EventSource) → `respond` WorkflowTemplate
+  (`agents/coordinator/responder-argo.yaml`) — a SCRIPT (no LLM) that fingerprint-dedupes and
+  files ONE evidence issue per new alert (bot-authored → inert, breaker #1; scan 🌱 surfaces
+  it); backstop = none (alerts are level-triggered); key = `alert-fp:<fingerprint>` in the open
+  issue body; capacity = Sensor rateLimit 6/min (no subscription draw in v1). Graduation knobs
+  (NOT built): the LLM triage session behind the same edge, then the remediation whitelist
+  (the FU-090 `selfQueue` pattern).
 - **researcher/planner** (FU-105) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
   `research` egress profile (proxy-logged) or claude-harness server-side WebSearch; safe because
   the pod holds no cluster creds and a spec-branch-only git token. Consumers in order: sleep
   spec retrofit (FU-095 prerequisite), IdP greenfield (whose EITS output seeds the e-ITS lens).
+  **First mode BUILT 2026-07-27:** sleep-tracking `.agents/research.yaml` (recipe: specs/-only
+  boundary, un-armed PR = the human gate until a CODEOWNERS ruleset exists, FU-069 breaker),
+  `goal` label + goal issue sleep-tracking#36, claim `claudeTier: true` (sleep-iac#21), egress =
+  claude server-side WebSearch (no dial change — WebFetch stays blocked and the brief says so).
+  Dispatch is operator-manual until FU-090(c) graduates; git token is the standing per-repo
+  broker token (branch-scope narrowing = open gap, noted in FU-105).
 - **infra-fixer** (FU-106) — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic — §contract/fulfillment in FU-106); input = `values.schema.json` diff (the
   typed infra delta), fulfillment = enriched **bump PR** (chart pin + claim change in ONE -iac

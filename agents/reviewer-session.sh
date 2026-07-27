@@ -109,8 +109,30 @@ ISSUE=\$(gh pr view ${PR} --json closingIssuesReferences -q '.closingIssuesRefer
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
 export TASK_KEY ISSUE
 echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
+# FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
+# lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review
+# time (no image rebuild, always current-pinned) and appended to the system prompt AFTER the
+# project rubric. Advisory framing lives inside each lens file (findings = Follow-ups, never the
+# verdict); a fetch failure skips the lens loudly — lenses must never block a review.
+LENS_BASE="\${LENS_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/lenses}"
+CHANGED="\$(gh pr view ${PR} --json files -q '.files[].path' 2>/dev/null || true)"
+LENSES=""
+printf '%s\n' "\$CHANGED" | grep -qE '^charts?/' && LENSES="helm"
+if printf '%s\n' "\$CHANGED" | grep -qE '^charts?/templates/|^(argocd|k8s|manifests|deploy)/.*\.ya?ml\$' \
+   || gh pr diff ${PR} 2>/dev/null | grep -qE '^\+.*kind: *(Deployment|StatefulSet|DaemonSet|CronJob)\b'; then
+  LENSES="\$LENSES k8s-prod"
+fi
+SYSFILE=/tmp/review-system.md
+if [ -f "${RUBRIC}" ]; then cp "${RUBRIC}" "\$SYSFILE"; else : > "\$SYSFILE"; fi
+for l in \$LENSES; do
+  if { printf '\n\n---\n\n'; curl -fsS --max-time 10 "\$LENS_BASE/\$l.md"; } >> "\$SYSFILE"; then
+    echo "→ lens attached: \$l (advisory — FU-101)"
+  else
+    echo "WARN: lens \$l fetch failed — review proceeds without it (advisory-only, never blocks)"
+  fi
+done
 RUBRIC_FLAG=""
-[ -f "${RUBRIC}" ] && RUBRIC_FLAG="--append-system-prompt-file ${RUBRIC}"
+[ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
 

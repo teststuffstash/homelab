@@ -54,6 +54,14 @@ spec:
       port: "12000"
       endpoint: /coordinate
       method: POST
+    # FU-103: the responder edge — Alertmanager webhook_configs POST here on firing alerts.
+    # Consumed by the `responder` Sensor (responder-argo.yaml). Alerts are level-triggered, so
+    # this edge has NO cron backstop by design (a missed delivery refires on the next group
+    # interval).
+    alert:
+      port: "12000"
+      endpoint: /alert
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

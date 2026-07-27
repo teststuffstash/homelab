@@ -203,7 +203,12 @@ _Last updated: 2026-07-16._
       scheduled audit-pass — dissolves the planned "auditor" role). Local platform-specific
       rules stay incident-evidenced (merge-path-fsm.yaml style), maintained by the retro role.
       Audit-lane model rules (reasoning tier, dual-model) = FU-095's. Design: `docs/agents/roles.md`
-      §Lenses. Elicit-don't-inject + mechanism>advice rules recorded there.
+      §Lenses. Elicit-don't-inject + mechanism>advice rules recorded there. **First two lenses
+      LIVE 2026-07-27:** `agents/lenses/{k8s-prod,helm}.md` (sources pinned; meta-11 incident
+      evidence inline), selected in-pod by `reviewer-session.sh` (deterministic path+diff
+      predicate, raw-fetch from public homelab, advisory contract inside each lens file, fetch
+      failure = loud skip). REMAINING: ASVS (needs a code-class predicate), e-ITS (seeded by
+      FU-105's IdP output), the per-stack advisory→blocking claim knob.
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
       lyhend-only resolution catch, 🌱#160). Brief exists (oracle probe-e2e/UC-1); missing =
@@ -219,7 +224,13 @@ _Last updated: 2026-07-16._
       level-triggered); key = alert fingerprint + window; boundary = namespace read + issue
       write, NO remediation initially — report-only evidence bundle → issue; a remediation
       WHITELIST (restart, ArgoCD rollback) is the graduation knob (FU-090 `selfQueue` pattern).
-      `roles.md`.
+      `roles.md`. **v1 machinery LIVE 2026-07-27 (deterministic, report-only — no LLM yet):**
+      Alertmanager fan-out route (`continue: true`, tofu/monitoring.tf, applied + reload
+      verified) → `/alert` webhook on the agent-loop EventSource → `responder` Sensor →
+      `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`): fingerprint-dedup
+      (`alert-fp:` in open-issue body) + ONE evidence issue per new alert on homelab
+      (bot-authored → inert, breaker #1; scan 🌱 surfaces). rateLimit 6/min. REMAINING: the LLM
+      triage session behind the same edge, per-stack issue routing, then the whitelist.
 - [ ] **FU-104** — **SLO as claim policy + error-budget deploy gate.** The stack declares
       `slo: {endpoint, probe, availability, errorBudget}` on its AgentStack claim; the
       Composition renders the FU-099 blackbox probe, burn-rate alerts, the FU-103 alert edge —
@@ -237,7 +248,12 @@ _Last updated: 2026-07-16._
       the new machinery: open-web egress** — a `research` egress profile on the claim
       (proxy-routed, logged) or claude-harness server-side WebSearch (only WebFetch needs the
       broad dial); safe because the pod holds NO cluster creds and a spec-branch-only git token.
-      `roles.md`.
+      `roles.md`. **First mode BUILT 2026-07-27** (roles.md has the inventory): sleep-tracking
+      `.agents/research.yaml` + `goal` label + goal issue sleep-tracking#36 (the FU-095 spec
+      retrofit), claim claudeTier (sleep-iac#21); un-armed PR = the human gate (no CODEOWNERS
+      ruleset on sleep yet); dispatch operator-manual until FU-090(c). OPEN GAPS: git token is
+      the standing per-repo broker token (spec-branch-only narrowing not built); `goal` label
+      is gh-created, graduates into the claim labels when sleep repos go claim-owned (FU-068).
 - [ ] **FU-106** — **Infra-fixer role: the -iac wrapper devops worker** (operator 2026-07-27;
       the provider-side PR — new secret ref/bucket/config — had no author every time). Design
       RULED by the target-agnostic-chart constraint (platform-and-stacks.md §Composition axes,

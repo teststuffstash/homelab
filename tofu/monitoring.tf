@@ -226,14 +226,37 @@ resource "helm_release" "kube_prometheus_stack" {
           group_interval  = "5m"
           repeat_interval = "3h"
           # Swallow the chart's always-firing Watchdog heartbeat (else it spams HA).
-          routes = [{
-            receiver = "null"
-            matchers = ["alertname = \"Watchdog\""]
-          }]
+          # Then FAN OUT: every real alert goes to the FU-103 responder edge (continue = true)
+          # AND to the HA webhook (the explicit catch-all child — with a continue:true sibling
+          # the parent default no longer applies, so HA needs its own terminal route).
+          routes = [
+            {
+              receiver = "null"
+              matchers = ["alertname = \"Watchdog\""]
+            },
+            {
+              receiver = "agent-responder"
+              continue = true
+            },
+            {
+              receiver = "ha-webhook"
+            },
+          ]
         }
         # "null" must exist because the Watchdog route targets it; everything else → HA.
         receivers = [
           { name = "null" },
+          {
+            # FU-103 responder v1 (report-only): the agent-loop EventSource's /alert endpoint
+            # (agents/coordinator/{review,responder}-argo.yaml) — a firing group becomes ONE
+            # fingerprint-deduped evidence issue. In-cluster svc URL; a down EventSource just
+            # drops the POST (alerts still reach HA via the route above).
+            name = "agent-responder"
+            webhook_configs = [{
+              url           = "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/alert"
+              send_resolved = false
+            }]
+          },
           {
             name = "ha-webhook"
             webhook_configs = [{
