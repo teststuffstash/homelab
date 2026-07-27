@@ -1223,3 +1223,29 @@ while-read pipe; </dev/null). The responder handled its first real alerts unsupe
 (NodeRebooted report-only with sound reasoning; #55 wk-01 memory squeeze — operator remediated
 12→16Gi, tofu-codified, no drift). Sleep re-enabled (sleep-iac#27) over the #48-first queue —
 the next session's job is WATCHING the first unsupervised cycles, per meta-state.
+
+### 2026-07-27 — meta-13: the sleep re-enable watched live; the -iac lane becomes its own machine
+The first unsupervised cycles of the 1-7 platform ran clean where they ran: C6 merged-closeout
+×3 verified (sleep#32→harvest #50, #30→#51, sleep-iac#22 closed with deliverables checked) —
+and the third unit itself FLAGGED the anomaly that became the day's design arc: **sleep-iac#28
+self-merged 38s after open, zero review, editing `.github/workflows/`**. Three individually
+sound decisions composed into the hole (ADR-084 require_approval=false + fleet#134 blanket
+workflows:write + FU-106 making sleep-iac a fixer) — the class lesson: a standing exclusion
+re-opened deliberately still needs its GATE re-derived, not inherited. Operator rulings turned
+the fix inside-out: **no human and no blocking review in the -iac deploy path** — cheap CI
+assertions (they explain themselves; post-merge failures cost revert+investigation), a
+tamper-proof CLUSTER-SIDE policy sentinel (in-repo CI runs the PR's own workflow code — review
+can't guard the worker from itself, policy-status can), the post-merge machine as the PRIMARY
+gate (observation window → promote|revert), review demoted to an async cheap-tier lens, humans
+monthly (retro) + product-contract specs only. Artifact: `docs/agents/iac-lane.md` +
+`iac-lane-fsm.yaml` — the -iac machine born modeled (7 transitions anchored, gaps IAC-G01..G06
+= the build list; merge-path-lint now checks both machines). Progressive delivery mapped to the
+platform: rung 0 = ArgoCD PostSync smoke (sleep pilots — "the curl IS the user"), rung 1 =
+Cilium Gateway-API weighted backendRefs (± Rollouts later), rung 2 = the Cloudflare edge
+(key-tier routing + shadow; wrong-answer-with-200 lives there). Build PARKED for a fresh
+session (meta-state bullet carries the order). Also today: scout-#40 graduation landed
+(sleep-iac#29 — laguna/ling/haiku fallbacks, claudeTier on sleep-iac, post-#48 haiku-primary
+flip planned), FU-109 filed (latch tiering: a 30s dispatch unit deferred like a review session
+— the queue sat capacity-stalled 1h16m+ on OUR OWN afternoon burn), and the #25-before-#48
+scheduling wrinkle noted (cross-repo Depends-on invisible to the pre-dispatch predicate; unit
+caught it clean — livelock question still open pending the first post-latch dispatching tick).

@@ -46,7 +46,17 @@ before trusting AgentQueueStalled)._
   the FU-095 router arc themselves. FU-106 gate design SETTLED (2026-07-27 rulings): no human,
   no blocking review — docs/agents/iac-lane.md + iac-lane-fsm.yaml carry it; build list =
   IAC-G01..G06 (rung-0 sleep PostSync smoke first).
-- **⚠ CONCURRENT SESSION (operator, 2026-07-26 ~18:45Z)**: another session is rewriting
+- **IAC-LANE BUILD (FU-106) — PARKED FOR A FRESH SESSION (operator, 2026-07-27 ~17:00Z).**
+  Design is SETTLED and committed (f75eda7): `docs/agents/iac-lane.md` (doctrine: no human,
+  no blocking review; deterministic CI + post-merge machine) + `iac-lane-fsm.yaml` (gap
+  register IAC-G01..G06 = the build list, lint-green). Pick up by building in §Build order:
+  (1) rung-0 sleep PostSync smoke — author the issue into sleep-iac (spec-anchor IAC-G05,
+  xs/sm: PostSync hook Job in the wrapper chart, curl /healthz + one real read, failure →
+  sync Failed → existing Degraded path) and let the LOOP build it; (2) IAC-G02 revert
+  widening + IAC-G03 cluster-verifying C6 (homelab-side, small); (3) IAC-G04 policy sentinel
+  (closes the #28 hole / IAC-G01); (4) IAC-G06 advisory lens; rungs 1/2 wait on oracle
+  gateway metering (T3c). Also parked nearby: -iac devops model chain (interim per-repo
+  override; FU-095(a) first axis = repo-type). another session is rewriting
   agentstack under FU-080 — agentstack-shaped errors (loop SA/broker/CronWorkflow machinery,
   odd coordinate ticks) are THAT session's lane: observe, don't clear/fix from here; flag to
   the operator only if it looks like unnoticed real damage. Remove this bullet when FU-080
