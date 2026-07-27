@@ -43,17 +43,24 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 1. `tail -120 agents/coordinator/TICK-LOG.md` — the last 2-3 entries are the arc's state +
    doctrines. Do NOT skip; the current doctrines live there (exclude-and-count, pin-follow,
    symptoms-only alerts, launcher-owned dispatch, "a belt is not a guard").
-2. Live board, per active repo (oracle-fleet, oracle-iac at minimum):
+2. **The PLATFORM work queue first — open 🚨 issues on homelab** (operator direction
+   2026-07-27): homelab has no fixer loop, so responder-filed platform issues have NO agent
+   lane — the meta-coordinator IS the platform's fixer. `gh issue list --repo
+   teststuffstash/homelab --state open` — triage/act/CLOSE these before loop work ("alerts
+   clear themselves, issues don't"), and during a BIG ROLLOUT sweep them FIRST and often:
+   infra breakage stalls the rollout silently while every event-watch stays quiet (#55, the
+   wk-01 memory squeeze, sat un-owned mid-rollout as the founding example).
+3. Live board, per active repo (oracle-fleet, oracle-iac at minimum):
    `gh issue list --repo teststuffstash/<r> --state open --json number,title,labels`
    `gh pr list --repo teststuffstash/<r> --state open --json number,title,labels,reviewDecision,mergeStateStatus`
    Reconcile: any bot-APPROVED spec-touching PR waiting on the codeowner gate? Any merged PR
    the `merged-closeout` clause MISSED (flip present but no harvest, or neither — clause bug)?
    Any `agent/error` latched? Any `agent/blocked` needing a design decision? Any un-armed
    `research/*` PR awaiting a HUMAN merge (the researcher gate — never arm it)?
-3. Cluster: latest `coordinate-<stack>` tick logs (`kubectl -n <stack>-agents logs <newest
+4. Cluster: latest `coordinate-<stack>` tick logs (`kubectl -n <stack>-agents logs <newest
    coordinate pod> -c main`), running ride/reviewer pods, any Failed workflow pods in workload
    namespaces.
-4. Re-arm BOTH standing watches:
+5. Re-arm BOTH standing watches:
    - The loop watch: `Monitor` (persistent) running `bash agents/meta-watch-loop.sh` —
      change-dedup'd scan ticks, ride/reviewer pods, open-PR set, 25-min stall clause. Probes must
      FAIL LOUDLY (rule #6; three dead-probe incidents in meta-9 alone).
@@ -68,7 +75,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
      the board (step 2), not just events to await. The loop watch only fires on CHANGE, and a stalled world produces no
      changes: on 2026-07-23 a red CI on the tail PR matched no filter and the session sat
      silent for ~a day. The heartbeat exists so silence can never exceed 2h unexamined.
-5. Check in-flight operator chains: `docs/agents/meta-state.md` (if present) lists any pending
+6. Check in-flight operator chains: `docs/agents/meta-state.md` (if present) lists any pending
    pin-follow / acceptance-run chains with their next step. Update it when starting/finishing one.
 
 ## Standing mechanics (how the routine beats run)
