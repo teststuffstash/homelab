@@ -85,6 +85,30 @@ spec:
                       type: boolean
                       default: true
                       description: Auto-review this stack's PRs. Default on.
+                slo:
+                  type: object
+                  description: >-
+                    FU-104 — the stack's availability contract as CLAIM POLICY. When declared,
+                    the platform renders: a blackbox Probe on the endpoint (the FU-099
+                    exporter), an EndpointProbeFailing alert stamped stack:<name> (routes the
+                    responder to THIS stack's -iac), an ErrorBudgetBurnt alert — and the TEETH:
+                    while the budget is burnt, the review reflex parks this stack's auto-merge
+                    lane (PRs wait for a HUMAN approval; "harder to ship something that breaks"
+                    by contract). Probe-content rule (meta-11): the endpoint must exercise the
+                    deepest dependency path — never a parent-process ping.
+                  properties:
+                    endpoint:
+                      type: string
+                      description: "The probed URL (e.g. https://mcp.oracle.teststuff.net/mcp)."
+                    module:
+                      type: string
+                      default: http_2xx_lan
+                      description: "Blackbox module (argocd/resources/blackbox: http_2xx_lan | mcp_post)."
+                    availability:
+                      type: number
+                      default: 0.99
+                      description: "30-day availability target; 1 - this = the error budget."
+                  required: [endpoint]
                 loop:
                   type: object
                   default: {}

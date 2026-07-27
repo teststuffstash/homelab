@@ -118,6 +118,71 @@ spec:
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: {{ $xr.metadata.name }}-loop-home-sa
                 gotemplating.fn.crossplane.io/ready: "True"
+            {{- if $xr.spec.slo }}
+            {{- $slo := $xr.spec.slo }}
+            {{- $sloStack := $xr.metadata.name }}
+            ---
+            # FU-104: the stack's SLO as claim policy — blackbox Probe (FU-099 exporter) on the
+            # declared endpoint. Probe-content rule (meta-11): the endpoint must exercise the
+            # deepest dependency path; a parent-process ping is not an SLO probe.
+            apiVersion: monitoring.coreos.com/v1
+            kind: Probe
+            metadata:
+              name: slo-{{ $sloStack }}
+              namespace: monitoring
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $sloStack }}-slo-probe
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              jobName: slo-{{ $sloStack }}
+              interval: 60s
+              module: {{ default "http_2xx_lan" (get $slo "module") }}
+              prober: { url: blackbox-exporter.monitoring.svc:9115 }
+              targets:
+                staticConfig:
+                  static:
+                    - {{ $slo.endpoint }}
+            ---
+            # FU-104: symptom alert (stack-labeled → the responder routes to THIS stack's -iac)
+            # + the error-budget recording rule the review reflex queries for the TEETH (budget
+            # burnt ⇒ the stack's auto-merge lane parks until it recovers).
+            apiVersion: monitoring.coreos.com/v1
+            kind: PrometheusRule
+            metadata:
+              name: slo-{{ $sloStack }}
+              namespace: monitoring
+              labels: { app: agentstack-slo }
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $sloStack }}-slo-rules
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              groups:
+                - name: slo-{{ $sloStack }}
+                  rules:
+                    - record: stack:error_budget_burnt:bool
+                      expr: ((1 - avg_over_time(probe_success{job="slo-{{ $sloStack }}"}[30d])) > (1 - {{ default 0.99 (get $slo "availability") }})) or vector(0)
+                      labels:
+                        stack: {{ $sloStack }}
+                    - alert: EndpointProbeFailing
+                      expr: probe_success{job="slo-{{ $sloStack }}"} == 0
+                      for: 10m
+                      labels:
+                        severity: warning
+                        stack: {{ $sloStack }}
+                      annotations:
+                        summary: "Synthetic probe failing: {{ "{{" }} $labels.instance {{ "}}" }}"
+                        description: "SLO endpoint has failed its blackbox probe for 10m. Symptom only."
+                    - alert: ErrorBudgetBurnt
+                      expr: stack:error_budget_burnt:bool{stack="{{ $sloStack }}"} == 1
+                      for: 30m
+                      labels:
+                        severity: warning
+                        stack: {{ $sloStack }}
+                        triage: none # self-describing policy state — the TEETH act on it (reflex parks the lane); a triage session would only restate it
+                      annotations:
+                        summary: "{{ $sloStack }} error budget burnt — auto-merge lane parked"
+                        description: "30d availability is below the claim's target; the review reflex parks this stack's auto-merge lane (PRs wait for a human) until the budget recovers (FU-104)."
+            {{- end }}
             {{- if and $xr.spec.loop (get $xr.spec.loop "perStack") }}
             {{- $stack := $xr.metadata.name }}
             {{- $loopns := printf "%s-agents" $stack }}

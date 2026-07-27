@@ -62,6 +62,31 @@ else
     REPOS="$kept"
   fi
 fi
+
+# FU-104 TEETH: a stack whose error budget is BURNT gets its auto-merge lane parked — this
+# reflex simply stops dispatching reviews for its repos (no bot approval ⇒ auto-merge never
+# fires ⇒ merges wait for a HUMAN). Ground truth = the claim-rendered recording rule
+# stack:error_budget_burnt:bool (agentstack Composition). FAIL-OPEN: a dead Prometheus must
+# never freeze every merge lane (rule #6 in reverse — availability of the gate < the gate);
+# a query failure logs loud and parks nothing.
+PROM_URL="${PROM_URL:-http://192.168.40.13:9090}"
+burnt_stacks="$(curl -fsS --max-time 10 "$PROM_URL/api/v1/query" \
+  --data-urlencode 'query=max by (stack) (stack:error_budget_burnt:bool) == 1' 2>/dev/null \
+  | jq -r '.data.result[].metric.stack' 2>/dev/null | tr '\n' ' ')" || burnt_stacks=""
+if [ -n "$burnt_stacks" ]; then
+  parked=""
+  for s in $burnt_stacks; do
+    parked="$parked $(jq -r --arg s "$s" '.stacks[]|select(.name==$s)|.repos[]' "$_HERE/stacks.json" 2>/dev/null | tr '\n' ' ')"
+  done
+  kept=""
+  for r in $REPOS; do
+    case " $parked " in
+      *" $r "*) echo "$(date -u +%H:%M:%S) ⚠ FU-104: $r parked — its stack's error budget is burnt (auto-merge lane demoted to human until it recovers)";;
+      *) kept="$kept $r";;
+    esac
+  done
+  REPOS="$kept"
+fi
 K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-${LOOP_NS_ARG:-agent-coordinator}}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
