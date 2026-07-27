@@ -99,9 +99,11 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 
 - **brief/state**: `agents/coordinator/TICK-LOG.md` (practice) + `meta-state.md` (in-flight chains)
 - **boundary**: the operator's jail sessions — full context, human-gated
-- **machinery**: **zero** — every meta-11 incident action (detect/diagnose/remediate/harden) was
-  manual. First machinery pieces, tracked: `arbitrate` scan clause (FU-086), follow-ups harvest +
-  goal decomposition (FU-090), close-the-loop C6 (MP-G03).
+- **machinery**: two of the three tracked pieces SHIPPED 2026-07-27 — the `arbitrate` scan
+  clause (FU-086) and close-the-loop C6 + Follow-ups harvest (`merged-closeout`, MP-T10 /
+  FU-090a) are loop-owned now; the incident lane grew machine belts the same day (blackbox →
+  responder triage → FU-044 deterministic revert). Remaining meta-manual: FU-090 (b)
+  spec-driven authoring + (c) goal decomposition, and everything the belts escalate.
 
 ## Lenses (FU-101)
 

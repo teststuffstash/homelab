@@ -19,13 +19,24 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   with ⚖ guidance pre-decided where the call is the codeowner's, acceptance criteria, track/*
   label, Depends-on lines per FU-087). Queue = `agent-fix` + `agent/queued`. Bot-authored 🌱
   sprouts stay unlabeled for the operator.
-- **C6 close-the-loop** (MP-G03, manual by design): on PR merge → verify the linked issue
-  closed → flip labels: remove `agent/in-progress`/`agent/queued`, add `agent/done`.
+- **C6 close-the-loop — MACHINE-OWNED since 2026-07-27** (the `merged-closeout` clause,
+  MP-T10): the scan flips `agent/done` and harvests review `Follow-ups:` bullets as inert
+  issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
+  their flip + harvest; a missed one is a clause bug to fix, not a label to hand-flip.
 - **Operator-lane work** the loop CANNOT do: `.github/workflows/*` changes (worker recipes +
-  tokens forbid them), cross-repo IaC (oracle-iac has no fixer), platform/homelab changes,
-  Composition/XRD work, incident response. Do these directly, through PRs with auto-merge.
-- **Breaker clears**: `agent/error` is human-first — investigate, verify the anomaly is
-  benign/root-caused, fix the class, THEN clear the label with an audit comment.
+  tokens forbid them), -iac repos WITHOUT a fixer block (oracle-iac today; sleep-iac has one
+  since FU-106 — its issues dispatch normally), platform/homelab changes, Composition/XRD
+  work. Do these directly, through PRs with auto-merge.
+- **Incidents — machine belts run FIRST since 2026-07-27**: blackbox probes (FU-099) →
+  responder triage (one sonnet session per new alert fingerprint; issues only when triage
+  decides, routed to the stack's -iac) → the FU-044 deterministic revert (Degraded ≤120m
+  after a deploy/* bump → auto-revert PR). Your lane = what they escalate (report-only
+  outcomes, `agent/blocked`, revert-conflicts) — read the respond-*/deploy-revert-* workflow
+  logs before diagnosing by hand.
+- **Breaker clears**: `agent/error` is human-first — investigate, root-cause, fix the class,
+  THEN clear with an audit comment. `agent/arbitrate` is NOT yours: rounds-exhausted
+  escalations dispatch the COORDINATOR's arbitrate unit (only its `agent/blocked` verdicts
+  reach you).
 
 ## Bootstrap a fresh session (do this first, in order)
 
@@ -36,7 +47,9 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
    `gh issue list --repo teststuffstash/<r> --state open --json number,title,labels`
    `gh pr list --repo teststuffstash/<r> --state open --json number,title,labels,reviewDecision,mergeStateStatus`
    Reconcile: any bot-APPROVED spec-touching PR waiting on the codeowner gate? Any merged PR
-   missing its C6 flip? Any `agent/error` latched? Any `agent/blocked` needing a design decision?
+   the `merged-closeout` clause MISSED (flip present but no harvest, or neither — clause bug)?
+   Any `agent/error` latched? Any `agent/blocked` needing a design decision? Any un-armed
+   `research/*` PR awaiting a HUMAN merge (the researcher gate — never arm it)?
 3. Cluster: latest `coordinate-<stack>` tick logs (`kubectl -n <stack>-agents logs <newest
    coordinate pod> -c main`), running ride/reviewer pods, any Failed workflow pods in workload
    namespaces.
