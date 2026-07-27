@@ -348,6 +348,29 @@ log excerpt in context (the usual case — a worker's own Gate-A escape or a fla
 that's a platform incident — say so on the PR and stop (the responder/operator lane owns
 master health, not a PR fix round).
 
+## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
+
+A RED `deploy/*` bump PR in a `*-iac` repo is the typed infra delta arriving: the new chart
+version needs something the wrapper doesn't fulfill yet (usually a new REQUIRED value —
+`values.schema.json` is the contract; platform-and-stacks.md §Composition axes, 4th bullet).
+Your job: make the bump PR mergeable by enriching THE SAME PR (pin + fulfillment = one commit
+set = deploy-atomic; the meta-11 paired-rolls rule).
+
+1. Re-read live state; if the PR went green or was superseded by a newer bump, exit clean.
+2. Diagnose deterministically first: `helm pull` the DEPLOYED chart version and the PR's, run
+   `bash /work/homelab/agents/infra-schema-diff.sh <old>/values.schema.json <new>/values.schema.json`.
+   `enrichment_needed: false` ⇒ the red is NOT a schema delta — treat as a normal `ci-red-stale`
+   (fix round / park / close).
+3. For each `new_required` path, add the fulfillment to the WRAPPER in the PR's branch: a value,
+   an ExternalSecret/claim (Crossplane) where the value is platform-provisioned. **Hard
+   boundary: wire secret REFERENCES (`existingSecret`, ESO paths), never secret VALUES.**
+4. Mechanical enrichment (schema-valid, no new quota/spend, references-only) → push to the PR
+   branch and let the CI-only lane merge it. Judgment-class (a new bucket/DB/quota, anything
+   with a cost or a security surface) → do NOT push; comment the analysis and label
+   `agent/blocked` for the codeowner (provider-first hold — FU-106 case (f)).
+5. Dispatch a worker only when the enrichment needs real code archaeology; prefer doing the
+   mechanical edit in-session (you have the clones and the diff).
+
 ## Dependency major bumps (coordinator-owned, NOT the review reflex)
 
 The weekly `devbox update` (FU-022) opens a bump PR per repo. A **non-major** bump arms auto-merge and

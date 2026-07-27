@@ -362,7 +362,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           continue
         fi
         if [ "$red_n" -lt 2 ]; then
-          units="${units}ci-red-stale|${repo}|pr-${u}\n"
+          # FU-106 (c)-class: a RED deploy/* bump PR in an -iac repo IS the typed infra-delta
+          # signal (a new REQUIRED chart value fails render/validate CI) — a DISTINCT dispatch
+          # class, not the generic red play: the item session diffs values.schema.json
+          # (agents/infra-schema-diff.sh) and ENRICHES the bump PR (pin + fulfillment atomic).
+          u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+          case "$repo:$u_head" in
+            *-iac:deploy/*) units="${units}infra-enrich|${repo}|pr-${u}\n";;
+            *)              units="${units}ci-red-stale|${repo}|pr-${u}\n";;
+          esac
           red_n=$((red_n+1))
         fi
       done
@@ -450,7 +458,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     unit=""
     # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
     # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major ci-red-stale merged-closeout queued-dispatch; do
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red-stale merged-closeout queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done
