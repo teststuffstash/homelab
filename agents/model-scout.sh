@@ -85,7 +85,26 @@ YAML
   verdict="$(printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1 | jq -r '.exit_status // "no-stats"' 2>/dev/null || echo "no-stats")"
   # Clean up the ephemeral key; the transcript/ledger row persists as the durable record.
   kubectl -n "$CANARY_PROJECT" delete openrouterkey "${CANARY_PROJECT}-${sess}" --ignore-not-found >&2 2>/dev/null || true
+  # ADR-096: feed the verdict into the router's rotation store too (TokenReview-gated — the
+  # in-cluster SA token authenticates us as an agent-coordinator SA). Best-effort: the digest
+  # issue stays the human record; a miss here only leaves the router's copy stale.
+  rotation_post "scout-canary" "$(jq -cn --arg m "$id" --arg v "$verdict" \
+    '{model: $m, canary_verdict: $v}')" || true
   echo "| \`$id\` | ${verdict} (${gname}) |"
+}
+
+# POST one rotation entry to the egress proxy's control plane (router.py). No-op without the
+# in-cluster SA token (jail runs) — the router's /rotation refuses unauthenticated writes.
+PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+rotation_post() { # <source> <entry-json>
+  [ -s "$SA_TOKEN_FILE" ] || return 0
+  curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $(cat "$SA_TOKEN_FILE")" \
+    -d "$(jq -cn --arg s "$1" --argjson e "$2" '{source: $s, entries: [$e]}')" \
+    "$PROXY/rotation" >/dev/null 2>&1 \
+    && log "rotation: posted $2 (source=$1)" \
+    || log "rotation: POST failed (non-fatal)"
 }
 
 s5() { # <key_id> <key_secret> <s5cmd args…> — reader for get, write-only writer for put

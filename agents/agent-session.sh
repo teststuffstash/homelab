@@ -801,6 +801,29 @@ if [ -n "$RUN_CMD" ]; then
       echo "  (no issue task / non-GitHub repo / no GH_TOKEN — strike not posted, logged above only)"
     fi
   fi
+
+  # ROUTER REPORT (ADR-096, M5 attribution): every run's outcome → POST /report on the egress
+  # proxy's control plane — run_reports + (for strike-class errors without a PR) the queryable
+  # strike row the /route filter reads. The AGENT_STRIKE comment above stays the human/audit
+  # twin; this is the machine one. Best-effort + idempotent per session (INSERT OR REPLACE):
+  # unreachable off-cluster (jail runs — the ClusterIP doesn't cross the BGP boundary) is fine.
+  if [ -n "$PROXY_URL" ] && { [ -n "$STATS" ] || [ -n "${ERR_CLASS:-}" ]; }; then
+    _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+    _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
+      --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
+      --argjson stats "${STATS:-null}" '
+      {session: $session, task: $task, stack: $stack, role: "worker",
+       round: ($round | tonumber? // 1), model: $model,
+       cost_usd: (($stats.cost_usd? // 0) | tonumber? // 0),
+       error_class: (if $err != "" then $err else ($stats.error_class? // "") end),
+       outcome: (if $pr != "" then "pr" else ($stats.exit_status? // "no-pr") end)}' 2>/dev/null)"
+    if [ -n "$_report" ]; then
+      curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
+        -d "$_report" "${PROXY_URL}/report" >/dev/null 2>&1 \
+        && echo "→ router report posted (${PROXY_URL}/report)" \
+        || echo "  (router report unreachable — non-fatal, jail runs land here)"
+    fi
+  fi
   # FU-085: ring the coordinator doorbell — a tasked worker's terminal state is scan-actionable
   # (C4/C5 re-dispatch, strike chain-walk, C6 bookkeeping). Doorbell, never a work item: the scan
   # re-lists and re-applies the full predicate; a false wake costs `gh` calls, not an LLM tick.

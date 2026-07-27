@@ -146,6 +146,9 @@
       ],
       "hubble": [
         "bash scripts/hubble-observe.sh \"$@\""
+      ],
+      "router-self-test": [
+        "python3 argocd/resources/openrouter-proxy/router.py --self-test"
       ]
     }
   }

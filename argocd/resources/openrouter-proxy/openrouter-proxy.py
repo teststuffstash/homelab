@@ -18,6 +18,13 @@ The pin math mirrors homelab agents/estimate_budget.py `pinned_provider()` (that
 authoritative twin — keep them in step): h-blended effective price over pools
 cached+tools+uptime → tools+uptime → tools.
 
+ADR-096 (FU-095): this service is also the ROUTER — the control-plane half lives in router.py
+(same ConfigMap): durable strikes/attribution (POST /report), passive provider-event
+observation on the forwarded OpenRouter leg, rotation/canary ingest (POST /rotation,
+TokenReview-gated), latch persistence across restarts, GET /router-status, and the router_*
+/metrics series. The decision endpoint (POST /route) and the budgeter legs land per the
+ADR-096 phases.
+
 Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter pattern).
 """
 
@@ -31,6 +38,8 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import router  # ADR-096 control plane — sibling file in the same ConfigMap/dir
 
 UPSTREAM = os.environ.get("UPSTREAM", "https://openrouter.ai")
 # FU-066 (claude+haiku worker tier): requests under /anthropic/* forward to the Anthropic API
@@ -66,6 +75,7 @@ ANTHROPIC_UTIL_THRESHOLD = float(os.environ.get("ANTHROPIC_UTIL_THRESHOLD", "0.8
 _latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
           "windows": {}, "count_429": 0}
 _latch_lock = threading.Lock()
+_latch_saved_at = 0.0  # happy-path persistence throttle (latch TRANSITIONS always persist)
 
 
 def _parse_windows(seen: dict) -> dict:
@@ -426,14 +436,22 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
             _latch["until"] = now + hold
             _latch["last_429"] = now
             _latch["count_429"] += 1
+            router.latch_save(_latch)  # ADR-096: an active hold survives a proxy roll
         log(f"anthropic 429 — subscription LATCHED for {hold:.0f}s (launchers defer via /anthropic-limit)")
         return "+429-latched"
     if 200 <= status < 300:
+        global _latch_saved_at
         with _latch_lock:
             if _latch["until"] > now:
                 _latch["until"] = 0.0
+                _latch_saved_at = now
+                router.latch_save(_latch)
                 log("anthropic 2xx while latched — latch cleared early")
                 return "+latch-cleared"
+            # Keep the persisted windows fresh without one sqlite write per streamed request.
+            if now - _latch_saved_at > 30:
+                _latch_saved_at = now
+                router.latch_save(_latch)
     return ""
 
 
@@ -444,7 +462,8 @@ class Proxy(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # default logger writes to stderr with client noise
         pass
 
-    def _forward(self, body: bytes | None, note: str) -> None:
+    def _forward(self, body: bytes | None, note: str,
+                 or_model: str | None = None, or_provider: str | None = None) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
@@ -482,6 +501,10 @@ class Proxy(BaseHTTPRequestHandler):
         status = resp.getcode()
         if anthropic:
             note += _anthropic_latch_update(status, resp.headers)
+        elif or_model:
+            # ADR-096: passive provider health — every forwarded completion is an observation
+            # (the router's health store costs zero extra polling by living in the data plane).
+            router.record_provider_event(or_model, or_provider or "", status)
         self.send_response(status)
         for k, v in resp.headers.items():
             if k.lower() not in _DROP_RESP:
@@ -565,9 +588,24 @@ class Proxy(BaseHTTPRequestHandler):
                 "# TYPE anthropic_subscription_429_total counter",
                 f"anthropic_subscription_429_total {count_429}",
             ]
+            lines += router.metrics_lines()  # ADR-096: the router_* series
             payload = ("\n".join(lines) + "\n").encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+        if self.path == "/router-status":
+            # ADR-096: the human/debug view of the router store (strikes, provider errors,
+            # rotation age, tier config). Read-only; port-forward from the jail to reach it.
+            now = time.time()
+            limited, reason, windows = _dispatch_verdict(now)
+            summary = router.status_summary()
+            summary["subscription"] = {"limited": limited, "reason": reason, "windows": windows}
+            payload = json.dumps(summary, indent=1).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -662,10 +700,58 @@ class Proxy(BaseHTTPRequestHandler):
             return
         self._forward(None, "passthrough")
 
+    def _reply_json(self, status: int, payload: dict) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
+        if self.path == "/report":
+            # ADR-096: post-run attribution from the launcher finalizer (M5). The AGENT_STRIKE
+            # GitHub comment remains the human/audit twin — this is the queryable one. In-cluster
+            # callers only (the FU-020 CNP bounds reach); idempotent per session, so best-effort
+            # retries are safe.
+            try:
+                report = json.loads(body)
+                assert isinstance(report, dict) and report.get("session")
+            except (ValueError, AssertionError):
+                self._reply_json(400, {"error": "body must be JSON with a session field"})
+                return
+            stored, striked = router.record_report(report)
+            log(f"POST /report session={report.get('session')} "
+                f"error_class={report.get('error_class') or 'clean'} → "
+                f"stored={stored} strike={striked}")
+            self._reply_json(200 if stored else 503, {"stored": stored, "strike": striked})
+            return
+        if self.path == "/rotation":
+            # ADR-096 rotation/canary ingest. TokenReview MANDATORY (loop-git pattern): the
+            # caller must be an agent-coordinator SA (the scout CronWorkflow) — rotation data
+            # steers future model choice, so it is a credential-gated write.
+            auth = self.headers.get("Authorization") or ""
+            caller = _token_review(auth[len("Bearer "):]) if auth.startswith("Bearer ") else None
+            if not (caller or "").startswith("system:serviceaccount:agent-coordinator:"):
+                log(f"POST /rotation → 403 (caller={caller or 'unauthenticated'})")
+                self._reply_json(403, {"error": "rotation ingest requires an agent-coordinator SA token"})
+                return
+            try:
+                payload = json.loads(body)
+                source = str(payload["source"])
+                entries = payload.get("entries") or []
+            except (ValueError, KeyError, TypeError):
+                self._reply_json(400, {"error": "body must be JSON {source, entries[]}"})
+                return
+            n = router.record_rotation(source, entries)
+            log(f"POST /rotation source={source} → {n} entries (caller={caller})")
+            self._reply_json(200, {"stored": n})
+            return
         note = "passthrough"
+        or_model = None
+        or_provider = None
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
@@ -686,11 +772,15 @@ class Proxy(BaseHTTPRequestHandler):
                             self.close_connection = True
                             return
                     notes = []
+                    or_model = normalize_model(str(payload["model"]))
                     pin = pin_for(str(payload["model"]))
                     # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
                     # hand-crafted request) always wins — never overwrite policy already in the body.
+                    if isinstance(payload.get("provider"), dict):
+                        or_provider = (payload["provider"].get("order") or [None])[0]
                     if pin and "provider" not in payload:
                         payload["provider"] = pin["provider"]
+                        or_provider = pin["provider"]["order"][0]
                         notes.append(f"injected:{pin['provider']['order'][0]}")
                     # max_tokens floor (goose -32602 truncation class): raise a missing/low
                     # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
@@ -707,10 +797,22 @@ class Proxy(BaseHTTPRequestHandler):
                         note = "+".join(notes)
             except ValueError:
                 pass  # not JSON — forward untouched
-        self._forward(body, note)
+        self._forward(body, note, or_model=or_model, or_provider=or_provider)
 
 
 def main() -> int:
+    # ADR-096: open the router store (PVC-backed; :memory: degrade keeps the data plane alive)
+    # and restore a persisted 429 latch/windows so a pod roll can't forget an active hold.
+    router.init(os.environ.get("ROUTER_DB") or None,
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "model-classes.json"))
+    saved = router.latch_load()
+    if saved:
+        with _latch_lock:
+            for k in ("until", "last_429", "windows", "count_429", "headers_at"):
+                if saved.get(k) is not None:
+                    _latch[k] = saved[k]
+        if float(saved.get("until") or 0) > time.time():
+            log(f"restored ACTIVE 429 latch from store (until={saved['until']:.0f})")
     log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
         f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
         f"max_tokens_floor={MAX_TOKENS_FLOOR})")

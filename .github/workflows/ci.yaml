@@ -34,3 +34,7 @@ jobs:
         run: devbox run merge-path-lint
       - name: GitHub App mint sites ⊆ declared permissions (FU-098)
         run: devbox run github-apps-lint
+      # ADR-096 router: DB round-trip + model-classes.json parse/threshold sanity — the same
+      # self-test a deployed pod's module carries.
+      - name: Router self-test (devbox run router-self-test)
+        run: devbox run router-self-test

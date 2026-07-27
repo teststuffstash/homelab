@@ -9,6 +9,10 @@ metadata:
     app: openrouter-proxy
 spec:
   replicas: 1
+  # ADR-096: the router store PVC is RWO — RollingUpdate would deadlock on the volume attach.
+  # Cost: ~10-20s data-plane blackout per script roll; launchers fail-open/retry by design.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: openrouter-proxy
@@ -19,6 +23,8 @@ spec:
     spec:
       # ADR-087: the SA whose per-namespace Roles let _resolve_ref read labeled session keys.
       serviceAccountName: openrouter-proxy
+      securityContext:
+        fsGroup: 65534 # the PVC must be writable by the nobody uid the container runs as
       containers:
         - name: proxy
           image: python:3.13-slim
@@ -30,6 +36,14 @@ spec:
             # rollback window.
             - name: GIT_TOKEN_REQUIRE_AUTH
               value: "1"
+            # ADR-096: the router store (sqlite, WAL). Unset/unwritable ⇒ :memory: degrade —
+            # never a hard dependency for the data plane.
+            - name: ROUTER_DB
+              value: /data/router.db
+            # ADR-096 P2: the router's own account-state credential (openrouterkey.yaml),
+            # resolved through the same labeled-secret ref rail as session keys.
+            - name: ROUTER_ACCOUNT_REF
+              value: agent-egress/router-account-key
           ports:
             - name: http
               containerPort: 8080
@@ -64,7 +78,12 @@ spec:
             - name: script
               mountPath: /app
               readOnly: true
+            - name: data
+              mountPath: /data
       volumes:
         - name: script
           configMap:
             name: openrouter-proxy-script # kustomize rewrites to the hashed name
+        - name: data
+          persistentVolumeClaim:
+            claimName: openrouter-proxy-data

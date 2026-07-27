@@ -1,0 +1,19 @@
+# ADR-096: the router's OWN OpenRouter credential — used ONLY to read account-level state
+# (/api/v1/credits for the account floor + the unattributed-spend cross-check; P2). Deliberately
+# the least-privilege shape: a standing operator-minted key, $1 ceiling, only-free guardrail
+# (it never completes anything — the guardrail + cap bound a leak). secretName is explicit so
+# ROUTER_ACCOUNT_REF (deployment.yaml) is stable; the operator labels the Secret
+# openrouter.teststuff.net/session-key, so the proxy's existing _resolve_ref + the agent-egress
+# Role in rbac.yaml cover it — no new resolution mechanism.
+apiVersion: openrouter.teststuff.net/v1alpha1
+kind: OpenRouterKey
+metadata:
+  name: router-account
+  labels:
+    app: openrouter-proxy
+spec:
+  project: agent-egress
+  budgetUSD: 1
+  resetInterval: weekly
+  guardrail: only-free
+  secretName: router-account-key

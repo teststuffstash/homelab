@@ -1,0 +1,17 @@
+# ADR-096: the router store — strikes/attribution, provider events, rotation, budget anchors,
+# and the persisted 429 latch ride this PVC (sqlite WAL at /data/router.db). RWO ⇒ the
+# Deployment runs strategy: Recreate (a RollingUpdate would deadlock on the attach). If the
+# volume ever fails to mount-write, router.py degrades to :memory: (router_db_persistent 0,
+# RouterDbEphemeral alert) — the data plane never depends on it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openrouter-proxy-data
+  labels:
+    app: openrouter-proxy
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,78 @@
+{
+  "_comment": "ADR-096 class policy — the router-owned half of model routing (the per-stack candidate CHAINS stay in agents/stacks.json / AgentStack claims; launchers pass them to POST /route, the router filters against THIS file + strikes + capacity). Lives in the kustomize dir because kustomize configMapGenerator cannot load outside its root; consumers use the API, never this file directly. tier_thresholds = FU-109 (dispatch units defer later than heavy sessions). model_tiers must cover every stacks.json chain entry (CI: devbox run router-self-test + agents-registration-lint). rotation_fallback IS the FU-095 rotation v1 — no rankings API exists (probed 2026-07-27), so the list is git-curated, fed by the weekly scout digest; entries are chain-TAIL candidates only, graduation into heads stays human.",
+  "classes": {
+    "coding": {
+      "chain_source": "stack",
+      "reasoning": false,
+      "dual_model": false,
+      "rails": ["openrouter", "subscription"],
+      "tier": "heavy"
+    },
+    "review": {
+      "chain_source": "stack",
+      "reasoning": true,
+      "min_tier_rule": "gte-author",
+      "rails": ["subscription", "openrouter"],
+      "tier": "heavy"
+    },
+    "audit": {
+      "chain_head": ["openrouter/fusion"],
+      "reasoning": true,
+      "dual_model": true,
+      "rails": ["openrouter"],
+      "tier": "heavy",
+      "never_roles": ["fixer"]
+    },
+    "research": {
+      "chain_head": ["openrouter/fusion"],
+      "reasoning": true,
+      "dual_model": true,
+      "rails": ["openrouter"],
+      "tier": "heavy"
+    },
+    "dispatch": {
+      "rails": ["subscription"],
+      "tier": "dispatch"
+    }
+  },
+  "role_defaults": {
+    "worker": "coding",
+    "fixer": "coding",
+    "scout": "coding",
+    "reviewer": "review",
+    "retro": "audit",
+    "researcher": "research",
+    "coordinator": "dispatch",
+    "dispatch-unit": "dispatch",
+    "responder": "dispatch"
+  },
+  "label_map": {
+    "agent-budget/xs": { "prefer_free": true },
+    "agent-budget/sm": {},
+    "track/iac": { "class": "coding" }
+  },
+  "tier_thresholds": {
+    "dispatch": 0.9,
+    "heavy": 0.8
+  },
+  "model_tiers": {
+    "claude/haiku": "cheap",
+    "claude/sonnet": "large",
+    "claude/opus": "premium",
+    "openrouter/deepseek/deepseek-v4-flash": "cheap",
+    "deepseek/deepseek-v4-flash": "cheap",
+    "deepseek/deepseek-v4-pro": "large",
+    "tencent/hy3": "cheap",
+    "qwen/qwen3-coder": "cheap",
+    "poolside/laguna-s-2.1": "cheap",
+    "poolside/laguna-s-2.1:free": "free",
+    "inclusionai/ling-3.0-flash:free": "free",
+    "moonshotai/kimi-k3": "large",
+    "openrouter/fusion": "premium",
+    "openrouter/free": "free"
+  },
+  "rotation_fallback": {
+    "coding": [],
+    "reasoning": []
+  }
+}

@@ -35,3 +35,26 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: openrouter-proxy-tokenreview }
 subjects:
   - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
+---
+# ADR-096: the router's OWN namespace is the one place the composition's per-stack
+# session-key Roles don't cover — this Role lets _resolve_ref read the router-account-key
+# Secret (openrouterkey.yaml) in agent-egress. Same narrowness rule as everywhere else:
+# get-only, and the code additionally honors only session-key-labeled Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: openrouter-proxy-session-keys
+  namespace: agent-egress
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: openrouter-proxy-session-keys
+  namespace: agent-egress
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: openrouter-proxy-session-keys }
+subjects:
+  - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }

@@ -212,7 +212,11 @@ _Last updated: 2026-07-16._
       subscription half waits. Also worth capturing: the meta/operator sessions share the pool —
       the latch measuring "us" is by design (FU-088), but the Grafana claude-subscription panel
       should split utilization by consumer (proxy already labels callers?) so a stall like
-      today's is attributable at a glance.
+      today's is attributable at a glance. **2026-07-27: folds into the ADR-096 router build
+      (FU-095 router leg), Phase 2** — per-tier verdicts server-side (`/anthropic-limit?tier=`,
+      `dispatch` 0.90 / `heavy` 0.80 in `model-classes.json` `tier_thresholds`), the semaphore
+      moves server-side, the per-consumer split rides the ref-derived consumer label. Resolve
+      when that phase ships.
 - [ ] **FU-111** — **FU-087 v2: migrate `Depends-on:` body lines to NATIVE GitHub issue
       dependencies (`blockedBy`)** (operator direction 2026-07-27, from the FU-110 mechanism
       review). The body-line idiom is regex-over-prose and its reader already broke once (the
@@ -702,6 +706,16 @@ _Last updated: 2026-07-16._
       Renovate-majors piloting on sleep is NOT this item — that's FU-046's existing lane.
       Prereqs: FU-080 sleep graduation (+ FU-044 before unattended deploys); relates ADR-077,
       ADR-081, FU-057, FU-062 (model-routing.md is the umbrella doc).
+      **ROUTER BUILD STARTED 2026-07-27 — ADR-096** (design session; plan = evolve the ADR-081
+      proxy into the decision API + budgeter: `POST /route` with explicit typed defers, sqlite
+      strike/provider-health/rotation store on Longhorn, FU-109 tiers absorbed, per-project
+      headroom via `/api/v1/auth/key` (probed: `limit_remaining`+`usage_weekly` live), claim
+      schema → mandatory `project.budgetUSD` = optional fixer+reviewer+coordinator splits,
+      cross-rail chain-entry eligibility for harness-flexible roles; rotation probe NEGATIVE —
+      no rankings API (`order=top-weekly` ignored, frontend 404) → git-curated
+      `rotation_fallback` fed by the scout digest, staleness-alerted). Phases: P1 observe-only
+      store → P2 budgeter/tiers → P3 shadow → P4 authoritative-for-workers → P5 rotation-fed
+      class chains. This builds leg (a)'s substrate; legs (b)/(c) unchanged.
       **Spec-creation directive (operator 2026-07-25): EXECUTED 2026-07-27** via the FU-105
       researcher mechanism (claude+opus authored, sonnet+Fable reviewed) — spec PR
       sleep-tracking#38 (9 pages, 17 ⚖, 9 suspected bugs, 2 code-verified) awaits the HUMAN

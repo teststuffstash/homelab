@@ -974,3 +974,59 @@ First instance: oracle-fleet `release-corpus.yaml` (fleet hosts it, not oracle-i
 `GITHUB_TOKEN` package grant is repo-scoped and the artifact's contract lives in fleet's spec —
 producer = iac policy, promoter = the repo that owns the package). Relates ADR-082, ADR-084,
 ING-RT-PUBLISH.
+
+### ADR-096 — The egress proxy becomes the model/billing router (FU-095: decision API + budgeter)
+
+**Accepted 2026-07-27.** Model choice is a static per-stack chain (`agents/stacks.json`) walked by
+the LLM coordinator over `AGENT_STRIKE` issue comments; capacity is three scattered gates (proxy
+`/anthropic-limit`, `subscription-latch.sh` kubectl semaphore, `agent-session.sh` credit floor);
+strikes/provider-health have no queryable store; per-project OpenRouter headroom is invisible; and
+there is no cross-rail move ("subscription ≥80% deferred + OpenRouter budget available → route
+there"). The FU-095 buy-vs-build survey settled BUILD: external gateways (LiteLLM/Portkey) would
+un-solve the proxy's subscription gate + cred/pin injection; per-prompt routers can't read our
+ledger.
+
+**Decision:** evolve the ADR-081 egress proxy (`argocd/resources/openrouter-proxy/`, ns
+`agent-egress`) into the router — it already carries every dollar of both rails, holds the
+subscription window state, resolves `ref:` creds (ADR-087), computes provider pins, and observes
+provider failures passively in the data plane. It gains: **(1)** a launcher-called decision API
+(`POST /route` — never the LLM, ADR-094; the launcher passes the chain it knows, the router
+filters/orders it against strikes + provider health + class policy + capacity, and answers either a
+dispatch {rail, model, pin, cap} or an **explicit typed defer** {zero-capacity | subscription-limited
+| openrouter-budget-exhausted | credit-floor | chain-exhausted, retry_after}; only chain-exhausted
+escalates — M1 doctrine); **(2)** a durable store — sqlite3 (stdlib) on a 1Gi Longhorn PVC
+(`strikes`, `provider_events`, `rotation`, `run_reports`, `decisions`, `budget_anchors`,
+`latch_state` — the 429 latch survives restarts; `:memory:` fail-open fallback, an empty DB never
+blocks dispatch); **(3)** budgeter authority — the FU-088 gate absorbed, FU-109 per-consumer tiers
+(`dispatch` 0.90 / `heavy` 0.80), the semaphore moved server-side, and per-project OpenRouter
+headroom read live from `GET /api/v1/auth/key` (probed 2026-07-27: `limit`, `limit_reset: weekly`,
+`limit_remaining`, `usage_weekly`) via the standing `<project>-openrouter` key refs. Budget policy
+stays claim-owned: **`project.budgetUSD` becomes the mandatory AgentStack ceiling** (= optional
+fixer + reviewer + coordinator sub-budgets; the standing key's limit enforces the ceiling at
+OpenRouter, the router enforces role splits from its `run_reports` attribution). Class policy
+(`model-classes.json`, router-owned in the kustomize dir): audit/research get reasoning tier +
+dual-model + the `openrouter/fusion` chain head (M6), reviewers get `min_tier ≥ author`
+(decorrelation), coding keeps the worker bar. Cross-rail v1 is chain-entry eligibility for
+harness-flexible roles (a `claude/*` entry needs a clear tiered subscription verdict; an OpenRouter
+entry needs project headroom + credit floor); claude-harness OAuth sessions stay subscription-only.
+Rollout: observe-only → shadow (`AGENT_ROUTER=shadow`, ≥1 week) → authoritative for workers
+(coordinator stops passing `--model`; explicit `--model` still wins; `/route` unreachable falls
+back to today's static chain + latch).
+
+**Considered:** a separate control-plane service (duplicates subscription/pin/cred state the proxy
+already holds); LiteLLM/Portkey/OpenRouter presets (the FU-095 survey — gateway mechanics or
+click-ops); CNPG for the store (needs psycopg → breaks the stdlib/stock-image ConfigMap-script
+pattern); router reads stacks.json itself (rejected: launcher passes the chain — keeps
+cluster-wins claim semantics in one consumer); scraping a rotation ranking (probed 2026-07-27:
+**no rankings API exists** — `order=top-weekly` is ignored by `/api/v1/models`, frontend paths
+serve the app shell → the rotation is a git-curated `rotation_fallback` list fed by the scout
+digest, staleness-alerted).
+
+**Consequences:** the proxy becomes single-replica stateful (`strategy: Recreate`, ~10–20s
+data-plane blackout per script roll — launchers already fail-open/retry). Two strike stores during
+transition (GitHub comments stay the human/audit trail, one write path dual-writes). The router
+owns billing/subscription knowledge: decisions/deferrals/budget gauges on `/metrics`, a new
+`agent-router` dashboard, alerts RouterZeroCapacity + OpenRouterProjectBudgetLow +
+RouterRotationStale + RouterDbEphemeral (capacity states `triage: none`). Builds FU-095(a),
+absorbs FU-109. Relates ADR-081, ADR-087, ADR-094, FU-057, FU-088 (archived), model-routing.md
+(§M8 = the router).

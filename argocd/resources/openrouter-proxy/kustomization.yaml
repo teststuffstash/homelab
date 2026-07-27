@@ -8,6 +8,8 @@ namespace: agent-egress
 resources:
   - namespace.yaml
   - rbac.yaml
+  - pvc.yaml
+  - openrouterkey.yaml
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml
@@ -16,7 +18,12 @@ resources:
 configMapGenerator:
   - name: openrouter-proxy-script
     files:
+      # ADR-096: openrouter-proxy.py = data plane, router.py = control plane (imported —
+      # the mount dir is on sys.path), model-classes.json = class/tier policy. Any edit
+      # re-hashes the ConfigMap and rolls the pod.
       - openrouter-proxy.py
+      - router.py
+      - model-classes.json
   - name: grafana-dashboard-subscription
     files:
       - subscription.json=dashboard-subscription.json
