@@ -539,7 +539,10 @@ def _mcp_call(key: str, tool: str, arguments: dict) -> dict:
     is stateless enough to take both in sequence without a session header)."""
     headers = {"Content-Type": "application/json",
                "Accept": "application/json, text/event-stream",
-               "Authorization": "Bearer " + key}
+               "Authorization": "Bearer " + key,
+               # Cloudflare 403s urllib's default Python-urllib UA (measured 2026-07-27) — every
+               # upstream fetch in this file must carry a real UA.
+               "User-Agent": "homelab-openrouter-proxy"}
     init = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                        "params": {"protocolVersion": "2025-03-26", "capabilities": {},
                                   "clientInfo": {"name": "homelab-router", "version": "1"}}}).encode()
