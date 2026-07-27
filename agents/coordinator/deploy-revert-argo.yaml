@@ -1,0 +1,149 @@
+# deploy-revert-argo — FU-044's DETERMINISTIC half: auto-rollback of a broken deploy.
+#
+# argocd-notifications POSTs a post-sync Degraded app to /deploy-degraded (tofu/argocd.tf,
+# oncePer revision) → this Sensor → a script (no LLM): if the app's source is a *-iac repo and
+# a deploy/* bump PR merged there within the window, `git revert` that squash commit as a new
+# auto-merging PR — the ADR-084 CI-only lane IS the rollback authority (ArgoCD re-syncs the
+# previous pin; sharpened by meta-11: ArgoCD health alone is NOT the acceptance gate — the
+# FU-102 prober is the deep post-deploy check; this path only catches what Degraded DOES see).
+# Roll-FORWARD (dispatch a worker against the app repo) stays the LLM half — the responder /
+# coordinator lanes own it; a revert PR here never blocks that (revert-then-fix composes).
+#
+# Idempotency: branch name revert-<app>-<sha8> (deterministic; second attempt hits
+# already-exists), plus the responder-seen cm ledger keyed deploy-<app>-<revision>. Guards:
+# non--iac sources exit report-only; no recent bump = "degraded without a deploy" report-only
+# (not a rollback case); every probe failure is loud and fail-closed (no revert on bad data).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: deploy-revert
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+  dependencies:
+    - name: degraded-dep
+      eventSourceName: agent-loop
+      eventName: deploy-degraded
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 4 }
+      template:
+        name: submit-deploy-revert
+        conditions: "degraded-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: deploy-revert-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: deploy-revert }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: degraded-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: deploy-revert
+  namespace: agent-coordinator
+spec:
+  entrypoint: revert
+  serviceAccountName: agent-coordinator
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: revert
+      inputs:
+        parameters:
+          - { name: payload }
+      metadata:
+        labels: { app: deploy-revert-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+          # Only bumps merged within this window are revert candidates — an app that degrades a
+          # day after a deploy is an incident (responder lane), not a rollback.
+          - { name: REVERT_WINDOW_MIN, value: "120" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            printf '%s' "$PAYLOAD" > /tmp/degraded.json
+            APP="$(jq -r '.app // empty' /tmp/degraded.json)"
+            REVISION="$(jq -r '.revision // empty' /tmp/degraded.json)"
+            REPO_URL="$(jq -r '.repo // empty' /tmp/degraded.json)"
+            APP_PATH="$(jq -r '.path // empty' /tmp/degraded.json)"
+            [ -n "$APP" ] || { echo "no app in payload — nothing to do"; exit 0; }
+            SLUG="$(printf '%s' "$REPO_URL" | sed -E 's#^https://github.com/##; s#\.git$##')"
+            case "$SLUG" in
+              teststuffstash/*-iac) : ;;
+              *) echo "→ $APP degraded but source '$SLUG' is not a *-iac repo — not a rollback case (report-only)"; exit 0;;
+            esac
+
+            # Ledger: one revert decision per (app, revision).
+            KEY="deploy-$(printf '%s' "${APP}-${REVISION}" | sha256sum | cut -c1-16)"
+            SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$KEY}" 2>/dev/null || true)"
+            [ -n "$SEEN" ] && { echo "→ $APP@${REVISION:0:8}: already handled ($SEEN) — skip"; exit 0; }
+            kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$KEY\":\"$(date -u +%Y-%m-%dT%H:%MZ)\"}}" >/dev/null 2>&1 \
+              || echo "WARN: ledger patch failed — branch-name idempotency is the remaining belt"
+
+            # The revert candidate: newest deploy/* bump PR merged into this repo within the
+            # window whose files touch the app's path. Fail-closed: no candidate = report-only.
+            CUTOFF="$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+            CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
+              --json number,title,headRefName,mergedAt,mergeCommit \
+              --jq --arg cutoff "$CUTOFF" '[.[] | select(.headRefName | startswith("deploy/")) | select(.mergedAt >= $cutoff)] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
+            [ -n "$CAND" ] || { echo "→ $APP degraded with NO deploy/* bump merged in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+            PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
+            SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
+            TITLE="$(printf '%s' "$CAND" | jq -r .title)"
+            # Path affinity: the bump must touch the degraded app's path (multi-app -iac repos).
+            if [ -n "$APP_PATH" ] && ! gh pr view "$PRNUM" --repo "$SLUG" --json files --jq '.files[].path' 2>/dev/null | grep -q "^${APP_PATH}/"; then
+              echo "→ bump PR #$PRNUM does not touch ${APP_PATH}/ — not this app's deploy (report-only)"; exit 0
+            fi
+
+            echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — $APP Degraded on revision ${REVISION:0:8} within ${REVERT_WINDOW_MIN}m of the merge"
+            BR="revert-${APP}-$(printf '%s' "$SHA" | cut -c1-8)"
+            rm -rf /work/iac
+            git clone --depth 30 "https://github.com/${SLUG}.git" /work/iac
+            cd /work/iac
+            git config user.name "deploy-revert (FU-044)"
+            git config user.email "noreply@teststuff.net"
+            if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+              echo "→ branch $BR already exists — a racing instance owns it (idempotent exit)"; exit 0
+            fi
+            git checkout -b "$BR"
+            git revert --no-edit "$SHA" || { echo "FATAL: git revert conflicted — human/coordinator lane (no blind force)"; exit 1; }
+            git push origin "$BR"
+            PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
+              --title "revert: ${TITLE} (auto-rollback — ${APP} Degraded post-deploy)" \
+              --body "FU-044 deterministic rollback: ArgoCD app **${APP}** went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN}m of #${PRNUM} merging. Reverting the bump restores the previous pin (ArgoCD re-syncs on merge). Roll-FORWARD (a worker fixing the app repo) composes on top — this only stops the bleeding. CI-only lane; no approval gate by design (ADR-084)." \
+              | grep -oE '[0-9]+$')"
+            gh pr merge --auto --squash "$PR" --repo "$SLUG"
+            echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"
+        resources:
+          requests: { cpu: "50m", memory: "128Mi" }
+          limits: { memory: "512Mi" }
