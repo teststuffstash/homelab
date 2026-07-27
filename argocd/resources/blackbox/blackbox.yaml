@@ -96,21 +96,6 @@ spec:
         - https://specs.oracle.teststuff.net
 ---
 apiVersion: monitoring.coreos.com/v1
-kind: Probe
-metadata:
-  name: mcp-gateway
-  namespace: monitoring
-spec:
-  jobName: blackbox-mcp
-  interval: 60s
-  module: mcp_post
-  prober: { url: blackbox-exporter.monitoring.svc:9115 }
-  targets:
-    staticConfig:
-      static:
-        - https://mcp.oracle.teststuff.net/mcp
----
-apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: blackbox
@@ -120,10 +105,12 @@ spec:
   groups:
     - name: blackbox
       rules:
-        # Oracle-owned endpoints: explicit stack label = the responder's routing precedence
-        # (explicit label wins over namespace derivation — roles.md §responder).
+        # Oracle-owned endpoints not yet on the claim: the mcp endpoint moved to the
+        # claim-rendered slo-oracle rule (FU-104); specs.oracle stays hand-listed until the
+        # claim grows an `slos` array (multi-endpoint). Explicit stack label = the responder's
+        # routing precedence.
         - alert: EndpointProbeFailing
-          expr: probe_success{instance=~"https://(mcp|specs)\\.oracle\\..*"} == 0
+          expr: probe_success{instance=~"https://specs\\.oracle\\..*"} == 0
           for: 10m
           labels:
             severity: warning
