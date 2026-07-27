@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-110** *(archived 2026-07-27, same day as filed)* — **Operator dispatch-priority knob =
+  the GitHub issue PIN.** Born when #39 beat #48 (ascending-number order inverted the operator's
+  gate-first plan). Shipped in coordinator-scan.sh (99ee5a9): `isPinned` rides the existing list
+  call; pinned queued units prepend WITHIN the queued-dispatch clause (in-flight recovery still
+  wins); `gh issue pin N` = the knob, max 3/repo caps the ladder. The planned `agent/priority`
+  label was REJECTED at implementation: the claim's IssueLabels set is authoritative ("anything
+  else gets deleted") — an ad-hoc label self-destructs, and the taxonomy lives in the
+  composition (the concurrent FU-080 session's file). Verified live: pinned #48 picked first,
+  dep-blocked #42/#43 stay blocked. Blocking-vs-preference split → FU-111.
 - **FU-099** *(archived 2026-07-27)* — **Blackbox synthetic monitoring LIVE + verified.** DIY
   blackbox-exporter (argocd/resources/blackbox/, pinned v0.27.0) + Probe CRs: `mcp_post` module
   (JSON-RPC initialize POST; 401=PASS — credential-free gateway-process aliveness, the 5xx/503

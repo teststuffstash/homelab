@@ -9,13 +9,11 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
-- **FU-096 chain — MEASURE LEG DONE 2026-07-27 17:33Z**: first real cache-seeded ride
-  (sleep-tracking#39 r1): `eval-cache seeded (lock match)` + local substituter mounted, NO cp
-  collisions, **devbox install → ready in 23.6s** in-pod. One benign warning to keep an eye
-  on: nix `creating directory /stack-cache/store/realisations: Read-only file system`
-  (expected — the ImageVolume store is RO; warning-only, proceeded clean). REMAINING before
-  archive: roll `devbox-cache.reusable.yml` to the remaining stack repos (loop-workable
-  issues; oracle-fleet + sleep-tracking already publish).
+- ~~FU-096~~ COMPLETE — already ARCHIVED in follow-ups-archive.md with in-pod numbers
+  (23-25s worst-node; my independent 17:33Z measure on sleep#39 r1 read 23.6s, seed+substituter
+  clean). Stale-bullet lesson: the archive, not this file, was current — recheck the tracker
+  before extending a remembered chain. (One benign nix warning on rides: RO
+  `/stack-cache/store/realisations` — expected, ImageVolume is read-only.)
 
 - **UC-1 agentic arc + schema arc: CLOSED (2026-07-27 ~09:50Z).** Operator bar met kind+prod
   (TICK-LOG carries the full story). Roll 2 live: stamped corpus sha256:3e45daea… + current

@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-111**.
+  Next free id: **FU-112**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -213,17 +213,23 @@ _Last updated: 2026-07-16._
       the latch measuring "us" is by design (FU-088), but the Grafana claude-subscription panel
       should split utilization by consumer (proxy already labels callers?) so a stall like
       today's is attributable at a glance.
-- [ ] **FU-110** — **Within-repo dispatch order has no operator knob** (born 2026-07-27: the
-      sleep re-enable's stated plan was "#48 dispatches FIRST" — but that intent lived only in
-      a claim comment; the scan orders queued-dispatch units by ascending issue number
-      (`sort_by(.number)`, coordinator-scan.sh), so #39 dispatched first and the lg system-test
-      gate #48 lands LAST of the wave, inverting gate-first into gate-last). In-flight-before-new
-      already exists; this is only ordering WITHIN queued-dispatch. Design lean: one extra sort
-      key — an `agent/priority` label the scan hoists to the front of the unit list (label =
-      operator-ownable, visible on the board, no new state). REJECTED alternative: encoding
-      order as fake `Depends-on` (FU-087 blocks on CLOSURE — that's a dependency, not a
-      preference, and it would freeze the queue if the prioritized item parks). Relates FU-086
-      (scan predicates), FU-087.
+- [ ] **FU-111** — **FU-087 v2: migrate `Depends-on:` body lines to NATIVE GitHub issue
+      dependencies (`blockedBy`)** (operator direction 2026-07-27, from the FU-110 mechanism
+      review). The body-line idiom is regex-over-prose and its reader already broke once (the
+      tab-IFS collapse, 2026-07-27 — the FU-087 gate silently dead for track-less issues);
+      native dependencies are structured state GitHub maintains, UI-visible, and **`blockedBy`
+      rides the SAME `gh issue list --json` call the scan already makes** (zero extra API
+      cost; measured field list 2026-07-27). Semantics identical: blocked-by = don't dispatch
+      until the blocker closes. Verify FIRST (the FU-108 probe-that-looks lesson): (a) the
+      field POPULATES under the App installation token — read a known dependency once, don't
+      trust an empty-but-200; (b) cross-repo edges work (sleep-iac#25 → sleep-tracking#48 is
+      the live test case); (c) the coordinator/issue-authoring lane can CREATE edges (API
+      call replaces the body line — one source of truth, no dual-format drift). Guiding
+      principle (recorded from the mechanism review): **the scheduler consumes semantics,
+      not decorations** — blocking = native deps; operator preference = the pin (FU-110,
+      archived); grouping/reporting = milestones (monthly-retro burndown candidate) and
+      sub-issues (spec→bugs + FU-090 harvest lineage, parked until board scale pays).
+      Relates FU-086, FU-087 (archived), FU-110 (archived).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
