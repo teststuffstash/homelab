@@ -377,6 +377,29 @@ if "$KUBECTL" $KUBE -n "$NS" get pvc agent-uv-cache >/dev/null 2>&1; then
   UV_ENV=$'        - name: UV_CACHE_DIR\n          value: "/uv-cache"'
 fi
 
+# FU-096: the stack's CI-published devbox cache (eval seed + file:// store), mounted read-only
+# via a k8s ImageVolume (verified on-cluster, oracle-fleet#106) — the entrypoint seeds ~/.cache
+# and adds the substituter so the per-pod `devbox install` skips the eval tax. Mount ONLY when
+# the :latest manifest is anonymously pullable (a missing/PRIVATE package would otherwise fail
+# the whole pod at image-pull — probe-then-mount, degrade loudly to a cold ride). Anonymous is
+# the same auth the kubelet pull uses (no imagePullSecrets on ride pods), so probe ≈ pullable.
+# Docker/kata rides skip it until ImageVolume-under-kata is canaried (runtimeClass owns mounts).
+# AGENT_STACK_CACHE=0 opts out.
+SC_MOUNT=""; SC_VOLUME=""
+if [ -z "$DOCKER" ] && [ "${AGENT_STACK_CACHE:-1}" = "1" ]; then
+  SC_IMAGE="ghcr.io/teststuffstash/${PROJECT}/devbox-cache:latest"
+  SC_TOKEN="$(curl -fsS --max-time 5 "https://ghcr.io/token?scope=repository:teststuffstash/${PROJECT}/devbox-cache:pull" 2>/dev/null | jq -r '.token // empty')" || SC_TOKEN=""
+  if [ -n "$SC_TOKEN" ] && curl -fsSI --max-time 5 -H "Authorization: Bearer $SC_TOKEN" \
+       -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+       "https://ghcr.io/v2/teststuffstash/${PROJECT}/devbox-cache/manifests/latest" >/dev/null 2>&1; then
+    echo "→ stack devbox-cache: mounting ${SC_IMAGE} (FU-096)"
+    SC_MOUNT=$'\n        - { name: stack-cache, mountPath: /stack-cache, readOnly: true }'
+    SC_VOLUME=$'\n    - name: stack-cache\n      image: { reference: "'"$SC_IMAGE"'", pullPolicy: Always }'
+  else
+    echo "→ stack devbox-cache absent for ${PROJECT} (no public :latest at ghcr) — cold bring-up (FU-096: publish via devbox-cache.reusable.yml + make the package public)"
+  fi
+fi
+
 # opencode's Bun runtime needs AVX2 → it SIGILLs ("Illegal instruction") on the older homelab CPUs
 # (hp-01, thinkcentre). goose (Rust) runs anywhere. Pin opencode pods to AVX2-capable nodes via the
 # homelab.io/cpu-avx2 label (the Proxmox VMs + the Haswell/Broadwell ThinkPads carry it). NB: that
@@ -625,8 +648,8 @@ ${CLAUDE_ENV}
       resources:
         requests: { cpu: "500m", memory: "1Gi" }
         limits:   ${AGENT_LIMITS}
-      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}
-  volumes:${UV_VOLUME}${DOCKER_VOLUMES}
+      volumeMounts:${UV_MOUNT}${DOCKER_MOUNT}${SC_MOUNT}
+  volumes:${UV_VOLUME}${DOCKER_VOLUMES}${SC_VOLUME}
 EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"

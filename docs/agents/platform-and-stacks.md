@@ -67,10 +67,13 @@ Known constraint couplings (encode them, don't fight them):
   coordinate leg = cron + doorbell RBAC + mutex + broker role; FU-100's review leg = exporter
   arm + Sensor dep + routing trigger — both change zero prompts, zero images).
 - **The stack's toolchain cache belongs to the STACK, not the harness image** (FU-096): baking
-  repo closures into agent-base would couple harness×stack. Target shape: the stack repo's CI
-  publishes its own devbox closure cache as an OCI artifact (versioned with `devbox.lock`),
-  and the launcher mounts it via ImageVolume (verified on this cluster, fleet#106) as a local
-  nix substituter + eval-cache seed. Harness images stay stack-blind; caches ride the stack.
+  repo closures into agent-base would couple harness×stack. Built 2026-07-27: the stack repo's
+  CI publishes its devbox closure + eval cache as an OCI artifact versioned with `devbox.lock`
+  (thin caller → homelab `devbox-cache.reusable.yml`, level-triggered on lock pushes), and the
+  launcher mounts it via ImageVolume (verified on this cluster, fleet#106) read-only at
+  `/stack-cache`; the agent-base entrypoint seeds `~/.cache` (exact-lock guard, loud degrade)
+  and adds the `file://` store as a substituter. Harness images stay stack-blind; caches ride
+  the stack. Rollout state + numbers: FU-096.
 - **App charts are TARGET-agnostic; platform fulfillment rides the -iac wrapper** (operator
   2026-07-27, the same coupling rule's third instance): an app chart carries only its
   consumption *contract* (`values.schema.json`, `existingSecret`, endpoint values, default-off

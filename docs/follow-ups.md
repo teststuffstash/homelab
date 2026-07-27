@@ -677,7 +677,19 @@ _Last updated: 2026-07-16._
       VERIFY the build-user cache survives to the runtime `USER 1000:1000` HOME). The
       claude/coordinator image needs nothing (no nix/devbox; repo cloned read-only). Relates
       FU-058, FU-015 (numbers), FU-073e (substituter = fetch half; this = eval half),
-      FU-095(b) (multi-harness evidence).
+      FU-095(b) (multi-harness evidence). **Built 2026-07-27 (jail-validated, pilot pending):**
+      `devbox-cache.reusable.yml` (homelab; artifact = `/devbox.lock` + `/xdg` eval seed +
+      `/store` file:// cache with upstream sigs intact; tag `lock-<sha256/12>` + `:latest`,
+      manifest-probe idempotent) + agent-runtime#22 entrypoint seed (exact-lock guard;
+      chmod-after-copy — cp keeps the ImageVolume's read-only modes) + `agent-session.sh`
+      probe-then-mount (anonymous ghcr manifest probe ≈ the kubelet's credless pull; a
+      missing/private package = cold ride, loudly — never a pod-level ImagePullBackOff;
+      docker/kata rides skip until canaried; `AGENT_STACK_CACHE=0` opt-out). Jail numbers on
+      oracle-fleet's real lock: `devbox install` 54.7s (cold eval, warm store) → **7.1s**
+      seeded incl. copy; cache portable across path AND HOME by plain copy; store half 868M
+      zstd (219 paths). REMAINING: oracle-fleet caller PR (pilot) → first publish → operator
+      flips the ghcr package PUBLIC (it inherits repo visibility; ride pods pull without
+      imagePullSecrets) → in-pod measure → roll to the other stack repos → kata canary.
 
 
 

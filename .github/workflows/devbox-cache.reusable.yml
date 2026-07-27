@@ -1,0 +1,94 @@
+# devbox-cache (reusable) — FU-096: publish the CALLING stack repo's devbox toolchain cache as an
+# OCI artifact, so agent rides skip the per-pod bring-up tax. Two halves, one image:
+#   /devbox.lock   the lock this cache was built from (the ride's entrypoint match-guard)
+#   /xdg/{nix,devbox}  the EVAL cache — nix evaluation was measured to be the bring-up tax, not
+#                  fetching (FU-015: 94s ensure with a fully-warm store; jail repro 2026-07-27:
+#                  55s cold-cache vs 4s seeded, portable across path + HOME by plain copy)
+#   /store/        the closure as a file:// nix binary cache (zstd) with UPSTREAM SIGNATURES
+#                  intact (`nix copy` preserves narinfo Sig) — a node-local substituter needing
+#                  no trust changes; stale/missing paths fall through to the LAN mirror.
+# The launcher (homelab agents/agent-session.sh) mounts :latest read-only via a k8s ImageVolume
+# (verified on the cluster: k8s 1.36.1 default gates + containerd 2.2.3, oracle-fleet#106) at
+# /stack-cache; the agent-base entrypoint seeds ~/.cache and adds the substituter. Caches ride
+# the STACK, harness images stay stack-blind (docs/agents/platform-and-stacks.md §Composition
+# axes — do NOT bake repo closures into agent-base).
+#
+# Caller (thin, level-triggered on the lock itself — the runner-image lesson: cron offsets
+# guarantee nothing):
+#   on: { push: { branches: [master], paths: [devbox.json, devbox.lock, <caller path>] },
+#         workflow_dispatch: {} }
+#   jobs: { publish: { uses: teststuffstash/homelab/.github/workflows/devbox-cache.reusable.yml@master,
+#                      permissions: { contents: read, packages: write } } }
+#
+# ⚠ First publish on a PRIVATE repo creates a PRIVATE package (GITHUB_TOKEN inherits repo
+# visibility). Ride pods pull the ImageVolume WITHOUT pull secrets, so the operator must flip
+# the package to PUBLIC once (repo → Packages → devbox-cache → settings). Contents are only
+# nixpkgs binaries + eval-cache sqlite — the tool list, no repo source. Until flipped, the
+# launcher's anonymous probe fails and rides run cold, loudly.
+name: devbox-cache
+
+on:
+  workflow_call: {}
+
+jobs:
+  publish:
+    runs-on: homelab-ephemeral
+    permissions:
+      contents: read
+      packages: write # push the cache image via the job's GITHUB_TOKEN (agent-coordinator precedent)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute the lock-addressed tag
+        id: lock
+        run: |
+          [ -f devbox.lock ] || { echo "::error:: no devbox.lock — nothing to cache"; exit 1; }
+          echo "tag=lock-$(sha256sum devbox.lock | cut -c1-12)" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${{ github.repository }}/devbox-cache" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Content-addressed idempotency: same lock ⇒ same cache; re-runs (workflow file edits,
+      # manual dispatches) skip the ~2min build. `:latest` is NOT re-pointed on a skip — it
+      # already points at this lock's image.
+      - name: Skip if this lock's cache is already published
+        id: exists
+        run: |
+          if docker manifest inspect "${{ steps.lock.outputs.image }}:${{ steps.lock.outputs.tag }}" >/dev/null 2>&1; then
+            echo "cache for ${{ steps.lock.outputs.tag }} already published — skipping" >> "$GITHUB_STEP_SUMMARY"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No toolchain install: the ARC runner image bakes nix + devbox + the warm store (FU-015).
+      # A FRESH XDG_CACHE_HOME makes the seed exactly THIS repo's eval entries (the runner's own
+      # ~/.cache carries the whole fleet's) — the one-time cold eval here is the tax every ride
+      # stops paying.
+      - name: Build the cache (eval seed + file:// store)
+        if: steps.exists.outputs.hit != 'true'
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/cache"; SEED="$RUNNER_TEMP/xdg-seed"
+          mkdir -p "$OUT/xdg" "$SEED"
+          time XDG_CACHE_HOME="$SEED" devbox install
+          cp -a "$SEED/nix" "$OUT/xdg/nix"
+          cp -a "$SEED/devbox" "$OUT/xdg/devbox"
+          PROFILE="$(readlink -f .devbox/nix/profile/default)"
+          nix copy --to "file://$OUT/store?compression=zstd" "$PROFILE"
+          cp devbox.lock "$OUT/devbox.lock"
+          du -sh "$OUT"/* | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Push the OCI artifact
+        if: steps.exists.outputs.hit != 'true'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          printf 'FROM scratch\nCOPY cache /\n' > Dockerfile.devbox-cache
+          IMG="${{ steps.lock.outputs.image }}"; TAG="${{ steps.lock.outputs.tag }}"
+          docker build -f Dockerfile.devbox-cache -t "$IMG:$TAG" -t "$IMG:latest" .
+          docker push "$IMG:$TAG"
+          docker push "$IMG:latest"
+          echo "pushed $IMG:$TAG (+latest)" >> "$GITHUB_STEP_SUMMARY"
