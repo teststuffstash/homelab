@@ -138,22 +138,41 @@ spec:
                 || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
 
               printf '%s' "$a" > /tmp/alert-one.json
-              echo "── triaging $NAME ($FP)"
+
+              # OWNERSHIP IS A LOOKUP, NOT A JUDGMENT (decision-free → script, never the brief).
+              # Precedence: explicit stack/owner alert label → namespace ∈ AgentStack claims
+              # (repos[].name = fixer/app namespaces; '<stack>-agents' = the loop ns) → PLATFORM.
+              # ⚠ node/system alerts carry the EXPORTER's namespace (e.g. monitoring) — such
+              # namespaces are in no claim, so they fall through to platform correctly.
+              ALERT_NS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              OWNER_LABEL="$(printf '%s' "$a" | jq -r '.labels.stack // .labels.owner // empty')"
+              CLAIMS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null                 || jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
+              ROUTE_STACK="$(printf '%s' "$CLAIMS" | jq -r --arg ns "$ALERT_NS" --arg ol "$OWNER_LABEL" '
+                (if $ol != "" then [.items[] | select(.metadata.name == $ol)] else [] end) as $byl
+                | (if ($byl | length) > 0 then $byl
+                   else [.items[] | select($ns != "" and (([.spec.repos[].name] | index($ns)) or ($ns == .metadata.name + "-agents")))] end)
+                | (first | .metadata.name) // "platform"')"
+              if [ "$ROUTE_STACK" = "platform" ]; then
+                ROUTE_REPO="teststuffstash/homelab"
+              else
+                ROUTE_REPO="teststuffstash/$(printf '%s' "$CLAIMS" | jq -r --arg s "$ROUTE_STACK"                   '[.items[] | select(.metadata.name == $s) | .spec.repos[].name | select(endswith("-iac"))] | first // ($s + "-iac")')"
+              fi
+              echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
             THE ALERT (JSON): $(cat /tmp/alert-one.json)
 
             Context available: /work/homelab is a fresh homelab clone (docs/, agents/stacks.json). kubectl READS may work (degrade gracefully if RBAC-denied). gh is authenticated (issues + PRs + contents on the agent repos). Shallow-clone a stack repo under /work/ if you need code context.
 
-            STEP 1 — route: map the alert's namespace label to a stack via agents/stacks.json (a namespace matching a stack's repos[] entry, or '<stack>-agents', belongs to that stack). Anything else (monitoring, garage, argocd, agent-coordinator, kube-*, …) is the PLATFORM.
+            STEP 1 — the route is ALREADY COMPUTED deterministically: owner stack = '$ROUTE_STACK', target repo for any issue/PR = '$ROUTE_REPO'. Do NOT re-derive or re-route to a different stack. The ONE allowed override: escalate platform-ward (file on teststuffstash/homelab instead) when your diagnosis shows the fix needs something only the platform can change — and state that reason in the issue.
 
             STEP 2 — diagnose from the alert labels/annotations + whatever context you can actually reach. Say what you verified vs assumed.
 
             STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
             (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.
             (b) a GitOps quick fix on the stack's -iac repo (bad pin → revert/bump PR; the CI-only lane auto-merges): do it now — branch, PR, 'gh pr merge --auto --squash' — and report.
-            (c) needs real work → file EXACTLY ONE issue on the stack's -iac repo (or the app repo if it is clearly app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP'. NO agent labels — the issue is inert; the stack loop/human triages it.
-            (d) the namespace is platform, or the stack needs something only the platform can change → the issue goes on teststuffstash/homelab instead.
+            (c) needs real work → file EXACTLY ONE issue on '$ROUTE_REPO' (or the stack's app repo instead if your diagnosis clearly points at app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP'. NO agent labels — the issue is inert; the stack loop/human triages it.
+            (d) platform-ward escalation only (see STEP 1): the issue goes on teststuffstash/homelab with the stated reason.
 
             HARD RULES: before filing, search the target repo for an OPEN issue containing 'alert-fp:$FP' — if found, add ONE comment there instead of a new issue. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
                 --model sonnet --permission-mode bypassPermissions --max-turns 40 \
