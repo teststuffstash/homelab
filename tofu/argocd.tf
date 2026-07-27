@@ -89,7 +89,41 @@ resource "helm_release" "argocd" {
     # memory limit there — a spike degrades instead of OOM-killing mid-sync.
     repoServer            = { resources = { requests = { cpu = "50m", memory = "128Mi" } } }                                    # ~68Mi, render spikes
     applicationSet        = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } }     # ~40Mi
-    notifications         = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "192Mi" } } }      # ~24Mi
+    # FU-044 (deterministic revert half, 2026-07-27): a post-sync Degraded app rings the
+    # agent-loop EventSource; the deploy-revert Sensor/Workflow decides revert-eligibility
+    # deterministically (agents/coordinator/deploy-revert-argo.yaml). oncePer revision = the
+    # notification-level dedup; the workflow's cm ledger is the belt. The template carries
+    # repo+path so the workflow needs NO ArgoCD read RBAC.
+    notifications = {
+      resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "192Mi" } } # ~24Mi
+      notifiers = {
+        "service.webhook.agent-loop" = <<-EOT
+          url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/deploy-degraded
+          headers:
+            - name: Content-Type
+              value: application/json
+        EOT
+      }
+      templates = {
+        "template.deploy-degraded" = <<-EOT
+          webhook:
+            agent-loop:
+              method: POST
+              body: |
+                {"app": "{{.app.metadata.name}}", "health": "{{.app.status.health.status}}", "revision": "{{.app.status.sync.revision}}", "repo": "{{.app.spec.source.repoURL}}", "path": "{{.app.spec.source.path}}"}
+        EOT
+      }
+      triggers = {
+        "trigger.on-health-degraded" = <<-EOT
+          - when: app.status.health.status == 'Degraded'
+            oncePer: app.status.sync.revision
+            send: [deploy-degraded]
+        EOT
+      }
+      subscriptions = [
+        { recipients = ["webhook:agent-loop"], triggers = ["on-health-degraded"] },
+      ]
+    }
     dex                   = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~25Mi
     redis                 = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~13Mi
   })]

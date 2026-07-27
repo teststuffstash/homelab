@@ -62,6 +62,15 @@ spec:
       port: "12000"
       endpoint: /alert
       method: POST
+    # FU-044: the deterministic-revert edge — argocd-notifications POSTs a post-sync Degraded
+    # app here (tofu/argocd.tf notifications block). Consumed by the `deploy-revert` Sensor
+    # (deploy-revert-argo.yaml). oncePer revision upstream; missed delivery = the app stays
+    # Degraded and the notification refires on the next state transition (plus the responder
+    # lane sees any alert-shaped symptom).
+    deploy-degraded:
+      port: "12000"
+      endpoint: /deploy-degraded
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

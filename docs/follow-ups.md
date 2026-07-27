@@ -653,47 +653,6 @@ _Last updated: 2026-07-16._
       "e2e" reserved for the actual target environment (synthetic production traffic). Record
       the terms in sleep's process docs when the specs land (cf. Fowler microservice-testing:
       our "system" ≈ his out-of-process component / limited e2e).
-- [ ] **FU-096** — **Warm the agent-base ride bring-up the FU-015 way — it's the EVAL CACHE,
-      not the store** (measured 2026-07-25 closing FU-015): with a fully-warm /nix store,
-      `devbox install` still costs 127s wall / 84s CPU when `~/.cache/{nix,devbox}` is cold
-      (7.7s warm, 0.09s with `.devbox` project state) — nix evaluation is the tax, fetching
-      isn't. The arc-runner image now keeps the cache (this closed the runner side); agent-base
-      (agent-runtime repo) pays the same eval per RIDE pod on top of the LAN-substituter store
-      fetch, and retro run 1 flagged bring-up dwarfing task time (opencode attempt 3 spent
-      ~35min of wall on devbox bring-up). **⚖ Fix shape RULED by the composition-axes
-      direction (operator 2026-07-25, platform-and-stacks.md §Composition axes): harness
-      images stay STACK-AGNOSTIC — do NOT bake repo closures into agent-base** (that couples
-      harness×stack). Target: the stack repo's CI publishes its own devbox closure cache as
-      an OCI artifact versioned with `devbox.lock`; the launcher mounts it via ImageVolume
-      (verified on this cluster, fleet#106) as a read-only local nix substituter
-      (`file://` store in substituters) + eval-cache seed copied at entrypoint. NOT a
-      volume-share across pods (single-user nix locking + RWX risk — image layers ARE the
-      share). CoW note (operator asked 2026-07-25): the k8s ImageVolume API is READ-ONLY by
-      design (KEP-4639, no writable option) — but kata rides own their guest kernel, so an
-      in-guest overlayfs (lower=image volume, upper=scratch) gives a true writable CoW /nix
-      if substitution overhead ever proves real; costs a CAP_SYS_ADMIN entrypoint step in the
-      guest (FU-077 exemption territory). Substituter+seed first; overlay only on evidence. Scoping: agent-base already bakes its HARNESS closure (`/opt/agent`) and keeps
-      `~/.cache`; the gap is the TARGET repo's eval in `/work/<repo>` (partial cache overlap;
-      VERIFY the build-user cache survives to the runtime `USER 1000:1000` HOME). The
-      claude/coordinator image needs nothing (no nix/devbox; repo cloned read-only). Relates
-      FU-058, FU-015 (numbers), FU-073e (substituter = fetch half; this = eval half),
-      FU-095(b) (multi-harness evidence). **Built 2026-07-27 (jail-validated, pilot pending):**
-      `devbox-cache.reusable.yml` (homelab; artifact = `/devbox.lock` + `/xdg` eval seed +
-      `/store` file:// cache with upstream sigs intact; tag `lock-<sha256/12>` + `:latest`,
-      manifest-probe idempotent) + agent-runtime#22 entrypoint seed (exact-lock guard;
-      chmod-after-copy — cp keeps the ImageVolume's read-only modes) + `agent-session.sh`
-      probe-then-mount (anonymous ghcr manifest probe ≈ the kubelet's credless pull; a
-      missing/private package = cold ride, loudly — never a pod-level ImagePullBackOff;
-      docker/kata rides skip until canaried; `AGENT_STACK_CACHE=0` opt-out). Jail numbers on
-      oracle-fleet's real lock: `devbox install` 54.7s (cold eval, warm store) → **7.1s**
-      seeded incl. copy; cache portable across path AND HOME by plain copy; store half 868M
-      zstd (219 paths). Both stacks publish (fleet#162, sleep#37 — merged); packages flipped
-      PUBLIC (operator, 2026-07-27); kata+ImageVolume canaried GREEN → the mount rides every
-      ride. First live ride: probe+mount+lock-guard+substituter all worked (install 25s vs
-      ~55s cold); the eval SEED failed on 0444 collisions with the harness image's own caches
-      → cp -rf fix = agent-runtime#24. REMAINING: #24 merges → pin bump → one measure ride
-      with the seed working → archive with numbers.
-
 
 
 ## Hardware & nodes

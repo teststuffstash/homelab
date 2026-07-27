@@ -8,6 +8,18 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-096** *(archived 2026-07-27)* — **Stack devbox-cache: DONE, target met.** The stack's CI
+  publishes `/devbox.lock` + xdg eval seed + the closure as a signed-upstream `file://` nix
+  cache (`devbox-cache.reusable.yml`; both stacks publish, packages public); the launcher
+  ImageVolume-mounts `:latest` on EVERY ride (kata canaried green) and agent-base seeds
+  `~/.cache` behind an exact-lock guard. **Numbers**: jail 54.7s cold-eval → 7.1s seeded;
+  in-pod worst-node (kata laptop) install ≈ 23-25s vs the retro-r1 ~35-min bring-up
+  pathologies. Honest decomposition: the image's own baked HARNESS eval cache overlaps the
+  project pins, so today the seed adds little on top — it carries the DRIFT delta (the exact
+  partial-overlap case the entry predicted) and the file:// store makes fetch node-local.
+  Paid lessons: cp -rf (image 0444 collisions, agent-runtime#24), `$SEED/devbox` optional,
+  probe-then-mount ≈ credless kubelet pull, and the mirror-full corruption incident
+  (10Gi PVC → truncated layer writes; purge + 20Gi). Store artifact 852M zstd + 75M xdg.
 - **FU-092** *(archived 2026-07-27)* — **Reviewer deterministic-name key, DONE (MP-G02 closed).**
   `reviewer-session.sh` pod name = `reviewer-<project>-<pr>-<headsha8>` (head-sha probe with a
   loud timestamp fallback), atomic `kubectl create` (was `apply` — the silent-adopt
