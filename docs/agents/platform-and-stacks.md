@@ -40,7 +40,7 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 | axis | values today | future | owned by |
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
-| **role** | fixer, coordinator, reviewer, retro, scout | meta-coordinator, auditor, large-job | recipes/briefs (`.agents/*`, coordinator runbook, retro brief) + the role's ns/credential boundary |
+| **role** | fixer, coordinator, reviewer, retro, scout | meta-coordinator, auditor, large-job | recipes/briefs (`.agents/*`, coordinator runbook, retro brief) + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
 | **stack** | sleep, oracle, idp | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
 | **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
 
@@ -52,9 +52,20 @@ Known constraint couplings (encode them, don't fight them):
   token (a future opencode subscription likewise, with its own hard limits). Harness↔model
   *affinity* ("some harnesses work better with some models") is empirical, not structural —
   FU-095(b) is the evidence instrument, the ledger axes the metric.
-- **Roles carry boundaries, not images**: retro rides must not hold the fixer WIP slot
-  (FU-058 P3), the coordinator's toolchain is fixed (§below), the reviewer needs full-repo
-  read. Role = recipe + RBAC + ns, never a baked image variant.
+- **Roles carry boundaries AND activation machinery, not images**: retro rides must not hold
+  the fixer WIP slot (FU-058 P3), the coordinator's toolchain is fixed (§below), the reviewer
+  needs full-repo read. Role = recipe + RBAC/ns + **the machinery that decides when and how it
+  fires**: the dispatch predicate, the edge trigger (emitter arm → Sensor dep → submit
+  Workflow), the level-triggered backstop cron, idempotency/serialization keys, capacity
+  gates, and breaker hooks. Never a baked image variant. The reviewer's machinery is
+  inventoried guard-by-guard in [`merge-path-fsm.md`](merge-path-fsm.md) (MP-T03/T04/T08 +
+  gap MP-G02); the coordinator's is the doorbell + scan clauses (ADR-094); retro/scout live
+  in `retro-argo.yaml`/`reflexes-argo.yaml`. Two consequences (operator observation
+  2026-07-27): standing up a NEW role is mostly machinery design, not prompt work — count the
+  reviewer: one rubric vs ~ten machinery pieces; and rendering a role per-stack means the
+  AgentStack Composition renders the whole machinery set, not just SA + secrets (FU-080's
+  coordinate leg = cron + doorbell RBAC + mutex + broker role; FU-100's review leg = exporter
+  arm + Sensor dep + routing trigger — both change zero prompts, zero images).
 - **The stack's toolchain cache belongs to the STACK, not the harness image** (FU-096): baking
   repo closures into agent-base would couple harness×stack. Target shape: the stack repo's CI
   publishes its own devbox closure cache as an OCI artifact (versioned with `devbox.lock`),
