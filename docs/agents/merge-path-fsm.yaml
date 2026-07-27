@@ -146,6 +146,18 @@ transitions:
         anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "bot_approved_head" }
     incidents: ["2026-07-12 oracle-fleet#13", "2026-07-21 oracle-fleet#60 (edge re-POSTed the approved head 2 min after the verdict — second breaker latch of the day, same class both arms)"]
 
+  - id: MP-T10
+    name: merged close-out (C6)
+    owner: scan merged-closeout clause → coordinator item session
+    when: "issue CLOSED by merged PR ∧ still agent/in-progress (21d window)"
+    status: guarded
+    guards:
+      - desc: "scan emits merged-closeout units (cap 3/repo/scan, agent/error excluded)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
+      - desc: "the play: verify outcome → agent/done flip → Follow-ups harvest as INERT issues (breaker #1)"
+        anchor: { file: agents/coordinator/README.md, pattern: "merged-closeout. clause" }
+    incidents: ["MP-G03 origin: #52/#55/#47 label flips + harvest all manual through meta-9..11"]
+
   - id: MP-T09
     name: breaker trip and clear
     owner: any layer (reflex counts / reviewer STEP-0 / worker recipe / exporter alerts / human)
@@ -170,11 +182,6 @@ gaps:
       test-and-set; implemented today: label idempotency + STEP-0 only (probabilistic, and STEP-0
       costs a burned session). Workers got their key 2026-07-21; reviewers didn't."
     fu: "FU-092"
-  - id: MP-G03
-    name: "merged → close-the-loop has no mechanical owner"
-    detail: "C6 (verify outcome, agent/done flip, follow-up harvest) was manual meta every time
-      this session (#52, #55, #47 labels by hand). ADR-094 lists no merged-clause unit."
-    fu: "FU-090 (harvest design; the label flip rides the same unit)"
   - id: MP-G04
     name: "arbitrate (flip-flop / rounds-exhausted) is breaker-only"
     detail: "The escalation table's tie-break rows exist as ROUNDS_MAX breaker counts, not as a
