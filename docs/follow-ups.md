@@ -310,11 +310,14 @@ _Last updated: 2026-07-16._
       on the INITIAL block-device hotplug — `"The disk could not be added to the VM… Cannot open
       disk path… No such file or directory"` — while Longhorn reported the very volume
       `state=attached robustness=healthy` on wk-metal-03 and every Longhorn node condition was True.
-      So kata cannot open the `/dev/longhorn/<vol>` device on wk-metal-03 specifically (the other two
-      kata nodes, wk-metal-01/02, were untested-but-presumed-fine — the re-dispatch off the cordon
-      tests it). **STOPGAP: wk-metal-03 `kubectl cordon`ed 2026-07-28** — root-cause (stale kata
-      device-mapper state? kernel/module diff on the i5-6200U? a dead `/dev/longhorn` udev) + UNCORDON
-      is the open work; if it recurs on 01/02 it's systemic, not node-specific. (b) r1's ephemeral
+      **ROOT CAUSE (found via homelab#63-66): the wk-metal-03 OOM cascade broke Longhorn CSI.** The
+      r4 kata ride pushed the 8GB laptop into memory pressure at 13:03Z; the Talos OOMController killed
+      the BestEffort longhorn-csi-plugin / longhorn-manager / engine-image (+ cilium-agent) → Longhorn
+      couldn't serve the block device → kata's attach failed. So (a) is a SYMPTOM of **FU-112(b)** (the
+      BestEffort-critical-DaemonSet posture), NOT a standalone kata bug. **CONFIRMED node-specific**:
+      after `kubectl cordon wk-metal-03` (2026-07-28), r5 re-dispatched to wk-metal-01 and its dind
+      came up clean (block device attached). Open work here = **UNCORDON wk-metal-03 once FU-112(b)
+      lands** (resource the DaemonSets so a ride can't OOM the platform there again). (b) r1's ephemeral
       `docker-lib` PVC was still Bound 18h after the pod went Error — the FU-093 scan janitor deletes
       only `Succeeded` ride pods >2h, so terminal Error/Failed pods leak their PVC (regressing the
       #41/#63 longhorn-scratch pool-exhaustion class fix — TICK-LOG §scratch-pool). Widen the janitor
