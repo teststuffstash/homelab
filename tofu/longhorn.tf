@@ -131,8 +131,14 @@ resource "helm_release" "longhorn" {
     longhornUI = { replicas = 1 }
     # The user-deployed components need the same taint tolerance as defaultSettings.taintToleration
     # (that setting only covers system-MANAGED pods).
-    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }] }
-    longhornDriver  = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }] }
+    # FU-112(b): GUARANTEED (req==limit) so the OOMController evicts the ~5Gi tenant ride, not
+    # Longhorn's control/CSI plane (homelab#66/#65). BestEffort longhorn-manager/csi died first in the
+    # #48 kata-ride OOM → block-device attach broke (FU-116a). Limits ~2× observed peaks (manager
+    # ~352Mi, csi small). ⚠ VERIFY post-apply the pods actually gained the resources — if the chart
+    # ignores these keys, instance-manager/engine-image also stay BestEffort (Longhorn-managed; a
+    # residual needing a Longhorn setting/patch — see FU-116).
+    longhornManager = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "150m", memory = "512Mi" }, limits = { cpu = "150m", memory = "512Mi" } } }
+    longhornDriver  = { tolerations = [{ key = "homelab.io/ephemeral", operator = "Equal", value = "true", effect = "NoSchedule" }], resources = { requests = { cpu = "100m", memory = "256Mi" }, limits = { cpu = "100m", memory = "256Mi" } } }
     # Prometheus ServiceMonitor for longhorn-manager (:9500 longhorn_* metrics: volume
     # robustness/state, node storage, replica counts). Scraped via the relaxed selector
     # (monitoring.tf); alerts on degraded/faulted volumes + low storage live there.

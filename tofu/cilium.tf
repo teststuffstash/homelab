@@ -77,6 +77,15 @@ resource "helm_release" "cilium" {
     }
     # FU-082: requests only (DaemonSet, one per node) — envoy proxies pod L7 traffic, ~15-30Mi.
     envoy = { resources = { requests = { cpu = "50m", memory = "64Mi" } } }
+    # FU-112(b): the cilium-AGENT DaemonSet was BestEffort (no resources) → the Talos OOMController
+    # killed it FIRST under node memory pressure (homelab#63, the #48 kata-ride OOM cascade). Make it
+    # GUARANTEED (req==limit) so its oom_score_adj is -997: among Guaranteed pods the kernel then
+    # evicts the biggest RSS (the ~5Gi kata ride), NOT the node's network. NB Burstable/requests-only
+    # does NOT achieve this — a small request still leaves oom_score_adj ~950. Limits are generous
+    # (mem 2× the ~261Mi observed peak; cpu 2.5× the ~100m peak) so self-cgroup-OOM/throttle is
+    # unlikely, while keeping the per-node reservation small enough that a ~5.1Gi kata ride still fits
+    # on the 7.1Gi kata nodes (the reservation-vs-self-OOM tension on the 8GB tier — kept modest).
+    resources = { requests = { cpu = "250m", memory = "512Mi" }, limits = { cpu = "250m", memory = "512Mi" } }
     # single operator is plenty for a homelab; default 2 (High Availability, anti-affinity) just
     # leaves a second replica stuck when a node hasn't cached the image yet.
     operator = {

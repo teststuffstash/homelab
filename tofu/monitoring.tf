@@ -334,6 +334,19 @@ resource "helm_release" "kube_prometheus_stack" {
               "for"         = "0m"
               "labels"      = { severity = "warning" }
               "annotations" = { summary = "{{ $labels.namespace }}/{{ $labels.pod }} killed (exit 137)", description = "Container {{ $labels.container }} restarted after SIGKILL — likely the Talos OOMController (BestEffort victim under node memory pressure, FU-082) or a kernel OOM. Check `talosctl dmesg | grep 'OOM controller'` on the pod's node; recurring hits mean the node is over-committed or the pod needs resource requests." }
+            },
+            {
+              # FU-112(b) safety net: warn BEFORE a container self-cgroup-OOMs, so a too-tight limit
+              # surfaces PROACTIVELY (not as a PodSigkilled after the fact). Scoped to the PLATFORM
+              # namespaces — the Guaranteed daemons should never sit near their limit; if one does,
+              # the limit is too tight and must be raised before it takes networking/storage down.
+              # Agent rides (their dind hits its 2560Mi limit BY DESIGN — the correct contained
+              # failure) are deliberately EXCLUDED, else this would be pure noise on every ride.
+              "alert"       = "ContainerMemoryNearLimit"
+              "expr"        = "container_memory_working_set_bytes{namespace=~\"kube-system|longhorn-system\", container!=\"\", container!=\"POD\"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace=~\"kube-system|longhorn-system\", resource=\"memory\"} > 0.85"
+              "for"         = "15m"
+              "labels"      = { severity = "warning" }
+              "annotations" = { summary = "{{ $labels.namespace }}/{{ $labels.pod }} near its memory limit", description = "Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-driver), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node." }
             }
           ]
         }]
