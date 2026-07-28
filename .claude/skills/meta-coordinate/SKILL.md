@@ -96,6 +96,22 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 - **Session hygiene**: monitors + background chains die with the session — before /clear,
   finish or note in-flight chains in `docs/agents/meta-state.md` (create if needed, keep tiny:
   a bullet per pending chain with its next concrete step).
+- **Context lifecycle — drive your own clears (the operator just gets a nudge).** A long meta
+  session accumulates context that is expensive to keep cached (1-hour prompt-cache TTL) and very
+  expensive to re-read once the TTL lapses (the full ~500k re-processes UNCACHED). Don't wait for
+  the harness's lossy auto-summary at the hard limit — drive a CLEAN reset instead. You CANNOT run
+  `/clear` yourself (harness command) and you canNOT see your own token count or the cache clock,
+  so you time it on PROXIES, not precision:
+  - **When to nudge**: on a HEARTBEAT sweep (or right after finishing a major arc), if substantial
+    work has piled up since the last clear AND nothing is mid-flight you must babysit this turn →
+    it's a clean breakpoint. Better a little early than riding to the limit.
+  - **How to nudge (in order)**: (1) CONSOLIDATE — trim `meta-state.md` to live state + watches
+    (delete superseded bullets; TICK-LOG holds history) and append the arc's TICK-LOG entry; commit
+    + push. (2) EMIT one line, e.g. `🧹 CLEAR RECOMMENDED — handoff clean (meta-state consolidated,
+    TICK-LOG written, pushed). /clear then /meta-coordinate resets the ~<N>k context before the
+    1-hour cache TTL forces an uncached re-read.` (3) Do NOT block — keep coordinating; the operator
+    clears when convenient and the next /meta-coordinate re-bootstraps from the durable state, losing
+    nothing. The goal is FREQUENT + CLEAN clears, not a perfectly-timed one.
 
 ## Anti-stall discipline (the meta-9 recurring failure class — FOUR incidents)
 
