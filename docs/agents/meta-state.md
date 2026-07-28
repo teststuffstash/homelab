@@ -50,6 +50,15 @@ before trusting AgentQueueStalled)._
      When resuming #48, escalate the worker model (claude/haiku, the planned post-#48 primary, or
      sonnet) — the loop can't self-heal this with the current chain (fallbacks only swap on STRIKES,
      and a clean-but-useless exit is not a strike).
+  DESIGN FILED (2026-07-28): the ROOT of gap #1+deepseek's no-docker assumption is now
+  **FU-114 / [`docs/agents/fixer-context.md`](fixer-context.md)** — fixer context is three layers
+  (platform env card from claim knobs + stack task-type briefs fix/build + deterministic `task/*`
+  selection); operator chose launcher-rendered env card + design-doc-first. Build order: L1 env card
+  → L2/L3 build.yaml+task label → ci.sh fail-closed. Operator DE-PRIORITIZED forcing `devbox run ci`
+  (GitHub CI is the real gate; in-pod ci_passed stays best-effort). OPEN sub-question for the walk:
+  did r3's ci-red-stale ride actually get `--docker` (derivation from the claim), or did the
+  fix-round dispatch drop it? — decides if gap #3 is real. Next in the top-down walk = L1 build or
+  that sub-question, operator's call.
 - ~~FU-096~~ COMPLETE — already ARCHIVED in follow-ups-archive.md with in-pod numbers
   (23-25s worst-node; my independent 17:33Z measure on sleep#39 r1 read 23.6s, seed+substituter
   clean). Stale-bullet lesson: the archive, not this file, was current — recheck the tracker
