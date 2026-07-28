@@ -26,9 +26,17 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 
 - **#48 LANDED** (PR#72 merged, CI green — the system-test gate: k3d + MinIO + ingester + Grafana,
   graph-read assertion). This unblocked its dependents.
-- **#71 (k3d→kind migration) RUNNING** on haiku (r1 was live at handoff; may have re-rounded). Depends-on
-  #48 (now satisfied). When it lands it **closes #67** (the k3d-mirror wall). NEXT: watch it merge; verify
-  it added `kind@latest` to devbox.json (not a downloaded binary) + the `kind_mirror` hosts.toml.
+- **#71 (k3d→kind migration) — r1 WEDGED + deleted 2026-07-28 ~21:22.** r1 hung ~3.5h in an
+  unrecoverable claude-code network-timeout loop ("Request timed out / call final_output NOW" every
+  ~2min since 21:00), Running-but-not-progressing → the coordinator's `phase=Running` filter read it
+  as a live worker and DEFERRED (liveness≠progress trap). Worse: the **FU-042 1-worker WIP limit**
+  (no TRACKS.md lane split) meant r1 held sleep-tracking's SOLE slot, so it also blocked #42 (verified
+  pre-flight-refused "FU-042 WIP limit" at 20:42). Proxy confirmed HEALTHY (other sessions 200 in
+  2-19s post-roll) → r1 was individually wedged, not a proxy regression. Deleted → freed the WIP slot.
+  EXPECTED NEXT (deadline ~21:35): coordinator re-dispatches #71-**r2** (in-progress, no live worker →
+  redispatch clause); bounded watch `bpd755sil` reports r2 liveness. If r2 ALSO wedges → environmental,
+  not transient (investigate). When #71 lands it **closes #67**; verify `kind@latest` in devbox.json
+  (not a downloaded binary) + the `kind_mirror` hosts.toml. #42 waits on the WIP slot behind #71.
 - **#42 / #43** (dashboard-contract bugs) + **sleep-iac#25** — **#48 now CLOSED, so unblocked**;
   watch them flow. **#42 enriched 2026-07-28** with LIVE root cause of the operator's "all panels
   blank on /d/sleep-overview": the dominant cause is a **dangling `${DS_SLEEP_DB}` datasource var**
