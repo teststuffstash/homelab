@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-116**.
+  Next free id: **FU-117**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -303,6 +303,22 @@ _Last updated: 2026-07-16._
       refinement OPEN** — immediate no-op detection (same head across a completed round → arbitrate
       NOW, not after the full cap) needs a dispatch-time `@head` marker; the attempt-cap is the v1
       bound. E2E validated by the operator's #48 re-fail test. Relates FU-086 (archived), MP-T07/T11/T12/T13.
+
+- [ ] **FU-116** — **Kata docker-ride storage fragility: (a) wk-metal-03 can't attach a HEALTHY
+      Longhorn block volume; (b) ephemeral docker-lib PVCs leak on Error/Failed pods** (born
+      2026-07-28, the #48 FU-114/FU-115 E2E test). (a) r4's dind CrashLooped `StartError exit=128`
+      on the INITIAL block-device hotplug — `"The disk could not be added to the VM… Cannot open
+      disk path… No such file or directory"` — while Longhorn reported the very volume
+      `state=attached robustness=healthy` on wk-metal-03 and every Longhorn node condition was True.
+      So kata cannot open the `/dev/longhorn/<vol>` device on wk-metal-03 specifically (the other two
+      kata nodes, wk-metal-01/02, were untested-but-presumed-fine — the re-dispatch off the cordon
+      tests it). **STOPGAP: wk-metal-03 `kubectl cordon`ed 2026-07-28** — root-cause (stale kata
+      device-mapper state? kernel/module diff on the i5-6200U? a dead `/dev/longhorn` udev) + UNCORDON
+      is the open work; if it recurs on 01/02 it's systemic, not node-specific. (b) r1's ephemeral
+      `docker-lib` PVC was still Bound 18h after the pod went Error — the FU-093 scan janitor deletes
+      only `Succeeded` ride pods >2h, so terminal Error/Failed pods leak their PVC (regressing the
+      #41/#63 longhorn-scratch pool-exhaustion class fix — TICK-LOG §scratch-pool). Widen the janitor
+      to Error/Failed. Relates FU-081 (archived), FU-093, FU-072, TICK-LOG §scratch-pool.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
