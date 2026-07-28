@@ -377,7 +377,14 @@ _Last updated: 2026-07-16._
       SERVICES.md, devbox-for-everything, prior-art-before-creating) NEVER reach the goose worker.
       Concrete cost already paid: #71-r1 downloaded a kind binary into a read-only nix profile; the
       #48 rounds didn't configure the registry mirror (both are CLAUDE.md-rule gaps). The env card
-      became the smuggling route → the spread. INTERIM (done 2026-07-28, meta-15): duplicated the key
+      became the smuggling route → the spread. **Sighting 2026-07-28 (a boundary the model must
+      respect): the ride clones ONLY `/work/repo` (the project repo) — never homelab — so a worker
+      CANNOT grep SERVICES.md; and it shouldn't — SERVICE CONTEXT (endpoints, buckets, existing-secret
+      refs) is the ISSUE-AUTHOR's / coordinator's job to inject into the issue, the worker executes
+      with it.** (Meta-15 briefly mis-added a "grep SERVICES.md" env-card bullet, then removed it —
+      the exact flip-flop-to-worker the operator flagged.) So the map has ≥3 context classes: env
+      (how your box works — env card), task+service facts (WHAT this task needs — the ISSUE, injected
+      by author/coordinator), universal ground rules (CLAUDE.md today, unreachable by goose). INTERIM (done 2026-07-28, meta-15): duplicated the key
       CLAUDE.md rules into `render_env_card` + added the missing nix-cache proxy — accept the
       duplication, THIS FU tracks the dedup. THE REFACTOR (when piled up enough): a **role × context ×
       source** map — separate DYNAMIC per-ride facts (env card: docker/egress/proxy values, round,
