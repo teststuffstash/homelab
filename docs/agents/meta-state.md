@@ -54,6 +54,10 @@ before trusting AgentQueueStalled)._
     $platformLabels. NO auto-merge (untested-E2E core machinery — the goose `--recipe` path esp.).
   - L2 = **sleep-tracking#70**: `.agents/build.yaml` (build-task brief) + fix.yaml marker + de-misled
     "no-real-data sandbox". Both recipes valid YAML (yq), one marker each.
+  - GOOSE PATH VERIFIED (2026-07-28, goose 1.28.0, throwaway agent-base pod): `--recipe <abs> --params
+    issue=N` accepted; `--explain` loads both; `--render-recipe` shows the actual env card (all fields,
+    literal, no {{ }} collision) atop instructions + {{ issue }}→48, valid YAML, marker AND fallback
+    paths. Only recipe content+path changed; goose exec unchanged. Evidence on homelab#61.
   - RELABEL #48 → task/build = the FINAL step, AFTER #61 merges + ArgoCD renders task/build authoritative
     (doing it before = reconciled away). NEEDS: review both PRs → controlled goose dispatch to verify the
     --recipe path → merge → relabel #48 → (un-pause sleep to run #48 on a capable model).
