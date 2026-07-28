@@ -15,15 +15,18 @@ before trusting AgentQueueStalled)._
   fix round dispatched. Root cause (bash -x proven): the `[ -z "$items" ]` actionability gate
   reads the REPORT string, but ci-red-stale + merged-closeout append only to `$units` → sole-work
   = "nothing actionable", units dropped. Also #47/#46 never got C6 agent/done flip+harvest (#46
-  merged from `agent/review`, which C6 didn't even query). Fix in **homelab#60** (auto-merge
-  armed, CI pending ~06:10Z). CHAIN + deadlines:
-  1. homelab#60 merges (CI ~06:25Z deadline; BLOCKED=checks-pending is normal).
-  2. Next coordinate-sleep scan (~10min after merge) clones new master → dispatches ci-red-stale
-     #61 (priority) then merged-closeout #47/#46/#22. Deadline: a ride pod for #61 by ~06:50Z.
-  3. ci-red-stale fix round edits PR#61 branch to fix the garage-exec race → green → review →
-     merge → unblocks #42/#43 + sleep-iac#25 + the haiku flip (see the flip bullet below).
-  Remove this bullet when PR#61 goes green. If the garage race is a pure flake not a harness bug,
-  the fix round should still make the wait deterministic — do NOT just re-run CI (masks it).
+  merged from `agent/review`, which C6 didn't even query). Fix **homelab#60 MERGED 06:19Z**
+  (CI green 18s). CHAIN:
+  1. ✓ homelab#60 merged → fix on master (3cd3160).
+  2. ✓ 06:20Z scan (coordinate-sleep-1785219600) dispatched ci-red-stale#61 → item session
+     **coordinator-062028** (sonnet) running. Report also lists merged-closeout #47/#46/#22 (WIP=1,
+     behind #61).
+  3. → NEXT: coordinator-062028 re-dispatches a fix round on PR#61's branch for the garage-exec
+     race (`container not found ("garage")` at seed step [3/6]). Deadlines: fix-round agent-session
+     pod (issue-48) by ~06:35Z; PR#61 new commit ~06:55Z; green+merge ~07:30Z. Flake or not, the
+     round must make the wait deterministic — do NOT just re-run CI (masks it).
+  Then merged-closeout ticks flip #47/#46/#22 → agent/done + harvest; PR#61 merge unblocks
+  #42/#43 + sleep-iac#25 + the haiku flip (next bullet). Remove this bullet when PR#61 is green.
 - ~~FU-096~~ COMPLETE — already ARCHIVED in follow-ups-archive.md with in-pod numbers
   (23-25s worst-node; my independent 17:33Z measure on sleep#39 r1 read 23.6s, seed+substituter
   clean). Stale-bullet lesson: the archive, not this file, was current — recheck the tracker
