@@ -176,7 +176,7 @@ transitions:
   - id: MP-T10
     name: merged close-out (C6)
     owner: scan merged-closeout clause → coordinator item session
-    when: "issue CLOSED by merged PR ∧ still agent/in-progress (21d window)"
+    when: "issue CLOSED by merged PR ∧ still agent/in-progress OR agent/review (21d window)"
     status: guarded
     guards:
       - desc: "scan emits merged-closeout units (cap 3/repo/scan, agent/error excluded)"
