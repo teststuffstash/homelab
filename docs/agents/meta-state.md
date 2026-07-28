@@ -14,10 +14,25 @@ before trusting AgentQueueStalled)._
   platform coordinators + the two global reflexes STILL paused (from the earlier "pause the world").
   **wk-metal-03 UNCORDONED 2026-07-28 (FU-112b landed — see item 1).** All watches/monitors DIE with
   the session — re-arm per the meta-coordinate skill.
-  **➤ meta-15 (fresh session, 2026-07-28) PROGRESS: item 1 (FU-112b Talos kata reservation) DONE +
-  verified + committed (4a9e9a9); wk-metal-03 back in service; stale OOM alerts homelab#68/#69 closed.
-  Remaining = items 2 (#48/FU-116 kata+dind STORAGE fragility — the real docker-ride blocker, needs
-  operator direction) + 3 (Phase 4, do after #48). World still paused otherwise.**
+  **➤ meta-15 (fresh session, 2026-07-28) PROGRESS:**
+  - **item 1 (FU-112b Talos kata reservation) DONE** + verified + committed (4a9e9a9); wk-metal-03
+    back in service; stale OOM alerts homelab#68/#69 closed; crosscheck UNTRIAGED found benign (FU-113
+    siblings). meta-15 TICK-LOG entry written.
+  - **item 2 investigation DONE (root-cause, b1c0ea2): the r5 read-only `/var/lib/docker` WAS another
+    OOM — not a distinct kata bug.** talosctl dmesg wk-metal-01: 13:42Z virtiofsd (kata VM) global OOM
+    → 13:45Z k3d exit137 + longhorn-scratch block PVC read-only → 13:53Z 2nd global OOM killed
+    longhorn-instance-manager. = the FU-112b cascade, storage-path variant, ALL pre-reservation. Also
+    cleaned the leaked r5 pod + its 20Gi ephemeral PVC (FU-116b action; PVC GC'd). **NEW FINDING for
+    operator**: post-reservation the ride footprint (5.12Gi req) BARELY fits an 8GB kata node
+    (allocatable ~6.2GiB − ~1.25GiB daemons ≈ 5.0GiB free) — currently ONLY wk-metal-03 fits (144Mi
+    margin); wk-metal-01/02 are ~40-410Mi short. Safe (Pending, not OOM) but tight → one-ride-at-a-time.
+  - **PENDING OPERATOR DECISION — the validation re-run**: re-run a ~5Gi kata+dind ride on a RESERVED
+    node to confirm the kubelet evicts before global OOM (longhorn survives, no read-only-fs). Gated on
+    the worker-model call (deepseek too weak — Phase 4 planned a claude/haiku flip) + whether to keep
+    the world paused. If k3d STILL fails on a NON-OOM node → genuine kata bug (evidence says it won't).
+    Separately: k3d-vs-kind — operator notes k3d is genuinely new/unproven, kind is problem-free (the
+    Phase-4 migration is still worth it on those grounds, independent of this OOM).
+  - item 3 (Phase 4) unchanged, after the #48 validation. World still paused otherwise.**
   SHIPPED THIS SESSION (all on master + deployed): **FU-114** (fixer 3-layer context: launcher env
   card from claim knobs + unify `--recipe` onto goose + `task/*` recipe selection + `.agents/build.yaml`
   + the #67 kind-mirror lesson) — homelab#60/#61 + sleep-tracking#70 merged; **FU-115** (red merge-path
