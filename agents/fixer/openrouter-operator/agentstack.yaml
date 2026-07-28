@@ -14,7 +14,7 @@ spec:
   # agentic activity happens here yet (operator note). coordinator.enabled + loop.perStack render
   # the loop; loop.graduated cuts over (global scan skips platform, doorbell + per-stack review in-ns).
   coordinator:
-    enabled: true
+    enabled: false # PAUSED 2026-07-28 (meta-14, operator "pause the world") — flip back to true to resume
   loop:
     perStack: true
     graduated: true
