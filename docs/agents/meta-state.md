@@ -19,11 +19,17 @@ before trusting AgentQueueStalled)._
     (homelab e11cc03 — global kill switch released), platform coordinator enabled=true (name=`platform`),
     oracle coordinator+reviewer=true (oracle-iac#257 merged, ArgoCD rendering), sleep already enabled.
     All verified live except oracle (sync lag at handoff — CONFIRM it flips true).
-  - **NEXT (active meta-coordination of sleep)**: re-arm the loop watch + heartbeat; watch the first
-    resumed ticks — does #48 dispatch on haiku (not deepseek)? does PR#61 get a round (it's BEHIND
-    master + label-less — if the ci-red/scan doesn't pick it up, intervene)? then the dependent
-    dashboard bugs (#42/#43 dep-held on #48), the spec bugs (#39-47 range), #71 after #48. #67 (k3d
-    egress 🚨) closes when #71 lands. Verify the haiku subscription load stays under the FU-088 gate.
+  - **#48 RESET + RE-DISPATCHED (meta-15).** PR#61 was ci-red 3/3 (budget EXHAUSTED by the OOM
+    cascade + weak deepseek, not task difficulty) + BEHIND master → closed it + deleted its branch
+    (diagnosis preserved on #48: garage Deployment lacks a readinessProbe tied to the S3 API →
+    kubectl wait passes before Garage serves → seed's kubectl exec finds container gone). #48 stayed
+    agent/queued → next scan queued-dispatched **r6 fresh**: LIVE Running on wk-metal-03 (kata,
+    MemoryPressure=False), **MODEL=haiku confirmed**. Watch bqqwelvz7 armed for its outcome (PR/CI/OOM).
+  - **NEXT (active meta-coordination of sleep)**: watch r6 to outcome — PR pushed? CI green? (no OOM =
+    FU-112b holding). Then the dep-held queue unblocks as #48 lands: dashboard bugs #42/#43 + sleep-iac#25
+    (dep on #48), #71 (kind migration, dep on #48; closes #67 the k3d-egress 🚨). Verify haiku
+    subscription load stays under the FU-088 gate. Oracle + platform loops also live now (watch for
+    their own first ticks). Standing heartbeat: biy97zxyw (prior-session 2h backstop, kept).
   _(historical meta-14 handoff below — superseded by the above)_
 - **🔴 SESSION HANDOFF (meta-14, 2026-07-28 ~14:00Z — written at 98% context; a fresh session
   resumes HERE).** WORLD: sleep coordinator RE-ENABLED (sleep-iac#38, CR enabled=true); oracle +
