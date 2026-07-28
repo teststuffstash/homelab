@@ -140,6 +140,21 @@ render_env_card() {
 # harness-specific invocation. Both harnesses read the SAME augmented recipe (goose natively; claude
 # as an appended system prompt — it parses the goose YAML fine, agent-runtime#14).
 if [ -n "${RECIPE:-}" ]; then
+  # FU-114 L3: deterministic task-type recipe selection (docs/agents/fixer-context.md). The
+  # dispatcher passes the DEFAULT recipe (.agents/fix.yaml); if the issue carries a `task/<class>`
+  # label and a sibling `.agents/<class>.yaml` exists, use THAT — launcher-owned, never LLM-picked
+  # (ADR-094). Default is the passed recipe; an unknown class or missing sibling degrades to it loudly.
+  if command -v gh >/dev/null 2>&1; then
+    TASK_CLASS="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json labels \
+      --jq '[.labels[].name|select(startswith("task/"))|ltrimstr("task/")]|first // empty' 2>/dev/null || true)"
+    if [ -n "$TASK_CLASS" ]; then
+      if [ -f "$(dirname "$RECIPE")/${TASK_CLASS}.yaml" ]; then
+        RECIPE="$(dirname "$RECIPE")/${TASK_CLASS}.yaml"; echo "→ FU-114 L3: recipe .agents/${TASK_CLASS}.yaml selected (task/${TASK_CLASS} label)"
+      else
+        echo "→ FU-114 L3: issue has task/${TASK_CLASS} but no .agents/${TASK_CLASS}.yaml — using $(basename "$RECIPE")"
+      fi
+    fi
+  fi
   # Splice the env card into the recipe's `instructions` block. Marker-first (the author chose
   # placement); fall back to right after `instructions: |`; WARN + no-card if neither shape is
   # found — NEVER FATAL (a missing marker in one stack's recipe must not wedge the whole loop; the
