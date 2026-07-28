@@ -340,8 +340,21 @@ _Last updated: 2026-07-16._
       couldn't serve the block device → kata's attach failed. So (a) is a SYMPTOM of **FU-112(b)** (the
       BestEffort-critical-DaemonSet posture), NOT a standalone kata bug. **CONFIRMED node-specific**:
       after `kubectl cordon wk-metal-03` (2026-07-28), r5 re-dispatched to wk-metal-01 and its dind
-      came up clean (block device attached). Open work here = **UNCORDON wk-metal-03 once FU-112(b)
-      lands** (resource the DaemonSets so a ride can't OOM the platform there again). (b) r1's ephemeral
+      came up clean (block device attached). ✅ **UNCORDON DONE + root cause of the wk-metal-01
+      read-only-fs CONFIRMED = OOM too (meta-15, 2026-07-28).** FU-112(b) landed (Talos kata kubelet
+      reservation, 4a9e9a9) → wk-metal-03 uncordoned. The r5-on-wk-metal-01 `/var/lib/docker …
+      read-only file system` (exit 255) that looked like "a broader kata storage bug beyond the OOM"
+      is NOT distinct — `talosctl dmesg` on wk-metal-01 shows the SAME cascade: 13:42:43Z **`virtiofsd
+      invoked oom-killer` (global OOM — the kata microVM's own fs daemon is the trigger)** → 13:45:31Z
+      the k3d container exits 137 and `/var/lib/docker` (an ephemeral `longhorn-scratch` Block PVC)
+      goes read-only because its engine backend died in the OOM → 13:53:00Z a second global OOM
+      (`kubelet invoked oom-killer`) kills `longhorn-instance-manager` again. So the read-only-fs is
+      the longhorn-block-device variant of the FU-112(b) cascade (collateral = storage path, not
+      cilium networking); all of it PREDATES the reservation. Both (a) and the wk-metal-01 read-only
+      are OOM symptoms → FU-112(b) is the root-cause fix. RESIDUAL VALIDATION: re-run a ~5Gi kata+dind
+      ride on a RESERVED node and confirm the kubelet evicts the ride before global OOM (longhorn
+      survives, block device stays healthy). Only if k3d/dind STILL fails on a non-OOM node is there
+      a genuine kata bug left — evidence says there isn't. (b) r1's ephemeral
       `docker-lib` PVC was still Bound 18h after the pod went Error — the FU-093 scan janitor deletes
       only `Succeeded` ride pods >2h, so terminal Error/Failed pods leak their PVC (regressing the
       #41/#63 longhorn-scratch pool-exhaustion class fix — TICK-LOG §scratch-pool). Widen the janitor
