@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-117**.
+  Next free id: **FU-118**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -364,6 +364,27 @@ _Last updated: 2026-07-16._
       only `Succeeded` ride pods >2h, so terminal Error/Failed pods leak their PVC (regressing the
       #41/#63 longhorn-scratch pool-exhaustion class fix — TICK-LOG §scratch-pool). Widen the janitor
       to Error/Failed. Relates FU-081 (archived), FU-093, FU-072, TICK-LOG §scratch-pool.
+
+- [ ] **FU-117** — **Agent context delivery is spreading across surfaces with no role×context model**
+      (operator 2026-07-28: "context management is starting to spread — which role requires what
+      context"). Operator style = let it grow organically then analysis+refactor, NOT BDUF — so this
+      is a DELIBERATE let-it-pile-up item; do NOT refactor yet, just keep noting the sightings.
+      ROOT FINDING: two delivery channels carry DIFFERENT context. (a) **Claude-Code auto-load**
+      (CLAUDE.md + skills + memory) reaches the meta-coordinator + the claude-harness rides
+      (coordinator/reviewer/researcher — they run `claude -p`, clone homelab, get its CLAUDE.md).
+      (b) **the recipe + launcher-spliced env card** reaches the GOOSE worker/fixer rides. **Goose is
+      not Claude Code → never loads CLAUDE.md**, so the universal ground rules that live there (grep
+      SERVICES.md, devbox-for-everything, prior-art-before-creating) NEVER reach the goose worker.
+      Concrete cost already paid: #71-r1 downloaded a kind binary into a read-only nix profile; the
+      #48 rounds didn't configure the registry mirror (both are CLAUDE.md-rule gaps). The env card
+      became the smuggling route → the spread. INTERIM (done 2026-07-28, meta-15): duplicated the key
+      CLAUDE.md rules into `render_env_card` + added the missing nix-cache proxy — accept the
+      duplication, THIS FU tracks the dedup. THE REFACTOR (when piled up enough): a **role × context ×
+      source** map — separate DYNAMIC per-ride facts (env card: docker/egress/proxy values, round,
+      write-scope) from UNIVERSAL ground rules (author once; deliver to goose via a launcher-injected
+      static block — the env card's sibling — or a recipe "read CLAUDE.md first" opener) from TASK
+      rules (the recipe). One source per concern, delivered to the roles that need it. Design home:
+      docs/agents/roles.md / fixer-context.md. Relates FU-114 (env card), ADR-094 (launcher dispatch).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
@@ -900,7 +921,15 @@ _Last updated: 2026-07-16._
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
 - [ ] **FU-038** — Tuya plugs: drop the cloud dependency for local-API polling; then the `/10`
-      power correction can go away (`homeassistant/ha-config/packages/power.yaml`).
+      power correction can go away (`homeassistant/ha-config/packages/power.yaml`). Investigated
+      2026-07-28 — DIRECTION: standardize on HA-local WiFi plugs via `make-all/tuya-local` (or the
+      `xZetsubou/hass-localtuya` fork): one-time `device_id`+`local_key` extraction (free Tuya IoT
+      project / `tinytuya wizard`), then pure LAN polling — no soldering, true-unit DPs (kills the
+      `/10`). Cheap WiFi metering plugs are fine driven this way; reflashing to ESPHome-LibreTiny /
+      OpenBeken (plugs are BK7231; serial or tuya-cloudcutter OTA, `tuya-convert` mostly patched)
+      stays an OPTIONAL per-device upgrade, not required. Same path for the 2 new metal nodes — buy
+      cheap WiFi metering plugs (SonOff via SonoffLAN or Matter on newer models, or Tuya via
+      tuya-local; block cloud egress at OPNsense) — not the FU-034 Zigbee coordinator.
 
 ---
 
