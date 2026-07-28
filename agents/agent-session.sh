@@ -148,7 +148,7 @@ if [ -n "${RECIPE:-}" ]; then
   if grep -q '{{PLATFORM_ENV_CARD}}' "$RECIPE"; then
     IND="$(grep -m1 '{{PLATFORM_ENV_CARD}}' "$RECIPE" | sed 's/[^ ].*$//')"
     CARD="$(render_env_card | sed "s/^/${IND}/;s/[[:space:]]*$//")"
-    awk -v c="$CARD" '/{{PLATFORM_ENV_CARD}}/{print c; next} {print}' "$RECIPE" > "$RECIPE_WITH_CARD"
+    awk -v c="$CARD" '!spliced && /{{PLATFORM_ENV_CARD}}/{print c; spliced=1; next} {print}' "$RECIPE" > "$RECIPE_WITH_CARD"
   elif grep -qE '^[[:space:]]*instructions:[[:space:]]*\|' "$RECIPE"; then
     IND="$(grep -m1 -E '^[[:space:]]*instructions:[[:space:]]*\|' "$RECIPE" | sed 's/[^ ].*$//')  "  # instructions key indent + one level
     CARD="$(render_env_card | sed "s/^/${IND}/;s/[[:space:]]*$//")"
