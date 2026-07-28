@@ -37,16 +37,14 @@ before trusting AgentQueueStalled)._
     MemoryPressure=False, longhorn 0 restarts, no read-only-fs) — the failure stayed contained in the
     kata VM. FU-112b holds; the read-only-fs is confirmed a pure OOM artifact. #48 got two operator
     rulings (boot-only garage/grafana sizing + Playwright=16GB-node-not-laptops).
-  - **🖥️ ONBOARDING IN FLIGHT — wk-metal-04 (16GB desktop, i5-3570K, MAC d4:3d:7e:93:00:92, @ .186,
-    kata ephemeral tier).** IaC prepped (metal.tf entry+taint, transient matchbox_group, dnsmasq .186).
-    Applied: matchbox flag (ipxe 200) + dnsmasq reservation. **NEXT (steps 4-7 of onboard-metal-node,
-    once it PXEs to maintenance — a background wait watches .186):** (4) `talosctl -n 192.168.2.186 get
-    disks --insecure` → confirm install_disk (currently /dev/sda placeholder in metal.tf); (5) `tofu
-    -chdir=tofu apply -target='talos_machine_configuration_apply.metal[\"wk-metal-04\"]'` (needs
-    keepass-env TF_VARs); (6) UNFLAG: `tofu -chdir=tofu/provisioning destroy -target=matchbox_group.wk_metal_04`
-    + remove the group from matchbox.tf (committed file holds no per-node groups); (7) after Ready,
-    `tofu -chdir=tofu apply -target=kubernetes_node_taint.desktop_kata`. Then commit + verify `devbox
-    run nodes`. NOT in local.avx2_nodes (no AVX2 → goose-only). Uncommitted IaC on disk until onboarded.
+  - **✅ wk-metal-04 ONBOARDED (16GB desktop, i5-3570K, @ .186, kata ephemeral tier) — meta-15.**
+    Full flow done: PXE→maintenance (operator enabled BIOS "LAN Option ROM"/Network Stack — the EFI-shell
+    fallthrough was a disabled UEFI network stack) → disk confirmed KINGSTON SA400S3 480GB /dev/sda →
+    install → unflag (MAC 404s, matchbox group removed from matchbox.tf) → joined Ready as wk-metal-04
+    (no ghost, DHCP hostname held) → ephemeral taint. Verified: kata=true, NO avx2 (goose-only), FU-112b
+    reservation applied, allocatable 14.2GiB (a 5.12Gi ride leaves ~7.6Gi → 2 rides fit). The
+    Playwright/Chrome gate's home. IaC committed. Next natural use: when sleep#48's Playwright graduates,
+    route it here (per the #48 node-tier ruling).
   - item 3 (Phase 4) unchanged, after the #48 validation. World still paused otherwise.**
   SHIPPED THIS SESSION (all on master + deployed): **FU-114** (fixer 3-layer context: launcher env
   card from claim knobs + unify `--recipe` onto goose + `task/*` recipe selection + `.agents/build.yaml`

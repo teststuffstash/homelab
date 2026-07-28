@@ -57,6 +57,14 @@ variable "metal_nodes" {
     # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs) — all 3 laptops carry it since
     # 2026-07-14. Compute tier: tainted ephemeral.
     wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
+    # Desktop i5-3570K (Ivy Bridge: VT-x + EPT → kata OK; VT-d absent on the K SKU but not needed
+    # for microVMs; NO AVX2 → intentionally kept OUT of local.avx2_nodes, so goose rides schedule
+    # here but opencode (Bun SIGILLs) does not). 16GB RAM = the roomy kata node: unlike the 8GB
+    # laptops a ~5Gi ride fits with ~7Gi to spare (the Playwright/Chrome gate's home — sleep#48).
+    # 500GB SATA SSD → /dev/sda (⚠ CONFIRM via `talosctl -n 192.168.2.186 get disks --insecure` at
+    # maintenance before install). kata=true → metal_kata install image + homelab.io/kata label +
+    # the FU-112b kubelet reservation (conservative on 16GB). Compute tier: tainted ephemeral below.
+    wk-metal-04 = { ip = "192.168.2.186", install_disk = "/dev/sda", kata = true }
   }
 }
 
@@ -177,6 +185,16 @@ resource "kubernetes_node_taint" "laptop_kata" {
 # ThinkPad X250 — same ephemeral/compute tier as the X240. Applied after the node joins.
 resource "kubernetes_node_taint" "laptop_x250" {
   metadata { name = "wk-metal-02" }
+  taint {
+    key    = "homelab.io/ephemeral"
+    value  = "true"
+    effect = "NoSchedule"
+  }
+}
+
+# Desktop i5-3570K/16GB — same ephemeral/compute (kata) tier. Applied after the node joins (step 7).
+resource "kubernetes_node_taint" "desktop_kata" {
+  metadata { name = "wk-metal-04" }
   taint {
     key    = "homelab.io/ephemeral"
     value  = "true"
