@@ -13,7 +13,7 @@
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
 # `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
 # report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
-# boundary (docs/agents/merge-path.md). red-beyond-T = the ci-red-stale clause (guarded checks
+# boundary (docs/agents/merge-path.md). red-beyond-T = the ci-red clause (FU-115) (guarded checks
 # probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). The
 # `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
 # schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
@@ -357,46 +357,74 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       units="${units}arbitrate|${repo}|pr-${u}\n"
     done
 
-    # ci-red-stale (FU-086 / MP-G01, built 2026-07-27): an ARMED PR that is CI-red and QUIET for
-    # > RED_STALE_HOURS (default 4) is invisible to the whole merge path (updater + reflex skip
-    # red) — the timer nobody owned. Guarded probe: statusCheckRollup needs checks:read; a 403 /
-    # bad read SKIPS the clause loudly (rule #6 — never fail INTO a wake). Cap 2/repo/scan;
-    # held while a worker is Running (the fix round IS this unit's in-flight work).
-    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,autoMergeRequest,updatedAt,statusCheckRollup 2>/dev/null)" || red_probe=''
+    # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
+    # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
+    # was "quiet > RED_STALE_HOURS(4h)" — a coarse LAST-ACTIVITY timer that a no-op fix round's OWN
+    # run-stats comment reset, giving a 4h-spaced LIVELOCK with no exhaustion→escalation (the red
+    # loop lacked the review loop's ROUNDS_MAX→arbitrate). NOW keyed on CONTENT + a cap, symmetric
+    # with the review path (MP-T11), and woken near-instant by the exporter's red edge (github-exporter
+    # maybe_dispatch_cired → /coordinate) instead of only the poll. Per red PR we read the fix-round
+    # history from durable `🔴 ci-red round rN @ <head8>` markers (coordinator posts one per dispatch):
+    #   attempts==0                    → DISPATCH (first red)
+    #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break)
+    #   head8 != last dispatched head  → DISPATCH (a round pushed new-but-still-red content; re-attempt)
+    #   else (same head, round done)   → ARBITRATE (NO-OP round: the worker produced nothing → escalate,
+    #                                    never re-dispatch the same input — this is the anti-livelock)
+    # Guarded probe: statusCheckRollup needs checks:read; a 403/bad read SKIPS loudly (rule #6). Held
+    # while a worker Runs (the fix round owns it). Dispatch cap 2/repo/scan; arbitrate is uncapped
+    # (labeling is cheap + idempotent).
+    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,autoMergeRequest,headRefOid,headRefName,statusCheckRollup 2>/dev/null)" || red_probe=''
     if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"$red_probe"; then
       red_n=0
-      for u in $(printf '%s' "$red_probe" | jq -r --arg cutoff "$(date -u -d "-${RED_STALE_HOURS:-4} hours" +%Y-%m-%dT%H:%M:%SZ)" '
+      for u in $(printf '%s' "$red_probe" | jq -r '
           .[]|(.labels|map(.name)) as $L
           | select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not)
                    and (($L|index("major"))|not) and (($L|index("major/awaiting-human"))|not))
           | select(.autoMergeRequest != null)
-          | select(.updatedAt < $cutoff)
           | select([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0)
           | .number'); do
         if [ -n "$wip_busy" ]; then
-          orphans="${orphans}[$repo] ⏳ ci-red-stale held (worker Running in ${repo} — the fix round owns it):\n  PR #${u}\n"
+          orphans="${orphans}[$repo] ⏳ ci-red held (worker Running in ${repo} — the fix round owns it):\n  PR #${u}\n"
           continue
         fi
-        if [ "$red_n" -lt 2 ]; then
-          # FU-106 (c)-class: a RED deploy/* bump PR in an -iac repo IS the typed infra-delta
-          # signal (a new REQUIRED chart value fails render/validate CI) — a DISTINCT dispatch
-          # class, not the generic red play: the item session diffs values.schema.json
-          # (agents/infra-schema-diff.sh) and ENRICHES the bump PR (pin + fulfillment atomic).
-          u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
-          case "$repo:$u_head" in
-            *-iac:deploy/*) units="${units}infra-enrich|${repo}|pr-${u}\n"; rclause="infra-enrich";;
-            *)              units="${units}ci-red-stale|${repo}|pr-${u}\n"; rclause="ci-red-stale";;
-          esac
-          # A dispatchable unit MUST also add an `items` line: the actionability gate (`[ -z "$items" ]`
-          # ~line 445) and the ACTIONABLE report both read `items`, NOT `units`. Units-only clauses
-          # (this one + merged-closeout, both built 2026-07-27) were invisible to the gate — a stack
-          # whose ONLY work was a red PR read as "nothing actionable" and the fix round never dispatched.
-          items="${items}[$repo] PR #${u} — ${rclause} (CI red > ${RED_STALE_HOURS:-4}h, auto-merge armed)\n"
-          red_n=$((red_n+1))
+        head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
+        u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
+        # attempts = durable count of completed fix rounds on this PR (the launcher's finalize posts
+        # one `🤖 Agent run stats` comment per round — no extra marker needed, restart-safe: reads
+        # GitHub). Bounds the loop: a no-op round costs at most RED_ROUNDS_MAX attempts before it
+        # escalates, never the old infinite 4h-spaced livelock. (Immediate no-op detection — same
+        # head across a completed round → arbitrate NOW — is the FU-115(b) refinement, needs a
+        # dispatch-time @head marker; the cap is the v1 bound.)
+        attempts="$(gh pr view "$u" --repo "$slug" --json comments \
+          --jq '[.comments[]|select(.body|test("Agent run stats"))]|length' 2>/dev/null)" || attempts=0
+        case "$attempts" in ''|*[!0-9]*) attempts=0;; esac
+        RED_MAX="${RED_ROUNDS_MAX:-3}"
+        if [ "$attempts" -lt "$RED_MAX" ]; then
+          # DISPATCH a fix round (under the attempt cap)
+          if [ "$red_n" -lt 2 ]; then
+            # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
+            # infra-enrich class (diff values.schema.json, enrich the bump PR), not the generic play.
+            case "$repo:$u_head" in
+              *-iac:deploy/*) units="${units}infra-enrich|${repo}|pr-${u}\n"; rclause="infra-enrich";;
+              *)              units="${units}ci-red|${repo}|pr-${u}\n"; rclause="ci-red";;
+            esac
+            # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
+            # every dispatchable unit MUST also add an items line.
+            items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((attempts+1))/${RED_MAX} @ ${head8})\n"
+            red_n=$((red_n+1))
+          fi
+        else
+          # ARBITRATE: red rounds EXHAUSTED. Reuse the review path's MP-T11 machinery — label
+          # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
+          # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
+          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${attempts} fix rounds and CI still red at ${head8} (cap ${RED_MAX}). The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+            && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${attempts} rounds, still red — exhausted)\n" \
+            || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
         fi
       done
     else
-      echo "  [$repo] PROBE_FAILED reading check rollups — ci-red-stale clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
+      echo "  [$repo] PROBE_FAILED reading check rollups — ci-red clause skipped this tick (needs checks:read; fail-loud rule #6)" >&2
     fi
 
     # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
@@ -421,7 +449,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     for u in $c6_all; do
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${u}\n"
-        # trip the actionability gate + surface in the report (see the ci-red-stale note above) —
+        # trip the actionability gate + surface in the report (see the ci-red note above) —
         # otherwise a merged issue's agent/done flip + Follow-ups harvest silently never dispatches.
         items="${items}[$repo] issue #${u} — merged-closeout (closed, still non-terminal agent/*)\n"
         c6_n=$((c6_n+1))
@@ -492,7 +520,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     units="${punits}${units}"
     # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
     # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red-stale merged-closeout queued-dispatch; do
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done

@@ -20,7 +20,8 @@ diagram: |
       [*] --> Open: pr_opened + arm (MP-T01)
       Open --> Green: ci success
       Open --> Red: ci failure
-      Red --> Green: fix round lands (MP-T07) — ⚠ MP-G01 no timer owner
+      Red --> Green: fix round lands (MP-T07/MP-T12) — edge-woken, content-based (FU-115)
+      Red --> Arbitrate: red rounds exhausted (MP-T13)
       Green --> Behind: master_moved
       Behind --> Green: branch_updated (MP-T02) — NOT new content
       Behind --> Conflicted: merge_conflict_422 (MP-T06)
@@ -202,16 +203,28 @@ transitions:
     incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
 
   - id: MP-T12
-    name: red-beyond-T detection → judgment
-    owner: scan ci-red-stale clause (guarded checks probe) → coordinator item session
-    when: "armed ∧ CI-red ∧ quiet > RED_STALE_HOURS (4h) ∧ no Running worker"
+    name: red detection → fix round (content-based, edge-woken)
+    owner: exporter red edge (/coordinate doorbell) + */10 poll → scan ci-red clause → coordinator item session
+    when: "armed ∧ CI-red ∧ no Running worker ∧ fix-round attempts < RED_ROUNDS_MAX"
     status: guarded
     guards:
-      - desc: "guarded statusCheckRollup probe — a 403/bad read SKIPS the clause loudly (rule #6), cap 2/repo/scan"
-        anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red-stale" }
+      - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
+      - desc: "exporter red edge-trigger: POST /coordinate on an armed agent PR going CI-red, deduped per head_sha (a no-op pushes no commit → no re-wake)"
+        anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "maybe_dispatch_cired" }
       - desc: "the play: fix round with the failing log in context / park / close; red-master = platform incident, not a fix round"
-        anchor: { file: agents/coordinator/README.md, pattern: "ci-red-stale. clause" }
-    incidents: ["MP-G01 origin: #58's red e2e needed a MANUAL meta round dispatch (2026-07-21)"]
+        anchor: { file: agents/coordinator/README.md, pattern: "ci-red. clause" }
+    incidents: ["MP-G01 origin: #58's red e2e needed a MANUAL meta round dispatch (2026-07-21)", "2026-07-28 meta-14 #48: no-op rounds reset the 4h timer → livelock; the red loop had no exhaustion→escalation (FU-115)"]
+
+  - id: MP-T13
+    name: red rounds exhausted → arbitrate
+    owner: scan ci-red clause (attempt cap) → agent/arbitrate → MP-T11 tie-break
+    when: "armed ∧ CI-red ∧ fix-round attempts ≥ RED_ROUNDS_MAX (the Red→Arbitrate edge the FSM lacked — symmetric with the review loop's ROUNDS_MAX→arbitrate)"
+    status: guarded
+    guards:
+      - desc: "scan labels agent/arbitrate + comments when red attempts hit the cap; the existing arbitrate clause + coordinator tie-break take over (re-dispatch stronger / close / escalate)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
+    incidents: ["FU-115: the red loop livelocked forever (no exhaustion edge); this is MP-T11 ported to the CI-red side"]
 
   - id: MP-T09
     name: breaker trip and clear

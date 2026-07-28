@@ -339,16 +339,22 @@ Read the diff + the whole review thread, then rule — exactly one of:
 Never re-dispatch the reviewer directly from this play — fix rounds re-enter the reviewable
 path on their own once new content lands.
 
-## The `ci-red-stale` clause (FU-086 / merge-path MP-G01, built 2026-07-27)
+## The `ci-red` clause (FU-115 / merge-path MP-T12, content-based rewrite 2026-07-28)
 
-An ARMED PR that is CI-red and quiet for >4h is invisible to the whole merge path (updater and
-reflex both skip red — by design). The scan's guarded checks probe emits it to you. Re-read
-live state; then rule: **re-dispatch a fix round** on the PR's branch with the failing check's
-log excerpt in context (the usual case — a worker's own Gate-A escape or a flaky base);
-**park** it (`agent/blocked` + why) when the red is environmental and a human must act; or
-**close** per the not-mergeable rule above. If CI is red because master itself is broken,
-that's a platform incident — say so on the PR and stop (the responder/operator lane owns
-master health, not a PR fix round).
+An ARMED red PR is invisible to the whole merge path (updater and reviewer both skip red — by
+design). The scan now emits a `ci-red` **dispatch** unit to you the moment it sees one — no more
+4h `updatedAt` timer (a no-op round's own comment reset that clock → the 4h-spaced livelock; the
+red loop is now edge-woken by the exporter's `/coordinate` red-doorbell + attempt-bounded, symmetric
+with the review loop). The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
+your play: **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
+context (the usual case — a worker's own Gate-A escape, a flaky base, a missing platform fact like
+sleep-tracking#67's kind mirror); **park** (`agent/blocked` + why) when the red is environmental and
+a human must act; or **close** per the not-mergeable rule. If CI is red because master itself is
+broken, that's a platform incident — say so and stop (the responder/operator lane owns master
+health, not a PR fix round). **When the fix round keeps failing, the SCAN escalates for you**: at
+`RED_ROUNDS_MAX` fix rounds still-red it labels `agent/arbitrate` (the Red→arbitrate edge, MP-T13) →
+your `arbitrate` play rules (re-dispatch with a stronger model / close / escalate) — you never see
+an infinitely-re-dispatching red PR again.
 
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 

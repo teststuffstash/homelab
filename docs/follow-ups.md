@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-115**.
+  Next free id: **FU-116**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -285,6 +285,24 @@ _Last updated: 2026-07-16._
       the reviewer's FU-101 lens pattern to the fixer machinery family; shares one `task/*`
       classifier with FU-095's task-class model routing (one label, two consumers). NOT iac-lane
       (app-repo fixer). Relates FU-101, FU-095, FU-087, ADR-094, ADR-085.
+
+- [ ] **FU-115** — **The red merge-path loop was asymmetric with the green one — no edge, no
+      exhaustion→escalation → a stuck-red PR livelocks forever** (born 2026-07-28 from the meta-14 #48
+      MP-T07 deadlock). Green PRs get an edge (github-exporter → `/review` Sensor → reviewer,
+      near-instant) AND bounded rounds → `agent/arbitrate` (review-reflex ROUNDS_MAX). Red PRs had
+      NEITHER: the ONLY pickup was `ci-red-stale`'s 4h `updatedAt` quiet-timer, which a no-op fix
+      round's OWN run-stats comment reset → a 4h-spaced livelock, never escalating (a red PR never
+      enters the review path, so ROUNDS_MAX never engages). Fix = port the green machinery to the red
+      side (docs/agents/merge-path-fsm.yaml MP-T12 rewrite + new **MP-T13 Red→arbitrate** edge):
+      (a) **exporter red edge** — `maybe_dispatch_cired` POSTs `/coordinate` when an armed agent PR
+      goes CI-red, deduped per head_sha (a no-op pushes no commit → no re-wake = content-based for
+      free); (b) **scan `ci-red` clause content-based + capped** — attempts = durable run-stats-comment
+      count, dispatch under `RED_ROUNDS_MAX` (3), else label `agent/arbitrate` → the existing MP-T11
+      tie-break. DONE 2026-07-28 (this session): exporter + scan + README play + FSM shipped; verified
+      offline (scan dry-run: #61 → "ci-red attempt 3/3"; py_compile; lint 20 transitions). **(b)
+      refinement OPEN** — immediate no-op detection (same head across a completed round → arbitrate
+      NOW, not after the full cap) needs a dispatch-time `@head` marker; the attempt-cap is the v1
+      bound. E2E validated by the operator's #48 re-fail test. Relates FU-086 (archived), MP-T07/T11/T12/T13.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the

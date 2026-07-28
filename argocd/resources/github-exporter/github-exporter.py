@@ -48,6 +48,10 @@ WINDOW_HOURS = int(os.environ.get("RUN_WINDOW_HOURS", "24"))
 # fires without the review-reflex CronJob's */5 GraphQL poll (this poll already knows the reviewable
 # set — reuse it, the one-poller doctrine). Empty = disabled (dispatch stays with the CronJob).
 REVIEW_WEBHOOK_URL = os.environ.get("REVIEW_WEBHOOK_URL", "").strip()
+# FU-115 red edge-trigger: the /coordinate doorbell (same agent-loop EventSource) — POST it when an
+# armed agent PR goes CI-RED so the coordinate scan's ci-red clause fires near-instant instead of
+# only on the */10 poll (the symmetric twin of REVIEW_WEBHOOK_URL for the RED half of the FSM).
+COORDINATE_WEBHOOK_URL = os.environ.get("COORDINATE_WEBHOOK_URL", "").strip()
 # The reviewer App's login (GraphQL bare; REST appends "[bot]" — stripped where compared). Feeds
 # the bot_approved_head arm of the review edge-trigger, mirroring review-reflex.sh's $bot.
 REVIEWER_BOT = os.environ.get("REVIEWER_BOT", "homelab-reviewer").strip()
@@ -78,6 +82,7 @@ _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
+_cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 
 
 def gh(path, token=None):
@@ -284,6 +289,47 @@ def graduated_loop_ns(repo):
     return _stacks_cache["map"].get(repo)
 
 
+def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labels):
+    """FU-115 red edge-trigger (MP-T12): POST a /coordinate doorbell when an ARMED agent PR is
+    CI-RED, so the coordinate scan's ci-red clause dispatches a fix round near-instant instead of
+    only on the */10 poll — the symmetric twin of the green review edge. Deduped per
+    (repo, number, head_sha): ONE wake per red commit. A no-op fix round pushes NO commit → same
+    head_sha → no re-wake (the content-basis the old 4h `updatedAt` timer lacked, which reset on the
+    no-op's own comment). The scan owns the attempt cap → agent/arbitrate; this only decides WHEN to
+    look. Label exclusions mirror the ci-red scan predicate. Best-effort — the */10 cron is the
+    backstop; a restart re-POSTs a still-red head, which the scan's attempt-count dedups anyway."""
+    if not COORDINATE_WEBHOOK_URL:
+        return
+    red = (
+        ci_state == "failure"
+        and armed
+        and not draft
+        and not ({"agent/error", "agent/arbitrate", "major", "major/awaiting-human", "automerge"}
+                 & set(labels))
+    )
+    if not red or not head_sha:
+        return
+    key = (repo, str(number), head_sha)
+    if key in _cired_dispatched:
+        return
+    payload = {"repo": repo, "number": str(number), "head_sha": head_sha}
+    grad = graduated_loop_ns(repo)   # graduated stack → {stack, loop_ns} so it routes to the per-stack coordinate
+    if grad:
+        payload.update(grad)
+    body = json.dumps(payload).encode()
+    try:
+        req = urllib.request.Request(
+            COORDINATE_WEBHOOK_URL, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        _cired_dispatched.add(key)
+        print(f"cired-edge: POST /coordinate for {repo}#{number} @ {head_sha[:8]} (CI red)", flush=True)
+    except Exception as e:
+        print(f"cired-edge: POST failed for {repo}#{number}: {e}", flush=True)
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
                           labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
@@ -483,6 +529,16 @@ def collect_open_prs(lines):
                     newest_commit_at=newest_commit_at,
                     newest_review_at=newest_review_at,
                     bot_approved_at=bot_approved_at,
+                )
+                # FU-115 red edge-trigger: the symmetric RED half — POST /coordinate when this armed
+                # agent PR is CI-red, so the coordinate scan's ci-red clause fires now instead of on
+                # the */10 poll (the green loop got its edge in ADR-093; the red loop lacked one).
+                maybe_dispatch_cired(
+                    repo["name"], pr["number"], pr.get("headRefOid") or "",
+                    ci_state=ci_state,
+                    armed=pr.get("autoMergeRequest") is not None,
+                    draft=bool(pr["isDraft"]),
+                    labels=label_names,
                 )
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
