@@ -1295,3 +1295,24 @@ on a bug the trace showed in one line; when a probe "returns cleanly" prove it b
 ACTUAL code, not a re-derivation of it. Chain live at handoff: homelab#60 auto-merge armed (CI
 pending) → next scan dispatches ci-red-stale#61 → fix round on the garage-exec race (see
 meta-state).
+
+### 2026-07-28 (cont.) — meta-14: world paused; the deepseek "clean CI" was unit tests, not the gate
+After the gate fix dispatched ci-red-stale#61, the fix round (r3, deepseek-v4-flash) came back
+"clean" with ci_passed=true and ZERO commits — the 3rd such no-op. Operator called the pause:
+"stop the coordinator, none of the issues into the loop." FROZE the world durably in git — all
+three stacks' claim `coordinator.enabled=false` (sleep-iac#37, oracle-iac#256, homelab platform
+claim) + the documented global kill switch (coordinator-reflex + review-reflex suspend=true).
+Note the pause knobs live in the -iac CLAIMS (Crossplane XR restored from the claim in seconds —
+an imperative `kubectl patch` of the live XR reverts; "sleep-iac has the knobs"). No jobs were
+running at pause. Then the operator's forensic question — "did deepseek get a clean `devbox run
+ci` INSIDE the goose pod (works-on-my-machine)?" — answered from the transcript
+(s3://agent-transcripts/sleep-tracking/issue-48, via the transcripts-viewer PVC): **NO.** r3
+verbatim "I can't run k3d in this environment" (run.log L2059) → ran only the 117 UNIT tests →
+self-reported ci_passed=true off those, never the integration gate. So the misleading green is
+STRUCTURAL, not a lie: `ci_passed` is a goose schema self-report scoped to what the worker chose
+to run, blind to `devbox run test-integration`. Four gaps logged in meta-state for the operator's
+deeper look (ci_passed-vs-real-CI, no-op-round resets the staleness clock, does ci-red-stale drop
+fixer.docker, deepseek too weak for #48) — NOT filed as FUs (the operator is reframing them).
+LESSON: read the ride's TRANSCRIPT before trusting its stats row — the run-stats table said
+ci_passed=true; the run.log said it never ran the CI that matters. Meta coordination stopped here
+(watches down) per operator direction; resume steps in meta-state.

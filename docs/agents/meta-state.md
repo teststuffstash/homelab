@@ -9,24 +9,47 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
-- **ACTIVE CHAIN — coordinator-scan units-only gate fix (meta-14, 2026-07-28 ~06:10Z).** The
-  sleep tail stalled ~10h: PR#61 (sleep-tracking#48 system-test gate) CI-red (`container not
-  found (garage)` race in the new integration harness) + auto-merge armed, but NO ci-red-stale
-  fix round dispatched. Root cause (bash -x proven): the `[ -z "$items" ]` actionability gate
-  reads the REPORT string, but ci-red-stale + merged-closeout append only to `$units` → sole-work
-  = "nothing actionable", units dropped. Also #47/#46 never got C6 agent/done flip+harvest (#46
-  merged from `agent/review`, which C6 didn't even query). Fix **homelab#60 MERGED 06:19Z**
-  (CI green 18s). CHAIN:
-  1. ✓ homelab#60 merged → fix on master (3cd3160).
-  2. ✓ 06:20Z scan (coordinate-sleep-1785219600) dispatched ci-red-stale#61 → item session
-     **coordinator-062028** (sonnet) running. Report also lists merged-closeout #47/#46/#22 (WIP=1,
-     behind #61).
-  3. → NEXT: coordinator-062028 re-dispatches a fix round on PR#61's branch for the garage-exec
-     race (`container not found ("garage")` at seed step [3/6]). Deadlines: fix-round agent-session
-     pod (issue-48) by ~06:35Z; PR#61 new commit ~06:55Z; green+merge ~07:30Z. Flake or not, the
-     round must make the wait deterministic — do NOT just re-run CI (masks it).
-  Then merged-closeout ticks flip #47/#46/#22 → agent/done + harvest; PR#61 merge unblocks
-  #42/#43 + sleep-iac#25 + the haiku flip (next bullet). Remove this bullet when PR#61 is green.
+- **🛑 WORLD PAUSED (meta-14, 2026-07-28 ~07:45Z, operator "pause the world").** The loop is
+  FROZEN while the operator investigates machinery gaps. State of the freeze (all durable/git):
+  - sleep coordinator.enabled=false (sleep-iac#37 merged), oracle coordinator+reviewer=false
+    (oracle-iac#256 merged), platform coordinator=false (homelab
+    agents/fixer/openrouter-operator/agentstack.yaml). All three verified live = false.
+  - Global kill switch: coordinator-reflex + review-reflex suspend=true (homelab reflexes-argo.yaml
+    5da23c0), verified suspended. ledger-reflex/model-scout left running (harmless, no dispatch).
+  - No jobs were running at pause. Scans still tick but report-only (coordinator.enabled=false).
+  - **RESUME** = flip each coordinator.enabled back to true (the 3 -iac/claim files) + suspend
+    false on the two reflexes, in git; ArgoCD/Crossplane re-render. Per-stack review-<stack> crons
+    were left as-is (idle — no green PRs); oracle review is off, sleep/platform review nominal.
+- **The units-only gate fix (homelab#60 MERGED 06:19Z, on master 3cd3160)** — DONE + verified live
+  (post-fix scan dispatched ci-red-stale#61). Operator wants to review it deeper. Widened C6 too
+  (agent/review closeouts). NOT reverted by the pause.
+- **DEEPSEEK #48 TRANSCRIPT FINDINGS (operator asked: did it get a clean `devbox run ci` in-pod?).**
+  Read from s3://agent-transcripts/sleep-tracking/issue-48/worker-r3.../run.log via the
+  transcripts-viewer PVC (bucket-sync container, /mirror/...). ANSWER: **NO.** r3 (deepseek-v4-flash)
+  said verbatim "Actually, I can't run k3d in this environment. Let me focus on what I can do"
+  (run.log L2059), ran only the **117 unit tests** (pytest), and self-reported `ci_passed:true`
+  off THOSE — never `devbox run ci`/`test-integration` (the k3d/Garage/Grafana gate that's red on
+  the runner). manifest: reproduced:false, ci_passed:true, exit clean, harness_exit 0, **0 commits
+  pushed** (branch head still r2's 47b61cb6). So it is NOT "works on my machine, fails on the
+  runner" — the integration part never ran in-pod. Machinery gaps this exposes (for the operator's
+  deeper look — NOT filed as FUs yet, pending the operator's framing):
+  1. `ci_passed` is a goose SELF-REPORT and here reflected unit tests, not the real `devbox run ci`
+     exit — a worker that can't run the integration gate still reports green. (Lineage:
+     TICK-LOG:247 "ci_passed=true + no pr_url must NOT be clean"; archive:258 "ci_passed is not
+     False" clean-gate. Next step: finalize should VERIFY ci_passed vs the actual `devbox run ci`
+     exit, or the recipe must key ci_passed off the command's real exit, not a schema self-report.)
+  2. A no-op round (reproduced:false, 0 commits) on a RED PR exits "clean" AND its run-stats comment
+     refreshes PR#61.updatedAt → ci-red-stale staleness clock reset → suppressed ~4h. A round that
+     changes nothing on a red PR shouldn't count as progress or reset the timer.
+  3. Open question: did r3's ci-red-stale ride actually have docker (kata+dind)? r1/r2 ran k3d fine
+     (r1 even OOM'd the node); r3 said it couldn't. Couldn't confirm DOCKER_HOST from the transcript
+     — worth checking whether the ci-red-stale/fix-round dispatch preserves fixer.docker=true, or
+     deepseek just gave up (weak model). If capability is dropped, a docker-gated CI failure is
+     UNFIXABLE by the fix-round path as configured.
+  4. deepseek-v4-flash is too weak for this task (3 rounds, gave up as "infrastructure not a bug").
+     When resuming #48, escalate the worker model (claude/haiku, the planned post-#48 primary, or
+     sonnet) — the loop can't self-heal this with the current chain (fallbacks only swap on STRIKES,
+     and a clean-but-useless exit is not a strike).
 - ~~FU-096~~ COMPLETE — already ARCHIVED in follow-ups-archive.md with in-pod numbers
   (23-25s worst-node; my independent 17:33Z measure on sleep#39 r1 read 23.6s, seed+substituter
   clean). Stale-bullet lesson: the archive, not this file, was current — recheck the tracker
