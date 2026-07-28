@@ -25,11 +25,23 @@ before trusting AgentQueueStalled)._
     kubectl wait passes before Garage serves → seed's kubectl exec finds container gone). #48 stayed
     agent/queued → next scan queued-dispatched **r6 fresh**: LIVE Running on wk-metal-03 (kata,
     MemoryPressure=False), **MODEL=haiku confirmed**. Watch bqqwelvz7 armed for its outcome (PR/CI/OOM).
-  - **NEXT (active meta-coordination of sleep)**: watch r6 to outcome — PR pushed? CI green? (no OOM =
-    FU-112b holding). Then the dep-held queue unblocks as #48 lands: dashboard bugs #42/#43 + sleep-iac#25
-    (dep on #48), #71 (kind migration, dep on #48; closes #67 the k3d-egress 🚨). Verify haiku
-    subscription load stays under the FU-088 gate. Oracle + platform loops also live now (watch for
-    their own first ticks). Standing heartbeat: biy97zxyw (prior-session 2h backstop, kept).
+  - **#48 r6 STOPPED (operator) — hit the #67 mirror wall, not a stall.** r6 (haiku) did the
+    dashboard-into-chart deliverable but the k3d gate can't pull: bare `k3d cluster create` → the k3d
+    node's containerd tries the mirrors over HTTPS → times out (mirrors are HTTP-only; healthy at
+    http://.40.20/.21) → #67. test-integration.sh had ZERO mirror config. **Operator ruling: keep #48
+    first (NOT flip to kind), add k3d mirror guidance, stop r6.** Done: r6 pod deleted (budget freed);
+    #48 comment posted with the fix (`k3d cluster create --registry-config <registries.yaml>` built
+    from REGISTRY_MIRROR_DOCKER_IO/GHCR with **http** endpoints — the k3d-native kind_mirror). #48 =
+    agent/in-progress, no pod/PR → next scan re-dispatches r7 WITH the guidance. #71 stays Depends-on #48.
+  - **BGP onboarding gap FIXED (heartbeat sweep caught it).** wk-metal-04's Cilium BGP sat `active`
+    (CiliumBGPNodeSessionDown, fp f37a3bd2) — not in FRR's neighbor list. Added .186 to bgp_node_ips
+    (opnsense.yml) + applied opnsense-bgp → `established`. Added step 8 (BGP neighbor) to the
+    onboard-metal-node skill (the lesson recurred from 2026-06-11).
+  - **NEXT (active meta-coordination of sleep)**: watch r7's dispatch + whether haiku applies the k3d
+    --registry-config fix (does the gate finally pull through the mirrors?). Then the dep-held queue
+    unblocks as #48 lands: dashboard bugs #42/#43 + sleep-iac#25, then #71 (kind migration; closes #67).
+    Verify haiku subscription load under FU-088. Oracle + platform loops live (watch their first ticks).
+    Standing heartbeat: biy97zxyw (2h backstop). Sweep clean otherwise (no new homelab 🚨).
   _(historical meta-14 handoff below — superseded by the above)_
 - **🔴 SESSION HANDOFF (meta-14, 2026-07-28 ~14:00Z — written at 98% context; a fresh session
   resumes HERE).** WORLD: sleep coordinator RE-ENABLED (sleep-iac#38, CR enabled=true); oracle +

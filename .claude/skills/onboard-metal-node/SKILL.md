@@ -53,6 +53,21 @@ The flow is flag → reserve IP → boot to maintenance → read disk → instal
    devbox run -- tofu -chdir=tofu apply -target=kubernetes_node_taint.<x>
    ```
 
+8. **Add the node as a BGP neighbor in OPNsense** — Cilium's BGP nodeSelector is all-nodes, so a
+   node not listed in FRR sits `active`/`idle` (never peers, never advertises VIPs) →
+   `CiliumBGPNodeSessionDown`. Add its IP to `bgp_node_ips` in `ansible/group_vars/opnsense.yml`,
+   then apply and verify the session goes `established`:
+   ```bash
+   bash scripts/opnsense-playbook.sh ansible/opnsense-bgp.yml
+   devbox run -- kubectl --kubeconfig tofu/kubeconfig exec -n kube-system \
+     "$(devbox run -- kubectl --kubeconfig tofu/kubeconfig get pods -n kube-system -l k8s-app=cilium \
+        -o jsonpath='{range .items[?(@.spec.nodeName=="<name>")]}{.metadata.name}{end}')" \
+     -c cilium-agent -- cilium bgp peers    # session must be `established`
+   ```
+   (Missed for wk-metal-04 on 2026-07-28; the same class recurred from 2026-06-11 — it's easy to
+   forget because k8s reports the node `Ready` regardless.)
+
 ## Verify
 
-`devbox run nodes` — the new node should be `Ready` on Talos v1.13.2.
+`devbox run nodes` — the new node should be `Ready` on Talos v1.13.2, and its `cilium bgp peers`
+session `established` (step 8).
