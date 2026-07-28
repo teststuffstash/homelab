@@ -1370,3 +1370,34 @@ World still paused (sleep-only, for #48). Remaining meta-state items: 2 (#48/FU-
 fragility — the real docker-ride blocker, needs operator direction; the dead agent-sleep-tracking-
 issue-48-r5 Error pod, 54m, left in place as #48 evidence + an FU-116b PVC-leak sighting) + 3 (Phase 4,
 after #48). Watches NOT re-armed (loop paused; nothing for the loop-watch to see).
+
+### 2026-07-28 — meta-15 (cont.): the 8GB kata OOM fix VALIDATED live, and a 16GB desktop onboarded to end the tightness
+Continued from the metal rollout. Operator's stakes framing: "if this doesn't work the laptops are
+useless for real projects." VALIDATION (kata-oom-validation pod, faithful ride shape — kata RC + dind
+native sidecar + longhorn-scratch block PVC + the exact 2Gi+2560Mi+512Mi=5.12Gi footprint, on
+wk-metal-03): scheduler PLACED it (tight-fit math confirmed — the 5.12Gi fits the reserved node), dind
+mounted the block volume CLEANLY (no read-only — disproving "kata block is inherently broken"; it was
+purely OOM), then the workload deliberately overloaded dind with escalating k3d clusters (val+val2 up,
+val3/val4 "context deadline exceeded" = dind cgroup saturated at 2560Mi). RESULT = **PASS**: host
+global_oom count UNCHANGED (2=baseline), MemoryPressure=False, longhorn-manager + instance-manager 0
+restarts, no read-only-fs. The ride's memory pressure stayed CONTAINED in the kata microVM; the host
+survived. So FU-112b works AND the read-only-fs (FU-116) is confirmed a pure OOM artifact. LESSON: a
+kata-GUEST cgroup OOM (k3d container exit137) is the correct contained residual and is INVISIBLE to
+host talosctl dmesg — probe the HOST oom-killer/global_oom count, not the guest, to tell containment
+from cascade.
+CAPACITY, two levers: (1) the ride is 5.12Gi ≈ ALL an 8GB laptop's ~5Gi free — only wk-metal-03 fits
+right now (144Mi margin); one-ride-at-a-time. Operator ruled "accept + watch". (2) SHRINK the workload:
+the sleep #48 itest garage+grafana aren't built yet (test-integration.sh stubbed) → captured an operator
+ruling on #48 to size them boot-only (garage ~128Mi/repl-1, grafana ~192-256Mi + analytics/alerting/live
+disabled, whole stack <1.5Gi in dind). And the KEY tiering insight (also on #48): v1's assertion is curl
+→ /api/ds/query (no browser) → fits laptops; the later Playwright+headless-Chrome graduation (~0.7-1Gi)
+breaks the 5.12Gi envelope → that's a 16GB-node workload, NOT the laptops.
+THE 16GB DESKTOP (operator, mid-session): i5-3570K/16GB/500GB-SSD, R9 290 pulled (parasitic ~20-40W idle,
+useless for kata, ROCm-dead for LLM; iGPU HD4000 boots headless). Assessed kata-viable: VT-x + EPT yes
+(VT-d absent on the K SKU but microVMs don't need it); NO AVX2 (Ivy Bridge) → goose rides fine (Rust),
+opencode excluded (Bun SIGILLs, agent-session.sh:491) — so intentionally kept OUT of local.avx2_nodes.
+16GB doubles the laptops → a ride fits with ~7Gi spare (the Playwright home). Onboarded as wk-metal-04
+@ .186 (kata=true, ephemeral taint, MAC d4:3d:7e:93:00:92): metal.tf entry + taint + transient
+matchbox_group + dnsmasq reservation; matchbox flag applied (ipxe 200) + reservation pushed. Awaiting
+PXE→maintenance to read the disk + install (steps 4-7). FU-112b kubelet reservation applies to it too
+(conservative on 16GB).

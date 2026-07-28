@@ -351,10 +351,15 @@ _Last updated: 2026-07-16._
       (`kubelet invoked oom-killer`) kills `longhorn-instance-manager` again. So the read-only-fs is
       the longhorn-block-device variant of the FU-112(b) cascade (collateral = storage path, not
       cilium networking); all of it PREDATES the reservation. Both (a) and the wk-metal-01 read-only
-      are OOM symptoms → FU-112(b) is the root-cause fix. RESIDUAL VALIDATION: re-run a ~5Gi kata+dind
-      ride on a RESERVED node and confirm the kubelet evicts the ride before global OOM (longhorn
-      survives, block device stays healthy). Only if k3d/dind STILL fails on a non-OOM node is there
-      a genuine kata bug left — evidence says there isn't. (b) r1's ephemeral
+      are OOM symptoms → FU-112(b) is the root-cause fix. ✅ **VALIDATED live 2026-07-28 (meta-15)**:
+      a faithful ~5Gi kata+dind ride (exact 2Gi+2560Mi+512Mi footprint, longhorn-scratch block PVC)
+      on wk-metal-03 that DELIBERATELY overloaded dind with escalating k3d clusters — dind mounted the
+      block volume cleanly (no read-only), the k3d creates failed CONTAINED (dind cgroup cap), and the
+      HOST survived: global_oom count unchanged, MemoryPressure=False, longhorn 0 restarts, no
+      read-only-fs. Confirms both legs are OOM symptoms and FU-112(b) holds; kata block-device is NOT
+      inherently broken. (Probe lesson: a kata-GUEST cgroup OOM is invisible to host dmesg — watch the
+      host oom-killer count, not the guest.) Capacity residual → the 16GB wk-metal-04 desktop
+      (onboarding). (b) r1's ephemeral
       `docker-lib` PVC was still Bound 18h after the pod went Error — the FU-093 scan janitor deletes
       only `Succeeded` ride pods >2h, so terminal Error/Failed pods leak their PVC (regressing the
       #41/#63 longhorn-scratch pool-exhaustion class fix — TICK-LOG §scratch-pool). Widen the janitor

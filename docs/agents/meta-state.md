@@ -32,6 +32,21 @@ before trusting AgentQueueStalled)._
     the world paused. If k3d STILL fails on a NON-OOM node → genuine kata bug (evidence says it won't).
     Separately: k3d-vs-kind — operator notes k3d is genuinely new/unproven, kind is problem-free (the
     Phase-4 migration is still worth it on those grounds, independent of this OOM).
+  - **item 2 VALIDATION DONE — PASS (meta-15).** Faithful ~5Gi kata+dind ride on wk-metal-03
+    deliberately overloaded dind (escalating k3d clusters); host survived (global_oom unchanged,
+    MemoryPressure=False, longhorn 0 restarts, no read-only-fs) — the failure stayed contained in the
+    kata VM. FU-112b holds; the read-only-fs is confirmed a pure OOM artifact. #48 got two operator
+    rulings (boot-only garage/grafana sizing + Playwright=16GB-node-not-laptops).
+  - **🖥️ ONBOARDING IN FLIGHT — wk-metal-04 (16GB desktop, i5-3570K, MAC d4:3d:7e:93:00:92, @ .186,
+    kata ephemeral tier).** IaC prepped (metal.tf entry+taint, transient matchbox_group, dnsmasq .186).
+    Applied: matchbox flag (ipxe 200) + dnsmasq reservation. **NEXT (steps 4-7 of onboard-metal-node,
+    once it PXEs to maintenance — a background wait watches .186):** (4) `talosctl -n 192.168.2.186 get
+    disks --insecure` → confirm install_disk (currently /dev/sda placeholder in metal.tf); (5) `tofu
+    -chdir=tofu apply -target='talos_machine_configuration_apply.metal[\"wk-metal-04\"]'` (needs
+    keepass-env TF_VARs); (6) UNFLAG: `tofu -chdir=tofu/provisioning destroy -target=matchbox_group.wk_metal_04`
+    + remove the group from matchbox.tf (committed file holds no per-node groups); (7) after Ready,
+    `tofu -chdir=tofu apply -target=kubernetes_node_taint.desktop_kata`. Then commit + verify `devbox
+    run nodes`. NOT in local.avx2_nodes (no AVX2 → goose-only). Uncommitted IaC on disk until onboarded.
   - item 3 (Phase 4) unchanged, after the #48 validation. World still paused otherwise.**
   SHIPPED THIS SESSION (all on master + deployed): **FU-114** (fixer 3-layer context: launcher env
   card from claim knobs + unify `--recipe` onto goose + `task/*` recipe selection + `.agents/build.yaml`
