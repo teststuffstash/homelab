@@ -384,9 +384,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # (agents/infra-schema-diff.sh) and ENRICHES the bump PR (pin + fulfillment atomic).
           u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
           case "$repo:$u_head" in
-            *-iac:deploy/*) units="${units}infra-enrich|${repo}|pr-${u}\n";;
-            *)              units="${units}ci-red-stale|${repo}|pr-${u}\n";;
+            *-iac:deploy/*) units="${units}infra-enrich|${repo}|pr-${u}\n"; rclause="infra-enrich";;
+            *)              units="${units}ci-red-stale|${repo}|pr-${u}\n"; rclause="ci-red-stale";;
           esac
+          # A dispatchable unit MUST also add an `items` line: the actionability gate (`[ -z "$items" ]`
+          # ~line 445) and the ACTIONABLE report both read `items`, NOT `units`. Units-only clauses
+          # (this one + merged-closeout, both built 2026-07-27) were invisible to the gate — a stack
+          # whose ONLY work was a red PR read as "nothing actionable" and the fix round never dispatched.
+          items="${items}[$repo] PR #${u} — ${rclause} (CI red > ${RED_STALE_HOURS:-4}h, auto-merge armed)\n"
           red_n=$((red_n+1))
         fi
       done
@@ -395,21 +400,30 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     fi
 
     # C6 merged-closeout (FU-090a / MP-G03, built 2026-07-27): an issue CLOSED by its merged PR
-    # but still carrying `agent/in-progress` is a loop nobody closed — outcome unverified, label
-    # stale, and the merged PR's review `Follow-ups:` bullets die in the comment. Emit ONE unit
-    # per such issue (the item session verifies, flips agent/done, harvests the bullets as INERT
-    # issues — breaker #1). Level-triggered off closed-issue state; capped at 3/repo/scan (a
-    # housekeeping trickle — first run meets history) with the overflow reported, 21-day window
-    # (older closeouts are archaeology, not reconciliation).
-    closed_ip="$(gh issue list --repo "$slug" --state closed --label agent/in-progress --limit 20 \
+    # but still carrying a non-terminal `agent/*` state is a loop nobody closed — outcome
+    # unverified, label stale, and the merged PR's review `Follow-ups:` bullets die in the comment.
+    # BOTH pre-merge states qualify: `agent/in-progress` (auto-merge outran the review-flip) AND
+    # `agent/review` (the happy-path pre-merge state per merge-path-fsm.md MP-T10 — nothing else
+    # flips it to agent/done; #46/PR#63 sat stale here). Emit ONE unit per such issue (the item
+    # session verifies, flips agent/done, harvests the bullets as INERT issues — breaker #1).
+    # Level-triggered off closed-issue state; capped at 3/repo/scan (a housekeeping trickle — first
+    # run meets history) with the overflow reported, 21-day window (older = archaeology).
+    closed_ip="$(gh issue list --repo "$slug" --state closed --label agent-fix --limit 30 \
       --json number,title,labels,updatedAt 2>/dev/null)" || closed_ip='[]'
     jq -e . >/dev/null 2>&1 <<<"$closed_ip" || closed_ip='[]'
     c6_all="$(printf '%s' "$closed_ip" | jq -r --arg cutoff "$(date -u -d '-21 days' +%Y-%m-%dT%H:%M:%SZ)" \
-      '[.[] | select(((.labels|map(.name))|index("agent/error"))|not) | select(.updatedAt >= $cutoff) | .number] | .[]')"
+      '[.[] | (.labels|map(.name)) as $L
+             | select(($L|index("agent/error"))|not)
+             | select(($L|index("agent/done"))|not)
+             | select(($L|index("agent/in-progress")) or ($L|index("agent/review")))
+             | select(.updatedAt >= $cutoff) | .number] | .[]')"
     c6_n=0
     for u in $c6_all; do
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${u}\n"
+        # trip the actionability gate + surface in the report (see the ci-red-stale note above) —
+        # otherwise a merged issue's agent/done flip + Follow-ups harvest silently never dispatches.
+        items="${items}[$repo] issue #${u} — merged-closeout (closed, still non-terminal agent/*)\n"
         c6_n=$((c6_n+1))
       else
         orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${u} waits for the next pass\n"

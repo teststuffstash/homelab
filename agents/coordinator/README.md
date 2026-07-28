@@ -303,8 +303,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
    the merge commit is green (`gh run list --commit <sha>`). If the outcome looks WRONG (merged
    but the fix demonstrably didn't take), comment the evidence on the issue and reopen it with
    `agent/queued` removed — a human or the next triage decides; do NOT dispatch anything.
-2. **Flip the label**: add `agent/done`, then remove `agent/in-progress` (add-before-remove;
-   compare-then-write per the label discipline above).
+2. **Flip the label**: add `agent/done`, then remove whichever non-terminal state label the issue
+   still carries — `agent/in-progress` OR `agent/review` (a PR merged from the happy-path review
+   state closes still at `agent/review`; add-before-remove; compare-then-write per the label
+   discipline above).
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
