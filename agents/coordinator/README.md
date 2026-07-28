@@ -151,29 +151,32 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    CR's `.status.openrouter.expires_at` shows the LIVE expiry — assert it covers the run
    (`agent-session.sh` pre-flight refuses keys with <30 min real life). A stale `status.hash` does
    NOT prove the key is live. This is the real breaker — the worker can't outspend `budgetUSD`.
-5. **Dispatch a fresh worker** for this round (already labelled `agent/in-progress` from step 2):
+5. **Dispatch a fresh worker** for this round (already labelled `agent/in-progress` from step 2).
+   **BOTH harnesses use the launcher-owned `--recipe`** (FU-114 unified goose onto it — goose used
+   to take a dispatcher-assembled `--run "goose run --recipe …"`, the ADR-094 gap the #55 incident
+   first hit): pass the recipe PATH from the stack clone and the launcher builds the harness command
+   AND prepends the platform **environment card** (`docs/agents/fixer-context.md` L1 — docker/egress/
+   round/write-scope from the claim knobs, at the recipe's `{{PLATFORM_ENV_CARD}}` marker).
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \
        --task issue-<N> --round <r> \
-       --run "goose run --recipe .agents/fix.yaml --params issue=<N>"
+       --recipe /work/<project>/.agents/fix.yaml
    ```
    **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — there
    is no OpenRouter key (auth = `ref:<project>/claude-session` via the egress proxy; the estimator
-   and the budget CR have no role; the turn cap below is the spend bound). claude-code takes no
-   goose recipe, so **you translate `.agents/fix.yaml`** (read it from the stack clone,
-   `/work/<project>/.agents/fix.yaml`): the recipe's `instructions` become the appended system
-   prompt, its `prompt` (with `issue=<N>` substituted) becomes `-p`. The system-prompt file must
-   exist **in the worker pod**, not here — base64-carry it through the run command (the proven
-   oracle-fleet#22 shape):
+   and the budget CR have no role; the turn cap below is the spend bound). Same `--recipe` line,
+   drop `--harness`/`--openrouter-secret` (the launcher self-derives `--harness claude` from the
+   `claude/` model prefix):
    ```sh
    bash agents/agent-session.sh <project> --model claude/<alias> \
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
-   `--recipe` makes the LAUNCHER build the claude invocation from the recipe file — never
-   hand-assemble the base64-carry command (the old template shipped un-substituted `$B64`
-   verbatim on #55, 2026-07-21, and burned a session until the FU-069 breaker caught it).
+   `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
+   `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
+   burned a session until the FU-069 breaker caught it). (FU-114 L3 will swap `fix.yaml` for the
+   `.agents/<class>.yaml` chosen by the issue's `task/*` label — until then it is always `fix.yaml`.)
    `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
    haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
    run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
