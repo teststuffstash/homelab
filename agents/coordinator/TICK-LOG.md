@@ -1401,3 +1401,42 @@ opencode excluded (Bun SIGILLs, agent-session.sh:491) — so intentionally kept 
 matchbox_group + dnsmasq reservation; matchbox flag applied (ipxe 200) + reservation pushed. Awaiting
 PXE→maintenance to read the disk + install (steps 4-7). FU-112b kubelet reservation applies to it too
 (conservative on 16GB).
+
+### 2026-07-28 — meta-15: the marathon — 8GB kata proven, a 16GB node added, Phase 4 shipped, #48 landed, the context-spread named
+A very long arc. THREADS (all durable in git):
+1. **FU-112(b) VALIDATED live on 8GB** (the metal rollout): Talos kata kubelet reservation (systemReserved
+   512/kubeReserved 256/evictionHard.memory.available 512, kata nodes only, maps written FULL so the
+   extraConfig merge keeps cpu/pid/disk defaults) → a faithful ~5Gi kata+dind ride that DELIBERATELY
+   overloaded dind kept its pressure CONTAINED in the kata VM; host survived (global_oom unchanged,
+   longhorn 0 restarts, no read-only-fs). Probe lesson: a kata-GUEST cgroup OOM is invisible to host
+   dmesg — watch the HOST oom-killer count.
+2. **FU-116 root-caused = OOM, not a kata bug**: the r5 read-only /var/lib/docker was virtiofsd (the kata
+   VM) triggering a global OOM → longhorn instance-manager killed → block device read-only. Same FU-112b
+   cascade, storage-path variant. #68/#69 stale-closed; r5 leaked-PVC cleaned.
+3. **wk-metal-04 (16GB desktop i5-3570K) ONBOARDED** to the kata ephemeral tier — the capacity answer +
+   the Playwright/Chrome gate's home (the 8GB laptops run the v1 curl gate; Chrome breaks the 5.12Gi ride
+   envelope). Kata-viable (VT-x+EPT, no VT-d/AVX2 → goose-only). ⚠ ONBOARDING GAP CAUGHT by the heartbeat
+   crosscheck: forgot the OPNsense BGP neighbor → session sat `active` (CiliumBGPNodeSessionDown); added
+   .186 to bgp_node_ips + **added step 8 (BGP neighbor) to the onboard-metal-node skill** (recurred from
+   2026-06-11). k8s reports Ready regardless — that's the trap.
+4. **Phase 4 shipped + world ENABLED**: sleep workerModel→claude/haiku (sleep-iac#39, deepseek too weak);
+   k3d→kind migration authored = sleep-tracking#71 (pinned, resolves #67); #48 breaker cleared + PR#61 RESET
+   (red-round budget 3/3 was poisoned by OOM-infra failures, not task difficulty → close+restart fresh on
+   haiku — a reusable pattern). Un-paused: reflexes suspend=false + all 3 coordinators enabled.
+5. **#48 LANDED — the milestone**: after the reset, #48 ran on haiku on a no-OOM node, hit the #67 k3d
+   mirror wall (bare `k3d cluster create` → node containerd pulls the mirrors over HTTPS → timeout;
+   mirrors are HTTP-only). Operator ruled keep-#48-first + I posted the `k3d --registry-config` fix →
+   **PR#72 merged, CI green** (k3d + MinIO + ingester + Grafana, graph-read assertion). Unblocked #42/#43/#71.
+6. **The context-spread NAMED (FU-117)**: goose ≠ Claude Code → goose workers NEVER load CLAUDE.md, so
+   universal ground rules (devbox-for-everything, proxies, prior-art) never reached them — #71-r1 downloaded
+   a kind binary into the read-only nix profile, #48 rounds skipped the mirror. INTERIM: duplicated the
+   rules into render_env_card + added the missing NIX_CACHE proxy + the HTTP-only mirror note. ⚠ then
+   caught my own flip-flop: added a "grep SERVICES.md" bullet — but the ride clones ONLY /work/repo (no
+   homelab), and service context is the AUTHOR's/coordinator's job to INJECT, not the worker's to grep —
+   removed it. FU-117 = the deliberate let-it-pile-up architecture item (operator's grow-then-refactor
+   style): a role×context×source map (env=how-your-box-works, issue=what-this-task-needs, ground-rules).
+LESSONS: (a) dep-gate regex is fragile — a MARKDOWN-BULLET "- Depends-on:" slips the `^[ \t]*depends-on:`
+gate (#71 ran early); write unbulleted, FU-111 native blockedBy is the real fix. (b) red-round budget can
+be poisoned by infra failures — reset (close PR + restart) when the rounds never ran the task. (c) the env
+card / launcher reaches goose; CLAUDE.md doesn't. Dispatch pods clone master at runtime → agent-session.sh
+changes are live on the next ride, no rebuild.
