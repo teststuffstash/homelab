@@ -9,8 +9,25 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
-- **🛑 WORLD PAUSED (meta-14, 2026-07-28 ~07:45Z, operator "pause the world").** The loop is
-  FROZEN while the operator investigates machinery gaps. State of the freeze (all durable/git):
+- **✅ FU-114 + FU-115 SHIPPED + E2E-PROVEN, then blocked on a kata infra bug (meta-14, 2026-07-28
+  ~13:00Z).** All merged to master + deployed: FU-114 (env card + `--recipe` unify + `task/*`
+  selection + build.yaml + #67 kind-mirror lesson), FU-115 (exporter red-doorbell `maybe_dispatch_cired`
+  → `/coordinate` + content-based `ci-red` clause + `RED_ROUNDS_MAX` cap → `agent/arbitrate` MP-T13).
+  **E2E test on #48** (sleep coordinator RE-ENABLED sleep-iac#38; pushed 061fcfe to re-fail CI):
+  the WHOLE software chain fired — exporter red-edge POST → coordinate-sleep `ci-red` dispatch → ride
+  r4 (deepseek) → **L3 picked build.yaml** → and the KEY behavior change: **deepseek ran `docker info`
+  + read the mirror vars instead of r3's blind "I can't run k3d"**. THEN hit a kata infra wall:
+  **r4 dind CrashLoopBackOff on wk-metal-03 — kata can't re-hotplug the `/dev/docker-scratch` block
+  device (FU-081 longhorn-scratch) after a dind restart** (`"Cannot open disk path… No such file"`,
+  PVC Bound). Orthogonal to k3d-vs-kind (both need dind+block PVC) → Phase-4 kind won't dodge it.
+  Also: r1's ephemeral docker-lib PVC still Bound 18h (ephemeral-PVC GC gap). **PENDING OPERATOR
+  DIRECTION** on the kata block-device (investigate/cordon wk-metal-03 / delete-r4-and-re-dispatch /
+  own incident+FU). Remaining phases: 4 = switch sleep worker→claude/haiku + author k3d→kind
+  migration task (oracle e2e-kind.sh pattern) priority-timed; 5 = meta-coordination (heartbeat armed).
+  NOTE: sleep is now UN-paused (coordinator.enabled=true); oracle+platform+global reflexes still paused.
+- **🛑 (PARTLY LIFTED) WORLD PAUSED (meta-14, 2026-07-28 ~07:45Z, operator "pause the world").** SLEEP
+  re-enabled 2026-07-28 ~12:33Z (sleep-iac#38) for the E2E test — see the bullet above. The loop was
+  FROZEN while the operator investigated machinery gaps. State of the freeze (all durable/git):
   - sleep coordinator.enabled=false (sleep-iac#37 merged), oracle coordinator+reviewer=false
     (oracle-iac#256 merged), platform coordinator=false (homelab
     agents/fixer/openrouter-operator/agentstack.yaml). All three verified live = false.
