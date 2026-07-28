@@ -49,7 +49,11 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 
 ### fixer (worker)
 
-- **brief**: per-repo `.agents/fix.yaml` recipe (launcher-owned `--recipe`, never LLM-assembled — ADR-094)
+- **brief**: per-repo `.agents/<class>.yaml` recipe (launcher-owned `--recipe`, never LLM-assembled — ADR-094).
+  The brief is THREE layers — a platform-generated **environment card** (from the claim knobs) + a stack-owned
+  **task-type brief** (`fix`/`build`/…) + **deterministic selection** (a `task/*` label). Design + division of
+  labor: [`fixer-context.md`](fixer-context.md) (FU-114, born from the #48 no-docker autopsy — today only `fix`
+  exists and the environment is unadvertised, which primed a `fixer.docker:true` ride to assume "no docker")
 - **boundary**: fixer ns == repo; branch-scoped ~1h git token, budget-capped OpenRouterKey; per-stack egress CNP
 - **machinery**: predicate = `coordinator-scan.sh` clauses (queued-dispatch, c4c5, changes-requested,
   merge-conflict, unarmed-major; deps-closed FU-087, lane-free, repo-dispatchable, capacity);

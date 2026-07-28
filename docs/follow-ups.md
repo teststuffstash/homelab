@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-114**.
+  Next free id: **FU-115**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -265,6 +265,26 @@ _Last updated: 2026-07-16._
       run at 0.83 anyway — the three compose. Alert content itself was handled operator-lane
       same hour (mirror cache wiped; second fill of the day — the FU-093 sighting family).
       Relates FU-088 (archived), FU-109, FU-103 (archived).
+
+- [ ] **FU-114** — **Fixer context is three layers, not one: environment card (platform) +
+      task-type briefs (stack) + deterministic selection** (born 2026-07-28, the sleep-tracking#48
+      no-docker autopsy). deepseek-v4-flash ran 3 no-op rounds on a `fixer.docker:true` ride and
+      never once ran `docker info`/`k3d` — it asserted "I can't run k3d in this environment" and
+      fell back to unit tests. Root cause is NOT weak-model alone: the launcher reads every claim
+      knob to BUILD the ride but never tells the model what it built, and the one recipe
+      (`.agents/fix.yaml`) is a *bug-fixer* ("Fix ONLY the bug") mis-applied to a *build* task while
+      framing the env as a restricted "no-real-data sandbox" that never mentions docker. Design in
+      **[`docs/agents/fixer-context.md`](agents/fixer-context.md)** (extends roles.md §fixer). Build
+      order: (1) **L1 env card** — `agent-session.sh render_env_card()` composes the ride's real
+      capabilities (docker+`docker info` verify / egress allowlist / budget / write-scope) from the
+      knobs, prepended to the recipe both harnesses (ADR-094 launcher-owned); highest leverage,
+      alone stops the assumption. (2) **L2/L3** — `.agents/build.yaml` in the stack repo + a
+      claim-authoritative `task/*` label (default `task/fix`, #48=`task/build`) selected in
+      coordinator-scan → `--recipe`. (3) ci.sh fail-closed when docker expected-but-absent (hygiene;
+      GitHub CI is the real gate so in-pod `ci_passed` stays best-effort — operator's call). Extends
+      the reviewer's FU-101 lens pattern to the fixer machinery family; shares one `task/*`
+      classifier with FU-095's task-class model routing (one label, two consumers). NOT iac-lane
+      (app-repo fixer). Relates FU-101, FU-095, FU-087, ADR-094, ADR-085.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
