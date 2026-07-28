@@ -35,9 +35,20 @@ before trusting AgentQueueStalled)._
      ~½GiB before the kernel OOMs; cilium/longhorn are system-node-critical so exempt). Node math:
      cap 7.61GiB, alloc 7.14→~6.6GiB; ride 5.1 + daemon-reqs 1.3 = 6.4 < 6.6, still fits. ⚠ desktops
      + Talos VMs (cp-01/wk-01/wk-02/thinkcentre/hp-01) want the same EVENTUALLY but NOT urgent (no
-     kata rides there — different math). NEXT: find the Talos kata-node machine-config patch, add the
-     kubelet block, plan, apply, verify (allocatable dropped + a ride still schedules), THEN uncordon
-     wk-metal-03. Keep the Burstable requests + the alert.
+     kata rides there — different math). NEXT (COPY-PASTE READY): add this as a new element in the
+     `config_patches = concat(...)` in **tofu/metal.tf** (right after the `each.value.kata ? [...kata
+     label...] : []` block at ~line 96-98, SAME `each.value.kata` scoping so only wk-metal-01/02/03
+     get it):
+       `each.value.kata ? [yamlencode({ machine = { kubelet = { extraConfig = {`
+       `  systemReserved = { memory = "512Mi" }`
+       `  kubeReserved   = { memory = "256Mi" }`
+       `  evictionHard   = { "memory.available" = "512Mi" } } } } })] : [],`
+     Then `devbox run tf-plan -- -target='talos_machine_configuration_apply.metal'` (review — it rolls
+     the kubelet on the 3 kata nodes) → `tf-apply`. ⚠ Talos `kubelet.extraConfig` MERGES; VERIFY after
+     via `kubectl get --raw /api/v1/nodes/wk-metal-01/proxy/configz | jq .kubeletconfig.{systemReserved,evictionHard}`
+     that systemReserved didn't lose its cpu/ephemeral-storage/pid (add them back if it replaced). Then
+     confirm allocatable dropped ~7.14→~6.6GiB AND a ride still schedules, THEN `kubectl uncordon
+     wk-metal-03`. Keep the Burstable requests + the ContainerMemoryNearLimit alert (already on master).
   2. **#48 test conclusion**: r5 (deepseek, build.yaml) on wk-metal-01 PUSHED a commit (head 399ddaa6
      — real progress: it edited test-integration.sh, tried a new cluster name) but hit ANOTHER kata+dind
      bug: `/var/lib/docker … read-only file system` (block-PVC/overlay corruption, even on wk-metal-01)
