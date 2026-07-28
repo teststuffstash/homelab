@@ -10,17 +10,12 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 - **World ENABLED.** All three coordinators (sleep / oracle / platform) `enabled=true`; both global
   reflexes (`coordinator-reflex` + `review-reflex`) `suspend=false`. Verified live. Sleep worker =
   `claude/haiku` (sleep-iac#39). Watch haiku subscription load stays under the FU-088 gate.
+- **FU-088 gate is now PER-WINDOW** (PR#70 merged+live 2026-07-28): 5h@0.80 (finish-in-progress guard),
+  **7d@0.95** (operator weekly-headroom pref, `ANTHROPIC_UTIL_THRESHOLD_7D`). So 7d sitting at ~0.81 no
+  longer freezes dispatch (it would under the old single-0.80 gate). Verify live: proxy
+  `/anthropic-limit` `.thresholds`.
 - **wk-metal-04** (16GB desktop, i5-3570K, @.186) is a live kata ephemeral-tier node (BGP established,
   FU-112b reservation applied). Goose-only (no AVX2). The Playwright/Chrome gate's home when it graduates.
-
-## In-flight operator chains (check each on every heartbeat)
-
-- **homelab PR#70 — FU-088 per-window thresholds (7d→0.95, 5h stays 0.80).** Operator-requested
-  2026-07-28: 5h is the finish-in-progress guard, 7d is the operator's personal weekly headroom.
-  Platform lane; **needs OPERATOR APPROVAL** (homelab master requires a review, no bot reviewer —
-  `coordinator-session.sh:129` excludes homelab). Auto-merge armed + squash. NEXT: watch it merge →
-  ArgoCD sync openrouter-proxy → the loop resumes deeper into the week (once 5h eases, 7d@0.80 no
-  longer blocks). Env: `ANTHROPIC_UTIL_THRESHOLD_7D=0.95` in deployment.yaml.
 
 ## Active sleep-queue watch (the operator's standing ask: "meta-coordinate all the sleep tasks")
 
@@ -34,9 +29,11 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
   pre-flight-refused "FU-042 WIP limit" at 20:42). Proxy confirmed HEALTHY (other sessions 200 in
   2-19s post-roll) → r1 was individually wedged, not a proxy regression. Deleted → freed the WIP slot.
   EXPECTED NEXT (deadline ~21:35): coordinator re-dispatches #71-**r2** (in-progress, no live worker →
-  redispatch clause); bounded watch `bpd755sil` reports r2 liveness. If r2 ALSO wedges → environmental,
-  not transient (investigate). When #71 lands it **closes #67**; verify `kind@latest` in devbox.json
-  (not a downloaded binary) + the `kind_mirror` hosts.toml. #42 waits on the WIP slot behind #71.
+  redispatch clause). **r2 confirmed HEALTHY** (up 21:33, progressing — installed `kind-0.32.0` via the
+  nix substituter 192.168.40.23, doing the migration; NOT re-wedged → r1 was transient/r1-specific, not
+  environmental/proxy). Let it run; the loop watch surfaces its PR. When #71 lands it **closes #67**;
+  verify `kind` came via devbox/nix (it did — not a downloaded binary) + the `kind_mirror` hosts.toml.
+  #42 waits on the sole WIP slot behind #71 (FU-042 1-worker limit, no TRACKS.md split).
 - **#42 / #43** (dashboard-contract bugs) + **sleep-iac#25** — **#48 now CLOSED, so unblocked**;
   watch them flow. **#42 enriched 2026-07-28** with LIVE root cause of the operator's "all panels
   blank on /d/sleep-overview": the dominant cause is a **dangling `${DS_SLEEP_DB}` datasource var**
