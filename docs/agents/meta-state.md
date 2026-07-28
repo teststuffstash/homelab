@@ -13,6 +13,15 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 - **wk-metal-04** (16GB desktop, i5-3570K, @.186) is a live kata ephemeral-tier node (BGP established,
   FU-112b reservation applied). Goose-only (no AVX2). The Playwright/Chrome gate's home when it graduates.
 
+## In-flight operator chains (check each on every heartbeat)
+
+- **homelab PR#70 — FU-088 per-window thresholds (7d→0.95, 5h stays 0.80).** Operator-requested
+  2026-07-28: 5h is the finish-in-progress guard, 7d is the operator's personal weekly headroom.
+  Platform lane; **needs OPERATOR APPROVAL** (homelab master requires a review, no bot reviewer —
+  `coordinator-session.sh:129` excludes homelab). Auto-merge armed + squash. NEXT: watch it merge →
+  ArgoCD sync openrouter-proxy → the loop resumes deeper into the week (once 5h eases, 7d@0.80 no
+  longer blocks). Env: `ANTHROPIC_UTIL_THRESHOLD_7D=0.95` in deployment.yaml.
+
 ## Active sleep-queue watch (the operator's standing ask: "meta-coordinate all the sleep tasks")
 
 - **#48 LANDED** (PR#72 merged, CI green — the system-test gate: k3d + MinIO + ingester + Grafana,
@@ -20,8 +29,15 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 - **#71 (k3d→kind migration) RUNNING** on haiku (r1 was live at handoff; may have re-rounded). Depends-on
   #48 (now satisfied). When it lands it **closes #67** (the k3d-mirror wall). NEXT: watch it merge; verify
   it added `kind@latest` to devbox.json (not a downloaded binary) + the `kind_mirror` hosts.toml.
-- **#42 / #43** (dashboard-contract bugs) + **sleep-iac#25** were dep-held on #48 → now dispatchable;
-  watch them flow. #42 is the frser-contract repro the #48 gate was built to prove.
+- **#42 / #43** (dashboard-contract bugs) + **sleep-iac#25** — **#48 now CLOSED, so unblocked**;
+  watch them flow. **#42 enriched 2026-07-28** with LIVE root cause of the operator's "all panels
+  blank on /d/sleep-overview": the dominant cause is a **dangling `${DS_SLEEP_DB}` datasource var**
+  (dashboard JSON references it in every panel but defines NO `__inputs`/templating → Grafana can't
+  resolve → "datasource not found" everywhere); live datasource uid is `sleep-notes`. PLUS #42's
+  original frser contract (rawSql/epoch). Deployed dashboard = the `sleep-ingester` Helm chart copy
+  (sleep-tracking), NOT the "fixed sleep-iac copy" #42/#43's premise assumed — fix the chart's JSON.
+  Data is HEALTHY (45 rows sleep_nights, sidecar syncing). Operator: no rush, land it with the other
+  sleep issues. Fix must BIND the datasource (hardcode uid sleep-notes) + apply frser contract.
 
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
 
@@ -39,8 +55,8 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 ## Re-arm on a fresh session (watches die with `/clear`)
 
 - Per the meta-coordinate skill: re-arm the loop watch (`bash agents/meta-watch-loop.sh`, persistent)
-  + the 2h backstop heartbeat (each sweep runs `agents/meta-alert-crosscheck.sh`). `biy97zxyw` (a prior
-  heartbeat) may still be alive — check before arming a duplicate.
+  + the 2h backstop heartbeat (each sweep runs `agents/meta-alert-crosscheck.sh`). Meta-16 session
+  armed loop=`bn59ctrq2`, heartbeat=`bxdzr3d88` (both die on /clear — re-arm fresh, don't trust these ids).
 - Probe hygiene (hard-won): put probes in bash SCRIPT FILES and dry-run under the real interpreter (zsh
   no-word-split bites inline Monitors AND Bash); NEVER leave a stray `devbox run -- kubectl` with no
   subcommand in a probe (it prints kubectl help into your captured var — bit me twice this session);

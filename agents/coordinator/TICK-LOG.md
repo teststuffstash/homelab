@@ -1440,3 +1440,40 @@ gate (#71 ran early); write unbulleted, FU-111 native blockedBy is the real fix.
 be poisoned by infra failures — reset (close PR + restart) when the rounds never ran the task. (c) the env
 card / launcher reaches goose; CLAUDE.md doesn't. Dispatch pods clone master at runtime → agent-session.sh
 changes are live on the next ride, no rebuild.
+
+### 2026-07-28 — meta-16: per-window subscription thresholds + the sleep-dashboard all-blank root-cause
+Fresh bootstrap. World still ENABLED, #71-r1 running (72m, healthy). One benign Error pod
+(coordinate-sleep-…800, 95m): the atomic pod-name dispatch key collided — `agentstack-loop` can
+CREATE but not PATCH `coordinator-173030`, so `kubectl apply` onto an existing key 403'd; a later
+scan dispatched clean (#71-r1 up). Self-healed as designed; no action.
+TWO operator asks:
+1. **FU-088 per-window thresholds (PR#70).** Operator: the 5h/7d gate should be SEPARATE — 5h@0.80
+   is the finish-in-progress guard (deny doomed spawns before the short window flips), 7d is the
+   operator's PERSONAL weekly-headroom preference → set to 0.95. The gate treated both identically at
+   `ANTHROPIC_UTIL_THRESHOLD` (0.80), so a 7d pinned at 0.80 (a ~4-day rolling window) froze ALL
+   subscription dispatch for days even after each 5h reset. Shipped `_window_threshold()` +
+   `ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW` (base default, per-window `ANTHROPIC_UTIL_THRESHOLD_<W>`
+   override); `_dispatch_verdict` reads per-window; `/anthropic-limit` gains `.thresholds`; `/metrics`
+   threshold gauge now `{window=}`-labelled; subscription dashboard line → `{{window}} threshold`;
+   `deployment.yaml` sets 7d=0.95. Offline-tested the verdict: 5h≥0.80 defers, 7d only at ≥0.95, and
+   once 5h eases the loop resumes with 7d@0.80. Live verdict at ship time: both windows exactly 0.80,
+   `limited=true reason=utilization-5h` (5h sorts first; 7d equally over). PR#70 auto-merge armed but
+   **needs operator approval** — homelab has NO bot reviewer (`coordinator-session.sh:129` excludes it);
+   platform-repo PRs are operator-gated. LESSON: the 429 latch/util gate is one composite verdict but
+   the two windows guard DIFFERENT things — completion-safety (5h) vs personal-budget (7d) — and want
+   independent knobs.
+2. **Sleep dashboard "no data on ALL panels" (/d/sleep-overview).** Root-caused live, NOT ingestion:
+   `sleep.sqlite` syncs fine from Garage (52KiB, `sleep_nights` = 45 rows), datasource `sleep-notes`
+   (frser-sqlite, `/data/sleep.sqlite`) is healthy and grafana reads it. The bug is in the dashboard
+   JSON (deployed by the `sleep-ingester` Helm chart, sleep-tracking): every panel's datasource is
+   `${DS_SLEEP_DB}` but the JSON defines NO `__inputs`/`__requires`/templating var by that name →
+   Grafana can't resolve → "datasource not found" on every panel = the all-blank symptom. PLUS the
+   frser contract issues #42 already names (rawSql, night_date-as-time). This is the SAME artifact as
+   #42 (queued, `Depends-on #48` now satisfied — #48 CLOSED) → EXTENDED #42 with the live evidence
+   (prior-art: don't file a parallel issue) incl. correcting its stale premise ("the sleep-iac copy is
+   deployed & fixed" — reality: the deployed copy IS the chart's broken one). Operator: not urgent,
+   land with the rest of the sleep issues. Fix must BIND the datasource (hardcode uid `sleep-notes`)
+   AND apply the frser contract. LESSON: "panels render empty" has TWO independent causes on the same
+   JSON — a dangling datasource var (hard "not found", all panels) vs a query-contract violation
+   (connects but yields no series); triage the datasource binding FIRST, it's the dominant one.
+Watches re-armed (loop bn59ctrq2, heartbeat bxdzr3d88). Crosscheck clean ("belts healthy").
