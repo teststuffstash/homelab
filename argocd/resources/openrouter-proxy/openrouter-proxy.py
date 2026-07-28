@@ -70,10 +70,18 @@ ANTHROPIC_429_HOLD_S = int(os.environ.get("ANTHROPIC_429_HOLD_S", "900"))
 # `anthropic-ratelimit-unified-{5h,7d}-utilization` is a 0–1 FRACTION, each window carries its
 # own `-reset` epoch + `-status`; overage is org-disabled on this account, so hitting a window
 # hard-stops (429) rather than spilling to paid.
-# Threshold deferral: dispatch reads limited=true once EITHER window's utilization crosses
-# ANTHROPIC_UTIL_THRESHOLD (fraction; 0 disables) and that window hasn't reset yet — deferring
+# Threshold deferral: dispatch reads limited=true once ANY window's utilization crosses its
+# threshold (fraction; 0 disables that window) and that window hasn't reset yet — deferring
 # BEFORE the 429 leaves headroom for interactive rides instead of burning it on batch spawns.
+# Per-window thresholds (they guard DIFFERENT things — operator direction 2026-07-28): the 5h
+# window is the finish-in-progress guard (deny spawns that can't complete before the short
+# window flips), the 7d window is the operator's personal weekly headroom preference and is set
+# INDEPENDENTLY (higher = burn more of the week before backing off). ANTHROPIC_UTIL_THRESHOLD is
+# the base/default; a per-window ANTHROPIC_UTIL_THRESHOLD_<W> overrides it for that window.
 ANTHROPIC_UTIL_THRESHOLD = float(os.environ.get("ANTHROPIC_UTIL_THRESHOLD", "0.80"))
+def _window_threshold(w: str) -> float:
+    return float(os.environ.get(f"ANTHROPIC_UTIL_THRESHOLD_{w.upper()}", ANTHROPIC_UTIL_THRESHOLD))
+ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW = {w: _window_threshold(w) for w in ("5h", "7d")}
 _latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
           "windows": {}, "count_429": 0}
 _latch_lock = threading.Lock()
@@ -105,10 +113,10 @@ def _dispatch_verdict(now: float) -> tuple[bool, str | None, dict]:
         windows = {k: dict(v) for k, v in _latch["windows"].items()}
     if until > now:
         return True, "429-latch", windows
-    if ANTHROPIC_UTIL_THRESHOLD > 0:
-        for w, data in sorted(windows.items()):
-            if data["utilization"] >= ANTHROPIC_UTIL_THRESHOLD and now < data["reset"]:
-                return True, f"utilization-{w}", windows
+    for w, data in sorted(windows.items()):
+        thr = ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW.get(w, ANTHROPIC_UTIL_THRESHOLD)
+        if thr > 0 and data["utilization"] >= thr and now < data["reset"]:
+            return True, f"utilization-{w}", windows
     return False, None, windows
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
@@ -722,6 +730,7 @@ class Proxy(BaseHTTPRequestHandler):
                 "limited": limited,
                 "reason": reason,
                 "threshold": ANTHROPIC_UTIL_THRESHOLD,
+                "thresholds": ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW,
                 "windows": windows,
                 "until_epoch": round(until),
                 "remaining_s": max(0, round(until - now)),
@@ -760,7 +769,11 @@ class Proxy(BaseHTTPRequestHandler):
                 f"anthropic_subscription_headers_age_seconds {now - seen_at:.0f}" if seen_at
                 else "anthropic_subscription_headers_age_seconds NaN",
                 "# TYPE anthropic_subscription_utilization_threshold gauge",
-                f"anthropic_subscription_utilization_threshold {ANTHROPIC_UTIL_THRESHOLD}",
+                "# HELP anthropic_subscription_utilization_threshold Per-window dispatch-deferral threshold (0-1 fraction).",
+            ]
+            for w in sorted(ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW):
+                lines.append(f'anthropic_subscription_utilization_threshold{{window="{w}"}} {ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW[w]}')
+            lines += [
                 "# TYPE anthropic_subscription_latched gauge",
                 "# HELP anthropic_subscription_latched 1 while the reactive 429 latch holds.",
                 f"anthropic_subscription_latched {1 if until > now else 0}",
