@@ -96,6 +96,38 @@ data "talos_machine_configuration" "metal" {
     each.value.kata ? [yamlencode({
       machine = { nodeLabels = { "homelab.io/kata" = "true" } }
     })] : [],
+    # Kata nodes run k3d/kind-in-dind rides whose kata microVM grows to ~5Gi. Without a memory
+    # reservation the kernel global-OOMs the node and takes cilium/longhorn as collateral
+    # (FU-112b; incidents #63-66, #68, #69). Reserve memory + raise the HARD eviction threshold
+    # so the kubelet EVICTS the (non-critical) ride ~½GiB before the kernel OOMs — cilium/longhorn
+    # are system-node-critical and exempt from eviction. KATA NODES ONLY (they alone carry the k3d
+    # spikes; desktops/VMs use different math and aren't urgent). Maps are written in FULL: Talos
+    # kubelet.extraConfig can replace a nested map, so the cpu/pid/ephemeral + disk-pressure
+    # defaults are restated here or they'd be lost (verify via .../proxy/configz after apply).
+    each.value.kata ? [yamlencode({
+      machine = {
+        kubelet = {
+          extraConfig = {
+            systemReserved = {
+              cpu                 = "50m"
+              memory              = "512Mi"
+              "ephemeral-storage" = "256Mi"
+              pid                 = "100"
+            }
+            kubeReserved = {
+              memory = "256Mi"
+            }
+            evictionHard = {
+              "memory.available"   = "512Mi"
+              "imagefs.available"  = "15%"
+              "imagefs.inodesFree" = "5%"
+              "nodefs.available"   = "10%"
+              "nodefs.inodesFree"  = "5%"
+            }
+          }
+        }
+      }
+    })] : [],
     # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). The Haswell/Broadwell
     # ThinkPads have AVX2; hp-01 + thinkcentre do not. Talos applies machine.nodeLabels live.
     contains(local.avx2_nodes, each.key) ? [yamlencode({
