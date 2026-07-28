@@ -1336,3 +1336,37 @@ containers are unresourced; (2) `evictionHard.memory.available` (not the reserve
 kubelet eviction beat the kernel OOM; (3) the fixer env card WORKS — a weak model probed instead of
 assuming; (4) kata+dind storage (block-PVC re-hotplug + read-only-fs) is fragile beyond the OOM — the
 real docker-ride blocker. Full in-flight state + next steps: docs/agents/meta-state.md §SESSION HANDOFF.
+
+### 2026-07-28 — meta-15: the metal rollout — kata kubelet reservation lands, the OOM storm is root-caused, the crosscheck's UNTRIAGED is benign
+Resumed to do the parked FU-112(b) Talos kata reservation (meta-state item 1) and found the
+platform queue already loud about the SAME incident: homelab#68/#69 (🚨 PodSigkilled cascade,
+"BestEffort, no resource requests"). Both were STALE — fired 13:03/13:42Z DURING the #48 kata ride's
+node-wide OOM, their evidence = the pre-apply BestEffort state (live QoS is now Burstable, the
+earlier belt landed). SHIPPED (4a9e9a9, tofu/metal.tf): the operator-chosen Talos kubelet
+reservation on the 3 KATA nodes only — systemReserved.memory 384→512Mi, kubeReserved.memory
+0→256Mi, evictionHard.memory.available 100→512Mi (the lever: kubelet EVICTS the non-critical ride
+~½GiB before the kernel global-OOMs; cilium=system-node-critical + longhorn=longhorn-critical are
+eviction-exempt). Verified live on all 3; allocatable ~7.4→6.2-6.36GiB; a ~5.1Gi ride still fits
+wk-metal-03 (free 5264Mi ≥ 5120Mi) → uncordoned. #68/#69 dispositioned into FU-112b + closed.
+KEY EXECUTION LESSON: wrote the systemReserved/evictionHard maps in FULL, not memory-only — Talos's
+kubelet.extraConfig merge can REPLACE a nested map, which would have silently dropped cpu/pid/
+ephemeral AND the imagefs/nodefs disk-pressure thresholds (losing disk eviction entirely). Verify
+proved it kept them. The meta-state copy-paste snippet was memory-only; the full-map form is the
+correct declarative shape — added to the file comment.
+THE CROSSCHECK CAUGHT SOMETHING, BUT IT WAS BENIGN — and that's a lesson too. meta-alert-crosscheck
+flagged 4 PodSigkilled fps UNTRIAGED ("responder machinery stuck"). Investigated the CHAIN first
+(skill rule), NOT the alert: responder-sensor Running 23h, respond jobs completing every ~10-25m —
+demonstrably alive. Two benign causes: (1) daily-cap-12 exhaustion (one OOM cascade = >12 distinct
+pod fps → cap hit → "NOT triaged (loud)", no seen entry); (2) report-only dedup — respond-zddj6
+correctly triaged two fps and declined to file ("already scoped to FU-112b/#68, no new artifact"),
+writing no ledger marker. Both look identical to a stuck sensor through the crosscheck's ledger-diff.
+Extended FU-113 (same root as its latch-defer case): generalize fix-leg (a) to marker-on-EVERY-
+outcome (cap-deferred/seen-noop/deferred) so the crosscheck can tell loud-known from silently-broken;
+and the cap should key off INCIDENT (route+root), not raw fp count, or a single-incident storm floods
+the budget and starves unrelated alerts. LESSON REINFORCED: "the responder is alive" is proven by
+its job cadence, not by the crosscheck's silence — the crosscheck flags NON-TRIAGE, which includes
+correct non-triage; investigate the chain, then the outcome, before ever touching the alert.
+World still paused (sleep-only, for #48). Remaining meta-state items: 2 (#48/FU-116 kata+dind STORAGE
+fragility — the real docker-ride blocker, needs operator direction; the dead agent-sleep-tracking-
+issue-48-r5 Error pod, 54m, left in place as #48 evidence + an FU-116b PVC-leak sighting) + 3 (Phase 4,
+after #48). Watches NOT re-armed (loop paused; nothing for the loop-watch to see).
