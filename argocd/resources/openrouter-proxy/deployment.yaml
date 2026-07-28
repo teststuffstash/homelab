@@ -33,6 +33,13 @@ spec:
           image: python:3.13-slim
           command: ["python3", "/app/openrouter-proxy.py"]
           env:
+            # FU-088 per-window thresholds (operator direction 2026-07-28): 5h stays at the base
+            # 0.80 (finish-in-progress guard — deny spawns that can't complete before the short
+            # window flips); 7d is the operator's personal weekly headroom preference, set higher
+            # so the loop keeps ticking deeper into the week before backing off. Base default
+            # (ANTHROPIC_UTIL_THRESHOLD, unset here) = 0.80 governs 5h.
+            - name: ANTHROPIC_UTIL_THRESHOLD_7D
+              value: "0.95"
             # FU-089 finale (2026-07-26): /git-token refuses unauthenticated callers. Flipped
             # after live evidence — a full ride lifecycle (issue-135 r1 redispatch) fetched
             # with the agentstack-worker SA bearer, TokenReview-verified. Set "0" only for a

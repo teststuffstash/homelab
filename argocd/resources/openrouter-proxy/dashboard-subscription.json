@@ -136,12 +136,12 @@
       "id": 7,
       "type": "timeseries",
       "title": "Utilization by window (dispatch defers at threshold)",
-      "description": "anthropic_subscription_utilization per window vs the deferral threshold the proxy enforces (anthropic_subscription_utilization_threshold, default 0.80). Gaps = no subscription traffic through the proxy (data only refreshes when sessions run).",
+      "description": "anthropic_subscription_utilization per window vs the per-window deferral threshold the proxy enforces (anthropic_subscription_utilization_threshold; 5h=finish-in-progress guard, 7d=operator weekly headroom). Gaps = no subscription traffic through the proxy (data only refreshes when sessions run).",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
       "targets": [
         { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_utilization", "legendFormat": "{{window}}" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_utilization_threshold", "legendFormat": "deferral threshold" }
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_utilization_threshold", "legendFormat": "{{window}} threshold" }
       ],
       "fieldConfig": {
         "defaults": {
