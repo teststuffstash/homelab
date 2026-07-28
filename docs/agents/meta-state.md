@@ -9,6 +9,21 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
+- **ACTIVE CHAIN — coordinator-scan units-only gate fix (meta-14, 2026-07-28 ~06:10Z).** The
+  sleep tail stalled ~10h: PR#61 (sleep-tracking#48 system-test gate) CI-red (`container not
+  found (garage)` race in the new integration harness) + auto-merge armed, but NO ci-red-stale
+  fix round dispatched. Root cause (bash -x proven): the `[ -z "$items" ]` actionability gate
+  reads the REPORT string, but ci-red-stale + merged-closeout append only to `$units` → sole-work
+  = "nothing actionable", units dropped. Also #47/#46 never got C6 agent/done flip+harvest (#46
+  merged from `agent/review`, which C6 didn't even query). Fix in **homelab#60** (auto-merge
+  armed, CI pending ~06:10Z). CHAIN + deadlines:
+  1. homelab#60 merges (CI ~06:25Z deadline; BLOCKED=checks-pending is normal).
+  2. Next coordinate-sleep scan (~10min after merge) clones new master → dispatches ci-red-stale
+     #61 (priority) then merged-closeout #47/#46/#22. Deadline: a ride pod for #61 by ~06:50Z.
+  3. ci-red-stale fix round edits PR#61 branch to fix the garage-exec race → green → review →
+     merge → unblocks #42/#43 + sleep-iac#25 + the haiku flip (see the flip bullet below).
+  Remove this bullet when PR#61 goes green. If the garage race is a pure flake not a harness bug,
+  the fix round should still make the wait deterministic — do NOT just re-run CI (masks it).
 - ~~FU-096~~ COMPLETE — already ARCHIVED in follow-ups-archive.md with in-pod numbers
   (23-25s worst-node; my independent 17:33Z measure on sleep#39 r1 read 23.6s, seed+substituter
   clean). Stale-bullet lesson: the archive, not this file, was current — recheck the tracker

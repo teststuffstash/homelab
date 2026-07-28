@@ -1267,3 +1267,31 @@ themselves, issues don't. Also this arc: FU-110 shipped-and-archived same day (p
 priority knob; label REJECTED at implementation — IssueLabels authority would delete it),
 FU-111 filed (native blockedBy migration), the tab-IFS dep-gate fix proved itself (#25/#42/#43
 blocked correctly), and the queue kept eating: #39/#40/#41 all merged+closed unsupervised.
+
+### 2026-07-28 — meta-14: the units-only gate — a "0 gaps" FSM whose two newest guards never fired
+Resumed to a silently stalled sleep tail: PR#61 (sleep-tracking#48 system-test gate) CI-red for
+~10h — a `container not found ("garage")` race in the just-written integration harness — with
+auto-merge armed but NO `ci-red-stale` fix round dispatched, and the whole downstream queue
+(#42/#43/sleep-iac#25 + the post-#48 haiku flip) gated behind it. The coordinate scan said
+"nothing actionable" every 10min. `bash -x` on the live scan with the real loop token was the
+autopsy: the scan **built the units** (`units='ci-red-stale|sleep-tracking|pr-61\nmerged-closeout|
+sleep-tracking|issue-47'`) but the actionability gate reads `[ -z "$items" ]` — the human-readable
+REPORT string — while `ci-red-stale` + `merged-closeout` (both born 2026-07-27, MP-T12/MP-T10)
+append ONLY to `$units`. When they're the SOLE work (every other issue blocked on #48), `items`
+is empty → gate fires "nothing actionable" → units silently dropped. **One bug, both of the day's
+anomalies**: the fix round never fired AND #47 never got its C6 agent/done flip + Follow-ups
+harvest. The merge-path FSM read `open gaps: 0` — the two guards were present-yet-neutered, the
+exact "a belt is not a guard" trap one level up (the guard existed, the dispatch it feeds was
+unreachable). Class fix (homelab#60): every dispatchable unit now also emits an `items` line —
+the invariant `queued-dispatch` already honored (unit ⇒ report line ⇒ trips the gate), so a
+units-only clause can never again be invisible to both the gate and the scan log.
+**Second gap surfaced by the operator's "check the FSM" nudge**: C6 queried `--label
+agent/in-progress` only, but the FSM's happy path merges from `agent/review` (BotApproved) and
+nothing else flips that to agent/done — #46/PR#63 sat closed-but-stale there, uncatchable even
+after the gate fix. Widened C6 to closed ∧ (agent/in-progress ∨ agent/review) ∧ ¬done ∧ ¬error;
+closeout play (README) + MP-T10.when synced. LESSON: `bash -x` the live path with the live token
+beats every theory — I burned three hypotheses (token 403, silent-empty-rollup, scan-not-reached)
+on a bug the trace showed in one line; when a probe "returns cleanly" prove it by running the
+ACTUAL code, not a re-derivation of it. Chain live at handoff: homelab#60 auto-merge armed (CI
+pending) → next scan dispatches ci-red-stale#61 → fix round on the garage-exec race (see
+meta-state).
