@@ -32,6 +32,7 @@ metadata:
   name: review-reflex
   namespace: agent-coordinator
 spec:
+  suspend: true # PAUSED 2026-07-28 (meta-14, operator "pause the world"; was unset=false) — global review backstop off
   schedules:
     - "*/15 * * * *"
   concurrencyPolicy: Forbid
@@ -85,7 +86,7 @@ metadata:
 spec:
   schedules:
     - "*/10 * * * *"
-  suspend: false # per-stack autonomy via claim coordinator.enabled (FU-080); global kill switch stays here
+  suspend: true # GLOBAL KILL SWITCH ENGAGED 2026-07-28 (meta-14, operator "pause the world"; was false). per-stack autonomy via claim coordinator.enabled (FU-080)
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   # FU-085 refactor: the scan container lives in the `coordinate` WorkflowTemplate
