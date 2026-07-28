@@ -9,6 +9,22 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
+- **🟢 meta-15 (2026-07-28): PHASE 4 DONE + WORLD ENABLED. Now meta-coordinating the sleep queue.**
+  - **Phase 4**: (a) sleep workerModel → `claude/haiku` (sleep-iac#39 MERGED + live — deepseek too
+    weak for #48); (b) k3d→kind migration authored = sleep-tracking **#71** (pinned/FU-110, Depends-on
+    #48, resolves #67, models oracle-fleet e2e-kind.sh + kind_mirror hosts.toml); (c) **#48 breaker
+    CLEARED** → `agent/queued` (audit comment: OOM root cause + FU-112b validated + haiku + wk-metal-04)
+    — re-dispatches on haiku, continues PR#61.
+  - **World ENABLED** (operator "enable the world"): coordinator-reflex + review-reflex suspend=false
+    (homelab e11cc03 — global kill switch released), platform coordinator enabled=true (name=`platform`),
+    oracle coordinator+reviewer=true (oracle-iac#257 merged, ArgoCD rendering), sleep already enabled.
+    All verified live except oracle (sync lag at handoff — CONFIRM it flips true).
+  - **NEXT (active meta-coordination of sleep)**: re-arm the loop watch + heartbeat; watch the first
+    resumed ticks — does #48 dispatch on haiku (not deepseek)? does PR#61 get a round (it's BEHIND
+    master + label-less — if the ci-red/scan doesn't pick it up, intervene)? then the dependent
+    dashboard bugs (#42/#43 dep-held on #48), the spec bugs (#39-47 range), #71 after #48. #67 (k3d
+    egress 🚨) closes when #71 lands. Verify the haiku subscription load stays under the FU-088 gate.
+  _(historical meta-14 handoff below — superseded by the above)_
 - **🔴 SESSION HANDOFF (meta-14, 2026-07-28 ~14:00Z — written at 98% context; a fresh session
   resumes HERE).** WORLD: sleep coordinator RE-ENABLED (sleep-iac#38, CR enabled=true); oracle +
   platform coordinators + the two global reflexes STILL paused (from the earlier "pause the world").
