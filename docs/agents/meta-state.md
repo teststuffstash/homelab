@@ -9,6 +9,48 @@ are the LOOP's lane; FU-088 latch lifted ~12:55Z (agent-runtime#24 review dispat
 tail chain running, see its bullet); FU-108 filed (queue gauge blind to private repos — fix
 before trusting AgentQueueStalled)._
 
+- **🔴 SESSION HANDOFF (meta-14, 2026-07-28 ~14:00Z — written at 98% context; a fresh session
+  resumes HERE).** WORLD: sleep coordinator RE-ENABLED (sleep-iac#38, CR enabled=true); oracle +
+  platform coordinators + the two global reflexes STILL paused (from the earlier "pause the world").
+  wk-metal-03 CORDONED (kata block-device broke there under OOM). All watches/monitors DIE with the
+  session — re-arm per the meta-coordinate skill.
+  SHIPPED THIS SESSION (all on master + deployed): **FU-114** (fixer 3-layer context: launcher env
+  card from claim knobs + unify `--recipe` onto goose + `task/*` recipe selection + `.agents/build.yaml`
+  + the #67 kind-mirror lesson) — homelab#60/#61 + sleep-tracking#70 merged; **FU-115** (red merge-path
+  edge: exporter `maybe_dispatch_cired`→`/coordinate` + content-based `ci-red` scan clause + cap→
+  `agent/arbitrate` MP-T13) — homelab#62 merged, exporter deployed. **E2E on #48 PROVEN**: red-doorbell
+  fired → `ci-red` dispatched build.yaml → deepseek RAN `docker info`+read mirrors (the behavior change,
+  vs r3's blind give-up). FUs filed: FU-114, FU-115, FU-116 (kata storage fragility).
+  IN-FLIGHT / NEXT (in priority order):
+  1. **FU-112(b) — the OOM-posture fix, HALF DONE.** #63-66 (homelab, closed) were ONE OOM cascade:
+     the r4 kata ride pushed wk-metal-03 into memory pressure → OOMController killed the BestEffort
+     cilium/longhorn DaemonSets → broke the block-device attach (= FU-116a root cause). APPLIED
+     (tofu, master): cilium-agent + longhorn-manager/-driver got memory requests (512/512/256Mi) +
+     a new `ContainerMemoryNearLimit` alert (tofu/monitoring.tf). BUT QoS came out **Burstable, not
+     Guaranteed** (unresourced init/sidecar containers) → oom_score ~934, INSUFFICIENT. DECISION
+     (operator, this session): do the **Talos kubelet reservation** approach instead of chasing
+     per-container Guaranteed — on the KATA nodes ONLY (wk-metal-01/02/03; they have the k3d/kind
+     memory spikes). Numbers: `systemReserved.memory 384→512Mi`, `kubeReserved.memory 0→256Mi`,
+     `evictionHard.memory.available 100Mi→512Mi` (the key one — kubelet evicts the non-critical ride
+     ~½GiB before the kernel OOMs; cilium/longhorn are system-node-critical so exempt). Node math:
+     cap 7.61GiB, alloc 7.14→~6.6GiB; ride 5.1 + daemon-reqs 1.3 = 6.4 < 6.6, still fits. ⚠ desktops
+     + Talos VMs (cp-01/wk-01/wk-02/thinkcentre/hp-01) want the same EVENTUALLY but NOT urgent (no
+     kata rides there — different math). NEXT: find the Talos kata-node machine-config patch, add the
+     kubelet block, plan, apply, verify (allocatable dropped + a ride still schedules), THEN uncordon
+     wk-metal-03. Keep the Burstable requests + the alert.
+  2. **#48 test conclusion**: r5 (deepseek, build.yaml) on wk-metal-01 PUSHED a commit (head 399ddaa6
+     — real progress: it edited test-integration.sh, tried a new cluster name) but hit ANOTHER kata+dind
+     bug: `/var/lib/docker … read-only file system` (block-PVC/overlay corruption, even on wk-metal-01)
+     → exit 255. CI still FAILURE. So kata+dind storage is fragile BEYOND wk-metal-03's OOM — a broader
+     FU-116/FU-081 concern (the block-PVC re-hotplug + read-only-fs after a dind restart). The FU-115
+     ci-red machinery will re-dispatch (r6) or arbitrate at the cap — watch it.
+  3. **Phase 4 (operator's plan, still queued)**: switch sleep workerModel→claude/haiku in sleep-iac
+     (post-#48-flip was planned) + author the k3d→kind migration task for sleep-tracking (model on
+     oracle-fleet scripts/e2e-kind.sh — kind + the `kind_mirror` hosts.toml pattern that #67 needs);
+     priority-time it with the FU-110 pin. Do AFTER #48 resolves.
+  4. **Uncordon wk-metal-03** once FU-112(b) Talos change lands + verified.
+  NOTE: the kata+dind storage fragility (FU-116, read-only-fs / block re-hotplug) may be the real
+  blocker for docker rides — bigger than the OOM. The operator flagged "kata is a lot + unfinished."
 - **✅ FU-114 + FU-115 SHIPPED + E2E-PROVEN, then blocked on a kata infra bug (meta-14, 2026-07-28
   ~13:00Z).** All merged to master + deployed: FU-114 (env card + `--recipe` unify + `task/*`
   selection + build.yaml + #67 kind-mirror lesson), FU-115 (exporter red-doorbell `maybe_dispatch_cired`

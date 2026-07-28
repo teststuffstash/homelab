@@ -1316,3 +1316,23 @@ fixer.docker, deepseek too weak for #48) — NOT filed as FUs (the operator is r
 LESSON: read the ride's TRANSCRIPT before trusting its stats row — the run-stats table said
 ci_passed=true; the run.log said it never ran the CI that matters. Meta coordination stopped here
 (watches down) per operator direction; resume steps in meta-state.
+
+### 2026-07-28 — meta-14: the day the fixer + red-path shipped, and kata's storage limits surfaced
+Marathon session. SHIPPED E2E-proven: **FU-114** (fixer 3-layer context — launcher env card composed
+from AgentStack claim knobs + `--recipe` unified onto goose + `task/*` recipe selection + build.yaml;
+the #67 kind-mirror lesson baked into the card) and **FU-115** (the red merge-path got the green loop's
+machinery — exporter `maybe_dispatch_cired`→`/coordinate` edge + content-based `ci-red` scan clause +
+`RED_ROUNDS_MAX`→`agent/arbitrate` MP-T13, closing the MP-T07 4h-livelock deadlock). #48 E2E proved the
+WHOLE chain live AND the behavior change: deepseek r4 ran `docker info` + read the mirrors instead of
+r3's blind "I can't run k3d". Then the platform's real limit showed: the ~5.1Gi kata ride on an 8GB
+laptop OOM-cascaded (#63-66, one incident) → killed the BestEffort cilium/longhorn DaemonSets → broke
+the block-device attach (FU-116a). Cordoned wk-metal-03; the re-dispatch (r5) came up clean on
+wk-metal-01 (node-specific confirmed) but hit ANOTHER kata+dind bug (`/var/lib/docker` read-only). Started
+FU-112(b): resourced cilium/longhorn (Burstable — insufficient, QoS needs all-containers-Guaranteed) +
+a `ContainerMemoryNearLimit` alert; operator chose the Talos `evictionHard`/`kubeReserved` route (kata
+nodes only — desktops/VMs lack the k3d spikes) so the kubelet evicts the ride before the kernel OOMs.
+LESSONS: (1) verify QoS after resourcing — req==limit on the MAIN container ≠ Guaranteed if init/sidecar
+containers are unresourced; (2) `evictionHard.memory.available` (not the reserves) is the lever that lets
+kubelet eviction beat the kernel OOM; (3) the fixer env card WORKS — a weak model probed instead of
+assuming; (4) kata+dind storage (block-PVC re-hotplug + read-only-fs) is fragile beyond the OOM — the
+real docker-ride blocker. Full in-flight state + next steps: docs/agents/meta-state.md §SESSION HANDOFF.
