@@ -248,7 +248,18 @@ _Last updated: 2026-07-16._
       daemons — nothing platform-critical BestEffort (the FU-082 estate discipline), and raise
       cilium-agent/longhorn-manager memory REQUESTS toward observed usage so their kubelet
       oom_score_adj drops (the kernel then prefers the overcommitted tenant, not the platform,
-      even in an unforeseen global OOM). (c) note: clearing #48's agent/error breaker = the
+      even in an unforeseen global OOM). ✅ (b) DONE 2026-07-28 (4a9e9a9, tofu/metal.tf): the
+      Burstable requests weren't enough (oom_score ~934), so the operator's chosen route landed —
+      a Talos kubelet reservation on the KATA nodes only (wk-metal-01/02/03): systemReserved.memory
+      384→512Mi, kubeReserved.memory 0→256Mi, evictionHard.memory.available 100→512Mi (maps written
+      in full so Talos's extraConfig merge keeps cpu/pid/ephemeral + the disk-pressure thresholds).
+      The kubelet now EVICTS the non-critical ride ~½GiB before the kernel global-OOMs; cilium
+      (system-node-critical) + longhorn (longhorn-critical) are eviction-exempt. Verified live on
+      all 3 nodes; allocatable ~7.4→6.2-6.36GiB, a ~5.1Gi ride still fits; wk-metal-03 uncordoned.
+      Stale OOM-cascade alerts homelab#68/#69 (fired 13:03/13:42Z DURING the #48 ride, evidence =
+      pre-apply BestEffort state) dispositioned here + closed. Residual: engine-image DaemonSet has
+      no priorityClass (BestEffort) — the "nothing platform-critical BestEffort" sub-goal; trivially
+      restartable + non-cascading, left as a minor note. (c) note: clearing #48's agent/error breaker = the
       re-dispatch rides (a); an in-VM dind cgroup OOM (gate too fat for 2560Mi) is the
       CORRECT residual failure mode — pod fails, node survives. FU-082 (archived 2026-07-25),
       FU-081, FU-072 lineage.
@@ -264,6 +275,19 @@ _Last updated: 2026-07-16._
       instead of trusting the edge; (c) FU-109's tier would have let this ~30s bounded triage
       run at 0.83 anyway — the three compose. Alert content itself was handled operator-lane
       same hour (mirror cache wiped; second fill of the day — the FU-093 sighting family).
+      **Sibling non-triage outcomes witnessed 2026-07-28 (meta-15) — SAME root, generalize fix
+      leg (a) to "any non-triaging respond writes a ledger marker":** during the #48 OOM storm the
+      crosscheck flagged 4 PodSigkilled fps UNTRIAGED, but the responder was HEALTHY (respond jobs
+      completing every ~10-25m). Two benign causes, neither a stuck sensor: (1) **daily-cap-12
+      exhaustion** — the storm produced >12 distinct pod fingerprints, so respond exited "daily cap
+      reached — NOT triaged (loud)" and wrote no `seen` entry; (2) **report-only dedup** —
+      respond-zddj6 correctly DID triage two fps but declined to file (already scoped to FU-112b/#68)
+      and made no GitHub write / no ledger marker. Both look identical to a machinery break through
+      the crosscheck's ledger-diff. Marker-on-every-outcome (cap-hit → `cap-deferred`, report-only →
+      `seen-noop`, latch → `deferred`) lets the crosscheck distinguish loud-known from silently-broken.
+      Also surfaced: the daily cap is easy to exhaust during a genuine single-incident storm (one OOM
+      cascade = many pod fps) — the cap should key off INCIDENT (route+root) not raw fp count, or the
+      storm floods the budget and starves unrelated alerts. Root cause of THIS storm fixed (FU-112b).
       Relates FU-088 (archived), FU-109, FU-103 (archived).
 
 - [ ] **FU-114** — **Fixer context is three layers, not one: environment card (platform) +

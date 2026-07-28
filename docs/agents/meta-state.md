@@ -12,8 +12,12 @@ before trusting AgentQueueStalled)._
 - **🔴 SESSION HANDOFF (meta-14, 2026-07-28 ~14:00Z — written at 98% context; a fresh session
   resumes HERE).** WORLD: sleep coordinator RE-ENABLED (sleep-iac#38, CR enabled=true); oracle +
   platform coordinators + the two global reflexes STILL paused (from the earlier "pause the world").
-  wk-metal-03 CORDONED (kata block-device broke there under OOM). All watches/monitors DIE with the
-  session — re-arm per the meta-coordinate skill.
+  **wk-metal-03 UNCORDONED 2026-07-28 (FU-112b landed — see item 1).** All watches/monitors DIE with
+  the session — re-arm per the meta-coordinate skill.
+  **➤ meta-15 (fresh session, 2026-07-28) PROGRESS: item 1 (FU-112b Talos kata reservation) DONE +
+  verified + committed (4a9e9a9); wk-metal-03 back in service; stale OOM alerts homelab#68/#69 closed.
+  Remaining = items 2 (#48/FU-116 kata+dind STORAGE fragility — the real docker-ride blocker, needs
+  operator direction) + 3 (Phase 4, do after #48). World still paused otherwise.**
   SHIPPED THIS SESSION (all on master + deployed): **FU-114** (fixer 3-layer context: launcher env
   card from claim knobs + unify `--recipe` onto goose + `task/*` recipe selection + `.agents/build.yaml`
   + the #67 kind-mirror lesson) — homelab#60/#61 + sleep-tracking#70 merged; **FU-115** (red merge-path
@@ -22,7 +26,15 @@ before trusting AgentQueueStalled)._
   fired → `ci-red` dispatched build.yaml → deepseek RAN `docker info`+read mirrors (the behavior change,
   vs r3's blind give-up). FUs filed: FU-114, FU-115, FU-116 (kata storage fragility).
   IN-FLIGHT / NEXT (in priority order):
-  1. **FU-112(b) — the OOM-posture fix, HALF DONE.** #63-66 (homelab, closed) were ONE OOM cascade:
+  1. **✅ FU-112(b) DONE (meta-15, 2026-07-28, master 4a9e9a9).** Talos kubelet reservation on the 3
+     kata nodes: systemReserved.memory 384→512Mi, kubeReserved.memory 0→256Mi,
+     evictionHard.memory.available 100→512Mi (maps written FULL — the merge kept cpu/pid/ephemeral +
+     disk thresholds; verified live all 3). Allocatable ~7.4→6.2-6.36GiB, a ~5.1Gi ride fits
+     wk-metal-03 (free 5264Mi ≥ 5120Mi); cilium=system-node-critical + longhorn=longhorn-critical are
+     eviction-exempt. wk-metal-03 uncordoned; #68/#69 closed; residual = engine-image DS has no
+     priorityClass (minor, non-cascading). Burstable requests + ContainerMemoryNearLimit alert kept.
+     _Historical detail below (the pre-execution plan):_
+  1b. **FU-112(b) — the OOM-posture fix, HALF DONE.** #63-66 (homelab, closed) were ONE OOM cascade:
      the r4 kata ride pushed wk-metal-03 into memory pressure → OOMController killed the BestEffort
      cilium/longhorn DaemonSets → broke the block-device attach (= FU-116a root cause). APPLIED
      (tofu, master): cilium-agent + longhorn-manager/-driver got memory requests (512/512/256Mi) +
