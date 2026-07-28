@@ -34,6 +34,8 @@ spec:
             # (safely parallel via the reviewer-pod idempotency guard). Empty = disabled.
             - name: REVIEW_WEBHOOK_URL
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/review"
+            - name: COORDINATE_WEBHOOK_URL  # FU-115 red edge-trigger: /coordinate doorbell on CI-red armed agent PRs
+              value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate"
           ports:
             - name: http-metrics
               containerPort: 9504
