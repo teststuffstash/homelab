@@ -46,6 +46,17 @@ before trusting AgentQueueStalled)._
      — worth checking whether the ci-red-stale/fix-round dispatch preserves fixer.docker=true, or
      deepseek just gave up (weak model). If capability is dropped, a docker-gated CI failure is
      UNFIXABLE by the fix-round path as configured.
+  FU-114 3-LAYER BUILD (2026-07-28, world still paused — PRs open, NOT merged, offline-verified only):
+  - L1+L3 = **homelab#61** (`fu-114-fixer-context-l1`): render_env_card() (docker+verify/egress/round/
+    write-scope from claim knobs) spliced into the recipe at {{PLATFORM_ENV_CARD}} marker (else after
+    `instructions: |`, else WARN — never FATAL); unify `--recipe` onto goose (closes the ADR-094 goose
+    gap); L3 launcher task/<class>→.agents/<class>.yaml selection; task/{fix,build} in composition
+    $platformLabels. NO auto-merge (untested-E2E core machinery — the goose `--recipe` path esp.).
+  - L2 = **sleep-tracking#70**: `.agents/build.yaml` (build-task brief) + fix.yaml marker + de-misled
+    "no-real-data sandbox". Both recipes valid YAML (yq), one marker each.
+  - RELABEL #48 → task/build = the FINAL step, AFTER #61 merges + ArgoCD renders task/build authoritative
+    (doing it before = reconciled away). NEEDS: review both PRs → controlled goose dispatch to verify the
+    --recipe path → merge → relabel #48 → (un-pause sleep to run #48 on a capable model).
   4. deepseek-v4-flash is too weak for this task (3 rounds, gave up as "infrastructure not a bug").
      When resuming #48, escalate the worker model (claude/haiku, the planned post-#48 primary, or
      sonnet) — the loop can't self-heal this with the current chain (fallbacks only swap on STRIKES,
