@@ -21,7 +21,13 @@ meant to avoid. Meta-15's full arc is in `agents/coordinator/TICK-LOG.md`.)
 
 - **#48 LANDED** (PR#72 merged, CI green — the system-test gate: k3d + MinIO + ingester + Grafana,
   graph-read assertion). This unblocked its dependents.
-- **#71 (k3d→kind migration) — r1 WEDGED + deleted 2026-07-28 ~21:22.** r1 hung ~3.5h in an
+- **#71 (k3d→kind) — UNBLOCKED 2026-07-29 ~03:14.** The real blocker was FU-118 (offline rides can't
+  `devbox add` → placeholder lock poisons every later round; r4/r5 died at bootstrap). Meta-coordinator
+  pre-provisioned `kind@latest` online → **PR#75 MERGED 01:28** (approved). **r7 booted off post-merge
+  master, `devbox install` SUCCEEDED, agent running the migration** (kind now in the toolchain). Let it
+  run; loop watch surfaces its PR. When it lands it **closes #67**; verify it dropped `k3d@latest` +
+  added `e2e-kind.sh` + `kind_mirror` hosts.toml. #42 waits behind it on the sole WIP slot. HISTORY:
+  r1 WEDGED (network-timeout loop) + deleted 20:22; r1 hung ~3.5h in an
   unrecoverable claude-code network-timeout loop ("Request timed out / call final_output NOW" every
   ~2min since 21:00), Running-but-not-progressing → the coordinator's `phase=Running` filter read it
   as a live worker and DEFERRED (liveness≠progress trap). Worse: the **FU-042 1-worker WIP limit**
