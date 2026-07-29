@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-119**.
+  Next free id: **FU-120**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -409,6 +409,21 @@ _Last updated: 2026-07-16._
       loudly with this guidance instead of the opaque `path-info` failure; (b) give rides `devbox-search`
       reach via the package proxies so an add resolves; or (c) a documented "add tools on master, online"
       rule surfaced to authors. Relates FU-114/FU-117 (env card / context), FU-105 (egress dial).
+
+- [ ] **FU-119** — **`dockerRepos` rides get the daemon socket but no `docker` CLI — so kind/k3d
+      can't run in-ride and workers can't locally verify a docker-backed gate.** A `dockerRepos`-flagged
+      kata ride wires `$DOCKER_HOST` (dind native sidecar, `ServerVersion` reachable) but there is **no
+      `docker` client binary anywhere in the pod** (`command -v docker` → not found). `kind` (and the old
+      `k3d`) shell out to the `docker` CLI, not the raw API, so `devbox run test-integration` cannot stand
+      up a cluster in-ride. Surfaced by #71 (k3d→kind): every round hit this same wall regardless of model
+      → `agent/blocked`. NOT a blocker for the migration itself — the `homelab-ephemeral` ARC runner DOES
+      have a working docker CLI (the gate builds a real k3d cluster there), so CI is the real check and #71
+      proceeds on that basis. This FU is the *local-verification* gap. THE FIX (choose): (a) add
+      `docker-client` (nixpkgs, CLI-only, no daemon) to agent-base so EVERY `dockerRepos` ride gets a
+      client alongside the socket — platform fix, covers all stacks; or (b) per-repo: pre-provision
+      `docker-client` in the stack's `devbox.json` (the FU-118 pre-provision-online pattern). (a) preferred
+      (fix the class). Relates FU-116 (kata docker-ride *storage*, distinct), FU-118 (pre-provision online),
+      ADR-094 (launcher dispatch / `dockerRepos` wiring).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
