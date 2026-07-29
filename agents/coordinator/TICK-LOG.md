@@ -1477,3 +1477,42 @@ TWO operator asks:
    JSON — a dangling datasource var (hard "not found", all panels) vs a query-contract violation
    (connects but yields no series); triage the datasource binding FIRST, it's the dominant one.
 Watches re-armed (loop bn59ctrq2, heartbeat bxdzr3d88). Crosscheck clean ("belts healthy").
+
+### 2026-07-29 — meta-16 (cont.): the bounded drain — a FALSE agent/done caught by its own (non-blocking) gate
+Fresh bootstrap; mid-session the operator set a **BOUNDED RUN**: stop after 16h (≈21:05Z) or when the
+dispatchable queue drains, then **close cleanly** (no `agent/queued`/`in-progress` left, no running
+workers, coordinators+reflexes suspended). Reframed the role from keep-alive to drain-and-wind-down.
+The dispatchable queue was the sleep stack only: #71 + #43 (+ a starved snore-recorder #12 surfaced
+later); oracle operator-paced, platform empty.
+**THE FIND — #42 was a FALSE `agent/done`.** The handoff said #42 (dashboard frser contract) CLOSED,
+PR#76 merged. But a `require-green=true` dispatch of the system-test gate on master FAILED: the gate's
+POSITIVE CONTROL (panel SQL via `queryType:"table"`) returns the ~511-min value, but the panel AS
+DEFINED still errored `can not convert to wide series … got not series`. PR#76 half-applied the fix —
+3 of 6 panels got `queryType:"table"`, 3 kept `"time series"`, which frser can't serve for the wide SQL
+(time + named value columns). The gate only asserts "Total Sleep (h)" (one of the broken 3) so it stayed
+RED — **and PR#76 merged + auto-closed #42 anyway because the gate is non-blocking (`require-green` off).**
+That is EXACTLY the false-done #43 exists to prevent, caught live. Reopened #42, refixed operator-lane
+(PR#78, all 6 → `table`), verified GREEN by dispatch, admin-merged. LESSON: a non-blocking quality gate
++ machine auto-close = false-dones sail through as `agent/done`; verify a "done" issue's GATE, not its
+label. Triage the datasource-binding cause of "all panels blank" FIRST (that's #77, dominant) — the
+queryType cause (#42) is secondary and only errors the wide-series panels once the datasource resolves.
+**#43 was mis-dispatched to a WORKER.** Its only real remaining work = force `REQUIRE_GREEN` true on the
+`pull_request` trigger (it was `inputs.require-green||'false'` = always false there) — a
+`.github/workflows/*` edit the **worker git token is forbidden to push**. A free-model worker was
+strike-looping on an impossible task. Took it operator-lane (PR#79, `github.event_name=='pull_request'`
+→ 'true'); its own now-enforced gate self-proved green; admin-merged, closed #43. LESSON: an issue whose
+only fix is a `.github/workflows/` change can NEVER be a worker fix (token lacks `workflows`) — the
+coordinator can't detect this and will burn rounds; route such issues to the operator lane at triage.
+Flagged: mark `integration / system-test` a REQUIRED check in branch protection (repo-admin) to make the
+now-green gate a hard merge gate.
+**#71 (k3d→kind) UNBLOCKED — CI is the check.** r7's `agent/blocked` was the real structural find: the
+`dockerRepos` ride pods wire `$DOCKER_HOST` but ship no `docker` CLI, and kind/k3d shell out to the CLI →
+no in-ride cluster, no local verify. But the gate runs on the `homelab-ephemeral` ARC runner, which HAS
+a working docker CLI (it builds a real k3d cluster) → CI is the real check (coordinator option 3), and
+#43's now-enforced gate means the kind PR is green-or-blocked. Filed **FU-119** (add `docker-client` to
+agent-base so every docker-mode ride gets a client — the class fix). Unblocked → `agent/queued`.
+**Misc:** snore-recorder #12 (`agent/queued`, LED-on-backstop enhancement) had sat 2 days un-dispatched —
+NOT un-laned (coordinate-sleep covers snore-recorder) but STARVED behind continuous sleep-tracking work
+(FU-042 per-stack 1-WIP). Drains after #71. Two orphan monitors from the prior session were still ALIVE
+(heartbeat bxdzr3d88, loop bn59ctrq2) and fired into this session — stopped on sight (the hygiene rule
+holds: orphans survive /clear-continuations, verify the id against your own arm-return).
