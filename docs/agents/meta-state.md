@@ -65,6 +65,12 @@ THE DRAIN CHAIN (meta-16 cont., 2026-07-29) — sleep stack shares ONE WIP slot 
   clone, service context is author/coordinator-injected). Just keep noting sightings; don't refactor yet.
 - **Dep-gate fragility**: a markdown-bullet `- Depends-on:` slips the `^[ \t]*depends-on:` scan regex
   (#71 ran early on it). Write Depends-on lines UNBULLETED until FU-111 (native `blockedBy`) lands.
+- **CORRECTION (2026-07-29): worker git tokens CAN push `.github/workflows/*`.** The homelab-agents App
+  has `workflows:write` (operator granted it — TICK-LOG ~1007/1233), PROVEN live: PR#80 (a worker ride)
+  pushed an `integration.yaml` change. So the role note "workflows changes = operator-lane, tokens forbid
+  them" is STALE — workflow-only issues ARE worker-doable; don't reflexively pull them operator-lane.
+  (Taking #43 operator-lane was still a fine call — the require-green expression is subtle + false-done
+  risk — just not forced by a token limit.) Branch-protection RULE edits remain repo-admin/tofu, though.
 - **FU-106 iac-lane build** parked (design settled: `docs/agents/iac-lane.md`; build list IAC-G01..G06,
   rung-0 sleep PostSync smoke first). **FU-080** (agentstack rewrite) may be another session's lane —
   observe agentstack-shaped errors, don't fix from here; flag the operator only on unnoticed real damage.

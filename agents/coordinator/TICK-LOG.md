@@ -1498,13 +1498,19 @@ label. Triage the datasource-binding cause of "all panels blank" FIRST (that's #
 queryType cause (#42) is secondary and only errors the wide-series panels once the datasource resolves.
 **#43 was mis-dispatched to a WORKER.** Its only real remaining work = force `REQUIRE_GREEN` true on the
 `pull_request` trigger (it was `inputs.require-green||'false'` = always false there) — a
-`.github/workflows/*` edit the **worker git token is forbidden to push**. A free-model worker was
-strike-looping on an impossible task. Took it operator-lane (PR#79, `github.event_name=='pull_request'`
-→ 'true'); its own now-enforced gate self-proved green; admin-merged, closed #43. LESSON: an issue whose
-only fix is a `.github/workflows/` change can NEVER be a worker fix (token lacks `workflows`) — the
-coordinator can't detect this and will burn rounds; route such issues to the operator lane at triage.
-Flagged: mark `integration / system-test` a REQUIRED check in branch protection (repo-admin) to make the
-now-green gate a hard merge gate.
+`.github/workflows/*` edit which I BELIEVED (from the stale role note) the worker token couldn't push.
+Took it operator-lane (PR#79, `github.event_name=='pull_request'` → 'true'); its own now-enforced gate
+self-proved green; admin-merged, closed #43. ⚠ **CORRECTION (proven later by #71's PR#80): worker tokens
+CAN push `.github/workflows/*`** — the homelab-agents App has `workflows:write` (operator granted it,
+TICK-LOG ~1007/1233), and PR#80 (a worker ride) pushed an `integration.yaml` change cleanly. So the role
+note "workflows = operator-lane, tokens forbid them" is STALE; a workflow-only issue IS worker-doable —
+don't reflexively pull it operator-lane. (Taking #43 operator-lane was still fine: the require-green
+expression is subtle + I'd just caught the #42 false-done, so verifying it myself was warranted — just
+not FORCED by a permission limit. Branch-protection RULE edits DO stay repo-admin/tofu.) The real reason
+the #43 free-model rounds struck was the STALE ISSUE TEXT (they read "#42/#48 already landed" and stopped),
+not a permission wall. Flagged: mark `integration / system-test` a REQUIRED check in branch protection
+(repo-admin/tofu) so the now-green gate HARD-blocks merge — until then it enforces (fails loud) but a
+non-required red check doesn't stop auto-merge.
 **#71 (k3d→kind) UNBLOCKED — CI is the check.** r7's `agent/blocked` was the real structural find: the
 `dockerRepos` ride pods wire `$DOCKER_HOST` but ship no `docker` CLI, and kind/k3d shell out to the CLI →
 no in-ride cluster, no local verify. But the gate runs on the `homelab-ephemeral` ARC runner, which HAS
@@ -1516,3 +1522,17 @@ NOT un-laned (coordinate-sleep covers snore-recorder) but STARVED behind continu
 (FU-042 per-stack 1-WIP). Drains after #71. Two orphan monitors from the prior session were still ALIVE
 (heartbeat bxdzr3d88, loop bn59ctrq2) and fired into this session — stopped on sight (the hygiene rule
 holds: orphans survive /clear-continuations, verify the id against your own arm-return).
+**DRAIN OUTCOME (2026-07-29 ~07:1xZ):** all four sleep-tracking items LANDED — #42 (PR#78), #43 (PR#79),
+#71+#67 (PR#80). #71's kind migration: r8 (tencent/hy3) built it and opened PR#80; the ENFORCED gate
+(#43 paying off <2h after landing) caught it RED — but NOT a kind/runner problem: `kind create` stood the
+cluster up fine (node image, control-plane Ready), then a deploy guard grepped `kind-${CLUSTER}-control-plane`
+against `kubectl get nodes` — kind prefixes the *context* with `kind-`, NOT the *node* (node =
+`${CLUSTER}-control-plane`) → false "refusing to deploy", exit 2. One-line operator fix (drop `kind-`),
+pushed to the ride's branch, gate GREEN end-to-end (kind+MinIO+ingester+Grafana+frser, `/api/ds/query`
+reads 511.2), admin-merged. LESSONS: (a) the enforced gate immediately earned itself — it blocked a
+migration that WOULD have merged red+false-done under the old warn-only gate (exactly the #42 pattern);
+(b) "gate exit=2 infra" ≠ "environment broken" — read WHERE it died (kind succeeded; a script guard
+failed); (c) kind's context name (`kind-X`) vs node name (`X-control-plane`) is a real footgun when
+porting k3d guards; (d) admin-merging out-of-band leaves the issue's `agent/in-progress` label unflipped
+(the machine `merged-closeout` watches the loop's own merges) — verify/flip on closed issues by hand for
+these. Remaining sleep-stack drain item: snore-recorder #12 (starved behind, now has the freed WIP slot).
