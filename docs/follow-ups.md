@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-118**.
+  Next free id: **FU-119**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -392,6 +392,23 @@ _Last updated: 2026-07-16._
       static block — the env card's sibling — or a recipe "read CLAUDE.md first" opener) from TASK
       rules (the recipe). One source per concern, delivered to the roles that need it. Design home:
       docs/agents/roles.md / fixer-context.md. Relates FU-114 (env card), ADR-094 (launcher dispatch).
+
+- [ ] **FU-118** — **Offline rides can't `devbox add` a NEW package — they write a placeholder lock
+      that poisons every later round.** Agent rides run offline (local nix substituter + package
+      proxies only, no `devbox-search` reach), so a worker `devbox add <pkg>` cannot resolve the real
+      store path and writes `/nix/store/placeholder-<system>-<pkg>` into `devbox.lock`. That commits
+      fine but hard-fails `devbox install` (`path-info --offline` on a nonexistent placeholder) on the
+      NEXT round's pod bootstrap — before the agent runs, so the worker can't self-recover. Concrete
+      cost: #71 (k3d→kind) — r2 added `kind` offline → placeholder → r4/r5 died identically at boot;
+      the coordinator correctly scored them infra-strikes (not logic rounds) and re-dispatched fresh
+      off master, but a fresh round hits the SAME wall the moment it re-adds kind. INTERIM (done
+      2026-07-29): meta-coordinator pre-provisioned `kind@latest` online (jail) → sleep-tracking PR#75
+      (real path, matches oracle-fleet). PATTERN: a new ride tool must be resolved ONLINE and landed on
+      the stack's master FIRST (pre-provision), then the migration USES it — never a worker `devbox
+      add` mid-ride. THE FIX (choose): (a) a launcher/CI pre-flight that rejects a placeholder lock
+      loudly with this guidance instead of the opaque `path-info` failure; (b) give rides `devbox-search`
+      reach via the package proxies so an add resolves; or (c) a documented "add tools on master, online"
+      rule surfaced to authors. Relates FU-114/FU-117 (env card / context), FU-105 (egress dial).
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
