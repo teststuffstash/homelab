@@ -67,8 +67,12 @@ spec:
       # Crossplane MUTATES the claim it reconciles: bookkeeping into the spec (compositionRef/
       # resourceRefs under spec.crossplane), a composite label, and a finalizer — without ignoring
       # all three the AgentStack diffs OutOfSync forever and selfHeal churns against the injector.
-      # (Server-side schema DEFAULTS inside spec.repos[] can't be pointer-ignored — claims must
-      # write defaulted array fields explicitly, e.g. extraFQDNs: [].)
+      # (Server-side schema DEFAULTS can't be pointer-ignored — a claim must write EVERY defaulted
+      # field it relies on explicitly, whatever the type: arrays (extraFQDNs: []), enums/strings
+      # (egress.profile: none) AND bools (reviewer.enabled, docker, claudeTier). Omit one and the
+      # API server stamps the default into the stored object → the app is permanently OutOfSync.
+      # Enforced by `devbox run stack-lint` REG-03. Observed live: extraFQDNs 2026-07-16,
+      # reviewer.enabled + egress.profile 2026-07-31.)
       ignoreDifferences:
         - group: platform.teststuff.net
           kind: AgentStack

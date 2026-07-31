@@ -94,6 +94,27 @@ lint_stack() { # <name>
     say PROBE-FAILED REG-02 "$stack" "cluster unreachable — claim state unknown"
   fi
 
+  # REG-04 — the AgentStack's ArgoCD app is Synced. An OutOfSync app almost always means the claim
+  # OMITS a server-default field the API server stamps into the stored object (the claim must
+  # declare EVERY defaulted field it relies on — arrays, enums AND bools; see agent-fixer.yaml's
+  # ignoreDifferences note). The app name is carried on the claim's own tracking-id annotation.
+  if [ "$KUBE_OK" = 1 ]; then
+    local app appsync
+    app=$(timeout 10 kubectl get agentstack "$stack" -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}' 2>/dev/null | cut -d: -f1)
+    if [ -z "$app" ]; then
+      say PROBE-FAILED REG-04 "$stack" "no ArgoCD tracking-id on the claim — managing app unknown"
+    else
+      appsync=$(timeout 10 kubectl -n argocd get application "$app" -o jsonpath='{.status.sync.status}' 2>/dev/null)
+      case "$appsync" in
+        Synced) say OK REG-04 "$stack" "ArgoCD app $app Synced" ;;
+        "")     say PROBE-FAILED REG-04 "$stack" "ArgoCD app $app not found/readable" ;;
+        *)      say FAIL REG-04 "$stack" "ArgoCD app $app is $appsync — claim likely omits a server-default field (declare it explicitly; see agent-fixer.yaml)" ;;
+      esac
+    fi
+  else
+    say PROBE-FAILED REG-04 "$stack" "cluster unreachable — app sync unknown"
+  fi
+
   local repo res
   for repo in $repos; do
     res=$(printf '%s' "$repo" | tr '-' '_')
