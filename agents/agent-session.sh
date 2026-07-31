@@ -244,6 +244,20 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
       echo "PREFLIGHT REFUSED: ${PF_LIVE} agent pod(s) Running in ns ${NS} ≥ WIP limit ${PF_LIMIT} (FU-042; AGENT_WIP_LIMIT raises it for multi-track dispatch)." >&2
       exit 3
     fi
+    # (d) FU-118: an offline `devbox add` writes a `placeholder-<system>-<pkg>` store path into
+    # devbox.lock that commits fine but hard-fails the NEXT round's bootstrap `devbox install`
+    # (`path-info --offline` on a nonexistent path) BEFORE the agent runs — an opaque, unrecoverable
+    # boot crash the worker can't self-recover from (#71 r4/r5 died identically here). A poisoned
+    # lock on the branch we're about to clone means the round is dead on arrival — refuse loudly
+    # with the fix instead of dispatching into the crash. THE FIX IS NEVER A MID-RIDE `devbox add`:
+    # resolve the tool ONLINE on the stack's master first (jail/CI), commit the real lock, then the
+    # ride USES it (the pre-provision pattern — sleep-tracking PR#75 kind, PR#81 docker-client).
+    if command -v gh >/dev/null 2>&1 \
+       && gh api "repos/${PF_SLUG}/contents/devbox.lock?ref=${WORK_BRANCH:-$BASE_REF}" \
+            -H "Accept: application/vnd.github.raw" 2>/dev/null | grep -q 'placeholder-'; then
+      echo "PREFLIGHT REFUSED: devbox.lock on ${PF_SLUG}@${WORK_BRANCH:-$BASE_REF} carries a placeholder store path — an offline \`devbox add\` poisoned it, and the bootstrap \`devbox install\` will boot-crash this round before the agent runs (FU-118). Resolve the package ONLINE on master first (jail/CI: \`devbox add <pkg>@<ver>\` → commit the real devbox.{json,lock}), THEN dispatch. Never \`devbox add\` mid-ride." >&2
+      exit 3
+    fi
   ;; esac
   # (c) session-key freshness: post openrouter-operator#6 the CR surfaces the LIVE key expiry in
   # .status.openrouter.expires_at (the PATCH re-mint bug killed a healthy run at its STALE deadline —

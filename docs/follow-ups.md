@@ -405,10 +405,20 @@ _Last updated: 2026-07-16._
       2026-07-29): meta-coordinator pre-provisioned `kind@latest` online (jail) → sleep-tracking PR#75
       (real path, matches oracle-fleet). PATTERN: a new ride tool must be resolved ONLINE and landed on
       the stack's master FIRST (pre-provision), then the migration USES it — never a worker `devbox
-      add` mid-ride. THE FIX (choose): (a) a launcher/CI pre-flight that rejects a placeholder lock
-      loudly with this guidance instead of the opaque `path-info` failure; (b) give rides `devbox-search`
-      reach via the package proxies so an add resolves; or (c) a documented "add tools on master, online"
-      rule surfaced to authors. Relates FU-114/FU-117 (env card / context), FU-105 (egress dial).
+      add` mid-ride. THE FIX — DECIDED 2026-07-31, (a)+(b) not (c)-alone: **(a) DONE** — a launcher
+      pre-flight (agent-session.sh guard (d)) fetches the target branch's `devbox.lock` and REFUSES
+      dispatch (exit 3, with the fix guidance) if it carries a `placeholder-` store path, instead of
+      dispatching into the opaque bootstrap crash (verified: clean master → no refuse; synthetic
+      placeholder → caught). **(b) TO BUILD** — a `devbox-search` caching proxy: nginx `proxy_cache`
+      in front of search.devbox.sh (SAME shape as argocd/resources/nix-cache/), `proxy_cache_valid
+      200 6h` + `proxy_cache_lock on` + `proxy_cache_use_stale` + `limit_req ~2r/s` (freshness is
+      low-stakes; the rate-limit + lock are the haywire guard). The resolver RETURNS the store path
+      (devbox.lock records it), so rides need ONLY this one endpoint — the LAN nix cache already
+      serves the binary; no GitHub/flake reach. Wire via `DEVBOX_SEARCH_HOST` (VERIFY that override
+      exists on devbox 0.17.5; else an Unbound override for search.devbox.sh → the proxy VIP). (c)
+      the pre-provision-on-master doc rule stays only as the INTERIM until (b) lands. Relates
+      FU-114/FU-117 (env card / context), FU-105 (egress dial), ADR-083/ADR-091 (nix-cache/OCI-mirror
+      precedent).
 
 - [ ] **FU-120** — **`agent-finalize` crashes on `env: python3: not found` → NO automatic strike /
       salvage / router `/report` bookkeeping runs.** On #71-r2 (2026-07-28) the launcher's finalize step
