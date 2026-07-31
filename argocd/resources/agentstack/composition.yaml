@@ -814,6 +814,7 @@ spec:
                     - 192.168.40.20/32
                     - 192.168.40.21/32
                     - 192.168.40.23/32 # nix-cache VIP (FU-073e) — kata rides install via it
+                    - 192.168.40.22/32 # devbox-search VIP (FU-118b) — kata rides `devbox add` via it
                   toPorts:
                     - ports:
                         - { port: "80", protocol: TCP }
@@ -824,6 +825,9 @@ spec:
                 - toEndpoints: # devbox installs via the in-cluster pull-through cache (ADR-083)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: nix-cache
+                - toEndpoints: # `devbox add` resolves via the search proxy (FU-118b)
+                    - matchLabels:
+                        k8s:io.kubernetes.pod.namespace: devbox-search
                 - toEndpoints: # transcript uploads (agent-finalize)
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: garage

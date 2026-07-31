@@ -1,0 +1,54 @@
+# nginx as a caching proxy for the Devbox package-search API (https://search.devbox.sh). FU-118(b):
+# agent rides run offline (nix substituter + package proxies only), so a worker `devbox add <pkg>`
+# cannot reach the resolver → it writes a `placeholder-<sys>-<pkg>` store path into devbox.lock that
+# boot-crashes the NEXT round's `devbox install`. Rides point `DEVBOX_SEARCH_HOST` at this proxy
+# (plain HTTP → no TLS-MITM; the proxy terminates TLS to the upstream), so `devbox add` resolves
+# in-band, WAN-free. The resolver RETURNS the store path (recorded in devbox.lock), so this ONE
+# endpoint closes the loop — the LAN nix cache (argocd/resources/nix-cache/) already serves the binary.
+# Same nginx pull-through shape as nix-cache; tuned for a tiny JSON resolver, not big nars.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devbox-search-nginx
+  namespace: devbox-search
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    events { worker_connections 1024; }
+    http {
+      # Resolver responses are tiny JSON → small cache. TTL is deliberately short-ish: `@latest`
+      # resolutions go at most ~6h stale, which is a non-issue for build tooling (staler = MORE
+      # reproducible), and repeat/identical adds within the window are instant.
+      proxy_cache_path /var/cache/nginx/devboxsearch levels=1:2 keys_zone=devboxsearch:10m
+                       max_size=512m inactive=7d use_temp_path=off;
+      proxy_temp_path /tmp/proxy_temp;
+      # Haywire guard: a looping `devbox add` (goose retry-storm class) can't spam the WAN. The
+      # rate-limit caps novel queries; proxy_cache_lock collapses identical ones. Per-ride (pod IP).
+      limit_req_zone $binary_remote_addr zone=devsearch:1m rate=2r/s;
+      access_log off;
+      server {
+        listen 8080;
+        # readiness — cheap, no upstream dependency.
+        location = /healthz { return 200 "ok\n"; }
+        location / {
+          limit_req zone=devsearch burst=10 nodelay;
+          proxy_pass https://search.devbox.sh;         # resolved via CoreDNS (pod resolv.conf) at start
+          proxy_set_header Host search.devbox.sh;
+          proxy_ssl_server_name on;
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          proxy_cache devboxsearch;
+          proxy_cache_key "$request_uri";
+          proxy_cache_valid 200 6h;                    # resolutions; @latest at most ~6h stale (fine)
+          proxy_cache_valid 404 1m;                    # a probe for a bad name shouldn't pin a 404
+          # NEVER cache 429/5xx as fresh (would pin an upstream error for everyone); instead serve
+          # the last good resolution when the upstream rate-limits US or is down.
+          proxy_cache_lock on;                         # tight-loop's identical queries → ONE WAN req
+          proxy_cache_revalidate on;
+          proxy_cache_use_stale error timeout updating http_429 http_500 http_502 http_503 http_504;
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+      }
+    }

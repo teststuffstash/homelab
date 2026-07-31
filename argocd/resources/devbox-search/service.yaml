@@ -1,0 +1,18 @@
+# In-cluster + LAN-reachable at http://192.168.40.22 (BGP VIP — kata-reachable like the other package
+# proxies). Rides set DEVBOX_SEARCH_HOST=http://192.168.40.22 (the launcher passes it; ip-plan.md).
+# Slots into the package-proxy cluster: .20 docker.io, .21 ghcr, .22 devbox-search, .23 nix-cache.
+apiVersion: v1
+kind: Service
+metadata:
+  name: devbox-search
+  namespace: devbox-search
+  labels:
+    app: devbox-search
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.22"
+spec:
+  type: LoadBalancer
+  selector: { app: devbox-search }
+  ports:
+    - { name: http, port: 80, targetPort: 8080 }

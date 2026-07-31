@@ -1,0 +1,13 @@
+# Small: resolver responses are tiny JSON (unlike nix-cache's nars). 1Gi is plenty; LRU evicts at
+# the configmap's max_size=512m long before this fills.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: devbox-search-data
+  namespace: devbox-search
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 1Gi

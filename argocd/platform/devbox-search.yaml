@@ -1,0 +1,27 @@
+# FU-118(b): the Devbox package-search caching proxy (argocd/resources/devbox-search/). Lets agent
+# rides `devbox add` in-band via DEVBOX_SEARCH_HOST instead of writing a placeholder lock that
+# boot-crashes the next round. Same wave/shape as nix-cache (a package proxy the rides depend on).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devbox-search
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/devbox-search
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: devbox-search
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devbox-search
+  namespace: devbox-search
+  labels: { app: devbox-search }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }            # RWO volume — don't run two pods at once
+  selector:
+    matchLabels: { app: devbox-search }
+  template:
+    metadata:
+      labels: { app: devbox-search }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101                     # nginx-unprivileged uid
+        runAsGroup: 101
+        fsGroup: 101                       # so the cache PVC is writable
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - { name: http, containerPort: 8080 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true }
+            - { name: cache,  mountPath: /var/cache/nginx }
+            - { name: tmp,    mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "50m",  memory: "32Mi" }
+            limits:   { cpu: "1",    memory: "128Mi" }   # a JSON proxy, not big-nar territory
+      volumes:
+        - name: config
+          configMap: { name: devbox-search-nginx }
+        - name: cache
+          persistentVolumeClaim: { claimName: devbox-search-data }
+        - name: tmp
+          emptyDir: {}
