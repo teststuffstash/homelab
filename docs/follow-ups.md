@@ -712,6 +712,28 @@ _Last updated: 2026-07-16._
       **Operator 2026-07-24: leg (c) NOT YET — rollout continues the old-fashioned way (human
       goal decomposition) until the current arc settles; revisit when a real goal candidate
       appears.**
+      **Sprout-index extension (operator synthesis 2026-07-31, from the sleep harvest run — THIS is
+      arguably the "real goal candidate" leg (c) was waiting for):** goal-budget was missing its
+      ACCOUNTING SUBSTRATE — a *sprout-index*, the lineage DAG (issue → PR → harvested child, with
+      depth + breadth). The harvest tree already IS an unbudgeted goal decomposition; the 2026-07-31
+      run showed the gap live — with no depth-awareness the reviewer harvests indiscriminately (3 of 5
+      sprouts were self-acknowledged noise: #93/#101/#102) AND *defers a same-class-as-the-fix defect it
+      should have completed in-PR* (#96 — the 14th band column the #57 COALESCE fix missed). Fix, in
+      rungs: (1) STRUCTURE the lineage as GitHub **sub-issues** (native parent/child → the tree UI +
+      graph API for free; today provenance is unparseable prose "Harvested from PR #X (issue #Y)").
+      (2) The harvest/reviewer gate then reads depth + remaining budget: shallow + budget → harvest a
+      real deferral; deep / budget-low → fix-in-PR (collapse the tail); budget-blown OR N levels without
+      converging → the TERMINAL. (3) **The terminal is a RETRO CHECKPOINT, not a reflex revert**
+      (operator): it means "a good place to STOP and rethink" — the goal was probably sound but
+      unexpected complexity arose, so a HUMAN retro decides how to go forward (re-scope / collapse-in-PR
+      / and only in the extreme, a lineage-scoped revert via FU-044 machinery). Surface the sprout-index
+      + a **sprout-RATE gauge** via the github-exporter (one poller) → Grafana node-graph + convergence
+      trend (rate > 1 per run = diverging; the health KPI). **Down-payment SHIPPED 2026-07-31**
+      (prompt-only, no index yet — proving the #96/#92 mis-sorts are fixable from the diff alone):
+      `agents/reviewer-session.sh` gained a *complete-the-fix* narrow-blocking case + a *HARVEST BAR*
+      (inert/not-a-gap/wont-fix/style stay comments, never Follow-ups). NEXT RUNG = the structured
+      sub-issue lineage (the index everything else keys off). Relates FU-044 (revert machinery), the
+      github-exporter sprout metric, the agent-observability stack.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
