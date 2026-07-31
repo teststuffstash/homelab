@@ -1536,3 +1536,54 @@ failed); (c) kind's context name (`kind-X`) vs node name (`X-control-plane`) is 
 porting k3d guards; (d) admin-merging out-of-band leaves the issue's `agent/in-progress` label unflipped
 (the machine `merged-closeout` watches the loop's own merges) — verify/flip on closed issues by hand for
 these. Remaining sleep-stack drain item: snore-recorder #12 (starved behind, now has the freed WIP slot).
+
+### 2026-07-31 — infra hardening (operator session): the #48/#71 postmortem → fixed, sleep ≈ oracle
+Not a dispatch loop — an operator+assistant deep-dive after meta-16, turning the #48/#71 friction into
+fixes (grounded in the router store + agent transcripts). **State for a FRESH session: `devbox run ci`
+AND `devbox run test-integration` now work both in-pod (rides) and in CI for sleep-tracking; sleep's
+agent-stack + CI config is ALIGNED with oracle-fleet.** No structural fixes outstanding.
+
+**Cat 1 — toolchain provisioning (the biggest hole):**
+- **FU-119 (docker CLI) DONE+ARCHIVED.** kind execs the `docker` binary (k3d used the socket via its Go
+  client — why #48's k3d ran in-ride but #71's kind hit `agent/blocked`). `docker-client` → sleep-tracking
+  devbox.json (PR#81); oracle-fleet already had it. Both docker stacks run the in-ride kind gate.
+- **FU-118 (offline `devbox add`) DONE+ARCHIVED.** (a) launcher pre-flight refuses a placeholder-poisoned
+  devbox.lock (agent-session.sh guard d); (b) the **devbox-search caching proxy** (argocd/resources/
+  devbox-search/, nginx proxy_cache of search.devbox.sh, BGP VIP **192.168.40.27**, `DEVBOX_SEARCH_HOST`).
+  VERIFIED: `devbox add ripgrep` through it → real store path, no placeholder. SERVICES.md row added.
+- **Option C — nix+devbox on the ci-runner VM.** Recreated ci-runner-01 (`tofu apply -replace`) with
+  nix+devbox baked in cloud-init (FU-015/ADR-082 parity). Sleep's integration gate moved off
+  homelab-ephemeral's kind-in-dind-in-ARC nesting → `[self-hosted, proxmox-vm]` (PR#82); oracle-fleet
+  dropped its hand-curled tool installs for `devbox run` (PR#164). Both devbox gates run on the robust VM.
+
+**Cat 2 — model/provider 4XX (ADR-096 Addendum 3):** router-store evidence (1753 provider_events over the
+saga window) — free-vs-paid is the WRONG axis (ling:free 97% ok vs laguna PAID 19%ok/81%-429); 142 401s,
+140 from one storming laguna:free ride. Specified the net-new leg: in-flight per-`(session,model)` 4XX
+**circuit-breaker** (proxy stops forwarding + emits circuit-open; the FU-021 storm-watchdog is the killer,
+threshold retune ~200→~10). Rejected "rewrite Nth 401→500" (goose ignores error class; 500 is retryable).
+Passive `provider_events` is the primary health substrate (it caught the 401s that `/report` MISSED — see
+FU-120). Builds under FU-095.
+
+**Cat 6 — finalize/liveness:** **FU-120** (finalize `python3: not found`) — original diagnosis WRONG:
+python IS baked in agent-base and on the CONTAINER PATH; finalize ran fine for r2's siblings r3/r6/r7/r8.
+r2-only auth-storm anomaly, cause UNCONFIRMED (pod gone). Belt: launcher pins the agent-base profile on the
+finalize PATH so bookkeeping can't be lost to any PATH weirdness. Interpreter ownership documented
+(agent-runtime#25: base scripts run on agent-base's python, NOT the project's — a stack pinning a different
+python only affects its own code). **FU-121** (liveness≠progress spurious redispatch — the r9 killed by
+hand at #71's close) — filed.
+
+**Cats 3/4/5:** cat 3 — the docker-in-ride is KEPT (it's the agent self-verify optimization, ADR-082, not
+dead weight); OOM fixed (FU-112 requests==limits); FU-116 (kata storage) open. cat 4 (#67 registry mirror)
+resolved via `kind_mirror`. cat 5 (context delivery) = FU-117, deliberately piling; this session added
+DEVBOX_SEARCH_HOST + docker-CLI-source to the env card.
+
+**Config alignment (sleep-tracking ≈ oracle-fleet):** coordinator+reviewer enabled, workerModel claude/
+haiku, coordinatorModel sonnet, docker-client + kind in devbox.json, docker gate on `proxmox-vm` via
+devbox, devbox-cache (FU-096), egress profile python + enforce. **Only difference: oracle-fleet's fixer has
+`argo.enabled: true`** (its ingestion DAG runs Argo Workflows in-ns) — sleep is CI-gate-based and doesn't
+need it. Intentional per-stack policy, NOT a gap.
+
+**sleep-iac housekeeping:** removed the goose-validate TTL×selfHeal recreation loop (PR#44); fixed the
+`agent-fixer-sleep-tracking` permanent OutOfSync by declaring server-default fields (`reviewer.enabled`,
+`egress.profile` — PR#45); enabled the per-stack reviewer (PR#46 — phasing out the global reflex). Added
+stack-lint **REG-04** (the AgentStack app must be Synced) to catch that drift class.
