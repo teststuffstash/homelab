@@ -5,6 +5,18 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
+## ⏹ STOPPED 2026-07-31 (~95% weekly subscription limit — operator: "no point pushing it")
+
+Meta-coordination halted at a CLEAN state: sleep drive **14/14 done**, board empty (0 queued /
+0 in-progress / 0 open PRs / 0 running pods / 0 breakers). Watches TaskStop'd. Coordinators/reflexes
+left LIVE but IDLE — an empty board = "no LLM woken" (≈0 spend), and FU-088's 7d@0.95 gate freezes
+any dispatch at the limit anyway; suspend them explicitly only if you want belt-and-suspenders.
+**RESUME THREADS when the weekly window resets:** (1) fix **#96** (real `extra`-clobber, completes
+#57) + **#92** (marginal) — left open, un-labeled, NOT dispatched; (2) build the structured sub-issue
+lineage / sprout-rate gauge (FU-090(c) next rung); (3) VALIDATE the reviewer-prompt patch on the next
+harvest run (#96/#92-class should not sprout). Session FUs: FU-123, FU-124. Harvested sprouts for
+triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
+
 ## Live world state (2026-07-31)
 
 - **World ENABLED.** `coordinate-sleep` + `review-sleep` CronWorkflows live (10-min cadence,
