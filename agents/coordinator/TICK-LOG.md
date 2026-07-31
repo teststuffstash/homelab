@@ -1587,3 +1587,49 @@ need it. Intentional per-stack policy, NOT a gap.
 `agent-fixer-sleep-tracking` permanent OutOfSync by declaring server-default fields (`reviewer.enabled`,
 `egress.profile` — PR#45); enabled the per-stack reviewer (PR#46 — phasing out the global reflex). Added
 stack-lint **REG-04** (the AgentStack app must be Synced) to catch that drift class.
+
+### 2026-07-31 (cont.) — the sleep-tracking harvested-follow-up drive (operator: "do all 14")
+Operator delegated adopting the 14 bot-authored 🌱 follow-ups on sleep-tracking (the FU-090 triage
+gate) and driving them to done. Queued in waves (`agent-fix`+`agent/queued`+`task/fix`), 1-WIP
+serialized. At heartbeat: **8/14 merged** (#55/#50/#58/#60/#64/#51/#66/#68), #54/#57/#69 in flight,
+#73/#74 queued, **#77 held as the deliberate finale** (touches the just-stabilized #42/#48/#71 gate).
+No breakers; belts healthy.
+
+**LESSON (the big one) — FU-122 filed then RETRACTED same session for the FU-122 mistake ITSELF.**
+The operator asked "shouldn't review be event-driven, not the 15-min tick?" I traced #55/PR#83
+(review fired 14:31 ≈ the 14:30 coordinate cron) and filed FU-122 claiming review systematically
+waits for the `*/10` coordinate cron after CI-green — a real ~5-min gap needing a CI-green→review
+edge. WRONG, and I should have read the source FIRST: the review edge ALREADY exists (ADR-093
+`maybe_dispatch_review` in github-exporter + FU-115 red edge), fires via the in-cluster exporter on
+the reviewable transition, routes per-stack — PROVEN by the exporter's own dispatch log
+(`review dispatch: sleep-tracking#83 → webhook (loop_ns sleep-agents)`). The coordinate cron was
+never in the review path; residual latency = CI runtime + the exporter's 120s poll. Retracted
+(pushed), id BURNED (not reused). The prior-art grep used my invented name "review-ready" and missed
+shipped work named "ADR-093 edge". **Rule reinforced: read the mechanism (review-argo.yaml + the
+exporter) before filing a latency FU; verify before asserting.**
+
+**Change — POLL_INTERVAL_SECONDS 120→90** (operator call after I pulled the real numbers from
+Prometheus `github_rate_limit_*`): binding resource is graphql (the PR query, point-weighted);
+exporter-pat peak ~1658/hr@120s (~33% of 5000) → ~2200/hr@90s (~45%), clear of the 2026-07-17 burn;
+core (~50/hr) + search (<4/min) negligible. Live + rollout-verified (new pod, env applied).
+
+**Finding — FU-123: in-pod `agent-finalize` arm-auto-merge fails systemically.** 4/4 sleep workers
+log `bookkeeping: arm FAILED … gh auth login … (launcher/reflex re-arms)`. Non-fatal (the launcher +
+review-reflex re-arm un-armed PRs → all merges clean) but a REGRESSION vs FU-119a "perfect 3/3" that
+defeats FU-064/043 in-pod resilience and hides a fallback dependency. Cause filed as HYPOTHESIS
+(broker-fetched git token absent in finalize env — FU-089 removed the standing secret — maybe ×
+FU-120's `PATH=/opt/agent/.devbox/…` prefix resolving finalize's gh to agent-base's binary), NOT
+asserted; needs an agent-finalize read.
+
+**#77 lane RESOLVED**: `grafana/provisioning/datasources/sleep-notes.yaml` IS in the sleep-tracking
+repo (sleep-iac has none) → worker-doable, not cross-repo (meta-16's operator-lane flag was on
+incomplete info). Two in-repo deliverables + a uid-unification nuance (see meta-state); held as the
+finale. **#57 care item** (SLP-ING-SRC-SNORE-ONLY): steered the COALESCE-guard approach, and
+verified the merged fix myself down to the boundary columns (`time_in_bed_min` is snore-set by
+merge_snore_json → overwrite correct; `extra` is vestigial `{}` → harmless) + a regression test row.
+
+**Mechanics confirmed live** (answering operator design questions): WIP=1 = one RUNNING worker pod
+(not one open PR) → PRs pipeline (N in review while N+1 codes); BEHIND PRs handled by the MP-T02
+updater; the worker's `/coordinate`-at-exit doorbell = QUEUE ADVANCE (dispatch the next item once the
+pod frees the slot), NOT this PR's review (that's the CI-green exporter edge); the finalize/label/arm
+comment is the WORKER's in-pod agent-finalize (homelab-agents identity), not the coordinator.

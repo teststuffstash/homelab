@@ -22,9 +22,10 @@ delegated adopting them. Sleep = ONE WIP slot (FU-042 per-stack), so queue in wa
 loop serialize. Label to adopt = `agent-fix` + `agent/queued` + `task/fix` (all are fixes/cleanups,
 no build deliverables).
 
-PROGRESS (source-of-truth = GitHub labels; this = live snapshot ~15:35Z):
-- ✅ **MERGED (7):** #55, #50, #58, #60, #64, #51, #66.
-- 🏗 riding: #68 · 📋 queued: #73, #69, #74, #54, #57.
+PROGRESS (source-of-truth = GitHub labels; this = live snapshot ~16:05Z):
+- ✅ **MERGED (8):** #55, #50, #58, #60, #64, #51, #66, #68.
+- 🔍 in review: #54(PR#91), #57(PR#94 — verified correct) · 🏗 riding: #69 · 📋 queued: #73, #74.
+- **#77** still the HELD FINALE (see below). After #73/#74 land, queue #77 with detailed steering.
 - **#57** (snore-only upsert clobber, SLP-ING-SRC-SNORE-ONLY) queued WITH ⚖ steering comment
   (COALESCE-guard band-owned cols on the snore-only path only + a decision-table test row).
 - **#77** (datasource uid hardcode) = the HELD FINALE. Lane RESOLVED: `grafana/provisioning/
