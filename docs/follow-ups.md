@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-123**.
+  Next free id: **FU-122**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -421,27 +421,6 @@ _Last updated: 2026-07-16._
       fresh closed/merged probe (or a short debounce after the pod vanishes) so a terminal pod near a close
       can't manufacture in-progress work. Relates ADR-094 (coordinate dispatch / C4-C5 re-dispatch),
       FU-085 (doorbell), the meta-16 bounded-drain lesson.
-
-- [ ] **FU-122** — **`CI-green → review` edge: kill the systematic per-PR review latency.** Today a
-      worker rings the `/coordinate` doorbell at pod EXIT — but that is BEFORE its PR's CI completes
-      (the worker pushes, opens the PR, exits; CI then runs on the pushed commit). So the doorbell
-      scan sees a not-yet-green PR, the coordinator's ci-red clause holds review, and review only
-      fires on the NEXT `*/10` coordinate cron after CI goes green. Measured live 2026-07-31 on
-      #55/PR#83: worker exit 14:25:45, CI green ~14:28, review Sensor fired 14:31:16 (≈ the 14:30
-      cron) — i.e. every PR eats avg ~5min (up to 10) of pure cron-granularity wait between green
-      and review. FIX (all precedented): the `integration` CI workflow's final `if: success()` step
-      POSTs `{repo,pr,stack,loop_ns}` to a new `/review-ready` path on the **agent-loop EventSource**;
-      a Sensor dep submits the existing `submit-review-perstack` review Workflow directly (skip the
-      coordinate hop). Transport = ADR-520's proven pattern (LAN-only endpoint, the self-hosted
-      `proxmox-vm` runner reaches it, GitHub never does — no Cloudflare/public surface); the
-      EventSource already multiplexes paths (`/coordinate` workers, `/alert` Alertmanager→responder),
-      FU-100 already reviews per-stack near-instantly once triggered. ONE real decision: the endpoint
-      moves from ClusterIP-airlocked to LAN-reachable, so it needs a **shared-secret bearer token**
-      (k8s Secret, Sensor filters on it) so a LAN host can't spam review dispatch → subscription DoS
-      (mirror ArgoCD's webhook-secret). The `*/10` coordinate + `*/15` review crons stay as the
-      lost-event backstop. Acceptance: a PR's review Sensor fires within ~1min of CI-green, not at the
-      next cron tick. Relates ADR-520 (runner→LAN-webhook), FU-085/FU-100 (the review edge + per-stack
-      trigger), the 2026-07-31 meta observation.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
