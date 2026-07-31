@@ -1060,3 +1060,54 @@ token volume — the router pulls it dailyish via `ROUTER_ACCOUNT_REF` into the 
 primary (the fallback list stays as the belt). Also noted for P3: OpenRouter's `pareto-router`
 request plugin (`price_source: weighted_avg`, server-side Pareto frontier over coding models) —
 a candidate serverside twin of our class ordering, parked until API manageability is clear.
+
+**Addendum 3 (2026-07-31, operator session — the #48/#71 saga postmortem fed back).** Querying the
+live router store (`provider_events`: 1753 observations over the exact saga window 2026-07-27
+18:57 → 07-29 07:43 UTC) turned "provider reliability" from abstraction into evidence and surfaced
+one net-new mechanism the design lacked.
+
+**The evidence (per-model outcome over the window):** `deepseek-v4-flash` 100% ok (n=545),
+`tencent/hy3` 100% (n=111), `ling-3.0-flash:free` **97%** (n=207) — versus `laguna-s-2.1:free`
+33% ok / **53% 401** (n=263) and `laguna-s-2.1` **paid 19% ok / 81% 429** (n=607). Two rulings:
+**(1) free-vs-paid is the wrong axis** — a *free* model (`ling:free`, 97%) beat a *paid* one
+(`laguna` paid, 19%); laguna is a bad **provider** at both tiers, wearing 401 (free) or 429 (paid).
+Health + `/route` ordering key on observed **`(model, provider)` reliability, tier-agnostic**; the
+`:free` string is never itself a demotion. Free models stay in-chain **deliberately, as cheap
+instability canaries** (they flush infra bugs paid models mask) — `rotation.canary_verdict` is fed
+from these aggregates, and a canary is only cheap if it fails in *seconds* (see the breaker below).
+**(2) Passive `provider_events` is the PRIMARY health substrate, not `/report` strikes** — it
+captured all 142 401s (140 = laguna:free) that the `/report` path **missed** (the `strikes` table
+is empty: r2's `agent-finalize` crashed on `env: python3: not found`, so the finalize-dependent
+write never ran). `/report` stays the audit twin.
+
+**Net-new leg — the in-flight 4XX circuit-breaker (the router had none).** The 140 laguna:free
+401s were ONE ride's goose continuation loop hammering a hopeless auth failure for ~20 min; the
+proxy *observed* every one but never *acted*. New leg: the proxy counts 4XX per `(session, model)`
+(it already holds the data) and at a **class-scoped threshold — auth (401/403) ~3-5, generic 4xx
+~10; 429 → fail-over/back-off, never session-abort** — (a) **stops forwarding** (spares the
+provider the other ~130 calls; also the "haywire agent spams OpenRouter" guard) and (b) emits
+**`circuit-open`** for that session into the store.
+
+**The killer is NOT the router (ADR-094 boundary) — reuse FU-021's watchdog, retuned.** FU-021
+(archived 2026-07-12) already built the in-pod **storm watchdog** (agent-runtime#8/#11) +
+`GOOSE_MAX_TURNS=200` belt for exactly this — but its trigger is ~200 turns / "200 auth failures in
+21s", so the 140-401 storm ran *under* the bar. **Line item (agent-runtime): drop the watchdog
+trigger ~200 → ~10 and drive it off the proxy's `circuit-open` signal** (the source-of-truth 4XX
+count) rather than its own coarse in-pod counter. Proven killer, ~20× tighter, no pod-delete RBAC
+added to the egress plane.
+
+**Why NOT "rewrite the Nth 401 as a 500" (the tempting single-mechanism):** FU-021's root cause is
+explicit — goose's storm is its *final-output continuation loop* and **no error class stops it**
+(812× on a bad key); a 500-rewrite just becomes a 500-storm. A terminal-status rewrite only helps
+harnesses that honor status classes — the **Anthropic SDK / claude harness** treats 400/401/403 as
+non-retryable (fail-fast) but 500 as *retryable* (so 500 is the wrong pick there too). So a
+status-rewrite is a **per-harness belt** (claude/opencode: a 4xx-non-429 at the circuit point;
+goose: none), verified by a small probe matrix — never the primary kill.
+
+**Also into the health model:** per-`(model, provider)` **429 backoff distinct from the account
+429-latch** (FU-088) — laguna paid's 81% per-model 429 slipped straight through the
+subscription-account-wide latch; a model at 81% 429 must be demoted by `/route` regardless of the
+account latch. Rehab is **per-class TTL** — 401 sticky/long (an eligibility fact, not transient),
+429 honors `retry-after`, generic 4xx medium. All of this builds under the **FU-095 router leg**
+(the `/route` decision endpoint stays the gating build); the FU-021 watchdog retune is the one
+out-of-band actionable (agent-runtime).
