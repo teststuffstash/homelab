@@ -393,18 +393,24 @@ _Last updated: 2026-07-16._
       rules (the recipe). One source per concern, delivered to the roles that need it. Design home:
       docs/agents/roles.md / fixer-context.md. Relates FU-114 (env card), ADR-094 (launcher dispatch).
 
-- [ ] **FU-120** — **`agent-finalize` crashes on `env: python3: not found` → NO automatic strike /
-      salvage / router `/report` bookkeeping runs.** On #71-r2 (2026-07-28) the launcher's finalize step
-      died because `python3` wasn't on PATH at finalize time (the ride's python lives *inside* the devbox
-      env; finalize runs outside it), so the AGENT_STRIKE comment, the ADR-096 `/report` write, and salvage
-      never ran — the coordinator posted the strike by hand. Two costs: (1) strike/report were manual; (2)
-      ADR-096's `strikes`/`run_reports` store MISSED the event entirely — the empty `strikes` table across
-      the whole #71 window IS this bug (only the passive data-plane `provider_events` caught the 140 401s,
-      which is why ADR-096 bases health on passive events, not `/report`). FIX: guarantee `python3` on the
-      finalize PATH (bake into agent-base, or run finalize inside the devbox env, or rewrite the finalize
-      helper in POSIX sh) so strike/salvage/report ALWAYS run. Was a TICK-LOG-only note (single-writer
-      contract barred the agent from filing). Relates ADR-096 (§Addendum 3 — passive observation is the
-      workaround), FU-062 (strike bookkeeping), FU-117 (context/toolchain reaching goose rides).
+- [ ] **FU-120** — **`agent-finalize` bookkeeping must survive a lost PATH (one storming ride crashed
+      it on `env: python3: not found`).** ORIGINAL DIAGNOSIS WAS WRONG: `python@3.11` IS baked into
+      agent-base and on the CONTAINER PATH (`/opt/agent/.devbox`, agent-base/devbox.json) — finalize runs
+      on agent-base's python, ALWAYS, outside any `devbox run`; it is NOT "the project's python lives
+      inside the devbox env." Proof it wasn't a systematic break: finalize ran fine for #71's sibling
+      rides r3/r6/r7/r8 (they uploaded transcripts). The crash was #71-**r2-specific** — the auth-storm
+      ride (140× 401 on laguna:free) — and the exact cause is UNCONFIRMED (the crash meant no transcript →
+      r2's pod log is gone); best guess is a transient PATH/mount loss on that storming kata pod (relates
+      FU-116). Cost was real: no auto strike / `/report` / salvage → the coordinator posted the strike by
+      hand, and ADR-096's `strikes` table was empty across the #71 window (only the passive
+      `provider_events` caught the 140 401s — WHY ADR-096 bases health on passive events, not `/report`).
+      **BELT DONE 2026-07-31:** the launcher pins `PATH=/opt/agent/.devbox/nix/profile/default/bin` on the
+      finalize call (agent-session.sh) so its shebang + git/gh subprocesses resolve regardless of any PATH
+      weirdness — bookkeeping can no longer be lost to this class. Interpreter ownership DOCUMENTED
+      (agent-runtime#25: base scripts run on agent-base's python, not the project's). Root cause stays
+      unconfirmed (now masked by the belt) — reopen a root-cause dig only if a NON-finalize symptom of the
+      same PATH/mount loss appears. Relates ADR-096 (§Addendum 3), FU-062 (strike bookkeeping), FU-116
+      (kata storage).
 
 - [ ] **FU-121** — **`liveness≠progress` redispatch races a closing issue → a spurious round on a
       just-solved item.** On #71's close (2026-07-29 07:12Z) a `coordinate-sleep` scan saw #71

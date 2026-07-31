@@ -447,7 +447,12 @@ if [ -n "$RUN_CMD" ]; then
   # normal in-pod finalize path: tokens/turns + transcripts for subscription runs (FU-066 b). The
   # coordinator-image-era minimal-stats fallback is gone — an AGENT_BASE_IMAGE pin older than
   # agent-runtime#14 would fail loudly at `claude: command not found` long before finalize.
-  FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} agent-finalize /tmp/run.log"
+  # FU-120 belt: pin the agent-base harness profile on PATH for finalize. Its `#!/usr/bin/env
+  # python3` shebang (+ the git/gh subprocesses it spawns) must resolve even if the ride left PATH
+  # in a weird state — #71 r2 crashed here with `env: python3: not found` on a storming kata pod, so
+  # the strike/report/salvage never ran. python IS baked + normally on PATH (agent-base/devbox.json,
+  # /opt/agent/.devbox), so this guards that anomaly, not a missing dep. `\$PATH` expands in-pod.
+  FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} PATH=/opt/agent/.devbox/nix/profile/default/bin:\$PATH agent-finalize /tmp/run.log"
   WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 elif [ -n "$OC_SETUP" ]; then
