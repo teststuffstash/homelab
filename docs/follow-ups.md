@@ -393,33 +393,6 @@ _Last updated: 2026-07-16._
       rules (the recipe). One source per concern, delivered to the roles that need it. Design home:
       docs/agents/roles.md / fixer-context.md. Relates FU-114 (env card), ADR-094 (launcher dispatch).
 
-- [ ] **FU-118** — **Offline rides can't `devbox add` a NEW package — they write a placeholder lock
-      that poisons every later round.** Agent rides run offline (local nix substituter + package
-      proxies only, no `devbox-search` reach), so a worker `devbox add <pkg>` cannot resolve the real
-      store path and writes `/nix/store/placeholder-<system>-<pkg>` into `devbox.lock`. That commits
-      fine but hard-fails `devbox install` (`path-info --offline` on a nonexistent placeholder) on the
-      NEXT round's pod bootstrap — before the agent runs, so the worker can't self-recover. Concrete
-      cost: #71 (k3d→kind) — r2 added `kind` offline → placeholder → r4/r5 died identically at boot;
-      the coordinator correctly scored them infra-strikes (not logic rounds) and re-dispatched fresh
-      off master, but a fresh round hits the SAME wall the moment it re-adds kind. INTERIM (done
-      2026-07-29): meta-coordinator pre-provisioned `kind@latest` online (jail) → sleep-tracking PR#75
-      (real path, matches oracle-fleet). PATTERN: a new ride tool must be resolved ONLINE and landed on
-      the stack's master FIRST (pre-provision), then the migration USES it — never a worker `devbox
-      add` mid-ride. THE FIX — DECIDED 2026-07-31, (a)+(b) not (c)-alone: **(a) DONE** — a launcher
-      pre-flight (agent-session.sh guard (d)) fetches the target branch's `devbox.lock` and REFUSES
-      dispatch (exit 3, with the fix guidance) if it carries a `placeholder-` store path, instead of
-      dispatching into the opaque bootstrap crash (verified: clean master → no refuse; synthetic
-      placeholder → caught). **(b) TO BUILD** — a `devbox-search` caching proxy: nginx `proxy_cache`
-      in front of search.devbox.sh (SAME shape as argocd/resources/nix-cache/), `proxy_cache_valid
-      200 6h` + `proxy_cache_lock on` + `proxy_cache_use_stale` + `limit_req ~2r/s` (freshness is
-      low-stakes; the rate-limit + lock are the haywire guard). The resolver RETURNS the store path
-      (devbox.lock records it), so rides need ONLY this one endpoint — the LAN nix cache already
-      serves the binary; no GitHub/flake reach. Wire via `DEVBOX_SEARCH_HOST` (VERIFY that override
-      exists on devbox 0.17.5; else an Unbound override for search.devbox.sh → the proxy VIP). (c)
-      the pre-provision-on-master doc rule stays only as the INTERIM until (b) lands. Relates
-      FU-114/FU-117 (env card / context), FU-105 (egress dial), ADR-083/ADR-091 (nix-cache/OCI-mirror
-      precedent).
-
 - [ ] **FU-120** — **`agent-finalize` crashes on `env: python3: not found` → NO automatic strike /
       salvage / router `/report` bookkeeping runs.** On #71-r2 (2026-07-28) the launcher's finalize step
       died because `python3` wasn't on PATH at finalize time (the ride's python lives *inside* the devbox

@@ -8,6 +8,19 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-118** *(archived 2026-07-31)* — **Offline rides couldn't `devbox add` a NEW package.** An
+  offline add wrote `/nix/store/placeholder-*` into devbox.lock that boot-crashed the NEXT round's
+  `devbox install` (#71 r4/r5 died here). Fixed BOTH legs 2026-07-31: **(a)** launcher pre-flight
+  (agent-session.sh guard (d)) REFUSES dispatch if the target branch's devbox.lock carries a
+  `placeholder-` (belt; verified clean-master no-refuse + synthetic-placeholder caught); **(b)** the
+  `devbox-search` caching proxy (`argocd/resources/devbox-search/`, nginx proxy_cache of
+  search.devbox.sh, BGP VIP **192.168.40.27**, `DEVBOX_SEARCH_HOST`) — `devbox add` now resolves
+  in-band, WAN-free (the resolver returns store paths; the LAN nix cache serves the binary). VERIFIED
+  live: `DEVBOX_SEARCH_HOST=http://192.168.40.27 devbox add ripgrep` → REAL store path
+  (`/nix/store/…-ripgrep-15.2.0`), no placeholder; X-Cache-Status active; the agent-worker-egress CNP
+  allows .40.27 (composition.yaml). `DEVBOX_SEARCH_HOST` override confirmed in the devbox 0.17.5
+  binary. SERVICES.md row added; interim (pre-provision on master) stays a valid fallback. Gotcha:
+  .40.22 was oracle's gateway VIP (ADR-092) — landed on .40.27.
 - **FU-119** *(archived 2026-07-31)* — **`dockerRepos` rides lacked a `docker` CLI** (only
   `$DOCKER_HOST`). kind/k3d shell out to the `docker` binary, not the raw API, so the in-ride gate
   couldn't stand up a cluster (#71-r7 `agent/blocked`). Fixed per-stack via `docker-client`
