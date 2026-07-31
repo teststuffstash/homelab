@@ -42,8 +42,22 @@ runcmd:
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
   - curl -fsSL https://get.docker.com | sh
   - systemctl enable --now docker
+  # FU-015/ADR-082 parity: nix + devbox so the stacks' devbox-based gates (sleep `devbox run
+  # test-integration`, oracle `e2e-kind`) run REPRODUCIBLY on this VM, not just the ARC runner —
+  # same single-user install as docker/arc-runner/Dockerfile, owned by the sudo-less `runner`
+  # (root does the /nix mkdir here; the user needs no sudo to USE it), LAN pull-through cache first.
+  # devbox = pinned binary (not the install script, which floats to latest).
+  - curl -fsSL "https://github.com/jetify-com/devbox/releases/download/0.17.5/devbox_0.17.5_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin devbox && chmod 0755 /usr/local/bin/devbox
+  - install -d -m 0755 -o runner -g runner /nix
+  - install -d -o runner -g runner /home/runner/.config/nix
+  - printf 'experimental-features = nix-command flakes\nsubstituters = http://192.168.40.23 https://cache.nixos.org\n' > /home/runner/.config/nix/nix.conf && chown runner:runner /home/runner/.config/nix/nix.conf
+  - su - runner -c 'curl -fsSL "https://releases.nixos.org/nix/nix-2.35.1/install" | sh -s -- --no-daemon --no-channel-add'
   - install -d -o runner -g runner /home/runner/actions-runner
   - su - runner -c 'cd ~/actions-runner && curl -fsSL -o r.tar.gz https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz && tar xzf r.tar.gz && rm r.tar.gz'
+  # The runner is a systemd service (non-login) → job steps don't source ~/.profile, so single-user
+  # nix (~/.nix-profile) and devbox (/usr/local/bin) miss the PATH. The actions-runner `.env` is
+  # loaded for every job step — put both on PATH there. `nix` must be present for `devbox run`.
+  - printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\n' > /home/runner/actions-runner/.env && chown runner:runner /home/runner/actions-runner/.env
   - |
     set -e
     TOKEN=$(GH_APP_ID='${app_id}' GH_APP_INSTALLATION_ID='${installation_id}' \

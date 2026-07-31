@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-120**.
+  Next free id: **FU-122**.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -423,7 +423,32 @@ _Last updated: 2026-07-16._
       client alongside the socket — platform fix, covers all stacks; or (b) per-repo: pre-provision
       `docker-client` in the stack's `devbox.json` (the FU-118 pre-provision-online pattern). (a) preferred
       (fix the class). Relates FU-116 (kata docker-ride *storage*, distinct), FU-118 (pre-provision online),
-      ADR-094 (launcher dispatch / `dockerRepos` wiring).
+      ADR-094 (launcher dispatch / `dockerRepos` wiring). **SLEEP done 2026-07-31 via (b):** `docker-client`
+      added to sleep-tracking `devbox.json` (PR #81, resolved online per FU-118) — the in-ride kind gate
+      now has its `docker` CLI. The class-fix (a) (bake into agent-base) + oracle-fleet parity remain open.
+
+- [ ] **FU-120** — **`agent-finalize` crashes on `env: python3: not found` → NO automatic strike /
+      salvage / router `/report` bookkeeping runs.** On #71-r2 (2026-07-28) the launcher's finalize step
+      died because `python3` wasn't on PATH at finalize time (the ride's python lives *inside* the devbox
+      env; finalize runs outside it), so the AGENT_STRIKE comment, the ADR-096 `/report` write, and salvage
+      never ran — the coordinator posted the strike by hand. Two costs: (1) strike/report were manual; (2)
+      ADR-096's `strikes`/`run_reports` store MISSED the event entirely — the empty `strikes` table across
+      the whole #71 window IS this bug (only the passive data-plane `provider_events` caught the 140 401s,
+      which is why ADR-096 bases health on passive events, not `/report`). FIX: guarantee `python3` on the
+      finalize PATH (bake into agent-base, or run finalize inside the devbox env, or rewrite the finalize
+      helper in POSIX sh) so strike/salvage/report ALWAYS run. Was a TICK-LOG-only note (single-writer
+      contract barred the agent from filing). Relates ADR-096 (§Addendum 3 — passive observation is the
+      workaround), FU-062 (strike bookkeeping), FU-117 (context/toolchain reaching goose rides).
+
+- [ ] **FU-121** — **`liveness≠progress` redispatch races a closing issue → a spurious round on a
+      just-solved item.** On #71's close (2026-07-29 07:12Z) a `coordinate-sleep` scan saw #71
+      `agent/in-progress` with r8's pod already gone (the liveness≠progress redispatch clause) and fired
+      **r9** BEFORE the merge/close propagated — a wasted round re-running CI on the already-merged kind
+      migration; the operator killed it by hand. The redispatch decision doesn't re-check the
+      issue-closed / PR-merged state atomically at dispatch time. FIX: gate the liveness-redispatch on a
+      fresh closed/merged probe (or a short debounce after the pod vanishes) so a terminal pod near a close
+      can't manufacture in-progress work. Relates ADR-094 (coordinate dispatch / C4-C5 re-dispatch),
+      FU-085 (doorbell), the meta-16 bounded-drain lesson.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
