@@ -1633,3 +1633,26 @@ merge_snore_json → overwrite correct; `extra` is vestigial `{}` → harmless) 
 updater; the worker's `/coordinate`-at-exit doorbell = QUEUE ADVANCE (dispatch the next item once the
 pod frees the slot), NOT this PR's review (that's the CI-green exporter edge); the finalize/label/arm
 comment is the WORKER's in-pod agent-finalize (homelab-agents identity), not the coordinator.
+
+### 2026-07-31 (cont. 2) — drive COMPLETE 14/14 + two live incidents
+All 14 sleep harvested-follow-ups merged (0 open PRs, 0 breakers). Two incidents worth the memory:
+
+**FU-124 (operator-caught, the finale's hang).** #100 (#77) sat `BEHIND/APPROVED` ~1h. The MP-T02
+updater had NO runs 16:47→a manual 17:50 `workflow_dispatch` — the `*/15` cron sweeper never fired
+at :00/:15/:30/:45 (GitHub delays/drops scheduled workflows). Root: the ADR-093 review edge approves
+a PR while BEHIND (doesn't gate on not-behind), inverting update-before-review; a NON-last PR gets
+re-triggered by the next merge's `push`, but the LAST open PR has nothing behind it → the cron is the
+sole backstop → unreliable cron = indefinite hang. Manual dispatch fixed it instantly (updater logic
+is fine, only its trigger failed). Fix direction: a reliable in-cluster updater trigger (the coordinate
+scan already reads mergeStateStatus). LESSON: my loop watch checked CI-fail + merge but NOT updater
+liveness — an armed PR BEHIND >15min is a watch gap (added to FU-124).
+
+**Harvest worked.** As the 13 PRs merged, C6 merged-closeout harvested their review `Follow-ups:`
+bullets into inert sprouts #92/#93/#96/#101/#102 (unlabeled, operator-triage) — MP-T10 as designed.
+
+**Pipeline lessons banked** (from operator design Qs): review IS event-driven (ADR-093 exporter edge,
+not the coordinate cron — FU-122 retract); WIP=1 = one worker POD not one open PR (PRs pipeline);
+/coordinate-at-exit = queue-advance not review; the worker's in-pod finalize does the arm+label+comment
+(not the coordinator) — and that arm is currently failing (FU-123). Poll 120→90 landed (graphql headroom
+checked in Prometheus). #57 care-item verified down to column categorization; #77 finale steered
+(uid-unification) + gate self-validated green.

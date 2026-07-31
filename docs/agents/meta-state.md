@@ -13,7 +13,16 @@ meant to avoid.)
   test-integration` now work both in-ride and in CI for sleep; sleep's agent-stack ≈ oracle-fleet.
   FU-118/119/120 done. No structural blockers outstanding. (Detail: TICK-LOG 2026-07-31 entry.)
 
-## ACTIVE DRIVE — clear the sleep-tracking harvested-follow-up queue (operator ask 2026-07-31)
+## ✅ DONE — sleep-tracking harvested-follow-up drive (2026-07-31): 14/14 merged
+
+All 14 merged (0 open PRs, 0 breakers). #77 finale needed a manual updater dispatch (FU-124). Left
+for the operator's triage (unlabeled): **#92/#93/#96/#101/#102** (machine-harvested review-Follow-up
+sprouts from the merged PRs) + **#99** (pinned-SHA-256 hardening, the accepted #98 follow-up). New FUs
+this session: **FU-123** (in-pod arm fails, hypothesis), **FU-124** (last-PR-behind cron-backstop
+unreliable). FU-122 filed+retracted. Poll 120→90 live. Detail: TICK-LOG 2026-07-31 (cont.) entries.
+The rest of this file below is stale-but-harmless standing context; the drive section is retired.
+
+## (retired) ACTIVE DRIVE — clear the sleep-tracking harvested-follow-up queue (operator ask 2026-07-31)
 
 Operator: "pick any open sleep-tracking issue (not #16 dep-dashboard), label it, let the loop pick
 it up. Keep going until the 14 issues are done or a major blocker appears." These 14 are all
