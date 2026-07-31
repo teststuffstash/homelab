@@ -22,21 +22,25 @@ delegated adopting them. Sleep = ONE WIP slot (FU-042 per-stack), so queue in wa
 loop serialize. Label to adopt = `agent-fix` + `agent/queued` + `task/fix` (all are fixes/cleanups,
 no build deliverables).
 
-THE 14 (excl. #16). Status source-of-truth = GitHub labels; this list = my dispatch order/notes:
-- **#55** dedup log always 0 — QUEUED first (pipeline-validation lead; real self-contained bug).
-- #60 log warning-not-info · #66 nights.yaml stray blank lines · #64 vitals comment · #50 GLOSSARY
-  stale · #51 README stale topology · #58 snore-only count list-scan · #68 dup SQL query · #69
-  fixture→conftest · #73 _chmod_tree over-chmod · #74 frser download checksum · #54 is_nap tz test-gap
-  — clean cleanups/refactors/docs; queue in waves after #55 proves the pipeline.
-- **#57** snore-only upsert clobbers band cols (SLP-ING-SRC-SNORE-ONLY) — REAL bug, spec anchor;
-  read spec + pre-decide ⚖ before queuing.
-- **#77** datasource uid hardcode — ⚠ CARE: meta-16 flagged this as the dominant prod-blank cause,
-  needs cross-repo confirmation of WHERE prod provisions the datasource (sleep-iac / chart has no
-  datasource template). May be OPERATOR-LANE (cross-repo). Read fully before queuing; don't hand a
-  worker an unverifiable cross-repo task. Queue LAST.
+PROGRESS (source-of-truth = GitHub labels; this = live snapshot ~15:35Z):
+- ✅ **MERGED (7):** #55, #50, #58, #60, #64, #51, #66.
+- 🏗 riding: #68 · 📋 queued: #73, #69, #74, #54, #57.
+- **#57** (snore-only upsert clobber, SLP-ING-SRC-SNORE-ONLY) queued WITH ⚖ steering comment
+  (COALESCE-guard band-owned cols on the snore-only path only + a decision-table test row).
+- **#77** (datasource uid hardcode) = the HELD FINALE. Lane RESOLVED: `grafana/provisioning/
+  datasources/sleep-notes.yaml` IS in the sleep-tracking repo (sleep-iac has no datasource
+  provisioning) → **worker-doable, NOT cross-repo** (meta-16's operator-lane flag was on incomplete
+  info). Two in-repo deliverables: (1) pin `uid: sleep-notes` in that provisioning YAML; (2) fix
+  `assert_graph.py._query()` to read the panel's OWN datasource uid instead of hardcoding
+  `sleepdbitest` — ⚠ NUANCE: must UNIFY the uid across panel + `tests/integration/manifests/
+  grafana.yaml` (currently pins `sleepdbitest`) or the gate breaks. Touches the just-stabilized
+  #42/#48/#71 gate → queue LAST, watch closely, post detailed ⚖ steering when queuing.
 
-Wave discipline: verify #55 lands green end-to-end (dispatch → CI gate → review → merge) FIRST —
-infra changed today, so prove the pipeline before mass-queuing. Then feed waves of ~3.
+Pipeline pattern confirmed live: WIP=1 = one RUNNING worker pod (not one open PR) → multiple PRs
+review concurrently; BEHIND PRs handled by the MP-T02 updater (proven); review edge = the exporter's
+ADR-093 dispatch (POLL_INTERVAL=120s), NOT the coordinate cron. FU-122 was filed then RETRACTED
+(already shipped as ADR-093+FU-115 — verified via exporter dispatch log; lesson: read the mechanism
+before filing a latency FU).
 
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
 
