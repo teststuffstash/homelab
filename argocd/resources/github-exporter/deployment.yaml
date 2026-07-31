@@ -36,6 +36,13 @@ spec:
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/review"
             - name: COORDINATE_WEBHOOK_URL  # FU-115 red edge-trigger: /coordinate doorbell on CI-red armed agent PRs
               value: "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate"
+            # Poll cadence (default 120). 90s halves worst-case ADR-093 review-edge latency vs 120
+            # for a modest graphql cost: measured 2026-07-31 exporter-pat graphql peak ~1658/hr@120s
+            # (~33% of the 5000/hr pool) → ~2200/hr@90s (~45%), well clear of the 2026-07-17 burn.
+            # core (~50/hr) + search (<4/min) stay negligible. Don't drop below ~60 without re-checking
+            # github_rate_limit_remaining{resource="graphql",token="exporter-pat"} in Prometheus.
+            - name: POLL_INTERVAL_SECONDS
+              value: "90"
           ports:
             - name: http-metrics
               containerPort: 9504
