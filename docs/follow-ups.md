@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-122**.
+  Next free id: **FU-124** (FU-122 burned — filed then retracted 2026-07-31 as already-shipped, ADR-093; not reused).
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -421,6 +421,25 @@ _Last updated: 2026-07-16._
       fresh closed/merged probe (or a short debounce after the pod vanishes) so a terminal pod near a close
       can't manufacture in-progress work. Relates ADR-094 (coordinate dispatch / C4-C5 re-dispatch),
       FU-085 (doorbell), the meta-16 bounded-drain lesson.
+
+- [ ] **FU-123** — **In-pod `agent-finalize` arm-auto-merge FAILS systemically (gh not authed in
+      finalize); the launcher/reflex fallback masks it.** VERIFIED 2026-07-31 across 4/4 sleep workers
+      (#58/#51/#66/#68): finalize logs `bookkeeping: arm FAILED: To get started with GitHub CLI …
+      gh auth login … populate the GH_TOKEN environment variable (launcher/reflex re-arms)`. Non-fatal
+      — every PR still merged because `agent-session.sh:864` (launcher) + `review-reflex.sh:168` re-arm
+      un-armed PRs — BUT it defeats FU-064/043's whole point (in-pod bookkeeping surviving an early
+      launcher exit) and hides a hard dependency on the fallback (if the reflex breaker ever latches, PRs
+      silently never arm→never merge). This is a REGRESSION: FU-119a archived recorded in-pod arming
+      "perfect 3/3". HYPOTHESIS (unconfirmed — DON'T assert without reading `agent-finalize` in
+      agent-runtime + the broker token flow): the worker's git token is broker-fetched at runtime (FU-089
+      deleted the standing `agent-git-token` Secret), and it isn't present in `agent-finalize`'s env/gh
+      config — possibly interacting with the FU-120 belt's `PATH=/opt/agent/.devbox/nix/profile/default/
+      bin:$PATH` prefix (agent-session.sh:472) resolving finalize's `gh` to agent-base's binary, which
+      reads auth from a location the session's token never populated. NEXT: confirm whether the pod
+      exports `GH_TOKEN`/persists `gh auth` for finalize, and whether pre-FU-120 workers armed in-pod
+      (compare an oracle-fleet worker's finalize). Acceptance: `armed_by_pod=true` on the AGENT_RUN_STATS
+      line so the launcher/reflex re-arm is the belt, not the primary. Relates FU-120 (finalize PATH),
+      FU-089 (broker token, no standing secret), FU-064/043 (in-pod bookkeeping), the merge-path fallback.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
