@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-124** (FU-122 burned — filed then retracted 2026-07-31 as already-shipped, ADR-093; not reused).
+  Next free id: **FU-125** (FU-122 burned — filed then retracted 2026-07-31 as already-shipped, ADR-093; not reused).
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.
@@ -440,6 +440,25 @@ _Last updated: 2026-07-16._
       (compare an oracle-fleet worker's finalize). Acceptance: `armed_by_pod=true` on the AGENT_RUN_STATS
       line so the launcher/reflex re-arm is the belt, not the primary. Relates FU-120 (finalize PATH),
       FU-089 (broker token, no standing secret), FU-064/043 (in-pod bookkeeping), the merge-path fallback.
+
+- [ ] **FU-124** — **The last PR in a batch can hang BEHIND for ≫15min: the MP-T02 updater's only
+      backstop for it is the `*/15` GitHub cron, which GitHub runs unreliably.** VERIFIED live 2026-07-31
+      on sleep-tracking #100 (the #77 finale): it sat `BEHIND/APPROVED` for ~1h; the updater
+      (`update-pr-branch.yml`) had NO runs between 16:47 and a manual 17:50 `workflow_dispatch` — the
+      `schedule: */15` sweeper never fired at 17:00/15/30/45 (GitHub delays/drops scheduled workflows under
+      load). The manual dispatch brought #100 current immediately (BEHIND→BLOCKED→merged), confirming the
+      updater logic is fine — only its TRIGGER failed. Mechanism: the ADR-093 review edge approves a PR on
+      `green ∧ armed ∧ review_required` WITHOUT gating on `not-behind`, so a PR gets approved-while-behind
+      (inverting the updater's intended update-BEFORE-review order); for a NON-last PR the next merge's
+      `push` re-triggers the updater, but the LAST open PR has nothing behind it → only the `push`/
+      `workflow_run` edges are dead and the cron is the sole backstop → an unreliable cron = an indefinite
+      hang. FIX DIRECTION (not asserting impl): give the updater a RELIABLE in-cluster trigger instead of
+      GitHub's cron — the coordinate scan already reads `mergeStateStatus` (its conflict-flagging step), so
+      it can `gh workflow run update-pr-branch.yml` when it sees an armed PR stuck BEHIND with no updater
+      progress (the coordinator's */10+doorbell cadence is far more reliable than Actions cron). Belt for
+      the meta-watch: ADD a check for an armed PR sitting BEHIND > ~15min (my loop watch missed this — it
+      checks CI-fail + merge, not updater liveness). Relates FU-041 (updater/merge-path), ADR-093 (review
+      edge), merge-path-fsm MP-T02.
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
