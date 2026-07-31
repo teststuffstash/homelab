@@ -410,23 +410,6 @@ _Last updated: 2026-07-16._
       reach via the package proxies so an add resolves; or (c) a documented "add tools on master, online"
       rule surfaced to authors. Relates FU-114/FU-117 (env card / context), FU-105 (egress dial).
 
-- [ ] **FU-119** — **`dockerRepos` rides get the daemon socket but no `docker` CLI — so kind/k3d
-      can't run in-ride and workers can't locally verify a docker-backed gate.** A `dockerRepos`-flagged
-      kata ride wires `$DOCKER_HOST` (dind native sidecar, `ServerVersion` reachable) but there is **no
-      `docker` client binary anywhere in the pod** (`command -v docker` → not found). `kind` (and the old
-      `k3d`) shell out to the `docker` CLI, not the raw API, so `devbox run test-integration` cannot stand
-      up a cluster in-ride. Surfaced by #71 (k3d→kind): every round hit this same wall regardless of model
-      → `agent/blocked`. NOT a blocker for the migration itself — the `homelab-ephemeral` ARC runner DOES
-      have a working docker CLI (the gate builds a real k3d cluster there), so CI is the real check and #71
-      proceeds on that basis. This FU is the *local-verification* gap. THE FIX (choose): (a) add
-      `docker-client` (nixpkgs, CLI-only, no daemon) to agent-base so EVERY `dockerRepos` ride gets a
-      client alongside the socket — platform fix, covers all stacks; or (b) per-repo: pre-provision
-      `docker-client` in the stack's `devbox.json` (the FU-118 pre-provision-online pattern). (a) preferred
-      (fix the class). Relates FU-116 (kata docker-ride *storage*, distinct), FU-118 (pre-provision online),
-      ADR-094 (launcher dispatch / `dockerRepos` wiring). **SLEEP done 2026-07-31 via (b):** `docker-client`
-      added to sleep-tracking `devbox.json` (PR #81, resolved online per FU-118) — the in-ride kind gate
-      now has its `docker` CLI. The class-fix (a) (bake into agent-base) + oracle-fleet parity remain open.
-
 - [ ] **FU-120** — **`agent-finalize` crashes on `env: python3: not found` → NO automatic strike /
       salvage / router `/report` bookkeeping runs.** On #71-r2 (2026-07-28) the launcher's finalize step
       died because `python3` wasn't on PATH at finalize time (the ride's python lives *inside* the devbox

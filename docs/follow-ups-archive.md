@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-119** *(archived 2026-07-31)* — **`dockerRepos` rides lacked a `docker` CLI** (only
+  `$DOCKER_HOST`). kind/k3d shell out to the `docker` binary, not the raw API, so the in-ride gate
+  couldn't stand up a cluster (#71-r7 `agent/blocked`). Fixed per-stack via `docker-client`
+  (nixpkgs CLI-only) in `devbox.json`: **sleep-tracking PR#81** (2026-07-31, resolved online per
+  FU-118, `devbox run -- docker --version` → 29.6.2); **oracle-fleet already carried it**. Both
+  docker stacks now run the in-ride kind gate (proven: sleep gate GREEN on the proxmox-vm runner).
+  Gotcha: the socket alone is never enough — the CLI is required. NOT done (optional, deferred, low
+  value while the per-stack pattern works): the class-fix — bake `docker-client` into agent-base so
+  future `dockerRepos` stacks get it without a per-stack add.
 - **FU-110** *(archived 2026-07-27, same day as filed)* — **Operator dispatch-priority knob =
   the GitHub issue PIN.** Born when #39 beat #48 (ascending-number order inverted the operator's
   gate-first plan). Shipped in coordinator-scan.sh (99ee5a9): `isPinned` rides the existing list
