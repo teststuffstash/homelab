@@ -122,12 +122,12 @@ limited by having one public IP → LAN-side CARP is the main win.
 - Power/perf ground truth: [`docs/power-measurements.md`](docs/power-measurements.md) +
   [`machines/`](machines/README.md) (laptops ≈64% better perf/W → the ephemeral tier, ADR-044).
 
-## Agent platform — phased
+## Agent platform
 
-_Added 2026-06-25. A program distinct from the original 2026-05-24 cluster plan: an in-cluster MCP
-capability + an ephemeral sandbox harness that turns a natural-language bug report into a tested,
-auto-merged fix. Full design + trust model + the worked sleep-tracker example:
-[`docs/agents/`](docs/agents/README.md). Each phase is independently useful._
+_Added 2026-06-25. A program distinct from the original 2026-05-24 cluster plan: turn a
+natural-language bug report into a tested, auto-merged fix. What it became — an interactive
+meta-coordinator in the jail plus an autonomous per-stack loop in the cluster — with the roles,
+trust boundaries and the sub-doc index: [`docs/agents/`](docs/agents/README.md)._
 
 **The original P0–P3 phases are done or superseded** (kept here as history — the plan happened, and
 then moved past itself):

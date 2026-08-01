@@ -1,17 +1,18 @@
 # Agent observability & the retro loop — see every session, improve the process from evidence
 
-> **Status: P0 + P1 LIVE (built 2026-07-08).** A0 (OTLP → `argocd/resources/otel-collector/`), the
-> `agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), all three capture hooks
-> (worker `agent-finalize`, reviewer/coordinator launcher traps, nightly `transcripts-sync`
-> CronJob) and the viewer (`transcripts.local.teststuff.net`,
-> `agents/coordinator/transcripts-viewer.yaml`) are deployed. **P2 = FU-057 LIVE (merged + deployed
-> 2026-07-10; archived 2026-07-16)** — exit_status/error_class classifier, pushgateway +
-> `agent_run_*` metrics, the dashboards (model-health, running-agents/stall detector, cost, the
-> agent-issue drill-down), goose sessions.db rendering in the viewer, and the `ledger-reflex`
-> Argo CronWorkflow on a 30-min cadence (ADR-093 — the loop reflexes migrated k8s CronJob → Argo
-> CronWorkflow, `agents/coordinator/reflexes-argo.yaml`); taxonomy unification (FU-061) landed with it. **P3 = FU-058**, next
-> (the ledger it needs is accumulating; both absorbed the old "stats v2" scope). Companion to [`workflow.md`](workflow.md) (control flow)
-> and [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
+**This doc owns seeing what the agents did, and improving the process from that evidence** —
+session capture, the durable store and browser, the facts ledger, and the retro loop.
+
+**Where the machinery lives:** OTLP collector (`argocd/resources/otel-collector/`), the
+`agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), three capture hooks
+(worker `agent-finalize` + reviewer/coordinator launcher traps + the nightly `transcripts-sync`
+CronJob), the viewer (`transcripts.local.teststuff.net`,
+`agents/coordinator/transcripts-viewer.yaml`), the exit_status/error_class classifier +
+pushgateway `agent_run_*` metrics + dashboards, and the `ledger-reflex` Argo CronWorkflow
+(30-min cadence, `agents/coordinator/reflexes-argo.yaml`). The retro session itself is a
+CronWorkflow that is **born suspended** — see Part B. Companion to
+[`workflow.md`](workflow.md) (control flow) and
+[`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 
 Two needs, one substrate:
 
@@ -117,10 +118,12 @@ Hook points (all existing seams, small diffs):
   direct answer to "the loop was hard to follow" (the #1 pain from the first hand-driven runs).
 - **Task-centric entry**: the bucket prefix *is* the "all sessions for issue #N" view; add the
   prefix URL to the existing PR stats comment (one line next to the Grafana link).
-- **LLM access**: an MCP toolset on the homelab Type-1 MCP —
+- **LLM access (not built)**: a transcript MCP toolset —
   `list_sessions(project, task)` · `get_manifest(session)` · `grep_transcript(session, pattern)` ·
   `fetch_segment(session, from, to)` — so an analysis session pulls *slices*, never whole
-  transcripts into context.
+  transcripts into context. This is the retro's (FU-058) standing want and the **only** concrete
+  consumer that would justify standing up an in-cluster MCP server at all; the retro runs without
+  it today by reading the ledger.
 
 ## Part A′ — what actually took time (measured from the first oracle runs, 2026-07-09)
 

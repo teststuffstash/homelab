@@ -1,9 +1,11 @@
 # AgentStack — the agents framework as a platform API (FU-048 / ADR-085)
 
-**Status: BUILT 2026-07-12; first claim = the oracle stack (oracle-iac).** homelab publishes a
-cluster-scoped Crossplane XRD `agentstacks.platform.teststuff.net`; a stack declares ONE
-`AgentStack` in its `-iac` repo (its POLICY), and the platform's Composition renders the per-repo
-fixer MECHANISM from it. Mechanism = platform, policy = stack — the ADR-084/ADR-085 lens.
+**This doc owns the `AgentStack` claim** — what a stack declares and what the platform renders
+from it. homelab publishes a cluster-scoped Crossplane XRD `agentstacks.platform.teststuff.net`; a
+stack declares ONE `AgentStack` in its `-iac` repo (its POLICY), and the platform's Composition
+renders the per-repo fixer MECHANISM from it. **Mechanism = platform, policy = stack** — the
+ADR-084/ADR-085 lens. Which stacks are on claims today is a cluster query, not a doc:
+`kubectl get agentstacks`.
 
 Two documentation surfaces, one story:
 
@@ -99,7 +101,7 @@ Prometheus.
 
 ## Consumption + migration state
 
-`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point, FU-045) reads
+`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point) reads
 `kubectl get agentstacks -o json` **merged over** `agents/stacks.json` — cluster claims win per
 stack name; a PROBE-FAILED read warns and falls back to the file alone. The reflex SA has
 `agentstacks` get/list ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml));

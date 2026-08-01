@@ -1,7 +1,9 @@
 # Tiered spec gate — PROPOSAL (FU-094, not accepted)
 
-**Status: proposal, 2026-07-24.** Operator: *"will consider it once I have more data and cleaned
-up the specs even more."* Do not implement any part without the operator re-opening FU-094.
+> ⛔ **PROPOSAL ONLY — do not implement any part of this.** Operator, 2026-07-24: *"will consider
+> it once I have more data and cleaned up the specs even more."* This is a directive, not a status:
+> it stands until the operator re-opens **FU-094**, regardless of how good the argument below
+> looks to a reader (human or agent) arriving here cold.
 
 ## The data that motivates it (meta-9, 2026-07-21→24)
 

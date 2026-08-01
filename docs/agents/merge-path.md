@@ -1,13 +1,16 @@
 # Deterministic merge path — serialized auto-update + auto-merge (FU-041)
 
-**Status: DONE + operational (FU-041, proven E2E 2026-07-05; rolled out 2026-07-06).** Tracked in
-[`../follow-ups.md`](../follow-ups.md). Artifacts: the updater + renovate-approve are now **reusable org
-workflows** — [`../../.github/workflows/update-pr-branch.reusable.yml`](../../.github/workflows/update-pr-branch.reusable.yml)
-+ [`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml) — with ~3-line
-callers in each agent repo (sleep-tracking, snore-recorder, openrouter-operator, agent-runtime,
-agent-coordinator); the `gh pr merge --auto --squash` arming lives in
-[`../../agents/agent-session.sh`](../../agents/agent-session.sh). Renovate's shared classification is in
-[`../../.github/renovate-global.json`](../../.github/renovate-global.json) (FU-014).
+**This doc owns how a PR gets from open to merged** — the deterministic reflexes, who owns which
+transition, and the worked scenarios. The lint-checked state machine is
+[`merge-path-fsm.md`](merge-path-fsm.md) / `merge-path-fsm.yaml`; the `-iac` variant is
+[`iac-lane.md`](iac-lane.md).
+
+**Where the machinery lives:** the updater and renovate-approve are **reusable org workflows** —
+[`update-pr-branch.reusable.yml`](../../.github/workflows/update-pr-branch.reusable.yml) +
+[`renovate-approve.reusable.yml`](../../.github/workflows/renovate-approve.reusable.yml) — with
+~3-line callers in each agent repo; auto-merge arming (`gh pr merge --auto --squash`) is in
+[`../../agents/agent-session.sh`](../../agents/agent-session.sh); Renovate's shared classification
+is [`../../.github/renovate-global.json`](../../.github/renovate-global.json).
 
 > **Update (2026-07-17, ADR-093 — Argo Workflows + Events as the platform orchestration engine):** the
 > review path is now **event-driven** and the reflexes run as **Argo CronWorkflows**, not k8s CronJobs.

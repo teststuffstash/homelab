@@ -7,7 +7,13 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-125** (FU-122 burned — filed then retracted 2026-07-31 as already-shipped, ADR-093; not reused).
+  Next free id: **FU-125**. Burned ids (issued, then retracted without ever being work) are declared
+  right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
+  the lint reads this line so a reference to a burned id doesn't register as dangling:
+  **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
+- **An archive entry may stamp the date after the id or at the end of the entry** — both
+  `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
+  read by the freshness check. Prefer the first; it sorts and scans better.
 - **This file is the only tracker.** Everywhere else — docs, code comments, commit messages —
   reference the id (e.g. `FU-007`), never a free-floating `TODO`. Detailed context may stay near
   the code/doc it concerns; the item here carries the one-liner and links to the detail.

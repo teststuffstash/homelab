@@ -1,9 +1,14 @@
 # agents/ — the session launcher (cockpit side)
 
-Operational tooling for the agent platform (design: [`../docs/agents/README.md`](../docs/agents/README.md),
-ADR-077/078/081). This is the **cockpit**: it spawns and attaches per-project agent sessions on the
-cluster. It needs `../tofu/kubeconfig` and knows the per-project namespaces/secrets, so it lives here
-in homelab rather than with the image.
+**How to run an agent session.** Design, roles and trust boundaries are
+[`../docs/agents/README.md`](../docs/agents/README.md) — this file is the tool reference for the
+scripts sitting next to it. It spawns and attaches per-project agent sessions on the cluster; it
+needs `../tofu/kubeconfig` and knows the per-project namespaces/secrets, so it lives here in homelab
+rather than with the image.
+
+The same launcher serves the autonomous loop: `coordinator-session.sh` and `reviewer-session.sh`
+delegate to `agent-session.sh`, so an in-cluster dispatch and a hand-run session take the same path.
+The coordinator's own brief is [`coordinator/README.md`](coordinator/README.md).
 
 The two other pieces live elsewhere, by design:
 
@@ -88,28 +93,12 @@ is a **per-session hard cap**: mint a fresh, single-shot, self-expiring OpenRout
 
 The standing project key stays as the **funding ceiling**; the session key is the actual breaker.
 
-## Known gaps (v1)
+## Launcher gotchas
 
-- **FU-019 — Plain Pod, not [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)** —
-  controller not installed yet (ADR-078). Migrate `Pod` → `Sandbox` CR when it lands.
-- **Git token (wired; needs the App)** — a low-priv `homelab-agents` GitHub App mints a ~1h
-  installation token via the ESO `GithubAccessToken` generator (per-project, scoped to one repo +
-  contents/PR), delivered as `GH_TOKEN`; the entrypoint uses it for private clone+push and `gh pr
-  create`. Bootstrap with `scripts/github-app-bootstrap.sh homelab-agents` (one Create + one Install click,
-  rest scripted) + apply `sleep-iac/<project>/agent/git-token.yaml`. **v1**: pod holds the 1h token;
-  **v2/ADR-081**: the egress proxy injects it, never held in the pod (FU-018).
-- **FU-020 — Egress not locked down** — once the Cilium policy lands it must allow the nix cache
-  (`cache.nixos.org` / a self-hosted **attic**) or the project `devbox install` will hang.
-- **Cold start (mitigated, not gone)** — the in-cluster [nix pull-through cache](../SERVICES.md)
-  (`nixcache.nix-cache.svc`) + a **common toolchain baked into `agent-base`** (python/uv/kubectl/
-  gitleaks, as a cache-warm) cut the first `devbox install`; the per-project delta still installs at
-  runtime. A shared/persistent `/nix` store would remove the rest. ⚠️ Bake hits only land for
-  *version-pinned* packages — `@latest` tools (kubectl/uv) drift vs the project lock and re-fetch;
-  pin a minor (`kubectl@1.36`) in both `agent-base` and the project to get the cache hit (FU-022).
-- **opencode → homelab plugin (future UX)** — a thin opencode plugin could spawn the scoped pod the
-  way Daytona's spawns a Daytona sandbox, replacing the launcher.
-
-## Operational findings (2026-06-29)
+Facts about *running* a session. Design lives in `../docs/agents/`; open work lives in
+[`../docs/follow-ups.md`](../docs/follow-ups.md) — deliberately **not** restated here (this file
+used to carry its own "Known gaps" and "Follow-ups" lists, and by 2026-08-01 eight of the nine ids
+in them had shipped and been archived while the text still called them open).
 
 - **opencode needs AVX2; goose runs anywhere.** opencode's Bun runtime SIGILLs (`Illegal
   instruction`) on the non-AVX2 nodes (`hp-01`, `thinkcentre`). The launcher pins the **opencode**
@@ -120,52 +109,20 @@ The standing project key stays as the **funding ceiling**; the session key is th
   to parse the structured final line. Every headless run also drops an `AGENT_RUN_STATS {json}` line
   (via `agent-finalize`) and the launcher posts a **PR comment** with the stats + a Grafana deep-link
   to that pod's logs — so a PR review is one click from both the numbers and the full run.
-- **Cost is provider-routing + request-count, not output.** Autopsy of a real run (qwen3-coder paid,
-  $5.79): output was negligible ($0.03); the spend was **all input** = OpenRouter routing to a
-  pricier provider (AtlasCloud ~$1.15/M vs the $0.22 model-page headline) × **0% prompt caching**
-  (the ~27K context re-sent on all 187 requests) × **looping** (187 req vs owl's 72; it never read
-  the issue). Owl's provider cached 83% → near-free input. **Estimate:**
-  `cost ≈ requests × avg_context_tokens × effective_$/M_input × (1 − cache_hit)`. Levers, ranked:
-  route to a **caching** provider > pin a **cheaper** provider > **fewer requests**. Check the
-  *effective* provider price in the OpenRouter activity export, not the model-page headline.
-- **Model strategy (updated 2026-06-30).** **Don't chase free/cloaked.** `:free` tiers cap at ~8 rpm
-  → useless for a tool loop, and **cloaked** models (the former `openrouter/owl-alpha`, which solved
-  issue #2 → PR #6) get **rotated out and 404 mid-run** — exactly what happened. Default to a cheap,
-  *multi-provider, cached* PAID model bounded by the per-session cap: **`deepseek/deepseek-v4-flash`**
-  (~$0.09–0.10/M in, ~$0.02/M cached, ~12 providers @ 99%+ uptime). The per-session ephemeral key is
-  the real guardrail now (hard `budgetUSD`), so paid-but-bounded beats free-but-flaky. The standing
-  per-project key stays the weekly funding ceiling.
-
-## Follow-ups (tracked in [`docs/follow-ups.md`](../docs/follow-ups.md) — ids below)
-
-- **Per-session budget — landed (2026-06-29).** The cost autopsy traced the $5.79 to the *weekly*
-  key (one session can eat the window). Built: (1) the `openrouter-operator` mints **ephemeral
-  session keys** (hard `budgetUSD`, no reset, `expiresAt`) — `ephemeral: true` + `session`; (2)
-  `agents/estimate_budget.py` sizes the pre-flight cap into a tier and `--emit-cr`s the CR; (3)
-  `agent-session.sh --openrouter-secret <name>` binds a worker to a per-session key instead of the
-  shared `<project>-openrouter`. The **coordinator** (`agents/coordinator/`) ties them together per
-  dispatch. The dispatch loop now runs on the Argo reflexes (ADR-093; FU-026 archived), gated
-  per-stack by the FU-080 `coordinator.enabled` knob.
-- **FU-018 — OpenRouter provider routing: root cause found (2026-06-29), not yet wired.** The
-  playground **"Cost/Quality Tradeoff" slider is UI-only — it does NOT touch API-key requests**, so
-  the pod sent *no* `provider` field → default routing (filter ~30s-outage providers, then
-  load-balance weighted by **1/price²** — a lottery, not a floor) drew AtlasCloud and stuck. Fix =
-  send `provider` per request: `{order:["DeepInfra"], max_price:{prompt:0.3,completion:0.5},
-  ignore:["AtlasCloud"]}`. Inject via `opencode.json` `options.provider` (goose won't carry it) or —
-  the real home — the **ADR-081 egress proxy** rewriting the body for every harness. Prefer a
-  *caching* provider over blind `sort:"price"` (cheapest is often 0% cache). Biggest cost lever.
-- **Recipe `gh issue view` + incremental push** — landed in `sleep-tracking/.agents/fix.yaml`;
-  replicate when other repos get a fixer recipe.
-- **FU-057 — Retro P2 (facts ledger + cross-run dashboard)** — token breakdown
-  (prompt/completion/cached/requests) needs the OpenRouter *activity* API (the in-pod inference key
-  can self-report cost but not the per-request token split). Computes over the captured manifests
-  (`docs/agents/observability-and-retro.md` §B1) + a Grafana dashboard over the ledger.
-- **FU-021 — goose retry policy — ✅ RESOLVED (2026-07-09)** — the 812×-retry storm was goose's
-  final-output continuation loop (no config can stop it per error class); fixed by the runtime
-  storm watchdog (agent-runtime#8/#11) + a `GOOSE_MAX_TURNS=200` belt in the launcher, proven by
-  a live invalid-key acceptance run (sleep-tracking#20: kill in ~21s, `error_class=auth-storm`,
-  AGENT_STRIKE posted).
-- **FU-022 — Pin tool versions** in `agent-base` + project `devbox.json` so the baked-toolchain
-  cache hits.
-- **FU-024 — Wire `guardrail` in the openrouter-operator** so `only-free` is enforced, not just
-  declared.
+- **⚠ Cold-start cache hits need *pinned* versions.** The in-cluster
+  [nix pull-through cache](../SERVICES.md) + the toolchain baked into `agent-base` cut the first
+  `devbox install`, but `@latest` tools (kubectl, uv) drift against the project lock and re-fetch
+  anyway. Pin a minor (`kubectl@1.36`) in **both** `agent-base` and the project to get the hit.
+- **⚠ Don't hand-reconstruct a session Secret name.** It is `<project>-session-<id>-openrouter`;
+  deriving it from the CR's `metadata.name` (`<project>-<session>`) omits `-session-` and the worker
+  crash-loops on `secret … not found`.
+- **Model choice is not a launcher concern.** `--model` is an override, not the policy: chains,
+  strikes, provider pinning and the live registry are
+  [`../docs/agents/model-routing.md`](../docs/agents/model-routing.md), and the router/budgeter is
+  ADR-096. In particular the old "don't chase free/cloaked, hardcode one cheap paid model" doctrine
+  that used to live in this file is **superseded** — model-routing.md §"The problem, from evidence"
+  records why (reliability is a measurement, not a constant).
+- **Still a plain `Pod`, not [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)** —
+  the controller isn't installed (ADR-078); migrate to the `Sandbox` CR when it lands (FU-019).
+- **opencode → homelab plugin (idea, unbuilt)** — a thin opencode plugin could spawn the scoped pod
+  the way Daytona's spawns a Daytona sandbox, replacing this launcher.

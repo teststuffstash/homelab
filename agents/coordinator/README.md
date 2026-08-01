@@ -1,18 +1,37 @@
 # agents/coordinator — the coordinator brief
 
-The **coordinator** is the cockpit's brain: it watches `agent-fix` work, decides what to dispatch,
-sizes a budget, spawns a scoped worker pod per round, and drives the review loop to a merge. v1 is
-an **interactive Claude Code session** that loads *this file as its brief* and follows the runbook
-below by hand — structured, not autonomous. The structure is the point: the same brief survives the
-move from hand-driven → a real workflow engine later.
+**You are reading this because you were dispatched as the coordinator.** This file IS your brief —
+`coordinator-session.sh` loads it by absolute path and both the tick and item prompts say "per your
+brief". Read the design rule and the state machine, then go to the play your dispatch clause names.
+
+The **coordinator** decides what to dispatch, sizes a budget, spawns a scoped worker pod per round,
+and drives the review loop to a merge.
+
+**How you are running (this is not the hand-driven v1 — that shipped past):**
+
+- **You are autonomous and in-cluster.** Your stack's `coordinate-<stack>` CronWorkflow runs in
+  `<stack>-agents` as the `agentstack-loop` SA, plus the `/coordinate` doorbell edge. All three
+  stacks are graduated (ADR-093, FU-080 archived).
+- **You do not schedule yourself.** `coordinator-scan.sh` is a deterministic gate that emits
+  `(clause, repo, item)` work units and dispatches exactly one — *which* item, lane capacity and
+  WIP are its job, not yours (ADR-094). **You judge one item and exit.** Do not go looking for
+  other work.
+- **Dispatch is at-least-once and level-triggered.** Re-read your item's live state first; if it's
+  no longer actionable — already claimed with a live worker, already armed/approved/merged, labels
+  moved on — say so and exit clean having touched nothing.
+- **Your writes are labels, comments and merge-state via `gh`**, plus W1 ⚑ spec gap-flags on open
+  agent PR branches (ADR-086). Never merge by hand. Never touch the review reflex's armed PRs.
+  `.github/workflows/`, platform and XRD changes are the operator's lane, not yours.
+- **Your credentials are brokered per run.** Nothing standing lives in your namespace; `ref:`
+  strings resolve at the egress proxy (ADR-087).
 
 ## Design rule (keep every door open)
 
 **State lives in GitHub labels + CRs, never in the coordinator's head.** The coordinator is a
-*level-triggered reconciler*: it can crash, restart, or be a different person/agent and pick up
-exactly where things are by re-reading labels. That property is what makes graduating to a durable
-engine (Temporal / Argo Workflows+Events / a CRD+controller / Camunda-Zeebe) a mechanical swap
-rather than a rewrite. Until then, "the engine" is this brief + your judgement.
+*level-triggered reconciler*: it can crash, restart, or be a different session and pick up exactly
+where things are by re-reading labels. That property is what made graduating to a durable engine
+(Argo Workflows + Events, ADR-093) a mechanical swap rather than a rewrite — the brief survived the
+move from hand-driven unchanged. Keep it true: **hold no state between actions.**
 
 ## State machine (labels on the issue/PR)
 
@@ -448,7 +467,7 @@ devbox run coordinator-session -- --run-tick
 > `--run-tick` on a schedule — ADR-093) uses — graduating to autonomy was a **scheduler swap, not a
 > behavior change**. Edit the wording in one place and both follow.
 
-> **Scope note (partially landed — FU-045).** A coordinator instance is scoped to a **stack**: the
+> **Scope note.** A coordinator instance is scoped to a **stack**: the
 > platform (homelab) **plus that stack's repos**. Since FU-025 a stack's deploy truth lives in its own
 > `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is homelab + sleep-iac + the
 > app repos — and a *different* stack is a different context. **Landed:** `coordinator-session.sh`
@@ -457,8 +476,9 @@ devbox run coordinator-session -- --run-tick
 > so that repo's `CLAUDE.md` + specs load as natural cwd context while the brief (this file, the platform
 > *mechanism*) is still loaded by absolute path from `/work/homelab`. The clones are **read-only
 > reference** — the coordinator's only writes stay labels/comments/merge-state via `gh`; a write-tiers
-> model (touch a stack repo directly) needs its own ADR (**FU-059**). **Still deferred:** folding this
-> into the `AgentStack` CRD + running one coordinator per stack is **FU-045/FU-048**.
+> model (touch a stack repo directly) needs its own ADR (**FU-059**). **One coordinator per stack,
+> rendered from the `AgentStack` claim, is DONE** — all three stacks run their own
+> `coordinate-<stack>` CronWorkflow in `<stack>-agents` (FU-048/FU-080, both archived).
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn
 worker pods + mint/observe `OpenRouterKey` CRs; **no** Secret-value access), and subscription auth via
@@ -541,17 +561,17 @@ first:
 The **image-build CI needs no token** — it pushes to ghcr with the job's built-in `GITHUB_TOKEN`
 (`packages: write`). The only *new* credential the coordinator adds is this runtime `coordinator-git`.
 
-## Open wiring (still TODO — ids in [`docs/follow-ups.md`](../../docs/follow-ups.md))
+## See also
 
-- **FU-018 — `provider`-routing injection** (opencode.json or the ADR-081 egress proxy) so the paid
-  worker path stops default-routing to a pricey provider — see [`../README.md`](../README.md) follow-ups.
-- **Durable engine (FU-026, done):** the loop runs on Argo Workflows+Events (ADR-093) — reflexes
-  are CronWorkflows + the review edge-trigger Sensor. The per-stack move (creds ref-rail +
-  `<stack>-agents` ns) is FU-080.
-- **Deploy path (FU-025, done):** the release→deploy path is now automated — the app repo's `deploy`
-  workflow builds + opens an auto-merging version-bump PR in the stack's `-iac` repo, ArgoCD syncs. So
-  step 7a is a no-op (deploy is hands-off); the coordinator never cuts releases or touches homelab.
-  See `docs/sleep-iac.md` §"Deploy pipeline".
+Deploy is hands-off and not yours: the app repo's `deploy` workflow builds and opens an
+auto-merging version-bump PR in the stack's `-iac` repo, ArgoCD syncs
+(`docs/sleep-iac.md` §"Deploy pipeline", ADR-084). You never cut releases or touch homelab.
 
-See [`../README.md`](../README.md) (worker launcher + per-session budget), [`../../docs/agents/workflow.md`](../../docs/agents/workflow.md)
-(reconcile loop + hazards), and [`../../docs/agents/README.md`](../../docs/agents/README.md) (design/ADRs).
+[`../README.md`](../README.md) (worker launcher + per-session budget) ·
+[`../../docs/agents/workflow.md`](../../docs/agents/workflow.md) (reconcile loop + hazards) ·
+[`../../docs/agents/README.md`](../../docs/agents/README.md) (platform design + the doc index) ·
+[`../../docs/agents/roles.md`](../../docs/agents/roles.md) (your role's full machinery).
+
+Open work on the loop is tracked as `FU-NNN` in
+[`../../docs/follow-ups.md`](../../docs/follow-ups.md) — not listed here, because a second copy of
+a tracker is how this section went stale (it listed FU-018 as open for weeks after it shipped).

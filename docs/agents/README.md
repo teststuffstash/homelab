@@ -1,38 +1,88 @@
-# Agent platform — in-cluster MCP capability + ephemeral sandbox harness
+# Agent platform — an interactive meta-coordinator in the jail, an autonomous loop in the cluster
 
-> **Status: substrate LIVE, loop fully autonomous per-stack (2026-07-27 — FU-080 complete).** The
-> launcher/worker/budget/reviewer pieces run for real (`../../agents/README.md`); the coordinator
-> is a scoped brief behind a deterministic scan gate, dispatched **item-scoped** (ADR-094/FU-086 —
-> the scan emits units, a session judges one) and **edge-triggered** (review webhook + `/coordinate`
-> doorbell, ADR-093; the Argo CronWorkflows in `agents/coordinator/reflexes-argo.yaml` are the
-> level-triggered backstop). ALL THREE stacks (oracle 2026-07-18; sleep + platform 2026-07-26) run
-> their own `coordinate-<stack>` + `review-<stack>` CronWorkflows in `<stack>-agents` on
-> broker-fetched stack-scoped tokens (FU-080), with per-stack review **edge** routing since
-> FU-100 (2026-07-27); the global belts skip graduated stacks. The role inventory (brief +
-> boundary + activation machinery per role) is [`roles.md`](roles.md). Credential injection + the egress proxy are **LIVE default-on**
-> (ADR-087: opaque refs + git-cred broker), and the proxy doubles as the FU-088 subscription
-> headroom gate. This is the narrative home for the agent
-> platform; it's bigger than one ADR. Pivotal choices are recorded as thin ADRs in
-> [`../adr.md`](../adr.md) (ADR-077+, see [Decisions](#decisions)); the phased build lives in
-> [`../../ROADMAP.md`](../../ROADMAP.md). Where a piece goes LIVE it gets a row in
-> [`../../SERVICES.md`](../../SERVICES.md). The **fixer control flow** (worker gates, fresh-vs-hot,
-> the coordinator state machine + webhooks) is in [`workflow.md`](workflow.md); the **operational**
-> launcher reference + findings/follow-ups is in [`../../agents/README.md`](../../agents/README.md).
+The narrative home for the agent platform: what it is, where the trust boundaries are, and which
+doc owns what. It's bigger than one ADR, so pivotal choices are thin ADRs in
+[`../adr.md`](../adr.md) and each doc below owns its own mechanism.
+
+**Where status lives — not here.** Whether a piece is live is answered by
+[`../../SERVICES.md`](../../SERVICES.md) (consumable services), `kubectl get agentstacks` (which
+stacks are graduated), and [`../follow-ups.md`](../follow-ups.md) (what's still open). A
+hand-maintained status paragraph in a design doc is a fourth copy that goes stale between edits —
+the per-role "state" column below is deliberately coarse for the same reason.
+
+For the launcher — flags, usage, per-session budget mechanics — see
+[`../../agents/README.md`](../../agents/README.md).
 
 ## What this is
 
-Two agent shapes that compose into one **stack**, not two separate systems:
+Two places where agents run, with one boundary between them:
 
-- **Type 1 — the homelab MCP agent** (long-lived): an in-cluster MCP server with a scoped
-  ServiceAccount that exposes "observe + propose on the homelab" to any agent. It is the
-  **capability surface**.
-- **Type 2 — the sandbox harness** (ephemeral): per-task agents that run in disposable
-  [agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) pods and *consume* Type 1's MCP
-  plus git. It is the **execution substrate**.
+- **The jail — the interactive meta-coordinator** (`/meta-coordinate`). The operator's Claude Code
+  sessions on the Docker jail, with full context and every credential the operator has. It is
+  **human-gated by construction**: a person is in the session. It does what the loop structurally
+  cannot — the codeowner gate on `specs/` diffs, issue authoring, `.github/workflows/` and
+  platform/XRD changes (worker tokens forbid them), `agent/error` breaker clears, and everything
+  the machine belts escalate. Its state is durable and re-read every session, never remembered:
+  [`../../agents/coordinator/TICK-LOG.md`](../../agents/coordinator/TICK-LOG.md) (practice) +
+  [`meta-state.md`](meta-state.md) (in-flight chains).
+- **The cluster — the autonomous loop.** Each graduated stack runs its own `coordinate-<stack>` and
+  `review-<stack>` CronWorkflows in a `<stack>-agents` namespace as the `agentstack-loop` SA, which
+  dispatches ephemeral worker pods into the per-repo fixer namespaces. **Zero cross-boundary
+  Secrets live there** — git tokens are broker-fetched per run from the egress proxy under
+  TokenReview, and LLM creds are opaque `ref:` strings resolved at the proxy (ADR-087). All three
+  stacks are graduated: oracle (2026-07-18), sleep + platform (2026-07-26).
 
-The "intelligence" lives at exactly two nodes — **triage** and **fix** — and everything between
-them is plumbing you mostly already run (CI, ArgoCD, Renovate, a verification step). Don't put an
-agent where a status check will do.
+The boundary between them is the interesting part: **the jail has the context and the authority;
+the cluster has the blast-radius containment.** Work moves from jail to cluster as an *issue* (the
+loop's only input) and comes back as a *PR* (its only output).
+
+Inside the cluster, the intelligence sits at a small number of judgment points and everything
+between them is deterministic plumbing you mostly already run — a scan, CI, ArgoCD, Renovate,
+Sensors. **Don't put an agent where a status check will do:** the `coordinator-scan` gate exists
+precisely so an empty world wakes no LLM, and dispatch is item-scoped so the model judges one item
+rather than scheduling itself (ADR-094).
+
+### The roles
+
+A **role** = brief + boundary + activation machinery (predicate, edge, backstop, idempotency key,
+capacity gate, breakers). The machinery outweighs the brief roughly 10:1, which is why a new role
+is a machinery design problem, not a prompt-writing one. Full per-role inventory — every guard,
+every key — is [`roles.md`](roles.md); this is the map.
+
+| Role | Runs | Fires on | State |
+|---|---|---|---|
+| **meta-coordinator** | jail, interactive | the operator | live |
+| **fixer** (worker) | fixer ns (== repo) | a scan-emitted work unit | live |
+| **coordinator** | `<stack>-agents` | scan clause / `/coordinate` doorbell | live |
+| **reviewer** | `<stack>-agents` | reviewable transition (exporter edge) | live |
+| **responder** | `agent-coordinator` | an Alertmanager fingerprint | live (v2, triage-first) |
+| **scout** (model-scout) | cluster cron | weekly schedule | live |
+| **researcher/planner** | fixer ns | a human-queued `goal` issue | first mode proven |
+| **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | detector + dispatch built |
+| **retro** | cluster cron | ledger level-trigger | built, **born suspended** |
+| **prober** | — | post-deploy + schedule | planned (FU-102) |
+
+**Lenses** (FU-101) are not roles: a lens is the reviewer's machinery with a different brief
+sourced from an externally maintained standard, selected by a deterministic artifact-class
+predicate. N briefs over one machinery family — that distinction is what stops the role list
+growing without bound.
+
+### The docs
+
+| Doc | What it owns |
+|---|---|
+| [`roles.md`](roles.md) | The role axis — brief/boundary/machinery per role, lenses, SLO teeth |
+| [`workflow.md`](workflow.md) | The fixer control flow — worker gates, the reconciler, triggers, hazards |
+| [`merge-path.md`](merge-path.md) + [`merge-path-fsm.md`](merge-path-fsm.md) | How a PR gets from open to merged; the lint-checked state machine |
+| [`iac-lane.md`](iac-lane.md) + [`iac-lane-fsm.md`](iac-lane-fsm.md) | The `-iac` deploy lane — no humans in the path, the IAC-G gap register |
+| [`agentstack.md`](agentstack.md) | The `AgentStack` claim — what a stack declares, what the Composition renders |
+| [`platform-and-stacks.md`](platform-and-stacks.md) | Platform ⟷ stack separation; the composition axes; the credential airlock |
+| [`model-routing.md`](model-routing.md) | Chains, strikes, the live registry, the scout, the task-class pilots |
+| [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
+| [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |
+| [`issue-authoring.md`](issue-authoring.md) | Coordinator-authored issues, harvest, the sprout index |
+| [`spec-gate-tiering.md`](spec-gate-tiering.md) | Proposal only — do not implement before the operator re-opens it |
+| [`meta-state.md`](meta-state.md) | Transient: what a fresh meta session must pick up |
 
 ## Design invariants
 
@@ -53,47 +103,65 @@ These come straight from [`../../CONTEXT.md`](../../CONTEXT.md) ("boot from git"
 
 ```mermaid
 graph TB
-  you(["You — NL bug report"]) --> triage
+  you(["Operator — NL report, direction, gates"]) --> meta
 
-  subgraph ephemeral["Ephemeral · from-git · created+destroyed per task"]
-    triage["① Triage recipe<br/>reads prod via MCP · writes an Issue only"]
-    fixer["② Fixer sandbox — agent-sandbox pod<br/>Goose/claude-or recipe · no data · branch+PR only"]
-    itest["③ Full-stack test — Tofu'd Proxmox VM runner<br/>k3d: Garage + ingester + Grafana + Playwright"]
+  subgraph jail["The jail · interactive · human-in-the-session"]
+    meta["meta-coordinator (/meta-coordinate)<br/>full context · codeowner gate · operator-lane work"]
+  end
+
+  subgraph loop["&lt;stack&gt;-agents · autonomous per-stack · no standing Secrets"]
+    scan["coordinator-scan — DETERMINISTIC gate<br/>emits (clause, repo, item) work units"]
+    coord["coordinator — judges ONE item<br/>labels/comments/merge-state only"]
+    rev["reviewer — distinct App identity<br/>self-approval blocked"]
+  end
+
+  subgraph fixns["fixer ns (== repo) · ephemeral per round"]
+    worker["worker pod<br/>recipe + env card · branch+PR only · no data creds"]
   end
 
   subgraph prod["Long-running · PRODUCTION — the only persistent env"]
-    mcp["Homelab MCP (Type-1)<br/>in-cluster SA · read + propose"]
     plat["Talos · ArgoCD · Garage S3 · Grafana · Prometheus"]
-    mcp --> plat
   end
 
-  proxy["Egress proxy<br/>injects per-job LLM key + 1h GitHub App token"]
+  proxy["Egress proxy (ADR-087/096)<br/>resolves ref: creds · brokers git tokens · budgets + routes models"]
 
-  triage -. read .-> mcp
-  triage -->|Issue + synthetic data table| fixer
-  fixer -->|PR| itest
-  itest -->|green| merge["auto-merge → ghcr image → bump PR → ArgoCD"]
-  fixer -. all egress .-> proxy
+  meta -->|"issue: agent-fix + agent/queued"| scan
+  scan -->|one unit| coord
+  coord -->|dispatch round N| worker
+  worker -->|branch + PR| ci["CI — devbox run ci + system test<br/>Tofu'd Proxmox VM runner, k3d"]
+  ci -->|green| rev
+  rev -->|approve| merge["auto-merge → ghcr image → deploy-pin PR → ArgoCD"]
+  merge --> plat
+  rev -. "escalations: agent/blocked, arbitrate verdicts" .-> meta
+  worker -. all egress .-> proxy
+  coord -. all egress .-> proxy
+  rev -. all egress .-> proxy
 ```
 
 ## Trust boundaries
 
-The whole design is three zones and the artifacts that cross between them:
+The design is four zones and the artifacts that cross between them:
 
 | Zone | Can read | Can write | Holds creds? |
 |---|---|---|---|
-| **Triage** | prod data (Grafana, S3, source) via MCP | a GitHub **Issue** only (`issues:write`) | no raw keys — via proxy |
-| **Fixer** | the Issue + the synthetic data table | a **branch + PR** (non-protected only) | **no data creds**; git token injected, never held |
+| **meta-coordinator** (jail) | everything the operator can | anything — but a human is in the session | yes, the operator's |
+| **coordinator / reviewer** (`<stack>-agents`) | the stack's repos, cluster state for its own scheduling | labels, comments, merge-state, approvals (+ W1 ⚑ spec gap-flags on open PR branches, ADR-086) | **no** — broker-fetched per run, `ref:` resolved at the proxy |
+| **fixer** (fixer ns) | the app repo + the Issue | a **branch + PR** (non-protected only) | **no data creds**; git token brokered, never standing |
 | **CI / verify** | the repo + the ephemeral test stack | status checks | minted per-run |
 
-The one-line rule: **triage reads everything but only writes an Issue; the fixer writes code but
-sees no data and can't touch master; the bridge is the synthetic data table.** Master is protected
-by branch protection + required checks — the token scope is belt, the protection rule is suspenders.
+The one-line rule: **the jail has authority and no containment; the loop has containment and no
+authority.** A cluster agent can propose (branch, PR, label) but never merge by hand, never
+`kubectl apply`, never touch `.github/workflows/`. Master is protected by branch protection +
+required checks — the token scope is belt, the protection rule is suspenders. The reviewer runs
+under a *distinct* GitHub App from the worker, so self-approval is structurally impossible.
 
-A corollary: **the Issue must be self-contained.** The fixer has only the app repo + the Issue —
-no homelab checkout, no `SERVICES.md`, no cluster access — and app repos deliberately don't mirror
-platform docs (they'd go stale). So triage/the coordinator copies the platform facts a task needs
-(endpoints, bucket names, service status) into the Issue alongside the synthetic table.
+A corollary that keeps biting: **the Issue must be self-contained.** The worker clones only
+`/work/repo` — no homelab checkout, no `SERVICES.md`, no cluster access — and app repos
+deliberately don't mirror platform docs (they'd go stale). So the platform facts a task needs
+(endpoints, bucket names, existing secret refs) are the **issue author's** job to inject, not
+something the worker can go and look up. The worker's *environment* facts arrive separately, via
+the launcher-composed env card — the two must not be confused ([`fixer-context.md`](fixer-context.md),
+and the role × context map in [`roles.md`](roles.md)).
 
 ## Identity & secrets
 
@@ -123,29 +191,34 @@ The driving prompt:
 > Grafana shows this day as a 25-minute sleep only."*
 
 (25 min ≈ the 24-min nap; the 8h31m overnight block was dropped — a cross-midnight wake-date keying
-or session-aggregation bug in `src/sleep_ingester/`.) Through P0+P1:
+or session-aggregation bug in `src/sleep_ingester/`.) End to end today:
 
 ```mermaid
 sequenceDiagram
-  participant U as You
-  participant T as Triage recipe (P0)
-  participant M as Homelab MCP (read)
+  participant U as Operator
+  participant MC as meta-coordinator (jail)
   participant I as GitHub Issue
-  participant F as Fixer sandbox (P1)
-  participant C as CI / full-stack test
-  U->>T: paste the report
-  T->>M: query sleep.sqlite night=2026-06-24 → 25 min
-  T->>M: read raw sessions from sleep-band S3 → both present
-  T->>M: read parser.py / timezone.py → hypothesis
-  T->>I: open Issue + synthetic DATA TABLE (no real PII)
-  Note over U,I: P0 ends — zero blast radius. You label it `agent-fix`.
-  I->>F: spawn agent-sandbox (no data creds, branch+PR only)
-  F->>F: build sqlite from the table → write FAILING row → red
+  participant S as coordinator-scan (deterministic)
+  participant CO as coordinator (one item)
+  participant F as worker pod (fixer ns)
+  participant C as CI / system test
+  participant R as reviewer
+  U->>MC: paste the report
+  MC->>MC: read prod — sleep.sqlite night=2026-06-24 → 25 min;<br/>raw sessions in S3 → both present; parser.py → hypothesis
+  MC->>I: open Issue + synthetic DATA TABLE (no real PII) + the platform facts
+  Note over U,I: operator labels `agent-fix` + `agent/queued` — breaker #1
+  S->>CO: emits (queued-dispatch, sleep-tracking, #N)
+  CO->>F: claim, size the budget, dispatch round 1
+  F->>F: build sqlite from the table → FAILING row → red
   F->>F: minimal fix in parser.py → devbox run ci → green (cov ≥85%)
-  F->>C: gh pr create
-  C->>C: devbox run ci + scan-secrets + full-stack test; reviewer session approves (merge-path.md)
-  C-->>I: green + approval → auto-merge → ghcr image
+  F->>C: branch + PR, auto-merge armed
+  C->>R: green → reviewable edge
+  R-->>I: approve → auto-merge → ghcr image → deploy-pin PR → ArgoCD
 ```
+
+**What the operator still does by hand here is the triage**, and that is deliberate: reading prod
+data needs credentials the loop is designed not to have. The synthetic data table is the bridge —
+it carries the shape of the bug across the boundary without carrying the data.
 
 **Why the dashboard needs the full-stack test:** the recent dashboard fixes (`rawSql`→`queryText`,
 `queryType=table`, `night_date`→epoch, `rawQueryText` interpolation) were all **dashboard-JSON /
@@ -208,17 +281,21 @@ sleep-tracking/
 ```
 
 - **Per-app fixer recipe → the app repo** (it knows `parser.py`, `devbox run ci`, the 85% gate).
-- **Generic triage recipe → homelab** (leans on the homelab MCP; parameterized with the repo).
+  Recipes are per task class (`fix.yaml`, `build.yaml`, `research.yaml`) and are selected by the
+  launcher from a `task/*` label — never assembled by an LLM (ADR-094, FU-114).
+- **Reviewer rubric + lens attachments → the app repo** too; the lens *sources* are platform-owned
+  (`agents/lenses/`, FU-101).
 - **Hard guardrail in `fix.yaml`:** *new test cases are rows in the decision table — a new
   near-duplicate test function requires justification.* (AI's default failure mode is exactly the
   20-duplicate-tests anti-pattern; forbid it explicitly.)
 
 ## Decisions
 
-Recorded as thin ADRs in [`../adr.md`](../adr.md) — the agent-platform range is **ADR-077..082 +
-ADR-084..087 + ADR-093/094**. No mirror table here: the hand-maintained copy that used to sit in
-this section drifted (093/094 missing for 10 days) and was removed 2026-07-27 (FU-107) —
-`../adr.md` is the single source.
+Recorded as thin ADRs in [`../adr.md`](../adr.md); the agent-platform ones live under its
+**Agent platform** heading. **No list here, not even a range** — the mirror *table* was removed
+2026-07-27 (FU-107) after drifting for 10 days, and the hand-maintained *range* that replaced it
+drifted the same way within days (it still said `..094` after ADR-095 and ADR-096 landed). Any
+enumeration of ADRs outside `../adr.md` is a copy that will rot; go read the file.
 
 ## Open / deferred
 
@@ -226,15 +303,23 @@ this section drifted (093/094 missing for 10 days) and was removed 2026-07-27 (F
   shouldn't reach prod. If it ever does, the GitOps-correct fix is **`git revert` the bump commit**
   (ArgoCD re-syncs the previous tag) — never `kubectl rollout undo` (drifts from git). Revisit
   Argo Rollouts only if reality proves testing insufficient.
-- **Does Omnigent earn its place?** Start with Goose-in-agent-sandbox + the bare egress-proxy
-  pattern; add Omnigent's full meta-harness only if governing *multiple* harnesses becomes real.
-- **Shared memory-as-MCP** — a third platform-service candidate (durable git-markdown + a
-  disposable vector cache, à la Memory-OS Layer 1). Not P0/P1.
+- **Does Omnigent earn its place?** The bare pod + egress-proxy pattern is what runs; add
+  Omnigent's meta-harness only if governing *multiple* harnesses becomes real. FU-095(b) —
+  the same task classes across `--harness goose|opencode|claude` — is the evidence this awaits
+  (the trigger recorded in ADR-077).
+- **Shared memory-as-MCP** — a platform-service candidate (durable git-markdown + a disposable
+  vector cache, à la Memory-OS Layer 1). Untouched; nothing has been blocked on it yet.
+- **A homelab MCP capability surface** — an in-cluster read-only MCP server ("observe + propose on
+  the homelab") was the original P0 and was **never built**. Triage arrived instead as the
+  **responder** role (alert-triggered, one bounded session per fingerprint) and as the jail-side
+  meta-coordinator, both of which needed no new server. Revisit only if a consumer appears that
+  can't be served by either — the retro's transcript slices (FU-058) are the nearest candidate.
 - **CI-cluster-with-ARC upgrade** — VMs now; revisit a dedicated CI cluster with autoscaling
   privileged runners only if parallel PR volume outgrows a single VM.
 
 ## Roadmap
 
-Phased build in [`../../ROADMAP.md`](../../ROADMAP.md#agent-platform--phased) — P0 read-only triage
-MCP → P1 fixer sandbox + full-stack gate → P2 bump-PR + deploy verify → P3 local-LLM/Hermes tier +
-shared memory.
+The original P0–P3 phases are done or superseded — the ledger, and what replaced each, is in
+[`../../ROADMAP.md`](../../ROADMAP.md#agent-platform). Open work is **programs**, not
+phases: see ROADMAP → *Programs in flight* for the deploy paths and the onboard-every-repo
+program, and `docs/follow-ups.md` for individual loose ends.

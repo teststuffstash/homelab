@@ -27,7 +27,16 @@ MAX_ITEM_LINES=10
 # Historical/journal paths: references here are legal forever (never scrubbed).
 HIST_EXCLUDES=":(exclude)agents/coordinator/TICK-LOG.md :(exclude)docs/adr.md :(exclude)docs/agents/retros :(exclude)docs/incidents"
 
-defined=$( (grep -o 'FU-[0-9][0-9][0-9]' "$TRACKER"; [ -f "$ARCHIVE" ] && grep -o 'FU-[0-9][0-9][0-9]' "$ARCHIVE") | sort -u)
+# "Defined" means the id HAS ITS OWN ENTRY — not merely that the string appears somewhere.
+# Matching loosely (plain grep over both files) counts an id mentioned only inside another item's
+# "Relates <id>" cross-reference as defined, which let a resolved id stay referenced in shipped
+# code comments for weeks while this lint reported clean. Anchor on the entry syntax instead.
+# BURNED ids (declared in the tracker header, never reused) count as defined: the declaration IS
+# the record, and it is permanent.
+defined=$( (grep -oE '^- \[[ x]\] \*\*FU-[0-9]{3}\*\*' "$TRACKER"
+            grep -oE 'FU-[0-9]{3} burned' "$TRACKER"
+            [ -f "$ARCHIVE" ] && grep -oE '^- \*\*FU-[0-9]{3}\*\*' "$ARCHIVE"
+           ) | grep -o 'FU-[0-9][0-9][0-9]' | sort -u)
 # shellcheck disable=SC2086 # HIST_EXCLUDES is a list of pathspecs
 referenced=$(git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(exclude)$ARCHIVE" $HIST_EXCLUDES | sort -u)
 
@@ -84,9 +93,21 @@ if [ -f "${TMPDIR:-/tmp}/fu-lint-$$" ]; then
 fi
 
 # Freshness warnings on the archive (never fail — deleting is an operator judgment call).
+# Two entry formats exist in the wild and BOTH must be seen: the stamp may follow the id
+# (`- **FU-118** *(archived 2026-07-31)* — …`) or trail the entry (`- **FU-050** — … *(archived …)*`).
+# Matching only the first left 8 entries permanently invisible to this check.
 if [ -f "$ARCHIVE" ]; then
   now=$(date +%s)
-  grep -o 'FU-[0-9][0-9][0-9]\*\* \*(archived [0-9-]*' "$ARCHIVE" | sed 's/\*\* \*(archived /|/' |
+  awk '
+    /^- \*\*FU-[0-9][0-9][0-9]\*\*/ {
+      if (id != "" && stamp != "") print id "|" stamp
+      match($0, /FU-[0-9][0-9][0-9]/); id = substr($0, RSTART, RLENGTH); stamp = ""
+    }
+    id != "" && stamp == "" && match($0, /\(archived [0-9][0-9-]*/) {
+      stamp = substr($0, RSTART + 10, RLENGTH - 10)
+    }
+    END { if (id != "" && stamp != "") print id "|" stamp }
+  ' "$ARCHIVE" |
   while IFS='|' read -r id stamp; do
     ts=$(date -d "$stamp" +%s 2>/dev/null) || continue
     age=$(( (now - ts) / 86400 ))

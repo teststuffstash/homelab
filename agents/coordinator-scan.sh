@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# coordinator-scan — the DETERMINISTIC gate in front of the LLM coordinator (FU-045). The cheap sibling
+# coordinator-scan — the DETERMINISTIC gate in front of the LLM coordinator. The cheap sibling
 # of review-reflex.sh: per stack, list open issues/PRs across the stack's repos and answer the boolean
 # "is there anything a coordinator TICK would act on?" — and ONLY spawn the LLM coordinator when yes.
 # No subscription tokens are ever spent to discover "nothing to do".
@@ -19,7 +19,7 @@
 # schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
 # -n agent-coordinator -p '{"spec":{"suspend":false}}').
 #
-# STACK SOURCE — `stacks_json()` is the single swap-point: TODAY it reads agents/stacks.json; the FU-045
+# STACK SOURCE — `stacks_json()` is the single swap-point: TODAY it reads agents/stacks.json; the
 # TARGET is the cluster, where each stack's -iac repo owns a Crossplane `AgentStack` claim and this reads
 # `kubectl get agentstacks -o json`. Policy (repos/models/tools) then lives in the stack, not here.
 # See docs/agents/platform-and-stacks.md.
@@ -121,7 +121,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     continue
   fi
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
-  # mainRepo is stack POLICY (the coordinator's cwd; FU-045) — default homelab for stacks whose
+  # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   items=""; orphans=""; units=""; punits=""

@@ -17,7 +17,7 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | Doc | Summary |
 |---|---|
 | [adr.md](adr.md) | **Architecture Decision Record** — what was considered (e.g. Ceph vs Longhorn) and what was chosen, with rationale. Start here for *why*. |
-| [agents/](agents/README.md) | **Agent platform** (design/scaffolding) — in-cluster MCP capability + ephemeral sandbox harness; trust model, identity/secrets, testing doctrine, the worked sleep-tracker fix flow |
+| [agents/](agents/README.md) | **Agent platform** — an interactive meta-coordinator in the jail + an autonomous per-stack loop in the cluster; roles, trust boundaries, testing doctrine, and the index to the 12 sub-docs |
 | [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, CNPG, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
 | [follow-ups.md](follow-ups.md) | **The FU tracker** — every loose end / deferred item as a stable `FU-NNN` id (conventions in its header) |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |

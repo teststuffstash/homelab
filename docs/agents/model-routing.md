@@ -1,17 +1,16 @@
 # Model routing — chains, strikes, and a live registry (not one hardcoded model)
 
-> **Status: direction set 2026-07-09; core BUILT same week** — the live registry is code
-> (`estimate_budget.py`: cached /models + /endpoints, cache-aware effective price, `--lookup`),
-> strike bookkeeping is in the launcher (`AGENT_STRIKE` comments), goose provider injection is LIVE
-> via the egress proxy, opencode carries the per-session pin, and the model scout runs
-> WEEKLY (unsuspended 2026-07-16 after its clean supervised run; canary leg live 2026-07-17 —
-> ephemeral capped keys, FU-024's guardrail live-fired).
-> Born from the oracle-fleet issue #1 postmortem + the 2026-06-29 qwen cost autopsy. This doc is
-> the umbrella for **FU-062** and binds together FU-018 (provider injection), FU-021 (retry
-> hard-stop — resolved), FU-024 (only-free guardrail) and FU-057 (ledger/error-class — live)
-> — they only work as one design. Companions: [`observability-and-retro.md`](observability-and-retro.md)
-> (the ledger this feeds), [`../../agents/coordinator/README.md`](../../agents/coordinator/README.md)
-> (the brief that executes it).
+**This doc owns model choice** — failure taxonomy, fallback chains, the live registry, provider
+pinning, attribution, the scout, and the task-class pilots. Born from the oracle-fleet issue #1
+postmortem and the 2026-06-29 qwen cost autopsy (both in §"The problem, from evidence").
+
+**Where the machinery lives:** the registry is `estimate_budget.py` (cached `/models` +
+`/endpoints`, cache-aware effective price, `--lookup`); strike bookkeeping is `AGENT_STRIKE`
+comments from the launcher; provider injection and the router/budgeter are the egress proxy
+(ADR-087, ADR-096). Companions: [`observability-and-retro.md`](observability-and-retro.md) (the
+ledger this feeds) and
+[`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) (the brief that
+executes it).
 
 ## The problem, from evidence
 

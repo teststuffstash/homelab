@@ -1,9 +1,11 @@
 # Roles — the role axis, inventoried
 
-**Status: created 2026-07-27 (operator sessions of 2026-07-27; the FU-100 build + the meta-11
-prod-outage role-gap analysis).** This is the home of the **role** axis from
-[`platform-and-stacks.md`](platform-and-stacks.md) §Composition axes. One page per question the
-axes model raises: *what does a role consist of, which exist, what does a new one cost?*
+**This doc owns the role axis** from [`platform-and-stacks.md`](platform-and-stacks.md)
+§Composition axes — one page for the three questions that axis raises: *what does a role consist
+of, which exist, and what does a new one cost?* Written out of the FU-100 build and the meta-11
+prod-outage role-gap analysis. The platform map (which role runs where) is
+[`README.md`](README.md); per-role status is coarse here on purpose — the tracker and the cluster
+are the authorities.
 
 ## What a role is
 
