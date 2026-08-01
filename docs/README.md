@@ -26,6 +26,8 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
+| [dependency-upgrades.md](dependency-upgrades.md) | **homelab's own dependency lifecycle** — propose → review → test/lint → rollout → monitor, per dependency class; plus what Renovate has *measurably* done here (FU-097/FU-051) |
+| [renovate.md](renovate.md) | The **org-wide Renovate policy** — threat model (Trivy-style compromise), cooldown/SHA-pinning/OSV, the automerge-vs-review split, coordinator × Renovate verbs |
 | [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
 | [patterns/app-owned-resources.md](patterns/app-owned-resources.md) | How an app provisions its own buckets/keys/DBs from its own repo (ADR-074/076) |
 | [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |

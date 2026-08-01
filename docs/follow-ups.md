@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-125**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-126**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -99,6 +99,16 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       arc-github-app `replace "\\n" "\n"` un-escape template. All shapes + their state:
       `ROADMAP.md` → Programs in flight → "Deploy paths". Relates FU-097, FU-014 (archived),
       ADR-084.
+- [ ] **FU-125** — **Renovate has never opened a dependency PR in ANY repo — and reports success.**
+      Measured 2026-08-01 (run #115): all 10 autodiscovered repos abort — 4 `integration-unauthorized`
+      (sleep-tracking, snore-recorder, oracle-fleet, oracle-iac), 6 `repository-changed` — after
+      extracting deps fine. 115 green runs, zero PRs, no Dependency Dashboard, and
+      `renovate/pin-dependencies` (the Actions SHA-pinning, the Trivy mitigation) orphaned since
+      07-27 with no PR. Same silent-success class as FU-108/FU-113. Evidence + the full inventory:
+      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
+      **Next:** fix the App permissions (out-of-jail), then a liveness signal so the next stall is
+      loud. Also drop the invalid `vulnerabilityAlerts.prPriority` and fix/remove the dead
+      `NIX_VERSION` manager. Relates FU-014 (archived), FU-046, FU-097, FU-016.
 - [ ] **FU-097** — **Write the per-surface ruling table for the surfaces ArgoCD/tofu don't
       reconcile** (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
       human-applied + a named drift belt. That table is the first deliverable; then implement the
