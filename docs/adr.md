@@ -9,11 +9,33 @@ the call was made; most trace to the 2026-05 planning and the 2026-06 build. Dec
 against the `CONTEXT.md` principles — reproducible-from-git, deterministic diffs, local-first,
 open-source/replaceable, budget-conscious, public-by-default.
 
-> Newest decisions are at the bottom of each area. **Edit a block in place** for small corrections or
-> details settled during implementation. Reversing a **significant, established** decision instead gets
-> a **new ADR**, with the old one marked `Superseded-by` (e.g. swapping Garage for a MinIO fork, or
-> LAN-only → public). Keep blocks to **one decision** — operational detail belongs in `docs/`, and
-> application design belongs in the app's own repo (ADR-004).
+> Newest decisions are at the bottom of each area. Keep blocks to **one decision** — operational
+> detail belongs in `docs/`, and application design belongs in the app's own repo (ADR-004).
+
+**The three rules that keep this file a decision log and not a design archive:**
+
+1. **A block is ≤~20 lines.** It answers *what was chosen, what was rejected, why, what it costs* —
+   nothing else. The **design** (mechanism, phases, rollout, gap registers) goes to a doc under
+   `docs/` and the block links to it. If you are writing a build order or a phase list, you are
+   writing a design doc; give it a file. See the routing table in `CLAUDE.md`.
+2. **An accepted block is immutable in substance.** Edit in place only for typos, broken links, and
+   details that *clarify* what was already decided. An **Addendum** may add evidence or narrow
+   scope; it may never change the Decision line — if the decision moved, that is a **new ADR** and
+   the old one gets `Superseded-by`. Two addenda on one block is the signal you should have opened
+   a new ADR; three means the design belongs in `docs/`.
+3. **`Status: Open` is not a parking space.** An undecided question is a follow-up (`FU-NNN`) or a
+   spike (`docs/spikes/`). An Open block is legitimate only while it records *the shape of a
+   decision deliberately not yet made* — and it names the trigger that will settle it.
+
+Reversing a **significant, established** decision gets a new ADR with the old marked
+`Superseded-by` (e.g. swapping Garage for a MinIO fork, or LAN-only → public).
+
+_Blocks written before these rules (notably ADR-084/092/093/094/096, all >50 lines) are
+**grandfathered**: they get split into decision + design doc **when next substantively touched**,
+not in a sweep — several describe designs still being built, and churning them mid-build is how
+the design and the record drift apart. ADR-096's design home is
+[`agents/model-routing.md`](agents/model-routing.md); ADR-093/094's is
+[`agents/workflow.md`](agents/workflow.md) + [`agents/merge-path.md`](agents/merge-path.md)._
 
 ---
 

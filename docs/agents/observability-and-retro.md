@@ -218,6 +218,58 @@ reports move stack-side — the standard mechanism/policy split (platform-and-st
 teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
 is needed for this.
 
+#### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
+
+The retro was chosen as the **first multi-large-model tryout** (operator direction 2026-07-25):
+N models over the SAME worst-K ledger slice in parallel, then a **cross-review** round where each
+critiques the others' reports and the human reads the critiques. It is the safest arena for it —
+read-only inputs, human-gated outputs — and the task shape is the FU-095 reasoning/audit tier,
+where dual-model spend is ruled worth it. v1 needed **no MCP transcript tools**: ledger + issue/PR
+stats + strike comments sufficed, reusing model-scout's ephemeral capped-key mint.
+
+**Runs 1+2 are done** (`retros/2026-07-25-*`): mechanism proven, 9 models compared repo-verified,
+cross-review landed with a deepseek-v4-pro critic. Routing data harvested for FU-095:
+
+| Cell | Verdict |
+|---|---|
+| deepseek-v4-pro, hy3 | the **audit tier** — opus-adjacent grounding at $0.02–0.08 |
+| kimi | useful **wide-net second reader** |
+| gpt-oss-120b, nemotron-super | **fabricators** on evidence work — do not use for audit |
+
+**Brief v2, from runs 1+2 evidence:**
+
+- **(a) ✅ done 2026-07-25** — run-1's brief was recovered verbatim from the transcript bucket and
+  committed as [`retros/BRIEF.md`](retros/BRIEF.md) (v3 template: ledger-blind-spots block,
+  harness-source excerpts, task-granularity / wins / predecessor-score sections), plus
+  [`retros/CROSS-REVIEW.md`](retros/CROSS-REVIEW.md) and `agents/retro-session.sh` (assembles
+  per-cell, delegates to `agent-session.sh --harness/--model`).
+- **(b)** The cross-run "could not verify" items are mostly **ledger gaps, not access gaps** —
+  `reviewer_rounds=0` despite real review rounds, `wall_time_s` not decomposed active/idle
+  (contradicted by PR lifetimes), `retry_storms` taxonomy undefined, haiku cost $0.00-vs-untracked
+  ambiguity. **Fix the emitter before adding tools.**
+- **(c)** Give the retro **read access to the harness source it is asked to improve**
+  (`coordinator-scan.sh`, `estimate_budget.py` excerpts in the brief, or a homelab checkout): 6/9
+  models flagged naming-targets-they-cannot-read, and the fabricators invented APIs exactly there.
+- **(d)** Add a **task-granularity** section to the report contract: *"which of these worst-K tasks
+  should have been ONE bigger-model task (or a subagent fan-out) instead of chunks; which chunks
+  needed rework at integration."* Operator hypothesis to test either way: a large model + subagents
+  might one-shot a project this size in ~48h.
+
+Prometheus/Grafana access is **not** needed yet — no report was blocked on metrics.
+
+**Run-3 shape (operator direction, composition-axes frame):** two retro rides off the SAME
+agent-base image and the SAME committed `BRIEF.md` — **A** = claude harness + opus (subscription
+via the ADR-081 proxy, FU-088-gated), **B** = goose harness + deepseek-v4-pro (ephemeral capped
+key, provider-pinned) — then cross-review with the **cells swapped** (A reviews B's report, B
+reviews A's). Tooling parity is already structural: agent-base ships `claude-code@latest` alongside
+goose/opencode plus the full toolkit (gh/git/jq/python/uv/kubectl/s5cmd), so retro-er and reviewer
+are freely mixable. Rotating cells run-over-run separates **harness effect from model effect** on
+the FU-057 ledger axes — which doubles as FU-095(b) evidence. Repo scope for the retro token = the
+stack jail's REPOS boundary (`tools/stack-jail.sh`: oracle-fleet, oracle-iac,
+allure-behavior-snippets), read-only, App-minted. Standing guardrails: outside the fixer ns / WIP
+slot (the P3 constraint), $0.05 key floor, `GOOSE_MAX_TOKENS=16384`, reports land in
+`docs/agents/retros/` via PR.
+
 ## Rollout
 
 - **P0 (blocker)**: bucket + manifests + the three capture hooks. Fire coordinators after this —

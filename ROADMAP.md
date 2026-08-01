@@ -82,6 +82,7 @@ graph TB
 | 3 — MAC-table provisioning pipeline (Matchbox, no IPMI) | ✅ done (`docs/provisioning.md`) |
 | 4 — Promote to a real bare-metal cluster | ✅ 4 metal nodes joined (thinkcentre, hp-01, wk-metal-01/02) |
 | 5 — Day-2 operations | 🟡 monitoring ✅ (ADR-042) · GitOps ✅ (ADR-005) · logs ✅ (ADR-083) · CI ✅ (`docs/ci.md`) · **backups/off-cluster DR ⬜ (FU-013)** |
+| 6 — Agent platform | 🟡 see *Agent platform* below — the loop runs unattended per-stack; the open work is programs, not phases |
 
 ## Service tiers (standing design)
 
@@ -128,29 +129,111 @@ capability + an ephemeral sandbox harness that turns a natural-language bug repo
 auto-merged fix. Full design + trust model + the worked sleep-tracker example:
 [`docs/agents/`](docs/agents/README.md). Each phase is independently useful._
 
-- **P0 — read-only triage MCP.** The Type-1 homelab MCP server (in-cluster SA, read-only:
-  Grafana/Prometheus, Garage S3, repo source) + a triage recipe that turns a report into a GitHub
-  Issue + a **synthetic data table**. Zero blast radius; useful on its own. Goes in `SERVICES.md`
-  when live.
-- **P1 — fixer sandbox + full-stack gate.** Agent-sandbox pod running the per-app fixer recipe
-  (`.agents/fix.yaml`, no data creds, branch+PR only) → CI runs `devbox run ci` + the **full-stack
-  ephemeral test** (`devbox run test-integration`: k3d + Garage + ingester + Grafana + Playwright on
-  a **Tofu'd Proxmox VM runner**) + a cross-vendor reviewer subagent → branch-protected auto-merge →
-  ghcr image. Also gates Renovate/Dependabot bumps (FU-014). _(Substrate largely live — the worker
-  launcher, budgets, reviewer gate and hand-driven coordinator run today; see
-  [`agents/README.md`](agents/README.md).)_
-- **P2 — bump-PR + deploy verify.** Renovate (or Argo CD Image Updater) opens the homelab tag-bump
-  PR → ArgoCD syncs on merge → a PostSync verification step re-runs the synthetic fixture against
-  the deployed stack. Rollback deferred (testing gates pre-merge; if needed, `git revert` the bump —
-  never `kubectl rollout undo`). Depends on the deploy-versioning rework (FU-025).
-- **P3 — local/cheap tier + shared memory.** Hermes (or other OpenRouter/Ollama models) as the cheap
-  high-volume tier via the model knob; shared **memory-as-MCP** (durable git-markdown + disposable
-  vector cache). Local-LLM serving is real infra (vLLM/prefix-cache) — keep the MCP tool surface
-  small and stable so it caches; see [`docs/agents/`](docs/agents/README.md#open--deferred).
+**The original P0–P3 phases are done or superseded** (kept here as history — the plan happened, and
+then moved past itself):
+
+- **P0 — read-only triage MCP.** ✅ superseded in shape: triage arrived as the **responder** role
+  (alert-triggered, ADR-093 Sensor edge) rather than a standing MCP server; the read-only MCP tool
+  surface is now a retro/prober-side want, not a prerequisite.
+- **P1 — fixer sandbox + full-stack gate.** ✅ live. Worker launcher, budgets, reviewer gate,
+  per-repo `.agents/` recipes, k3d/kind system-test gates on Tofu'd runners (ADR-082).
+- **P2 — bump-PR + deploy verify.** ✅ the bump/deploy half is live per repo shape (see *Deploy
+  paths*, below); the **verify** half is the open piece — deterministic rollback shipped, deep
+  post-deploy acceptance is still the prober (FU-044, FU-102).
+- **P3 — local/cheap tier + shared memory.** 🟡 the cheap tier is live and far past "a model knob":
+  chains, strikes, a live registry, a scout and the ADR-096 **router/budgeter**
+  ([`docs/agents/model-routing.md`](docs/agents/model-routing.md)). Shared memory-as-MCP is
+  untouched. Local-LLM *serving* (vLLM/prefix-cache) remains unbuilt and unscheduled.
+
+**Where it actually got to.** The loop runs **per-stack and unattended**: each graduated stack owns
+its `coordinate-<stack>` / `review-<stack>` CronWorkflows in its own namespace with zero
+cross-boundary secrets (AgentStack claim, ADR-085); dispatch is **item-scoped** — a deterministic
+scan emits work units and the LLM judges one item (ADR-094); Argo Workflows + Events is the
+orchestration engine (ADR-093); model and budget decisions are moving into the egress proxy as a
+router (ADR-096). Roles beyond fixer now exist or are specified: coordinator, reviewer, retro,
+scout, responder, researcher, infra-fixer, prober
+([`docs/agents/roles.md`](docs/agents/roles.md)).
 
 **Identity/secrets** reuse existing primitives (Infisical+ESO, Cilium FQDN policy, the
 `homelab-agents` GitHub App minting 1h scoped tokens) — no new secret platform. **CI runners are
 Tofu-defined Proxmox VMs** running ephemeral k3d, not privileged in-cluster ARC (ADR-082).
+
+## Programs in flight
+
+Multi-phase work with several deliverables each — too big to be a follow-up, too committed to be
+backlog. Each names the `FU-NNN` that carries its *next* concrete deliverable; the FU is not the
+program.
+
+### Platform self-service via Crossplane — "homelab as AWS/Civo" (FU-039)
+
+A project can already IaC its S3 buckets/keys (ADR-076 Workspaces), OpenRouter keys
+(`OpenRouterKey` CR) and Postgres (CNPG `Cluster` CR). It still **cannot** self-serve its git repos
+(`tofu/github/`, admin PAT deliberately outside the jail), or its own ArgoCD AppProject/namespace.
+Decide per resource: a Crossplane provider vs a thin homelab PR seam.
+
+**Delivered:** the HTTPS-names leg (ADR-092, 2026-07-15) — per-stack subdomain delegation. homelab
+wires `*.<stack>.teststuff.net` **once** (wildcard cert + one `3.0/24` VIP + a dumb HAProxy TLS
+terminator → the stack's in-cluster Cilium Gateway; `stack_gateways` in `group_vars/opnsense.yml`,
+opt-in), then the stack adds hostnames as HTTPRoutes in its own `-iac` repo with zero homelab
+change. Opt-in is still a thin homelab PR once per stack; making *that* an XRD claim (ADR-085) is
+the residual. Labels moved the same way (FU-068, the Issues-tier split).
+
+**Open:** the git-repos and AppProject/namespace legs, both still operator PRs against
+`tofu/github` + `argocd/platform`. Prereq for the per-stack IaC-repo model.
+
+### Deploy paths — every merged change must reach prod (FU-051, FU-097)
+
+Each project owns its own test+CI+deploy; auto-merging a bump that never deploys is a footgun. All
+shapes use the same readable **`2026.<m>.<d>-g<sha>`** version and a first-party **deploy-pin PR**
+— CI-opened, never Renovate (Renovate is for external deps only) — that auto-merges on a CI gate.
+
+| Shape | Mechanism | State |
+|---|---|---|
+| app + chart | the `-iac` bump (sleep-tracking → sleep-iac) | ✅ proven E2E |
+| operator / controller | Helm chart to **ghcr OCI** (ADR-084); `deploy.yaml` opens a bump PR in homelab/argocd; the app is multi-source (OCI chart + homelab `$values`), gated by `argocd-validate-pins` | ✅ live |
+| image consumed by pods | version-pinned in `agents/images.env` + `review-reflex.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
+| snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | 🟡 platform half done — DHCP reservation + `SNORE_DEPLOY_SSH_KEY` in Infisical; sleep-iac side pending |
+| homelab | a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`) | ✅ |
+
+**The other half (FU-097): the surfaces ArgoCD and tofu do NOT reconcile.** A merged change to
+these deploys *nothing* today. Each needs either an automated apply or an explicit human-applied
+ruling plus a drift belt:
+
+- **OPNsense** — `ansible/opnsense-*.yml`, applied by hand via `scripts/opnsense-playbook.sh`;
+  merged `group_vars` changes just sit. Candidate shape = the snore precedent (in-cluster ansible
+  Job, PostSync or CronJob) with creds via ESO; a nightly `--check` diff → alert is the minimum belt.
+- **Proxmox host (pve)** — host config beyond what `tofu/provisioning/` owns; pure hands-on SSH.
+- **Home Assistant** — `homeassistant/` applied imperatively.
+- **Matchbox** — `ansible/matchbox*.yml`, same manual-apply gap as OPNsense.
+- **`tofu/` roots** — plan/apply from the jail is the **deliberate human gate** (keep), but nothing
+  detects live-vs-state drift between applies. A `tofu plan` cron → alert is the candidate.
+
+First deliverable is a per-surface ruling table (automate / human-applied + belt), then implement
+the automated ones one surface at a time. ADR-093 makes Argo the candidate runner for the ansible
+Jobs.
+
+### Onboard every app repo to the agentic loop by default (FU-052, FU-070)
+
+Direction 2026-07-06: the full flow — merge-path auto-merge **and** the fixer (NL issue → worker →
+PR → review → merge) — should be the **default** for app repos, not bespoke per repo.
+
+A repo needs two layers. **(1) Merge-path**, mostly covered by `new-agent-repo.sh`: a managed
+`github_repository` (allow_auto_merge), agent labels, required-check `ci`, the renovate-approve +
+update-pr-branch callers, a PR-triggered `ci`. **(2) Fixer flow**: the `homelab-agents` App
+installed, an `agent-git-token` ExternalSecret, an `OpenRouterKey` CR, `.agents/` recipes, a worker
+namespace, and the repo in `agents/stacks.json`.
+
+Layer 2's k8s infra is now **one `AgentStack` claim per stack** (ADR-085,
+[`docs/agents/agentstack.md`](docs/agents/agentstack.md)) rather than a fixer block per repo. Still
+per-repo and manual: the `.agents/` recipes, the `stacks.json` entry, and the GitHub side. The
+collapse of the last of it is a **`stack-template` org repo** (FU-070) — `is_template = true`,
+instantiated via `gh repo create --template` before `new-agent-repo.sh` — carrying the CLAUDE.md
+skeleton, `.agents/` skeletons, devbox `ci` + `scan-secrets`, and the merge-path caller workflows.
+stack-lint's REPO-03/04/05 already verify the result.
+
+**Onboarded:** sleep-tracking (reference), openrouter-operator. **To onboard:** snore-recorder,
+agent-runtime, agent-coordinator. **Excluded, different workflow (per Rasmus):** sleep-iac (CI-only
+deploy repo, no fixer) and homelab itself (platform/base-infra; dep policy unresolved).
 
 ## Caching tier (nix + images LIVE)
 

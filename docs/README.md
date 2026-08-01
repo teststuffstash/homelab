@@ -4,6 +4,14 @@ Service- and operations-level docs for the homelab. Infrastructure-as-code lives
 in the repo (`tofu/`, `ansible/`, `esphome/`, `homeassistant/`); these pages describe how the
 running services fit together, how to operate them, and their risks.
 
+## Which record am I writing?
+
+Several long-lived records live here and they are **not** interchangeable — the routing table in
+[`../CLAUDE.md`](../CLAUDE.md) ("Where things get written down") is the authority. In short:
+**decision** → `adr.md` · **design** → a doc here · **loose end** → `follow-ups.md` (≤10 lines,
+detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `incidents/` ·
+**unsettled investigation** → `spikes/`.
+
 ## Operations & design
 
 | Doc | Summary |
@@ -12,6 +20,9 @@ running services fit together, how to operate them, and their risks.
 | [agents/](agents/README.md) | **Agent platform** (design/scaffolding) — in-cluster MCP capability + ephemeral sandbox harness; trust model, identity/secrets, testing doctrine, the worked sleep-tracker fix flow |
 | [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, CNPG, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
 | [follow-ups.md](follow-ups.md) | **The FU tracker** — every loose end / deferred item as a stable `FU-NNN` id (conventions in its header) |
+| [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
+| [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
+| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps, and why a breach is currently invisible until a workload fails (FU-093) |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |

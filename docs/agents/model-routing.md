@@ -167,6 +167,71 @@ OpenRouter's documented MCP `list-daily-model-rankings`** (daily popularity by t
 standard API key — ADR-096 addendum 2) into its rotation store; the scout's canary stays the
 safety probe for rotation entrants, and canary verdicts land in the same store (`POST /rotation`).
 
+## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
+
+Direction 2026-07-25. The downstream consumer is the IdP project's **reasoning** agents (auditing,
+requirements, monitoring — *not* coding), so the pilots have to produce evidence about a class of
+work the coding lane's rules were never written for.
+
+**Three operator corrections that shaped it:**
+
+- **Sleep specs + evidence are a prerequisite, not optional.** Comparable model results across
+  projects need the same evidence discipline; without specs the loop can't run reliably on sleep.
+  Sequencing: specs discipline (oracle-style, adapted) lands **with or before** graduation.
+- **The candidate source is a maintained ROTATION**, not the scout's new-model diff. The scout
+  missed `nemotron-3-ultra-550b:free` — verified: the registry snapshot predates it *and* kimi-k3.
+  Diff-only + tools/price filter ≠ "what's currently good". The rotation feeds chains
+  continuously; the scout's canary leg stays as the safety probe for rotation entrants.
+- **Reasoning tier for audit/review/research task types.** The coordinator README currently *bars*
+  reasoning models — a worker-coding rule. The audit/research lane needs its own, including
+  **dual-model review** (two models on one audit is worth the tokens here, unlike coding). Budget
+  shape for IdP pre-build research: a few review rounds on a large model (e.g. kimi-k3), never N
+  full designs from scratch.
+
+**Leg (a) — task-class-aware model choice at dispatch.** Today the model is static-chain +
+strike-walk (`agents/stacks.json`, coordinator README §MODEL); availability and price already exist
+(§M3 registry, §M4 pinning). The new axis: resolve the chain **per task class** (first
+approximation: `agent-budget/*` × `track/*` labels) against the registry + strike/ledger history —
+the exact gap §M2 notes ("failure classes are task-shaped… should carry a task-size/class
+dimension"), with the FU-057 pivot as the data seam. The first axis of the class is **repo-type**:
+an `-iac` devops chain is not an app coding chain ([`iac-lane.md`](iac-lane.md) §Model class).
+
+> **Buy-vs-build, surveyed 2026-07-27 → BUILD the small lookup.** External routers solve
+> per-*prompt* difficulty inference (RouteLLM / NotDiamond / openrouter-auto — popularity- or
+> classifier-based, and none can read our ledger; the §M6 verdict on `auto` stands) or gateway
+> mechanics (LiteLLM / Portkey — which would un-solve the proxy's subscription gate and cred/pin
+> injection). Closest fit is **OpenRouter presets** (`@preset/<class>`, server-side chains) —
+> dashboard-managed today, i.e. click-ops; watch for API manageability.
+> Two registry enhancements adopted from the survey: **(1)** a provider quantization/staleness
+> filter in the §M4 pin (the `/endpoints` field — never pin an fp8/stale serving for
+> eval-sensitive lanes); **(2)** "sales" need nothing — live effective-price recompute per
+> dispatch already captures price drops, and the rotation covers currently-good drift.
+> **(3) `openrouter/fusion`** (operator find, same day): a panel-deliberation router — the
+> audit/research **class chain head** candidate, mechanizing the dual-model directive in one
+> ~4–5× call, with server-side web reach solving part of the FU-105 egress dial on the
+> OpenRouter rail. §M6 was re-assessed (the 07-09 no-tools parking was stale). Panel pinned via
+> `analysis_models` launcher-side; **never** a fixer-lane entry.
+
+**Leg (b) — multi-harness evidence.** The same task classes across `--harness goose|opencode|claude`,
+compared on the FU-057 ledger axes {success-rate, harness-death-rate, $/successful-issue}. This
+*is* the recorded ADR-077 trigger ("add Omnigent's meta-harness only if governing multiple
+harnesses becomes real") — the pilot supplies the evidence that decision is waiting on.
+
+**Leg (c) — free-model probing of goose error handling.** Extend the model-scout canary shape
+(ephemeral only-free capped keys) from trivial closed rides to real sleep xs tasks. This resolves
+the live tension between §M2 ("free entries fine anywhere — failure = one strike") and
+`stacks.json` `_chain_policy` ("free tiers never fix-chain entries").
+
+Renovate-majors piloting on sleep is **not** this — that's FU-046's existing lane. Prereqs: FU-080
+sleep graduation (+ FU-044 before unattended deploys). The router that leg (a) needs is ADR-096,
+whose store/decision-API build is tracked there.
+
+**Terminology ruled (2026-07-27), record it in sleep's process docs when the specs land:**
+**"system testing"** = logic against real components in kind (Garage + ingester + Grafana +
+Playwright, the ADR-082 shape); **"e2e"** is reserved for the actual target environment (synthetic
+production traffic). Cf. Fowler's microservice testing pyramid — our "system" ≈ his out-of-process
+component / limited e2e.
+
 ## The bundle — why these FUs resolve together
 
 | FU | role in this design | without it |

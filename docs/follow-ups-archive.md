@@ -8,6 +8,19 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-080** *(archived 2026-08-01)* — **Per-stack coordinator/reviewer rendered from the
+  AgentStack claim — COMPLETE; all three stacks graduated.** The stack jail now controls its whole
+  loop by construction: the Composition renders `<stack>-agents` + the namespaced `agentstack-loop`
+  SA/Role/Bindings, `coordinate-<stack>` + `review-<stack>` CronWorkflows, and the graduated
+  doorbell/review edges route data-driven on `body.loop_ns`; loop git tokens are minted centrally
+  and served only via the TokenReview-gated `/loop-git-token`, so the loop home holds **zero
+  cross-boundary Secrets** (one documented exception: the write-only transcripts S3 key). Oracle
+  graduated 2026-07-18; sleep + platform 2026-07-26; the last leg (per-stack review edge) shipped
+  as FU-100, archived 2026-07-27 — nothing remained after that. Design, the four claim knobs, the
+  credential model and the RBAC/Argo gotchas: [`docs/agents/agentstack.md`](agents/agentstack.md)
+  §Decisions + §Operational notes; airlock pattern in `platform-and-stacks.md`. Note carried
+  forward: docker-ride dispatch **from the jail** still waits on FU-072; model-scout + ledger stay
+  global by design. Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
 - **FU-118** *(archived 2026-07-31)* — **Offline rides couldn't `devbox add` a NEW package.** An
   offline add wrote `/nix/store/placeholder-*` into devbox.lock that boot-crashed the NEXT round's
   `devbox install` (#71 r4/r5 died here). Fixed BOTH legs 2026-07-31: **(a)** launcher pre-flight
