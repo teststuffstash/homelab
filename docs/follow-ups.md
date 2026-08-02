@@ -255,11 +255,12 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       the scan's scheduling predicates and the unit taxonomy live there and in
       [`docs/agents/workflow.md`](agents/workflow.md).
       **Still open:** (1) the FU-085 compound — the Sensor submits item units directly and the cron
-      sweep emits only MISSED units; (2) relax the coordinator cron `*/10 → */30` (edge proven
-      through meta-9/10; the github-exporter's CI metrics carry the out-of-band half);
-      (3) lift WIP>1 for lane-parallel dispatch (the FU-088 capacity gates are in);
-      (4) demote the janitor tick to its own cron — keep it ~daily and report-only, for
-      board-level judgment (direction-change sweeps, orphans, cross-PR smells).
+      sweep emits only MISSED units; (3) lift WIP>1 for lane-parallel dispatch (the FU-088
+      capacity gates are in — held back 2026-08-02: interacts with the wip_busy hold, the #55
+      double-dispatch class; wants operator appetite); (4) demote the janitor tick to its own
+      ~daily report-only cron (under-specified — which judgment sweeps exactly?).
+      **(2) DONE 2026-08-02:** cron relaxed `*/10 → */30` in the Composition (edge-primary,
+      cron = 30min staleness bound); meta-watch stall clause moved 25→40min to match.
       Relates FU-050, FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:

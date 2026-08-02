@@ -433,7 +433,12 @@ spec:
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
               schedules:
-                - "*/10 * * * *"
+                # FU-086(2) 2026-08-02: */10 → */30. The doorbell edge (worker-exit /coordinate)
+                # + the exporter's event edges are the PRIMARY triggers — proven through meta-9/10
+                # and the 2026-08-02 sessions (every dispatch this week rode an edge or a tick that
+                # an edge would also have covered). The cron is the level-triggered backstop; at
+                # */30 a fully-missed edge still bounds staleness at 30min.
+                - "*/30 * * * *"
               concurrencyPolicy: Forbid
               startingDeadlineSeconds: 60
               workflowSpec:

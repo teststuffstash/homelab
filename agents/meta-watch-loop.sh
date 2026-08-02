@@ -33,8 +33,9 @@ while true; do
       fi
     fi
   fi
-  if [ $((now - last_scan_seen)) -gt 1500 ]; then
-    echo "STALL: no new ${SCAN_PREFIX}* tick observed in 25 min (last: $last_scan)"
+  # FU-086(2): cron is */30 since 2026-08-02 (edge-primary) — stall = a missed cron + slack.
+  if [ $((now - last_scan_seen)) -gt 2400 ]; then
+    echo "STALL: no new ${SCAN_PREFIX}* tick observed in 40 min (last: $last_scan; cron is */30 + edges)"
     last_scan_seen=$now
   fi
   # --- ride/coordinator/reviewer pod lifecycle (startTime in the key: same-name redispatch emits) ---
