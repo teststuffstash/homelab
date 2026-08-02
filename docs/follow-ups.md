@@ -162,15 +162,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       Relates FU-086, FU-087/FU-110 (archived), FU-090.
 
 
-- [ ] **FU-113** — **Any non-triaging respond must write a ledger marker; the responder must not
-      trust the alert edge to refire.** Postmortem (both the latch-defer drop and the three
-      look-alike silent outcomes):
-      [`docs/incidents/2026-07-27-responder-silent-defer.md`](incidents/2026-07-27-responder-silent-defer.md).
-      Build: (a) marker on every outcome — `deferred` / `cap-deferred` / `seen-noop`; (b) self-requeue
-      (Argo retry/backoff or resubmit-on-defer) instead of trusting the edge; (c) key the daily cap
-      off INCIDENT (route+root), not raw fingerprint count. FU-109's tiering composes with (c).
-      Relates FU-088 (archived), FU-109, FU-103 (archived).
-
 
 
 - [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**

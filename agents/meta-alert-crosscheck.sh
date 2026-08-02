@@ -27,9 +27,13 @@ kubectl() { "$KUBECTL" $KUBE "$@"; }
 ALERTS="$(curl -fsS --max-time 10 "$AM_URL/api/v2/alerts?active=true&silenced=false&inhibited=false" 2>/dev/null)" \
   || { echo "PROBE_FAILED: Alertmanager unreachable at $AM_URL — that is itself the incident"; exit 1; }
 
-LEDGER="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r '.data // {} | keys[]' 2>/dev/null | tr '\n' ' ')" \
-  || LEDGER=""
-[ -n "$LEDGER" ] || echo "NOTE: responder-seen ledger empty/unreadable — every eligible alert below is unexplained"
+# FU-113(a): marker values (deferred-/cap-/none- prefixes) mean SEEN-BUT-NOT-TRIAGED — they
+# explain the machinery but do not settle the alert. Split the ledger accordingly.
+LEDGER_JSON="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -c '.data // {}' 2>/dev/null)" || LEDGER_JSON='{}'
+LEDGER="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(deferred-|cap-|none-)") | not) | .key' | tr '\n' ' ')"
+MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^(deferred-|cap-)")) | "\(.key)=\(.value)"' | tr '\n' ' ')"
+NONE_MARKED="$(printf '%s' "$LEDGER_JSON" | jq -r 'to_entries[] | select(.value | test("^none-")) | .key' | tr '\n' ' ')"
+[ -n "$LEDGER$MARKED$NONE_MARKED" ] || echo "NOTE: responder-seen ledger empty/unreadable — every eligible alert below is unexplained"
 
 CUTOFF="$(date -u -d "-${GRACE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
 FOUND=0
@@ -38,8 +42,18 @@ while IFS=$'\t' read -r fp name started; do
   case " $LEDGER " in
     *" fp-$fp "*) : ;;  # triaged — healthy
     *)
-      FOUND=1
-      echo "UNTRIAGED: $name (fp $fp) firing since $started with no responder ledger entry — check the respond Sensor/EventSource/latch chain, NOT the alert itself"
+      case " $NONE_MARKED " in *" fp-$fp "*) continue;; esac  # triage:none — self-describing
+      case " $MARKED " in
+        *" fp-$fp="*)
+          FOUND=1
+          MV="$(printf '%s' "$MARKED" | grep -o "fp-$fp=[^ ]*" | cut -d= -f2)"
+          echo "DEFERRED-STUCK: $name (fp $fp) firing since $started, responder marker '$MV' but never triaged — the FU-113(b) Argo retry chain should have re-run it; check the respond workflow retries/latch"
+          ;;
+        *)
+          FOUND=1
+          echo "UNTRIAGED: $name (fp $fp) firing since $started with no responder ledger entry — check the respond Sensor/EventSource/latch chain, NOT the alert itself"
+          ;;
+      esac
       ;;
   esac
 done < <(printf '%s' "$ALERTS" | jq -r --arg cutoff "$CUTOFF" '

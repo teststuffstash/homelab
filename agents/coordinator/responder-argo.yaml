@@ -85,6 +85,14 @@ spec:
           - { name: payload }
       metadata:
         labels: { app: respond-workflow }
+      # FU-113(b): the responder must not trust the alert edge to refire — a latch-deferred
+      # triage EXITS 1 and Argo re-runs it here with backoff (15m→2h, 6 tries ≈ the FU-088
+      # window). The 24h fp ledger + deferred-markers keep retries idempotent; retries
+      # exhausted = a Failed workflow, visible in Argo + the crosscheck belt.
+      retryStrategy:
+        limit: "6"
+        retryPolicy: OnFailure
+        backoff: { duration: "15m", factor: "2" }
       container:
         image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
         env:
@@ -114,12 +122,18 @@ spec:
             rm -rf /work/homelab
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
 
-            # FU-088: a parked triage loses nothing — Alertmanager refires the group (≤3h).
+            TODAY="$(date -u +%Y-%m-%d)"
+            # FU-113(a): every non-triaging outcome writes a LEDGER MARKER (value forms that do
+            # NOT satisfy the triage dedup or consume the cap) — a silent defer/skip was
+            # indistinguishable from a drop (2026-07-27 postmortem). (b): a latch defer exits 1
+            # so Argo's retryStrategy re-runs THIS workflow — never trust the edge to refire.
             if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
-              echo "triage deferred — subscription limited (FU-088; the alert refires)"; exit 0
+              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
+                | while read -r dfp; do [ -n "$dfp" ] && kubectl -n agent-coordinator patch cm responder-seen \
+                    --type merge -p "{\"data\":{\"fp-$dfp\":\"deferred-$TODAY\"}}" >/dev/null 2>&1 || true; done
+              echo "triage DEFERRED — subscription limited (FU-088); markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1
             fi
 
-            TODAY="$(date -u +%Y-%m-%d)"
             kubectl -n agent-coordinator get cm responder-seen >/dev/null 2>&1 \
               || kubectl -n agent-coordinator create cm responder-seen >/dev/null 2>&1 || true
 
@@ -136,16 +150,25 @@ spec:
               # rides in the payload, so this costs zero lookups. Rule-side convention:
               # argocd/resources/*/prometheusrule.yaml.
               if [ "$(printf '%s' "$a" | jq -r '.labels.triage // empty')" = "none" ]; then
-                echo "→ $NAME ($FP): triage:none (self-describing by rule author) — skip"; continue
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"none-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "→ $NAME ($FP): triage:none (self-describing by rule author) — marker written, skip"; continue
               fi
 
-              # Ledger dedup: one triage per fingerprint per 24h (cm value = last-triaged date).
+              # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
+              # marker values — deferred-/cap-/none- prefixed — deliberately do NOT match).
               SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
-              if [ "$SEEN" = "$TODAY" ]; then echo "→ $NAME ($FP): triaged today — skip"; continue; fi
-              # Daily cap: unique-fp storms (label churn) must not buy unbounded sessions.
-              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value == $t)] | length')"
-              if [ "${N_TODAY:-0}" -ge 12 ]; then echo "⚠ responder daily cap (12) reached — $NAME ($FP) NOT triaged (loud; raise the cap or fix the storm)"; continue; fi
-              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY\"}}" >/dev/null 2>&1 \
+              case "$SEEN" in "$TODAY"|"$TODAY|"*) echo "→ $NAME ($FP): triaged today — skip"; continue;; esac
+              # FU-113(c): the daily cap counts INCIDENTS (alertname/namespace), not raw
+              # fingerprints — a label-churn storm collapses to one incident instead of eating
+              # the cap. 12 distinct incidents/day.
+              INCIDENT="$NAME/$(printf '%s' "$a" | jq -r '.labels.namespace // "-"')"
+              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value | startswith($t)) | (.value | split("|") | .[1] // "-")] | unique | length')"
+              INC_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg v "$TODAY|$INCIDENT" '[.data // {} | to_entries[] | select(.value == $v)] | length')"
+              if [ "${N_TODAY:-0}" -ge 12 ] && [ "${INC_SEEN:-0}" -eq 0 ]; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"cap-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "⚠ responder daily incident cap (12) reached — $NAME ($FP) NOT triaged (marker written; raise the cap or fix the storm)"; continue
+              fi
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
                 || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
 
               printf '%s' "$a" > /tmp/alert-one.json

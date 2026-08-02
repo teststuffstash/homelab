@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-113** *(archived 2026-08-02)* — **Responder outcome markers + self-requeue + incident cap
+  BUILT** (all three legs): (a) every non-triaging outcome writes a ledger marker
+  (`deferred-`/`cap-`/`none-` values that satisfy neither the triage dedup nor the cap); (b) a
+  latch defer exits 1 into an Argo retryStrategy (15m→2h ×6) — the edge is never trusted to
+  refire; (c) the daily cap counts INCIDENTS (alertname/namespace), 12/day, not raw fingerprints.
+  meta-alert-crosscheck understands markers (DEFERRED-STUCK vs UNTRIAGED). Postmortem:
+  docs/incidents/2026-07-27-responder-silent-defer.md.
 - **FU-112** *(archived 2026-08-02)* — **Platform-pod OOM posture: residual RESOLVED upstream.**
   Both cascade legs were already fixed (launcher requests=limits; kata-node kubelet reservation);
   the engine-image DaemonSet residual verified live: ALL longhorn-system DS (engine-image,
