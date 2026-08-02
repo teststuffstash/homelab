@@ -5,45 +5,25 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## Live world state (router test 2026-08-02; session 3 resumed ~14:00Z)
+## Live world state (2026-08-02 ~20:35Z, overnight build-out session — operator asleep)
 
-- **World ENABLED.** `coordinate-sleep` + `review-sleep` CronWorkflows live (10-min cadence,
-  not suspended), ticking green. Coordinator/reviewer = sonnet.
-- **Chain REDIRECTED (operator, 2026-08-02 ~18:30Z): free-first test yield banked, sleep-iac#56
-  MERGED 18:35Z** → `xiaomi/mimo-v2.5` primary → `tencent/hy3` → deepseek → qwen3-coder →
-  claude/haiku (frees dropped off the walk; rationale in the claim comment + PR#56). Free-first
-  results: #92/#96/#99 → PR#106/107/108 all merged clean on laguna:free; NO cooldown weather
-  materialized. **#103 riding since 18:31Z (LAST laguna:free ride, 4h deadline); #105 next =
-  the FIRST mimo dispatch — watch its estimator/pin behave.** `AGENT_ROUTER=shadow` unchanged;
-  P4 flip still waits on the soak (FU-095). ⏳ `xiaomi/mimo-v2.5` model_tiers entry
-  (model-classes.json — P5 rotation universe only, NOT dispatch-path) batched for the next
-  proxy-roll window. GC-on-expiry = openrouter-operator#10.
-- Jetify phone-home path 3 belted (18153b4): the LAUNCHER ignores the 07-22 env vars,
-  refetches when the devbox-cache current-version file ages past 24h → VERSION_CACHE_TTL=1y
-  in the pod template. Takes effect on newly dispatched rides (#99 onward); the
-  AgentWorkerEgressDropped alert cleared 17:2xZ.
-- ✅ VERIFIED: WIP-hold jq-null fix (e2fdbe7) + fixerless probe-skip (d8f3a8e). Loop watch
-  REWRITTEN for the sleep stack (was still on oracle — blind all session): startTime-keyed
-  pod state, circuit/key-window/FU-124 clauses, Alertmanager firing-set awareness
-  (InfoInhibitor filtered; triage stays with the responder).
-- ✅ homelab#22 CLOSED (91c9c29, proxy rolled 18:29Z, all four deliverables verified live —
-  TICK-LOG cont. 4). Soak watch: `router_request_deadline_exceeded_total` should stay 0 on
-  healthy laguna rides (306s turns ≪ 900s); a nonzero burst = the deadline is biting real
-  turns → revisit the default before blaming providers.
-- Platform queue residue: homelab#22 (above); sleep-tracking#104 (datasource naming — touches
-  the #77-stabilized uid gate, needs steering if queued) + #16 dep-dashboard, both unlabeled.
-- **Shadow-soak review checklist (run before the P4 flip; collect ≥1wk of decisions):**
-  (1) divergence table — `decisions` where shadow model ≠ dispatched model: would the router's
-  pick have done better/worse (join run_reports outcomes)? (2) defer audit — every `defer`
-  reason correct + retry_after honored by callers? (3) cooldown episodes — trips/half-open
-  re-picks/escalations from `router_cooldown*` + circuit events: any flapping? (4) latency —
-  needs homelab#22's `generation_time` harvest first; then check the free-band tie-break case
-  (laguna 306s/turn, ~9× verbosity vs deepseek — model-routing §M8 ¶latency). (5) jitter-pool
-  health — is exploration actually spreading picks across the band (`jitter_pool` in decision
-  detail)? (6) `--help`-class junk rows excluded from the analysis (guard shipped e2fdbe7).
-- **Infra hardening landed TODAY (07-31, operator session)** — `devbox run ci` + `devbox run
-  test-integration` now work both in-ride and in CI for sleep; sleep's agent-stack ≈ oracle-fleet.
-  FU-118/119/120 done. No structural blockers outstanding. (Detail: TICK-LOG 2026-07-31 entry.)
+- **World ENABLED**, all cron/doorbell/review machinery green. Sleep chain = mimo-first (claim
+  + stacks.json both, after the chain-source drift fix — brief now reads the CLUSTER claim).
+- **In flight, machinery-owned (verify on wake-ups):** sleep #109 (fix for #103, arrived
+  `armed_by_pod=true` — FU-123 acceptance MET, archived) + #110 (recipe rule) both armed →
+  merges + #103's C6 flip to verify. snore-recorder#15 fix round = the FIRST snore worker ride
+  (reviewer correctly caught my stale CLAUDE.md/README pointers). oracle-iac#97 = the FIRST
+  oracle-iac ride (probe armed). oracle-fleet#166 (build+research port) + #167 (G07
+  pin-follow) armed. sleep-iac#57 merged (snore fixer live, render verified).
+  **#105 dispatches next WIP-free tick = the FIRST mimo ride** (watch its estimator + pin).
+- **OPERATOR STEP PENDING:** `devbox run github-tofu apply` (deploy_repos += snore-recorder;
+  committed; org-admin wallet is host-side). Until then snore's deploy-pin job fails
+  loud-but-harmless. Also pending: mimo `model_tiers` entry at the next proxy-roll window;
+  soak watch on `router_request_deadline_exceeded_total` (stay 0 on healthy rides).
+- ✅ homelab#22 CLOSED (proxy deadline/gauge/generation_ms/activeDeadlineSeconds live).
+  ✅ oracle-iac fixer lane LIVE (#262 + ns render). ✅ FU-114 L3 (task class in dispatch
+  units). ✅ IAC-G07 (pin-follow rides the bump commit, pin-hold opt-out). ✅ FU-126 platform
+  legs (research-fanout.sh + branch-slug rules). ✅ FU-051 built (wallet apply = the residue).
 
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
 
