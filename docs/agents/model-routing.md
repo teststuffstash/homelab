@@ -166,6 +166,46 @@ OpenRouter's documented MCP `list-daily-model-rankings`** (daily popularity by t
 standard API key — ADR-096 addendum 2) into its rotation store; the scout's canary stays the
 safety probe for rotation entrants, and canary verdicts land in the same store (`POST /rotation`).
 
+### M8. The router's class scoring — how "auto" happens without the data problem (ADR-096 /route)
+
+Direction 2026-08-02 (operator conversation; ADR-096 has pointed here since P1). The worry this
+section answers: *"openrouter/auto decides per prompt; I'll never gather enough data to build
+that."* Correct — and unnecessary. `auto` needs per-prompt difficulty inference because its
+requests arrive unlabeled. **Ours arrive pre-classified**: every dispatch unit already carries
+role ([`roles.md`](roles.md)) × `task/*` label (FU-114 — one label, N consumers) × repo-type
+(`-iac` vs app) × `agent-budget/*`. Class assignment is a **zero-data deterministic lookup**
+(`model-classes.json` `role_defaults` + `label_map`), made at authoring/scan time, never inferred
+in the data plane (ADR-094). What remains is scoring ~10 candidate models × ~5 classes — and that
+splits into three feeds with different time constants, none of which needs "enough data":
+
+| feed | time constant | source | role in the pick |
+|---|---|---|---|
+| **capability** | per model release | external benchmarks (someone else's millions of samples) | **eligibility floor** per class |
+| **price + reliability** | days | market effective price + passive `provider_events` + canary verdicts (all live, zero spend) | **ordering + filter** |
+| **own outcomes** | weeks | `run_reports`/strikes per (class, model) — the FU-057 pivot | **correction** (catches benchmark-maxxing) |
+
+The /route pick is then: (chain ∩ class-eligible − claim deny − task strikes − health-broken)
+→ order by effective price → uniform pick in the 15% jitter band (the exploration budget that
+keeps the outcome feed alive — cells need dozens of samples for a coarse works/flaky/avoid
+verdict, not millions). Benchmark axes map to classes, not one score: **IFBench** ≈ recipe
+compliance (coding), **τ²-Bench** ≈ agentic tool loops (the closest public proxy for "can it
+drive goose"), **GPQA/AA-LCR/HLE** ≈ the research/audit reasoning tier. ⚠ Probed 2026-08-02:
+OpenRouter's own benchmark data (`/api/frontend/v1/benchmarks?permaslug=`) is **session-gated**
+— a standard API key 401s (unlike effective-pricing/MCP), so the source is either the
+Artificial Analysis API (documented, free key — an operator mint) or a **curated snapshot in
+`model-classes.json`** refreshed by the weekly scout digest (start here: capability changes per
+release, not per day, and graduation-stays-human already reviews that digest).
+
+**Per-stack and per-task control (operator ruling, same conversation):** projects blacklist
+independently — the AgentStack claim gains `modelDeny: [...]`, composed into the /route filter
+launcher-side (cluster-wins claim semantics, same seam as the chain). Per-task override rides
+labels, not new machinery: `label_map` already maps `track/iac`→class and
+`agent-budget/xs`→prefer_free; `task/research`→`research` class gives FU-105 its reasoning tier
++ `openrouter/fusion` head + dual-model without touching the coding lane, and an explicit
+`model/<alias>` issue label is the "--model wins" escape hatch, issue-shaped. If per-prompt
+difficulty ever matters, it enters as a coordinator-scan **labeling** step (auditable, one
+label) — never request-time inference in the proxy.
+
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
 Direction 2026-07-25. The downstream consumer is the IdP project's **reasoning** agents (auditing,
