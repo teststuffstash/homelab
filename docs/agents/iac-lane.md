@@ -41,6 +41,8 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 | `deploy_bump` | deploy App | CI-only, instant (ADR-084) | `require_approval=false` is deliberate: App bypass can't waive an approval, so it was dropped, not bypassed |
 | `infra_enrich` | coordinator unit | rides the bump PR (atomic pin+claim) | mechanical (schema-valid, FU-093 quota) = CI lane; judgment parks (roles.md §infra-fixer) |
 | `fixer_issue` | worker | **the gap** (IAC-G01) — closes via the policy sentinel, not review | sleep-iac#28: 38s self-merge incl. `.github/workflows/` |
+| `pin_follow` | **⚠ IAC-G07: nobody — today the operator by hand** | should be CI-only (pure mechanical) | cross-repo image-ref propagation: a deploy bump lands in `-iac`, but OTHER manifests in the stack (oracle-fleet `infra/workflow-ert-*.yaml`) pin the same image by tag — the follow-up bump is deterministic, needs NO LLM, and is the single most frequent human commit in oracle-iac history (7 of the last 120). Deploy-workflow extension shape (like `deploy-pin.sh`), not a role. |
+| `data_roll` | operator (oracle corpus rolls) | paired-roll contract (fleet#159 schema gate) | 4 of the last 120 oracle-iac commits; semi-mechanical since the schema gate — WHICH corpus stays judgment, the paired pin+digest commit is workflow-shaped |
 | `operator` | operator/meta session | CI-only | the directing human IS the review |
 | `revert` | FU-044 chain | CI-only, must NEVER gain a gate | the emergency path stays instant |
 | `renovate` | Renovate | existing classification (renovate.md) | |
@@ -175,7 +177,12 @@ canaries prove nothing here.
 
 ## Build order
 
-Tracked on FU-106; the gap register (IAC-G01..G06) IS the list. Suggested order: G05-rung-0
+Tracked on FU-106; the gap register (IAC-G01..G07) IS the list. Suggested order: G05-rung-0
 (sleep PostSync smoke — smallest, proves the post-merge shape) → G02+G03 (revert widening +
 cluster-verifying closeout — both homelab-side, small) → G04 sentinel skeleton + first rule set
 (closes G01) → G06 advisory lens → rung 1/2 when oracle's gateway metering (T3c) exists.
+**Reprioritization note (2026-08-02, from the commit-history audit):** G07 pin-follow is the
+biggest *mechanical* win (no LLM, deterministic, the most frequent human commit in oracle-iac)
+and can ship independently of the order above; and once oracle-iac gains a fixer block (the
+FU-106 twin, operator-wanted), G04 rises with it — fixer volume without the sentinel widens the
+G01 hole.
