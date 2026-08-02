@@ -209,7 +209,12 @@ was 306s) — true tokens/sec needs the `/generation` record's `generation_time`
 (homelab#22 build). Once present: within a jitter band, tie-break on measured full-duration
 tokens/sec per (model, provider), with per-class tolerance (a `dispatch`-class unit needs fast
 turns; a `heavy` overnight ride tolerates slow-but-cheap). Verbosity (output tokens/turn) is
-itself a latency AND cost factor — it belongs in the same evidence row.
+itself a latency AND cost factor — it belongs in the same evidence row. Cache hit is NOT a
+latency defense: it accelerates prefill only (laguna: 94% cached paid / TTFT 1.6s, yet ~11-12
+tok/s DECODE × 3.5k-token outputs = the 306s turns) — the tie-break metric is decode
+tokens/sec, which cache cannot flatter. (Page location tabs = client vantage segments — a
+single-provider model shows several — with each segment's own workload mix; another reason the
+page is never the evidence.)
 
 **Per-stack and per-task control (operator ruling, same conversation):** projects blacklist
 independently — the AgentStack claim gains `modelDeny: [...]`, composed into the /route filter
