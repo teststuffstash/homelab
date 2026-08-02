@@ -143,7 +143,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # but flagged stale (the dependent's premise may have died with it). A direct A↔B cycle →
     # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
     # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
-    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned \
+    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-094 lane predicate
@@ -292,7 +292,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
       fi
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")) ] | @tsv')
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ((([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten)
+             + [((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"])
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"

@@ -36,8 +36,9 @@ meant to avoid.)
 
 - **FU-117** (context architecture) — DELIBERATE let-it-pile-up (operator's grow-then-refactor).
   Note sightings; don't refactor yet.
-- **Dep-gate fragility**: a markdown-bullet `- Depends-on:` slips the `^[ \t]*depends-on:` scan
-  regex. Write Depends-on lines UNBULLETED until FU-111 (native `blockedBy`) lands.
+- **Dependencies (FU-111, 2026-08-02)**: create the NATIVE blockedBy edge when authoring
+  (+ keep the unbulleted `Depends-on:` line as the transition belt — the scan unions both);
+  retire body lines once App-token edges are seen live.
 - Worker git tokens CAN push `.github/workflows/*` (homelab-agents App has `workflows:write`, proven
   PR#80). Workflow-only issues ARE worker-doable. Branch-protection RULE edits stay repo-admin/tofu.
 - **FU-058 retro-session** deployed SUSPENDED (hand-fire). **Oracle/UC-1** operator-paced (its lane).

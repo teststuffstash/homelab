@@ -98,6 +98,16 @@ BAR** (inert / not-a-gap / won't-fix / style stay comments, never `Follow-ups:`)
 
 **Next rung = the structured sub-issue lineage** — the index everything else keys off.
 
+## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
+
+Authoring a dependency = **create the native edge** (verified live: create, cross-repo, list-ride
+all work — `gh api -X POST repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by -F
+issue_id=<the BLOCKER's numeric id>`) **and keep the `Depends-on:` body line** during the
+transition (unbulleted — a markdown bullet slips the scan regex). The scan reads the UNION of
+both (same probe path), so either alone gates correctly; the body-line reader retires once
+native edges are observed flowing under the App token in scan logs (the one leg a jail probe
+cannot verify — FU-108's lesson applied).
+
 ## Why sub-issues here and not elsewhere
 
 The scheduler consumes **semantics, not decorations** (recorded during the FU-110 mechanism

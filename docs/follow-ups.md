@@ -151,17 +151,16 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       Pull requests:read), then verify oracle-fleet/sleep-tracking series appear within one
       poll. Relates FU-091, FU-063 (archived).
 
-- [ ] **FU-111** — **Migrate `Depends-on:` body lines to native GitHub issue dependencies
-      (`blockedBy`).** The body-line idiom is regex-over-prose and its reader already broke once
-      (the tab-IFS collapse — the FU-087 gate silently dead for track-less issues); `blockedBy` is
-      structured state GitHub maintains, is UI-visible, and rides the SAME `gh issue list --json`
-      call the scan already makes (zero extra API cost, field list measured).
-      **Verify FIRST — the FU-108 probe-that-looks lesson:** (a) the field POPULATES under the App
-      installation token (read a known dependency; don't trust an empty-but-200); (b) cross-repo
-      edges work (sleep-iac#25 → sleep-tracking#48 is the live case); (c) the issue-authoring lane
-      can CREATE edges, so the API call replaces the body line with no dual-format drift.
-      Principle: **the scheduler consumes semantics, not decorations** — blocking = native deps,
-      grouping = milestones/sub-issues (FU-090). Relates FU-086, FU-087/FU-110 (archived).
+- [ ] **FU-111** — **Native `blockedBy` migration: probes GREEN + union reader SHIPPED
+      2026-08-02.** Verified live (jail token): the field rides the existing `gh issue list
+      --json` call and populates; cross-repo edges work; REST create/delete works
+      (`/issues/<n>/dependencies/blocked_by`, `-F issue_id=<int>`). The scan now gates on the
+      UNION of native edges + `Depends-on:` body lines (no dual-format drift — either alone
+      blocks); authoring guidance updated (issue-authoring.md §Dependencies). **Remaining:**
+      observe native edges under the APP token in live scan logs (the jail cannot mint that
+      token — FU-108's probe-that-looks lesson), then retire the body-line reader + lines.
+      Relates FU-086, FU-087/FU-110 (archived), FU-090.
+
 - [ ] **FU-112** — **Platform-pod OOM posture: nothing platform-critical should be BestEffort.**
       Both legs of the 2026-07-27/28 cascade are fixed (launcher requests=limits; Talos kata-node
       kubelet reservation, 4a9e9a9) — full postmortem:
