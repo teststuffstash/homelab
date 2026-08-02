@@ -61,7 +61,7 @@ while true; do
   #     dedup'd repeat fingerprints never re-escalate, so the meta session was blind to a live
   #     symptom unless the operator pasted it, 2026-08-02 egress-drop) ---
   am=$(curl -fsS --max-time 10 "${AM_URL:-http://192.168.40.14:9093}/api/v2/alerts?active=true&silenced=false&inhibited=false" 2>/dev/null \
-       | jq -r '[.[].labels.alertname] | unique | if length==0 then "NONE" else join(",") end')
+       | jq -r '[.[].labels.alertname | select(. != "InfoInhibitor")] | unique | if length==0 then "NONE" else join(",") end')
   if [ -z "$am" ] && [ "$last_am" != "PROBE_FAILED" ]; then
     echo "PROBE-FAIL: Alertmanager unreachable (firing-set clause blind)"; last_am="PROBE_FAILED"
   elif [ -n "$am" ] && [ "$am" != "$last_am" ]; then
