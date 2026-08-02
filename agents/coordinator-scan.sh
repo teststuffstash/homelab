@@ -436,11 +436,28 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         # escalates, never the old infinite 4h-spaced livelock. (Immediate no-op detection — same
         # head across a completed round → arbitrate NOW — is the FU-115(b) refinement, needs a
         # dispatch-time @head marker; the cap is the v1 bound.)
-        attempts="$(gh pr view "$u" --repo "$slug" --json comments \
-          --jq '[.comments[]|select(.body|test("Agent run stats"))]|length' 2>/dev/null)" || attempts=0
+        round_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits 2>/dev/null)" || round_probe=''
+        attempts="$(printf '%s' "$round_probe" | jq -r '[.comments[]|select(.body|test("Agent run stats"))]|length' 2>/dev/null)" || attempts=0
         case "$attempts" in ''|*[!0-9]*) attempts=0;; esac
+        # FU-115(b) immediate no-op detection (built 2026-08-02, marker-free): if the NEWEST
+        # stats comment post-dates the newest NON-MERGE commit, the last completed round pushed
+        # nothing — same head, still red → arbitrate NOW instead of burning the remaining cap.
+        # Merge commits excluded (the updater's BEHIND merges are not round output — the
+        # nine-review-loop lesson). ISO-8601 strings compare correctly as strings.
+        noop_round=""
+        if [ "$attempts" -ge 1 ]; then
+          noop_round="$(printf '%s' "$round_probe" | jq -r '
+            ([.comments[]|select(.body|test("Agent run stats"))|.createdAt] | max // "") as $stats
+            | ([.commits[]?.commit | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
+            | if $stats != "" and ($head == "" or $stats > $head) then "1" else "" end' 2>/dev/null)" || noop_round=""
+        fi
         RED_MAX="${RED_ROUNDS_MAX:-3}"
-        if [ "$attempts" -lt "$RED_MAX" ]; then
+        if [ -n "$noop_round" ]; then
+          gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+            && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
+            || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
+        elif [ "$attempts" -lt "$RED_MAX" ]; then
           # DISPATCH a fix round (under the attempt cap)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the

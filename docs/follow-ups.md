@@ -178,14 +178,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       Relates FU-088 (archived), FU-109, FU-103 (archived).
 
 
-- [ ] **FU-115** — **Immediate no-op detection on the red merge path** — same head across a
-      completed round should escalate to `agent/arbitrate` NOW, not after the full `RED_ROUNDS_MAX`
-      cap; needs a dispatch-time `@head` marker. The attempt-cap is the v1 bound.
-      The red loop's edge + escalation shipped 2026-07-28 (exporter `maybe_dispatch_cired`,
-      content-based capped `ci-red` scan clause, MP-T12 rewrite + MP-T13 Red→arbitrate) —
-      transitions in [`docs/agents/merge-path-fsm.yaml`](agents/merge-path-fsm.yaml), play in the
-      coordinator README. Relates MP-T07/T11/T12/T13.
-
 
 - [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
       DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —

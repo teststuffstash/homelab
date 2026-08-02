@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-115** *(archived 2026-08-02)* — **Immediate no-op detection on the red merge path BUILT,
+  marker-free**: the ci-red clause compares the newest `Agent run stats` comment timestamp vs the
+  newest NON-merge commit — stats newer = the round pushed nothing → `agent/arbitrate` NOW (skips
+  the remaining RED_ROUNDS_MAX budget). Merge commits excluded (nine-review-loop lesson).
+  Synthetic-tested both verdicts. The edge + exhaustion cap shipped 2026-07-28 (MP-T12/T13).
 - **FU-124** *(archived 2026-08-02)* — **Armed-BEHIND updater nudge built into the scan**: per
   repo, any armed PR with mergeStateStatus=BEHIND gets a direct `PUT /pulls/N/update-branch`
   (idempotent, self-limiting, FAIL-LOUD on 403 — cron sweeper stays the backstop). The meta-watch
