@@ -161,13 +161,7 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       token — FU-108's probe-that-looks lesson), then retire the body-line reader + lines.
       Relates FU-086, FU-087/FU-110 (archived), FU-090.
 
-- [ ] **FU-112** — **Platform-pod OOM posture: nothing platform-critical should be BestEffort.**
-      Both legs of the 2026-07-27/28 cascade are fixed (launcher requests=limits; Talos kata-node
-      kubelet reservation, 4a9e9a9) — full postmortem:
-      [`docs/incidents/2026-07-27-kata-ride-oom-cascade.md`](incidents/2026-07-27-kata-ride-oom-cascade.md).
-      **Residual only:** the `engine-image` DaemonSet still has no `priorityClass` (BestEffort),
-      against the operator's "agents must not be able to kill cilium" ruling. Trivially restartable
-      and non-cascading, hence deferred. Relates FU-082 (archived), FU-081, FU-072, FU-116.
+
 - [ ] **FU-113** — **Any non-triaging respond must write a ledger marker; the responder must not
       trust the alert edge to refire.** Postmortem (both the latch-defer drop and the three
       look-alike silent outcomes):

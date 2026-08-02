@@ -8,6 +8,12 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-112** *(archived 2026-08-02)* — **Platform-pod OOM posture: residual RESOLVED upstream.**
+  Both cascade legs were already fixed (launcher requests=limits; kata-node kubelet reservation);
+  the engine-image DaemonSet residual verified live: ALL longhorn-system DS (engine-image,
+  csi-plugin, manager) carry `priorityClassName: longhorn-critical` (1e9) via the Longhorn
+  `priority-class` setting, `applied:true` — declarative, not drift. Postmortem:
+  docs/incidents/2026-07-27-kata-ride-oom-cascade.md.
 - **FU-115** *(archived 2026-08-02)* — **Immediate no-op detection on the red merge path BUILT,
   marker-free**: the ci-red clause compares the newest `Agent run stats` comment timestamp vs the
   newest NON-merge commit — stats newer = the round pushed nothing → `agent/arbitrate` NOW (skips
