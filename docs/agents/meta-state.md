@@ -5,19 +5,7 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## ⏹ STOPPED 2026-07-31 (~95% weekly subscription limit — operator: "no point pushing it")
-
-Meta-coordination halted at a CLEAN state: sleep drive **14/14 done**, board empty (0 queued /
-0 in-progress / 0 open PRs / 0 running pods / 0 breakers). Watches TaskStop'd. Coordinators/reflexes
-left LIVE but IDLE — an empty board = "no LLM woken" (≈0 spend), and FU-088's 7d@0.95 gate freezes
-any dispatch at the limit anyway; suspend them explicitly only if you want belt-and-suspenders.
-**RESUME THREADS when the weekly window resets:** (1) fix **#96** (real `extra`-clobber, completes
-#57) + **#92** (marginal) — left open, un-labeled, NOT dispatched; (2) build the structured sub-issue
-lineage / sprout-rate gauge (FU-090(c) next rung); (3) VALIDATE the reviewer-prompt patch on the next
-harvest run (#96/#92-class should not sprout). Session FUs: FU-123, FU-124. Harvested sprouts for
-triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
-
-## Live world state (2026-07-31; router test 2026-08-02)
+## Live world state (router test 2026-08-02; session 3 resumed ~14:00Z)
 
 - **World ENABLED.** `coordinate-sleep` + `review-sleep` CronWorkflows live (10-min cadence,
   not suspended), ticking green. Coordinator/reviewer = sonnet.
@@ -27,12 +15,16 @@ triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
   for `POST /route` + `cooldown tripped/cleared`, decisions in `/router-status`. P4 flip waits
   on the shadow soak (FU-095). Revert the chain via sleep-iac when the test has yielded enough.
   **Progress:** #92 → PR#106 merged CLEAN end-to-end on laguna:free (~100min ride, 306s turns,
-  zero failures — no cooldown weather yet); **#96 riding** at clear-time; #99/#103/#105 queued.
-- **⏳ PENDING VERIFICATION (first thing on resume):** the WIP-hold jq-null fix (e2fdbe7) — a
-  coordinate-sleep tick DURING a ride must print `⏳ project WIP busy` for the queued issues and
-  spawn NO coordinator pod (the old bug burned ~1 sonnet session/tick/ride). Check any tick log
-  newer than ~13:25Z 2026-08-02 while a ride pod ran. If sessions still spawn per-tick: the fix
-  missed, investigate the scan clone path.
+  zero failures — no cooldown weather yet); **#96 riding** (r1 dispatched 13:24Z on laguna:free,
+  pod `agent-sleep-tracking-issue-96-r1` ns sleep-tracking); #99/#103/#105 queued behind it.
+  Shadow `/route` divergence continues: both #96 route calls picked `ling-3.0-flash:free` vs
+  static laguna. No cooldowns active; expect PR ≈15:00-15:30Z (100min #92 baseline), then
+  review edge → merge → next queue item.
+- ✅ WIP-hold jq-null fix (e2fdbe7) VERIFIED live 13:50Z: tick during the #96 ride printed
+  `⏳ project WIP busy` ×3 + "no LLM woken", no coordinator pod spawned.
+- **⏳ PENDING VERIFICATION:** scan probe-skip for fixerless repos (d8f3a8e) — next
+  coordinate-sleep tick must NOT print `[snore-recorder] ⚠ WIP pod probe FAILED` (root: no
+  fixer block → no ns RBAC; probe now skipped for non-dispatchable repos).
 - **⏳ PENDING BUILD (ride-gap only — single proxy Recreate roll):** the homelab#22 batch, notes
   on the issue: `REQUEST_DEADLINE_S≈900`, model-labeled in-flight gauge, harvest
   `generation_time` (store's `latency`=TTFT only — unlocks decode-tok/s, the §M8 free-band
@@ -52,46 +44,11 @@ triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
   test-integration` now work both in-ride and in CI for sleep; sleep's agent-stack ≈ oracle-fleet.
   FU-118/119/120 done. No structural blockers outstanding. (Detail: TICK-LOG 2026-07-31 entry.)
 
-## ✅ DONE — sleep-tracking harvested-follow-up drive (2026-07-31): 14/14 merged
-
-All 14 merged (0 open PRs, 0 breakers). #77 finale needed a manual updater dispatch (FU-124). Left
-for the operator's triage (unlabeled): **#92/#93/#96/#101/#102** (machine-harvested review-Follow-up
-sprouts from the merged PRs) + **#99** (pinned-SHA-256 hardening, the accepted #98 follow-up). New FUs
-this session: **FU-123** (in-pod arm fails, hypothesis), **FU-124** (last-PR-behind cron-backstop
-unreliable). FU-122 filed+retracted. Poll 120→90 live. Detail: TICK-LOG 2026-07-31 (cont.) entries.
-The rest of this file below is stale-but-harmless standing context; the drive section is retired.
-
-## (retired) ACTIVE DRIVE — clear the sleep-tracking harvested-follow-up queue (operator ask 2026-07-31)
-
-Operator: "pick any open sleep-tracking issue (not #16 dep-dashboard), label it, let the loop pick
-it up. Keep going until the 14 issues are done or a major blocker appears." These 14 are all
-bot-authored 🌱 harvested follow-ups sitting at the FU-090 human-triage gate — operator has
-delegated adopting them. Sleep = ONE WIP slot (FU-042 per-stack), so queue in waves and let the
-loop serialize. Label to adopt = `agent-fix` + `agent/queued` + `task/fix` (all are fixes/cleanups,
-no build deliverables).
-
-PROGRESS (source-of-truth = GitHub labels; this = live snapshot ~16:05Z):
-- ✅ **MERGED (8):** #55, #50, #58, #60, #64, #51, #66, #68.
-- 🔍 in review: #54(PR#91), #57(PR#94 — verified correct) · 🏗 riding: #69 · 📋 queued: #73, #74.
-- **#77** still the HELD FINALE (see below). After #73/#74 land, queue #77 with detailed steering.
-- **#57** (snore-only upsert clobber, SLP-ING-SRC-SNORE-ONLY) queued WITH ⚖ steering comment
-  (COALESCE-guard band-owned cols on the snore-only path only + a decision-table test row).
-- **#77** (datasource uid hardcode) = the HELD FINALE. Lane RESOLVED: `grafana/provisioning/
-  datasources/sleep-notes.yaml` IS in the sleep-tracking repo (sleep-iac has no datasource
-  provisioning) → **worker-doable, NOT cross-repo** (meta-16's operator-lane flag was on incomplete
-  info). Two in-repo deliverables: (1) pin `uid: sleep-notes` in that provisioning YAML; (2) fix
-  `assert_graph.py._query()` to read the panel's OWN datasource uid instead of hardcoding
-  `sleepdbitest` — ⚠ NUANCE: must UNIFY the uid across panel + `tests/integration/manifests/
-  grafana.yaml` (currently pins `sleepdbitest`) or the gate breaks. Touches the just-stabilized
-  #42/#48/#71 gate → queue LAST, watch closely, post detailed ⚖ steering when queuing.
-
-Pipeline pattern confirmed live: WIP=1 = one RUNNING worker pod (not one open PR) → multiple PRs
-review concurrently; BEHIND PRs handled by the MP-T02 updater (proven); review edge = the exporter's
-ADR-093 dispatch (POLL_INTERVAL=120s), NOT the coordinate cron. FU-122 was filed then RETRACTED
-(already shipped as ADR-093+FU-115 — verified via exporter dispatch log; lesson: read the mechanism
-before filing a latency FU).
-
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
+
+- Open session FUs: **FU-123** (in-pod arm-auto-merge fails, hypothesis needs an agent-finalize
+  read) + **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater backstop; watch
+  clause: armed PR BEHIND >15min).
 
 - **FU-117** (context architecture) — DELIBERATE let-it-pile-up (operator's grow-then-refactor).
   Note sightings; don't refactor yet.
