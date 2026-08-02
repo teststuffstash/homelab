@@ -63,7 +63,8 @@ locals {
     github_repository.openrouter_operator.repo_id,
     github_repository.agent_runtime.repo_id,
     github_repository.agent_coordinator.repo_id,
-    github_repository.oracle_fleet.repo_id, # oracle-fleet deploy.yaml mints a token to open the oracle-iac bump PR
+    github_repository.oracle_fleet.repo_id,    # oracle-fleet deploy.yaml mints a token to open the oracle-iac bump PR
+    github_repository.snore_recorder.repo_id,  # build-image.yaml mints a token for the sleep-iac SNORE_IMAGE pin PR (FU-051)
   ]
 }
 
