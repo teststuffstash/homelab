@@ -186,6 +186,19 @@ PIN_TTL_S = int(os.environ.get("PIN_TTL_S", "3600"))  # pin cache; providers/pri
 PIN_FAIL_TTL_S = int(os.environ.get("PIN_FAIL_TTL_S", "300"))  # don't hammer a failing endpoint
 MAX_PRICE_FACTOR = float(os.environ.get("MAX_PRICE_FACTOR", "2.0"))  # guard vs fallback lottery
 READ_TIMEOUT_S = int(os.environ.get("READ_TIMEOUT_S", "300"))  # idle timeout per upstream read
+# homelab#22: the ABSOLUTE per-request wall — READ_TIMEOUT_S never breaks a slow-drip stream
+# (every read returns in time, the request never ends; oracle-fleet#7 r1). 900s default clears
+# the agentic tail by measurement: laguna:free healthy turns run ~306s wall and the advertised
+# e2e P99 is 602s — agentic turns (large context + the 16k max_tokens floor) live at P95–P99
+# by construction. A client may override per request via X-Request-Deadline-S (stripped before
+# forwarding). Enforced at read-loop granularity, so worst-case overshoot is one READ_TIMEOUT_S.
+REQUEST_DEADLINE_S = int(os.environ.get("REQUEST_DEADLINE_S", "900"))
+# homelab#22: in-flight registry — a wedged handler thread is invisible to the logs (they only
+# write on completion); the per-model gauge + oldest-age series make quiet-but-wedged observable
+# (the FU-057 stall-detector denominator). In-memory by design, a roll resets it.
+_inflight: dict[int, tuple[str, float]] = {}  # thread id -> (model/leg label, started_epoch)
+_inflight_lock = threading.Lock()
+_deadline_exceeded: dict[str, int] = {}  # label -> severed-request count (in-memory counter)
 # Completion floor (0 = off). Three worker runs died to goose -32602 tool-call truncation at
 # 14781/15267/16322 chars — all ≈4k tokens: a max_tokens=4096 default somewhere goose-side caps
 # any file-write tool call above ~4k tokens mid-JSON (oracle-fleet#1 autopsies, TICK-LOG 2026-07-09).
@@ -464,6 +477,7 @@ def _cb_update(session: str, model: str, status: int) -> None:
 _DROP_REQ = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
     "transfer-encoding", "upgrade", "host", "content-length", "accept-encoding",
+    "x-request-deadline-s",  # homelab#22: a proxy directive, not an upstream header
 }
 _DROP_RESP = {"connection", "keep-alive", "transfer-encoding", "content-length"}
 
@@ -844,6 +858,9 @@ def _anthropic_latch_update(status: int, resp_headers) -> str:
 class Proxy(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "openrouter-proxy"
+    # homelab#22: socket timeout on the CLIENT connection (recv and send both) — without it a
+    # client that stops reading mid-stream blocks wfile.write forever and no deadline can fire.
+    timeout = READ_TIMEOUT_S
 
     def log_message(self, fmt, *args):  # default logger writes to stderr with client noise
         pass
@@ -851,6 +868,22 @@ class Proxy(BaseHTTPRequestHandler):
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
                  cb_session: str | None = None) -> None:
+        # homelab#22: every forwarded request is registered in-flight for its full lifetime —
+        # try/finally so a handler exception can never leak a phantom entry into the gauge.
+        key = threading.get_ident()
+        label = or_model or ("anthropic" if self.path.startswith("/anthropic/") else "other")
+        with _inflight_lock:
+            _inflight[key] = (label, time.time())
+        try:
+            self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
+                                   cb_session=cb_session)
+        finally:
+            with _inflight_lock:
+                _inflight.pop(key, None)
+
+    def _forward_upstream(self, body: bytes | None, note: str,
+                          or_model: str | None = None, or_provider: str | None = None,
+                          cb_session: str | None = None) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
@@ -922,13 +955,34 @@ class Proxy(BaseHTTPRequestHandler):
         self.end_headers()
         sent = 0
         head = b""  # first bytes of the response — the generation id lives here (JSON and SSE both)
+        # homelab#22: the absolute wall. A slow-drip upstream keeps every read under
+        # READ_TIMEOUT_S forever; this severs at started+deadline regardless.
         try:
-            while chunk := resp.read(8192):
+            deadline_s = float(self.headers.get("X-Request-Deadline-S") or REQUEST_DEADLINE_S)
+        except (TypeError, ValueError):
+            deadline_s = float(REQUEST_DEADLINE_S)
+        deadline = started + deadline_s if deadline_s > 0 else None
+        # read1, NOT read: BufferedIOBase.read(8192) BLOCKS until all 8192 bytes accumulate —
+        # a slow-drip upstream never fills it, so the loop (and the deadline check) never runs
+        # (caught by the homelab#22 e2e test). read1 returns per raw read; a fully-silent socket
+        # still falls to READ_TIMEOUT_S, hence the one-READ_TIMEOUT_S overshoot bound above.
+        read1 = getattr(resp, "read1", resp.read)  # HTTPError bodies may lack read1 (finite anyway)
+        try:
+            while chunk := read1(8192):
                 self.wfile.write(chunk)
                 self.wfile.flush()
                 if or_model and len(head) < 16384:
                     head += chunk
                 sent += len(chunk)
+                if deadline and time.time() > deadline:
+                    with _inflight_lock:
+                        _deadline_exceeded[or_model or "other"] = \
+                            _deadline_exceeded.get(or_model or "other", 0) + 1
+                    log(f"REQUEST DEADLINE EXCEEDED: {self.command} {self.path} "
+                        f"model={or_model or '-'} — severing after {time.time() - started:.0f}s "
+                        f"(deadline {deadline_s:.0f}s, {sent}B relayed; homelab#22)")
+                    note += "+deadline-severed"
+                    break
         except OSError as e:
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
@@ -1057,6 +1111,33 @@ class Proxy(BaseHTTPRequestHandler):
                         lines.append(f'router_openrouter_key_limit_remaining_usd{{key="{ref}"}} {d["limit_remaining"]}')
                     if isinstance(d.get("usage"), (int, float)):
                         lines.append(f'router_openrouter_key_usage_usd{{key="{ref}"}} {d["usage"]}')
+            # homelab#22: in-flight requests by model/leg + oldest age — the stall-detector's
+            # view of a quiet-but-wedged proxy (a handler thread only logs on completion).
+            with _inflight_lock:
+                inflight = list(_inflight.values())
+                severed = sorted(_deadline_exceeded.items())
+            by_label: dict[str, tuple[int, float]] = {}
+            for label, ts in inflight:
+                n, oldest = by_label.get(label, (0, ts))
+                by_label[label] = (n + 1, min(oldest, ts))
+            lines += ["# TYPE router_inflight_requests gauge",
+                      "# HELP router_inflight_requests Requests currently being forwarded, by model (or anthropic/other leg)."]
+            if by_label:
+                lines += [f'router_inflight_requests{{model="{m}"}} {n}'
+                          for m, (n, _) in sorted(by_label.items())]
+            else:
+                lines.append("router_inflight_requests 0")
+            lines += ["# TYPE router_inflight_oldest_age_seconds gauge",
+                      "# HELP router_inflight_oldest_age_seconds Age of the oldest in-flight request per model — a value past REQUEST_DEADLINE_S+READ_TIMEOUT_S means a wedged thread."]
+            lines += [f'router_inflight_oldest_age_seconds{{model="{m}"}} {now - oldest:.0f}'
+                      for m, (_, oldest) in sorted(by_label.items())]
+            lines += ["# TYPE router_request_deadline_exceeded_total counter",
+                      "# HELP router_request_deadline_exceeded_total Requests severed at the absolute REQUEST_DEADLINE_S wall (in-memory; resets on roll)."]
+            if severed:
+                lines += [f'router_request_deadline_exceeded_total{{model="{m}"}} {n}'
+                          for m, n in severed]
+            else:
+                lines.append("router_request_deadline_exceeded_total 0")
             lines += router.metrics_lines()  # ADR-096: the router_* series
             payload = ("\n".join(lines) + "\n").encode()
             self.send_response(200)
@@ -1387,6 +1468,7 @@ def main() -> int:
         threading.Thread(target=_headroom_loop, daemon=True).start()
     log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
         f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
+        f"deadline={REQUEST_DEADLINE_S}s, "
         f"max_tokens_floor={MAX_TOKENS_FLOOR}, market={'on' if MARKET_ENABLE else 'off'}, "
         f"rankings={'on' if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0 else 'off'}, "
         f"semaphore≤{SUBSCRIPTION_MAX_RUNNING}, headroom={HEADROOM_POLL_S}s, "

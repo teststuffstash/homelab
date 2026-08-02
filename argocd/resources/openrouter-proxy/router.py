@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS run_reports(
 CREATE TABLE IF NOT EXISTS generations(
   id TEXT PRIMARY KEY, ts REAL, requested_model TEXT, served_model TEXT, provider TEXT,
   tokens_prompt INTEGER, tokens_completion INTEGER, tokens_cached INTEGER,
-  cost_usd REAL, latency_ms INTEGER, finish TEXT);
+  cost_usd REAL, latency_ms INTEGER, finish TEXT, generation_ms INTEGER);
 CREATE TABLE IF NOT EXISTS decisions(
   ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
   model TEXT, reason TEXT, detail TEXT);
@@ -92,6 +92,13 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
             try:
                 conn = sqlite3.connect(attempt, check_same_thread=False)
                 conn.executescript(_SCHEMA)
+                # homelab#22: generation_ms landed after the PVC store existed — migrate in
+                # place. It sits LAST in the CREATE TABLE above so column order matches the
+                # ALTER'd layout and positional INSERTs stay valid on both.
+                try:
+                    conn.execute("ALTER TABLE generations ADD COLUMN generation_ms INTEGER")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
                 if attempt != ":memory:":
                     conn.execute("PRAGMA journal_mode=WAL")
                 conn.commit()
@@ -202,14 +209,17 @@ def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
     'served model/provider' the ledger wanted — and native_tokens_cached measures the real
     cache hit the h=0.8 pin math assumes). Harvested passively by the data plane per forwarded
     completion; idempotent per generation id — OR IGNORE, so a lookup retry can never
-    overwrite a stored record with a thinner one."""
+    overwrite a stored record with a thinner one. `latency` is TTFT ONLY (measured 2026-08-02:
+    laguna 1.6s TTFT vs ~306s wall) — generation_time is the full decode duration, the only
+    field that yields true tokens/sec (homelab#22, the §M8 free-band tie-break input)."""
     return _write(
-        "INSERT OR IGNORE INTO generations VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR IGNORE INTO generations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
         (gen_id, time.time(), requested_model, str(data.get("model") or ""),
          str(data.get("provider_name") or ""), int(data.get("native_tokens_prompt") or 0),
          int(data.get("native_tokens_completion") or 0),
          int(data.get("native_tokens_cached") or 0), float(data.get("total_cost") or 0.0),
-         int(data.get("latency") or 0), str(data.get("finish_reason") or "")))
+         int(data.get("latency") or 0), str(data.get("finish_reason") or ""),
+         int(data.get("generation_time") or 0)))
 
 
 def record_provider_event(model: str, provider: str, status: int) -> None:
@@ -627,6 +637,13 @@ def metrics_lines() -> list[str]:
                            (now - 7 * 86400,)):
         if tp:
             lines.append(f'router_observed_cache_hit{{model="{m}"}} {(tc or 0) / tp:.3f}')
+    lines += ["# TYPE router_observed_decode_tps gauge",
+              "# HELP router_observed_decode_tps Measured completion tokens per second of generation_time over 7d — the §M8 free-band latency tie-break (homelab#22; rows without generation_time excluded)."]
+    for m, tok, ms in _read("SELECT requested_model, SUM(tokens_completion), SUM(generation_ms) "
+                            "FROM generations WHERE ts > ? AND generation_ms > 0 "
+                            "GROUP BY requested_model", (now - 7 * 86400,)):
+        if ms:
+            lines.append(f'router_observed_decode_tps{{model="{m}"}} {(tok or 0) * 1000.0 / ms:.2f}')
     return lines
 
 
@@ -658,9 +675,13 @@ def self_test() -> int:
         "model": "deepseek/deepseek-v4-flash-20260423", "provider_name": "Fireworks",
         "native_tokens_prompt": 100, "native_tokens_completion": 20,
         "native_tokens_cached": 80, "total_cost": 9.8e-07, "latency": 1022,
-        "finish_reason": "stop"})
+        "generation_time": 2000, "finish_reason": "stop"})
     assert record_generation("gen-test-1", "deepseek/deepseek-v4-flash", {
         "total_cost": 9.8e-07}), "generation re-record must stay idempotent (no-op)"
+    assert (_read("SELECT generation_ms FROM generations WHERE id='gen-test-1'")
+            or [(0,)])[0][0] == 2000, "generation_time must round-trip (homelab#22)"
+    assert any("router_observed_decode_tps" in ln and "10.00" in ln
+               for ln in metrics_lines()), "decode tok/s gauge (20 tok / 2s = 10.00)"
     assert record_rotation("scout-canary",
                            [{"model": "moonshotai/kimi-k3", "canary_verdict": "clean"}]) == 1
     # Addendum 3: reliability aggregate + free-canary derivation + circuit events + key refs

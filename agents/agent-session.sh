@@ -723,6 +723,11 @@ metadata:
   labels: { app: agent-session, project: ${PROJECT}${SUB_LABEL} }
 spec:
   restartPolicy: Never
+  # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns
+  # ≈ 16h theoretical); 4h matches the session key's TTL (estimate_budget.py --ttl-hours) — past
+  # it the ride can only 401-storm anyway. K8s kills with reason DeadlineExceeded; the launcher
+  # classifier below maps that to a `timeout` strike, so the chain re-dispatches on the next model.
+  activeDeadlineSeconds: ${AGENT_POD_DEADLINE_S:-14400}
   # FU-089: the worker's PROVABLE identity — the proxy's /git-token TokenReviews this SA's
   # projected token (Composition renders the SA per fixer ns; no RBAC grants attached).
   serviceAccountName: agentstack-worker
@@ -969,7 +974,12 @@ if [ -n "$RUN_CMD" ]; then
       # No AGENT_RUN_STATS line at all = finalize never ran (the pod died hard / wait timed out) —
       # the PR-less death that used to be invisible. Classify the raw log jail-side with the same
       # signatures agent-finalize uses (that script is the authoritative copy of these patterns).
-      if grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
+      # homelab#22: an activeDeadlineSeconds kill leaves no log signature at all — the pod's
+      # status.reason is the only evidence, and it maps to the `timeout` strike class.
+      POD_REASON="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.reason}' 2>/dev/null || true)"
+      if [ "$POD_REASON" = "DeadlineExceeded" ]; then
+        ERR_CLASS="timeout"
+      elif grep -qiE -e '-32602|EOF while parsing|response may have been truncated|context_length_exceeded|panicked at' "$RUNLOG"; then
         ERR_CLASS="harness-death"
       elif grep -qiE 'insufficient (credit|quota|fund)|402 payment|payment required|quota exceeded|budget exceeded|key limit exceeded|out of credit' "$RUNLOG"; then
         ERR_CLASS="budget-403"
