@@ -209,15 +209,16 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked like the
       app FSM); the detector + `infra-enrich` dispatch class shipped 2026-07-27 with a first live
       dispatch merged.
-      **Open:** ⚠ **IAC-G01, the review-gate hole** — an `-iac` worker can rewrite its own CI gate
-      and instant-merge unreviewed (sleep-iac#28 self-merged 38s after open, touching
-      `.github/workflows/`); it closes via the G04 policy sentinel, not review. Then the rest of the
-      register in the doc's suggested order. **Operator directive 2026-08-02: steady-state -iac work
-      is the STACK's lane, not the jail's** (jail/meta = first-time bootstrap only — "it will burn
-      me out otherwise when I add more stacks") → the oracle-iac twin is now WANTED, not optional:
-      fixer block on oracle's claim + the platform ns precreation, sleep-iac's FU-106 shape
-      (oracle-iac#97 currently has NO lane).
-      Window is bounded meanwhile (sleep-iac#25 is the only queued -iac item, Depends-on-held).
+      **2026-08-02: oracle-iac twin LIVE** (fixer block #262 + ns render + first ride #97→#265
+      clean), **G02 CLOSED** (revert candidate = any -iac merge, revert-* excluded), **G03
+      CLOSED** (closeout's -iac variant verifies Synced-at-revision + Healthy + claims Ready;
+      loop SA granted the read-only RBAC), **G07 pin-follow SHIPPED** (oracle-fleet#167 —
+      workflow tags ride the bump commit, pin-hold opt-out).
+      **Open:** ⚠ **IAC-G01/G04, the review-gate hole + cluster-side policy sentinel** — an
+      `-iac` worker can rewrite its own CI gate and instant-merge unreviewed (sleep-iac#28,
+      38s); priority RISES with three fixer lanes live. Then G05 (rung-0 smoke — ⚖ OPEN
+      QUESTION: what does the PostSync curl target on a CronJob-shaped app like the sleep
+      ingester? the sketch assumes an HTTP service) + G06 advisory lens.
       Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-086** — **Item-scoped dispatch: the four remaining knobs.** Core shipped + E2E-verified
       2026-07-17 (scan emits `(clause, repo, item)` units, `--spawn` dispatches the single

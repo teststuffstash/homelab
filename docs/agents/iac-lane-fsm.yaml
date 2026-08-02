@@ -127,11 +127,11 @@ gaps:
     fu: FU-106
   - id: IAC-G02
     name: revert trigger scoped to deploy/* bumps
-    detail: "IAC-T05 watches deploy/* bump merges only; a fixer-issue merge (IAC-T03) that degrades the stack is invisible to the revert chain. Widen to: any -iac merge preceding Degraded ≤T."
+    detail: "CLOSED 2026-08-02: the revert candidate is now ANY -iac merge (revert-* branches excluded — never revert a revert) within the window touching the app path (deploy-revert-argo.yaml); was deploy/* only."
     fu: FU-106
   - id: IAC-G03
     name: C6 closeout verifies GitHub, not the cluster
-    detail: "The -iac definition of done is reconciled-and-healthy, not merged-and-CI-green: closeout must check app Synced AT the merge revision + Healthy + composed claims Ready (+ SLO burn unchanged) before flipping agent/done."
+    detail: "CLOSED 2026-08-02: the merged-closeout play's -iac variant checks app Synced at/past the merge revision + Healthy + touched Workspace claims Ready before flipping (coordinator README step 1; loop SA granted read-only applications/workspaces). SLO-burn check rides FU-104's rules, not this play."
     fu: FU-106
   - id: IAC-G04
     name: no tamper-proof policy check

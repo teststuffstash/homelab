@@ -110,13 +110,16 @@ spec:
             kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$KEY\":\"$(date -u +%Y-%m-%dT%H:%MZ)\"}}" >/dev/null 2>&1 \
               || echo "WARN: ledger patch failed — branch-name idempotency is the remaining belt"
 
-            # The revert candidate: newest deploy/* bump PR merged into this repo within the
-            # window whose files touch the app's path. Fail-closed: no candidate = report-only.
+            # The revert candidate: newest -iac merge within the window whose files touch the
+            # app's path. IAC-G02 (2026-08-02): ANY -iac merge, not only deploy/* bumps — a
+            # fixer-issue merge (IAC-T03) that degrades the stack was invisible to this chain.
+            # revert-* branches excluded (never revert a revert — that ping-pongs).
+            # Fail-closed: no candidate = report-only.
             CUTOFF="$(date -u -d "-${REVERT_WINDOW_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
             CAND="$(gh pr list --repo "$SLUG" --state merged --limit 10 \
               --json number,title,headRefName,mergedAt,mergeCommit \
-              --jq --arg cutoff "$CUTOFF" '[.[] | select(.headRefName | startswith("deploy/")) | select(.mergedAt >= $cutoff)] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
-            [ -n "$CAND" ] || { echo "→ $APP degraded with NO deploy/* bump merged in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
+              --jq --arg cutoff "$CUTOFF" '[.[] | select((.headRefName | startswith("revert-")) | not) | select(.mergedAt >= $cutoff)] | sort_by(.mergedAt) | last | select(.)' 2>/dev/null || true)"
+            [ -n "$CAND" ] || { echo "→ $APP degraded with NO -iac merge in the last ${REVERT_WINDOW_MIN}m — not a rollback case (responder/operator lane owns it)"; exit 0; }
             PRNUM="$(printf '%s' "$CAND" | jq -r .number)"
             SHA="$(printf '%s' "$CAND" | jq -r .mergeCommit.oid)"
             TITLE="$(printf '%s' "$CAND" | jq -r .title)"

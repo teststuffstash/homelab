@@ -338,6 +338,14 @@ job, in order (re-read live state first, exit clean if someone already closed it
    the merge commit is green (`gh run list --commit <sha>`). If the outcome looks WRONG (merged
    but the fix demonstrably didn't take), comment the evidence on the issue and reopen it with
    `agent/queued` removed — a human or the next triage decides; do NOT dispatch anything.
+   **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
+   definition of done is *reconciled-and-healthy*, so before flipping the label also check —
+   the owning ArgoCD Application is Synced **at (or past) the merge revision** AND Healthy
+   (`kubectl -n argocd get application <app> -o jsonpath='{.status.sync.revision} {.status.sync.status} {.status.health.status}'`),
+   and any Workspace claims the merge touched are `Ready=True` (`kubectl get workspaces.tf.upbound.io`).
+   Reads are RBAC-granted to your SA (read-only). Not-yet-synced → say so and exit WITHOUT
+   flipping (the next tick re-checks — level-triggered); Degraded → do not flip, note that the
+   revert chain owns it. A PROBE FAILURE is loud, never a silent flip.
 2. **Flip the label**: add `agent/done`, then remove whichever non-terminal state label the issue
    still carries — `agent/in-progress` OR `agent/review` (a PR merged from the happy-path review
    state closes still at `agent/review`; add-before-remove; compare-then-write per the label

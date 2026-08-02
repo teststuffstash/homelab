@@ -102,3 +102,12 @@ rules:
   - apiGroups: [""]
     resources: [endpoints]
     verbs: [get, list]
+  # IAC-G03 (2026-08-02): the -iac merged-closeout verifies the CLUSTER, not GitHub — the play
+  # reads the app's Synced-revision + Health and the composed claims' Ready. Read-only, and only
+  # what the closeout needs (no secrets, no writes).
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list]
+  - apiGroups: [tf.upbound.io]
+    resources: [workspaces]
+    verbs: [get, list]
