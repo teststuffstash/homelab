@@ -17,10 +17,17 @@ lineage / sprout-rate gauge (FU-090(c) next rung); (3) VALIDATE the reviewer-pro
 harvest run (#96/#92-class should not sprout). Session FUs: FU-123, FU-124. Harvested sprouts for
 triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
 
-## Live world state (2026-07-31)
+## Live world state (2026-07-31; router test 2026-08-02)
 
 - **World ENABLED.** `coordinate-sleep` + `review-sleep` CronWorkflows live (10-min cadence,
-  not suspended), ticking green. Sleep worker = `claude/haiku`, coordinator/reviewer = sonnet.
+  not suspended), ticking green. Coordinator/reviewer = sonnet.
+- **ADR-096 router LIVE TEST in flight (2026-08-02, operator-directed):** sleep worker chain is
+  **FREE-FIRST** (`laguna:free` primary — sleep-iac#53; deliberately failure-prone: the
+  cooldown/recovery loop needs weather). Issues #92/#96/#103/#99 queued as test fodder
+  (#92 riding at session end). `AGENT_ROUTER=shadow` is the fleet default — watch proxy logs
+  for `POST /route` + `cooldown tripped/cleared` lines, decisions in `/router-status`. The P4
+  authoritative flip waits on the shadow soak (FU-095). Revert the chain via sleep-iac when
+  the test has yielded enough.
 - **Infra hardening landed TODAY (07-31, operator session)** — `devbox run ci` + `devbox run
   test-integration` now work both in-ride and in CI for sleep; sleep's agent-stack ≈ oracle-fleet.
   FU-118/119/120 done. No structural blockers outstanding. (Detail: TICK-LOG 2026-07-31 entry.)

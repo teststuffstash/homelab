@@ -28,6 +28,10 @@ KUBECTL="$(command -v kubectl || true)"
 [ -x "$KUBECTL" ] || KUBECTL="kubectl"
 
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
+case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm]"
+  exit 0
+;; esac
 shift || true
 
 # Default to a cheap, multi-provider, CACHED model bounded by the per-session budget cap. The
