@@ -564,6 +564,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       *"|"*) uitem="${rest2%%|*}"; uclass="${rest2#*|}";;
       *)     uitem="$rest2"; uclass="";;
     esac
+    # FU-121: a c4c5 redispatch can race a closing issue (the #71 r9 spurious round — the scan's
+    # list snapshot predated the close). Re-probe the ISSUE fresh immediately before spending a
+    # session: closed → skip this unit (the next scan's list won't carry it). Probe failure
+    # dispatches anyway (level-triggered permissive — the session's own re-read is the belt).
+    if [ "$uclause" = "c4c5-redispatch" ]; then
+      fresh_state="$(gh issue view "${uitem#issue-}" --repo "${ORG}/${urepo}" --json state --jq .state 2>/dev/null || echo PROBE-FAILED)"
+      if [ "$fresh_state" = "CLOSED" ]; then
+        echo "  FU-121: ${urepo} ${uitem} closed since the list snapshot — redispatch skipped."
+        continue
+      fi
+    fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}, model ${cmodel})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home

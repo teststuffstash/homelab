@@ -8,6 +8,10 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-121** *(archived 2026-08-02)* — **c4c5 redispatch vs closing-issue race closed**: the scan
+  re-probes the issue's state fresh IMMEDIATELY before spending a session on a c4c5 unit (closed →
+  skip, logged; probe-fail → permissive, the session's live-state re-read is the belt). The #71 r9
+  spurious round was a list-snapshot predating the close.
 - **FU-116** *(archived 2026-08-02)* — **Scan janitor widened to Failed ride pods** (their
   ephemeral docker-lib PVCs leaked — one r1 PVC Bound 18h, the scratch-pool-exhaustion regression).
   Failed gets a 2h grace (hard-died rides may hold the only forensics), Succeeded stays 30min.

@@ -203,15 +203,7 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       **Action:** none unless a NON-finalize symptom of the same PATH/mount loss appears — then dig.
       Relates ADR-096 (§Addendum 3), FU-062, FU-116, FU-123.
 
-- [ ] **FU-121** — **`liveness≠progress` redispatch races a closing issue → a spurious round on a
-      just-solved item.** On #71's close (2026-07-29 07:12Z) a `coordinate-sleep` scan saw #71
-      `agent/in-progress` with r8's pod already gone (the liveness≠progress redispatch clause) and fired
-      **r9** BEFORE the merge/close propagated — a wasted round re-running CI on the already-merged kind
-      migration; the operator killed it by hand. The redispatch decision doesn't re-check the
-      issue-closed / PR-merged state atomically at dispatch time. FIX: gate the liveness-redispatch on a
-      fresh closed/merged probe (or a short debounce after the pod vanishes) so a terminal pod near a close
-      can't manufacture in-progress work. Relates ADR-094 (coordinate dispatch / C4-C5 re-dispatch),
-      FU-085 (doorbell), the meta-16 bounded-drain lesson.
+
 
 
 - [ ] **FU-124** — **Give the PR updater a reliable in-cluster trigger — GitHub's `*/15` cron is the
