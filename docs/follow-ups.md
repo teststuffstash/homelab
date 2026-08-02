@@ -359,9 +359,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       the addendum-4 cooldown/recovery leg shipped 2026-08-02** (`POST /route` live,
       launcher consult AGENT_ROUTER=shadow default, rotation-fed candidates). Remaining: the
       P4 authoritative flip after the shadow soak. **Open here:** legs (b)+(c) unstarted.
-      ⚠ P1 coverage gap: `/report` posts from the LAUNCHER finalizer only — coordinator-path
-      rides need the in-pod `agent-finalize` twin (agent-runtime; do with P3 for honest shadow
-      coverage). Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
+      P1 coverage gap CLOSED 2026-08-02: the in-pod `agent-finalize` /report twin shipped
+      (agent-runtime#27 + launcher-injected AGENT_STACK/AGENT_REPORT_URL) — coordinator-path
+      ride outcomes now reach the shadow store. Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 
 ## Hardware & nodes
 
