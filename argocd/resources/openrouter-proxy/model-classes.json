@@ -56,6 +56,14 @@
     "dispatch": 0.9,
     "heavy": 0.8
   },
+  "cooldown": {
+    "_comment": "ADR-096 addendum 4: model-level temporary blacklist. Trip when >= min_events in window_s and the non-2xx share >= bad_share (reason = dominant class); hold base_s doubling per consecutive trip up to max_s; ANY 2xx clears + resets the streak (half-open recovery: an expired hold makes the model eligible again and cheapest-effective ordering re-picks it — natural traffic is the probe). Keyed on OUR passive events, never upstream uptime (laguna measured 100% upstream while 81% 429 for our account, 2026-08-02).",
+    "window_s": 600,
+    "min_events": 6,
+    "bad_share": 0.5,
+    "base_s": 300,
+    "max_s": 3600
+  },
   "circuit_breaker": {
     "_comment": "ADR-096 addendum 3: in-flight 4XX breaker per (session, model). auth (401/403) trips fast — an auth failure never self-heals mid-session (the 140-401 laguna:free storm); generic 4xx gets more rope; 429 NEVER counts (fail-over/back-off, not session-abort). hold_s = how long forwarding stays stopped.",
     "auth_threshold": 4,

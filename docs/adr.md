@@ -1133,3 +1133,32 @@ account latch. Rehab is **per-class TTL** — 401 sticky/long (an eligibility fa
 429 honors `retry-after`, generic 4xx medium. All of this builds under the **FU-095 router leg**
 (the `/route` decision endpoint stays the gating build); the FU-021 watchdog retune is the one
 out-of-band actionable (agent-runtime).
+
+**Addendum 4 (2026-08-02): P3–P5 shipped, plus the cooldown/recovery leg (the end-state
+resilience).** `POST /route` is live: class resolve (explicit > `label_map` > `role_defaults`),
+candidates = the launcher-passed chain or — when none — **rotation-fed (P5)**: the
+`model_tiers` universe ∩ daily-rankings order, broken canaries excluded, class `chain_head`
+first; filters = claim `deny` + task-scoped strikes + cooldowns + class rails; within the
+OpenRouter rail the **effective-cheapest wins with the 15% jitter pick** (price = the pin's
+`eff_in`, market basis; free = $0 so free-first falls out of ordering, never a special case);
+capacity gates per rail (tier verdict + semaphore / key headroom) yield **typed defers with
+`retry_after_s`** — only `chain-exhausted` (deny/strike residue) escalates. Launcher seam (P4):
+`agent-session.sh` consults /route before harness derivation — `AGENT_ROUTER=shadow` (default:
+log + record, dispatch unchanged — the soak that gates the flip), `authoritative` (decision
+replaces the model; explicit `--model` wins; a defer aborts the dispatch), `off`. **Net-new —
+model cooldowns, the temporary-blacklist/recovery loop the operator specified** ("free model
+429s → blacklisted temporarily → comes back → picked again"): ≥`min_events` in `window_s` with
+≥`bad_share` non-2xx trips a hold (reason = dominant class: `429-burst`/`auth-burst`/`5xx-burst`;
+per-class TTL split from addendum 3 = an open dial, v1 escalates uniformly), `base_s` doubling
+per consecutive trip to `max_s`; **any 2xx clears + resets the streak**; an expired hold is
+half-open — eligible again, cheapest ordering re-picks it, natural traffic is the probe
+(`half_open` flagged in the decision). Cooldowns key on OUR passive events only: probed
+2026-08-02, `/endpoints` now serves `uptime_last_5m`/`_1d`, but laguna measured 99.9–100%
+upstream while our account saw 81% 429 / 53% 401 — upstream uptime is OpenRouter's routing
+view, blind to per-account/tier limits; it stays the PIN layer's outage filter, never the
+cooldown signal. (The OpenRouter frontend benchmarks endpoint is session-cookie-gated — API
+key 401s — so the M8 capability prior starts as a curated snapshot; model-routing §M8.)
+Surfaces: `router_decisions_total`, `router_cooldowns_active`, cooldowns + decisions in
+`/router-status`. Verified: 11-check jail sim of the full
+429→cooldown→paid-fallback→half-open-re-pick→2xx-clear→escalated-re-trip cycle through the
+real data plane; live entry = the sleep free-first chain test (claim reorder, same date).

@@ -23,6 +23,7 @@ import needs no packaging). `--self-test` runs the in-memory round-trip; CI runs
 
 import json
 import os
+import random
 import sqlite3
 import sys
 import threading
@@ -65,6 +66,9 @@ CREATE TABLE IF NOT EXISTS circuit_events(
   ts REAL, session TEXT, model TEXT, class TEXT, n_4xx INTEGER);
 CREATE TABLE IF NOT EXISTS openrouter_keys(
   ref TEXT PRIMARY KEY, first_seen REAL, last_seen REAL);
+CREATE TABLE IF NOT EXISTS model_cooldowns(
+  model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL);
+CREATE INDEX IF NOT EXISTS ix_pe_model_ts ON provider_events(model, ts);
 """
 
 _lock = threading.Lock()
@@ -297,6 +301,202 @@ def strikes_for(task: str, stack: str) -> list[str]:
         "SELECT DISTINCT model FROM strikes WHERE task=? AND stack=?", (task, stack))]
 
 
+# ── ADR-096 addendum 4: model cooldowns (the temporary-blacklist / recovery loop) ──────────────
+# The end-state resilience the platform wants: a free model 429s under load → it leaves the
+# routing pool for a bounded, ESCALATING hold — and when the hold expires it is simply eligible
+# again (half-open: cheapest-effective ordering re-picks it, natural traffic is the probe; a 2xx
+# clears the streak, a re-trip doubles the hold). Trip/clear both key on OUR passive
+# provider_events, never on upstream uptime: measured 2026-08-02, laguna showed 99.9-100%
+# uptime_last_5m upstream while our account saw 81% 429 / 53% 401 — OpenRouter's uptime is THEIR
+# routing view, blind to per-account/tier limits. (True provider outages are already excluded at
+# the PIN layer via uptime_last_30m >= UPTIME_FLOOR.)
+
+def _cooldown_cfg() -> dict:
+    cfg = _classes.get("cooldown") or {}
+    return {"window_s": int(cfg.get("window_s", 600)),
+            "min_events": int(cfg.get("min_events", 6)),
+            "bad_share": float(cfg.get("bad_share", 0.5)),
+            "base_s": int(cfg.get("base_s", 300)),
+            "max_s": int(cfg.get("max_s", 3600))}
+
+
+def cooldown_note(model: str, status: int) -> str | None:
+    """Fold one passive provider event into the cooldown state. Returns 'tripped'/'cleared'
+    for the data plane's log line, else None. Called AFTER record_provider_event."""
+    now = time.time()
+    if 200 <= status < 300:
+        # Verified working for OUR account — clear any hold and reset the escalation streak.
+        if _read("SELECT 1 FROM model_cooldowns WHERE model=?", (model,)):
+            _write("DELETE FROM model_cooldowns WHERE model=?", (model,))
+            return "cleared"
+        return None
+    if status < 400:
+        return None
+    cfg = _cooldown_cfg()
+    rows = _read(
+        "SELECT COUNT(*), SUM(CASE WHEN class='2xx' THEN 0 ELSE 1 END), "
+        "SUM(CASE WHEN class='429' THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN status IN (401,403) THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN class='5xx' THEN 1 ELSE 0 END) "
+        "FROM provider_events WHERE model=? AND ts > ?", (model, now - cfg["window_s"]))
+    if not rows:
+        return None
+    n, bad, n429, nauth, n5xx = (rows[0][0] or 0), (rows[0][1] or 0), (rows[0][2] or 0), \
+        (rows[0][3] or 0), (rows[0][4] or 0)
+    if n < cfg["min_events"] or bad / n < cfg["bad_share"]:
+        return None
+    cur = _read("SELECT until, streak FROM model_cooldowns WHERE model=?", (model,))
+    if cur and cur[0][0] > now:
+        return None  # already holding — don't extend on every event inside the window
+    streak = (cur[0][1] if cur else 0) + 1
+    hold = min(cfg["base_s"] * (2 ** (streak - 1)), cfg["max_s"])
+    reason = ("429-burst" if n429 >= max(nauth, n5xx) else
+              "auth-burst" if nauth >= n5xx else "5xx-burst")
+    _write("INSERT OR REPLACE INTO model_cooldowns VALUES(?,?,?,?,?)",
+           (model, now + hold, streak, reason, now))
+    return "tripped"
+
+
+def active_cooldowns(now: float | None = None) -> dict[str, dict]:
+    now = now or time.time()
+    return {m: {"until": u, "remaining_s": round(u - now), "streak": s, "reason": r}
+            for m, u, s, r in _read(
+                "SELECT model, until, streak, reason FROM model_cooldowns WHERE until > ?",
+                (now,))}
+
+
+def _rotation_candidates(cinfo: dict) -> list[str]:
+    """P5: the class candidate list when the caller passes NO chain — rotation-fed. Universe =
+    model_tiers keys (the human-approved set; graduation stays human), ordered: class chain_head
+    first, then daily-rankings rank order, then the git rotation_fallback belt. Models whose
+    canary verdict says broken are excluded."""
+    tiers = _classes.get("model_tiers") or {}
+    rows = _read("SELECT model, source, canary_verdict, rank FROM rotation")
+    broken = {m for m, _s, v, _r in rows if v == "broken"}
+    ranked = sorted(((r or 0, m) for m, s, _v, r in rows
+                     if s == "openrouter-daily-rankings" and m in tiers and m not in broken))
+    kind = "reasoning" if cinfo.get("reasoning") else "coding"
+    fallback = (_classes.get("rotation_fallback") or {}).get(kind) or []
+    out: list[str] = []
+    for m in (list(cinfo.get("chain_head") or []) + [m for _r, m in ranked]
+              + [m for m in fallback if m not in broken]):
+        if m not in out:
+            out.append(m)
+    return out
+
+
+def route(payload: dict, ctx: dict) -> dict:
+    """The ADR-096 /route decision core — pure given ctx, so the self-test can drive it.
+
+    payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?}
+    ctx:     {price: fn(model)->(usd_per_mtok|None, basis|None),
+              subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
+              openrouter_ok:  fn(key_ref)->(ok, reason|None),
+              pick: fn(list)->item  (optional; defaults to uniform random — the jitter band)}
+
+    Walk: resolve class (explicit > label_map > role_defaults) → candidates (chain, else
+    rotation-fed) → filter deny/strikes/cooldowns/rail → per class-rail-order pick the
+    effective-cheapest with a jitter-band uniform pick → capacity-gate the rail → dispatch,
+    or a TYPED defer (capacity reasons and cooldowns carry retry_after; only chain-exhausted
+    escalates — M1 doctrine)."""
+    now = time.time()
+    role = str(payload.get("role") or "worker")
+    labels = [str(x) for x in (payload.get("labels") or [])]
+    sel = _classes.get("selection") or {}
+    jitter = float(sel.get("jitter_band_pct", 15)) / 100.0
+    cls = str(payload.get("class") or "")
+    label_map = _classes.get("label_map") or {}
+    for lab in labels:
+        entry = label_map.get(lab) or {}
+        if entry.get("class") and not cls:
+            cls = str(entry["class"])
+    if not cls:
+        cls = str((_classes.get("role_defaults") or {}).get(role) or "coding")
+    cinfo = (_classes.get("classes") or {}).get(cls) or {}
+    tier = str(payload.get("tier") or cinfo.get("tier") or "heavy")
+    rails = list(cinfo.get("rails") or ["openrouter", "subscription"])
+    chain = [str(m) for m in (payload.get("chain") or [])]
+    source = "chain"
+    if not chain:
+        chain = _rotation_candidates(cinfo)
+        source = "rotation"
+    deny = {str(m) for m in (payload.get("deny") or [])}
+    struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or "")))
+    cool = active_cooldowns(now)
+    skipped: list[dict] = []
+    eligible: list[tuple[str, str]] = []
+    for m in chain:
+        rail = "subscription" if m.startswith("claude/") else "openrouter"
+        if m in deny:
+            skipped.append({"model": m, "reason": "claim-deny"})
+        elif m in struck:
+            skipped.append({"model": m, "reason": "strike"})
+        elif m in cool:
+            skipped.append({"model": m, "reason": f"cooldown:{cool[m]['reason']}",
+                            "retry_after_s": cool[m]["remaining_s"]})
+        elif rail not in rails:
+            skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
+        else:
+            eligible.append((m, rail))
+    capacity_block: dict | None = None
+    result: dict | None = None
+    for rail in rails:
+        pool = [m for m, r in eligible if r == rail]
+        if not pool:
+            continue
+        if rail == "subscription":
+            ok, reason, retry = ctx["subscription_ok"](tier)
+            if not ok:
+                reason = reason or "subscription-limited"
+                capacity_block = capacity_block or {"reason": reason, "retry_after_s": retry}
+                skipped += [{"model": m, "reason": reason} for m in pool]
+                continue
+            result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
+                      "basis": "subscription", "jitter_pool": pool[:1]}
+        else:
+            ok, reason = ctx["openrouter_ok"](payload.get("key_ref"))
+            if not ok:
+                reason = reason or "openrouter-budget-exhausted"
+                capacity_block = capacity_block or {"reason": reason, "retry_after_s": 900}
+                skipped += [{"model": m, "reason": reason} for m in pool]
+                continue
+            priced = [(m, *ctx["price"](m)) for m in pool]
+            known = [p for p in priced if p[1] is not None]
+            if known:
+                floor = min(p[1] for p in known)
+                band = [p for p in known if p[1] <= floor * (1 + jitter) + 1e-12]
+                pick = ctx.get("pick", random.choice)(band)
+            else:
+                pick, band = priced[0], priced[:1]  # unpriced chain: keep caller order
+            result = {"model": pick[0], "rail": rail, "price_per_mtok": pick[1],
+                      "basis": pick[2], "jitter_pool": [p[0] for p in band]}
+        break
+    if result:
+        half_open = bool(_read(
+            "SELECT 1 FROM model_cooldowns WHERE model=? AND until <= ?", (result["model"], now)))
+        decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
+                    "half_open": half_open, "skipped": skipped, **result}
+    else:
+        if capacity_block:
+            reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
+        elif any(s["reason"].startswith("cooldown:") for s in skipped):
+            reason = "cooldown"
+            retry = min(s.get("retry_after_s") or 900
+                        for s in skipped if s["reason"].startswith("cooldown:"))
+        else:
+            reason = "chain-exhausted"  # deny/strike only — the one defer that escalates
+            retry = None
+        decision = {"decision": "defer", "reason": reason, "retry_after_s": retry,
+                    "class": cls, "tier": tier, "source": source, "skipped": skipped}
+    _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
+           (now, str(payload.get("session") or ""), str(payload.get("stack") or ""), role, cls,
+            decision["decision"], decision.get("rail") or "",
+            decision.get("model") or "", decision.get("reason") or "",
+            json.dumps({"skipped": skipped, "source": source,
+                        "jitter_pool": decision.get("jitter_pool")})))
+    return decision
+
+
 def latch_save(latch: dict) -> None:
     """Persist the FU-088 latch + last windows so a proxy roll can't forget an active 429 hold
     (the in-memory-by-design note in openrouter-proxy.py predates this store)."""
@@ -335,7 +535,14 @@ def status_summary() -> dict:
     circuit = _read(
         "SELECT session, model, class, n_4xx, ts FROM circuit_events WHERE ts > ? "
         "ORDER BY ts DESC LIMIT 20", (now - 7 * 86400,))
+    decisions_24h = _read(
+        "SELECT decision, rail, model, reason, COUNT(*) FROM decisions WHERE ts > ? "
+        "GROUP BY decision, rail, model, reason ORDER BY 5 DESC LIMIT 20", (now - 86400,))
     return {
+        "cooldowns_active": active_cooldowns(now),
+        "decisions_24h": [
+            {"decision": d, "rail": rl, "model": m, "reason": rs, "n": n}
+            for d, rl, m, rs, n in decisions_24h],
         "db_persistent": _persistent,
         "rows": counts,
         "strikes_7d": [{"model": m, "error_class": e, "n": n} for m, e, n in recent_strikes],
@@ -378,6 +585,17 @@ def metrics_lines() -> list[str]:
         lines += [f'router_provider_events_total{{class="{c}"}} {n}' for c, n in events]
     else:
         lines.append("router_provider_events_total 0")
+    lines += ["# TYPE router_cooldowns_active gauge",
+              "# HELP router_cooldowns_active Models currently held out of the routing pool (addendum-4 temporary blacklist).",
+              f"router_cooldowns_active {len(active_cooldowns(now))}",
+              "# TYPE router_decisions_total counter",
+              "# HELP router_decisions_total /route outcomes by decision and defer reason."]
+    dec = _read("SELECT decision, COALESCE(NULLIF(reason,''),'-'), COUNT(*) FROM decisions "
+                "GROUP BY decision, reason")
+    if dec:
+        lines += [f'router_decisions_total{{decision="{d}",reason="{r}"}} {n}' for d, r, n in dec]
+    else:
+        lines.append("router_decisions_total 0")
     lines += ["# TYPE router_circuit_open_total counter",
               "# HELP router_circuit_open_total In-flight 4XX circuit-breaker trips per class (ADR-096 addendum 3)."]
     circuit = _read("SELECT class, COUNT(*) FROM circuit_events GROUP BY class")
@@ -464,10 +682,66 @@ def self_test() -> int:
     latch_save({"until": 123.0, "last_429": 100.0, "windows": {"5h": {"utilization": 0.5}},
                 "count_429": 2, "headers_at": 99.0})
     assert (latch_load() or {}).get("count_429") == 2, "latch round-trip"
+    # ── addendum 4: the 429→cooldown→recovery loop + route() scenarios ──
+    CTX = {
+        "price": lambda m: (0.0, "free") if m.endswith(":free") else
+                           ({"tencent/hy3": (0.041, "market"),
+                             "deepseek/deepseek-v4-flash": (0.033, "market")}.get(m, (None, None))),
+        "subscription_ok": lambda tier: (True, None, 0),
+        "openrouter_ok": lambda ref: (True, None),
+        "pick": lambda band: band[0],  # deterministic for the test
+    }
+    CHAIN = ["inclusionai/ling-3.0-flash:free", "deepseek/deepseek-v4-flash", "tencent/hy3",
+             "claude/haiku"]
+    base = {"stack": "sleep", "task": "issue-42", "role": "worker", "session": "t-route",
+            "chain": CHAIN}
+    d = route(dict(base), CTX)
+    assert d["decision"] == "dispatch" and d["model"] == "inclusionai/ling-3.0-flash:free", d
+    assert d["rail"] == "openrouter" and d["class"] == "coding", d
+    # free model starts 429ing: burst past min_events/bad_share trips a cooldown
+    for _ in range(8):
+        record_provider_event("inclusionai/ling-3.0-flash:free", "novita", 429)
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 429) == "tripped"
+    assert "inclusionai/ling-3.0-flash:free" in active_cooldowns()
+    d2 = route(dict(base), CTX)
+    assert d2["decision"] == "dispatch" and d2["model"] == "deepseek/deepseek-v4-flash", d2
+    assert any(s["reason"] == "cooldown:429-burst" for s in d2["skipped"]), d2["skipped"]
+    # the hold expires ("the model comes back online") → half-open: cheapest wins again
+    assert _write("UPDATE model_cooldowns SET until=? WHERE model=?",
+                  (time.time() - 1, "inclusionai/ling-3.0-flash:free"))
+    d3 = route(dict(base), CTX)
+    assert d3["decision"] == "dispatch" and d3["model"] == "inclusionai/ling-3.0-flash:free", d3
+    assert d3["half_open"], "an expired-cooldown pick must be flagged half-open"
+    # a 2xx clears the row + streak; a re-trip would have doubled the hold before that
+    assert cooldown_note("inclusionai/ling-3.0-flash:free", 200) == "cleared"
+    assert not _read("SELECT 1 FROM model_cooldowns WHERE model='inclusionai/ling-3.0-flash:free'")
+    # claim deny + strike filtering → chain-exhausted escalates; cooldown-only defer retries
+    dd = route(dict(base, chain=["deepseek/deepseek-v4-flash"],
+                    deny=["deepseek/deepseek-v4-flash"]), CTX)
+    assert dd["decision"] == "defer" and dd["reason"] == "chain-exhausted", dd
+    # subscription-limited defers with retry_after when only claude/* remains
+    lim = {**CTX, "subscription_ok": lambda tier: (False, "utilization-5h", 1200)}
+    ds = route(dict(base, chain=["claude/haiku"]), lim)
+    assert ds == {**ds, "decision": "defer", "reason": "utilization-5h"} and \
+        ds["retry_after_s"] == 1200, ds
+    # label-driven class override: task/research → research class (reasoning tier, openrouter rail)
+    dr = route(dict(base, labels=["track/iac"], chain=CHAIN), CTX)
+    assert dr["class"] == "coding", dr
+    # rotation-fed candidates when NO chain is passed (P5): universe ∩ rankings, broken excluded
+    record_rotation("openrouter-daily-rankings",
+                    [{"model": "qwen/qwen3-coder", "rank": 1},
+                     {"model": "not-in-tiers/mystery", "rank": 2}])
+    record_rotation("provider-events",
+                    [{"model": "poolside/laguna-s-2.1:free", "canary_verdict": "broken"}])
+    dv = route(dict(base, chain=[]), {**CTX, "price": lambda m: (0.05, "market")})
+    assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
+    assert dv["model"] == "qwen/qwen3-coder", dv
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
     assert 'router_circuit_open_total{class="auth"} 1' in body
+    assert 'router_decisions_total{decision="dispatch"' in body
+    assert status_summary()["decisions_24h"], "decisions must surface in status"
     assert (_read("SELECT COUNT(*) FROM generations") or [(0,)])[0][0] == 1
     assert 'router_generations_total{model="deepseek/deepseek-v4-flash",provider="Fireworks"} 1' in body
     summary_gen = status_summary()["generations_24h"]

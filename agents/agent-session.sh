@@ -41,7 +41,7 @@ while [ $# -gt 0 ]; do
     --ref)       BASE_REF="$2"; shift 2;;
     --repo)      REPO_URL="$2"; shift 2;;
     --harness)   HARNESS="$2"; HARNESS_SET=1; shift 2;;
-    --model)     MODEL="$2"; shift 2;;
+    --model)     MODEL="$2"; MODEL_SET=1; shift 2;;
     --docker)    DOCKER=1; shift;;    # repo needs a real docker daemon (kind/k3d CI gate): kata microVM pod + dind sidecar — stack POLICY, from the AgentStack claim's fixer.docker (counterpart of CI choosing the VM runner)
     --openrouter-secret) OR_SECRET="$2"; shift 2;;  # use a per-SESSION budget key Secret (the coordinator's ephemeral OpenRouterKey) instead of the shared <project>-openrouter
     --task)      TASK="$2"; shift 2;;   # transcript-capture task key: issue-<n> | pr-<n> (§A1 bucket prefix)
@@ -53,6 +53,56 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+# ── ADR-096 P3/P4: consult the router at the model-decision seam (POST /route) ──
+# AGENT_ROUTER=shadow (default): consult + log the divergence, dispatch unchanged — the ≥1wk
+# soak that gates the flip. =authoritative: the decision REPLACES the model — but an explicit
+# --model always wins (the ADR override rule; under authoritative, dispatchers stop passing
+# --model and the launcher owns the choice, ADR-094). =off: today's behavior exactly.
+# The chain is the stacks.json mirror entry for this project's stack (same source the scan
+# merges cluster-wins); /route filters it against strikes, cooldowns, class policy and capacity
+# server-side and answers a dispatch or a typed defer. Fail-open: unreachable proxy (jail run
+# without AGENT_EGRESS_PROXY) → static behavior, one loud line.
+AGENT_ROUTER="${AGENT_ROUTER:-shadow}"
+if [ "$AGENT_ROUTER" != "off" ]; then
+  ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
+  _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
+  _chain="$(printf '%s' "$_srow" | jq -c '([.workerModel] + (.workerModelFallbacks // [])) | map(select(. != null))' 2>/dev/null)" || _chain="[]"
+  if [ -n "${HARNESS_SET:-}" ]; then  # an explicit --harness bounds the rail this pod can ride
+    case "$HARNESS" in
+      claude) _chain="$(printf '%s' "$_chain" | jq -c 'map(select(startswith("claude/")))')";;
+      *)      _chain="$(printf '%s' "$_chain" | jq -c 'map(select(startswith("claude/") | not))')";;
+    esac
+  fi
+  _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
+      --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
+      --arg key_ref "${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}" \
+      --argjson chain "$_chain" \
+      --argjson deny "$(printf '%s' "$_srow" | jq -c '.modelDeny // []')" \
+      '{stack: $stack, task: $task, role: "worker", session: $session,
+        key_ref: $key_ref, chain: $chain, deny: $deny}')"
+  _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
+      -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
+  if [ -z "$_decision" ]; then
+    echo "→ router: $ROUTER_URL unreachable — static model chain (fail-open, AGENT_ROUTER=$AGENT_ROUTER)"
+  else
+    _verdict="$(printf '%s' "$_decision" | jq -r '.decision // "?"')"
+    _rmodel="$(printf '%s' "$_decision" | jq -r '.model // ""')"
+    _rwhy="$(printf '%s' "$_decision" | jq -r '[.reason, .basis, (if .half_open then "half-open" else empty end)] | map(select(. != null and . != "")) | join(",")')"
+    echo "→ router(${AGENT_ROUTER}): ${_verdict} ${_rmodel:-—} [${_rwhy}] (static would be: ${MODEL})"
+    if [ "$AGENT_ROUTER" = "authoritative" ]; then
+      if [ -n "${MODEL_SET:-}" ]; then
+        echo "→ router: explicit --model ${MODEL} wins over the routed decision (ADR-096 override rule)"
+      elif [ "$_verdict" = "dispatch" ] && [ -n "$_rmodel" ]; then
+        MODEL="$_rmodel"
+      elif [ "$_verdict" = "defer" ]; then
+        _retry="$(printf '%s' "$_decision" | jq -r '.retry_after_s // "?"')"
+        echo "→ router: DEFER (${_rwhy}) retry_after=${_retry}s — not dispatching. chain-exhausted means every model is struck/denied for this task: escalate." >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
+
 # workerModel notation from the AgentStack claim (first used by oracle, oracle-iac#8):
 # "claude/<model>" = harness-prefixed — the XRD carries no harness field yet (FU-066's
 # fixer.claudeTier is the eventual shape), so the claim encodes the tier in the model string.

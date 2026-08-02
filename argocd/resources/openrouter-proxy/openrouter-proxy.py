@@ -605,6 +605,8 @@ def compute_pin(model: str) -> dict | None:
                 },
                 "max_completion": best["max_completion"],
                 "basis": "market" if is_market(best) else "list",
+                # ADR-096 P3: the pinned provider's effective $/M input — the /route ordering key.
+                "eff_in": round(eff(best), 6),
             }
     return None
 
@@ -901,6 +903,14 @@ class Proxy(BaseHTTPRequestHandler):
             router.record_provider_event(or_model, or_provider or "", status)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
+            # addendum 4: and the model cooldown state (temporary blacklist + auto-recovery)
+            cd = router.cooldown_note(or_model, status)
+            if cd:
+                hold = router.active_cooldowns().get(or_model) or {}
+                log(f"cooldown {cd}: model={or_model} "
+                    + (f"reason={hold.get('reason')} streak={hold.get('streak')} "
+                       f"hold={hold.get('remaining_s')}s" if cd == "tripped"
+                       else "(2xx — back in the pool, streak reset)"))
         self.send_response(status)
         for k, v in resp.headers.items():
             if k.lower() not in _DROP_RESP:
@@ -1192,6 +1202,71 @@ class Proxy(BaseHTTPRequestHandler):
                 f"error_class={report.get('error_class') or 'clean'} → "
                 f"stored={stored} strike={striked}")
             self._reply_json(200 if stored else 503, {"stored": stored, "strike": striked})
+            return
+        if self.path == "/route":
+            # ADR-096 P3: the launcher-called decision API (never the LLM — ADR-094). The
+            # launcher passes the chain it knows (claim/stacks.json) + its deny list; the
+            # router filters against strikes/cooldowns/health + class policy + capacity and
+            # answers a dispatch or a TYPED defer. In-cluster callers (FU-020 CNP bounds
+            # reach), honor-system like /report; decisions are recorded server-side either way.
+            try:
+                req_body = json.loads(body)
+                assert isinstance(req_body, dict)
+            except (ValueError, AssertionError):
+                self._reply_json(400, {"error": "body must be a JSON object"})
+                return
+            now = time.time()
+
+            def _subscription_ok(tier: str):
+                limited, reason, windows = _dispatch_verdict(now, tier)
+                if limited:
+                    retry = 900
+                    if reason == "429-latch":
+                        with _latch_lock:
+                            retry = max(60, round(_latch["until"] - now))
+                    elif reason and reason.startswith("utilization-"):
+                        w = windows.get(reason[len("utilization-"):]) or {}
+                        retry = max(60, min(round((w.get("reset") or now + 900) - now), 6 * 3600))
+                    return False, f"subscription-limited:{reason}", retry
+                sem = _semaphore_state()
+                if sem["limited"]:
+                    return False, "subscription-limited:semaphore", 300
+                return True, None, 0
+
+            def _openrouter_ok(key_ref):
+                if key_ref:
+                    with _headroom_lock:
+                        d = _headroom.get(str(key_ref))
+                    if d and isinstance(d.get("limit"), (int, float)) \
+                            and isinstance(d.get("limit_remaining"), (int, float)) \
+                            and d["limit_remaining"] <= max(0.05, 0.02 * d["limit"]):
+                        return False, "openrouter-budget-exhausted"
+                return True, None  # unknown ref = fail-open (the key's hard limit is the belt)
+
+            def _price(model):
+                m = normalize_model(model)
+                if m.endswith(":free"):
+                    return 0.0, "free"
+                pin = pin_for(m)
+                if pin and pin.get("eff_in") is not None:
+                    return pin["eff_in"], pin.get("basis")
+                return None, None
+
+            decision = router.route(req_body, {
+                "price": _price, "subscription_ok": _subscription_ok,
+                "openrouter_ok": _openrouter_ok,
+            })
+            if decision.get("decision") == "dispatch" \
+                    and decision.get("rail") == "openrouter" \
+                    and not str(decision.get("model", "")).endswith(":free"):
+                pin = pin_for(str(decision["model"]))
+                if pin:
+                    decision["pin"] = pin["provider"]
+            log(f"POST /route stack={req_body.get('stack')} task={req_body.get('task')} "
+                f"role={req_body.get('role')} → {decision['decision']} "
+                f"{decision.get('model') or decision.get('reason')} "
+                f"[{decision.get('basis') or ''}{'+half-open' if decision.get('half_open') else ''}]")
+            self._reply_json(200, decision)
             return
         if self.path == "/rotation":
             # ADR-096 rotation/canary ingest. TokenReview MANDATORY (loop-git pattern): the

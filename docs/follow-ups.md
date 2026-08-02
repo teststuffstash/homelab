@@ -381,10 +381,10 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 - [ ] **FU-095** — **Sleep stack pilots: task-class model routing + multi-harness evidence.**
       Design, operator corrections, legs (a)/(b)/(c), buy-vs-build:
       [`docs/agents/model-routing.md`](agents/model-routing.md) §"The sleep-stack pilots". Leg
-      (a)'s substrate is **ADR-096** (detail there): P1/P1.5/P1.6 shipped 2026-07-27 (c9e909e);
-      **P2 shipped 2026-08-02** (FU-109 tiers + server-side semaphore, per-key headroom,
-      addendum-3 breaker/reliability/canary). Remaining: P3 shadow `/route` → P4
-      authoritative-for-workers → P5 rotation-fed chains. **Open here:** legs (b)+(c) unstarted.
+      (a)'s substrate is **ADR-096** (detail there): P1–P2 shipped 2026-07-27/08-02; **P3+P5 +
+      the addendum-4 cooldown/recovery leg shipped 2026-08-02** (`POST /route` live,
+      launcher consult AGENT_ROUTER=shadow default, rotation-fed candidates). Remaining: the
+      P4 authoritative flip after the shadow soak. **Open here:** legs (b)+(c) unstarted.
       ⚠ P1 coverage gap: `/report` posts from the LAUNCHER finalizer only — coordinator-path
       rides need the in-pod `agent-finalize` twin (agent-runtime; do with P3 for honest shadow
       coverage). Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
