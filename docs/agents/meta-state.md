@@ -29,10 +29,13 @@ meant to avoid.)
   REWRITTEN for the sleep stack (was still on oracle — blind all session): startTime-keyed
   pod state, circuit/key-window/FU-124 clauses, Alertmanager firing-set awareness
   (InfoInhibitor filtered; triage stays with the responder).
-- **⏳ PENDING BUILD (ride-gap only — single proxy Recreate roll):** the homelab#22 batch, notes
-  on the issue: `REQUEST_DEADLINE_S≈900`, model-labeled in-flight gauge, harvest
-  `generation_time` (store's `latency`=TTFT only — unlocks decode-tok/s, the §M8 free-band
-  tie-break), `activeDeadlineSeconds` on ride pods (no total-session bound exists today).
+- **⏳ homelab#22 batch BUILT + COMMITTED locally (af3a474), PUSH AT THE #99 RIDE GAP** (push
+  → ConfigMap hash → ArgoCD → proxy Recreate roll; never mid-ride). All four deliverables
+  tested in-jail (sever e2e 3.1s, migration, happy-path relay, self-test). Chain: #99 ride
+  ends (expected ~19:10Z, laguna rides ≈95-100min; hard stop 21:31Z key expiry) → push →
+  verify proxy roll (startup log shows `deadline=900s`) + next ride pod carries
+  `activeDeadlineSeconds: 14400` → comment+close homelab#22 + TICK-LOG. Bonus fix inside:
+  proxy relay used blocking `read(8192)` — a slow-drip upstream defeated BOTH timeouts.
 - Platform queue residue: homelab#22 (above); sleep-tracking#104 (datasource naming — touches
   the #77-stabilized uid gate, needs steering if queued) + #16 dep-dashboard, both unlabeled.
 - **Shadow-soak review checklist (run before the P4 flip; collect ≥1wk of decisions):**
