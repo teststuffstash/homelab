@@ -504,7 +504,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # FU-088 gates are the belt), the session JUDGES one item. Priority finishes in-flight work
     # before starting new: c4c5 > changes-requested > merge-conflict > unarmed-major > queued.
     # SCAN_ITEM_MODE=0 = rollback to the whole-stack tick (also the janitor/manual path).
-    if ! bash "${HERE}/subscription-latch.sh"; then
+    if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
       echo "  capacity: subscription limited (FU-088) — no dispatch this pass (level-triggered; next scan re-checks)."
       continue
     fi

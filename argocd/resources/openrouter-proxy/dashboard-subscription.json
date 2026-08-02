@@ -183,6 +183,46 @@
         "overrides": []
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Subscription requests by consumer (FU-109 attribution)",
+      "description": "anthropic_requests_total rate per ref-derived consumer (the session secret name) — a stalled window is attributable at a glance: who was burning the pool. In-memory counter; a proxy roll restarts it (rate() copes).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 16, "x": 0, "y": 19 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (consumer) (rate(anthropic_requests_total[10m]))", "legendFormat": "{{consumer}}" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 25, "stacking": { "mode": "normal" }, "spanNulls": false }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Semaphore (running / max)",
+      "description": "Running subscription-session pods cluster-wide vs SUBSCRIPTION_MAX_RUNNING — the server-side FU-088 semaphore (ADR-096 P2). No value = pod count unavailable (fail-open).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 19 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_semaphore_running", "legendFormat": "running", "instant": true },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_semaphore_max", "legendFormat": "max", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 3 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" }
     }
   ]
 }

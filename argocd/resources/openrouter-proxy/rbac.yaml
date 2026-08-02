@@ -36,6 +36,27 @@ roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: openrou
 subjects:
   - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
 ---
+# ADR-096 P2: the FU-088 concurrency semaphore moved server-side — the proxy counts Running
+# pods labelled homelab.teststuff.net/subscription-session=claude across namespaces (the same
+# count every launcher used to run via kubectl). pods/list is read-only metadata; the proxy
+# never reads pod specs beyond counting the label-selected set.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: openrouter-proxy-semaphore
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: openrouter-proxy-semaphore
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: openrouter-proxy-semaphore }
+subjects:
+  - { kind: ServiceAccount, name: openrouter-proxy, namespace: agent-egress }
+---
 # ADR-096: the router's OWN namespace is the one place the composition's per-stack
 # session-key Roles don't cover — this Role lets _resolve_ref read the router-account-key
 # Secret (openrouterkey.yaml) in agent-egress. Same narrowness rule as everywhere else:

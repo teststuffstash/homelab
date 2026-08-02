@@ -61,6 +61,10 @@ CREATE TABLE IF NOT EXISTS decisions(
   ts REAL, session TEXT, stack TEXT, role TEXT, class TEXT, decision TEXT, rail TEXT,
   model TEXT, reason TEXT, detail TEXT);
 CREATE TABLE IF NOT EXISTS latch_state(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS circuit_events(
+  ts REAL, session TEXT, model TEXT, class TEXT, n_4xx INTEGER);
+CREATE TABLE IF NOT EXISTS openrouter_keys(
+  ref TEXT PRIMARY KEY, first_seen REAL, last_seen REAL);
 """
 
 _lock = threading.Lock()
@@ -140,6 +144,10 @@ def _write(sql: str, params: tuple) -> bool:
                               (now - RETAIN_REPORTS_D * 86400,))
                 _conn.execute("DELETE FROM generations WHERE ts < ?",
                               (now - RETAIN_REPORTS_D * 86400,))
+                _conn.execute("DELETE FROM circuit_events WHERE ts < ?",
+                              (now - RETAIN_EVENTS_D * 86400,))
+                _conn.execute("DELETE FROM openrouter_keys WHERE last_seen < ?",
+                              (now - RETAIN_EVENTS_D * 86400,))
             _conn.commit()
         return True
     except sqlite3.Error as e:
@@ -226,6 +234,62 @@ def record_rotation(source: str, entries: list) -> int:
     return n
 
 
+def record_circuit_open(session: str, model: str, klass: str, n_4xx: int) -> bool:
+    """ADR-096 addendum 3: the data plane tripped the in-flight 4XX breaker for (session, model)
+    — the durable half of the signal (the in-memory half stops forwarding). The retuned FU-021
+    watchdog (agent-runtime) reads this class of event as its kill trigger."""
+    return _write("INSERT INTO circuit_events VALUES(?,?,?,?,?)",
+                  (time.time(), session, model, klass, n_4xx))
+
+
+def enroll_key_ref(ref: str) -> None:
+    """ADR-096 P2: remember every OpenRouter session-key ref the data plane resolves, so the
+    headroom daemon can poll GET /api/v1/auth/key per standing project key without any
+    cluster-wide secret enumeration (the proxy only ever reads refs traffic already presented)."""
+    now = time.time()
+    _write("INSERT INTO openrouter_keys VALUES(?,?,?) "
+           "ON CONFLICT(ref) DO UPDATE SET last_seen=excluded.last_seen", (ref, now, now))
+
+
+def key_refs() -> list[str]:
+    return [r[0] for r in _read("SELECT ref FROM openrouter_keys ORDER BY last_seen DESC")]
+
+
+def reliability(days: int = 7, min_n: int = 5) -> list[dict]:
+    """Addendum 3: observed (model, provider) outcome shares over the window — TIER-AGNOSTIC
+    (the ':free' string is never itself a demotion; laguna wore 401 free and 429 paid). Passive
+    provider_events is the PRIMARY substrate (it caught the 142 401s /report missed). This is
+    the /route ordering + health input in P3; /router-status shows it today."""
+    rows = _read(
+        "SELECT model, provider, COUNT(*), "
+        "SUM(CASE WHEN class='2xx' THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN status IN (401,403) THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN class='429' THEN 1 ELSE 0 END) "
+        "FROM provider_events WHERE ts > ? GROUP BY model, provider HAVING COUNT(*) >= ? "
+        "ORDER BY 3 DESC", (time.time() - days * 86400, min_n))
+    return [{"model": m, "provider": p, "n": n, "ok_rate": round((ok or 0) / n, 3),
+             "auth_rate": round((auth or 0) / n, 3), "rate_429": round((r429 or 0) / n, 3)}
+            for m, p, n, ok, auth, r429 in rows]
+
+
+def derive_canary_verdicts(days: int = 7, min_n: int = 20) -> int:
+    """Addendum 3: free models stay in-chain deliberately as cheap instability canaries — their
+    verdict is FED FROM the passive aggregates, not hand-curated. Per :free model over the
+    window: clean ≥95% ok, degraded ≥50%, broken below. Upserts rotation source
+    'provider-events'; the scout's own probes stay a separate source."""
+    rows = _read(
+        "SELECT model, COUNT(*), SUM(CASE WHEN class='2xx' THEN 1 ELSE 0 END) "
+        "FROM provider_events WHERE ts > ? AND model LIKE '%:free' "
+        "GROUP BY model HAVING COUNT(*) >= ?", (time.time() - days * 86400, min_n))
+    entries = []
+    for model, n, ok in rows:
+        rate = (ok or 0) / n
+        entries.append({"model": model,
+                        "canary_verdict": "clean" if rate >= 0.95 else
+                                          "degraded" if rate >= 0.5 else "broken"})
+    return record_rotation("provider-events", entries) if entries else 0
+
+
 def strikes_for(task: str, stack: str) -> list[str]:
     """Models struck for THIS task (M1: blacklists are task-scoped) — the /route filter in P3;
     /router-status shows it today."""
@@ -255,7 +319,7 @@ def status_summary() -> dict:
     now = time.time()
     counts = {t: (_read(f"SELECT COUNT(*) FROM {t}") or [(0,)])[0][0]
               for t in ("run_reports", "strikes", "provider_events", "rotation", "decisions",
-                        "generations")}
+                        "generations", "circuit_events", "openrouter_keys")}
     gen_24h = _read(
         "SELECT requested_model, provider, COUNT(*), ROUND(SUM(cost_usd), 6), "
         "SUM(tokens_cached), SUM(tokens_prompt) FROM generations WHERE ts > ? "
@@ -268,11 +332,18 @@ def status_summary() -> dict:
         "WHERE ts > ? AND class != '2xx' GROUP BY provider, class ORDER BY 3 DESC LIMIT 20",
         (now - 86400,))
     rot = _read("SELECT source, COUNT(*), MAX(updated_ts) FROM rotation GROUP BY source")
+    circuit = _read(
+        "SELECT session, model, class, n_4xx, ts FROM circuit_events WHERE ts > ? "
+        "ORDER BY ts DESC LIMIT 20", (now - 7 * 86400,))
     return {
         "db_persistent": _persistent,
         "rows": counts,
         "strikes_7d": [{"model": m, "error_class": e, "n": n} for m, e, n in recent_strikes],
         "provider_errors_24h": [{"provider": p, "class": c, "n": n} for p, c, n in provider_errs],
+        "provider_reliability_7d": reliability()[:20],
+        "circuit_opens_7d": [
+            {"session": s, "model": m, "class": c, "n_4xx": n, "age_s": round(now - ts)}
+            for s, m, c, n, ts in circuit],
         "generations_24h": [
             {"model": m, "provider": p, "n": n, "cost_usd": c,
              "observed_cache_hit": round((tc or 0) / tp, 3) if tp else None}
@@ -307,6 +378,13 @@ def metrics_lines() -> list[str]:
         lines += [f'router_provider_events_total{{class="{c}"}} {n}' for c, n in events]
     else:
         lines.append("router_provider_events_total 0")
+    lines += ["# TYPE router_circuit_open_total counter",
+              "# HELP router_circuit_open_total In-flight 4XX circuit-breaker trips per class (ADR-096 addendum 3)."]
+    circuit = _read("SELECT class, COUNT(*) FROM circuit_events GROUP BY class")
+    if circuit:
+        lines += [f'router_circuit_open_total{{class="{c}"}} {n}' for c, n in circuit]
+    else:
+        lines.append("router_circuit_open_total 0")
     lines += ["# TYPE router_rotation_age_seconds gauge",
               "# HELP router_rotation_age_seconds Age of the newest entry per rotation source (RouterRotationStale alert)."]
     for s, _n, ts in _read("SELECT source, COUNT(*), MAX(updated_ts) FROM rotation GROUP BY source"):
@@ -367,12 +445,29 @@ def self_test() -> int:
         "total_cost": 9.8e-07}), "generation re-record must stay idempotent (no-op)"
     assert record_rotation("scout-canary",
                            [{"model": "moonshotai/kimi-k3", "canary_verdict": "clean"}]) == 1
+    # Addendum 3: reliability aggregate + free-canary derivation + circuit events + key refs
+    for _ in range(18):
+        record_provider_event("poolside/laguna-s-2.1:free", "poolside", 401)
+    for _ in range(2):
+        record_provider_event("poolside/laguna-s-2.1:free", "poolside", 200)
+    rel = {(r["model"], r["provider"]): r for r in reliability(min_n=2)}
+    laguna = rel[("poolside/laguna-s-2.1:free", "poolside")]
+    assert laguna["n"] == 20 and laguna["ok_rate"] == 0.1 and laguna["auth_rate"] == 0.9
+    assert derive_canary_verdicts(min_n=20) == 1, "20 laguna events must yield one verdict"
+    verdicts = dict(_read("SELECT model, canary_verdict FROM rotation WHERE source='provider-events'"))
+    assert verdicts == {"poolside/laguna-s-2.1:free": "broken"}, verdicts
+    assert record_circuit_open("sleep-agents/or-key", "poolside/laguna-s-2.1:free", "auth", 4)
+    assert status_summary()["circuit_opens_7d"][0]["class"] == "auth"
+    enroll_key_ref("sleep-agents/sleep-openrouter")
+    enroll_key_ref("sleep-agents/sleep-openrouter")  # re-enroll = last_seen bump, not a dup
+    assert key_refs() == ["sleep-agents/sleep-openrouter"]
     latch_save({"until": 123.0, "last_429": 100.0, "windows": {"5h": {"utilization": 0.5}},
                 "count_429": 2, "headers_at": 99.0})
     assert (latch_load() or {}).get("count_429") == 2, "latch round-trip"
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
+    assert 'router_circuit_open_total{class="auth"} 1' in body
     assert (_read("SELECT COUNT(*) FROM generations") or [(0,)])[0][0] == 1
     assert 'router_generations_total{model="deepseek/deepseek-v4-flash",provider="Fireworks"} 1' in body
     summary_gen = status_summary()["generations_24h"]
@@ -383,7 +478,12 @@ def self_test() -> int:
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
+            if tier.startswith("_"):  # _comment keys are docs, not tiers
+                continue
             assert 0.0 < float(thr) <= 1.0, f"tier {tier} threshold out of range"
+        cb = _classes.get("circuit_breaker") or {}
+        assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
+            "auth breaker must trip before the generic one (auth never self-heals)"
     print("router self-test: OK "
           f"(classes {'loaded' if _classes else 'absent — jail run without the file is fine'})")
     return 0

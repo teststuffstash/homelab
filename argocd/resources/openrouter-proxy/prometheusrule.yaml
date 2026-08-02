@@ -39,3 +39,40 @@ spec:
           annotations:
             summary: "Claude subscription weekly pool above 90%"
             description: '7d utilization is {{ $value | humanizePercentage }} with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+
+    - name: agent-router
+      rules:
+        # ADR-096: the router store degraded to :memory: — decisions/strikes/costs are being
+        # forgotten on every roll. Real fault (PVC/Longhorn), triage-able.
+        - alert: RouterDbEphemeral
+          expr: router_db_persistent == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Router store is running ephemeral (:memory:)"
+            description: 'The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress.'
+
+        # ADR-096 addendum 2: the MCP daily-rankings feed stopped landing. The git-curated
+        # rotation_fallback belt still routes, but the "what's currently good" signal is stale.
+        - alert: RouterRotationStale
+          expr: router_rotation_age_seconds{source="openrouter-daily-rankings"} > 259200
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "OpenRouter rankings rotation feed is stale (>3d)"
+            description: 'The dailyish list-daily-model-rankings pull has not written rotation entries for {{ $value | humanizeDuration }} — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret.'
+
+        # ADR-096 P2: a standing project key is close to its OpenRouter spend limit — worker
+        # dispatch on that rail will start failing with 402s when it empties.
+        - alert: OpenRouterKeyBudgetLow
+          expr: >-
+            router_openrouter_key_limit_remaining_usd / on(key) router_openrouter_key_limit_usd < 0.10
+          for: 30m
+          labels:
+            severity: warning
+            triage: none # capacity fact — topping up/raising the key limit is an operator move
+          annotations:
+            summary: "OpenRouter key {{ $labels.key }} below 10% of its spend limit"
+            description: 'Standing key {{ $labels.key }} has {{ with query (printf "router_openrouter_key_limit_remaining_usd{key=''%s''}" $labels.key) }}{{ . | first | value | humanize }}{{ end }} USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties.'

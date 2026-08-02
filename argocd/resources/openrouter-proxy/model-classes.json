@@ -52,8 +52,15 @@
     "track/iac": { "class": "coding" }
   },
   "tier_thresholds": {
+    "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold — the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
     "dispatch": 0.9,
     "heavy": 0.8
+  },
+  "circuit_breaker": {
+    "_comment": "ADR-096 addendum 3: in-flight 4XX breaker per (session, model). auth (401/403) trips fast — an auth failure never self-heals mid-session (the 140-401 laguna:free storm); generic 4xx gets more rope; 429 NEVER counts (fail-over/back-off, not session-abort). hold_s = how long forwarding stays stopped.",
+    "auth_threshold": 4,
+    "generic_threshold": 10,
+    "hold_s": 900
   },
   "selection": {
     "_comment": "The /route ordering rule (operator 2026-07-27, built in P3): among same-class/same-tier candidates the EFFECTIVE-cheapest wins, with a small randomization — a uniform pick among candidates within jitter_band_pct of the cheapest — so evidence keeps accruing across near-priced models instead of a monoculture. Price basis order (ADR-096 addendum 2): MARKET effective price (frontend stats/effective-pricing — 30d traffic-weighted, real cache rates; same basis the pins use) → harvested /generation billed costs as the cross-check → registry list-blend as cold-start fallback.",

@@ -150,15 +150,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       per-repo source the PAT already reads — cheapest is `labels(first:…)` on the existing GraphQL
       walk (0 extra calls), else per-repo REST (~10 calls/poll). **Verify:** private-repo counts
       appear within one poll. Same class as FU-063 (archived). Relates FU-091.
-- [ ] **FU-109** — **Tier the subscription latch by consumer weight** — a ~30s sonnet dispatch
-      unit shouldn't defer at the same 0.80 as a full review session (the sleep rollout stalled
-      1h16m+ at 0.83 with a 9-item queue whose work was all OpenRouter). **Folds into the ADR-096
-      router build, Phase 2:** per-tier verdicts server-side (`/anthropic-limit?tier=`, `dispatch`
-      0.90 / `heavy` 0.80 in `model-classes.json` `tier_thresholds`), the semaphore moves
-      server-side, and the per-consumer split rides the ref-derived consumer label. **Resolve when
-      that phase ships.** Also wanted: split the Grafana claude-subscription panel by consumer —
-      meta/operator sessions share the pool by design (FU-088), but a stall should be attributable
-      at a glance. Relates FU-088 (archived), FU-095, FU-113.
 - [ ] **FU-111** — **Migrate `Depends-on:` body lines to native GitHub issue dependencies
       (`blockedBy`).** The body-line idiom is regex-over-prose and its reader already broke once
       (the tab-IFS collapse — the FU-087 gate silently dead for track-less issues); `blockedBy` is
@@ -388,19 +379,15 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       matches rulesets). Relates FU-048, ADR-085.
 
 - [ ] **FU-095** — **Sleep stack pilots: task-class model routing + multi-harness evidence.**
-      Design, the three operator corrections, legs (a)/(b)/(c) and the buy-vs-build survey:
-      [`docs/agents/model-routing.md`](agents/model-routing.md) §"The sleep-stack pilots". The
-      router substrate leg (a) needs is **ADR-096** — P1 + P1.5 + P1.6 shipped 2026-07-27
-      (c9e909e: router store, `/report`, `/rotation`, `/router-status`, `router_*` metrics, latch
-      persistence, `model-classes.json`, ground-truth generation costs, market price basis, MCP
-      rankings rotation). Remaining phases there: P2 budgeter/tiers → P3 shadow → P4
-      authoritative-for-workers → P5 rotation-fed class chains.
-      **Open here:** legs (b) multi-harness evidence and (c) free-model goose probing, both
-      unstarted; leg (a)'s class lookup rides ADR-096 P2+. ⚠ P1 coverage gap: `/report` posts from
-      the LAUNCHER finalizer only, so coordinator-path rides need the in-pod `agent-finalize` twin
-      to POST too (agent-runtime change — do it with P3 so shadow coverage is honest).
-      Prereqs met: sleep specs landed (FU-105), FU-080 graduation done.
-      Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
+      Design, operator corrections, legs (a)/(b)/(c), buy-vs-build:
+      [`docs/agents/model-routing.md`](agents/model-routing.md) §"The sleep-stack pilots". Leg
+      (a)'s substrate is **ADR-096** (detail there): P1/P1.5/P1.6 shipped 2026-07-27 (c9e909e);
+      **P2 shipped 2026-08-02** (FU-109 tiers + server-side semaphore, per-key headroom,
+      addendum-3 breaker/reliability/canary). Remaining: P3 shadow `/route` → P4
+      authoritative-for-workers → P5 rotation-fed chains. **Open here:** legs (b)+(c) unstarted.
+      ⚠ P1 coverage gap: `/report` posts from the LAUNCHER finalizer only — coordinator-path
+      rides need the in-pod `agent-finalize` twin (agent-runtime; do with P3 for honest shadow
+      coverage). Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 
 ## Hardware & nodes
 

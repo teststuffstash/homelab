@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-109** *(archived 2026-08-02)* — **Subscription latch tiered by consumer weight — shipped
+  as ADR-096 P2.** `/anthropic-limit?tier=dispatch|heavy` applies `model-classes.json`
+  `tier_thresholds` composed as **max(per-window FU-088 threshold, tier)** — a ~30s dispatch unit
+  (coordinator-scan/-session, responder; `SUBSCRIPTION_TIER=dispatch`) now defers at 0.90 on the
+  5h window instead of 0.80, while the operator's 7d=0.95 stays binding; heavy ≡ bare probe. The
+  FU-088 pod-count semaphore moved server-side (the proxy counts `subscription-session=claude`
+  pods cluster-wide, new `openrouter-proxy-semaphore` ClusterRole; the launcher kubectl copy is
+  now the belt). Attribution: `anthropic_requests_total{consumer=}` (ref-derived secret name) +
+  a stacked dashboard panel — a stalled window is attributable at a glance. Verified via jail
+  smoke (tier composition, breaker, semaphore fail-open) + live probe. Relates FU-088 (archived),
+  FU-095, FU-113, ADR-096.
 - **FU-080** *(archived 2026-08-01)* — **Per-stack coordinator/reviewer rendered from the
   AgentStack claim — COMPLETE; all three stacks graduated.** The stack jail now controls its whole
   loop by construction: the Composition renders `<stack>-agents` + the namespaced `agentstack-loop`

@@ -213,8 +213,10 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    (resume the PR / wait / re-mint), not retry. Distinct from a refusal: a **capacity deferral**
    (FU-088) — every subscription launcher (this one, the reviewer, claude-tier workers) probes
    `agents/subscription-latch.sh` pre-spawn and exits 0 with a `deferred — subscription
-   rate-limited` line when the egress proxy reports a 429 latch, ≥80% window utilization, or ≥3
-   subscription pods already Running (OpenRouter workers: the account-credit floor). Deferrals
+   rate-limited` line when the egress proxy reports a 429 latch, window utilization past its
+   per-window/per-tier threshold (FU-088/FU-109 — dispatch units pass `SUBSCRIPTION_TIER=dispatch`
+   and defer later), or ≥3 subscription pods already Running (counted server-side since ADR-096 P2;
+   OpenRouter workers: the account-credit floor). Deferrals
    need NO operator action — the next cron/backstop pass re-probes and resumes once the window
    resets; flow walkthrough in docs/agents/workflow.md §Capacity gates. Terminal bookkeeping (auto-merge arming, the stats
    comment, the `AGENT_STRIKE` issue comment, and a salvage-push of any committed-but-unpushed work)

@@ -22,7 +22,7 @@ metadata:
   name: subscription-capacity
   namespace: agent-coordinator
 data:
-  claude: "3" # keep in step with SUBSCRIPTION_MAX_RUNNING in agents/subscription-latch.sh
+  claude: "3" # keep in step with SUBSCRIPTION_MAX_RUNNING — since ADR-096 P2 the authority is the proxy Deployment (default 3); agents/subscription-latch.sh's env is the jail belt
 ---
 # Review backstop — level-triggered catch-all for anything the edge-trigger missed (exporter down,
 # lost event). The Sensor path handles the common case near-instantly; this only sweeps.

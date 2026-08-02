@@ -29,6 +29,7 @@ Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter 
 """
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -104,7 +105,17 @@ def _parse_windows(seen: dict) -> dict:
     return windows
 
 
-def _dispatch_verdict(now: float) -> tuple[bool, str | None, dict]:
+def _effective_thresholds(tier: str | None) -> dict[str, float]:
+    """FU-109 (ADR-096 P2) composed with the FU-088 per-window thresholds: a consumer tier only
+    RAISES a window's threshold, never lowers it — effective = max(window, tier). So `dispatch`
+    (0.90) lifts the 5h gate for ~30s dispatch units while the operator's 7d=0.95 preference
+    stays binding, and `heavy` (0.80) is identical to a bare probe. Unknown/absent tier = the
+    per-window values exactly (today's behavior)."""
+    tier_thr = router.tier_threshold(tier, 0.0) if tier else 0.0
+    return {w: max(t, tier_thr) for w, t in ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW.items()}
+
+
+def _dispatch_verdict(now: float, tier: str | None = None) -> tuple[bool, str | None, dict]:
     """The composite launcher answer: (limited, reason, windows). 429 latch wins; otherwise a
     window past the utilization threshold that hasn't reset yet defers dispatch. A window whose
     reset epoch has passed is dead data, never a verdict — stale headers can't wedge dispatch."""
@@ -113,11 +124,61 @@ def _dispatch_verdict(now: float) -> tuple[bool, str | None, dict]:
         windows = {k: dict(v) for k, v in _latch["windows"].items()}
     if until > now:
         return True, "429-latch", windows
+    eff = _effective_thresholds(tier)
     for w, data in sorted(windows.items()):
-        thr = ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW.get(w, ANTHROPIC_UTIL_THRESHOLD)
+        thr = eff.get(w, ANTHROPIC_UTIL_THRESHOLD)
         if thr > 0 and data["utilization"] >= thr and now < data["reset"]:
             return True, f"utilization-{w}", windows
     return False, None, windows
+
+
+# ADR-096 P2: the FU-088 concurrency semaphore moves SERVER-side — the proxy counts Running
+# pods labelled subscription-session=claude cluster-wide (the same count subscription-latch.sh
+# ran via kubectl in every launcher; one authority instead of N copies). FAIL-OPEN like every
+# capacity gate here: an unreadable count (RBAC gap, API blip) never wedges dispatch — the
+# launcher's local kubectl belt still exists for exactly that case.
+SUBSCRIPTION_MAX_RUNNING = int(os.environ.get("SUBSCRIPTION_MAX_RUNNING", "3"))
+SUBSCRIPTION_SESSION_SELECTOR = "homelab.teststuff.net/subscription-session=claude"
+SEMAPHORE_TTL_S = int(os.environ.get("SEMAPHORE_TTL_S", "10"))
+_semaphore_cache: tuple[float, int | None] = (0.0, None)
+_semaphore_lock = threading.Lock()
+# FU-109 attribution: /anthropic requests counted per ref-derived consumer (in-memory — a roll
+# resets the counter, rate() doesn't care).
+_consumers: dict[str, int] = {}
+_consumers_lock = threading.Lock()
+
+
+def _subscription_running() -> int | None:
+    """Cluster-wide Running count of subscription-labelled pods, briefly cached. None = count
+    unavailable (fail-open, logged) — the caller must treat that as 'not limited'."""
+    global _semaphore_cache
+    now = time.time()
+    with _semaphore_lock:
+        ts, val = _semaphore_cache
+        if now - ts < SEMAPHORE_TTL_S:
+            return val
+    count = None
+    try:
+        token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        qs = urllib.parse.urlencode({"labelSelector": SUBSCRIPTION_SESSION_SELECTOR,
+                                     "fieldSelector": "status.phase=Running"})
+        req = urllib.request.Request(f"https://kubernetes.default.svc/api/v1/pods?{qs}",
+                                     headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            count = len(json.load(resp).get("items") or [])
+    except Exception as e:  # noqa: BLE001 — fail-open by design
+        log(f"semaphore: pod count failed: {e} — failing open")
+    with _semaphore_lock:
+        _semaphore_cache = (now, count)
+    return count
+
+
+def _semaphore_state() -> dict:
+    running = _subscription_running()
+    return {"running": running, "max": SUBSCRIPTION_MAX_RUNNING,
+            "limited": bool(SUBSCRIPTION_MAX_RUNNING > 0 and running is not None
+                            and running >= SUBSCRIPTION_MAX_RUNNING)}
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -170,7 +231,12 @@ def _resolve_ref(ref: str) -> dict | None:
                 resolved = {
                     "key": base64.b64decode(b64).decode(),
                     "guardrail": base64.b64decode(data.get("GUARDRAIL", "")).decode(),
+                    # ADR-096 P2: which rail this ref belongs to — OpenRouter keys enroll for
+                    # the headroom poll; anthropic oauth refs must never hit /api/v1/auth/key.
+                    "kind": "openrouter" if data.get("OPENROUTER_API_KEY") else "anthropic",
                 }
+                if resolved["kind"] == "openrouter":
+                    router.enroll_key_ref(ref)
         else:
             log(f"ref: {ref} exists but lacks {SESSION_KEY_LABEL} — refusing (not a session key)")
     except Exception as e:  # noqa: BLE001 — a failed resolve degrades to passthrough (upstream 401s the ref)
@@ -315,6 +381,83 @@ def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
                        "this session key is restricted to free-tier models (FU-024)",
         }
     }).encode()
+
+# ADR-096 addendum 3: the in-flight 4XX circuit breaker. The 2026-07-28 laguna:free storm was
+# ONE ride's goose continuation loop hammering a hopeless 401 ~140 times over ~20 min — the
+# proxy OBSERVED every one (provider_events) but never ACTED. Per (session, model) the data
+# plane counts 4XX outcomes at class-scoped thresholds (auth 401/403 trips fast — an auth
+# failure never self-heals mid-session; generic 4xx gets more rope; 429 NEVER counts — a rate
+# limit is fail-over/back-off territory, not a hopeless request) and once tripped it STOPS
+# FORWARDING that pair for hold_s, emitting a durable `circuit-open` event the retuned FU-021
+# watchdog (agent-runtime line item) uses as its kill trigger. Thresholds live in
+# model-classes.json `circuit_breaker` (router policy, code defaults as the belt).
+_cb: dict[tuple[str, str], dict] = {}  # (session, model) -> {auth, generic, open_until, class, n, ts}
+_cb_lock = threading.Lock()
+
+
+def _cb_config() -> dict:
+    cfg = router.classes().get("circuit_breaker") or {}
+    return {"auth": int(cfg.get("auth_threshold", 4)),
+            "generic": int(cfg.get("generic_threshold", 10)),
+            "hold_s": int(cfg.get("hold_s", 900))}
+
+
+def _cb_session(headers) -> str:
+    """The breaker's session identity: the opaque ref for injected sessions (per-session/-project
+    secret name — exactly the granularity the storm had), a key-hash bucket for direct keys."""
+    auth = next((v for k, v in headers.items() if k.lower() == "authorization"), "")
+    if auth.startswith("Bearer ref:"):
+        return auth[len("Bearer ref:"):].strip()
+    if auth:
+        return "direct:" + hashlib.sha256(auth.encode()).hexdigest()[:8]
+    return "anonymous"
+
+
+def _cb_open(session: str, model: str) -> dict | None:
+    with _cb_lock:
+        st = _cb.get((session, model))
+        if st and st["open_until"] > time.time():
+            return dict(st)
+    return None
+
+
+def _cb_update(session: str, model: str, status: int) -> None:
+    """Fold one forwarded completion outcome into the breaker."""
+    now = time.time()
+    tripped = None
+    cfg = _cb_config()
+    with _cb_lock:
+        if len(_cb) > 512:  # sessions are ephemeral pods — prune day-old entries opportunistically
+            for k in [k for k, v in _cb.items() if now - v["ts"] > 86400]:
+                del _cb[k]
+        st = _cb.setdefault((session, model),
+                            {"auth": 0, "generic": 0, "open_until": 0.0, "class": "", "n": 0,
+                             "ts": now})
+        st["ts"] = now
+        if 200 <= status < 300:
+            st["auth"] = st["generic"] = 0
+            st["open_until"] = 0.0
+            return
+        if status in (401, 403):
+            st["auth"] += 1
+        elif 400 <= status < 500 and status != 429:
+            st["generic"] += 1
+        else:
+            return
+        if st["open_until"] > now:
+            return
+        if st["auth"] >= cfg["auth"]:
+            tripped = ("auth", st["auth"])
+        elif st["generic"] >= cfg["generic"]:
+            tripped = ("generic", st["generic"])
+        if tripped:
+            st["open_until"] = now + cfg["hold_s"]
+            st["class"], st["n"] = tripped
+    if tripped:
+        router.record_circuit_open(session, model, tripped[0], tripped[1])
+        log(f"circuit OPEN ({tripped[0]}) session={session} model={model} n_4xx={tripped[1]} — "
+            f"forwarding stopped for {cfg['hold_s']}s (ADR-096 addendum 3)")
+
 
 # Hop-by-hop (and framing) headers never forwarded either way. accept-encoding is stripped so the
 # upstream answers identity — we re-frame the response as stream-until-close.
@@ -588,7 +731,72 @@ def _rankings_loop() -> None:
             _rankings_tick()
         except Exception as e:  # noqa: BLE001 — the feed is an upgrade, never a crash source
             log(f"rankings: pull failed: {e} — next tick in {RANKINGS_POLL_S}s")
+        try:
+            # ADR-096 addendum 3: free models are deliberate instability canaries — score their
+            # verdicts dailyish from the passive (model, provider) aggregates, not by hand.
+            n = router.derive_canary_verdicts()
+            if n:
+                log(f"canary verdicts: scored {n} :free models from provider_events")
+        except Exception as e:  # noqa: BLE001
+            log(f"canary verdicts: derivation failed: {e}")
         time.sleep(RANKINGS_POLL_S)
+
+
+# ADR-096 P2: per-project OpenRouter headroom. Every standing key limits its project at
+# OpenRouter (`project.budgetUSD` ceiling); the router reads the live remainder per enrolled
+# session-key ref via GET /api/v1/auth/key (probed 2026-07-27: `limit`, `limit_remaining`,
+# `limit_reset: weekly`, `usage_weekly`) — the /route openrouter-budget-exhausted verdict input
+# in P3, a Grafana/alert surface today. Refs come from the store (enrolled as traffic resolves
+# them) — no cluster-wide secret enumeration, the proxy only polls keys it was already handed.
+HEADROOM_POLL_S = int(os.environ.get("HEADROOM_POLL_S", "900"))
+_headroom: dict[str, dict] = {}  # ref -> last auth/key snapshot (no key material, ever)
+_headroom_lock = threading.Lock()
+
+
+def _headroom_tick() -> int:
+    refs = router.key_refs()
+    if ROUTER_ACCOUNT_REF and ROUTER_ACCOUNT_REF not in refs:
+        refs.append(ROUTER_ACCOUNT_REF)
+    n = 0
+    for ref in refs:
+        resolved = _resolve_ref(ref)
+        if not resolved or resolved.get("kind") != "openrouter":
+            continue  # anthropic oauth refs have no OpenRouter account state
+        try:
+            req = urllib.request.Request(
+                f"{UPSTREAM}/api/v1/auth/key",
+                headers={"Authorization": "Bearer " + resolved["key"],
+                         "User-Agent": "homelab-openrouter-proxy"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.load(resp).get("data") or {}
+        except Exception as e:  # noqa: BLE001 — one key failing must not starve the others
+            log(f"headroom: {ref}: auth/key failed: {e}")
+            continue
+        with _headroom_lock:
+            _headroom[ref] = {
+                "label": data.get("label"),
+                "limit": data.get("limit"),
+                "limit_remaining": data.get("limit_remaining"),
+                "limit_reset": data.get("limit_reset"),
+                "usage": data.get("usage"),
+                "usage_weekly": data.get("usage_weekly"),
+                "is_free_tier": data.get("is_free_tier"),
+                "fetched_at": time.time(),
+            }
+        n += 1
+    return n
+
+
+def _headroom_loop() -> None:
+    time.sleep(75)  # after the pod settles; rankings sleeps 60 — stagger the store reads
+    while True:
+        try:
+            n = _headroom_tick()
+            if n:
+                log(f"headroom: refreshed {n} OpenRouter keys")
+        except Exception as e:  # noqa: BLE001
+            log(f"headroom: tick failed: {e}")
+        time.sleep(HEADROOM_POLL_S)
 
 
 def _anthropic_latch_update(status: int, resp_headers) -> str:
@@ -639,12 +847,22 @@ class Proxy(BaseHTTPRequestHandler):
         pass
 
     def _forward(self, body: bytes | None, note: str,
-                 or_model: str | None = None, or_provider: str | None = None) -> None:
+                 or_model: str | None = None, or_provider: str | None = None,
+                 cb_session: str | None = None) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
+            # FU-109 attribution: subscription traffic counted by ref-derived consumer (the
+            # secret name — coordinator-claude vs reviewer vs worker session), so a stalled
+            # window is attributable on the dashboard. Direct-token traffic buckets as such.
+            raw_auth = next((v for k, v in self.headers.items()
+                             if k.lower() == "authorization"), "")
+            consumer = (raw_auth[len("Bearer ref:"):].strip().split("/")[-1]
+                        if raw_auth.startswith("Bearer ref:") else "direct")
+            with _consumers_lock:
+                _consumers[consumer] = _consumers.get(consumer, 0) + 1
         else:
             url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
@@ -681,6 +899,8 @@ class Proxy(BaseHTTPRequestHandler):
             # ADR-096: passive provider health — every forwarded completion is an observation
             # (the router's health store costs zero extra polling by living in the data plane).
             router.record_provider_event(or_model, or_provider or "", status)
+            if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
+                _cb_update(cb_session, or_model, status)
         self.send_response(status)
         for k, v in resp.headers.items():
             if k.lower() not in _DROP_RESP:
@@ -718,19 +938,30 @@ class Proxy(BaseHTTPRequestHandler):
         log(f"{self.command} {self.path} → {status} [{note}] {sent}B {time.time() - started:.1f}s")
 
     def do_GET(self) -> None:
-        if self.path == "/anthropic-limit":
+        if self.path.split("?", 1)[0] == "/anthropic-limit":
             # FU-088(a): the launcher-side probe (agents/subscription-latch.sh). limited=true →
             # every subscription launcher defers its spawn until the latch expires/clears.
+            # ADR-096 P2: ?tier=dispatch|heavy applies the FU-109 per-consumer threshold
+            # (composed max(window, tier)); the FU-088 concurrency semaphore is folded in
+            # server-side (reason "semaphore" — the launcher's kubectl copy becomes a belt).
             now = time.time()
-            limited, reason, windows = _dispatch_verdict(now)
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            tier = (q.get("tier") or [None])[0]
+            limited, reason, windows = _dispatch_verdict(now, tier)
+            semaphore = _semaphore_state()
+            if not limited and semaphore["limited"]:
+                limited, reason = True, "semaphore"
             with _latch_lock:
                 until, last = _latch["until"], _latch["last_429"]
                 seen, seen_at = dict(_latch["headers"]), _latch["headers_at"]
             payload = json.dumps({
                 "limited": limited,
                 "reason": reason,
+                "tier": tier,
                 "threshold": ANTHROPIC_UTIL_THRESHOLD,
                 "thresholds": ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW,
+                "effective_thresholds": _effective_thresholds(tier),
+                "semaphore": semaphore,
                 "windows": windows,
                 "until_epoch": round(until),
                 "remaining_s": max(0, round(until - now)),
@@ -783,6 +1014,39 @@ class Proxy(BaseHTTPRequestHandler):
                 "# TYPE anthropic_subscription_429_total counter",
                 f"anthropic_subscription_429_total {count_429}",
             ]
+            # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
+            semaphore = _semaphore_state()
+            lines += ["# TYPE anthropic_subscription_semaphore_running gauge",
+                      "# HELP anthropic_subscription_semaphore_running Running subscription-session pods cluster-wide (the FU-088 semaphore, server-side)."]
+            if semaphore["running"] is not None:
+                lines.append(f"anthropic_subscription_semaphore_running {semaphore['running']}")
+            lines += ["# TYPE anthropic_subscription_semaphore_max gauge",
+                      f"anthropic_subscription_semaphore_max {SUBSCRIPTION_MAX_RUNNING}"]
+            # FU-109 attribution: subscription requests by ref-derived consumer.
+            with _consumers_lock:
+                consumers = sorted(_consumers.items())
+            if consumers:
+                lines += ["# TYPE anthropic_requests_total counter",
+                          "# HELP anthropic_requests_total Subscription-leg requests per ref-derived consumer (in-memory; resets on roll)."]
+                lines += [f'anthropic_requests_total{{consumer="{c}"}} {n}'
+                          for c, n in consumers]
+            # ADR-096 P2: per-key OpenRouter headroom (auth/key snapshots; label = the ref).
+            with _headroom_lock:
+                headroom = {k: dict(v) for k, v in _headroom.items()}
+            if headroom:
+                lines += ["# TYPE router_openrouter_key_limit_usd gauge",
+                          "# HELP router_openrouter_key_limit_usd The standing key's OpenRouter spend limit (absent = unlimited).",
+                          "# TYPE router_openrouter_key_limit_remaining_usd gauge",
+                          "# HELP router_openrouter_key_limit_remaining_usd Live remaining headroom under the key's limit (OpenRouterKeyBudgetLow alert).",
+                          "# TYPE router_openrouter_key_usage_usd counter",
+                          "# HELP router_openrouter_key_usage_usd Lifetime billed usage as reported by auth/key."]
+                for ref, d in sorted(headroom.items()):
+                    if isinstance(d.get("limit"), (int, float)):
+                        lines.append(f'router_openrouter_key_limit_usd{{key="{ref}"}} {d["limit"]}')
+                    if isinstance(d.get("limit_remaining"), (int, float)):
+                        lines.append(f'router_openrouter_key_limit_remaining_usd{{key="{ref}"}} {d["limit_remaining"]}')
+                    if isinstance(d.get("usage"), (int, float)):
+                        lines.append(f'router_openrouter_key_usage_usd{{key="{ref}"}} {d["usage"]}')
             lines += router.metrics_lines()  # ADR-096: the router_* series
             payload = ("\n".join(lines) + "\n").encode()
             self.send_response(200)
@@ -797,7 +1061,13 @@ class Proxy(BaseHTTPRequestHandler):
             now = time.time()
             limited, reason, windows = _dispatch_verdict(now)
             summary = router.status_summary()
-            summary["subscription"] = {"limited": limited, "reason": reason, "windows": windows}
+            summary["subscription"] = {"limited": limited, "reason": reason, "windows": windows,
+                                       "semaphore": _semaphore_state(),
+                                       "effective_thresholds": {
+                                           t: _effective_thresholds(t)
+                                           for t in ("dispatch", "heavy")}}
+            with _headroom_lock:
+                summary["openrouter_headroom"] = {k: dict(v) for k, v in _headroom.items()}
             payload = json.dumps(summary, indent=1).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -947,6 +1217,7 @@ class Proxy(BaseHTTPRequestHandler):
         note = "passthrough"
         or_model = None
         or_provider = None
+        cb_session = None
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
@@ -968,6 +1239,31 @@ class Proxy(BaseHTTPRequestHandler):
                             return
                     notes = []
                     or_model = normalize_model(str(payload["model"]))
+                    # ADR-096 addendum 3: a tripped breaker answers WITHOUT forwarding — the
+                    # storm's other ~130 calls never reach the provider, and the error body
+                    # carries the circuit-open marker the in-pod watchdog kills on.
+                    cb_session = _cb_session(self.headers)
+                    tripped = _cb_open(cb_session, or_model)
+                    if tripped:
+                        code = 401 if tripped["class"] == "auth" else 400
+                        reject = json.dumps({"error": {
+                            "code": code,
+                            "message": f"circuit-open ({tripped['class']}): "
+                                       f"{tripped['n']} 4XX responses for this (session, model) "
+                                       "— forwarding stopped, fix the session or switch model "
+                                       "(ADR-096 addendum 3)",
+                        }}).encode()
+                        log(f"POST {self.path} → {code} [circuit-open {tripped['class']}] "
+                            f"model={or_model} session={cb_session}")
+                        self.send_response(code)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(reject)))
+                        self.send_header("Connection", "close")
+                        self.send_header("X-Openrouter-Proxy", "circuit-open")
+                        self.end_headers()
+                        self.wfile.write(reject)
+                        self.close_connection = True
+                        return
                     pin = pin_for(str(payload["model"]))
                     # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
                     # hand-crafted request) always wins — never overwrite policy already in the body.
@@ -993,7 +1289,8 @@ class Proxy(BaseHTTPRequestHandler):
                         note = "+".join(notes)
             except ValueError:
                 pass  # not JSON — forward untouched
-        self._forward(body, note, or_model=or_model, or_provider=or_provider)
+        self._forward(body, note, or_model=or_model, or_provider=or_provider,
+                      cb_session=cb_session)
 
 
 def main() -> int:
@@ -1011,10 +1308,14 @@ def main() -> int:
             log(f"restored ACTIVE 429 latch from store (until={saved['until']:.0f})")
     if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0:
         threading.Thread(target=_rankings_loop, daemon=True).start()
+    if HEADROOM_POLL_S > 0:  # ADR-096 P2: per-key OpenRouter headroom (enrolled refs)
+        threading.Thread(target=_headroom_loop, daemon=True).start()
     log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
         f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
         f"max_tokens_floor={MAX_TOKENS_FLOOR}, market={'on' if MARKET_ENABLE else 'off'}, "
-        f"rankings={'on' if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0 else 'off'})")
+        f"rankings={'on' if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0 else 'off'}, "
+        f"semaphore≤{SUBSCRIPTION_MAX_RUNNING}, headroom={HEADROOM_POLL_S}s, "
+        f"breaker=auth:{_cb_config()['auth']}/generic:{_cb_config()['generic']})")
     ThreadingHTTPServer(("", PORT), Proxy).serve_forever()
     return 0
 

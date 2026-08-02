@@ -8,34 +8,41 @@
 # --harness claude) runs this first and defers while latched — a report-only line instead of a
 # doomed spawn that burns a session on a rate-limited account.
 #
-# Two gates, both FU-088(a):
-#   1. the proxy verdict (reactive 429 latch OR harvested utilization ≥ threshold, default 80%)
-#   2. the concurrency semaphore — count Running pods labelled subscription-session=claude
-#      across namespaces and defer at ≥ SUBSCRIPTION_MAX_RUNNING (default 3: one coordinator
-#      tick + the reflex's two reviewers; claude-tier workers share the same pool). This is the
-#      proactive half: it prevents the burst that CAUSES the 429.
+# Two gates, both FU-088(a) — BOTH now answered server-side by the proxy (ADR-096 P2):
+#   1. the proxy verdict (reactive 429 latch OR harvested utilization ≥ threshold). FU-109:
+#      export SUBSCRIPTION_TIER=dispatch|heavy and the proxy applies the per-consumer threshold
+#      (dispatch units defer later than heavy sessions; composed max(window, tier)).
+#   2. the concurrency semaphore — the proxy counts Running subscription-session=claude pods
+#      itself (reason "semaphore"). The local kubectl count below is now only the BELT for a
+#      proxy that answered without a semaphore verdict (old script version) or not at all.
 #
 # exit 0 = clear to dispatch. exit 1 = deferred (reason printed to stderr).
 # FAIL-OPEN by design: proxy unreachable (jail/manual run — the ClusterIP svc doesn't cross the
 # BGP boundary), kubectl/RBAC missing, or a malformed reply reads as clear. Burn-saver, not a gate.
 set -u
 PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit" 2>/dev/null)" || reply=""
+TIER="${SUBSCRIPTION_TIER:-}"
+reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
+server_semaphore="false"
 if [ -n "$reply" ]; then
   limited="$(printf '%s' "$reply" | jq -r '.limited // false' 2>/dev/null)" || limited="false"
   if [ "$limited" = "true" ]; then
     reason="$(printf '%s' "$reply" | jq -r '.reason // "?"' 2>/dev/null)"
     detail="$(printf '%s' "$reply" | jq -r '[.windows | to_entries[] | "\(.key)=\(.value.utilization)"] | join(" ")' 2>/dev/null)"
-    echo "subscription limited (FU-088, ${reason}): utilization ${detail:-?} — deferring subscription dispatch (probe: ${PROXY}/anthropic-limit)" >&2
+    sem="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then " sem=\(.semaphore.running)/\(.semaphore.max)" else "" end' 2>/dev/null)"
+    echo "subscription limited (FU-088, ${reason}${TIER:+, tier=$TIER}): utilization ${detail:-?}${sem} — deferring subscription dispatch (probe: ${PROXY}/anthropic-limit)" >&2
     exit 1
   fi
+  # ADR-096 P2: a reply carrying a semaphore verdict already counted the pods server-side —
+  # skip the local kubectl copy (belt only for older proxies / unreadable counts).
+  server_semaphore="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then "true" else "false" end' 2>/dev/null)" || server_semaphore="false"
 fi
 
-# Semaphore: label-selector count of live subscription sessions. Launchers stamp the label
+# Semaphore belt: label-selector count of live subscription sessions. Launchers stamp the label
 # (homelab.teststuff.net/subscription-session=claude) on every pod that draws on the operator
 # plan. Needs cluster-wide pod list; a denied/absent kubectl fails open.
 MAX="${SUBSCRIPTION_MAX_RUNNING:-3}"
-if [ "$MAX" -gt 0 ] 2>/dev/null && command -v kubectl >/dev/null 2>&1; then
+if [ "$server_semaphore" != "true" ] && [ "$MAX" -gt 0 ] 2>/dev/null && command -v kubectl >/dev/null 2>&1; then
   running="$(kubectl get pods -A -l homelab.teststuff.net/subscription-session=claude \
     --field-selector status.phase=Running --no-headers 2>/dev/null | wc -l)" || running=0
   if [ "${running:-0}" -ge "$MAX" ]; then

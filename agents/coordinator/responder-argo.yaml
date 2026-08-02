@@ -115,7 +115,7 @@ spec:
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
 
             # FU-088: a parked triage loses nothing — Alertmanager refires the group (≤3h).
-            if ! bash /work/homelab/agents/subscription-latch.sh; then
+            if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
               echo "triage deferred — subscription limited (FU-088; the alert refires)"; exit 0
             fi
 
