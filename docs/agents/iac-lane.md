@@ -70,6 +70,16 @@ Mechanical (schema-valid **and** within the FU-093 quota) rides the CI-only auto
 Hard boundary: the role wires secret **references**, never values — Infisical writes stay
 operator/ESO-push.
 
+**Greenfield is OUTSIDE this matrix (named 2026-08-02).** The matrix diffs an EXISTING wrapper
+against a chart delta; a project's FIRST chart has no wrapper to diff — `values.schema.json`
+appearing at all is the delta. That case is a **bootstrap seam, not a lane class**: the first
+wrapper is semi-derivable (donor copy from the freshest graduated stack — the FU-070 copy-paste
+experiment — plus the schema's required-without-default list as the fill-in worklist, plus the
+chart's `example-homelab-values.yaml` as the worked example), but its judgment slots are
+irreducibly operator: secret VALUES (the reference/value boundary above), platform precreations
+(ns, repos), and the FU-039 subdomain claim. After the first deploy the stack enters the matrix
+and evolves via `infra_enrich`.
+
 ⚠ This deliberately **re-opens two standing exclusions** — `fixerRepos` context-only (the FU-086
 predicate) and "sleep-iac excluded, CI-only deploy repo" — via a *distinct dispatch class*, not by
 silently flipping them.
