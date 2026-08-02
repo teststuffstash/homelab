@@ -196,6 +196,21 @@ Artificial Analysis API (documented, free key — an operator mint) or a **curat
 `model-classes.json`** refreshed by the weekly scout digest (start here: capability changes per
 release, not per day, and graduation-stays-human already reviews that digest).
 
+**Latency is an ordering dimension, not just price (operator + field evidence, 2026-08-02).**
+The free tier makes this acute: every `:free` model prices at $0, so the whole free set lands in
+ONE jitter band and price cannot separate them — yet measured turn shape differs wildly
+(laguna:free ~306s wall-clock/turn emitting ~3.5k output tokens — ~9× deepseek's ~400 — vs
+ling:free's snappier turns). Two doctrine points: **(a) advertised page percentiles are not our
+workload** — the model page's e2e P50 (~7-9s laguna) reflects the site's median request; agentic
+turns (large context, 16k max_tokens floor) sit at the advertised P95–P99 *by construction*
+(Helsinki P99 602s ≈ our steady 306s), so ordering uses OUR harvested evidence, never the page.
+**(b) the store's `latency` field is TTFT, not duration** (laguna TTFT 1.6s avg while wall-clock
+was 306s) — true tokens/sec needs the `/generation` record's `generation_time` harvested
+(homelab#22 build). Once present: within a jitter band, tie-break on measured full-duration
+tokens/sec per (model, provider), with per-class tolerance (a `dispatch`-class unit needs fast
+turns; a `heavy` overnight ride tolerates slow-but-cheap). Verbosity (output tokens/turn) is
+itself a latency AND cost factor — it belongs in the same evidence row.
+
 **Per-stack and per-task control (operator ruling, same conversation):** projects blacklist
 independently — the AgentStack claim gains `modelDeny: [...]`, composed into the /route filter
 launcher-side (cluster-wins claim semantics, same seam as the chain). Per-task override rides

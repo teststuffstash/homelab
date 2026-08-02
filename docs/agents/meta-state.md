@@ -28,6 +28,15 @@ triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
   for `POST /route` + `cooldown tripped/cleared` lines, decisions in `/router-status`. The P4
   authoritative flip waits on the shadow soak (FU-095). Revert the chain via sleep-iac when
   the test has yielded enough.
+- **Shadow-soak review checklist (run before the P4 flip; collect ≥1wk of decisions):**
+  (1) divergence table — `decisions` where shadow model ≠ dispatched model: would the router's
+  pick have done better/worse (join run_reports outcomes)? (2) defer audit — every `defer`
+  reason correct + retry_after honored by callers? (3) cooldown episodes — trips/half-open
+  re-picks/escalations from `router_cooldown*` + circuit events: any flapping? (4) latency —
+  needs homelab#22's `generation_time` harvest first; then check the free-band tie-break case
+  (laguna 306s/turn, ~9× verbosity vs deepseek — model-routing §M8 ¶latency). (5) jitter-pool
+  health — is exploration actually spreading picks across the band (`jitter_pool` in decision
+  detail)? (6) `--help`-class junk rows excluded from the analysis (guard shipped e2fdbe7).
 - **Infra hardening landed TODAY (07-31, operator session)** — `devbox run ci` + `devbox run
   test-integration` now work both in-ride and in CI for sleep; sleep's agent-stack ≈ oracle-fleet.
   FU-118/119/120 done. No structural blockers outstanding. (Detail: TICK-LOG 2026-07-31 entry.)
