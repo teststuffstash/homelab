@@ -185,14 +185,7 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       content-based capped `ci-red` scan clause, MP-T12 rewrite + MP-T13 Red→arbitrate) —
       transitions in [`docs/agents/merge-path-fsm.yaml`](agents/merge-path-fsm.yaml), play in the
       coordinator README. Relates MP-T07/T11/T12/T13.
-- [ ] **FU-116** — **Widen the scan janitor to Error/Failed ride pods — their ephemeral
-      `docker-lib` PVCs leak.** It deletes only `Succeeded` pods >2h, so one r1 PVC was still Bound
-      18h later, regressing the #41/#63 `longhorn-scratch` pool-exhaustion class fix.
-      The kata "can't attach a healthy volume" leg was NOT a kata bug — it and the wk-metal-01
-      read-only-fs are both OOM-cascade symptoms, root-caused and validated in
-      [`docs/incidents/2026-07-27-kata-ride-oom-cascade.md`](incidents/2026-07-27-kata-ride-oom-cascade.md)
-      (FU-112 is the root-cause fix; wk-metal-03 uncordoned). Relates FU-081 (archived), FU-093,
-      FU-072, TICK-LOG §scratch-pool.
+
 
 - [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
       DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —

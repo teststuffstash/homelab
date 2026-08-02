@@ -203,11 +203,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # nine rides inside 2h held 9x20Gi scratch allocations and pushed BOTH bulk-tier disks past
     # the scheduling cap — new scratch PVCs faulted (ReplicaSchedulingFailure) and wedged every
     # subsequent ride+worker Init. The grace only protects log reads; stats/transcripts are in S3.
+    # FU-116: Failed pods leak their ephemeral docker-lib PVCs exactly like Succeeded ones (one
+    # r1 PVC sat Bound 18h, regressing the #41/#63 scratch-pool-exhaustion fix) — janitor BOTH
+    # terminal phases. Failed gets a longer grace (2h vs 30min): a hard-died ride may not have
+    # uploaded transcripts, so its pod log is briefly the only forensics.
     for c in $("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
-        --field-selector=status.phase=Succeeded -o json 2>/dev/null | jq -r '.items[]
-        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601 < (now - 1800))
+        -o json 2>/dev/null | jq -r '.items[]
+        | select(.status.phase == "Succeeded" or .status.phase == "Failed")
+        | .status.phase as $p
+        | select((.status.startTime // "1970-01-01T00:00:00Z") | fromdateiso8601
+                 < (now - (if $p == "Failed" then 7200 else 1800 end)))
         | .metadata.name' 2>/dev/null); do
-      echo "  [$repo] janitor: deleting Completed ride pod ${c} (>30min; releases its ephemeral scratch PVC)"
+      echo "  [$repo] janitor: deleting terminal ride pod ${c} (releases its ephemeral scratch PVC)"
       "$KUBECTL" $KUBE -n "$repo" delete pod "$c" --ignore-not-found >/dev/null 2>&1 || true
     done
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work

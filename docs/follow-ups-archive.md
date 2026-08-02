@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-116** *(archived 2026-08-02)* — **Scan janitor widened to Failed ride pods** (their
+  ephemeral docker-lib PVCs leaked — one r1 PVC Bound 18h, the scratch-pool-exhaustion regression).
+  Failed gets a 2h grace (hard-died rides may hold the only forensics), Succeeded stays 30min.
+  Synthetic-tested all four phase×age cases. The kata/read-only-fs legs were OOM-cascade symptoms
+  (root cause = FU-112's incident doc).
 - **FU-114** *(archived 2026-08-02)* — **Fixer-context L2/L3 BUILT.** L1 env card shipped earlier;
   L2 `build.yaml` on sleep (#48 first task/build) + oracle (#166 port); L3 = task/* label →
   `class=` in scan dispatch units (queued + c4c5) → session uses `.agents/<class>.yaml` verbatim.
