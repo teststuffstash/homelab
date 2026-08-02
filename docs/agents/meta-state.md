@@ -29,13 +29,10 @@ meant to avoid.)
   REWRITTEN for the sleep stack (was still on oracle — blind all session): startTime-keyed
   pod state, circuit/key-window/FU-124 clauses, Alertmanager firing-set awareness
   (InfoInhibitor filtered; triage stays with the responder).
-- **⏳ homelab#22 batch BUILT + COMMITTED locally (af3a474), PUSH AT THE #99 RIDE GAP** (push
-  → ConfigMap hash → ArgoCD → proxy Recreate roll; never mid-ride). All four deliverables
-  tested in-jail (sever e2e 3.1s, migration, happy-path relay, self-test). Chain: #99 ride
-  ends (expected ~19:10Z, laguna rides ≈95-100min; hard stop 21:31Z key expiry) → push →
-  verify proxy roll (startup log shows `deadline=900s`) + next ride pod carries
-  `activeDeadlineSeconds: 14400` → comment+close homelab#22 + TICK-LOG. Bonus fix inside:
-  proxy relay used blocking `read(8192)` — a slow-drip upstream defeated BOTH timeouts.
+- ✅ homelab#22 CLOSED (91c9c29, proxy rolled 18:29Z, all four deliverables verified live —
+  TICK-LOG cont. 4). Soak watch: `router_request_deadline_exceeded_total` should stay 0 on
+  healthy laguna rides (306s turns ≪ 900s); a nonzero burst = the deadline is biting real
+  turns → revisit the default before blaming providers.
 - Platform queue residue: homelab#22 (above); sleep-tracking#104 (datasource naming — touches
   the #77-stabilized uid gate, needs steering if queued) + #16 dep-dashboard, both unlabeled.
 - **Shadow-soak review checklist (run before the P4 flip; collect ≥1wk of decisions):**
@@ -53,9 +50,9 @@ meant to avoid.)
 
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
 
-- **⏳ FU-123 fix chain: agent-runtime#26** (finalize fetches broker token; armed, CI+review
-  pending — expect merge by ~18:45Z, then image build + a CI-opened `agents/images.env` bump PR
-  ON HOMELAB to merge). Acceptance: `armed_by_pod=true` on the first post-pin ride.
+- **⏳ FU-123 fix DEPLOYED** (agent-runtime#26 merged + pin homelab#75 auto-merged; #103's ride
+  runs the fixed image). ACCEPTANCE PENDING: `armed_by_pod=true` on #103's AGENT_RUN_STATS
+  line (PR expected ~19:5x, laguna rides ≈80-100min) → then archive FU-123.
 - Open session FUs: **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater
   backstop; watch clause: armed PR BEHIND >15min).
 

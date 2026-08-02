@@ -1736,3 +1736,29 @@ never re-escalate. Answer to the operator's "should the skill watch alerts?": ye
 AWARENESS — the loop watch now emits on firing-set CHANGE (InfoInhibitor filtered), triage
 stays with the responder. Also: swept 40 expired ephemeral key CRs (their stale Secrets are
 the headroom 401-poll noise); GC-on-expiry = openrouter-operator#10.
+
+### 2026-08-02 (cont. 4) — meta session 4: #22 batch shipped in the ride gap; FU-123 fix chain ran itself
+**homelab#22 CLOSED** (91c9c29, proxy rolled 18:29Z in the #99→#103 gap): REQUEST_DEADLINE_S=900
+absolute wall + X-Request-Deadline-S override; router_inflight_requests{model=}/oldest-age/
+severed counter; generation_ms harvest (in-place PVC ALTER) + router_observed_decode_tps (the
+§M8 tie-break evidence); activeDeadlineSeconds=14400 on ride pods (=4h key TTL) with
+DeadlineExceeded→timeout strike mapping. **The e2e test found a FIFTH hole:** the relay's
+`resp.read(8192)` is BufferedIOBase.read — it BLOCKS until the full 8KB accumulates, so a
+slow-drip upstream defeated the deadline check AND READ_TIMEOUT_S simultaneously (my first
+implementation was severless against the very wedge the issue describes; only the fake-drip
+e2e caught it). Fixed with read1() + a client-socket timeout (a stopped-reading client blocked
+wfile.write forever — the third wedge vector). LESSON: for streaming relays, timeout reasoning
+is per-PRIMITIVE, not per-loop — verify with a hostile-shaped upstream, not a happy one.
+
+**FU-123 fix: agent-runtime#26** (finalize fetches the broker token itself, broker→mount→env,
+SA-Bearer'd — FU-089 deleted the mount it read). The chain ran END-TO-END on the machinery in
+~45min: PR → CI → reviewer APPROVED → auto-merge → image build → deploy-pin PR homelab#75
+auto-merged the image pin INTO master before I even pushed (my push rebased over it). #103's
+ride pod verified running 2026.8.2-gfbb2b739f806 + activeDeadlineSeconds — acceptance
+(`armed_by_pod=true`) lands with #103's PR.
+
+**#99 → PR#108** (SHA-256 pin for frser): ride 78min on laguna:free, clean. Arrived un-armed
+(FU-123, 6th confirmation, last pre-fix ride) → the reflex C9 belt armed it at 18:30:11 — the
+18:15 reflex non-arm that looked like a belt gap was pure timing (PR created 18:25). Session
+hygiene: two orphan monitors from the pre-clear session found alive (one still emitting into
+this session) — stopped both; "monitors die with the session" is not literally true, VERIFY.
