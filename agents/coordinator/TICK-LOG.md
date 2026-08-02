@@ -1693,3 +1693,27 @@ accelerates prefill only, so the free-band jitter tie-break must be DECODE tok/s
 audit: no total-session wall-clock bound exists (200 turns × slow turns ≈ 16h theoretical) →
 `activeDeadlineSeconds` in the #22 batch. WIP-hold fix (e2fdbe7) verification PENDING at handoff
 (needs a tick during a ride) — see meta-state.
+
+### 2026-08-02 (cont. 2) — meta session 3: ride-1 key-expiry death + the stale watch + TTL 2h→4h
+Bootstrap verified the WIP-hold fix (e2fdbe7) live: the 13:50Z tick held #99/#103/#105 with
+`⏳ project WIP busy` during the #96 ride, no LLM woken. Also fixed the scan probing FIXERLESS
+repos (d8f3a8e — snore-recorder has no fixer block → no ns RBAC → guaranteed per-tick
+`⚠ probe FAILED`; ADR-094 `dispatchable` now gates the probe; verified gone on the 15:50Z tick).
+
+**Incident — #96 ride 1 died of session-key age, and the watch was blind twice over.** The ride
+(13:24Z, laguna:free, ~306s/turn) ran its FULL fresh-POSTed 2h key window without a PR: headroom
+401 at 15:26, worker 401-storm 15:30, proxy auth circuit OPEN 900s (addendum-3 machinery ✓),
+pod died, c4c5 redispatched 15:41 — with a FABRICATED narrative ("no worker pod ever ran; key
+minted at 11:21" — both false; the action was right, the audit trail wasn't). Ride 2 started
+clean at 15:42 (circuit closed on schedule; 200s from 15:45:44). This is the 2026-07-09 class
+("slow-cheap models break every freshness assumption") on its third leg: not PATCH-drift
+(operator#6), not git-token TTL (FU-018/064, fixed) — the WINDOW ITSELF is smaller than a slow
+free ride. Fix: `estimate_budget.py --ttl-hours` default 2→4 (c9d1c08; budgetUSD stays the hard
+bound, expiresAt is cleanup) + evidence appended to operator#6 (rotation stays the durable fix).
+
+**Watch lessons (two blind spots found by hand, not by the watch):** (1) meta-watch-loop.sh was
+still pointed at the ORACLE stack — it watched an idle world all session while sleep burned a
+ride; rewritten for the active stack (env-overridable). (2) A redispatched ride pod REUSES its
+name — name-keyed pod state saw no change across death+redispatch; pod state now keys on
+startTime. Added explicit failure-signal clauses: proxy `circuit OPEN` lines, ride-age >100min
+(key-window death approaching), armed-PR-BEHIND >15min (FU-124 belt).
