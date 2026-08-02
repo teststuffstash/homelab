@@ -540,6 +540,10 @@ fi
 # namespace as an ExternalSecret — FU-080 a — and the pod secretKeyRefs it in-ns, so this launcher
 # reads NO key material). Best-effort: without the mirror the run proceeds and agent-finalize
 # skips the upload loudly.
+# FU-095 P1: the stack name rides into the pod (AGENT_STACK) so the in-pod finalize can POST
+# /report itself — resolution is launcher-owned (stacks.json; empty = unresolvable, finalize skips).
+REPORT_STACK="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+[ "$REPORT_STACK" = "null" ] && REPORT_STACK=""
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
@@ -776,6 +780,14 @@ ${DIND_CONTAINER}
         # Stats context for agent-finalize (project label + which node it ran on).
         - name: PROJECT
           value: "${PROJECT}"
+        # FU-095 P1 coverage: agent-finalize POSTs the run report to the router itself (the
+        # launcher's POST /report twin) — coordinator-path rides have no attending launcher, so
+        # without this their outcomes never reach the shadow-decision store. Stack resolution
+        # stays LAUNCHER-owned (the pod has no homelab checkout).
+        - name: AGENT_STACK
+          value: "${REPORT_STACK}"
+        - name: AGENT_REPORT_URL
+          value: "${PROXY_URL:+${PROXY_URL}/report}"
         - name: NODE_NAME
           valueFrom:
             fieldRef: { fieldPath: spec.nodeName }
