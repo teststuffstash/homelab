@@ -94,13 +94,13 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
-      auto-merged). Then finish the **snore-recorder** leg: move `snore-recorder/infra/ansible` +
-      compose into sleep-iac, wire the PostSync hook Job + ExternalSecret + nightly CronJob +
-      committed known_hosts + version pinning, and plant the deploy pubkey in the Pi's
-      `authorized_keys` via existing manual ansible access. ⚠ `SNORE_DEPLOY_SSH_KEY` needs the
-      arc-github-app `replace "\\n" "\n"` un-escape template. All shapes + their state:
-      `ROADMAP.md` → Programs in flight → "Deploy paths". Relates FU-097, FU-014 (archived),
-      ADR-084.
+      auto-merged). **snore-recorder leg BUILT 2026-08-02** (most of it had landed earlier via
+      sleep-iac#13-16 — hook, cron, ESO, known_hosts): the residue shipped as snore-recorder#15
+      (CalVer + deploy-pin.sh, `ci` script, `.agents/` recipes, dup ansible deleted) +
+      sleep-iac#57 (fixer block — snore is IN THE LOOP). **Remaining:** (1) operator:
+      `devbox run github-tofu apply` (deploy_repos += snore-recorder — committed, wallet is
+      host-side) then observe one real build → pin PR → Pi converge E2E; (2) the first half
+      (operator-chart + pod-image shapes). Relates FU-097, ADR-084.
 - [ ] **FU-125** — **Renovate silently REGRESSED to zero dependency PRs — while reporting success.**
       Real bumps flowed 2026-07-05/06 (FU-014's rollout evidence); measured 2026-08-01 (run #115)
       all 10 autodiscovered repos abort — 4 `integration-unauthorized` (incl. sleep-tracking, where
@@ -228,19 +228,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       can't manufacture in-progress work. Relates ADR-094 (coordinate dispatch / C4-C5 re-dispatch),
       FU-085 (doorbell), the meta-16 bounded-drain lesson.
 
-- [ ] **FU-123** — **In-pod `agent-finalize` arm-auto-merge fails systemically (`gh` not authed);
-      the launcher/reflex fallback masks it.** Verified 4/4 sleep workers 2026-07-31 — a REGRESSION
-      (archived FU-119a recorded in-pod arming "perfect 3/3"). Non-fatal today, but it defeats
-      FU-064/043 and hides a hard dependency: if the reflex breaker latches, PRs silently never arm.
-      Evidence: [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
-      **Mechanism CONFIRMED 2026-08-02 (5th failure, #96/PR#107):** the live pod env has
-      `GIT_CRED_BROKER_URL` (git credential-helper path — pushes work) but no `GH_TOKEN`, and gh's
-      error says exactly that; the FU-120 PATH sub-hypothesis is dead. **Fix in flight
-      (2026-08-02): agent-runtime#26** — `_fresh_gh_env` resolves broker → mount → env (the
-      entrypoint's agent-git-token order, SA-Bearer'd); armed auto-merge, then the CI deploy-pin
-      bumps `agents/images.env` on homelab. **Acceptance:** `armed_by_pod=true` on the first
-      post-pin ride's AGENT_RUN_STATS line.
-      Relates FU-120, FU-089, FU-064/043.
 
 - [ ] **FU-124** — **Give the PR updater a reliable in-cluster trigger — GitHub's `*/15` cron is the
       last PR's sole backstop and GitHub drops it.** Verified live: sleep-tracking#100 hung
@@ -314,15 +301,15 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       leg (c) goal-budget decomposition, and the `issueAuthoring.selfQueue` graduation knob.
       Relates FU-086/FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
-      issue → N researcher rides on N models → N un-armed `research/<goal>-<model-slug>` PRs →
-      operator compares and cherry-picks.** In-cluster, the FU-105 dispatch-on-goal shape (role
-      archived as built; this is its compare mode). Reference output = the nemotron-3-ultra jail
-      run in `/workspace/idp` (REPOSITORIES.md + specs tree + TARA-Test analysis, uncommitted).
-      Deltas: per-model branch AND pod-key scheme (today's `(task, round)` key collides on same
-      issue); goal-issue template must package context loop rides can't reach (private teststuff
-      spec doctrine → copy into the repo's specs/conventions.md); upstream-source egress per repo
-      (public GitHub clones already pass; e.g. web-eid.eu = extraFQDNs dial). First consumer:
-      idp-system specs. Relates FU-095, FU-090(c), archived FU-105.
+      issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares
+      and cherry-picks.** **Platform legs BUILT same day:** `agents/research-fanout.sh` (per-model
+      task keys `research-<n>-<slug>` — adhoc to the launcher, no strike/atomic-gate collisions;
+      per-ride ephemeral budget keys; `AGENT_WIP_LIMIT=N`) + model-slug branch rule in both
+      research recipes (oracle-fleet#166, sleep-tracking#110) + oracle research.yaml itself
+      (grow-mode port). **Remaining:** first consumer run (idp-system specs — needs the idp stack
+      bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
+      specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
+      output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

@@ -1806,3 +1806,29 @@ nightly stack-lint sweep + drift role exist for); snore-recorder context-only se
 (stale rationale, gated on FU-051's last leg). FU-070 softened to a lean (operator: "not a
 ruling — try copy-paste first"); the copy-paste method got its first rep TODAY (sleep-iac →
 oracle-iac recipes, worked cleanly).
+
+### 2026-08-02 (cont. 7) — overnight build-out lands; FU-123 RESOLVED on live acceptance
+**FU-123 archived — acceptance met on the machinery's own motion**: sleep #103's ride (r1-redux,
+15min, $0.0001, clean) ran the fixed agent-base and PR#109 arrived `armed_by_pod=true` +
+`stats_comment_by_pod=true` — the in-pod finalize armed its own PR with the broker token after
+six straight tokenless failures. Same window, the reviewer CHANGES_REQUESTED my snore#15
+(correctly — I deleted infra/ansible but left CLAUDE.md/README pointing at it, the exact
+half-done drift the PR claimed to fix) and the machinery dispatched the fix round itself: the
+FIRST snore-recorder worker ride, on the lane enabled ~20 minutes earlier. oracle-iac#97's
+first ride dispatched in parallel. Both freshly-enabled lanes exercising within the hour.
+
+**Shipped this stretch:** FU-051 built (snore#15 + sleep-iac#57 + tofu deploy_repos committed —
+operator wallet apply pending); role unification (oracle-fleet#166: build+research grow-mode
+port; review.yaml deliberately NOT ported — vestigial-suspect, drift-role judgment case);
+**FU-114 L3** (task class rides the dispatch unit from the task/* label, queued + c4c5 both;
+session brief: use it verbatim); **IAC-G07 pin-follow** (oracle-fleet#167: workflow image tags
+bump IN the chart-pin commit, `# pin-hold` opt-out for corpus-pairing skew); **FU-126 platform
+legs** (research-fanout.sh: per-model task keys + ephemeral keys + WIP override; branch-slug
+rule in both research recipes). **Chain-source drift CLASS fix**: #103's redispatch rode
+stale stacks.json laguna 2h after the claim moved to mimo — brief now reads the CLUSTER claim
+fresh per dispatch, file synced (two-homes bug; the drift-detector conversation found it in
+the wild same evening). Restored homelab-github-merge creds to the jail from Infisical (the
+\n-escape gotcha); org-admin wallet stays host-side by design — github-tofu apply is the one
+operator step. LESSON (circuit trip, 19:52): laguna's 400 wall was CONTEXT-DEPTH shaped — a
+fresh session sailed through the same issue; the breaker + kill + c4c5 redispatch chain
+recovered it end-to-end with $0 wasted spend.

@@ -8,6 +8,11 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-123** *(archived 2026-08-02)* — **In-pod agent-finalize arm-auto-merge ran tokenless since
+  FU-089** (6 consecutive un-armed PRs; mount deleted, gh had no GH_TOKEN). Fix: agent-runtime#26 —
+  `_fresh_gh_env` fetches broker→mount→env with the SA Bearer. **Acceptance met same day**:
+  sleep-tracking#109 (first ride on 2026.8.2-gfbb2b739f806) arrived `armed_by_pod=true` +
+  `stats_comment_by_pod=true`. Evidence: docs/incidents/2026-07-29-agent-finalize-bookkeeping.md.
 - **FU-109** *(archived 2026-08-02)* — **Subscription latch tiered by consumer weight — shipped
   as ADR-096 P2.** `/anthropic-limit?tier=dispatch|heavy` applies `model-classes.json`
   `tier_thresholds` composed as **max(per-window FU-088 threshold, tier)** — a ~30s dispatch unit
