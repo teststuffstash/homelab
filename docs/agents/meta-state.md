@@ -5,43 +5,21 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## Live world state (2026-08-02 ~20:35Z, overnight build-out session — operator asleep)
+## Live world state (2026-08-02 ~21:45Z — META STOOD DOWN, loop drained per operator directive)
 
-- **World ENABLED**, all cron/doorbell/review machinery green. Sleep chain = mimo-first (claim
-  + stacks.json both, after the chain-source drift fix — brief now reads the CLUSTER claim).
-- **In flight, machinery-owned (verify on wake-ups):** sleep #109 (fix for #103, arrived
-  `armed_by_pod=true` — FU-123 acceptance MET, archived) + #110 (recipe rule) both armed →
-  merges + #103's C6 flip to verify. snore-recorder#15 fix round = the FIRST snore worker ride
-  (reviewer correctly caught my stale CLAUDE.md/README pointers). oracle-iac#97 = the FIRST
-  oracle-iac ride (probe armed). oracle-fleet#166 (build+research port) + #167 (G07
-  pin-follow) armed. sleep-iac#57 merged (snore fixer live, render verified).
-  **#105 dispatches next WIP-free tick = the FIRST mimo ride** (watch its estimator + pin).
-- **OPERATOR STEP PENDING:** `devbox run github-tofu apply` (deploy_repos += snore-recorder;
-  committed; org-admin wallet is host-side). Until then snore's deploy-pin job fails
-  loud-but-harmless. Also pending: mimo `model_tiers` entry at the next proxy-roll window;
-  soak watch on `router_request_deadline_exceeded_total` (stay 0 on healthy rides).
-- ✅ homelab#22 CLOSED (proxy deadline/gauge/generation_ms/activeDeadlineSeconds live).
-  ✅ oracle-iac fixer lane LIVE (#262 + ns render). ✅ FU-114 L3 (task class in dispatch
-  units). ✅ IAC-G07 (pin-follow rides the bump commit, pin-hold opt-out). ✅ FU-126 platform
-  legs (research-fanout.sh + branch-slug rules). ✅ FU-051 built (wallet apply = the residue).
-
-## Standing / parked (compressed — detail in TICK-LOG or the FU)
-
-- ⚠ **IAC-G01 exposure widens** with the two new fixer lanes (oracle-iac + snore) — G04
-  sentinel is the next -iac priority (iac-lane.md build order + reprioritization note).
-- **review.yaml on sleep-tracking = vestigial-suspect** (pre-subscription goose reviewer;
-  deliberately NOT ported to oracle) — drift-role judgment case, decide keep/delete.
-- Open session FUs: **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater
-  backstop; watch clause: armed PR BEHIND >15min).
-
-- **FU-117** (context architecture) — DELIBERATE let-it-pile-up (operator's grow-then-refactor).
-  Note sightings; don't refactor yet.
-- **Dependencies (FU-111, 2026-08-02)**: create the NATIVE blockedBy edge when authoring
-  (+ keep the unbulleted `Depends-on:` line as the transition belt — the scan unions both);
-  retire body lines once App-token edges are seen live.
-- Worker git tokens CAN push `.github/workflows/*` (homelab-agents App has `workflows:write`, proven
-  PR#80). Workflow-only issues ARE worker-doable. Branch-protection RULE edits stay repo-admin/tofu.
-- **FU-058 retro-session** deployed SUSPENDED (hand-fire). **Oracle/UC-1** operator-paced (its lane).
+- **Loop DRAINED + healthy**: sleep #103/#105 merged+done (mimo's first ride: 13min, ≈7× faster
+  than laguna); oracle-iac#97→#265 merged (new lane's first ride, clean). Remaining open =
+  operator-triage sprouts (#104/#16, fleet#160) + unqueued backlog (fleet#109/#84).
+- **In flight, MACHINERY-owned (no babysitting needed):** snore-recorder#15 (re-review after
+  the review-fix push), oracle-fleet#166 (role port), agent-runtime#27 (/report twin — its
+  deploy-pin bumps homelab agents/images.env on merge). All armed.
+- **OPERATOR DECISIONS/ACTIONS pending:** (1) ⚠ **storage bulk tier at 121%** (181/150Gi —
+  `devbox run storage-ledger`; shrink ert-snapshots/loki caps vs grow the PVC); (2) FU-108 PAT
+  re-mint (click-only, bootstrap script has the recipe); (3) FU-106 G05-rung-0 ⚖ (what does the
+  PostSync smoke curl on a CronJob app?); (4) FU-086 knobs 3 (WIP>1 — wants your appetite) + 4
+  (janitor-tick cron — under-specified); (5) mimo model_tiers entry at the next proxy-roll
+  window; (6) soak: `router_request_deadline_exceeded_total` should stay 0.
+- The Agents-FU sweep record: TICK-LOG cont. 8 (8 closed / 4 advanced / skips with reasons).
 
 ## Re-arm on a fresh session (watches die with `/clear`)
 
