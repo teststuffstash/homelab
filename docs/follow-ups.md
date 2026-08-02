@@ -235,10 +235,11 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       Evidence: [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
       **Mechanism CONFIRMED 2026-08-02 (5th failure, #96/PR#107):** the live pod env has
       `GIT_CRED_BROKER_URL` (git credential-helper path — pushes work) but no `GH_TOKEN`, and gh's
-      error says exactly that; the FU-120 PATH sub-hypothesis is dead. **Next:** agent-finalize
-      (agent-runtime image) fetches a broker token itself (`GET /git-token`, as the helper does)
-      and exports `GH_TOKEN` before its gh section. **Acceptance:** `armed_by_pod=true` on the
-      AGENT_RUN_STATS line.
+      error says exactly that; the FU-120 PATH sub-hypothesis is dead. **Fix in flight
+      (2026-08-02): agent-runtime#26** — `_fresh_gh_env` resolves broker → mount → env (the
+      entrypoint's agent-git-token order, SA-Bearer'd); armed auto-merge, then the CI deploy-pin
+      bumps `agents/images.env` on homelab. **Acceptance:** `armed_by_pod=true` on the first
+      post-pin ride's AGENT_RUN_STATS line.
       Relates FU-120, FU-089, FU-064/043.
 
 - [ ] **FU-124** — **Give the PR updater a reliable in-cluster trigger — GitHub's `*/15` cron is the

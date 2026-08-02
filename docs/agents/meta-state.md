@@ -53,9 +53,11 @@ meant to avoid.)
 
 ## Standing / parked (compressed — detail in TICK-LOG or the FU)
 
-- Open session FUs: **FU-123** (in-pod arm-auto-merge fails, hypothesis needs an agent-finalize
-  read) + **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater backstop; watch
-  clause: armed PR BEHIND >15min).
+- **⏳ FU-123 fix chain: agent-runtime#26** (finalize fetches broker token; armed, CI+review
+  pending — expect merge by ~18:45Z, then image build + a CI-opened `agents/images.env` bump PR
+  ON HOMELAB to merge). Acceptance: `armed_by_pod=true` on the first post-pin ride.
+- Open session FUs: **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater
+  backstop; watch clause: armed PR BEHIND >15min).
 
 - **FU-117** (context architecture) — DELIBERATE let-it-pile-up (operator's grow-then-refactor).
   Note sightings; don't refactor yet.
