@@ -50,6 +50,16 @@ meant to avoid.)
 - **⏳ FU-123 fix DEPLOYED** (agent-runtime#26 merged + pin homelab#75 auto-merged; #103's ride
   runs the fixed image). ACCEPTANCE PENDING: `armed_by_pod=true` on #103's AGENT_RUN_STATS
   line (PR expected ~19:5x, laguna rides ≈80-100min) → then archive FU-123.
+- ✅ **oracle-iac FIXER LANE LIVE** (2026-08-02 ~19:41Z): ns precreated (homelab), claim fixer
+  block + recipes merged (oracle-iac#262), Composition render VERIFIED (SAs + 3 secrets + CNP
+  in ns oracle-iac). oracle-iac#97 is now dispatchable — operator to queue (offered), or I
+  queue on their word. ⚠ IAC-G01 exposure widens with fixer volume — G04 sentinel priority up.
+- **Drift findings (operator interactive session 2026-08-02):** oracle-fleet/.agents lacks
+  build.yaml + research.yaml (sleep-only — FU-114/FU-105 never ported back); port OFFERED,
+  awaiting operator. snore-recorder = context-only SEMI-deliberately (claim rationale partially
+  stale; flip only after FU-051's remaining leg). FU-126 filed (multi-model spec fan-out,
+  idp-system first consumer); iac-lane.md gained IAC-G07 pin-follow + data_roll classes + the
+  greenfield-bootstrap seam note.
 - Open session FUs: **FU-124** (last-open-PR BEHIND → unreliable cron is the sole updater
   backstop; watch clause: armed PR BEHIND >15min).
 

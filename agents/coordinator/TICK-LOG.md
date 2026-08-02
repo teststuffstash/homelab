@@ -1784,3 +1784,25 @@ held by a slow session did NOT stall the loop. Also banked: operator green-lit t
 jail-as-bootstrap-lane direction discussion (spec-seeder + copy-from-freshest as jail skills,
 twice-rule graduation, credential-mount convention) — assessment given, artifacts not yet
 filed; FU-070 needs the copy-from-freshest rewrite when adopted.
+
+### 2026-08-02 (cont. 6) — operator design session: jail-lane, spec fan-out, -iac audit, oracle-iac fixer LIVE
+Interactive arc (operator driving design questions between rides). Landed: **FU-126** (multi-model
+spec-writer fan-out — same goal, N models, N un-armed research/* branches, compare/cherry-pick;
+the nemotron idp jail run is the reference shape; deltas = per-model dispatch key, context
+packaging, extraFQDNs); **-iac directive** (steady-state -iac work = the STACK's lane, jail =
+bootstrap only — FU-106 extended, meta-coordinate skill lane rewritten); **iac-lane commit-history
+audit** → two unnamed classes added (IAC-G07 pin-follow: 7/120 oracle-iac human commits, pure
+mechanical, no LLM needed — the biggest win; data_roll: corpus rolls) + the greenfield-wrapper
+bootstrap seam named (matrix assumes an existing wrapper; first build = donor copy + schema
+required-list + operator judgment slots). Evolution case confirmed designed+built (red bump →
+infra-enrich → same-PR enrichment, atomic).
+
+**oracle-iac fixer lane ENABLED and LIVE same session** (the FU-106 twin): ns precreated
+(oracle-namespaces.yaml), claim fixer block + donor-adapted recipes (oracle-iac#262, merged
+19:34Z through the machinery), Composition render verified 6min post-merge (SAs, 3 secrets,
+egress CNP monitor-mode). oracle-iac#97 now has a lane. Drift found by hand: oracle-fleet lacks
+build.yaml/research.yaml (sleep-only recipes — the exact ignorance-drift class the planned
+nightly stack-lint sweep + drift role exist for); snore-recorder context-only semi-deliberate
+(stale rationale, gated on FU-051's last leg). FU-070 softened to a lean (operator: "not a
+ruling — try copy-paste first"); the copy-paste method got its first rep TODAY (sleep-iac →
+oracle-iac recipes, worked cleanly).
