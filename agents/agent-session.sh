@@ -748,6 +748,14 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
+        # 2026-08-02, third phone-home path: the /usr/local/bin/devbox LAUNCHER (jetify's wrapper
+        # script) ignores all of the above — without DEVBOX_USE_VERSION it re-downloads
+        # releases.jetify.com/devbox/stable/version whenever ~/.cache/devbox/current-version is
+        # older than VERSION_CACHE_TTL (24h default; the devbox-cache PVC keeps the file, so it
+        # goes stale between image builds and EVERY ride's first devbox call phones home). A year
+        # of TTL pins the launcher to the cached version without hardcoding it here.
+        - name: VERSION_CACHE_TTL
+          value: "31536000"
         # FU-118(b): `devbox add` resolves through the in-cluster search proxy (VIP, kata-reachable
         # like the other package proxies) instead of the WAN — so a mid-ride add gets a REAL store
         # path in devbox.lock, not the offline `placeholder-*` that boot-crashes the next round.
