@@ -206,7 +206,9 @@ ruling plus a drift belt:
 - **Home Assistant** — `homeassistant/` applied imperatively.
 - **Matchbox** — `ansible/matchbox*.yml`, same manual-apply gap as OPNsense.
 - **`tofu/` roots** — plan/apply from the jail is the **deliberate human gate** (keep), but nothing
-  detects live-vs-state drift between applies. A `tofu plan` cron → alert is the candidate.
+  detects live-vs-state drift between applies. A `tofu plan` cron → alert is the candidate —
+  prerequisite FU-012 (state is local in the jail today). The roots differ in owner/credential/blast
+  radius and need per-root rulings: `docs/dependency-upgrades.md` §"'Tofu' is not one class".
 
 First deliverable is a per-surface ruling table (automate / human-applied + belt), then implement
 the automated ones one surface at a time. ADR-093 makes Argo the candidate runner for the ansible

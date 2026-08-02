@@ -17,6 +17,7 @@
 #   lines with zero remaining work because nobody re-read it.
 # - NO-BACKLINK: a pointer's target doc never mentions the id, so the two halves can drift
 #   apart silently.
+# - UNARCHIVED: a checked `- [x]` item still in the tracker — resolution = archive, not tick.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
@@ -49,14 +50,25 @@ for id in $referenced; do
 done
 
 # Per-item checks. awk splits the tracker into open-item blocks and emits "<id>|<lines>|<body>".
+# An item = its header line + indented continuation lines ONLY. Anything else (blank line,
+# section header, prose, a checked item) ends it — without that, the last item of every section
+# absorbed the following "## Header" into its line count and body.
 items=$(awk '
   /^- \[ \] \*\*FU-[0-9][0-9][0-9]\*\*/ {
     if (id != "") print id "|" n "|" body
-    match($0, /FU-[0-9][0-9][0-9]/); id = substr($0, RSTART, RLENGTH); n = 0; body = ""
+    match($0, /FU-[0-9][0-9][0-9]/); id = substr($0, RSTART, RLENGTH); n = 0; body = $0
+    n = 1; next
   }
-  id != "" { n++; body = body " " $0 }
+  id != "" && /^      / { n++; body = body " " $0; next }
+  id != "" { print id "|" n "|" body; id = "" }
   END { if (id != "") print id "|" n "|" body }
 ' "$TRACKER")
+
+# A checked-off item still sitting in the tracker: resolution means ARCHIVING in the same commit,
+# not ticking the box (see Conventions).
+grep -n '^- \[x\]' "$TRACKER" | while IFS=: read -r ln rest; do
+  echo "UNARCHIVED line $ln — a checked item in the tracker: move it to $ARCHIVE ($(printf '%s' "$rest" | grep -o 'FU-[0-9][0-9][0-9]' | head -1))"
+done
 
 # Markers that mean "this leg finished" — history, not deferred work.
 DONE_RE='✅|\*\*DONE|\*\*SHIPPED|\*\*FIXED|\*\*DELIVERED|\*\*BUILT|\*\*VERIFIED|\*\*VALIDATED'
@@ -73,7 +85,9 @@ printf '%s\n' "$items" | while IFS='|' read -r id n body; do
   fi
 
   # Relative markdown links out of the tracker: verify the target exists and backlinks the id.
-  printf '%s' "$body" | grep -oE '\]\([a-zA-Z0-9._/-]+\.md\)' | tr -d ']()' | sort -u |
+  # Anchored links (foo.md#section) count too — the anchor is stripped before the file check.
+  printf '%s' "$body" | grep -oE '\]\([a-zA-Z0-9._/-]+\.md(#[A-Za-z0-9_-]+)?\)' |
+    sed -e 's/^](//' -e 's/)$//' -e 's/#.*$//' | sort -u |
   while read -r rel; do
     [ -n "$rel" ] || continue
     target="docs/$rel"

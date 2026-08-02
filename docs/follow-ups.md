@@ -33,7 +33,9 @@ tracker.
   gotcha — a few lines) with an *(archived YYYY-MM-DD)* stamp. References elsewhere stay legal
   while the id is archived; when the entry expires out of the archive (≈a month, once stable),
   delete it and scrub remaining references in living code/docs — TICK-LOG/ADR/incident references
-  are historical and exempt. `devbox run follow-ups-lint` checks all of this.
+  are historical and exempt. **Scrubbing a pointer item's id = repointing, not deleting**: the
+  code/doc comment loses the `FU-NNN` but gains a link to the doc that survived, so the trail
+  doesn't go cold. `devbox run follow-ups-lint` checks all of this.
   **Check for this actively:** FU-080 sat open at 91 lines with zero remaining work because its
   last leg was archived under a different id. A long item is a good place to look for a done one.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump
@@ -44,8 +46,8 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-01 (pointer-discipline pass: 1033 → ~460 lines, no information lost — detail
-moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.md`)._
+_Last updated: 2026-08-02 (pointer-discipline pass: 1033 → 433 lines, no information lost — detail
+moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.md`; lint now in `ci`)._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -99,22 +101,25 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       arc-github-app `replace "\\n" "\n"` un-escape template. All shapes + their state:
       `ROADMAP.md` → Programs in flight → "Deploy paths". Relates FU-097, FU-014 (archived),
       ADR-084.
-- [ ] **FU-125** — **Renovate has never opened a dependency PR in ANY repo — and reports success.**
-      Measured 2026-08-01 (run #115): all 10 autodiscovered repos abort — 4 `integration-unauthorized`
-      (sleep-tracking, snore-recorder, oracle-fleet, oracle-iac), 6 `repository-changed` — after
-      extracting deps fine. 115 green runs, zero PRs, no Dependency Dashboard, and
-      `renovate/pin-dependencies` (the Actions SHA-pinning, the Trivy mitigation) orphaned since
-      07-27 with no PR. Same silent-success class as FU-108/FU-113. Evidence + the full inventory:
+- [ ] **FU-125** — **Renovate silently REGRESSED to zero dependency PRs — while reporting success.**
+      Real bumps flowed 2026-07-05/06 (FU-014's rollout evidence); measured 2026-08-01 (run #115)
+      all 10 autodiscovered repos abort — 4 `integration-unauthorized` (incl. sleep-tracking, where
+      writes worked on 07-05), 6 `repository-changed`. 115 green runs, zero PRs, no Dependency
+      Dashboard, `renovate/pin-dependencies` (Actions SHA-pinning) orphaned since 07-27. Same
+      silent-success class as FU-108/FU-113. Evidence + inventory:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Ground truth".
-      **Next:** fix the App permissions (out-of-jail), then a liveness signal so the next stall is
-      loud. Also drop the invalid `vulnerabilityAlerts.prPriority` and fix/remove the dead
-      `NIX_VERSION` manager. Relates FU-014 (archived), FU-046, FU-097, FU-016.
+      **Next:** diff the App's permissions/installations against 07-06 (out-of-jail), then a
+      liveness signal so the next stall is loud; drop the invalid `vulnerabilityAlerts.prPriority`
+      + the dead `NIX_VERSION` manager. Relates FU-014 (archived), FU-046, FU-097, FU-016.
 - [ ] **FU-097** — **Write the per-surface ruling table for the surfaces ArgoCD/tofu don't
       reconcile** (OPNsense, Proxmox host, Home Assistant, Matchbox, `tofu/` roots): automate, or
       human-applied + a named drift belt. That table is the first deliverable; then implement the
       automated ones one surface at a time. Surfaces + candidate shapes:
-      `ROADMAP.md` → Programs in flight → "Deploy paths". Relates FU-051, ADR-093 (Argo as the
-      candidate runner for the ansible Jobs).
+      `ROADMAP.md` → Programs in flight → "Deploy paths"; per-root tofu split + the runner
+      dependency-cone rule: [`docs/dependency-upgrades.md`](dependency-upgrades.md); the no-human
+      end-state (what stays human-gated and why):
+      [`docs/spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
+      Relates FU-051, FU-012, ADR-093 (Argo as the candidate runner for the ansible Jobs).
 - [ ] **FU-052** — **Onboard the remaining three app repos** — snore-recorder, agent-runtime,
       agent-coordinator (sleep-tracking + openrouter-operator are done). What a repo needs, and
       what's already collapsed into the AgentStack claim: `ROADMAP.md` → Programs in flight →

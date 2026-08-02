@@ -23,7 +23,14 @@ Measured 2026-08-01 from run #115 of `.github/workflows/renovate.yaml` (job logs
 PR/branch/issue history. **This section is evidence, not design** — the design below exists because
 of it.
 
-**Renovate has never opened a single dependency PR in homelab.**
+**Renovate has never opened a single dependency PR in homelab — and org-wide this is a
+REGRESSION, not a never-worked.** FU-014's rollout evidence (archived 2026-07-12; preserved here
+because that archive entry expires ~2026-08-16) records real bumps flowing on 2026-07-05/06: a
+sleep-tracking docker-digest PR that produced a sleep-iac deploy PR 8 minutes later, plus
+devbox-update bumps. sleep-tracking is now one of the four `integration-unauthorized` repos. So
+the write path **worked** and then broke somewhere in the 2026-07-06 → 08-01 window — the FU-125
+diagnosis should start from *what changed* (App key rotation, permission edit, installation
+scope), not from scratch.
 
 | Observation | Evidence |
 |---|---|
@@ -56,11 +63,12 @@ one that fails**, because it buys false confidence in a supply-chain control tha
 compromise. The cooldown, the SHA-pinning and the OSV alerts are all real policy — and none of them
 have been *applied* to homelab.
 
-**The `integration-unauthorized` half needs an App-permission check** (Renovate reads fine, then
-fails on write). **The `repository-changed` half is a race** — Renovate re-checks the base SHA and
-aborts if it moved mid-run; six repos hitting it in one pass suggests the ~6h schedule is colliding
-with the loop's own push traffic rather than genuine coincidence. Neither is diagnosed here; both
-are stated as observed with the evidence attached.
+**The `integration-unauthorized` half is the regression** — Renovate reads fine, then fails on
+write, on repos where writes demonstrably worked on 2026-07-05/06; diff the App's permissions and
+installations against that date. **The `repository-changed` half is a race** — Renovate re-checks
+the base SHA and aborts if it moved mid-run; six repos hitting it in one pass suggests the ~6h
+schedule is colliding with the loop's own push traffic rather than genuine coincidence. Neither is
+diagnosed here; both are stated as observed with the evidence attached.
 
 > **Acceptance for "Renovate works in homelab":** a Dependency Dashboard issue exists, and at least
 > one `renovate/*` PR has been opened, gated and merged. Until then, treat every claim about
@@ -98,6 +106,36 @@ deployment?" has a different answer per class, because homelab runs **three reco
 have a deliberate human gate that should stay but has **no drift detection** between applies. Class
 6 is a node rollout that must never be automated. Classes 7 and 9 are outside Renovate entirely, and
 **9 is the one that silently does nothing** — a merged OPNsense change sits until a human remembers.
+
+### "Tofu" is not one class — the five roots differ in owner, credential and blast radius
+
+Rows 4–6 above lump five state roots that need different rulings:
+
+| Root | Credential | Ruling |
+|---|---|---|
+| `tofu/github` | org-admin PAT, **deliberately outside the jail** | **Operator-only.** Nothing automated can even `init` — the "plan-report path rule" is impossible here by standing decision, and should stay so |
+| `tofu/cloudflare` | scoped CF token, in jail | Low blast radius (one zone; a bad apply hurts `ha.teststuff.net`, not the updater). Automatable plan, arguably apply |
+| `tofu/infisical` | Infisical creds | Slated to leave tofu for ESO/Crossplane — don't invest automation here |
+| `tofu/provisioning` | PVE token | PXE content is **inert until the next netboot** — the safest root to automate |
+| `tofu/` (main) | PVE token + talosconfig + kubeconfig + KeePass env | **Mixed**: benign helm releases and dashboards next to VM definitions, Talos configs and Cilium — see the ArgoCD lever below |
+
+Two consequences the table above glosses over:
+
+- **Any automated `tofu plan` has a hard prerequisite: FU-012.** Every root's state is local and
+  gitignored **in the jail** — no in-cluster or CI process can plan *at all* until state moves to a
+  remote backend (or to wherever the automation runs).
+- **The main root's lump is reducible: migrate its helm releases to ArgoCD.** Moving
+  kube-prometheus-stack, metrics-server, forgejo(+runner) and garage from `helm_release` to
+  `argocd/platform/` Applications converts them class 4 → class 1: the path→deploy edge exists
+  natively, ArgoCD OutOfSync **is** the drift belt (no plan cron, no FU-012 dependency, no tofu
+  creds anywhere), the FU-044 revert extension covers them, and Renovate targets plain YAML
+  `targetRevision`s instead of terraform lockfiles. What stays in tofu — Proxmox/Talos/VMs, Cilium
+  (day-0 bootstrap, needed before ArgoCD runs), image factory — is then *exactly* the substrate
+  that keeps the human gate, which makes "tofu = human-applied" a coherent rule instead of a lump.
+  This is a candidate **ruling** for the FU-097 table, and it is *consistent with* ADR-005's
+  governing rule ("anything ArgoCD needs in order to run cannot be ArgoCD-managed") — none of the
+  four charts above are things ArgoCD needs. Longhorn IS in ADR-005's substrate list, so moving it
+  (even as a manual-sync app) would be an ADR-005 addendum, not a quiet migration.
 
 ---
 
@@ -153,7 +191,6 @@ What `devbox run ci` gates on a homelab PR today:
 - **No `helm template | kubeconform`** for class 2 (raw manifests in `argocd/resources/*`);
   `argocd-validate-pins` covers OCI charts, not the hand-written YAML next to them.
 - **No policy-as-code** for the platform invariants above.
-- **`follow-ups-lint` is not in `ci`** — it exists and passes, but nothing enforces it on a PR.
 
 ### 4. Rollout
 
@@ -168,12 +205,29 @@ This is where the three regimes diverge and where the design work is:
   Extending that trigger to homelab's own ArgoCD apps is the concrete next step.
 - **Tofu classes (4, 5)** — keep the human gate. Add the belt FU-097 asks for: a **`tofu plan` cron
   → alert on non-empty diff**, so "merged but not applied" and "live drifted from state" both become
-  visible instead of silent.
+  visible instead of silent. **Prerequisite: FU-012** — state is local + gitignored in the jail, so
+  today there is nowhere else that cron *can* run. (Or shrink the class instead: the ArgoCD lever
+  above removes the need for the belt on everything it migrates.)
 - **Substrate (6)** — a deliberate, staged node rollout: one metal node first, `talosctl health`,
   Longhorn rebuild-complete, then the rest. Never a nocloud VM in place (ADR-014).
 - **Unreconciled (9)** — the FU-097 first deliverable. The candidate shape is already precedented:
   an **in-cluster ansible Job** (ArgoCD PostSync or CronWorkflow, creds via ESO), with a nightly
-  `--check` diff → alert as the minimum belt even if apply stays manual.
+  `--check` diff → alert as the minimum belt even if apply stays manual. ⚠ For **OPNsense**
+  specifically the in-cluster Job sits *inside its own blast radius* — see the cone rule below.
+
+**Where the runner sits — the dependency-cone rule.** Belts are read-only (`--check`, `plan`,
+drift alerts) and safe to automate anywhere, including in-cluster. **Applies are only safe to
+automate from a runner outside the change's dependency cone, or with an out-of-band deadman.**
+Concretely: an in-cluster `tofu apply` touching Cilium, ArgoCD, Longhorn or the VM definitions can
+sever its own pod's network/storage/node mid-apply — with local state that also means a locked or
+half-written state file. An in-cluster ansible Job pushing OPNsense config changes the router that
+carries the Job's own network path: a bad apply cuts both the connection *and* every rollback path,
+and ArgoCD can't even report the failure anywhere reachable. The commit-confirm shape fixes the
+latter: schedule a config restore on the target *before* applying, cancel it only when the
+post-apply health probe passes. Matchbox, in the same ansible class, has a near-zero cone (nothing
+depends on it until the next PXE boot) — another reason class 9 is not one class. The full
+no-human end-state analysis (HA router pair, management network, out-of-band coordinator, what
+remains genuinely human): [`spikes/no-human-in-the-loop.md`](spikes/no-human-in-the-loop.md).
 
 ### 5. Monitoring
 
@@ -197,15 +251,16 @@ and then nothing is watching.
 
 ## Next steps, in dependency order
 
-1. **Make Renovate actually run here** — fix the `integration-unauthorized` App permissions, decide
-   whether the ~6h schedule is racing the loop's push traffic, drop the invalid
-   `vulnerabilityAlerts.prPriority`, and either fix or remove the `NIX_VERSION` custom manager. Then
+1. **Make Renovate actually run again** — diff the `homelab-renovate` App's permissions and
+   installations against 2026-07-06, when writes last demonstrably worked (the regression framing
+   above); decide whether the ~6h schedule is racing the loop's push traffic; drop the invalid
+   `vulnerabilityAlerts.prPriority`; and either fix or remove the `NIX_VERSION` custom manager. Then
    land the orphaned `renovate/pin-dependencies` branch — SHA-pinning the Actions is the single
    highest-value security item on this page.
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a dashboard-issue-exists
    check, or a `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix.
-3. **Close the CI gaps** — `tofu validate`/`fmt`, `kubeconform` over `argocd/resources/*`,
-   `follow-ups-lint` in `ci`.
+3. **Close the CI gaps** — `tofu validate`/`fmt`, `kubeconform` over `argocd/resources/*`
+   (`follow-ups-lint` joined `ci` with this doc).
 4. **Extend the FU-044 deterministic revert** from `-iac` deploy bumps to homelab's own ArgoCD apps.
 5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
    change reaches a *live network device* by hand or not at all.
