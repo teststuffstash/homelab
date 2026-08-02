@@ -232,10 +232,13 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       the launcher/reflex fallback masks it.** Verified 4/4 sleep workers 2026-07-31 — a REGRESSION
       (archived FU-119a recorded in-pod arming "perfect 3/3"). Non-fatal today, but it defeats
       FU-064/043 and hides a hard dependency: if the reflex breaker latches, PRs silently never arm.
-      Evidence + the (unconfirmed) broker-token/PATH hypothesis:
-      [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
-      **Next:** confirm whether the pod exports `GH_TOKEN`/persists `gh auth` for finalize, and whether
-      pre-FU-120 workers armed in-pod. **Acceptance:** `armed_by_pod=true` on the AGENT_RUN_STATS line.
+      Evidence: [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
+      **Mechanism CONFIRMED 2026-08-02 (5th failure, #96/PR#107):** the live pod env has
+      `GIT_CRED_BROKER_URL` (git credential-helper path — pushes work) but no `GH_TOKEN`, and gh's
+      error says exactly that; the FU-120 PATH sub-hypothesis is dead. **Next:** agent-finalize
+      (agent-runtime image) fetches a broker token itself (`GET /git-token`, as the helper does)
+      and exports `GH_TOKEN` before its gh section. **Acceptance:** `armed_by_pod=true` on the
+      AGENT_RUN_STATS line.
       Relates FU-120, FU-089, FU-064/043.
 
 - [ ] **FU-124** — **Give the PR updater a reliable in-cluster trigger — GitHub's `*/15` cron is the
