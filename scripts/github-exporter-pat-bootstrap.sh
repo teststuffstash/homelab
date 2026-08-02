@@ -59,6 +59,10 @@ cmd_create() {
   Repository access: All repositories
   Permissions:
     Repository -> Actions: Read-only         (Metadata: Read-only is added automatically)
+    Repository -> Pull requests: Read-only   (the open-PR GraphQL walk — reviewDecision etc.)
+    Repository -> Issues: Read-only          (FU-108: agent-label queue-liveness counts ride the
+                                              same walk; without this, PRIVATE repos' issues field
+                                              is FORBIDDEN and their series stay absent)
     Organization -> Administration: Read-only  (billing 403s "not accessible" without it; Plan is NOT it)
 
   Then:  scripts/github-exporter-pat-bootstrap.sh secrets

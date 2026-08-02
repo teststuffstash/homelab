@@ -405,6 +405,10 @@ query($org:String!, $cursor:String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         name
+        agentIssues: issues(states:OPEN, first:50,
+                            labels:["agent/queued","agent/in-progress","agent/blocked","agent/error"]) {
+          nodes { labels(first:10){ nodes { name } } }
+        }
         pullRequests(states:OPEN, first:40) {
           nodes {
             number isDraft updatedAt reviewDecision baseRefName headRefName
@@ -450,12 +454,24 @@ def collect_open_prs(lines):
         "# HELP github_pull_request_reviews_recent APPROVED/CHANGES_REQUESTED reviews per author in the trailing hour — a healthy worker↔reviewer iteration tops ~3, a dispatch loop runs 8+.",
     ]
     cursor = None
+    _AGENT_ISSUE_COUNTS.clear()
     for _ in range(10):  # hard page cap
         data = graphql(_PR_QUERY, {"org": ORG, "cursor": cursor})
         repos = data["organization"]["repositories"]
         for repo in repos["nodes"] or []:
             if not repo:
                 continue
+            # FU-108: per-repo agent-label counts ride THIS walk (the REST Search API silently
+            # omits private repos under the fine-grained PAT — github_agent_issue_labels had
+            # never emitted for oracle-fleet/sleep-tracking; same silent-success class as FU-063).
+            for iss in (repo.get("agentIssues") or {}).get("nodes") or []:
+                if not iss:
+                    continue
+                for lb in (iss.get("labels") or {}).get("nodes") or []:
+                    lname = (lb or {}).get("name") or ""
+                    if lname.startswith("agent/"):
+                        key = (repo["name"], lname)
+                        _AGENT_ISSUE_COUNTS[key] = _AGENT_ISSUE_COUNTS.get(key, 0) + 1
             for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
                 if not pr:
                     continue
@@ -562,26 +578,24 @@ def collect_open_prs(lines):
 
 
 
+_AGENT_ISSUE_COUNTS = {}  # (repo, label) -> n; filled by collect_open_prs' GraphQL walk (FU-108)
+
+
 def collect_agent_issues(lines):
     """FU-091 queue-liveness: per-repo counts of the agent state labels, so "queued work + idle
-    loop" is a Prometheus fact instead of tick-log prose (the 2026-07-18→21 three-day stall: a
-    zombie pod wedged WIP while every scan reported it into unread logs — nothing paged). One
-    REST search per label per poll (4 calls; the Search API's 30/min ceiling is untouched at the
-    120s cadence)."""
+    loop" is a Prometheus fact instead of tick-log prose (the 2026-07-18→21 three-day stall).
+    FU-108: counts come from the collect_open_prs GraphQL walk (agentIssues on each repo node —
+    0 extra API calls); the REST Search API was dropped because it SILENTLY omits private-repo
+    results under the fine-grained PAT (30d of series proved oracle-fleet/sleep-tracking never
+    emitted — AgentQueueStalled only ever watched public repos). Runs after collect_open_prs in
+    the collectors tuple; if that walk failed this poll, the dict is stale-empty and no series
+    emit (absent ≠ zero — honest, same rule as the subscription gauges)."""
     lines += [
         "# TYPE github_agent_issue_labels gauge",
-        "# HELP github_agent_issue_labels Open issues per repo carrying each agent state label.",
+        "# HELP github_agent_issue_labels Open issues per repo carrying each agent state label (source: the PR GraphQL walk, FU-108).",
     ]
-    from urllib.parse import quote
-    for label in ("agent/queued", "agent/in-progress", "agent/blocked", "agent/error"):
-        data = gh(f"/search/issues?q=org:{ORG}+label:%22{quote(label)}%22+state:open+type:issue&per_page=100")
-        counts = {}
-        for item in data.get("items") or []:
-            repo = (item.get("repository_url") or "").rsplit("/", 1)[-1]
-            if repo:
-                counts[repo] = counts.get(repo, 0) + 1
-        for repo, n in sorted(counts.items()):
-            lines.append(metric("github_agent_issue_labels", {"owner": ORG, "repo": repo, "label": label}, n))
+    for (repo, label), n in sorted(_AGENT_ISSUE_COUNTS.items()):
+        lines.append(metric("github_agent_issue_labels", {"owner": ORG, "repo": repo, "label": label}, n))
 
 
 def _app_jwt(app_id, key_path):

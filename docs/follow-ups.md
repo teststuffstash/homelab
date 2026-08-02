@@ -141,15 +141,16 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 ## Agents
 
 
-- [ ] **FU-108** — **Replace the exporter's Search-API call — the queue-liveness gauge is blind
-      to private repos.** `collect_agent_issues()` uses `/search/issues`, and the REST Search API
-      **silently omits private-repo results** under the fine-grained PAT: no error, `errors_total`
-      untouched, poll reports "fully successful". 30d history confirms `github_agent_issue_labels`
-      has NEVER emitted a series for oracle-fleet or sleep-tracking, so `AgentQueueStalled` has
-      only ever watched the public repos. **Fix:** drop search; count `agent/*` labels from a
-      per-repo source the PAT already reads — cheapest is `labels(first:…)` on the existing GraphQL
-      walk (0 extra calls), else per-repo REST (~10 calls/poll). **Verify:** private-repo counts
-      appear within one poll. Same class as FU-063 (archived). Relates FU-091.
+- [ ] **FU-108** — **Exporter queue-liveness private-repo fix: CODE SHIPPED 2026-08-02, PAT
+      re-mint pending.** `collect_agent_issues` now counts `agent/*` labels from the existing
+      PR GraphQL walk (`agentIssues` per repo node, 0 extra calls); the silently-private-blind
+      REST Search call is gone. **Verified live: the current PAT lacks Issues:read** — private
+      repos answer FORBIDDEN (public series keep parity; absent ≠ zero stays honest).
+      **Remaining (operator, click-only):** re-mint the PAT per the updated
+      `scripts/github-exporter-pat-bootstrap.sh` (adds Issues:read + records the already-live
+      Pull requests:read), then verify oracle-fleet/sleep-tracking series appear within one
+      poll. Relates FU-091, FU-063 (archived).
+
 - [ ] **FU-111** — **Migrate `Depends-on:` body lines to native GitHub issue dependencies
       (`blockedBy`).** The body-line idiom is regex-over-prose and its reader already broke once
       (the tab-IFS collapse — the FU-087 gate silently dead for track-less issues); `blockedBy` is
