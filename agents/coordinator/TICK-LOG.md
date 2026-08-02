@@ -1717,3 +1717,22 @@ ride; rewritten for the active stack (env-overridable). (2) A redispatched ride 
 name — name-keyed pod state saw no change across death+redispatch; pod state now keys on
 startTime. Added explicit failure-signal clauses: proxy `circuit OPEN` lines, ride-age >100min
 (key-window death approaching), armed-PR-BEHIND >15min (FU-124 belt).
+
+### 2026-08-02 (cont. 3) — #96 lands on ride 2; jetify phone-home path 3; 4h TTL proven
+#96 → PR#107 merged 17:21Z (ride 2: 95min, $0.0001, CI green, 87% coverage, correct
+COALESCE root-cause, review "Follow-ups: none" → clean C6, no sprouts — a reviewer-prompt
+validation point). FU-123 CONFIRMED on its 5th failure (pod env has GIT_CRED_BROKER_URL but
+no GH_TOKEN — gh's own error names it; PATH sub-hypothesis dead; fix routed to agent-finalize
+in agent-runtime). #99 dispatched 17:31Z with the FIRST 4h key (c9d1c08 verified live).
+
+**AgentWorkerEgressDropped (operator-pasted): jetify phone-home path THREE.** The
+/usr/local/bin/devbox LAUNCHER script ignores the 2026-07-22 telemetry/update env belts — it
+refetches releases.jetify.com/devbox/stable/version whenever the devbox-cache PVC's
+current-version file ages past its 24h VERSION_CACHE_TTL, so every ride's first devbox call
+SYN-stormed the egress CNP. Belt 3 = VERSION_CACHE_TTL=1y in the pod env (18153b4) — pins to
+the cached version without hardcoding it. Responder had correctly dedup-skipped the repeat
+fingerprint — which is WHY the meta session only saw it via the operator: dedup'd repeats
+never re-escalate. Answer to the operator's "should the skill watch alerts?": yes as
+AWARENESS — the loop watch now emits on firing-set CHANGE (InfoInhibitor filtered), triage
+stays with the responder. Also: swept 40 expired ephemeral key CRs (their stale Secrets are
+the headroom 401-poll noise); GC-on-expiry = openrouter-operator#10.

@@ -14,17 +14,21 @@ meant to avoid.)
   cooldown/recovery loop needs weather). `AGENT_ROUTER=shadow` fleet default — watch proxy logs
   for `POST /route` + `cooldown tripped/cleared`, decisions in `/router-status`. P4 flip waits
   on the shadow soak (FU-095). Revert the chain via sleep-iac when the test has yielded enough.
-  **Progress:** #92 → PR#106 merged CLEAN (~100min ride). **#96 ride 1 DIED of key expiry**
-  (2h window < laguna pace — TICK-LOG 2026-08-02 cont. 2; TTL default now 4h, c9d1c08);
-  **ride 2 running** since 15:42Z, but its key was minted under the OLD 2h default →
-  **expires 17:41Z**. Watch clause fires at ride age >100min. CONTINGENCY if still PR-less
-  near 17:30Z: delete + re-apply the session-key CR (forces POST → fresh key; cred injection
-  should pick the new Secret up transparently — unproven mid-ride, but a certain death
-  otherwise, and a live test of operator#6's rotation seamlessness). #99/#103/#105 queued.
-  Shadow `/route` keeps diverging (ling:free vs static laguna). No cooldown weather yet.
-- ✅ VERIFIED: WIP-hold jq-null fix (e2fdbe7, 13:50Z tick) + fixerless probe-skip (d8f3a8e,
-  15:50Z tick). Loop watch REWRITTEN for the sleep stack (was still on oracle — blind all
-  session) with startTime-keyed pod state, circuit/key-window/FU-124 clauses.
+  **Progress:** #92 → PR#106 merged CLEAN (~100min). **#96 → PR#107 MERGED** 17:21Z (ride 2,
+  95min, $0.0001, CI+review clean, no sprouts — ride 1 died of the 2h key window, TICK-LOG
+  cont. 2; TTL default now 4h c9d1c08, **VERIFIED live on #99's key: 17:31→21:31Z**).
+  **#99 riding** since 17:32Z; #103/#105 queued. Shadow `/route` keeps diverging (ling:free
+  vs static laguna). No cooldown weather yet. FU-123 CONFIRMED 5/5 (no GH_TOKEN in pod env —
+  fix = finalize fetches a broker token; agent-runtime lane). Swept 40 expired key CRs;
+  GC-on-expiry filed as openrouter-operator#10 (+ #6 got the ride-1 evidence).
+- Jetify phone-home path 3 belted (18153b4): the LAUNCHER ignores the 07-22 env vars,
+  refetches when the devbox-cache current-version file ages past 24h → VERSION_CACHE_TTL=1y
+  in the pod template. Takes effect on newly dispatched rides (#99 onward); the
+  AgentWorkerEgressDropped alert cleared 17:2xZ.
+- ✅ VERIFIED: WIP-hold jq-null fix (e2fdbe7) + fixerless probe-skip (d8f3a8e). Loop watch
+  REWRITTEN for the sleep stack (was still on oracle — blind all session): startTime-keyed
+  pod state, circuit/key-window/FU-124 clauses, Alertmanager firing-set awareness
+  (InfoInhibitor filtered; triage stays with the responder).
 - **⏳ PENDING BUILD (ride-gap only — single proxy Recreate roll):** the homelab#22 batch, notes
   on the issue: `REQUEST_DEADLINE_S≈900`, model-labeled in-flight gauge, harvest
   `generation_time` (store's `latency`=TTFT only — unlocks decode-tok/s, the §M8 free-band
