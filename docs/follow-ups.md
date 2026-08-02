@@ -363,10 +363,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
-      decided and built — `automerge` bumps get mechanical CI-only approval, `deps-review`/major
-      bumps ride the LLM review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions
-      + §"Coordinator × Renovate PRs"); the reflex already skips `automerge` PRs, and
-      `rebaseWhen: conflicted` is set so the updater owns freshness.
+      decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
+      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions + §"Coordinator ×
+      Renovate PRs"); reflex skips `automerge`, `rebaseWhen: conflicted` set (updater owns freshness).
       **Unproven and awaiting a real reviewable bump:** an armed `deps-review` PR flowing through
       the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
       **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
