@@ -1656,3 +1656,23 @@ not the coordinate cron — FU-122 retract); WIP=1 = one worker POD not one open
 (not the coordinator) — and that arm is currently failing (FU-123). Poll 120→90 landed (graphql headroom
 checked in Prometheus). #57 care-item verified down to column categorization; #77 finale steered
 (uid-unification) + gate self-validated green.
+
+### 2026-08-02 — meta: router live-test starts + the WIP-hold jq-null bug (the "harmless double dispatch" wasn't)
+ADR-096 P3–P5 + addendum-4 cooldowns deployed (2cdf520; POST /route, AGENT_ROUTER=shadow fleet
+default, model cooldowns with half-open recovery — 11-check jail sim green). Live test: sleep chain
+FREE-FIRST by claim (sleep-iac#53, laguna:free primary), #92/#96/#99/#103/#105 queued as fodder;
+first shadow divergence observed on the real #92 dispatch (router's jitter picked ling:free, static
+walk rode laguna). Platform queue swept: #67/#32/#40/#72 closed, #73 fixed via arming the operator's
+oracle-fleet#165 (unarmed PR = invisible to the review edge; merged clean on the machinery).
+
+**Incident — the recurring "harmless double dispatch" was a per-tick sonnet leak.** Operator pasted
+#96's pickup/defer churn. Chain: scan's project-WIP hold (`wip_busy`) never held for RUNNING rides —
+the live-count jq collected `.state.terminated` per agent container, which is `null` while running,
+and `[null] | length == 1` ≠ 0 → every Running ride invisible; only PENDING pods held the queue.
+So each */10 tick woke a coordinator session that hit the launcher's WIP=1 belt and deferred (~1
+sonnet session per tick per ride since the filter was written 2026-07-21 — the whole 14-issue drive
+ran like this unnoticed; "clean deferral" masked the burn). Fix: null-strip in the filter
+(`select(. != null)` — the zombie-reap filter above it always had it) + the probe now FAILS LOUDLY
+on kubectl error instead of silently failing open (rule #6). Verified against the live ride pod
+(fixed filter counts 1). LESSON: a belt that keeps absorbing the same "harmless" event is a guard
+bug by definition — count the belt hits.

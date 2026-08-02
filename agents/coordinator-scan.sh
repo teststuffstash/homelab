@@ -178,9 +178,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         echo "  [$repo] reaping zombie worker ${z} (agent terminated >30m ago; sidecar held the pod Running)"
         "$KUBECTL" $KUBE -n "$repo" delete pod "$z" --ignore-not-found >/dev/null 2>&1 || true
       done
+      # NB the null-strip is LOAD-BEARING: a RUNNING agent container yields .state.terminated
+      # = null, and [null] has length 1 — without select(.!=null) every Running ride was
+      # invisible to this hold (only Pending pods held the queue), so each tick burned a
+      # sonnet deferral session against the launcher belt (found 2026-08-02, issue-96 churn).
       live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
-          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated] | length) == 0)] | length')"
+          | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
+                     | select(. != null)] | length) == 0)] | length')"
       [ "${live:-0}" -gt 0 ] 2>/dev/null && wip_busy=1
+    else
+      # Rule #6: a dead probe must not read as calm — the launcher belt still refuses, but say so.
+      echo "  [$repo] ⚠ WIP pod probe FAILED (kubectl error) — units flow, launcher belt only"
     fi
     # COMPLETED-POD JANITOR (2026-07-22 — the #41/#63 scratch-pool exhaustion): a Completed ride
     # pod pins its GENERIC EPHEMERAL docker-lib PVC (20Gi longhorn-scratch each) until the POD
