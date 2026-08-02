@@ -269,9 +269,14 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       terminal): [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
       **Shipped:** leg (a) harvest + the `merged-closeout` scan clause (2026-07-27); the 🌱
       visibility slice (07-18); the prompt-only down-payment — reviewer complete-the-fix case +
-      HARVEST BAR (07-31). **Next rung:** the structured sub-issue lineage — the index the
-      depth-aware harvest gate and the sprout-RATE gauge both key off. **Deferred by the operator:**
-      leg (c) goal-budget decomposition, and the `issueAuthoring.selfQueue` graduation knob.
+      HARVEST BAR (07-31). **Sub-issue lineage SHIPPED 2026-08-02** (assessment delivered:
+      sub-issues over alternatives — semantics-not-decorations; API round-trip verified live):
+      the merged-closeout play now links each harvested issue as a native sub-issue of the
+      ORIGINATING issue (PR provenance stays in the body; failed link = non-fatal + noted) with
+      a ⚠ deep-sprout flag when harvesting at depth ≥2. **Next rungs:** the exporter sprout-RATE
+      gauge (walk `parent`/sub_issues on the FU-108 GraphQL walk) + the depth-aware harvest gate
+      reading it. **Deferred by the operator:** leg (c) goal-budget decomposition, and the
+      `issueAuthoring.selfQueue` graduation knob.
       Relates FU-086/FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
       issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares

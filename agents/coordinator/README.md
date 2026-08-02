@@ -351,6 +351,18 @@ job, in order (re-read live state first, exit clean if someone already closed it
    for human triage (the claim's `issueAuthoring.selfQueue` knob is the graduation, not yours).
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
    spec ID or key phrase); say which you skipped and why in the closing comment.
+   **Then LINK each harvested issue as a native sub-issue of the ORIGINATING issue** (FU-090
+   sprout index, 2026-08-02 — lineage as structure, not prose; the depth-aware harvest gate and
+   the sprout-RATE gauge key off this tree):
+   ```sh
+   CID="$(gh api repos/<slug>/issues/<harvested-N> --jq .id)"   # numeric id, NOT the number
+   gh api -X POST "repos/<slug>/issues/<originating-M>/sub_issues" -F sub_issue_id="$CID"
+   ```
+   Parent = the ORIGINATING ISSUE (never the PR — PR provenance stays in the body line). A
+   failed link is non-fatal (say so in the closing comment); the body provenance remains the
+   fallback lineage. Depth guardrail until the gauge exists: if the originating issue ITSELF
+   has a `parent` (check `gh api graphql` `issue.parent`), you are harvesting at depth ≥2 —
+   flag `⚠ deep sprout` in the closing comment so a human sees divergence early.
 4. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
    harvested (links), anything skipped.
 
