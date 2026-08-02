@@ -177,15 +177,7 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       off INCIDENT (route+root), not raw fingerprint count. FU-109's tiering composes with (c).
       Relates FU-088 (archived), FU-109, FU-103 (archived).
 
-- [ ] **FU-114** — **Build L2/L3 of the fixer-context stack: `.agents/build.yaml` + a
-      claim-authoritative `task/*` label** (default `task/fix`) selected in coordinator-scan →
-      `--recipe`. L1 (the env card) is the shipped, highest-leverage layer. Design, the
-      sleep-tracking#48 no-docker autopsy and the build order:
-      [`docs/agents/fixer-context.md`](agents/fixer-context.md).
-      Also open: ci.sh fail-closed when docker is expected-but-absent (hygiene — GitHub CI is the
-      real gate, so in-pod `ci_passed` stays best-effort; operator's call). Shares one `task/*`
-      classifier with FU-095's task-class routing — **one label, two consumers**. NOT iac-lane.
-      Relates FU-101, FU-095, FU-087, ADR-094, ADR-085.
+
 - [ ] **FU-115** — **Immediate no-op detection on the red merge path** — same head across a
       completed round should escalate to `agent/arbitrate` NOW, not after the full `RED_ROUNDS_MAX`
       cap; needs a dispatch-time `@head` marker. The attempt-cap is the v1 bound.

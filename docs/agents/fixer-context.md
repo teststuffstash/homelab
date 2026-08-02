@@ -124,9 +124,14 @@ by design (the operator's call: in-pod CI is a typo-saver, not the gate).
 1. **L1 — launcher env card** (`agent-session.sh render_env_card()` from `$DOCKER`/`$EGRESS_*`/
    budget, prepend to recipe). Highest leverage — it alone would have stopped deepseek's
    assumption. Verify against a real dispatch.
-2. **L2 + L3 — `.agents/build.yaml` in sleep-tracking + `task/*` label** in the IssueLabels set +
-   `coordinator-scan.sh` selection + launcher `--recipe` wiring. #48 is the first `task/build`.
-3. **ci.sh fail-closed** when docker is expected-but-absent (hygiene).
+2. **L2 + L3 — BUILT** (FU-114, archived 2026-08-02). L2: `.agents/build.yaml` on sleep-tracking
+   (#48 was the first `task/build`) AND oracle-fleet (#166, the role-unification port). L3: the
+   scan reads the issue's `task/*` label (default `task/fix`) and emits `class=<c>` in the
+   dispatch unit — queued-dispatch AND c4c5-redispatch both — and the session uses
+   `.agents/<c>.yaml` verbatim (brief step 5; recipe choice is never session judgment).
+3. **ci.sh fail-closed** when docker is expected-but-absent (hygiene) — **explicitly the
+   operator's call, unscheduled** (GitHub CI is the real gate; in-pod `ci_passed` stays a
+   best-effort self-report by design). Not tracked by an FU — re-raise here if wanted.
 
 Relates FU-101 (reviewer lenses — the pattern extended to the fixer), FU-095 (model axis; shared
 `task/*` classifier), FU-087 (authoring-time knowledge), ADR-094 (launcher-owned recipe),

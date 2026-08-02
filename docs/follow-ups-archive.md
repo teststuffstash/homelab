@@ -8,6 +8,10 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-114** *(archived 2026-08-02)* — **Fixer-context L2/L3 BUILT.** L1 env card shipped earlier;
+  L2 `build.yaml` on sleep (#48 first task/build) + oracle (#166 port); L3 = task/* label →
+  `class=` in scan dispatch units (queued + c4c5) → session uses `.agents/<class>.yaml` verbatim.
+  Design + residual (ci.sh fail-closed = operator's call, unscheduled): docs/agents/fixer-context.md.
 - **FU-123** *(archived 2026-08-02)* — **In-pod agent-finalize arm-auto-merge ran tokenless since
   FU-089** (6 consecutive un-armed PRs; mount deleted, gh had no GH_TOKEN). Fix: agent-runtime#26 —
   `_fresh_gh_env` fetches broker→mount→env with the SA Bearer. **Acceptance met same day**:
