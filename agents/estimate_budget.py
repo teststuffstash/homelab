@@ -565,10 +565,13 @@ def _run_cli(argv: list[str]) -> int:
     )
     p.add_argument("--project", help="project/namespace (for --emit-cr)")
     p.add_argument("--session", help="unique session id (for --emit-cr)")
-    # 2h comfortably covers a single worker run. It need not outlast the whole multi-round session:
-    # the openrouter-operator self-heals — applying the CR before each dispatch re-mints if the prior
-    # key died (it no longer NoOps on an expired/revoked key). So mint immediately before dispatch.
-    p.add_argument("--ttl-hours", type=float, default=2.0, help="ephemeral key TTL (--emit-cr)")
+    # 4h covers a single worker run INCLUDING slow free models — 2h did not: laguna:free at
+    # ~306s/turn outlasted its key on sleep-tracking#96 (2026-08-02, full ride lost at expiry;
+    # #92's clean ride was ~100min, right at the old margin). budgetUSD is the hard spend bound;
+    # expiresAt is cleanup, so the wider window costs little. It need not outlast the whole
+    # multi-round session: the openrouter-operator self-heals — applying the CR before each
+    # dispatch re-mints if the prior key died. So mint immediately before dispatch.
+    p.add_argument("--ttl-hours", type=float, default=4.0, help="ephemeral key TTL (--emit-cr)")
     p.add_argument("--emit-cr", action="store_true", help="print the ephemeral OpenRouterKey CR")
     p.add_argument("--self-test", action="store_true", help="run the assertion suite and exit")
     args = p.parse_args(argv)

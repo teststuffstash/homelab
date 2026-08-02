@@ -159,14 +159,15 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
 4. **Mint the per-session budget IMMEDIATELY before dispatch** — by re-running the estimate command
    from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
-   no reset, ~2h `expiresAt`. The openrouter-operator mints the key and writes the Secret
+   no reset, ~4h `expiresAt` (was 2h — a laguna:free ride at ~306s/turn outlasted its key,
+   sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
    read Secret values): `kubectl -n <project> get openrouterkey <name> -o jsonpath='{.status.openrouter.hash}'`
    returns non-empty once minted. ⚠ **Re-minting an EXISTING CR name takes the PATCH path, and
    OpenRouter's PATCH cannot extend a key's real `expires_at`** (openrouter-operator#6, proven live
    2026-07-09: the CR spec claimed 20:19, the key died at its original 18:40 deadline mid-run). Until
    the operator's rotate-on-drift fix is deployed AND verified: **`kubectl delete` the old CR first,
-   then apply** — a *created* CR POSTs a genuinely fresh key with a full 2h window. After the fix, the
+   then apply** — a *created* CR POSTs a genuinely fresh key with its full TTL window. After the fix, the
    CR's `.status.openrouter.expires_at` shows the LIVE expiry — assert it covers the run
    (`agent-session.sh` pre-flight refuses keys with <30 min real life). A stale `status.hash` does
    NOT prove the key is live. This is the real breaker — the worker can't outspend `budgetUSD`.
