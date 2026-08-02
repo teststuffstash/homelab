@@ -14,17 +14,17 @@ meant to avoid.)
   cooldown/recovery loop needs weather). `AGENT_ROUTER=shadow` fleet default — watch proxy logs
   for `POST /route` + `cooldown tripped/cleared`, decisions in `/router-status`. P4 flip waits
   on the shadow soak (FU-095). Revert the chain via sleep-iac when the test has yielded enough.
-  **Progress:** #92 → PR#106 merged CLEAN end-to-end on laguna:free (~100min ride, 306s turns,
-  zero failures — no cooldown weather yet); **#96 riding** (r1 dispatched 13:24Z on laguna:free,
-  pod `agent-sleep-tracking-issue-96-r1` ns sleep-tracking); #99/#103/#105 queued behind it.
-  Shadow `/route` divergence continues: both #96 route calls picked `ling-3.0-flash:free` vs
-  static laguna. No cooldowns active; expect PR ≈15:00-15:30Z (100min #92 baseline), then
-  review edge → merge → next queue item.
-- ✅ WIP-hold jq-null fix (e2fdbe7) VERIFIED live 13:50Z: tick during the #96 ride printed
-  `⏳ project WIP busy` ×3 + "no LLM woken", no coordinator pod spawned.
-- **⏳ PENDING VERIFICATION:** scan probe-skip for fixerless repos (d8f3a8e) — next
-  coordinate-sleep tick must NOT print `[snore-recorder] ⚠ WIP pod probe FAILED` (root: no
-  fixer block → no ns RBAC; probe now skipped for non-dispatchable repos).
+  **Progress:** #92 → PR#106 merged CLEAN (~100min ride). **#96 ride 1 DIED of key expiry**
+  (2h window < laguna pace — TICK-LOG 2026-08-02 cont. 2; TTL default now 4h, c9d1c08);
+  **ride 2 running** since 15:42Z, but its key was minted under the OLD 2h default →
+  **expires 17:41Z**. Watch clause fires at ride age >100min. CONTINGENCY if still PR-less
+  near 17:30Z: delete + re-apply the session-key CR (forces POST → fresh key; cred injection
+  should pick the new Secret up transparently — unproven mid-ride, but a certain death
+  otherwise, and a live test of operator#6's rotation seamlessness). #99/#103/#105 queued.
+  Shadow `/route` keeps diverging (ling:free vs static laguna). No cooldown weather yet.
+- ✅ VERIFIED: WIP-hold jq-null fix (e2fdbe7, 13:50Z tick) + fixerless probe-skip (d8f3a8e,
+  15:50Z tick). Loop watch REWRITTEN for the sleep stack (was still on oracle — blind all
+  session) with startTime-keyed pod state, circuit/key-window/FU-124 clauses.
 - **⏳ PENDING BUILD (ride-gap only — single proxy Recreate roll):** the homelab#22 batch, notes
   on the issue: `REQUEST_DEADLINE_S≈900`, model-labeled in-flight gauge, harvest
   `generation_time` (store's `latency`=TTFT only — unlocks decode-tok/s, the §M8 free-band
