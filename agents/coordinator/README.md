@@ -108,8 +108,13 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
 > and **never** `--kubeconfig`), `python3 agents/estimate_budget.py …`, `bash agents/agent-session.sh …`,
 > `gh …`. (The `devbox run …` forms in the other READMEs are the *jail* equivalents — ignore them here.)
 
-> **MODEL — walk the stack's chain; do not freelance.** The worker model comes from the stack's entry
-> in `agents/stacks.json`: `workerModel` is the primary, `workerModelFallbacks` the ordered fallbacks.
+> **MODEL — walk the stack's chain; do not freelance.** The chain's AUTHORITATIVE source is the
+> stack's **cluster claim**: `kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}
+> {.spec.workerModelFallbacks}'` — read it FRESH each dispatch (a chain redirect lands as a claim
+> change and syncs in minutes; `agents/stacks.json` is only the fallback when the claim read
+> fails, and it CAN lag — found live 2026-08-02: a #103 redispatch rode the file's stale
+> laguna-first chain two hours after the claim moved to mimo-first). `workerModel` is the
+> primary, `workerModelFallbacks` the ordered fallbacks.
 > Use the CURRENT chain model for BOTH `--model` flags below. Full design:
 > [`../../docs/agents/model-routing.md`](../../docs/agents/model-routing.md). The rules:
 > - **Rounds ≠ strikes.** Reviewer `CHANGES_REQUESTED` / CI-red-on-the-change = a **round** (bounded,
