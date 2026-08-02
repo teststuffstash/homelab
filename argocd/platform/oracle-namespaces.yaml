@@ -18,3 +18,18 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
   annotations:
     argocd.argoproj.io/sync-wave: "-1" # before the oracle child apps deploy into it
+---
+# FU-106 twin (2026-08-02, operator directive "steady-state -iac work is the stack's lane"): the
+# oracle-iac FIXER namespace — fixer ns == repo by platform convention; the AgentStack Composition
+# renders worker infra into it once the claim carries a fixer block (mirrors sleep-iac in
+# sleep-namespaces.yaml). docker=false ⇒ plain runc rides ⇒ baseline enforce is right.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oracle-iac
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
