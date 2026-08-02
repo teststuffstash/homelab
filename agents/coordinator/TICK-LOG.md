@@ -1762,3 +1762,25 @@ ride pod verified running 2026.8.2-gfbb2b739f806 + activeDeadlineSeconds — acc
 18:15 reflex non-arm that looked like a belt gap was pure timing (PR created 18:25). Session
 hygiene: two orphan monitors from the pre-clear session found alive (one still emitting into
 this session) — stopped both; "monitors die with the session" is not literally true, VERIFY.
+
+### 2026-08-02 (cont. 5) — chain redirect to paid-first; C6 verified via the doorbell path
+**Chain redirected (operator direction, mid-session): sleep-iac#56 merged 18:35Z** —
+`xiaomi/mimo-v2.5` primary (slug verified live: tooled fp8 ≥95-uptime endpoints from $0.112/M;
+operator naming = the §M7 human graduation) → `tencent/hy3` → deepseek → qwen → claude/haiku.
+Frees dropped from the walk (post-strike recovery wants capability, not 401/429 canary noise;
+provider_events keep scoring them passively). Free-first test yield: 3/3 clean merges
+(#92/#96/#99 → PR#106/107/108, #108 in NINE minutes open→merge), zero cooldown weather.
+#103 = the last laguna:free ride; #105 = first mimo dispatch. mimo model_tiers entry batched
+for the next proxy-roll window (P5 rotation universe only — chain dispatch unaffected).
+
+**C6 closeout on #99: VERIFIED, with a false alarm worth keeping.** First probe reported the
+flip missing — actually the 18:40/18:50 CRON ticks were skipped because the 18:30 dispatch
+session ran 24min (the NEW agent-base image pin → cold pull → the dispatch script's in-spec
+600s Ready-wait; session exited Succeeded, audit trail accurate). The at-exit doorbell then
+ran coordinate-perstack → C6 flipped `agent/done` + harvest correctly no-op'd ("Follow-ups:
+none worth filing"). LESSON (two-sided): a missed closeout probe must distinguish "clause
+skipped it" from "no tick ran"; and the doorbell is a real redundancy leg — the cron being
+held by a slow session did NOT stall the loop. Also banked: operator green-lit the
+jail-as-bootstrap-lane direction discussion (spec-seeder + copy-from-freshest as jail skills,
+twice-rule graduation, credential-mount convention) — assessment given, artifacts not yet
+filed; FU-070 needs the copy-from-freshest rewrite when adopted.

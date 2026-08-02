@@ -9,18 +9,15 @@ meant to avoid.)
 
 - **World ENABLED.** `coordinate-sleep` + `review-sleep` CronWorkflows live (10-min cadence,
   not suspended), ticking green. Coordinator/reviewer = sonnet.
-- **ADR-096 router LIVE TEST in flight (2026-08-02, operator-directed):** sleep worker chain is
-  **FREE-FIRST** (`laguna:free` primary — sleep-iac#53; deliberately failure-prone: the
-  cooldown/recovery loop needs weather). `AGENT_ROUTER=shadow` fleet default — watch proxy logs
-  for `POST /route` + `cooldown tripped/cleared`, decisions in `/router-status`. P4 flip waits
-  on the shadow soak (FU-095). Revert the chain via sleep-iac when the test has yielded enough.
-  **Progress:** #92 → PR#106 merged CLEAN (~100min). **#96 → PR#107 MERGED** 17:21Z (ride 2,
-  95min, $0.0001, CI+review clean, no sprouts — ride 1 died of the 2h key window, TICK-LOG
-  cont. 2; TTL default now 4h c9d1c08, **VERIFIED live on #99's key: 17:31→21:31Z**).
-  **#99 riding** since 17:32Z; #103/#105 queued. Shadow `/route` keeps diverging (ling:free
-  vs static laguna). No cooldown weather yet. FU-123 CONFIRMED 5/5 (no GH_TOKEN in pod env —
-  fix = finalize fetches a broker token; agent-runtime lane). Swept 40 expired key CRs;
-  GC-on-expiry filed as openrouter-operator#10 (+ #6 got the ride-1 evidence).
+- **Chain REDIRECTED (operator, 2026-08-02 ~18:30Z): free-first test yield banked, sleep-iac#56
+  MERGED 18:35Z** → `xiaomi/mimo-v2.5` primary → `tencent/hy3` → deepseek → qwen3-coder →
+  claude/haiku (frees dropped off the walk; rationale in the claim comment + PR#56). Free-first
+  results: #92/#96/#99 → PR#106/107/108 all merged clean on laguna:free; NO cooldown weather
+  materialized. **#103 riding since 18:31Z (LAST laguna:free ride, 4h deadline); #105 next =
+  the FIRST mimo dispatch — watch its estimator/pin behave.** `AGENT_ROUTER=shadow` unchanged;
+  P4 flip still waits on the soak (FU-095). ⏳ `xiaomi/mimo-v2.5` model_tiers entry
+  (model-classes.json — P5 rotation universe only, NOT dispatch-path) batched for the next
+  proxy-roll window. GC-on-expiry = openrouter-operator#10.
 - Jetify phone-home path 3 belted (18153b4): the LAUNCHER ignores the 07-22 env vars,
   refetches when the devbox-cache current-version file ages past 24h → VERSION_CACHE_TTL=1y
   in the pod template. Takes effect on newly dispatched rides (#99 onward); the
