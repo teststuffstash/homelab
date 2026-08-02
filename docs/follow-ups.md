@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-126**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-127**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -269,7 +269,11 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       **Open:** ⚠ **IAC-G01, the review-gate hole** — an `-iac` worker can rewrite its own CI gate
       and instant-merge unreviewed (sleep-iac#28 self-merged 38s after open, touching
       `.github/workflows/`); it closes via the G04 policy sentinel, not review. Then the rest of the
-      register in the doc's suggested order, plus the oracle-iac twin when oracle wants it.
+      register in the doc's suggested order. **Operator directive 2026-08-02: steady-state -iac work
+      is the STACK's lane, not the jail's** (jail/meta = first-time bootstrap only — "it will burn
+      me out otherwise when I add more stacks") → the oracle-iac twin is now WANTED, not optional:
+      fixer block on oracle's claim + the platform ns precreation, sleep-iac's FU-106 shape
+      (oracle-iac#97 currently has NO lane).
       Window is bounded meanwhile (sleep-iac#25 is the only queued -iac item, Depends-on-held).
       Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-086** — **Item-scoped dispatch: the four remaining knobs.** Core shipped + E2E-verified
@@ -309,6 +313,16 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       depth-aware harvest gate and the sprout-RATE gauge both key off. **Deferred by the operator:**
       leg (c) goal-budget decomposition, and the `issueAuthoring.selfQueue` graduation knob.
       Relates FU-086/FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
+- [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
+      issue → N researcher rides on N models → N un-armed `research/<goal>-<model-slug>` PRs →
+      operator compares and cherry-picks.** In-cluster, the FU-105 dispatch-on-goal shape (role
+      archived as built; this is its compare mode). Reference output = the nemotron-3-ultra jail
+      run in `/workspace/idp` (REPOSITORIES.md + specs tree + TARA-Test analysis, uncommitted).
+      Deltas: per-model branch AND pod-key scheme (today's `(task, round)` key collides on same
+      issue); goal-issue template must package context loop rides can't reach (private teststuff
+      spec doctrine → copy into the repo's specs/conventions.md); upstream-source egress per repo
+      (public GitHub clones already pass; e.g. web-eid.eu = extraFQDNs dial). First consumer:
+      idp-system specs. Relates FU-095, FU-090(c), archived FU-105.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

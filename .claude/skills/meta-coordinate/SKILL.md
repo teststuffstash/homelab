@@ -24,9 +24,11 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
   their flip + harvest; a missed one is a clause bug to fix, not a label to hand-flip.
 - **Operator-lane work** the loop CANNOT do: `.github/workflows/*` changes (worker recipes +
-  tokens forbid them), -iac repos WITHOUT a fixer block (oracle-iac today; sleep-iac has one
-  since FU-106 — its issues dispatch normally), platform/homelab changes, Composition/XRD
-  work. Do these directly, through PRs with auto-merge.
+  tokens forbid them), platform/homelab changes, Composition/XRD work. Do these directly,
+  through PRs with auto-merge. **-iac repos are NOT this lane** (operator directive 2026-08-02):
+  steady-state -iac work belongs to the STACK's fixer (sleep-iac has one since FU-106; a fixerless
+  -iac repo means the fixer block is MISSING — enable it, FU-106, don't do its work by hand).
+  Jail/meta touches -iac only at first-time stack bootstrap.
 - **Incidents — machine belts run FIRST since 2026-07-27**: blackbox probes (FU-099) →
   responder triage (one sonnet session per new alert fingerprint; issues only when triage
   decides, routed to the stack's -iac) → the FU-044 deterministic revert (Degraded ≤120m
