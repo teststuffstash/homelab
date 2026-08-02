@@ -23,11 +23,22 @@ triage: #92/#96 (keep) — #93/#101/#102 CLOSED as noise, #99 (pinned-SHA-256).
   not suspended), ticking green. Coordinator/reviewer = sonnet.
 - **ADR-096 router LIVE TEST in flight (2026-08-02, operator-directed):** sleep worker chain is
   **FREE-FIRST** (`laguna:free` primary — sleep-iac#53; deliberately failure-prone: the
-  cooldown/recovery loop needs weather). Issues #92/#96/#103/#99 queued as test fodder
-  (#92 riding at session end). `AGENT_ROUTER=shadow` is the fleet default — watch proxy logs
-  for `POST /route` + `cooldown tripped/cleared` lines, decisions in `/router-status`. The P4
-  authoritative flip waits on the shadow soak (FU-095). Revert the chain via sleep-iac when
-  the test has yielded enough.
+  cooldown/recovery loop needs weather). `AGENT_ROUTER=shadow` fleet default — watch proxy logs
+  for `POST /route` + `cooldown tripped/cleared`, decisions in `/router-status`. P4 flip waits
+  on the shadow soak (FU-095). Revert the chain via sleep-iac when the test has yielded enough.
+  **Progress:** #92 → PR#106 merged CLEAN end-to-end on laguna:free (~100min ride, 306s turns,
+  zero failures — no cooldown weather yet); **#96 riding** at clear-time; #99/#103/#105 queued.
+- **⏳ PENDING VERIFICATION (first thing on resume):** the WIP-hold jq-null fix (e2fdbe7) — a
+  coordinate-sleep tick DURING a ride must print `⏳ project WIP busy` for the queued issues and
+  spawn NO coordinator pod (the old bug burned ~1 sonnet session/tick/ride). Check any tick log
+  newer than ~13:25Z 2026-08-02 while a ride pod ran. If sessions still spawn per-tick: the fix
+  missed, investigate the scan clone path.
+- **⏳ PENDING BUILD (ride-gap only — single proxy Recreate roll):** the homelab#22 batch, notes
+  on the issue: `REQUEST_DEADLINE_S≈900`, model-labeled in-flight gauge, harvest
+  `generation_time` (store's `latency`=TTFT only — unlocks decode-tok/s, the §M8 free-band
+  tie-break), `activeDeadlineSeconds` on ride pods (no total-session bound exists today).
+- Platform queue residue: homelab#22 (above); sleep-tracking#104 (datasource naming — touches
+  the #77-stabilized uid gate, needs steering if queued) + #16 dep-dashboard, both unlabeled.
 - **Shadow-soak review checklist (run before the P4 flip; collect ≥1wk of decisions):**
   (1) divergence table — `decisions` where shadow model ≠ dispatched model: would the router's
   pick have done better/worse (join run_reports outcomes)? (2) defer audit — every `defer`

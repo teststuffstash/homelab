@@ -1676,3 +1676,20 @@ ran like this unnoticed; "clean deferral" masked the burn). Fix: null-strip in t
 on kubectl error instead of silently failing open (rule #6). Verified against the live ride pod
 (fixed filter counts 1). LESSON: a belt that keeps absorbing the same "harmless" event is a guard
 bug by definition — count the belt hits.
+
+### 2026-08-02 (cont.) — router live test session 2: first free ride CLEAN + latency/cache doctrine
+#92 → PR#106: the FULL pipeline ran clean on `laguna:free` (~100min ride, PR → ADR-093 review edge
+→ auto-merge → C6 closeout, zero follow-ups) — free-first WORKS when the weather is good; no
+cooldown trips yet (laguna 100% 2xx all day; its 53%-auth-fail history is why it leads the canary
+chain). Ride showed the goose `final_output NOW` continuation spam (FU-021 shape, bounded by turn
+cap) around a `gh pr create` no-`--head` quirk — recovered itself. #96 riding at handoff.
+
+**Latency/cache doctrine banked (§M8 + homelab#22 notes), operator-driven:** our 306s turns sit at
+the ADVERTISED P95–P99 (page P50 is the site's median request, not agentic turns; location tabs =
+client-vantage segments — single-provider model shows several); the store's `latency` = TTFT only
+(laguna 1.6s TTFT vs 306s wall — `generation_time` harvest = the #22 build); laguna emits ~3.5k
+output tok/turn (~9× deepseek) at ~11-12 tok/s decode — cache (94% paid / 67% free measured)
+accelerates prefill only, so the free-band jitter tie-break must be DECODE tok/s. Worker timeout
+audit: no total-session wall-clock bound exists (200 turns × slow turns ≈ 16h theoretical) →
+`activeDeadlineSeconds` in the #22 batch. WIP-hold fix (e2fdbe7) verification PENDING at handoff
+(needs a tick during a ride) — see meta-state.
