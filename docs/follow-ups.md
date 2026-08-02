@@ -259,9 +259,11 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       double-booked, and four sightings in six days confirm a breach is invisible until a workload
       fails. Ledger, the double-book, all four sightings and the build list:
       [`docs/storage-ledger.md`](storage-ledger.md).
-      **Next:** the per-tier ledger (doc table or a lint summing `max_size` vs tier budget), then
-      Garage admin-API metrics + ServiceMonitor and Longhorn per-disk `storageScheduled`, each with
-      a >80% alert. Blocks the FU-106 "mechanical" predicate. Relates ADR-089, FU-116.
+      **(a) ledger lint BUILT 2026-08-02** (`devbox run storage-ledger`, cluster-sourced, >100%
+      exits 1) — **first run: tier LIVE at 121% (181/150Gi), reconciliation = operator capacity
+      decision** (shrink ert-snapshots/loki caps vs grow the PVC). **Next:** Garage admin-API
+      metrics + ServiceMonitor and Longhorn per-disk `storageScheduled`, each with a >80% alert.
+      Blocks the FU-106 "mechanical" predicate. Relates ADR-089, FU-116 (archived).
 
 - [ ] **FU-090** — **Build the sprout index: structure harvest lineage as GitHub sub-issues.**
       Design (all three legs, the breaker-#1 gate, the sprout-index rungs and the retro-checkpoint

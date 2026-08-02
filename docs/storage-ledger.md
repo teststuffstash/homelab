@@ -43,9 +43,15 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
 
 ## Build
 
-- **The ledger itself** — one table per tier (not per repo), either as a doc table here or as a
-  lint that sums `max_size` across workspace manifests against the tier budget. Per-tier, because
-  per-repo accounting is what allowed the double-book.
+- **The ledger itself — BUILT 2026-08-02 (FU-093a)**: `devbox run storage-ledger`
+  (`scripts/storage-ledger-check.sh`) sums every `max_size` across the LIVE
+  `workspaces.tf.upbound.io` set (cluster-sourced — covers all repos' claims with no cross-repo
+  checkout) against the garage data PVC capacity. >80% warns, >100% exits 1 (the iac-lane
+  "mechanical" predicate refusal). Per-tier, because per-repo accounting is what allowed the
+  double-book. **First run found the tier LIVE-OVERCOMMITTED: 181Gi committed / 150Gi capacity
+  (121%)** — biggest lines: ert-snapshots 90, loki 40, agent-transcripts 20. Reconciling is an
+  operator capacity decision (shrink caps vs grow the PVC); until then the lint holds the line
+  against NEW claims.
 - **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
   usage-vs-cap panels; a **>80% alert**.
 - **Longhorn metering** — per-disk `storageScheduled`-vs-cap. The kubelet metrics already exist
