@@ -162,8 +162,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ns HOLDS this repo's queued-dispatch units — the
     # launcher's WIP=1 pre-flight would refuse the spawn anyway; better to never wake the session.
     # Probe-first: a FAILED pod probe leaves the units flowing (the launcher refusal is the belt).
+    # Fixerless (context-only) repos never run workers and have no ns RBAC — probing them is a
+    # guaranteed per-tick FAILED warning (snore-recorder, 2026-08-02), so skip, don't probe.
     wip_busy=""
-    if WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
+    if [ -z "$dispatchable" ]; then
+      :
+    elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
       jq -e . >/dev/null 2>&1 <<<"$WIPPODS_JSON" || WIPPODS_JSON='{"items":[]}'
       # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
