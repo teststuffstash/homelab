@@ -1832,3 +1832,31 @@ the wild same evening). Restored homelab-github-merge creds to the jail from Inf
 operator step. LESSON (circuit trip, 19:52): laguna's 400 wall was CONTEXT-DEPTH shaped — a
 fresh session sailed through the same issue; the breaker + kill + c4c5 redispatch chain
 recovered it end-to-end with $0 wasted spend.
+
+### 2026-08-02 (cont. 8) — the Agents-FU sweep: 8 closed, 4 advanced, loop drained → meta stands down
+Operator directive: work every CLEAR follow-up under Agents, close + document each; stop
+meta-coordinating when sleep/oracle drain. **CLOSED: FU-112** (residual resolved upstream —
+longhorn-critical on all system DS, verified live), **FU-113** (responder outcome markers +
+Argo-retry self-requeue + incident-keyed cap; crosscheck knows DEFERRED-STUCK vs UNTRIAGED),
+**FU-114** (L2/L3 built), **FU-115** (marker-free no-op-round detection → instant arbitrate),
+**FU-116** (janitor reaps Failed ride pods, 2h forensics grace), **FU-121** (fresh closed-state
+probe gates c4c5), **FU-123** (earlier: armed_by_pod acceptance), **FU-124** (scan nudges armed
+BEHIND PRs via update-branch). **ADVANCED: FU-086** (cron */10→*/30; knobs 1/3/4 open — 3 wants
+operator appetite, 4 under-specified), **FU-090** (harvest links sprouts as native sub-issues +
+deep-sprout flag), **FU-093** (ledger lint BUILT — **first run: bulk tier LIVE at 121%,
+181/150Gi — operator capacity decision**), **FU-095** (P1 gap closed: in-pod /report twin,
+agent-runtime#27), **FU-106** (G02 revert-widening + G03 cluster-verifying closeout + loop-SA
+read RBAC; G05 rung-0 = ⚖ open question — what does the smoke curl on a CronJob app?),
+**FU-108** (walk-sourced label counts; PAT re-mint = operator click), **FU-111** (blockedBy
+probes green, scan unions native+body deps). **SKIPPED with reasons**: FU-117/120/094 (by
+design), FU-126-residual (idp bootstrap), FU-019 (underspecified), FU-067/046 (conditional/
+event-driven), FU-059/049 (need design), FU-068 (host-side wallet), FU-102/058/044 (sizeable,
+judgment-mixed — not clear enough to run unattended).
+
+**Loop end-state:** sleep drained (#103 merged via r1-redux 15min ride; #105 = the FIRST MIMO
+ride, 13min, PR#111 merged + C6'd clean — mimo ≈7× faster wall-clock than laguna at $0.14/M).
+oracle-iac#97 → #265 merged (the new lane's first ride, end-to-end clean). In-flight,
+machinery-owned: snore#15 (re-review after my review-fix push), oracle-fleet#166,
+agent-runtime#27. Ops lessons this stretch: a && chain skipped a failed merge-path-lint and
+pushed a red FSM view (1-commit window — gate pushes on ALL lints); GitHub sub-issue +
+issue-dependency APIs verified round-trip live before any play relied on them.
