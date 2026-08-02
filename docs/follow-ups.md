@@ -206,14 +206,7 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 
 
 
-- [ ] **FU-124** — **Give the PR updater a reliable in-cluster trigger — GitHub's `*/15` cron is the
-      last PR's sole backstop and GitHub drops it.** Verified live: sleep-tracking#100 hung
-      `BEHIND/APPROVED` ~1h; a manual dispatch merged it immediately (logic fine, trigger failed).
-      Postmortem: [`docs/incidents/2026-07-31-last-pr-behind-hang.md`](incidents/2026-07-31-last-pr-behind-hang.md).
-      **Build:** the coordinate scan already reads `mergeStateStatus` — have it
-      `gh workflow run update-pr-branch.yml` on an armed PR stuck BEHIND with no updater progress.
-      **Belt:** meta-watch check for an armed PR BEHIND >~15min (it watches CI-fail + merge, not
-      updater liveness). Relates FU-041, ADR-093, merge-path-fsm MP-T02.
+
 
 - [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
       the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the

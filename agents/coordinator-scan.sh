@@ -312,6 +312,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
     prs="$(printf '%s' "$prsjson" | jq -r '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]')"
+    # FU-124: an ARMED PR stuck BEHIND relies on GitHub's cron sweeper as its sole updater
+    # trigger for the LAST open PR, and GitHub drops scheduled runs (sleep#100 hung ~1h).
+    # DETERMINISTIC nudge: call the update-branch API directly — idempotent at GitHub (422 =
+    # already current), self-limiting (a nudged PR stops being BEHIND), FAIL-LOUD on 403 (a
+    # token-scope gap must be visible, not silent). No LLM, no unit, no session.
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select((.autoMergeRequest!=null) and (.mergeStateStatus=="BEHIND"))|.number'); do
+      if gh api -X PUT "repos/${slug}/pulls/${u}/update-branch" >/dev/null 2>&1; then
+        echo "  [$repo] FU-124: nudged updater — update-branch on armed BEHIND PR #${u}"
+      else
+        echo "  [$repo] ⚠ FU-124: update-branch API FAILED for PR #${u} (token scope? conflict?) — updater cron remains the backstop"
+      fi
+    done
     # ADR-094 units: each predicate row IS an action class — (clause, repo, item), the LLM never picks.
     # AUTHOR-scoped (2026-08-02, found live on snore#15): the fix-round play only has a mandate
     # over WORKER-authored PRs (same WORKER_AUTHOR scope as the reflex's C9). A human/operator PR
