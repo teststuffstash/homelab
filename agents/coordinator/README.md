@@ -177,6 +177,11 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    first hit): pass the recipe PATH from the stack clone and the launcher builds the harness command
    AND prepends the platform **environment card** (`docs/agents/fixer-context.md` L1 — docker/egress/
    round/write-scope from the claim knobs, at the recipe's `{{PLATFORM_ENV_CARD}}` marker).
+   **The recipe FILE is chosen by the task class, never by you** (FU-114 L3): your dispatch unit
+   carries `class=<c>` (from the issue's `task/*` label) → use `.agents/<c>.yaml` VERBATIM (e.g.
+   `class=build` → `build.yaml`). A unit without `class=` (merge-path clauses): read the issue's
+   `task/*` label yourself and map the same way; no label → `fix.yaml`. Never pick a recipe on
+   your own judgment of the issue's content.
    ```sh
    bash agents/agent-session.sh <project> --harness goose --model <chain-model> \
        --openrouter-secret <project>-session-issue-<N>-round-<r>-openrouter \

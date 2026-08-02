@@ -222,7 +222,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps qpin; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps qpin qclass; do
+      # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
+      [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
       [ "$qtracks" = "-" ] && qtracks=""
       [ "$qdeps" = "-" ] && qdeps=""
@@ -279,11 +281,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # ("anything else gets deleted"), so an ad-hoc label self-destructs. All other predicates
       # (deps, lane, WIP) still apply — a pinned blocked issue stays blocked.
       if [ "$qpin" = "P" ]; then
-        punits="${punits}queued-dispatch|${repo}|issue-${qnum}\n"
+        punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
       else
-        units="${units}queued-dispatch|${repo}|issue-${qnum}\n"
+        units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
       fi
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end) ] | @tsv')
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
@@ -352,8 +354,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           if [ -n "$dispatchable" ]; then
             for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
                 '.[] | select(((.labels|map(.name))|index("agent/error"))|not)
-                 | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0) | .number'); do
-              units="${units}c4c5-redispatch|${repo}|issue-${u}\n"
+                 | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                 | "\(.number)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
+              units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
             done
           fi
         fi
@@ -540,13 +543,22 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       echo "  actionable items but no dispatchable unit (context-only repos / gated) — report-only."
       continue
     fi
-    uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; uitem="${rest#*|}"
+    uclause="${unit%%|*}"; rest="${unit#*|}"; urepo="${rest%%|*}"; rest2="${rest#*|}"
+    # FU-114 L3: 4-field units (queued-dispatch, c4c5-redispatch) carry the task class from the
+    # issue's task/* label — the recipe choice is DETERMINISTIC (never the session "figuring it
+    # out"; ADR-094). 3-field units (merge-path clauses) have no class — the session derives it
+    # from the issue labels per its brief.
+    case "$rest2" in
+      *"|"*) uitem="${rest2%%|*}"; uclass="${rest2#*|}";;
+      *)     uitem="$rest2"; uclass="";;
+    esac
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
-    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}, model ${cmodel})…"
+    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}, model ${cmodel})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --item "repo=${urepo} item=${uitem} clause=${uclause}"
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} \
+      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}"
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
