@@ -105,7 +105,8 @@ as if at home; recipe in `docs/runbook.md`.
   `coordinator-logs.sh`/`render-transcript.py`, `follow-ups-lint.sh`, `aws-*.sh` (one-shot audit/cleanup).
 - `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
 - `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
-  decision history in `docs/adr.md`.
+  decision history in `docs/adr.md`, postmortems in `docs/incidents/`, open investigations in
+  `docs/spikes/`. Which record gets what: the routing table below.
 
 ## Secrets
 
@@ -125,6 +126,33 @@ the agent repos; prefer minting from the `homelab-agents` App over a new PAT —
 `agents/coordinator/README.md` §Git token). The coordinator **image** CI needs no token (ghcr push via
 the built-in `GITHUB_TOKEN`). Imperative for now; fold into Infisical/ESO later (FU-001).
 
+## Where things get written down (the routing table)
+
+There are several long-lived records here and they are **not** interchangeable. Route by what the
+thought *is*, not by which file you happen to have open:
+
+| What you have | Goes to | Shape |
+|---|---|---|
+| A **decision** — a fork taken, with alternatives rejected | `docs/adr.md` | ≤20-line block: Decision / Considered / Why / Consequences |
+| The **design** behind a decision (mechanism, phases, gap register) | a doc under `docs/` | The ADR links to it; the ADR does not contain it |
+| A **loose end** — known, deferred, someone must act | `docs/follow-ups.md` | ≤10-line `FU-NNN` (see below) |
+| A **program** — multi-phase, weeks+, several deliverables | `ROADMAP.md` → Backlog | Prose + phases; an FU tracks only its *next* deliverable |
+| An **incident** — it broke, here's the timeline and root cause | `docs/incidents/YYYY-MM-DD-<slug>.md` | Postmortem; the FU carries only the residual action |
+| An **investigation** with no decision yet | `docs/spikes/` | Findings + what would settle it |
+| **What happened this session** (condition → command) | `agents/coordinator/TICK-LOG.md` | Append-only journal; never scrubbed |
+| **What a fresh session must pick up** | `docs/agents/meta-state.md` | Tiny, transient, delete when done |
+| **Agent-loop work items** | GitHub issues on the owning repo | `agent/*` labels; never hand-copied into the FU tracker |
+| A **spec shortfall** found by an agent | `specs/` ⚑ gap flag in the stack repo | ADR-086 — never the FU tracker |
+| A **service** that exists and can be consumed | `SERVICES.md` | The catalog other repos grep |
+
+Two rules make the table hold:
+
+- **One home per fact.** If detail belongs in a doc, the tracker/ADR links to it and does not
+  restate it. A duplicated paragraph is a drift bug waiting to happen — the copy nobody edits is
+  the one someone reads.
+- **Status lives with the pointer; everything else lives with the detail.** The FU line owns "is
+  this done, what's next"; the doc owns mechanism, evidence, history.
+
 ## Follow-ups (FU-NNN)
 
 Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one stable id per item
@@ -143,10 +171,16 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   only genuine deferrals.
 - **New deferred work / discovered loose end** → add an `FU-NNN` item there first. Never leave a
   free-floating `TODO` in code or docs — write the comment as `FU-NNN: <context>` instead.
+- **An item is ≤10 lines: symptom, why deferred, next concrete action, link.** When it outgrows
+  that, the detail moves to a doc (routing table above) and the FU becomes a **pointer** — the
+  item keeps status + next action, the doc takes mechanism/evidence/history and backlinks the id.
+  Do not grow a second copy in the tracker afterwards; edit the doc.
 - **Resolved something?** Move the item to `docs/follow-ups-archive.md` (trimmed to a few lines,
   `(archived YYYY-MM-DD)`) in the same commit as the fix. Archive entries expire after ≈a month:
   delete + scrub remaining refs in living code/docs (TICK-LOG/ADR refs are historical, exempt).
-  `devbox run follow-ups-lint` catches dangling references and stale archive entries.
+  A pointer item's **doc survives archival** — it's documentation, not tracker residue.
+  `devbox run follow-ups-lint` catches dangling references, stale archive entries, oversized
+  items, and broken/un-backlinked pointers.
 - Roadmap-scale parked *features* go to `ROADMAP.md` → Backlog, not here.
 
 ## Safety

@@ -65,7 +65,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Per-stack scope (FU-045): prepend the stack context to the prompt so the coordinator knows exactly
+# Per-stack scope: prepend the stack context to the prompt so the coordinator knows exactly
 # which repos are its world this session, and expose it as pod env for forward-compat. Policy will move
 # to a Crossplane AgentStack claim in the stack's -iac repo (docs/agents/platform-and-stacks.md); for
 # now coordinator-scan.sh passes --stack/--repos from agents/stacks.json.
@@ -101,7 +101,7 @@ POD="coordinator-$(date -u +%H%M%S)"
 BRIEF="agents/coordinator/README.md"           # relative to /work/homelab (the poll waits on it there)
 BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the stack main repo, not
                                                # necessarily /work/homelab, so the brief (platform
-                                               # MECHANISM) must be referenced by full path (FU-045).
+                                               # MECHANISM) must be referenced by full path.
 
 # The model/permission flags shared by both modes. The pod IS the isolation boundary (scoped
 # SA/RBAC, per-session OpenRouter/git tokens, NO secret-value access) — security lives there, not in
@@ -117,7 +117,7 @@ COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permi
 # diffs the transcripts PVC against (the PVC accumulates across sessions).
 PREP="set -e; ${LOOP_FETCH}touch /work/session-start; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
 
-# FU-045: a coordinator is scoped to a STACK, so clone ALL its repos (--repos) shallow into /work/<repo>
+# A coordinator is scoped to a STACK, so clone ALL its repos (--repos) shallow into /work/<repo>
 # and run from the stack's MAIN repo (--main-repo, default homelab) — so that repo's CLAUDE.md + specs
 # load naturally as cwd context. homelab is already cloned above (skip it). Private repos (oracle-*)
 # authenticate via the pod's GH_TOKEN, which `gh repo clone` inherits — so use gh, not bare git. Each
@@ -161,7 +161,7 @@ UPLOAD_FN=$(cat <<'SNIP'
 upload_transcripts() {
   [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
   command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
-  # cwd-agnostic (FU-045): Claude's project dir slug tracks the cwd (e.g. -work-oracle-fleet vs
+  # cwd-agnostic: Claude's project dir slug tracks the cwd (e.g. -work-oracle-fleet vs
   # -work-homelab), but discovery is by mtime vs the session-start marker, so the slug never matters.
   FILES=$(find /home/node/.claude/projects -name '*.jsonl' -newer /work/session-start 2>/dev/null)
   [ -n "$FILES" ] || { echo "transcripts: no new session files — nothing to upload"; return 0; }
@@ -218,7 +218,7 @@ spec:
       env:
         - name: HOME
           value: "/home/node"
-        # Per-stack scope (FU-045): which stack + repos this coordinator owns this session, and the
+        # Per-stack scope: which stack + repos this coordinator owns this session, and the
         # stack's main repo (the cwd). Exposed as env for forward-compat with the AgentStack claim.
         - name: STACK
           value: "${STACK}"

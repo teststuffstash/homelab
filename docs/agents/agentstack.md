@@ -1,9 +1,11 @@
 # AgentStack — the agents framework as a platform API (FU-048 / ADR-085)
 
-**Status: BUILT 2026-07-12; first claim = the oracle stack (oracle-iac).** homelab publishes a
-cluster-scoped Crossplane XRD `agentstacks.platform.teststuff.net`; a stack declares ONE
-`AgentStack` in its `-iac` repo (its POLICY), and the platform's Composition renders the per-repo
-fixer MECHANISM from it. Mechanism = platform, policy = stack — the ADR-084/ADR-085 lens.
+**This doc owns the `AgentStack` claim** — what a stack declares and what the platform renders
+from it. homelab publishes a cluster-scoped Crossplane XRD `agentstacks.platform.teststuff.net`; a
+stack declares ONE `AgentStack` in its `-iac` repo (its POLICY), and the platform's Composition
+renders the per-repo fixer MECHANISM from it. **Mechanism = platform, policy = stack** — the
+ADR-084/ADR-085 lens. Which stacks are on claims today is a cluster query, not a doc:
+`kubectl get agentstacks`.
 
 Two documentation surfaces, one story:
 
@@ -99,7 +101,7 @@ Prometheus.
 
 ## Consumption + migration state
 
-`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point, FU-045) reads
+`coordinator-scan.sh`'s `stacks_json()` (the ONE swap-point) reads
 `kubectl get agentstacks -o json` **merged over** `agents/stacks.json` — cluster claims win per
 stack name; a PROBE-FAILED read warns and falls back to the file alone. The reflex SA has
 `agentstacks` get/list ([`agents/coordinator/rbac.yaml`](../../agents/coordinator/rbac.yaml));
@@ -233,3 +235,24 @@ GitHub and the authoritative claim fights it back. Remaining: sleep-stack repos 
 - **Readiness:** composed resources without real Ready conditions (CNP, Role, OpenRouterKey) are
   annotated ready-on-apply; the `agent-git-token` ExternalSecret keeps its real condition — so
   `AgentStack` READY=True ⇒ the token minted, which is the one that matters.
+- **⚠ Crossplane can't compose a Role granting verbs it doesn't itself hold.** Kubernetes
+  privilege-escalation prevention blocks it, so every verb the Composition hands out must be
+  mirrored into the **crossplane-aggregated ClusterRole** first. Found three times, each time as a
+  new-stack failure rather than a code change (a new stack composes new Roles/Bindings, so latent
+  gaps surface on onboarding, not on edit): the loop SA's `pods/exec/pvc` verbs (2026-07-17 — the
+  proxy Role had slipped by on core's secrets access), `argoproj.io/workflows` **create** for the
+  sensor Role, and `endpoints` get/list for the FU-072 claims-read binding (2026-07-26 — oracle's
+  older ClusterRoleBinding had masked it). Header note lives in
+  [`agentstack/rbac.yaml`](../../argocd/resources/agentstack/rbac.yaml).
+- **⚠ Argo Events string data-filter values are REGEX**, not literals. `""` and `!=` are rejected;
+  use `.+` to mean "present and non-empty" (this is how the graduated-loop routing selects on
+  `body.loop_ns`).
+- **⚠ Bare hex colors in claim label values parse as YAML scientific notation** (`5319e7` →
+  5.319e10) — quote them. The XRD description warns. Also, `labels: {}` gets server-stamped to
+  `{extra: []}`, so write `extra: []` explicitly per the drift convention.
+- **The credential airlock** (why the loop home can hold pod-create at all) is written up in
+  [`platform-and-stacks.md`](platform-and-stacks.md) §"The credential-airlock pattern": pods in
+  `<stack>-agents` hold only `ref:` creds, so a stack's workbench SA can control its whole loop
+  without any broadening — the alternatives (widening the workbench SA into `agent-coordinator`,
+  or moving the agents while they still held a raw token) were both rejected because either one
+  kills the airlock.

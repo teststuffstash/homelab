@@ -1,0 +1,106 @@
+# Coordinator-authored issues — harvest, authoring, and the sprout index
+
+**Tracked by:** FU-090. **Gate:** TICK-LOG §Loop-safety breaker #1.
+**Relates:** FU-086/FU-087 (dispatch + dependencies), FU-044 (revert machinery), ADR-094.
+
+Issue *authoring* has been a jail-LLM practice ([workflow.md](workflow.md) §Triggers emitter
+table); the coordinator only filed issues inside meta-4 arbitration. That left a real hole: an
+approved PR's `Follow-ups:` section — which the review rubric **requires** to contain issue-ready
+bullets — had no owner and died in the review comment.
+
+This document is the design for closing it, plus the accounting substrate the harvest turned out
+to need.
+
+## Breaker #1 is the gate for all of it
+
+Every surface below produces **bot-authored, therefore INERT** issues: no `agent-fix`, no
+`agent/queued`. A human labels, or nothing runs. That is loop-safety breaker #1 and none of these
+legs retire it — leg (c) moves the breaker *up* to the goal issue rather than away.
+
+The graduation knob (**not built**): claim `issueAuthoring.selfQueue`, default off, letting the
+coordinator self-label harvested issues, bounded by the existing breakers plus a per-day rate cap.
+Flipping it is the operator's per-stack trust call, and it *does* retire breaker #1 for that stack.
+
+## Leg (a) — follow-up harvest — BUILT 2026-07-27
+
+The C6 / merged item session files each `Follow-ups:` bullet as an issue, with provenance links,
+`Depends-on:` lines (FU-087) and the track label inherited.
+
+Mechanism: the scan emits **`merged-closeout`** units for issues closed by a merged PR but still
+`agent/in-progress` (21-day window, cap 3/repo/scan, `agent/error` excluded). The item session's
+play (coordinator README §merged-closeout) is: verify the outcome on master → flip `agent/done` →
+file each review `Follow-ups:` bullet as an inert issue → one closing comment. Verified empty-safe
+on all three stacks.
+
+**Visibility slice shipped 2026-07-18:** the scan reports 🌱 bot-authored issues lacking
+`agent-fix` per repo, so harvested drafts surface for human triage instead of rotting.
+
+**Consumers registered 2026-07-27:** the harvest is the birth path for the infra-fixer's
+expand/contract debt tasks ([iac-lane.md](iac-lane.md) §rollout matrix, row d), and the goal-issue
+shape of leg (c) is the FU-105 researcher's dispatch trigger.
+
+## Leg (b) — spec-driven authoring
+
+The ADR-094 janitor tick MAY draft issues from `specs/`/TRACKS gaps, under the same inert gate.
+
+## Leg (c) — goal-budget decomposition — DEFERRED by the operator
+
+A human-authored **and human-queued** `goal` issue carries `budgetUSD` + acceptance criteria. Its
+item session MAY author and queue child issues citing the parent, with **Σ(child estimator budgets)
+≤ parent budget enforced in the LAUNCHER pre-flight** — deterministic, beside WIP=1, *never*
+LLM-honored. The child-issue set is then the reviewable decomposition artifact: "review the result"
+applied to planning. The scan surfaces children-of-closed-parents as orphans (the goal-drift belt).
+Existing containment carries over unchanged (lane WIP, capacity gates, pod-name keys, FSM,
+`agent/error`).
+
+> **Operator 2026-07-24: not yet.** Rollout continues the old-fashioned way — human goal
+> decomposition — until the current arc settles. Revisit when a real goal candidate appears.
+> A prototype ran 3 days live during meta-9.
+
+## The sprout index — the accounting substrate leg (c) was missing
+
+Operator synthesis 2026-07-31, from the sleep harvest run. This is arguably the "real goal
+candidate" leg (c) was waiting for.
+
+**The insight:** the harvest tree already *is* an unbudgeted goal decomposition. What goal-budget
+lacked was a **sprout index** — the lineage DAG (issue → PR → harvested child) carrying **depth and
+breadth**.
+
+The 2026-07-31 run showed the gap live, in both directions at once:
+
+- With no depth-awareness the reviewer **harvests indiscriminately** — 3 of 5 sprouts were
+  self-acknowledged noise (#93/#101/#102, closed).
+- And it **defers a same-class-as-the-fix defect it should have completed in-PR** — #96, the 14th
+  band column the #57 COALESCE fix missed.
+
+Both failures are the same missing signal.
+
+### The rungs
+
+1. **Structure the lineage as GitHub sub-issues.** Native parent/child gives the tree UI and the
+   graph API for free. Today provenance is unparseable prose: *"Harvested from PR #X (issue #Y)"*.
+2. **The harvest/reviewer gate reads depth + remaining budget.** Shallow + budget available →
+   harvest a real deferral. Deep, or budget low → **fix-in-PR** and collapse the tail.
+   Budget blown, or N levels without converging → the **terminal**.
+3. **The terminal is a RETRO CHECKPOINT, not a reflex revert** (operator ruling). It means "a good
+   place to STOP and rethink": the goal was probably sound but unexpected complexity arose, so a
+   **human retro** decides how to proceed — re-scope, collapse-in-PR, or, only in the extreme, a
+   lineage-scoped revert via the FU-044 machinery.
+4. **Surface it.** The sprout index plus a **sprout-RATE gauge** via the github-exporter (one
+   poller) → Grafana node-graph + convergence trend. **Rate > 1 per run = diverging**; that is the
+   health KPI.
+
+### Down-payment shipped 2026-07-31
+
+Prompt-only, no index yet — proving the #96/#92 mis-sorts are fixable from the diff alone:
+`agents/reviewer-session.sh` gained a **complete-the-fix** narrow-blocking case and a **HARVEST
+BAR** (inert / not-a-gap / won't-fix / style stay comments, never `Follow-ups:`).
+
+**Next rung = the structured sub-issue lineage** — the index everything else keys off.
+
+## Why sub-issues here and not elsewhere
+
+The scheduler consumes **semantics, not decorations** (recorded during the FU-110 mechanism
+review): blocking = native GitHub dependencies (FU-111); operator preference = the pin; grouping
+and reporting = milestones and **sub-issues** — which is exactly what lineage is. Sub-issues were
+parked "until board scale pays"; the sprout index is what makes them pay.

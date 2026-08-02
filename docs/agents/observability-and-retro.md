@@ -1,17 +1,18 @@
 # Agent observability & the retro loop — see every session, improve the process from evidence
 
-> **Status: P0 + P1 LIVE (built 2026-07-08).** A0 (OTLP → `argocd/resources/otel-collector/`), the
-> `agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), all three capture hooks
-> (worker `agent-finalize`, reviewer/coordinator launcher traps, nightly `transcripts-sync`
-> CronJob) and the viewer (`transcripts.local.teststuff.net`,
-> `agents/coordinator/transcripts-viewer.yaml`) are deployed. **P2 = FU-057 LIVE (merged + deployed
-> 2026-07-10; archived 2026-07-16)** — exit_status/error_class classifier, pushgateway +
-> `agent_run_*` metrics, the dashboards (model-health, running-agents/stall detector, cost, the
-> agent-issue drill-down), goose sessions.db rendering in the viewer, and the `ledger-reflex`
-> Argo CronWorkflow on a 30-min cadence (ADR-093 — the loop reflexes migrated k8s CronJob → Argo
-> CronWorkflow, `agents/coordinator/reflexes-argo.yaml`); taxonomy unification (FU-061) landed with it. **P3 = FU-058**, next
-> (the ledger it needs is accumulating; both absorbed the old "stats v2" scope). Companion to [`workflow.md`](workflow.md) (control flow)
-> and [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
+**This doc owns seeing what the agents did, and improving the process from that evidence** —
+session capture, the durable store and browser, the facts ledger, and the retro loop.
+
+**Where the machinery lives:** OTLP collector (`argocd/resources/otel-collector/`), the
+`agent-transcripts` bucket (`agents/coordinator/garage-workspace.yaml`), three capture hooks
+(worker `agent-finalize` + reviewer/coordinator launcher traps + the nightly `transcripts-sync`
+CronJob), the viewer (`transcripts.local.teststuff.net`,
+`agents/coordinator/transcripts-viewer.yaml`), the exit_status/error_class classifier +
+pushgateway `agent_run_*` metrics + dashboards, and the `ledger-reflex` Argo CronWorkflow
+(30-min cadence, `agents/coordinator/reflexes-argo.yaml`). The retro session itself is a
+CronWorkflow that is **born suspended** — see Part B. Companion to
+[`workflow.md`](workflow.md) (control flow) and
+[`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 
 Two needs, one substrate:
 
@@ -117,10 +118,12 @@ Hook points (all existing seams, small diffs):
   direct answer to "the loop was hard to follow" (the #1 pain from the first hand-driven runs).
 - **Task-centric entry**: the bucket prefix *is* the "all sessions for issue #N" view; add the
   prefix URL to the existing PR stats comment (one line next to the Grafana link).
-- **LLM access**: an MCP toolset on the homelab Type-1 MCP —
+- **LLM access (not built)**: a transcript MCP toolset —
   `list_sessions(project, task)` · `get_manifest(session)` · `grep_transcript(session, pattern)` ·
   `fetch_segment(session, from, to)` — so an analysis session pulls *slices*, never whole
-  transcripts into context.
+  transcripts into context. This is the retro's (FU-058) standing want and the **only** concrete
+  consumer that would justify standing up an in-cluster MCP server at all; the retro runs without
+  it today by reading the ledger.
 
 ## Part A′ — what actually took time (measured from the first oracle runs, 2026-07-09)
 
@@ -217,6 +220,58 @@ an operator/platform decision; the graduation target is an AgentStack claim knob
 reports move stack-side — the standard mechanism/policy split (platform-and-stacks.md).
 teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
 is needed for this.
+
+#### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
+
+The retro was chosen as the **first multi-large-model tryout** (operator direction 2026-07-25):
+N models over the SAME worst-K ledger slice in parallel, then a **cross-review** round where each
+critiques the others' reports and the human reads the critiques. It is the safest arena for it —
+read-only inputs, human-gated outputs — and the task shape is the FU-095 reasoning/audit tier,
+where dual-model spend is ruled worth it. v1 needed **no MCP transcript tools**: ledger + issue/PR
+stats + strike comments sufficed, reusing model-scout's ephemeral capped-key mint.
+
+**Runs 1+2 are done** (`retros/2026-07-25-*`): mechanism proven, 9 models compared repo-verified,
+cross-review landed with a deepseek-v4-pro critic. Routing data harvested for FU-095:
+
+| Cell | Verdict |
+|---|---|
+| deepseek-v4-pro, hy3 | the **audit tier** — opus-adjacent grounding at $0.02–0.08 |
+| kimi | useful **wide-net second reader** |
+| gpt-oss-120b, nemotron-super | **fabricators** on evidence work — do not use for audit |
+
+**Brief v2, from runs 1+2 evidence:**
+
+- **(a) ✅ done 2026-07-25** — run-1's brief was recovered verbatim from the transcript bucket and
+  committed as [`retros/BRIEF.md`](retros/BRIEF.md) (v3 template: ledger-blind-spots block,
+  harness-source excerpts, task-granularity / wins / predecessor-score sections), plus
+  [`retros/CROSS-REVIEW.md`](retros/CROSS-REVIEW.md) and `agents/retro-session.sh` (assembles
+  per-cell, delegates to `agent-session.sh --harness/--model`).
+- **(b)** The cross-run "could not verify" items are mostly **ledger gaps, not access gaps** —
+  `reviewer_rounds=0` despite real review rounds, `wall_time_s` not decomposed active/idle
+  (contradicted by PR lifetimes), `retry_storms` taxonomy undefined, haiku cost $0.00-vs-untracked
+  ambiguity. **Fix the emitter before adding tools.**
+- **(c)** Give the retro **read access to the harness source it is asked to improve**
+  (`coordinator-scan.sh`, `estimate_budget.py` excerpts in the brief, or a homelab checkout): 6/9
+  models flagged naming-targets-they-cannot-read, and the fabricators invented APIs exactly there.
+- **(d)** Add a **task-granularity** section to the report contract: *"which of these worst-K tasks
+  should have been ONE bigger-model task (or a subagent fan-out) instead of chunks; which chunks
+  needed rework at integration."* Operator hypothesis to test either way: a large model + subagents
+  might one-shot a project this size in ~48h.
+
+Prometheus/Grafana access is **not** needed yet — no report was blocked on metrics.
+
+**Run-3 shape (operator direction, composition-axes frame):** two retro rides off the SAME
+agent-base image and the SAME committed `BRIEF.md` — **A** = claude harness + opus (subscription
+via the ADR-081 proxy, FU-088-gated), **B** = goose harness + deepseek-v4-pro (ephemeral capped
+key, provider-pinned) — then cross-review with the **cells swapped** (A reviews B's report, B
+reviews A's). Tooling parity is already structural: agent-base ships `claude-code@latest` alongside
+goose/opencode plus the full toolkit (gh/git/jq/python/uv/kubectl/s5cmd), so retro-er and reviewer
+are freely mixable. Rotating cells run-over-run separates **harness effect from model effect** on
+the FU-057 ledger axes — which doubles as FU-095(b) evidence. Repo scope for the retro token = the
+stack jail's REPOS boundary (`tools/stack-jail.sh`: oracle-fleet, oracle-iac,
+allure-behavior-snippets), read-only, App-minted. Standing guardrails: outside the fixer ns / WIP
+slot (the P3 constraint), $0.05 key floor, `GOOSE_MAX_TOKENS=16384`, reports land in
+`docs/agents/retros/` via PR.
 
 ## Rollout
 

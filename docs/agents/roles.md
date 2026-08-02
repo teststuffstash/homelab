@@ -1,9 +1,11 @@
 # Roles — the role axis, inventoried
 
-**Status: created 2026-07-27 (operator sessions of 2026-07-27; the FU-100 build + the meta-11
-prod-outage role-gap analysis).** This is the home of the **role** axis from
-[`platform-and-stacks.md`](platform-and-stacks.md) §Composition axes. One page per question the
-axes model raises: *what does a role consist of, which exist, what does a new one cost?*
+**This doc owns the role axis** from [`platform-and-stacks.md`](platform-and-stacks.md)
+§Composition axes — one page for the three questions that axis raises: *what does a role consist
+of, which exist, and what does a new one cost?* Written out of the FU-100 build and the meta-11
+prod-outage role-gap analysis. The platform map (which role runs where) is
+[`README.md`](README.md); per-role status is coarse here on purpose — the tracker and the cluster
+are the authorities.
 
 ## What a role is
 
@@ -172,15 +174,60 @@ tier allowed, dual-model worth it) are FU-095's.
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
   `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
 - **infra-fixer** (FU-106) — the -iac devops role. Works the **-iac wrapper layer** (charts stay
-  target-agnostic — §contract/fulfillment in FU-106); input = `values.schema.json` diff (the
-  typed infra delta), fulfillment = enriched **bump PR** (chart pin + claim change in ONE -iac
-  commit — atomic at the deploy boundary, the meta-11 paired-rolls rule generalized); mechanical
-  (schema-valid, within FU-093 quota) rides the ADR-084 CI-only lane, judgment stays
-  codeowner-gated. Hard boundary: wires secret *references*, never values. Detector built
-  2026-07-27 (`agents/infra-schema-diff.sh` — the typed delta + `enrichment_needed` bit);
-  scan clause + dispatch = the remaining machinery.
+  target-agnostic); input = `values.schema.json` diff (the typed infra delta), fulfillment =
+  enriched **bump PR** (chart pin + claim change in ONE -iac commit — atomic at the deploy
+  boundary, the meta-11 paired-rolls rule generalized); mechanical (schema-valid, within the
+  FU-093 quota) rides the ADR-084 CI-only lane, judgment stays codeowner-gated. Hard boundary:
+  wires secret *references*, never values. Detector + `infra-enrich` dispatch class built
+  2026-07-27, first live dispatch merged the same day. **Full rollout matrix (a)–(f), the lane
+  doctrine and the IAC-G01..G06 gap register:** [`iac-lane.md`](iac-lane.md).
 - **audit-pass** — not a role: reviewer machinery × e-ITS lens × schedule predicate (dissolved
   the planned "auditor").
+
+## Context delivery — role × context × source (FU-117)
+
+Operator 2026-07-28: *"context management is starting to spread — which role requires what
+context."* The operator's style here is explicit: **let it grow organically, then analyse and
+refactor — not BDUF.** So this section is a deliberate pile-up. Keep noting sightings; do **not**
+refactor until it has piled up enough to see the shape.
+
+**Root finding: two delivery channels carry different context.**
+
+| Channel | Reaches | Carries |
+|---|---|---|
+| **Claude-Code auto-load** (CLAUDE.md + skills + memory) | the meta-coordinator, and claude-harness rides (coordinator / reviewer / researcher — they run `claude -p`, clone homelab, get its CLAUDE.md) | the universal ground rules |
+| **Recipe + launcher-spliced env card** | the **goose** worker/fixer rides | per-ride facts + task rules |
+
+**Goose is not Claude Code, so it never loads CLAUDE.md.** The universal ground rules that live
+there — grep SERVICES.md, devbox-for-everything, prior-art-before-creating — therefore never reach
+the goose worker. Concrete cost already paid: #71-r1 downloaded a kind binary into a read-only nix
+profile; the #48 rounds never configured the registry mirror. Both are CLAUDE.md-rule gaps. The env
+card became the smuggling route, which *is* the spread.
+
+**A boundary the model must respect (sighting 2026-07-28).** The ride clones ONLY `/work/repo` —
+the project repo, never homelab — so a worker **cannot** grep SERVICES.md. And it shouldn't:
+**service context** (endpoints, buckets, existing-secret refs) is the **issue author's /
+coordinator's** job to inject into the issue; the worker executes with it. Meta-15 briefly added a
+"grep SERVICES.md" env-card bullet and then removed it — exactly the flip-flop-to-worker the
+operator flagged.
+
+So the map has at least **three context classes**:
+
+1. **Environment** — how your box works. Owner: the env card
+   ([`fixer-context.md`](fixer-context.md) L1).
+2. **Task + service facts** — what THIS task needs. Owner: the **issue**, injected by the
+   author/coordinator.
+3. **Universal ground rules** — CLAUDE.md today, and unreachable by goose.
+
+**Interim (done 2026-07-28, meta-15):** the key CLAUDE.md rules were duplicated into
+`render_env_card()` and the missing nix-cache proxy added. The duplication is accepted on purpose;
+FU-117 tracks the dedup.
+
+**The refactor, when it has piled up enough:** a **role × context × source** map that separates
+*dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
+ground rules* (authored once, delivered to goose via a launcher-injected static block — the env
+card's sibling — or a recipe "read CLAUDE.md first" opener) from *task rules* (the recipe). One
+source per concern, delivered to the roles that need it.
 
 ## SLO machinery (not a role — stack policy)
 

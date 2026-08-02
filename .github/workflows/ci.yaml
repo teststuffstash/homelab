@@ -38,3 +38,8 @@ jobs:
       # self-test a deployed pod's module carries.
       - name: Router self-test (devbox run router-self-test)
         run: devbox run router-self-test
+      # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
+      # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
+      # discipline — see docs/follow-ups.md "Conventions".
+      - name: FU tracker lint (devbox run follow-ups-lint)
+        run: devbox run follow-ups-lint

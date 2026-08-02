@@ -1,13 +1,10 @@
 # Agent workflow — issue → tested PR → merge
 
-> **Status: autonomous per-stack (2026-07-27; originally hand-driven 2026-07).** The *substrate*
-> (scoped pods, recipes, scoped tokens,
-> branch protection, stats) is LIVE — see [`README.md`](README.md) and
-> [`../../agents/README.md`](../../agents/README.md). The **coordinator**
-> ([`../../agents/coordinator/`](../../agents/coordinator/README.md)) now runs as the durable,
-> self-running reconciler described below — Argo CronWorkflow reflexes (ADR-093, FU-026 archived),
-> per-stack autonomy via the FU-080 claim knobs. Pivotal choices → thin ADRs
-> in [`../adr.md`](../adr.md).
+**This doc owns the fixer control flow** — the worker's gates, why it's a pure function, the
+coordinator as a level-triggered reconciler, the trigger model, and the hazards to bake in. The
+coordinator that executes it is [`../../agents/coordinator/README.md`](../../agents/coordinator/README.md);
+its per-role machinery is [`roles.md`](roles.md); pivotal choices are thin ADRs in
+[`../adr.md`](../adr.md).
 
 The end-to-end goal (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged
 fix. This doc is the *control flow* that gets it there — who runs the agent, when, and how review and

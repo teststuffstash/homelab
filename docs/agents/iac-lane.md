@@ -45,6 +45,41 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 | `revert` | FU-044 chain | CI-only, must NEVER gain a gate | the emergency path stays instant |
 | `renovate` | Renovate | existing classification (renovate.md) | |
 
+## The infra-delta rollout matrix — what an upstream chart change costs the wrapper
+
+The whole role exists because of the **target-agnostic-chart constraint**
+([platform-and-stacks.md §Composition axes](platform-and-stacks.md), 4th bullet): app charts carry
+only the consumption **contract** (`values.schema.json`, `existingSecret`, endpoint values,
+default-off flags for ecosystem-standard CRDs) and deploy anywhere; **platform fulfillment**
+(Crossplane claims, ExternalSecrets) lives in the per-target wrapper chart in `-iac`. So every
+upstream change has to be classified by what it demands of the wrapper:
+
+| # | Chart change | What `-iac` must do |
+|---|---|---|
+| a | New **provisionable** (bucket, key, DB) | Wrapper claim, **atomic with the pin bump** |
+| b | New value **with a default** | Nothing — chart default carries it |
+| c | New **required** value | The `values.schema.json` **diff between chart versions IS the typed infra delta** → the scan emits one infra unit per `-iac` target dir → the role **enriches** the ADR-084 bump PR (pin + fulfillment in ONE commit = deploy-atomic, the meta-11 paired-rolls rule generalized) |
+| d | **Expand/contract** for code-level compat | Both halves, with a scan **aging predicate** on undropped expands (a debt timer; the contract task is born via the FU-090 harvest) |
+| e | **Runtime wedge** (`optional: false` → new RS wedges, old keeps serving) | The occasional visible-stall variant of (c) |
+| f | **Quota / judgment** | Codeowner-gated, provider-first hold — the only surviving hold |
+
+Mechanical (schema-valid **and** within the FU-093 quota) rides the CI-only auto-merge lane; the
+**FU-093 storage ledger is what DEFINES "mechanical"** ([storage-ledger.md](../storage-ledger.md)).
+Hard boundary: the role wires secret **references**, never values — Infisical writes stay
+operator/ESO-push.
+
+⚠ This deliberately **re-opens two standing exclusions** — `fixerRepos` context-only (the FU-086
+predicate) and "sleep-iac excluded, CI-only deploy repo" — via a *distinct dispatch class*, not by
+silently flipping them.
+
+**Built 2026-07-27:** `agents/infra-schema-diff.sh` (the typed delta + `enrichment_needed` bit,
+verified); the scan's `ci-red-stale` probe routes a RED `deploy/*` bump PR in a `*-iac` repo to the
+distinct `infra-enrich` class — the item session helm-pulls both chart versions, runs the diff, and
+enriches **the same PR** (brief §infra-enrich). The sleep-iac exclusion was re-opened deliberately
+via a reviewed claim diff (sleep-iac#24: fixer block, stack-declared fixer ns, `-iac` fix.yaml +
+PROD-SERVING rubric). First live dispatch 2026-07-27 (#22 → PR#28, merged, deliverables verified by
+the C6 closeout) — **and that dispatch is what exposed IAC-G01**, below.
+
 ## Assurance layers (what catches what)
 
 - **L0 — CI, deterministic (form):** helm template / kustomize build renders, kubeconform against
@@ -70,6 +105,32 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 What structurally cannot be caught pre-merge: references to platform-precreated resources,
 provider-side effects, cross-stack interactions. That is exactly the post-merge half's job, and
 why revert-first (never fix-forward-in-place) is the standing play.
+
+### ⚠ ArgoCD health is NOT the post-deploy gate (sharpened by meta-11, 2026-07-26)
+
+A chart that renders and passes kubeconform can still break at runtime — a bad migration, a
+crashlooping CronJob, a probe that passes while the thing behind it is dead. The meta-11 schema-skew
+outage **stayed GREEN in Argo throughout**, because the pods were Ready on a `tcpSocket` probe.
+
+So L2's health check is a *shallow* gate, and two things carry the real weight:
+
+- **The deep contract probe** — the FU-102 prober at tools/call level, "verify through the deepest
+  component" ([roles.md](roles.md) §prober). That is the acceptance signal, not app health.
+- **The deterministic half of prevention** — the paired-roll / schema-gate contract
+  (oracle-fleet#159 shape) plus readiness that actually exercises the backend (#157).
+
+**Deterministic rollback shipped 2026-07-27 (FU-044, no LLM):** argocd-notifications (`oncePer`
+revision) POSTs a post-sync **Degraded** app → the `/deploy-degraded` edge → the `deploy-revert`
+Sensor/Workflow ([`agents/coordinator/deploy-revert-argo.yaml`](../../agents/coordinator/deploy-revert-argo.yaml)):
+it reverts the newest `deploy/*` bump merged ≤120m that touches the app's path, as an auto-merging
+PR (branch + cm-ledger idempotency). Non-`-iac`, no-recent-bump and revert-conflict all fail closed
+to report-only.
+
+**Roll-FORWARD — dispatch a worker against the app repo to fix the breakage — is the remaining LLM
+half.** Direction is settled: do it **in-cluster off ArgoCD app-health events, NOT in the GitHub
+Actions deploy run**, since the deploy job now ends at "auto-merge armed" (`deploy-pin.sh`) and
+post-deploy health is decoupled from CI. Standing operator prereq: **harden app CI so prod
+breakages are rare** — the rollback is the safety net, not the primary control.
 
 ## Progressive delivery — the observation window (IAC-G05)
 

@@ -1,10 +1,10 @@
 # Platform ⟷ stack separation — the agents framework as a platform capability
 
-**Status: direction set (2026-07-05), first cut built + RAN LIVE in homelab.** Tracked as
-FU-045/FU-048/FU-049/FU-050. This doc records where the agents framework and service discovery are heading;
-the code that exists today is the pragmatic first cut, deliberately shaped so the migration is a *lift, not
-a rewrite*. First live proof (2026-07-05): `coordinator-scan` flagged sleep-tracking#18, and a scoped
-**opus** coordinator drove the major-devbox lane (FU-047) end-to-end to a human merge.
+**This doc owns the platform ⟷ stack boundary** — the composition axes, what a stack may declare
+versus what the platform renders, service discovery, and the credential-airlock pattern. It records
+the direction; the code that exists is deliberately shaped so the migration stays a *lift, not a
+rewrite*. Open legs are FU-049 (XRD-generated catalog) and the FU-039 self-service program
+(`ROADMAP.md` → Programs in flight).
 
 ## The theory
 
@@ -158,7 +158,7 @@ coordinator toolchain = platform **mechanism** (in the image); per-repo build to
 YAML it's `git` + maybe `yq` — still fixed and stack-independent; genuinely stack-specific coordinator
 tooling would be a per-stack image variant selected by the future `AgentStack` Composition.
 
-**The one swap-point:** `coordinator-scan.sh`'s `stacks_json()` reads `stacks.json` today; the FU-045 target
+**The one swap-point:** `coordinator-scan.sh`'s `stacks_json()` reads `stacks.json` today; the target
 is `kubectl get agentstacks -o json`. Everything downstream (the per-stack loop, the gate, the spawn) is
 already source-agnostic, so flipping the source is the migration.
 
