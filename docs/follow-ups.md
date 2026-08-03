@@ -46,8 +46,9 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-02 (pointer-discipline pass: 1033 → 433 lines, no information lost — detail
-moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.md`; lint now in `ci`)._
+_Last updated: 2026-08-03 (docs-cleanup pass: all six OVERSIZE items pointer-ized, 373 → 325
+lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-retro,model-routing}.md`
++ `docs/storage-ledger.md`; previous pass 2026-08-02: 1033 → 433)._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -141,18 +142,12 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 ## Agents
 
 
-- [ ] **FU-111** — **Native `blockedBy` migration: probes GREEN + union reader SHIPPED
-      2026-08-02.** Verified live (jail token): the field rides the existing `gh issue list
-      --json` call and populates; cross-repo edges work; REST create/delete works
-      (`/issues/<n>/dependencies/blocked_by`, `-F issue_id=<int>`). The scan now gates on the
-      UNION of native edges + `Depends-on:` body lines (no dual-format drift — either alone
-      blocks); authoring guidance updated (issue-authoring.md §Dependencies). **Remaining:**
-      observe native edges under the APP token in live scan logs (the jail cannot mint that
-      token — FU-108's probe-that-looks lesson), then retire the body-line reader + lines.
-      **Authoring FLIPPED 2026-08-03**: the merged-closeout play now creates the native edge
-      alongside the body line (failed create = noted in the closing comment for this soak).
-      Remaining: observe native edges flowing under the App token in scan logs → retire.
-      Relates FU-086, FU-087/FU-110 (archived), FU-090.
+- [ ] **FU-111** — **Native `blockedBy` migration: POINTER.** Doctrine, live-verified probe
+      facts (create/cross-repo/union reader) and the 2026-08-03 authoring flip live in
+      [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Dependencies.
+      **Next:** observe native edges flowing under the APP token in scan logs (the jail cannot
+      mint that token — FU-108's probe-that-looks lesson), then retire the body-line reader +
+      lines. Relates FU-087/FU-110 (archived), FU-090.
 
 
 
@@ -188,58 +183,32 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       → FU-103 responder. Composes with FU-044 as its deep post-deploy gate. `roles.md`.
 
 
-- [ ] **FU-106** — **Build out the -iac lane: close the IAC-G01..G06 gap register.** The role,
-      the doctrine, the rollout matrix and the build order live in
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked like the
-      app FSM); the detector + `infra-enrich` dispatch class shipped 2026-07-27 with a first live
-      dispatch merged.
-      **2026-08-02: oracle-iac twin LIVE** (fixer block #262 + ns render + first ride #97→#265
-      clean), **G02 CLOSED** (revert candidate = any -iac merge, revert-* excluded), **G03
-      CLOSED** (closeout's -iac variant verifies Synced-at-revision + Healthy + claims Ready;
-      loop SA granted the read-only RBAC), **G07 pin-follow SHIPPED** (oracle-fleet#167 —
-      workflow tags ride the bump commit, pin-hold opt-out).
-      **2026-08-03: G05-rung-0 ⚖ ANSWERED + BUILT** (cron-shaped = real-run-as-hook +
-      freshness-free read asserts; sleep-tracking#113; doctrine + rejected cron alternatives in
-      the iac-lane doc §IAC-G05).
-      **2026-08-03: G04 sentinel v1 BUILT (shadow)** — Kyverno-CLI as THE engine + gitleaks +
-      path-rule, cluster-side cron, measured ~2s/PR; detail + enforcement plan (reviewer-App
-      statuses:write, push ruleset, required check): iac-lane.md §L0b. **Open:** the G01
-      ENFORCEMENT flip after the shadow soak (operator: grant + tofu ruleset), then G06
-      advisory lens. Relates FU-086 (archived), FU-087/FU-093, ADR-084, ADR-076.
+- [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, gap
+      register IAC-G01..G07 with per-gap status, assurance layers and the sentinel:
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
+      Closed so far: G02/G03/G07 (2026-08-02), G05 rung-0 (sleep-tracking#113) + G04 sentinel
+      v1 shadow (2026-08-03). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak
+      (operator: reviewer-App statuses:write + tofu push ruleset + required check — plan in
+      §L0b), then G06 advisory lens. Relates FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
       with 0 rejections — the gate's value migrated to issue-time ⚖ pre-decision; ~half the
       gates were mechanical diffs (marker flips, event-list syncs, provenance notes). Do NOT
       implement before the operator re-opens this.
-- [ ] **FU-093** — **One ledger must own each storage tier's committed sum, and something must
-      meter it.** ADR-089 gives every claim a cap but nobody the total — the bulk tier was
-      double-booked, and four sightings in six days confirm a breach is invisible until a workload
-      fails. Ledger, the double-book, all four sightings and the build list:
+- [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, the double-book
+      history, the lint (built 2026-08-02) and the 2026-08-03 reconciliation (121%→89%):
       [`docs/storage-ledger.md`](storage-ledger.md).
-      **(a) ledger lint BUILT 2026-08-02** (`devbox run storage-ledger`, cluster-sourced, >100%
-      exits 1); **121% overcommit RECONCILED 2026-08-03** (operator: shrink oversized caps, keep
-      ert-snapshots 90Gi + the PVC) — loki 40→8Gi, agent-transcripts 20→5Gi → 134/150Gi (89%,
-      inside the WARN band by design). **Next:** Garage admin-API
-      metrics + ServiceMonitor and Longhorn per-disk `storageScheduled`, each with a >80% alert.
-      Blocks the FU-106 "mechanical" predicate. Relates ADR-089, FU-116 (archived).
+      **Next:** Garage admin-API metrics + ServiceMonitor and Longhorn per-disk
+      `storageScheduled`, each with a >80% alert. Blocks the FU-106 "mechanical" predicate.
+      Relates ADR-089, FU-116 (archived).
 
-- [ ] **FU-090** — **Build the sprout index: structure harvest lineage as GitHub sub-issues.**
-      Design (all three legs, the breaker-#1 gate, the sprout-index rungs and the retro-checkpoint
-      terminal): [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
-      **Shipped:** leg (a) harvest + the `merged-closeout` scan clause (2026-07-27); the 🌱
-      visibility slice (07-18); the prompt-only down-payment — reviewer complete-the-fix case +
-      HARVEST BAR (07-31). **Sub-issue lineage SHIPPED 2026-08-02** (assessment delivered:
-      sub-issues over alternatives — semantics-not-decorations; API round-trip verified live):
-      the merged-closeout play now links each harvested issue as a native sub-issue of the
-      ORIGINATING issue (PR provenance stays in the body; failed link = non-fatal + noted) with
-      a ⚠ deep-sprout flag when harvesting at depth ≥2. **Authoring contract grew `Touches:`
-      2026-08-03 (ADR-097)** — the declared footprint the FU-086 parallel dispatch keys on.
-      **Next rungs:** the exporter sprout-RATE
-      gauge (walk `parent`/sub_issues on the FU-108 GraphQL walk) + the depth-aware harvest gate
-      reading it. **Deferred by the operator:** leg (c) goal-budget decomposition, and the
-      `issueAuthoring.selfQueue` graduation knob.
-      Relates FU-086/FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
+- [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
+      the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
+      retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
+      **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
+      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`.
+      Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
       issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares
       and cherry-picks.** **Platform legs BUILT same day:** `agents/research-fanout.sh` (per-model
@@ -262,17 +231,12 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
-- [ ] **FU-058** — **Retro P3: unsuspend the scheduled retro session.** Design, the multi-model
-      pilot, runs 1+2 results and the run-3 shape:
-      [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2. Cron
-      exists (`agents/coordinator/retro-argo.yaml`, **born SUSPENDED** — Mon 05:00 declared,
-      hand-fired via `argo submit --from` until proven).
-      **(5) UNSUSPENDED 2026-08-03 (operator ruling)** — the cron self-fires Mondays 05:00 now.
-      **Remaining:** (1) run 3 (the swapped-cell cross-review) — next Monday's fire IS it, watch
-      it; (2) fix the ledger emitter gaps brief-v2(b) named — they, not tool access, are why
-      reports say "could not verify"; (3) MCP transcript slices; (4) act on the reports'
-      queued-issue candidates. Absorbs FU-057's residue: ledger-reflex consuming `key_hash`
-      for the OpenRouter activity-API per-request backfill. Relates FU-095.
+- [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
+      unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
+      §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
+      cross-review); then the ledger emitter gaps, MCP transcript slices, acting on report
+      candidates (list in §B2). Absorbs FU-057's residue (`key_hash` activity-API backfill).
+      Relates FU-095.
 
 - [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags
       to open agent PR branches during merge-forward arbitration (record-in-git; issues = work
@@ -323,25 +287,14 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       managers fight; a state `rm` must be scoped to `^github_issue_label\.` ONLY (a broad grep also
       matches rulesets). Relates FU-048, ADR-085.
 
-- [ ] **FU-095** — **Sleep stack pilots: task-class model routing + multi-harness evidence.**
-      Design, operator corrections, legs (a)/(b)/(c), buy-vs-build:
-      [`docs/agents/model-routing.md`](agents/model-routing.md) §"The sleep-stack pilots". Leg
-      (a)'s substrate is **ADR-096** (detail there): P1–P2 shipped 2026-07-27/08-02; **P3+P5 +
-      the addendum-4 cooldown/recovery leg shipped 2026-08-02** (`POST /route` live,
-      launcher consult AGENT_ROUTER=shadow default, rotation-fed candidates). Remaining: the
-      P4 authoritative flip after the shadow soak. **Open here:** legs (b)+(c) unstarted.
-      P1 coverage gap CLOSED 2026-08-02: the in-pod `agent-finalize` /report twin shipped
-      (agent-runtime#27 + launcher-injected AGENT_STACK/AGENT_REPORT_URL) — coordinator-path
-      ride outcomes now reach the shadow store. **M8 capability feed BUILT 2026-08-03**
-      (same-day direction→build): proxy pulls weekly via the standard key (`_capability_tick` —
-      AA indices → `capability`, task-tag top-10s → `task_market`), `/route` filters per class
-      vs `class_floors` (git policy; permissive on missing data; self-test covers block/pass);
-      floors surface in SHADOW decisions until the P4 flip — tighten with that evidence.
-      **P5 pilot RULED 2026-08-03: the `circles` stack bootstraps CHAINLESS** (no workerModel,
-      `routerMode: authoritative` — enablers in c36c7ed; plan: therapy others-view-plan.md;
-      the router is tuned until that project works — P4 fleet-flip evidence comes from it).
+- [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
+      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (M8 capability feed
+      BUILT 2026-08-03 — router-store delivery, class_floors shadow); decision record ADR-096
+      (P1–P3+P5 + cooldowns live).
+      **Next:** the P4 authoritative flip after the shadow soak — evidence comes from the
+      `circles` CHAINLESS pilot (ruled 2026-08-03: no workerModel, routerMode authoritative;
+      plan in therapy others-view-plan.md). **Open:** legs (b)+(c) unstarted.
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
-
 ## Hardware & nodes
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and

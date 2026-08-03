@@ -41,7 +41,7 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 | `deploy_bump` | deploy App | CI-only, instant (ADR-084) | `require_approval=false` is deliberate: App bypass can't waive an approval, so it was dropped, not bypassed |
 | `infra_enrich` | coordinator unit | rides the bump PR (atomic pin+claim) | mechanical (schema-valid, FU-093 quota) = CI lane; judgment parks (roles.md §infra-fixer) |
 | `fixer_issue` | worker | **the gap** (IAC-G01) — closes via the policy sentinel, not review | sleep-iac#28: 38s self-merge incl. `.github/workflows/` |
-| `pin_follow` | **⚠ IAC-G07: nobody — today the operator by hand** | should be CI-only (pure mechanical) | cross-repo image-ref propagation: a deploy bump lands in `-iac`, but OTHER manifests in the stack (oracle-fleet `infra/workflow-ert-*.yaml`) pin the same image by tag — the follow-up bump is deterministic, needs NO LLM, and is the single most frequent human commit in oracle-iac history (7 of the last 120). Deploy-workflow extension shape (like `deploy-pin.sh`), not a role. |
+| `pin_follow` | deploy workflow (**IAC-G07 SHIPPED 2026-08-02**, oracle-fleet#167) | CI-only (pure mechanical) | cross-repo image-ref propagation: workflow tags ride the bump commit, pin-hold opt-out. Was the single most frequent human commit in oracle-iac history (7 of the last 120). |
 | `data_roll` | operator (oracle corpus rolls) | paired-roll contract (fleet#159 schema gate) | 4 of the last 120 oracle-iac commits; semi-mechanical since the schema gate — WHICH corpus stays judgment, the paired pin+digest commit is workflow-shaped |
 | `operator` | operator/meta session | CI-only | the directing human IS the review |
 | `revert` | FU-044 chain | CI-only, must NEVER gain a gate | the emergency path stays instant |
@@ -90,7 +90,8 @@ distinct `infra-enrich` class — the item session helm-pulls both chart version
 enriches **the same PR** (brief §infra-enrich). The sleep-iac exclusion was re-opened deliberately
 via a reviewed claim diff (sleep-iac#24: fixer block, stack-declared fixer ns, `-iac` fix.yaml +
 PROD-SERVING rubric). First live dispatch 2026-07-27 (#22 → PR#28, merged, deliverables verified by
-the C6 closeout) — **and that dispatch is what exposed IAC-G01**, below.
+the C6 closeout) — **and that dispatch is what exposed IAC-G01**, below. The **oracle-iac twin
+went LIVE 2026-08-02** (fixer block #262 + ns render; first ride #97→#265 merged clean).
 
 ## Assurance layers (what catches what)
 

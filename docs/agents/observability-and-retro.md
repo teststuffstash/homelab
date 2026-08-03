@@ -221,6 +221,12 @@ reports move stack-side — the standard mechanism/policy split (platform-and-st
 teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
 is needed for this.
 
+**Cadence status: UNSUSPENDED 2026-08-03 (operator, FU-058(5))** — `retro-argo.yaml` self-fires
+Mondays 05:00 UTC (born-suspended hand-fired era over); the first unattended fire doubles as
+run 3 (the swapped-cell cross-review). Remaining FU-058 legs: the ledger emitter gaps
+brief-v2(b) named (the real cause of "could not verify" report lines), MCP transcript slices,
+and acting on the reports' queued-issue candidates.
+
 #### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
 
 The retro was chosen as the **first multi-large-model tryout** (operator direction 2026-07-25):

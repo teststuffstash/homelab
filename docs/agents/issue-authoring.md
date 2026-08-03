@@ -96,7 +96,11 @@ Prompt-only, no index yet — proving the #96/#92 mis-sorts are fixable from the
 `agents/reviewer-session.sh` gained a **complete-the-fix** narrow-blocking case and a **HARVEST
 BAR** (inert / not-a-gap / won't-fix / style stay comments, never `Follow-ups:`).
 
-**Next rung = the structured sub-issue lineage** — the index everything else keys off.
+**The structured sub-issue lineage SHIPPED 2026-08-02** (rung 1): the merged-closeout play
+links each harvested issue as a native sub-issue of the ORIGINATING issue (PR provenance stays
+in the body; failed link non-fatal + noted) with a ⚠ deep-sprout flag at depth ≥2 — API
+round-tripped live before adoption. **Next rungs:** the exporter sprout-RATE gauge (walk
+`parent`/sub_issues on the existing GraphQL walk) + the depth-aware harvest gate reading it.
 
 ## Touches: the declared footprint (ADR-097, 2026-08-03)
 
