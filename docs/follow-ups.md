@@ -205,22 +205,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       `-iac` worker can rewrite its own CI gate and instant-merge unreviewed (sleep-iac#28,
       38s); priority RISES with three fixer lanes live. Then G06 advisory lens.
       Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
-- [ ] **FU-086** — **Item-scoped dispatch: the four remaining knobs.** Core shipped + E2E-verified
-      2026-07-17 (scan emits `(clause, repo, item)` units, `--spawn` dispatches the single
-      highest-priority one, WIP=1 kept); arbitrate + `ci-red-stale` shipped 2026-07-27, closing
-      MP-G01/G04 — the merge-path FSM gap register is empty. Decision + mechanism: **ADR-094**;
-      the scan's scheduling predicates and the unit taxonomy live there and in
-      [`docs/agents/workflow.md`](agents/workflow.md).
-      **Still open:** (1) the FU-085 compound — the Sensor submits item units directly and the cron
-      sweep emits only MISSED units; (4) demote the janitor tick to its own
-      ~daily report-only cron (under-specified — which judgment sweeps exactly?).
-      **(3) SHIPPED 2026-08-03 as ADR-097 footprint dispatch** (supersedes lane labels:
-      `Touches:` intersection hold + wipmap→`--wip`→`AGENT_WIP_LIMIT`, undeclared=exclusive,
-      PR-cap + REPO_MAX_WIP ceilings, `footprint-test` ci belt; live-verified report-mode.
-      Residual: reviewer escape-flag rubric case — with the FU-111 retirement soak).
-      **(2) DONE 2026-08-02:** cron relaxed `*/10 → */30` in the Composition (edge-primary,
-      cron = 30min staleness bound); meta-watch stall clause moved 25→40min to match.
-      Relates FU-050, FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h

@@ -13,12 +13,11 @@ meant to avoid.)
 - **In flight, MACHINERY-owned (no babysitting needed):** snore-recorder#15 (re-review after
   the review-fix push), oracle-fleet#166 (role port), agent-runtime#27 (/report twin — its
   deploy-pin bumps homelab agents/images.env on merge). All armed.
-- **OPERATOR DECISIONS/ACTIONS pending:** (1) FU-086 knobs 3 (WIP>1 — wants your appetite) + 4
-  (janitor-tick cron — under-specified); (2) mimo model_tiers entry at the next proxy-roll
-  window; (3) soak: `router_request_deadline_exceeded_total` should stay 0.
-  ~~FU-106 G05-rung-0 ⚖~~ ANSWERED+BUILT 2026-08-03 (sleep-tracking#113 on the machinery).
-  ~~FU-108 PAT re-mint~~ DONE 2026-08-03 (Issues:read verified via walk replay; archived).
-  ~~storage 121%~~ RECONCILED 2026-08-03 (loki 40→8Gi, transcripts 20→5Gi → 89%).
+- **OPERATOR DECISIONS/ACTIONS pending:** (1) mimo model_tiers entry at the next proxy-roll
+  window. Everything else from the 2026-08-02 list CLEARED 2026-08-03: FU-108 (archived),
+  storage 121% (→89%), FU-106 G05 (built, sleep-tracking#113), router soak (counter=0),
+  **FU-086 all four knobs (ARCHIVED — ADR-097 footprint dispatch + FU-085 compound + janitor
+  tick shipped today; parallel dispatch turns on as issues gain `Touches:` lines)**.
 - The Agents-FU sweep record: TICK-LOG cont. 8 (8 closed / 4 advanced / skips with reasons).
 
 ## Re-arm on a fresh session (watches die with `/clear`)

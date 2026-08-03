@@ -112,6 +112,72 @@ stacks_json() {
 # an assignment would not survive. One cluster read per scan, not one per jq lookup.
 STACKS_CACHE="$(stacks_json)"
 
+# FU-085/FU-086(1) compound: an edge that already KNOWS its unit (a reviewer verdict is
+# item-shaped — reviewer-session.sh computes `changes-requested|repo|pr-N` in SCRIPT code,
+# never the LLM) skips the full multi-repo sweep. The fast path re-validates everything it
+# relies on, scoped to the one item; ANY doubt returns 1 and the caller falls through to the
+# FULL scan (rule #6 — the compound may only ever be cheaper, never weaker). v1 whitelist:
+# changes-requested — the high-volume edge; in-flight clauses are exempt from the ADR-097
+# new-work predicates (footprint/PR-cap), so the scoped checks match the main path exactly:
+# breaker label, capacity latch, WIP probe.
+fast_unit_dispatch() {
+  fu="$1"
+  fclause="${fu%%|*}"; frest="${fu#*|}"; frepo="${frest%%|*}"; fitem="${frest#*|}"
+  [ "$fclause" = "changes-requested" ] || { echo "unit fast-path: clause '${fclause}' not whitelisted"; return 1; }
+  case "$fitem" in pr-[1-9]*) ;; *) echo "unit fast-path: malformed item '${fitem}'"; return 1;; esac
+  fstack="$(stacks_json | jq -r --arg r "$frepo" '[.stacks[]|select(.repos|index($r))|.name]|first // ""')"
+  [ -n "$fstack" ] || { echo "unit fast-path: repo ${frepo} in no stack"; return 1; }
+  # Scoping mirrors the main loop: a per-stack instance only serves its own stack; the global
+  # instance never touches a graduated stack (its per-stack loop owns it — the doorbell routes
+  # graduated events there with loop_ns, so this only rejects mis-routed events).
+  if [ -n "${SCAN_STACK:-}" ]; then
+    [ "$fstack" = "$SCAN_STACK" ] || { echo "unit fast-path: ${frepo} not in scoped stack ${SCAN_STACK}"; return 1; }
+  elif [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
+    echo "unit fast-path: ${fstack} graduated — global instance won't dispatch it"; return 1
+  fi
+  [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')" = "true" ] \
+    || { echo "unit fast-path: coordinator.enabled=false for ${fstack}"; return 1; }
+  # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
+  # no breaker label. Probe failure → full scan decides (conservative).
+  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels 2>/dev/null)" \
+    || { echo "unit fast-path: PR probe FAILED"; return 1; }
+  [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
+  [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
+  jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"$fprjson" \
+    && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
+  if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
+    echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"; return 0
+  fi
+  # WIP probe, same shape as the main loop (null-strip is load-bearing — issue-96):
+  # probe failure pins wip=1 (belt-only), never blocks the in-flight fix round.
+  fwip=1
+  if FPODS="$("$KUBECTL" $KUBE -n "$frepo" get pods -l app=agent-session,project="$frepo" \
+        --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
+     && jq -e . >/dev/null 2>&1 <<<"$FPODS"; then
+    flive="$(jq -r '[.items[] | select(([.status.containerStatuses[]? | select(.name == "agent")
+        | .state.terminated | select(. != null)] | length) == 0)] | length' <<<"$FPODS")"
+    case "${flive:-}" in ''|*[!0-9]*) flive=0;; esac
+    if [ "$flive" -ge "$REPO_MAX_WIP" ]; then
+      echo "unit fast-path: ${frepo} at WIP ceiling (${flive}) — cron sweep re-checks"; return 0
+    fi
+    fwip=$((flive + 1))
+  fi
+  frepos="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
+  fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
+  fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+  echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
+  bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
+    --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" \
+    --item "repo=${frepo} item=${fitem} clause=${fclause}"
+  return 0
+}
+case "${SCAN_UNIT:-}" in ""|"-") ;; *)
+  if [ -n "$SPAWN" ]; then
+    if fast_unit_dispatch "$SCAN_UNIT"; then exit 0; fi
+    echo "unit fast-path fell through — running the full scan"
+  fi
+;; esac
+
 any_work=""
 for name in $(stacks_json | jq -r '.stacks[].name'); do
   # FU-080 perStack: a stack-scoped instance (the coordinate-<stack> CronWorkflow in
@@ -576,6 +642,28 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   done
 
   [ -n "$orphans" ] && { echo "stack ${name}: ⚠ REPORT-ONLY items (human attention; the tick does not touch these):"; printf '%b' "$orphans"; }
+
+  # FU-086(4): the daily JANITOR tick — the board-level judgment ADR-094 (4) retained, at its
+  # own cadence (the janitor-<stack> CronWorkflow sets SCAN_JANITOR=1). Report-only by prompt
+  # (coordinator README §The janitor tick): it dispatches nothing and the only writes allowed
+  # are INERT spec-gap drafts (issue-authoring leg b). Runs BEFORE the quiet-stack skip on
+  # purpose — a clause bug that starves an item class makes the stack LOOK quiet, and catching
+  # exactly that is sweep #1.
+  if [ -n "$SPAWN" ] && [ "${SCAN_JANITOR:-}" = "1" ]; then
+    if [ "$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')" != "true" ]; then
+      echo "  janitor: coordinator.enabled=false for ${name} — skipped."
+      continue
+    fi
+    if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
+      echo "  janitor: capacity limited (FU-088) — skipped this day (tomorrow's cron retries)."
+      continue
+    fi
+    cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    echo "→ spawning janitor tick for ${name} (report-only, model ${cmodel})…"
+    bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --janitor
+    continue
+  fi
 
   if [ -z "$items" ]; then
     echo "stack ${name}: nothing actionable"

@@ -8,6 +8,17 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-086** *(archived 2026-08-03)* — **Item-scoped dispatch COMPLETE — all four knobs.** Core
+  2026-07-17 (units + `--spawn` single-item); (2) cron `*/10→*/30` 2026-08-02; (3) **ADR-097
+  footprint dispatch** 2026-08-03 (`Touches:` intersection supersedes lane labels; wipmap→
+  `--wip`→`AGENT_WIP_LIMIT`; undeclared=exclusive; PR-cap + REPO_MAX_WIP; `footprint-test` ci
+  belt — first run caught the `*` glob-expansion bug); (1) **FU-085 compound** 2026-08-03
+  (reviewer verdict carries `unit`, Sensor passes through, scan fast-path re-validates scoped +
+  dispatches; "-" = full scan; live-verified chain exit on stale verdict); (4) **janitor tick**
+  2026-08-03 (daily report-only `janitor-<stack>` cron → `--janitor` session, 5-sweep brief in
+  coordinator README; starvation sweep runs on quiet stacks by design). Residuals live
+  elsewhere: reviewer Touches-escape rubric + native-edge soak (FU-111), fast-path whitelist
+  growth = only if edge volume demands. Mechanism: ADR-094/ADR-097, workflow.md.
 - **FU-108** *(archived 2026-08-03)* — **Exporter queue-liveness private-repo fix DONE**: code
   shipped 2026-08-02 (`agent/*` counts ride the PR GraphQL walk, REST Search dropped); operator
   granted the PAT Issues:read 2026-08-03. Acceptance: walk replayed with the in-cluster token —

@@ -344,7 +344,8 @@ else
   echo "  (no JSON result — reviewer likely errored; kubectl --kubeconfig tofu/kubeconfig -n ${NS} logs ${POD})"
 fi
 echo "→ review submitted on ${REPO_SLUG}#${PR}. verdict:"
-gh pr view "${PR}" --repo "${REPO_SLUG}" --json reviewDecision -q .reviewDecision 2>/dev/null | sed 's/^/    reviewDecision=/' || true
+_verdict="$(gh pr view "${PR}" --repo "${REPO_SLUG}" --json reviewDecision -q .reviewDecision 2>/dev/null || true)"
+echo "    reviewDecision=${_verdict:-unknown}"
 echo "  (APPROVED + CI green ⇒ auto-merge completes the PR; CHANGES_REQUESTED ⇒ back to the worker.)"
 echo "  remove the pod:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete pod ${POD}"
 # FU-085: a verdict is scan-actionable (CHANGES_REQUESTED → round N+1 is the coordinator's move) —
@@ -353,10 +354,16 @@ echo "  remove the pod:  kubectl --kubeconfig tofu/kubeconfig -n ${NS} delete po
 # FU-080 doorbell routing: carry {stack,loop_ns} for a GRADUATED stack so the coordinator Sensor's
 # per-stack trigger inlines into <loop_ns>; else plain {repo}. Best-effort (miss → */10 cron covers).
 _grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+# FU-085 compound: a CHANGES_REQUESTED verdict IS item-shaped — carry the unit so the Sensor's
+# workflow runs the scan's fast-path (scoped re-validation + dispatch) instead of a full sweep.
+# Computed HERE in script code (never the LLM); any other verdict rings the plain doorbell and
+# the full scan/cron decide. The fast-path re-validates, so a stale unit costs a few gh calls.
+_unit=""
+[ "${_verdict:-}" = "CHANGES_REQUESTED" ] && _unit=",\"unit\":\"changes-requested|${PROJECT}|pr-${PR}\""
 if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
-  _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"}"
+  _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"${_unit}}"
 else
-  _door="{\"repo\":\"${PROJECT}\"}"
+  _door="{\"repo\":\"${PROJECT}\"${_unit}}"
 fi
 curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_door" \
   "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \

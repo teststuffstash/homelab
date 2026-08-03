@@ -42,7 +42,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"; JANITOR=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 ORG="${ORG:-teststuffstash}"   # org the stack repos live under (for `gh repo clone <org>/<repo>`)
 while [ $# -gt 0 ]; do
@@ -51,6 +51,7 @@ while [ $# -gt 0 ]; do
     --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
     --item)            ITEM="$2"; shift 2;;               # ADR-094/FU-086: reconcile ONE unit — "<repo> <issue-N|pr-N> <clause>"
     --wip)             WIP_LIMIT="$2"; shift 2;;          # ADR-097: launcher-owned AGENT_WIP_LIMIT for this item's repo (scan-computed, never LLM-assembled)
+    --janitor)         JANITOR=1; shift;;                 # FU-086(4): the daily report-only judgment tick (README §The janitor tick)
     --loop-ns)         LOOP_NS_ARG="$2"; shift 2;;        # FU-080 perStack: run the tick pod in <stack>-agents as agentstack-loop; git creds fetched per-op from the proxy's TokenReview-gated /loop-git-token (no Secrets in that ns)
     --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
     --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
@@ -78,6 +79,13 @@ if [ -n "$ITEM" ]; then
   [ -n "$RUN_CMD" ] && { echo "--item and --run/--run-tick are mutually exclusive" >&2; exit 2; }
   RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Reconcile EXACTLY ONE work unit as the coordinator, per your brief (agents/coordinator/README.md): ${ITEM} (format: repo, item, clause — the clause is WHY the deterministic scan dispatched you). FIRST re-read the item's live state (labels, PR/issue state, worker pods): dispatch is at-least-once and level-triggered, so if the unit is no longer actionable — already claimed with a live worker, already armed/approved/merged, labels moved on — say so and EXIT CLEAN having touched nothing. Otherwise CLAIM it (relabel + a one-line plan comment) and take exactly the next action its state calls for per the brief; the judgment calls (triage completeness, budget sizing, arbitration per the meta-4 doctrine) are yours, inside this one item. Do NOT go looking for other work — scheduling (which item, lanes, capacity) is the scan's job, not yours. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex's armed PRs."
 fi
+# FU-086(4) janitor mode: the ~daily REPORT-ONLY judgment tick (ADR-094 (4) — board-level
+# breadth the clause code can't have). Its entire write surface is INERT spec-gap drafts
+# (issue-authoring leg b, breaker #1); everything else is read + report.
+if [ -n "$JANITOR" ]; then
+  [ -n "$RUN_CMD" ] && { echo "--janitor and --item/--run/--run-tick are mutually exclusive" >&2; exit 2; }
+  RUN_CMD="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Run the DAILY JANITOR TICK for this stack, per your brief (§'The janitor tick' in agents/coordinator/README.md): REPORT-ONLY board-level judgment. You dispatch NOTHING, claim nothing, and change NO labels or merge state; your one permitted write is filing INERT draft issues for genuine spec/TRACKS gaps (never agent-fix or agent/queued — loop-safety breaker #1). Work the five sweeps in order — (1) STARVATION: re-list queued/actionable state and compare against recent activity; anything queued or reported for days with zero movement is the headline finding, because a scan-clause bug makes starved work look quiet; (2) ORPHAN AGING: judge the scan's report-only classes (bot-authored 🌱 drafts, queued-blocked, un-armed PRs, footprint-held) for staleness — still valid, or rotting?; (3) DIRECTION-CHANGE: read issues labelled direction-change and summarize what they imply for queued work; (4) CROSS-PR SMELLS: open PRs colliding on files, stale branches, and diffs that escaped their issue's declared Touches: footprint (ADR-097); (5) SPEC GAPS: MAY file inert drafts for real spec/TRACKS gaps, deduped against open issues. END with one structured report to stdout: per sweep, findings or explicitly 'clean' — silence is not success; the report is the product. If a finding needs a human, say so loudly in the report — do not act on it."
+fi
 if [ -n "$STACK" ]; then
   SCOPE="You are the coordinator for the ${STACK} stack; its repos are: ${STACK_REPOS:-see agents/stacks.json}, cloned at /work/<repo>; your cwd is the stack main repo ${MAIN_REPO}. Clones are READ-ONLY reference — your writes remain labels, comments, and merge state via gh. "
   [ -n "$RUN_CMD" ] && RUN_CMD="${SCOPE}${RUN_CMD}"
@@ -99,6 +107,8 @@ fi
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)
 IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/agent-coordinator:latest}}"
 POD="coordinator-$(date -u +%H%M%S)"
+# Janitor pods are date-keyed: a second run the same day collides on create — natural daily dedup.
+[ -n "$JANITOR" ] && POD="coordinator-janitor-$(date -u +%Y%m%d)"
 BRIEF="agents/coordinator/README.md"           # relative to /work/homelab (the poll waits on it there)
 BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the stack main repo, not
                                                # necessarily /work/homelab, so the brief (platform

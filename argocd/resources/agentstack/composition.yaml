@@ -530,6 +530,61 @@ spec:
                       resources:
                         requests: { cpu: "100m", memory: "256Mi" }
                         limits: { memory: "512Mi" }
+            ---
+            # FU-086(4) janitor tick: the ~daily REPORT-ONLY judgment sweep (ADR-094 (4) — the
+            # board-level breadth the deterministic scan clauses can't have; brief in the
+            # coordinator README §The janitor tick). Same scan entrypoint with SCAN_JANITOR=1:
+            # the scan prints its report, then spawns ONE report-only session for the stack
+            # (capacity-latched; dispatches nothing; only write = inert spec-gap drafts under
+            # breaker #1). Shares the coordinator-scan mutex so it never overlaps a real tick.
+            apiVersion: argoproj.io/v1alpha1
+            kind: CronWorkflow
+            metadata:
+              name: janitor-{{ $stack }}
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-janitor-cron
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              schedules:
+                - "47 5 * * *"
+              concurrencyPolicy: Forbid
+              startingDeadlineSeconds: 3600
+              workflowSpec:
+                serviceAccountName: agentstack-loop
+                activeDeadlineSeconds: 3600
+                ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+                synchronization:
+                  mutexes:
+                    - name: coordinator-scan
+                entrypoint: main
+                volumes:
+                  - { name: work, emptyDir: {} }
+                templates:
+                  - name: main
+                    container:
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      command: ["bash", "-lc"]
+                      args:
+                        - |
+                          set -e
+                          SA_TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+                          GH_TOKEN="$(curl -fsS -H "Authorization: Bearer ${SA_TOKEN}" \
+                            "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
+                            || { echo "FATAL: loop-git token fetch refused/failed — not sweeping blind"; exit 1; }
+                          export GH_TOKEN
+                          rm -rf /work/homelab
+                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }} SCAN_JANITOR=1
+                          exec bash /work/homelab/agents/coordinator-scan.sh --spawn
+                      env:
+                        - { name: HOME, value: "/home/node" }
+                        - { name: ORG, value: "teststuffstash" }
+                      volumeMounts:
+                        - { name: work, mountPath: /work }
+                      resources:
+                        requests: { cpu: "100m", memory: "256Mi" }
+                        limits: { memory: "512Mi" }
             {{- end }}
             ---
             # FU-080 doorbell RBAC: let the GLOBAL `coordinator` Sensor (sensor-review SA in

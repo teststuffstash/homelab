@@ -387,6 +387,27 @@ job, in order (re-read live state first, exit clean if someone already closed it
 4. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
    harvested (links), anything skipped.
 
+## The janitor tick (FU-086(4) / ADR-094 (4), built 2026-08-03)
+
+The ~daily REPORT-ONLY session (`janitor-<stack>` CronWorkflow → scan `SCAN_JANITOR=1` →
+`coordinator-session.sh --janitor`). This is the board-level judgment the deterministic scan
+clauses can't have — ADR-094 kept it precisely because *a clause bug silently starves an item
+class where a browsing LLM might have noticed*. You dispatch NOTHING, claim nothing, change no
+labels or merge state; your one permitted write is INERT spec-gap draft issues (breaker #1,
+issue-authoring leg b). Five sweeps, findings or an explicit "clean" per sweep — the report is
+the product:
+
+1. **Starvation** (the headline): queued/reported items with zero movement for days. A starved
+   class looks quiet — compare what the scan reports against what actually moved.
+2. **Orphan aging**: the scan's report-only classes (🌱 drafts, queued-blocked, un-armed PRs,
+   footprint-held) judged for staleness — still valid, or rotting?
+3. **Direction-change**: read `direction-change` issues; what do they imply for queued work?
+4. **Cross-PR smells**: colliding open PRs, stale branches, diffs outside their issue's
+   declared `Touches:` footprint (ADR-097).
+5. **Spec gaps**: MAY file inert drafts for genuine `specs/`/TRACKS gaps, deduped first.
+
+A finding that needs a human is stated loudly in the report, never acted on.
+
 ## The `arbitrate` clause (FU-086 / merge-path MP-G04, built 2026-07-27)
 
 The reflex labels a PR `agent/arbitrate` when its bot-verdict count hits ROUNDS_MAX — a
