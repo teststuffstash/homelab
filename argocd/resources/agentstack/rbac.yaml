@@ -84,6 +84,16 @@ rules:
   - apiGroups: [""]
     resources: [endpoints]
     verbs: [get, list]
+  # IAC-G03 (2026-08-02) widened agentstack-claims-read with argocd-app + Workspace reads for the
+  # -iac merged-closeout — the SAME latent class as the endpoints lesson above: existing CRBs
+  # masked it, the first NEW stack CRB after the widening (circles, 2026-08-03) hit the
+  # escalation check. Mirrored here so crossplane can compose the binding; it never uses them.
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list]
+  - apiGroups: [tf.upbound.io]
+    resources: [workspaces]
+    verbs: [get, list]
 ---
 # FU-080 perStack: the loop SA reads AgentStack claims (the stack-list/knob source of truth) —
 # without this the per-stack scan PROBE-FAILS onto the stacks.json belt (seen live 2026-07-18,

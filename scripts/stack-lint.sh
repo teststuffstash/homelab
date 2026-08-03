@@ -11,8 +11,8 @@
 # Check states (the meta-5 probe principle — "cannot see" is never "missing"):
 #   OK            requirement verified
 #   FAIL          requirement missing → exit 1
-#   CLICK-PENDING browser-only step not done (App install) → exit 1; after the click, regenerate
-#                 the matrix (`devbox run github-apps`) — this check reads that generated snapshot
+#   CLICK-PENDING browser-only step not done (App install) → exit 1; this check reads the SERVED
+#                 live install matrix (github-exporter /apps, FU-098) via the apiserver proxy
 #   WARN          recommended, not yet required platform-wide (doesn't fail)
 #   PROBE-FAILED  the check could not see (no cluster creds / 404-as-403 / not on the operator
 #                 machine) — never counted as missing, but listed so nothing hides
@@ -23,7 +23,7 @@
 #   tofu/github/*.tf            repos / protected_repos / label_repos (labels move into the
 #                               claim with FU-068 — swap GH-03's source then)
 #   gh api                      repo content probes (visibility probe FIRST, per registration-lint)
-#   docs/github-apps.md         generated App-install matrix (click-only surface)
+#   github-exporter /apps       SERVED live App-install matrix (click-only surface, FU-098)
 #   ../tools/stack-jail.sh      operator-machine jail wiring (claude-jail repo, jail only)
 #
 # Fixer vs context-only: *-iac repos and homelab are context/deploy targets (FU-052 exclusion,
@@ -50,22 +50,31 @@ if timeout 10 kubectl get --raw /readyz >/dev/null 2>&1; then KUBE_OK=1; fi
 # ── gh reachability is probed per repo (visibility first) ─────────────────────
 HAVE_GH=0; command -v gh >/dev/null 2>&1 && HAVE_GH=1
 
-# App-install matrix lookup: prints INSTALLED / MISSING / NO-COLUMN / NO-ROW for <repo> <app-base>
+# App-install matrix lookup: prints INSTALLED / MISSING / NO-ROW / NO-SOURCE for <repo> <app-base>.
+# Source is the SERVED live view (github-exporter /apps, FU-098 finale) — docs/github-apps.md is
+# no longer committed (the deep-verify report goes to /tmp). Fetched ONCE via the apiserver
+# service proxy; without a cluster the check degrades to PROBE-FAILED, never "missing".
+APPS_HTML=""
+if [ "$KUBE_OK" = 1 ]; then
+  APPS_HTML=$(timeout 15 kubectl get --raw \
+    "/api/v1/namespaces/monitoring/services/github-exporter:9504/proxy/apps" 2>/dev/null || true)
+fi
 app_installed() { # <repo> <app-base>
-  python3 - "$1" "$2" <<'PY'
-import re, sys
+  [ -n "$APPS_HTML" ] || { echo "NO-SOURCE"; return; }
+  printf '%s' "$APPS_HTML" | python3 - "$1" "$2" <<'PY'
+import html, re, sys
 repo, app = sys.argv[1], sys.argv[2]
-rows = [l for l in open("docs/github-apps.md") if l.lstrip().startswith("|")]
-if not rows: print("NO-ROW"); raise SystemExit
-hdr = [c.strip() for c in rows[0].strip().strip("|").split("|")]
-if repo not in hdr: print("NO-COLUMN"); raise SystemExit
-col = hdr.index(repo)
-for l in rows[2:]:
-    cells = [c.strip() for c in l.strip().strip("|").split("|")]
-    m = re.match(r"`([a-z-]+?)(?:-\d+)?`", cells[0])
-    if m and m.group(1) == app:
-        print("INSTALLED" if (len(cells) > col and "✓" in cells[col]) else "MISSING")
-        raise SystemExit
+text = html.unescape(sys.stdin.read())
+# page shape per app: <h2><code>NAME</code></h2> … <p>installs: selected → r1, r2, …</p>
+for sec in re.split(r"<h2><code>", text)[1:]:
+    if sec.split("</code>", 1)[0] != app:
+        continue
+    m = re.search(r"installs:\s*(all|selected)\s*(?:→)?\s*([^<]*)", sec)
+    if not m:
+        print("NO-ROW"); raise SystemExit
+    repos = [r.strip() for r in m.group(2).split(",") if r.strip()]
+    print("INSTALLED" if (m.group(1) == "all" or repo in repos) else "MISSING")
+    raise SystemExit
 print("NO-ROW")
 PY
 }
@@ -146,9 +155,10 @@ lint_stack() { # <name>
     for app in $need_apps; do
       st=$(app_installed "$repo" "$app")
       case "$st" in
-        INSTALLED) say OK GH-04 "$stack" "$app installed on $repo (per matrix snapshot)" ;;
-        MISSING)   say CLICK-PENDING GH-04 "$stack" "$app NOT installed on $repo — browser install, then devbox run github-apps" ;;
-        *)         say PROBE-FAILED GH-04 "$stack" "$repo/$app not resolvable in docs/github-apps.md ($st) — devbox run github-apps" ;;
+        INSTALLED) say OK GH-04 "$stack" "$app installed on $repo (live exporter /apps view)" ;;
+        MISSING)   say CLICK-PENDING GH-04 "$stack" "$app NOT installed on $repo — browser install (exporter /apps refreshes on its next poll)" ;;
+        NO-SOURCE) say PROBE-FAILED GH-04 "$stack" "$repo/$app unknown — exporter /apps unreachable (needs cluster access)" ;;
+        *)         say PROBE-FAILED GH-04 "$stack" "$repo/$app not resolvable on the exporter /apps page ($st)" ;;
       esac
     done
     if is_fixer "$repo" && [ "$(app_installed "$repo" homelab-renovate)" = MISSING ]; then

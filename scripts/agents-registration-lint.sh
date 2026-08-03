@@ -27,7 +27,7 @@ fail=0
 # TOKEN-LIST exemptions: stack repos the homelab-agents/-reviewer Apps DON'T cover yet — adding
 # them to the lists before the App install 422s the ESO generator and kills the LIVE token for
 # every repo. Each entry is a pending OPERATOR install click; remove the entry (and add the repo
-# to both lists) the moment the install lands (docs/github-apps.md regenerated). Empty today.
+# to both lists) the moment the install lands (the exporter /apps page confirms). Empty today.
 TOKEN_EXEMPT=""
 for target in agents/coordinator/git-token.yaml agents/coordinator/reviewer-git.yaml; do
   have="$(list_repos "$HERE/$target")"
@@ -47,7 +47,7 @@ done
 # Requires gh (CI has it); skipped loudly when absent so the lint stays runnable offline.
 # -iac repos are CI-gated deploy TARGETS (require_approval=false; FU-052 excludes them from the
 # fixer flow) — their pin PRs merge on CI alone, so the armed-PR-stall class doesn't apply.
-CALLERS_EXEMPT="oracle-iac sleep-iac"
+CALLERS_EXEMPT="oracle-iac sleep-iac circles-iac"
 if command -v gh >/dev/null 2>&1; then
   for repo in $stack_repos; do
     case " $CALLERS_EXEMPT " in *" $repo "*) continue;; esac
@@ -73,7 +73,7 @@ fi
 
 if [ "$fail" -ne 0 ]; then
   echo "agents-registration-lint: FAILED — a stack repo is invisible to the coordinator/reviewer" >&2
-  echo "token (the stale-registration class; add it to the list AND verify docs/github-apps.md" >&2
+  echo "token (the stale-registration class; add it to the list AND verify the exporter /apps page" >&2
   echo "covers it, or ESO token generation 422s)." >&2
   exit 1
 fi
