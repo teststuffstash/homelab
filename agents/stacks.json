@@ -14,9 +14,8 @@
       "coordinatorModel": "sonnet",
       "workerModel": "xiaomi/mimo-v2.5",
       "workerModelFallbacks": [
+        "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3",
-        "deepseek/deepseek-v4-flash",
-        "qwen/qwen3-coder",
         "claude/haiku"
       ],
       "dockerRepos": [
@@ -34,10 +33,11 @@
       ],
       "mainRepo": "homelab",
       "coordinatorModel": "opus",
-      "workerModel": "openrouter/deepseek/deepseek-v4-flash",
+      "workerModel": "deepseek/deepseek-v4-flash-0731",
       "workerModelFallbacks": [
+        "xiaomi/mimo-v2.5",
         "tencent/hy3",
-        "qwen/qwen3-coder"
+        "claude/haiku"
       ]
     },
     {
@@ -52,11 +52,11 @@
       ],
       "mainRepo": "oracle-fleet",
       "coordinatorModel": "sonnet",
-      "workerModel": "claude/haiku",
+      "workerModel": "deepseek/deepseek-v4-flash-0731",
       "workerModelFallbacks": [
-        "openrouter/deepseek/deepseek-v4-flash",
-        "qwen/qwen3-coder",
-        "tencent/hy3"
+        "xiaomi/mimo-v2.5",
+        "tencent/hy3",
+        "claude/haiku"
       ],
       "dockerRepos": [
         "oracle-fleet"

@@ -18,8 +18,14 @@ spec:
   loop:
     perStack: true
     graduated: true
-  workerModel: openrouter/deepseek/deepseek-v4-flash
-  workerModelFallbacks: [tencent/hy3, qwen/qwen3-coder]
+  # Chain reset 2026-08-03 (operator, evidence-based — scout #81 + MCP evals/market/AA):
+  # 0731 = the flash successor (gpqa 88.7%@$0.0033 vs 0423's 87.0%, τ-Bench 76.7 vs 75.0,
+  # canary clean, already charting in devops/security tags); mimo = our own 7×-wall-clock
+  # evidence (sleep #105) + top devops/frontend/repo-scan market share; qwen3-coder EVICTED
+  # (weak on every AA axis); claude/haiku = cross-rail availability tail (agentic idx 16.4 —
+  # never a quality pick, survives OpenRouter-wide outage on the paid subscription).
+  workerModel: deepseek/deepseek-v4-flash-0731
+  workerModelFallbacks: [xiaomi/mimo-v2.5, tencent/hy3, claude/haiku]
   repos:
     # Platform-image repos, context-only (FU-052 "still to onboard", visibility half done
     # 2026-07-16): the review-reflex derives its scan set from the stack claims, so agent PRs

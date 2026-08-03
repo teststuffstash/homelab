@@ -101,18 +101,17 @@
   "claude/haiku": "cheap",
   "claude/sonnet": "large",
   "claude/opus": "premium",
-  "openrouter/deepseek/deepseek-v4-flash": "cheap",
   "deepseek/deepseek-v4-flash": "cheap",
   "deepseek/deepseek-v4-pro": "large",
   "tencent/hy3": "cheap",
-  "qwen/qwen3-coder": "cheap",
   "poolside/laguna-s-2.1": "cheap",
   "poolside/laguna-s-2.1:free": "free",
   "inclusionai/ling-3.0-flash:free": "free",
   "moonshotai/kimi-k3": "large",
   "openrouter/fusion": "premium",
   "openrouter/free": "free",
-  "xiaomi/mimo-v2.5": "cheap"
+  "xiaomi/mimo-v2.5": "cheap",
+  "deepseek/deepseek-v4-flash-0731": "cheap"
  },
  "rotation_fallback": {
   "coding": [],

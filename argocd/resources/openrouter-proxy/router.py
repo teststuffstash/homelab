@@ -816,13 +816,13 @@ def self_test() -> int:
     assert dr["class"] == "coding", dr
     # rotation-fed candidates when NO chain is passed (P5): universe ∩ rankings, broken excluded
     record_rotation("openrouter-daily-rankings",
-                    [{"model": "qwen/qwen3-coder", "rank": 1},
+                    [{"model": "tencent/hy3", "rank": 1},
                      {"model": "not-in-tiers/mystery", "rank": 2}])
     record_rotation("provider-events",
                     [{"model": "poolside/laguna-s-2.1:free", "canary_verdict": "broken"}])
     dv = route(dict(base, chain=[]), {**CTX, "price": lambda m: (0.05, "market")})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
-    assert dv["model"] == "qwen/qwen3-coder", dv
+    assert dv["model"] == "tencent/hy3", dv
     # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
     assert record_capability("artificial-analysis", [
         {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
