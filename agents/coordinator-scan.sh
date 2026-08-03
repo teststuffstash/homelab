@@ -514,11 +514,23 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Guarded probe: statusCheckRollup needs checks:read; a 403/bad read SKIPS loudly (rule #6). Held
     # while a worker Runs (the fix round owns it). Dispatch cap 2/repo/scan; arbitrate is uncapped
     # (labeling is cheap + idempotent).
-    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,autoMergeRequest,headRefOid,headRefName,statusCheckRollup 2>/dev/null)" || red_probe=''
+    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup 2>/dev/null)" || red_probe=''
     if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"$red_probe"; then
+      # MANDATE check (homelab#88, sleep-tracking#113 livelock 2026-08-03): red CI on a PR the
+      # loop did NOT author is the author's to fix — the scan kept dispatching sessions at a
+      # human's armed+red PR every tick until the coordinator breaker-labeled it. Same author
+      # predicate as the changes-requested clause; out-of-mandate armed+red stays VISIBLE as a
+      # report-only line (a human wants to know their armed PR is stuck red), never a unit.
+      red_foreign="$(printf '%s' "$red_probe" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '
+          .[]|select(.author.login != $wa)
+          | select(.autoMergeRequest != null)
+          | select([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0)
+          | "  PR #\(.number) (author \(.author.login))"')"
+      [ -n "$red_foreign" ] && orphans="${orphans}[$repo] ⚠ armed+red but NOT loop-authored (mandate: author fixes; no dispatch):\n${red_foreign}\n"
       red_n=0
-      for u in $(printf '%s' "$red_probe" | jq -r '
+      for u in $(printf '%s' "$red_probe" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '
           .[]|(.labels|map(.name)) as $L
+          | select(.author.login == $wa)
           | select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not)
                    and (($L|index("major"))|not) and (($L|index("major/awaiting-human"))|not))
           | select(.autoMergeRequest != null)
