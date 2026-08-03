@@ -1883,3 +1883,14 @@ AA intelligence tier ∩ own reliability evidence; operator picked mimo→pro). 
 `stack-lint circles` GREEN, claim Ready, 4 research pods running in ns circles, un-armed
 `research/issue-1-*` PRs pending operator cherry-pick. Filed FU-127 (model ids don't carry
 rail/harness — operator concern), FU-128 (dispatcher backtick noise from env-card text).
+
+**Addendum (same day, tf-apply leg):** goose fan-out arms died on a recipe YAML bug
+(`requirement_ids:{` missing colon-space — donor-inherited, latent because sleep research rode
+the claude harness; fixed in circles 44f4981 + donor PR sleep-tracking#114, arms re-dispatched
+clean; the "3+ non-clean runs" alert was this). Root-app apply surfaced a NAME COLLISION class:
+when MAIN == STACK the scaffolded child `apps/<main>.yaml` Application shares the root
+app-of-apps' name → the root SYNCED OVER ITSELF (spec became the child's), and after the
+rename-fix its stale self-tracking annotation made prune DELETE the root. Fixed: child renamed
+`circles-infra` (circles-iac 8b1195d), root recreated with helm ownership metadata, guard added
+to new-stack.sh. End-state verified: circles(root, default, apps) → circles-infra(circles,
+circles/infra) + agent-fixer-circles, all Synced/Healthy.

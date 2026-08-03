@@ -145,6 +145,13 @@ if [ -d "../$IAC" ] && [ -d ../oracle-iac ]; then
     else mkdir -p "$(dirname "../$IAC/$2")"; subst < "../oracle-iac/$1" > "../$IAC/$2"; echo "  $IAC: wrote $2"; fi
   }
   scaffold apps/oracle-fleet.yaml                   "apps/$MAIN.yaml"
+  # Collision guard (circles lesson, 2026-08-03): the ROOT app-of-apps in tofu/argocd.tf is
+  # named <stack>. When MAIN == STACK the scaffolded child Application inherits that same name
+  # and the root SYNCS OVER ITSELF (then self-prunes once the name changes). Rename the child.
+  if [ "$MAIN" = "$STACK" ] && grep -q "^  name: $MAIN$" "../$IAC/apps/$MAIN.yaml" 2>/dev/null; then
+    sed -i "s/^  name: $MAIN$/  name: $MAIN-infra/" "../$IAC/apps/$MAIN.yaml"
+    echo "  $IAC: apps/$MAIN.yaml child renamed → $MAIN-infra (root app-of-apps is named '$STACK' — identical child name makes the root sync over itself)"
+  fi
   scaffold oracle-fleet/agent/agentstack.yaml       "$MAIN/agent/agentstack.yaml"
   scaffold oracle-fleet/agent/workbench.yaml        "$MAIN/agent/workbench.yaml"
   scaffold devbox.json                              devbox.json
