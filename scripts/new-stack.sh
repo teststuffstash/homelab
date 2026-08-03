@@ -2,6 +2,13 @@
 # new-stack — scaffold a NEW STACK's codifiable onboarding, end to end (FU-052's two layers).
 #
 #   devbox run new-stack <stack> [--main-repo <name>] [--iac <name>] [--public]
+#                          [--from <donor-main-repo>] [--chainless]
+#
+#   --from      FU-070 middle ground: mechanically copy the shared surfaces from the donor's
+#               jail checkout (../<donor>) + emit a VANILLA deployable chart/Dockerfile —
+#               pipeline-proof on day one; the LLM-adaptation worklist prints at the end.
+#   --chainless ADR-096 P5: seed the stacks.json mirror with NO workerModel +
+#               routerMode: authoritative (router-routed per dispatch).
 #
 # Defaults: main repo = <stack>, -iac = <stack>-iac, both private.
 #
@@ -29,11 +36,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 ORG="teststuffstash"
 
-STACK=""; MAIN=""; IAC=""; VIS="--private"
+STACK=""; MAIN=""; IAC=""; VIS="--private"; FROM=""; CHAINLESS=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --main-repo) MAIN="$2"; shift 2;;
     --iac)       IAC="$2"; shift 2;;
+    --from)      FROM="$2"; shift 2;;      # donor stack MAIN repo for the surface copy (FU-070 middle ground)
+    --chainless) CHAINLESS=1; shift;;      # ADR-096 P5: no workerModel, routerMode authoritative
     --public)    VIS="--public"; shift;;
     -h|--help)   sed -n '2,26p' "$0"; exit 0;;
     -*)          echo "unknown flag: $1" >&2; exit 2;;
@@ -97,16 +106,30 @@ fi
 if jq -e --arg s "$STACK" '.stacks[] | select(.name==$s)' agents/stacks.json >/dev/null; then
   echo "  stacks.json: $STACK already present — skip"
 else
-  jq --arg s "$STACK" --arg main "$MAIN" --arg iac "$IAC" '.stacks += [{
-    "_migrated": ("MIRROR of the claim in " + $iac + "//" + $main + "/agent/agentstack.yaml (see _comment). Sync on claim changes."),
-    "name": $s,
-    "repos": [$iac, $main],
-    "mainRepo": $main,
-    "coordinatorModel": "sonnet",
-    "workerModel": "openrouter/deepseek/deepseek-v4-flash",
-    "workerModelFallbacks": ["qwen/qwen3-coder", "tencent/hy3"]
-  }]' agents/stacks.json > agents/stacks.json.tmp && mv agents/stacks.json.tmp agents/stacks.json
-  echo "  stacks.json: added $STACK (models = current default chain; adjust per stack policy)"
+  if [ "$CHAINLESS" = "1" ]; then
+    # ADR-096 P5: no chain — the router's rotation universe supplies candidates; the launcher
+    # REFUSES a chainless dispatch unless routerMode is authoritative.
+    jq --arg s "$STACK" --arg main "$MAIN" --arg iac "$IAC" '.stacks += [{
+      "_migrated": ("MIRROR of the claim in " + $iac + "//" + $main + "/agent/agentstack.yaml (see _comment). Sync on claim changes."),
+      "name": $s,
+      "repos": [$iac, $main],
+      "mainRepo": $main,
+      "coordinatorModel": "sonnet",
+      "routerMode": "authoritative"
+    }]' agents/stacks.json > agents/stacks.json.tmp && mv agents/stacks.json.tmp agents/stacks.json
+    echo "  stacks.json: added $STACK (CHAINLESS — router-routed per dispatch, routerMode authoritative)"
+  else
+    jq --arg s "$STACK" --arg main "$MAIN" --arg iac "$IAC" '.stacks += [{
+      "_migrated": ("MIRROR of the claim in " + $iac + "//" + $main + "/agent/agentstack.yaml (see _comment). Sync on claim changes."),
+      "name": $s,
+      "repos": [$iac, $main],
+      "mainRepo": $main,
+      "coordinatorModel": "sonnet",
+      "workerModel": "deepseek/deepseek-v4-flash-0731",
+      "workerModelFallbacks": ["xiaomi/mimo-v2.5", "tencent/hy3", "claude/haiku"]
+    }]' agents/stacks.json > agents/stacks.json.tmp && mv agents/stacks.json.tmp agents/stacks.json
+    echo "  stacks.json: added $STACK (models = the current evidence-based default chain)"
+  fi
 fi
 
 # ── 5. -iac sibling skeleton (jail only; oracle-iac is the reference) ─────────────────────────────
@@ -131,6 +154,163 @@ else
   echo "  -iac skeleton SKIPPED (../$IAC or ../oracle-iac not checked out here) — scaffold it from oracle-iac by hand"
 fi
 
+# ── 5c. Main-repo surfaces (FU-070 MIDDLE GROUND, operator 2026-08-03): mechanical copy from
+# the LIVING donor + a printed LLM-adaptation worklist. A template repo staleness-rots; a copy
+# script does not — the CONTENT comes from the donor at run time, so only the SURFACE LIST here
+# can stale, and it fails/warns LOUDLY when it does (missing expected file = list is stale;
+# donor grew an unlisted workflow = named warning). PRODUCT SHAPE IS DELIBERATELY NOT COPIED:
+# the chart/Dockerfile below are a VANILLA deployable (hello page) that proves build→deploy→
+# sync E2E on day one; the real shape arrives via specs + the goal issue, and convergence is
+# the cross-stack drift role's job — not this script's, not a template's.
+if [ -n "$FROM" ]; then
+  if [ ! -d "../$FROM" ] || [ ! -d "../$MAIN" ]; then
+    echo "  --from $FROM: ../$FROM and/or ../$MAIN not checked out here — surfaces SKIPPED (jail step)"
+  else
+    FROM_US="$(printf '%s' "$FROM" | tr '-' '_')"; MAIN_US="$(printf '%s' "$MAIN" | tr '-' '_')"
+    dsub() { sed -e "s/$FROM/$MAIN/g" -e "s/$FROM_US/$MAIN_US/g"; }
+    LIST_STALE=0
+    dcopy() { # dcopy <req|opt> <path>
+      if [ ! -f "../$FROM/$2" ]; then
+        if [ "$1" = req ]; then echo "  ✗ donor ../$FROM/$2 MISSING — the surface list in new-stack.sh is STALE; fix the list" >&2; LIST_STALE=1
+        else echo "  donor lacks optional $2 — skip"; fi
+        return 0
+      fi
+      if [ -f "../$MAIN/$2" ]; then echo "  $MAIN: $2 already present — skip"
+      else mkdir -p "$(dirname "../$MAIN/$2")"; dsub < "../$FROM/$2" > "../$MAIN/$2"; echo "  $MAIN: wrote $2 (from $FROM)"; fi
+    }
+    SURFACES_REQ=".github/workflows/ci.yaml .github/workflows/deploy.yaml devbox.json devbox.lock .gitignore"
+    SURFACES_OPT=".github/workflows/devbox-cache.yml .github/workflows/ghcr-cleanup.yaml
+      .github/workflows/renovate-approve.yaml .github/workflows/update-pr-branch.yml
+      .pre-commit-config.yaml .dockerignore
+      .agents/fix.yaml .agents/review.yaml .agents/research.yaml .agents/build.yaml
+      scripts/ci.sh scripts/test-chart.sh scripts/validate-chart.sh scripts/package-chart.sh
+      scripts/build-image.sh scripts/deploy-pin.sh"
+    for f in $SURFACES_REQ; do dcopy req "$f"; done
+    for f in $SURFACES_OPT; do dcopy opt "$f"; done
+    # donor growth: workflows the donor has that the list does not know
+    for wf in "../$FROM/.github/workflows/"*; do
+      b=".github/workflows/$(basename "$wf")"
+      case " $SURFACES_REQ $SURFACES_OPT " in *" $b "*) ;; *)
+        echo "  ⚠ donor has $b — NOT in the surface list (product-specific like integration.yaml, or the list is behind; judge)";;
+      esac
+    done
+    [ "$LIST_STALE" = 1 ] && echo "  ⚠ STALE SURFACE LIST above — extend it in scripts/new-stack.sh before trusting this copy"
+
+    # Vanilla deployable: chart + Dockerfile + hello page (only if absent)
+    if [ ! -d "../$MAIN/chart" ]; then
+      mkdir -p "../$MAIN/chart/templates" "../$MAIN/chart/tests" "../$MAIN/public"
+      cat > "../$MAIN/chart/Chart.yaml" <<CH
+apiVersion: v2
+name: $MAIN
+description: $STACK stack — vanilla bootstrap chart (shape arrives via specs; chart-is-deployable-unit)
+type: application
+version: 0.0.0-dev # CI stamps calver-gsha (deploy.yaml)
+appVersion: 0.0.0-dev
+CH
+      cat > "../$MAIN/chart/values.yaml" <<CH
+image:
+  repository: ghcr.io/$ORG/$MAIN
+  pullPolicy: IfNotPresent
+  tag: "" # chart appVersion by default
+port: 8080
+resources:
+  requests: { cpu: 25m, memory: 32Mi }
+  limits: { memory: 64Mi }
+CH
+      cat > "../$MAIN/chart/values.schema.json" <<'CH'
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "tag": { "type": "string" }
+      }
+    },
+    "port": { "type": "integer" },
+    "resources": { "type": "object" }
+  }
+}
+CH
+      cat > "../$MAIN/chart/templates/deployment.yaml" <<CH
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+    spec:
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: {{ .Values.port }}, name: http }]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+          readinessProbe: { httpGet: { path: /, port: http } }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+CH
+      cat > "../$MAIN/chart/templates/service.yaml" <<CH
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels: { app.kubernetes.io/name: {{ .Chart.Name }} }
+spec:
+  selector: { app.kubernetes.io/name: {{ .Chart.Name }} }
+  ports: [{ name: http, port: 80, targetPort: http }]
+CH
+      cat > "../$MAIN/chart/tests/deployment_test.yaml" <<CH
+suite: vanilla deployment
+templates: [deployment.yaml]
+tests:
+  - it: renders a Deployment with the pinned image
+    set: { image: { tag: 1.2.3 } }
+    asserts:
+      - isKind: { of: Deployment }
+      - equal: { path: spec.template.spec.containers[0].image, value: "ghcr.io/$ORG/$MAIN:1.2.3" }
+CH
+      cat > "../$MAIN/Dockerfile" <<CH
+# Vanilla bootstrap image ($STACK): serves the hello page so the deploy pipeline is E2E-provable
+# on day one. Replaced by the real product image via specs — never grow it in place.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
+COPY public/ /usr/share/nginx/html/
+CH
+      cat > "../$MAIN/public/index.html" <<CH
+<!doctype html><title>$MAIN</title>
+<h1>$MAIN — vanilla bootstrap</h1>
+<p>The $STACK stack's deploy pipeline works. The real page arrives via specs.</p>
+CH
+      echo "  $MAIN: vanilla chart + Dockerfile + hello page written (pipeline-proof; shape via specs)"
+    else
+      echo "  $MAIN: chart/ already present — vanilla deployable skipped"
+    fi
+    [ -f "../$MAIN/CLAUDE.md" ] || cat > "../$MAIN/CLAUDE.md" <<CH
+# CLAUDE.md — $MAIN ($STACK stack)
+
+SKELETON (new-stack --from $FROM): the LLM-adaptation pass fills this — read order, the CI
+gate (\`devbox run ci\` green before any PR), invariants, related repos as GitHub URLs
+(workers clone ONLY this repo — the issue carries all cross-repo context).
+CH
+    echo ""
+    echo "  LLM-ADAPTATION WORKLIST (the judgment half of FU-070 — do this in a homelab session):"
+    echo "    1. Donor remnants:   grep -rniE '$FROM|$FROM_US' ../$MAIN — judge each (names, product ci steps)"
+    echo "    2. scripts/ci.sh:    trim $FROM-product test invocations the vanilla chart can't satisfy"
+    echo "    3. CLAUDE.md:        fill the skeleton"
+    echo "    4. .agents/*.yaml:   recipe text mentions of $FROM paths/domains"
+    echo "    5. devbox.json:      drop $FROM-only scripts; devbox run ci must pass on the vanilla chart"
+  fi
+fi
+
 # ── The un-codifiable remainder ───────────────────────────────────────────────────────────────────
 cat <<EOF
 
@@ -146,11 +326,12 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
   D. CLICK-ONLY — App installs on $MAIN (+$IAC for homelab-deploy/merge), then regenerate the matrix:
        https://github.com/organizations/$ORG/settings/installations
        devbox run github-apps
-  E. Main-repo content ($MAIN): CLAUDE.md, .agents/{fix.yaml,review.md}, devbox ci + scan-secrets,
-       merge-path callers (.github/workflows/{update-pr-branch,renovate-approve}.yml) —
-       oracle-fleet is the reference shape (stack-template repo = the future collapse of this step).
-  F. Stack jail (operator machine, claude-jail repo): a '$STACK' case entry in tools/stack-jail.sh
-       + mint the per-stack PAT into .env.$STACK (template in the script header).
+  E. Main-repo content ($MAIN): if you ran --from <donor>, the surfaces are copied and the
+       LLM-ADAPTATION WORKLIST above is the remaining judgment half (homelab session).
+       Without --from: copy by hand from the freshest graduated stack.
+  F. Stack jail (operator machine, claude-jail repo): an overlay entry (UPLOAD_PORT/PRIMARY
+       [+ private mounts]) in tools/stack-jail.sh — repos/ns derive from stacks.json since
+       2026-08-03 — + mint the per-stack PAT into .env.$STACK (template in the script header).
 
   Definition of done:   devbox run stack-lint $STACK
 EOF

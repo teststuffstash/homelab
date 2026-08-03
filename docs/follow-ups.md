@@ -127,13 +127,14 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       "Onboard every app repo". Still per-repo and manual: `.agents/` recipes, the `stacks.json`
       entry, and the GitHub side — FU-070's `stack-template` repo is the collapse for that.
       Unattended running still needs the per-stack reflex (FU-050). Relates FU-070, FU-048.
-- [ ] **FU-070** — **`stack-template` org repo — collapse new-stack's step E (main-repo content).**
-      The one onboarding step still done by copying oracle-fleet's shapes by hand: CLAUDE.md
-      skeleton (read order / gate / invariants / related-repos-as-GitHub-URLs), `.agents/` recipe
-      skeletons, devbox `ci`+`scan-secrets`, merge-path caller workflows. Make it a template repo
-      (`is_template = true` in repos.tf), instantiate via `gh repo create --template` before
-      `new-agent-repo.sh` (which then emits the adopt-import). stack-lint's REPO-03/04/05 already
-      verify the result. Relates FU-052.
+- [ ] **FU-070** — **Main-repo bootstrap: MIDDLE GROUND BUILT 2026-08-03 (operator ruling —
+      template repo REJECTED: unexercised templates stale by construction).** `new-stack --from
+      <donor>` mechanically copies the shared surfaces from the LIVING donor checkout (content
+      can't stale; the surface LIST asserts loudly when it does) + emits a VANILLA deployable
+      chart/Dockerfile (pipeline-proof day one — product shape arrives via specs/goal issues)
+      + prints the LLM-adaptation worklist (the judgment half). **Next:** first consumer =
+      circles; then the cross-stack drift role (roles.md) owns long-term convergence — this
+      item closes when that role exists. Relates FU-052.
 - [ ] **FU-016** — SLSA Phase-1: cosign signing + SBOM + scan on the hosted runners (both tiers).
       Plan: `docs/slsa.md`.
 - [ ] **FU-017** — Merge the two runner GitHub Apps (`homelab-arc-…` + `homelab-runner-registrar`)
