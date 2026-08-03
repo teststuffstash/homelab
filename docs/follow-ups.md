@@ -141,16 +141,6 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
 ## Agents
 
 
-- [ ] **FU-108** — **Exporter queue-liveness private-repo fix: CODE SHIPPED 2026-08-02, PAT
-      re-mint pending.** `collect_agent_issues` now counts `agent/*` labels from the existing
-      PR GraphQL walk (`agentIssues` per repo node, 0 extra calls); the silently-private-blind
-      REST Search call is gone. **Verified live: the current PAT lacks Issues:read** — private
-      repos answer FORBIDDEN (public series keep parity; absent ≠ zero stays honest).
-      **Remaining (operator, click-only):** re-mint the PAT per the updated
-      `scripts/github-exporter-pat-bootstrap.sh` (adds Issues:read + records the already-live
-      Pull requests:read), then verify oracle-fleet/sleep-tracking series appear within one
-      poll. Relates FU-091, FU-063 (archived).
-
 - [ ] **FU-111** — **Native `blockedBy` migration: probes GREEN + union reader SHIPPED
       2026-08-02.** Verified live (jail token): the field rides the existing `gh issue list
       --json` call and populates; cross-repo edges work; REST create/delete works

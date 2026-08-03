@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-108** *(archived 2026-08-03)* — **Exporter queue-liveness private-repo fix DONE**: code
+  shipped 2026-08-02 (`agent/*` counts ride the PR GraphQL walk, REST Search dropped); operator
+  granted the PAT Issues:read 2026-08-03. Acceptance: walk replayed with the in-cluster token —
+  `agentIssues` returns real lists on ALL repos incl. private oracle-fleet/sleep-tracking (was
+  FORBIDDEN/NULL); no series emitted only because zero open issues carry `agent/*` labels (loop
+  drained — absent ≠ zero, honest). Gotcha: the exporter's per-poll "partial data (6 field
+  errors)" log line is the KNOWN FU-063a gap (private-repo `statusCheckRollup`; Actions-fallback
+  covers CI state) — not an Issues:read failure.
 - **FU-113** *(archived 2026-08-02)* — **Responder outcome markers + self-requeue + incident cap
   BUILT** (all three legs): (a) every non-triaging outcome writes a ledger marker
   (`deferred-`/`cap-`/`none-` values that satisfy neither the triage dedup nor the cap); (b) a
