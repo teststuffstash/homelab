@@ -233,7 +233,7 @@ spec:
     templates:
       - name: main
         container:
-          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.8.3-g79599ff0d65c
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.8.3-g9679e85bd4bc
           command: ["bash", "-lc"]
           args:
             - |
