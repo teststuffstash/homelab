@@ -54,13 +54,16 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
+          # Every repo dir must EXIST (empty on failure, never removed): the Dockerfile has a
+          # per-repo COPY (#80 layering) and a missing dir fails the whole build; warm-one
+          # skips an empty one.
           for r in homelab oracle-fleet oracle-iac sleep-tracking sleep-iac agent-coordinator openrouter-operator; do
             mkdir -p "docker/arc-runner/warm/$r"
             for f in devbox.json devbox.lock; do
               if ! gh api "repos/teststuffstash/$r/contents/$f" -H "Accept: application/vnd.github.raw" \
                    > "docker/arc-runner/warm/$r/$f"; then
                 echo "::warning:: $r/$f not fetchable — closure skipped"
-                rm -rf "docker/arc-runner/warm/$r"; break
+                rm -f docker/arc-runner/warm/$r/*; break
               fi
             done
           done
@@ -73,11 +76,24 @@ jobs:
       - name: Compute tag (calver-gsha, agent-coordinator convention)
         id: tag
         run: echo "tag=$(date +%Y.%-m.%-d)-g$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
       - name: Build and push
+        # Registry layer cache (#80): the hosted builder is ephemeral, so without --cache-from
+        # every build re-executes and RE-DIGESTS every layer — consecutive pins shared only the
+        # 0.55G of pulled base layers and each bump shipped ~3.5G of "new" bytes. mode=max
+        # exports every layer's cache to the :buildcache ref; an unchanged step (per-repo
+        # closure layers, Dockerfile) is REUSED bit-identical and its digest stays stable.
+        # --provenance=false keeps a plain manifest (no attestation index) — the pin consumers
+        # and the mirror-warm tooling expect one.
         run: |
           IMAGE="ghcr.io/${{ github.repository }}/arc-runner:${{ steps.tag.outputs.tag }}"
-          docker build -t "$IMAGE" docker/arc-runner
-          docker push "$IMAGE"
+          CACHE="ghcr.io/${{ github.repository }}/arc-runner:buildcache"
+          docker buildx build \
+            --push -t "$IMAGE" \
+            --provenance=false \
+            --cache-from "type=registry,ref=$CACHE" \
+            --cache-to "type=registry,ref=$CACHE,mode=max" \
+            docker/arc-runner
           echo "pushed $IMAGE" >> "$GITHUB_STEP_SUMMARY"
       # The image is consumed by TAG PIN in arc-runners.yaml — a build nobody pins is a no-op
       # (the scheduled Monday rebuild would otherwise bake fresh locks into an image nothing

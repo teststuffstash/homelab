@@ -49,20 +49,38 @@ ENV PATH="/home/runner/.nix-profile/bin:${PATH}"
 # (~340s of oracle-fleet's ci was closure fetch+xz-decompress on the ThinkPads). The workflow
 # fetches each repo's default-branch devbox.{json,lock} into warm/ with a minted App token
 # (most fleet repos are PRIVATE — anonymous raw fetch 404s, first warm build shipped hollow)
-# and this COPY bakes whatever it found. Deliberately not lockfile-coupled: a stale warm store
+# and the per-repo COPYs below bake whatever it found (a repo that failed to fetch stages an
+# EMPTY dir — warm-one skips it). Deliberately not lockfile-coupled: a stale warm store
 # still works, jobs realize the delta via the LAN mirror. Rebuild (push to this dir or
 # workflow_dispatch) whenever the drift gets noticeable. The store paths persist without GC
 # roots (no nix GC ever runs in the image); the /tmp/warm profiles are discarded on purpose.
-# NIX_CONFIG: the LAN VIP is unreachable from the ubuntu-latest builder — go straight upstream
-# there (runtime keeps the baked nix.conf order).
-COPY --chown=runner:runner warm/ /tmp/warm/
+# ONE LAYER PER REPO CLOSURE (#80): the warm store was a single ~3.4G RUN keyed on ALL seven
+# repos' lockfiles — any one lock change re-digested the whole layer, so consecutive pins
+# shared only 0.55G of 4G and every bump pushed ~3.5G of "new" bytes through ghcr, the LAN
+# mirror and every node. Per-repo COPY+RUN pairs + the buildx registry cache
+# (runner-image.yaml) mean an unchanged lockfile REUSES its cached layer (digest stays
+# stable); only the changed closure re-bakes. Layer order = cache invalidation order:
+# homelab goes LAST (its lock merge is the frequent rebuild trigger — the fleet layers
+# ahead of it stay cached); the rest is alphabetical, invalidated together on the Monday
+# devbox-update rebake anyway.
 # KEEP ~/.cache/{nix,devbox} from these installs: with the store fully warm, a job's
 # `devbox install` still burned 94s (oracle-fleet ci, run 30165878479) — measured to be
 # nix EVALUATION, not fetching (cold-cache repro: 127s wall/84s CPU on a fast desktop with
 # a complete /nix; 7.7s with the eval cache warm). Deleting the cache here was phase 2's
-# whole residual cost.
-RUN set -e; export NIX_CONFIG="substituters = https://cache.nixos.org"; \
-    for d in /tmp/warm/*/; do \
-      [ -f "$d/devbox.json" ] || continue; \
-      echo "── warming closure: $(basename "$d")"; cd "$d"; devbox install; \
-    done; rm -rf /tmp/warm; du -sh /home/runner/.cache/* || true
+# whole residual cost. The cache rides inside each closure's layer — churny content, but
+# layer REUSE (not content determinism) is what keeps unchanged digests stable.
+COPY --chown=runner:runner warm-one.sh /usr/local/bin/warm-one
+COPY --chown=runner:runner warm/agent-coordinator/ /tmp/warm/agent-coordinator/
+RUN warm-one agent-coordinator
+COPY --chown=runner:runner warm/openrouter-operator/ /tmp/warm/openrouter-operator/
+RUN warm-one openrouter-operator
+COPY --chown=runner:runner warm/oracle-fleet/ /tmp/warm/oracle-fleet/
+RUN warm-one oracle-fleet
+COPY --chown=runner:runner warm/oracle-iac/ /tmp/warm/oracle-iac/
+RUN warm-one oracle-iac
+COPY --chown=runner:runner warm/sleep-iac/ /tmp/warm/sleep-iac/
+RUN warm-one sleep-iac
+COPY --chown=runner:runner warm/sleep-tracking/ /tmp/warm/sleep-tracking/
+RUN warm-one sleep-tracking
+COPY --chown=runner:runner warm/homelab/ /tmp/warm/homelab/
+RUN warm-one homelab && rm -rf /tmp/warm
