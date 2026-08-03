@@ -1,0 +1,25 @@
+# Mirror cache-disk alerts (#80 / #47's promised early warning). A pull-through cache with a
+# full disk does NOT crash — it silently TRUNCATES in-flight blob writes, and consumers see
+# layer digest mismatches + 500s (homelab#48). So the alert must fire well before 100%: at
+# ~85% the write path still works and the fix is a purge/TTL decision, not an incident.
+# Prometheus picks up PrometheusRules cluster-wide (ruleSelectorNilUsesHelmValues=false).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: registry-cache
+  labels:
+    app: registry-cache
+spec:
+  groups:
+    - name: registry-cache
+      rules:
+        - alert: RegistryMirrorCacheAlmostFull
+          expr: >
+            kubelet_volume_stats_available_bytes{namespace="registry-cache"}
+              / kubelet_volume_stats_capacity_bytes{namespace="registry-cache"} < 0.15
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Registry mirror PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
+            description: "{{ $labels.persistentvolumeclaim }} has under 15% free. At 100% the mirror truncates in-flight pull-through writes and nodes see digest mismatches/500s instead of a loud failure. Check what's big: legit blobs (capacity/TTL decision — argocd/resources/registry-cache/) vs _uploads debris (should self-reap within ~1h via uploadpurging; if it isn't, that mechanism is broken)."

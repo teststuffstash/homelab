@@ -51,6 +51,12 @@ spec:
             - { name: REGISTRY_PROXY_TTL, value: "168h" }
             - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # Upload-debris reaping — same rationale as mirror-ghcr (#80): abandoned
+            # pull-through uploads must reap in ~1h, not the 168h default.
+            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED, value: "true" }
+            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_AGE, value: "1h" }
+            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_INTERVAL, value: "15m" }
+            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_DRYRUN, value: "false" }
           ports:
             - { name: http, containerPort: 5000 }
           securityContext:
