@@ -80,7 +80,7 @@ _Fig. 2: Integration & Delivery Plane — the path from a commit to a reconciled
   Reconciles CloudNativePG → Postgres → Infisical → External Secrets Operator and the app layer.
 - ✅ CI: self-hosted two-tier (`docs/ci.md`) — in-cluster **ARC** (`runs-on: homelab-ephemeral`) +
   the **Proxmox VM runner** (ADR-082) for Docker/binfmt builds; Forgejo `act_runner` for Tier-B.
-- ⬜ No internal image registry / pull-through mirror yet (ADR-070; use upstream for now).
+- ✅ Pull-through OCI mirrors live (ADR-091, `argocd/resources/registry-cache/` — docker.io @ .40.20, ghcr @ .40.21); the apt leg of ADR-070 stays open.
 
 ## 3 · Resource Plane
 
@@ -156,7 +156,8 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
   **Infisical** (self-hosted, on CloudNativePG) → **External Secrets Operator** delivers to workloads.
   The offline `snore-recorder` device reads its secrets from Infisical at provision time (plaintext
   on-device). **SOPS+age is not used.**
-- 🔜 Cilium NetworkPolicy, AMT hardening, OPNsense firewall as code.
+- ✅ Cilium NetworkPolicy for agent workloads (per-stack egress CNPs via the AgentStack composition, enforcing since 2026-07-16).
+- 🔜 AMT hardening, OPNsense firewall as code.
 - ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.
 
 ---

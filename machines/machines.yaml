@@ -98,6 +98,19 @@ machines:
     multicore_bogo_s: null
     notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
 
+  - name: wk-metal-04
+    role: k8s worker (ephemeral / compute tier, tainted; KATA node — microVM runtime)
+    hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
+    cpu_cores: 4
+    memory_gb: 16
+    ip: 192.168.2.186
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so opencode/Bun rides are excluded; onboarded 2026-07-28.
+
   - name: hp-01
     role: k8s worker (storage tier, WoL-capable)
     hardware: HP desktop

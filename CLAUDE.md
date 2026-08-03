@@ -25,12 +25,13 @@ devbox run k9s          # cluster TUI on tofu/kubeconfig
 ```
 
 Toolchain: opentofu, kubectl, talosctl, kubernetes-helm, cilium-cli, k9s, ansible, sops, age, jq,
-yq, python3, openssl, awscli2, **dig/host (bind), nmap, curl, nc/ncat, cloudflared**. `nix` commands need
+yq, python3, openssl, awscli2, gh, argocd, argo (workflows), infisical, keepassxc, gitleaks,
+kyverno, **dig/host (bind), nmap, curl, nc/ncat, cloudflared**. `nix` commands need
 `export NIX_CONFIG="experimental-features = nix-command flakes"`. `devbox run` executes from the
 repo root and runs scripts under **dash** — keep them simple, use absolute paths / `tofu -chdir=`,
 avoid `bash -c '<multiline>'` (it mangles).
 
-## Current state (2026-06)
+## Current state (2026-08)
 
 A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense managed as code.
 
@@ -41,11 +42,12 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
 | `wk-01` / `wk-02` (VMs) | .61 / .62 | workers (wk-02 in Longhorn) |
-| `thinkcentre` (metal, USB) | 192.168.2.53 | worker + Longhorn (+ 2×Optane fast tier) |
+| `thinkcentre` (metal, PXE) | 192.168.2.53 | worker + Longhorn (+ 2×Optane fast tier) |
 | `hp-01` (metal, PXE) | 192.168.2.54 | worker + Longhorn (WoL-capable) |
 | `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted) |
 | `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted) |
 | `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | worker, ephemeral/compute tier (tainted; kata node) |
+| `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | worker, ephemeral/compute tier (tainted; kata node, no AVX2) |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
@@ -89,16 +91,24 @@ as if at home; recipe in `docs/runbook.md`.
   separate root/state). `tofu/cloudflare-token/` mints the scoped CF tokens (run once with an admin
   token, outside the jail). See `docs/cloudflare.md`.
 - `ansible/` — OPNsense + Matchbox as code, **thin playbooks → `roles/`** with config in
-  `group_vars/` (`opnsense-bgp`, `-acme`, `-haproxy`, `-unbound`; `matchbox*`), plus
-  `opnsense/dnsmasq-dhcp.py` (LAN DHCP). Run OPNsense playbooks via
+  `group_vars/` (`opnsense-bgp`, `-acme`, `-haproxy`, `-unbound`; `matchbox*`). Run OPNsense playbooks via
   **`bash scripts/opnsense-playbook.sh ansible/opnsense-<play>.yml`** (handles the httpx
   interpreter + creds + `ANSIBLE_CONFIG` — see `ansible/readme.md`, `docs/runbook.md`).
+- `opnsense/` — `dnsmasq-dhcp.py` (LAN DHCP config-as-code, applied via the OPNsense API).
+- `agents/` — the agent platform: session launchers (`agent-session.sh`, `coordinator-session.sh`,
+  `reviewer-session.sh`), the deterministic scan (`coordinator-scan.sh` + `footprint.sh`),
+  `stacks.json` (claims mirror), reflex/cron manifests (`coordinator/*-argo.yaml`), fixer claims
+  (`fixer/`). Design docs in `docs/agents/`.
+- `argocd/` — the app-of-apps: `platform/` (ArgoCD Applications) + `resources/` (manifests per
+  service — the AgentStack XRD/Composition, exporters, proxies, registry mirrors, loki, …).
+- `policy/iac/` — the IAC-G04 sentinel's Kyverno policies (`scripts/iac-sentinel.sh` runs them).
+- `docker/` — image build contexts (`arc-runner/` — the warm-store ARC runner image).
 - `esphome/` — ESPHome device configs (`config/office-plants-irrigation.yaml`); flash with
   `devbox run flash-irrigation` (logs: `devbox run irrigation-logs`).
 - `homeassistant/` — Home Assistant config kept in git (applied imperatively; see runbook).
 - `scripts/` — wrappers + one-shots: `tf.sh` / `keepass-{env,init}.sh` (secret vars for tofu),
   `opnsense-playbook.sh`, `infisical-{secret,harden}.sh`,
-  `github-{runner,agents,reviewer,merge,deploy}-*bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
+  `github-runner-bootstrap.sh` + `github-app-bootstrap.sh` + `gh-app-runner-token.sh` (GitHub Apps),
   `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),

@@ -80,7 +80,7 @@ graph TB
 | 1 — Stable base cluster (Talos VMs on Proxmox, Cilium + BGP) | ✅ done (`tofu/README.md`) |
 | 2 — Home Assistant on the cluster | ✅ done — recorder = SQLite-on-Longhorn; network Zigbee coordinator still to buy (FU-034) |
 | 3 — MAC-table provisioning pipeline (Matchbox, no IPMI) | ✅ done (`docs/provisioning.md`) |
-| 4 — Promote to a real bare-metal cluster | ✅ 4 metal nodes joined (thinkcentre, hp-01, wk-metal-01/02) |
+| 4 — Promote to a real bare-metal cluster | ✅ 6 metal nodes joined (thinkcentre, hp-01, wk-metal-01..04) |
 | 5 — Day-2 operations | 🟡 monitoring ✅ (ADR-042) · GitOps ✅ (ADR-005) · logs ✅ (ADR-083) · CI ✅ (`docs/ci.md`) · **backups/off-cluster DR ⬜ (FU-013)** |
 | 6 — Agent platform | 🟡 see *Agent platform* below — the loop runs unattended per-stack; the open work is programs, not phases |
 
@@ -191,7 +191,7 @@ shapes use the same readable **`2026.<m>.<d>-g<sha>`** version and a first-party
 |---|---|---|
 | app + chart | the `-iac` bump (sleep-tracking → sleep-iac) | ✅ proven E2E |
 | operator / controller | Helm chart to **ghcr OCI** (ADR-084); `deploy.yaml` opens a bump PR in homelab/argocd; the app is multi-source (OCI chart + homelab `$values`), gated by `argocd-validate-pins` | ✅ live |
-| image consumed by pods | version-pinned in `agents/images.env` + `review-reflex.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
+| image consumed by pods | version-pinned in `agents/images.env` + `agents/coordinator/*-argo.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
 | snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | 🟡 platform half done — DHCP reservation + `SNORE_DEPLOY_SSH_KEY` in Infisical; sleep-iac side pending |
 | homelab | a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`) | ✅ |
 
@@ -244,7 +244,7 @@ The **nix** leg is LIVE — an in-cluster pull-through cache (`argocd/resources/
 (2026-07-14, **ADR-091**): two `registry:3` pull-through mirrors
 (`argocd/resources/registry-cache/`, docker.io + ghcr, BGP VIPs `.40.20/.21`) feeding docker-mode
 agent rides and the k3d/kind CI gates — Harbor/zot and the out-of-cluster box were rejected for
-nginx-grade simplicity. Remaining consumers tracked in FU-073 (Talos node-level
+nginx-grade simplicity. All consumers shipped (FU-073 archived 2026-07-26: Talos node-level
 `machine.registries.mirrors`, ci-runner-01, ARC runners). Still open (ADR-070): apt-cacher-ng,
 when apt pain is real.
 
