@@ -39,7 +39,11 @@ defined=$( (grep -oE '^- \[[ x]\] \*\*FU-[0-9]{3}\*\*' "$TRACKER"
             [ -f "$ARCHIVE" ] && grep -oE '^- \*\*FU-[0-9]{3}\*\*' "$ARCHIVE"
            ) | grep -o 'FU-[0-9][0-9][0-9]' | sort -u)
 # shellcheck disable=SC2086 # HIST_EXCLUDES is a list of pathspecs
-referenced=$(git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(exclude)$ARCHIVE" $HIST_EXCLUDES | sort -u)
+# The TRACKER's own prose counts as references too (found 2026-08-03: an id expired out of
+# the archive but lived on inside two other items' text — invisible to a scan that excludes
+# the tracker). Archive prose stays excluded: entries are historical residue by contract.
+referenced=$( { git grep -h -o 'FU-[0-9][0-9][0-9]' -- ":(exclude)$TRACKER" ":(exclude)$ARCHIVE" $HIST_EXCLUDES
+                grep -v 'Next free id' "$TRACKER" | grep -o 'FU-[0-9][0-9][0-9]'; } | sort -u)
 
 status=0
 for id in $referenced; do

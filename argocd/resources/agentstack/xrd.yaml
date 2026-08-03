@@ -155,6 +155,16 @@ spec:
                     platform's freshness windows (git-token TTL, budget pacing); they are
                     scout-canary material. OMIT the field entirely for a chainless stack
                     (router-routed per dispatch — see routerMode).
+                modelDeny:
+                  type: array
+                  items:
+                    type: string
+                  default: []
+                  description: >-
+                    Per-stack model deny list (ADR-096): ids here are excluded from every
+                    /route decision for this stack (skip reason claim-deny) — the launcher
+                    passes the stacks.json mirror row's list on each consult. Was consumed by
+                    agent-session.sh without being declared here (found 2026-08-03).
                 routerMode:
                   type: string
                   enum: [shadow, authoritative, "off"]

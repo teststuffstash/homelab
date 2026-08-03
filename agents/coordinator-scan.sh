@@ -90,6 +90,7 @@ stacks_json() {
         # ADR-096 P4 per-stack knob (2026-08-03): shadow|authoritative|off; chainless stacks
         # (no workerModel) declare authoritative — the launcher enforces.
         routerMode: (.spec.routerMode // "shadow"),
+        modelDeny: (.spec.modelDeny // []),
         # FU-080 cutover: a graduated stack is OWNED by its own per-stack loop (coordinate-<stack>
         # in <stack>-agents + the doorbell edge); the GLOBAL scan skips it below so the two never
         # double-run. Default false — perStack renders the loop, graduated retires the global belt.

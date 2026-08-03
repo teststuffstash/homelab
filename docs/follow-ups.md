@@ -240,12 +240,12 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       to open agent PR branches during merge-forward arbitration (record-in-git; issues = work
       pointers only). Remaining scope = W2+ (direct fixes/seeds), still needs design.** Original:
       **Coordinator write tiers (W1/W2) — needs its own ADR first.** Today the coordinator's
-      stack-repo clones (`/work/<repo>`, landed with the FU-045 first brick) are **read-only reference**: its
+      stack-repo clones (`/work/<repo>`, the per-stack context — platform-and-stacks.md) are **read-only reference**: its
       only writes are labels/comments/merge-state via `gh`. A future tier could let the coordinator write
       *directly* to a stack repo (open a PR from the clone, push a trivial fix, seed a spec) instead of always
       dispatching a worker — but that blurs the coordinator(orchestrator) vs worker(builder) split and touches
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
-      FU-045/FU-048 (the `AgentStack` claim would carry the tier as policy) and the merge-path reflexes.
+      the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
 - [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** The deterministic
       rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`
