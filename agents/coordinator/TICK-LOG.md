@@ -1906,3 +1906,22 @@ bookkeeping check); recipes asserted per-harness web-capability folklore (fixed:
 carries a harness-conditional "Web research:" line — FU-117 sighting; goose arms have NO web
 tool, an A/B fairness asymmetry to weigh in the comparison). Reviews normalized across all four
 via single doorbell rings (fairness, operator ask).
+
+**Addendum 3 (transcript audit, operator ask):** four parallel auditors over all 5 ride
+transcripts + the Prometheus DNS harvest. Egress: DISCIPLINED — zero model-initiated
+curl/wget/pip/npm across the fleet; the operator's "mimo curling github" = the CI gate's own
+`helm plugin install helm-unittest` (23 MB from release-assets, every run). External DNS total:
+github/api.github (190), cache.nixos.org (28 — LAN-cache misses), raw.githubusercontent (26),
+release-assets (8); zero denied flows. CROSS-CUTTING BUG: `gh issue view N --comments` renders
+EMPTY exit-0 in ride pods (all 5 rides, both harnesses; wrote off mimo attempt 1) → FU-129,
+recipes moved to --json (circles 96fe003). Env-card contradictions fixed (write-scope fix/-only
+false for research rides; package-proxy "egress-blocked" text vs monitor mode). gitleaks
+generic-api-key FP on spec JSON examples cost opus a squash+force-push → specs/ path allowlist
+(circles). CI WAN deps → FU-130. Storm evidence (budget-403 ×171/18s, final_output nags ×86,
+deepseek repetition loops 53% wall) → agent-runtime#13 comment. Model quality signal: opus 3
+minor tool fumbles/62 calls; kimi 0/28 (+ exemplary A/B-independence refusal); deepseek 0
+hard/33 but 53% wall in loops; mimo attempt-1 death = provider-side truncation (-32602, tool-id
+format flip mid-session ⇒ upstream endpoint switch — router cooldown lever, not a goose fix);
+mimo retry 3/39. Estimator: kimi ≈$4.2 actual vs $4.38 estimate; cap is SOFT (+11% overshoot).
+OPERATOR CLICK still open: flip ghcr `circles/devbox-cache` package PUBLIC (published 17:25 but
+private ⇒ all rides ran cold — the 433 MB nix pulls + 659 s queue waits).

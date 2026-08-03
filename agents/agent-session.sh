@@ -214,7 +214,16 @@ render_env_card() {
 
   # WHY: registry mirrors = FU-073/ADR-091 (.40.20/.21); nix-cache = ADR-083 (.40.23); devbox-search
   # = FU-118b (.40.27). The agent needs only the values + that a miss HANGS under the egress CNP.
-  printf '%s\n' "- **Package proxies (upstream is egress-blocked — a miss HANGS, it does not error):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
+  # WHY: the parenthetical must match the ACTUAL enforcement state — the FU-126 audit caught this
+  # bullet asserting "egress-blocked / a miss HANGS" while the egress bullet below said "monitored,
+  # not blocked" in the same card (deepseek arm flagged the contradiction).
+  local pkg_why
+  if [ "${EGRESS_ENFORCE:-}" = "true" ]; then
+    pkg_why="upstream is egress-blocked — a miss HANGS, it does not error"
+  else
+    pkg_why="upstream is reachable today (egress monitor mode) but WILL be blocked at enforcement — use the proxies anyway so the ride stays reproducible"
+  fi
+  printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
 
   # WHY: deliberately NOT a "grep SERVICES.md" rule — the ride clones ONLY /work/repo, never homelab,
   # so it's unreachable; service facts (endpoints/buckets/secret refs) are the ISSUE AUTHOR's job to
@@ -247,7 +256,14 @@ render_env_card() {
   fi
 
   printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-3} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
-  printf '%s\n' "- **Write scope:** you can only push a \`fix/\`-prefixed branch and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
+  # WHY: the branch PREFIX is recipe-owned (fix/ fixer, research/ researcher) — the FU-126 audit
+  # caught this card claiming fix/-only while a research ride legitimately pushed research/*
+  # (a compliance-minded model could deadlock on the contradiction).
+  if [ -n "${NO_ARM:-}" ]; then
+    printf '%s\n' "- **Write scope:** you can only push a \`research/\`-prefixed branch (the recipe's branch rule) and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
+  else
+    printf '%s\n' "- **Write scope:** you can only push a \`fix/\`-prefixed branch and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
+  fi
 }
 
 # Build the launcher-owned RUN_CMD from --recipe now that the environment is known (FU-114): render

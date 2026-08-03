@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-129**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-131**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -161,6 +161,22 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
       purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
 
+- [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) in ride pods — a
+      silent-success trap the recipes' "STOP if it fails" can't catch.** Reproduced on ALL 5
+      circles FU-126 rides, both harnesses; wrote off mimo attempt 1 (11 min without ever
+      seeing the goal). `--json` paths work; suspicion: gh pager/TTY detection in agent-base
+      (probe `GH_PAGER`/`PAGER` in the image) or the App-token GraphQL render path (the known
+      [bot]-suffix REST-vs-GraphQL mismatch class). Interim shipped: circles recipes read via
+      `--json title,body,comments` (96fe003). Next: root-cause probe in agent-runtime image +
+      port the --json form to sleep-tracking/oracle-fleet recipes. Relates FU-114.
+- [ ] **FU-130** — **The chart-stack CI gate curls 23 MB from GitHub releases EVERY run
+      (`helm plugin install helm-unittest` in test-chart.sh) + LAN nix-cache misses fall
+      through to cache.nixos.org** — both hang-prone the moment egress enforcement flips
+      (FU-020), and the plugin fetch is unauthenticated `--verify=false` WAN supply-chain
+      surface. Seen in the circles ride DNS harvest (8 release-asset + 26 raw.githubusercontent
+      + 28 cache.nixos.org lookups). Next: pre-seed helm-unittest (nixpkgs
+      `kubernetes-helmPlugins` or vendored tarball via the devbox-cache image) + warm the LAN
+      nix cache with new-stack toolchains at scaffold time. Relates FU-073, FU-096.
 - [ ] **FU-128** — **Dispatcher executes backticks from env-card text (cosmetic, every jail
       dispatch).** Symptom (circles fan-out, 2026-08-03): `Usage: devbox add`, `Try 'timeout
       --help'`, `placeholder-*: command not found` printed between the devbox-cache mount line
