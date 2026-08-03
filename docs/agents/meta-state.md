@@ -19,6 +19,12 @@ meant to avoid.)
   **FU-086 all four knobs (ARCHIVED — ADR-097 footprint dispatch + FU-085 compound + janitor
   tick shipped today; parallel dispatch turns on as issues gain `Touches:` lines)**.
 - The Agents-FU sweep record: TICK-LOG cont. 8 (8 closed / 4 advanced / skips with reasons).
+- **FRESH-SESSION pickup (2026-08-03): the circles chainless-pilot bootstrap** — full ordered
+  script (rename decision → new-stack → jail-seeded specs/goal → FU-126 multi-model spec A/B →
+  merge-path proof → tandem builder+iac lanes) lives in
+  `/workspace/therapy/documents/circles-of-happiness/others-view-plan.md` §"P-1/P0 session
+  order". Enablers all landed (c36c7ed chainless claims, 10ec34a chains reset). Also new:
+  `/docs-cleanup` skill (homelab .claude/skills/) — the operator wants that pass run soon.
 
 ## Re-arm on a fresh session (watches die with `/clear`)
 
