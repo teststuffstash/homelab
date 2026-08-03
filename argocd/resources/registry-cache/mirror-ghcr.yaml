@@ -54,10 +54,11 @@ spec:
             # an ENOSPC truncation abandons them, and the DEFAULT purge age of 168h left 9.8G
             # of debris wedging the disk for a week. A pull-through's upload lives minutes —
             # reap at 1h so a herd self-heals within the hour.
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED, value: "true" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_AGE, value: "1h" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_INTERVAL, value: "15m" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_DRYRUN, value: "false" }
+            # NB: must be ONE env var holding the whole YAML map — per-key
+            # REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_AGE vars panic the registry
+            # ("uploadpurging config key must contain additional keys").
+            - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
+              value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
           ports:
             - { name: http, containerPort: 5000 }
           securityContext:

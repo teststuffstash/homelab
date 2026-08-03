@@ -53,10 +53,11 @@ spec:
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
             # Upload-debris reaping — same rationale as mirror-ghcr (#80): abandoned
             # pull-through uploads must reap in ~1h, not the 168h default.
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_ENABLED, value: "true" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_AGE, value: "1h" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_INTERVAL, value: "15m" }
-            - { name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_DRYRUN, value: "false" }
+            # NB: must be ONE env var holding the whole YAML map — per-key
+            # REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING_AGE vars panic the registry
+            # ("uploadpurging config key must contain additional keys").
+            - name: REGISTRY_STORAGE_MAINTENANCE_UPLOADPURGING
+              value: "{enabled: true, age: 1h, interval: 15m, dryrun: false}"
           ports:
             - { name: http, containerPort: 5000 }
           securityContext:
