@@ -61,12 +61,27 @@ for MODEL in "$@"; do
   esac
 
   # Estimate + mint the per-ride ephemeral key (the coordinator's steps 3-4, deterministic).
-  # ESCALATE for one model skips THAT model only — the others still ride.
-  if ! gh issue view "$ISSUE" --repo "${ORG}/${PROJECT}" --json title,body -q '.title+"\n"+.body' \
+  # ESCALATE for one model skips THAT model only — the others still ride. The estimator prints
+  # the verdict to stderr and still emits a top-cap CR, so the gate is HERE: buffer the CR,
+  # read the verdict, apply only if clean or the operator pre-approved the draw
+  # (FANOUT_APPROVE_ESCALATE=1 — the ride then runs under the top-tier hard cap and may 403
+  # unfinished; incremental pushes bank the WIP).
+  EST_ERR="$(mktemp)"
+  CR="$(gh issue view "$ISSUE" --repo "${ORG}/${PROJECT}" --json title,body -q '.title+"\n"+.body' \
       | python3 "${HERE}/estimate_budget.py" --model "$MODEL" \
-          --project "$PROJECT" --session "$SESSION" --emit-cr \
-      | "${KUBECTL:-kubectl}" --kubeconfig "${HERE}/../tofu/kubeconfig" apply -f -; then
+          --project "$PROJECT" --session "$SESSION" --emit-cr 2>"$EST_ERR")" || CR=""
+  cat "$EST_ERR" >&2
+  if [ -z "$CR" ]; then
     echo "  ⚠ estimate/mint FAILED for ${MODEL} — skipping this model (others continue)" >&2
+    rm -f "$EST_ERR"; continue
+  fi
+  if grep -q "ESCALATE" "$EST_ERR" && [ "${FANOUT_APPROVE_ESCALATE:-0}" != "1" ]; then
+    echo "  ⚠ ESCALATE for ${MODEL} — skipping (human gate, FU-126). Re-run with FANOUT_APPROVE_ESCALATE=1 to ride it under the top-tier cap." >&2
+    rm -f "$EST_ERR"; continue
+  fi
+  rm -f "$EST_ERR"
+  if ! printf '%s\n' "$CR" | "${KUBECTL:-kubectl}" --kubeconfig "${HERE}/../tofu/kubeconfig" apply -f -; then
+    echo "  ⚠ key CR apply FAILED for ${MODEL} — skipping this model (others continue)" >&2
     continue
   fi
 

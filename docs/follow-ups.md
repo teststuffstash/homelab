@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-128**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-129**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -161,6 +161,13 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
       purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
 
+- [ ] **FU-128** — **Dispatcher executes backticks from env-card text (cosmetic, every jail
+      dispatch).** Symptom (circles fan-out, 2026-08-03): `Usage: devbox add`, `Try 'timeout
+      --help'`, `placeholder-*: command not found` printed between the devbox-cache mount line
+      and pod create — the card's backticked terms (`` `devbox add` ``, `` `timeout` ``…)
+      command-substitute in some launcher echo/expansion context. Verified HARMLESS to the ride:
+      the pod's decoded recipe carries the card intact. Next: find the unquoted expansion in
+      agent-session.sh (~pod-manifest region) and quote it. Relates FU-114.
 - [ ] **FU-120** — **`agent-finalize` PATH-loss root cause unconfirmed (belt shipped, now masking
       it).** The launcher pins `PATH=/opt/agent/.devbox/nix/profile/default/bin` on the finalize call
       (2026-07-31), so bookkeeping can't be lost to this class again; the #71-r2 crash itself is
