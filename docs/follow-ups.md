@@ -227,8 +227,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       fails. Ledger, the double-book, all four sightings and the build list:
       [`docs/storage-ledger.md`](storage-ledger.md).
       **(a) ledger lint BUILT 2026-08-02** (`devbox run storage-ledger`, cluster-sourced, >100%
-      exits 1) — **first run: tier LIVE at 121% (181/150Gi), reconciliation = operator capacity
-      decision** (shrink ert-snapshots/loki caps vs grow the PVC). **Next:** Garage admin-API
+      exits 1); **121% overcommit RECONCILED 2026-08-03** (operator: shrink oversized caps, keep
+      ert-snapshots 90Gi + the PVC) — loki 40→8Gi, agent-transcripts 20→5Gi → 134/150Gi (89%,
+      inside the WARN band by design). **Next:** Garage admin-API
       metrics + ServiceMonitor and Longhorn per-disk `storageScheduled`, each with a >80% alert.
       Blocks the FU-106 "mechanical" predicate. Relates ADR-089, FU-116 (archived).
 

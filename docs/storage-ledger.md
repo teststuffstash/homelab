@@ -49,9 +49,12 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
   checkout) against the garage data PVC capacity. >80% warns, >100% exits 1 (the iac-lane
   "mechanical" predicate refusal). Per-tier, because per-repo accounting is what allowed the
   double-book. **First run found the tier LIVE-OVERCOMMITTED: 181Gi committed / 150Gi capacity
-  (121%)** — biggest lines: ert-snapshots 90, loki 40, agent-transcripts 20. Reconciling is an
-  operator capacity decision (shrink caps vs grow the PVC); until then the lint holds the line
-  against NEW claims.
+  (121%)** — biggest lines: ert-snapshots 90, loki 40, agent-transcripts 20. **Reconciled
+  2026-08-03** (operator decision: right-size the oversized caps, no PVC grow): loki 40→8Gi
+  (698MiB actual at 30-day retention) and agent-transcripts 20→5Gi (448MiB actual) → **134Gi/150
+  (89%)**. ert-snapshots keeps 90Gi — its 2×42GB snapshot pairs need ~78GiB, the one cap that was
+  honest. The tier sits in the >80% WARN band deliberately: the next claim is a capacity
+  decision, not a rubber stamp.
 - **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
   usage-vs-cap panels; a **>80% alert**.
 - **Longhorn metering** — per-disk `storageScheduled`-vs-cap. The kubelet metrics already exist

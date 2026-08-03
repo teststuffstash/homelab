@@ -28,7 +28,7 @@ spec:
     module: |
       resource "garage_bucket" "transcripts" {
         global_alias = "agent-transcripts"
-        max_size     = 21474836480 # 20Gi — ADR-089 quota-as-contract: every bucket claim states its cap
+        max_size     = 5368709120 # 5Gi — ADR-089 quota-as-contract; ~11× actual (448MiB measured 2026-08-03, FU-093 tier reconciliation)
       }
 
       resource "garage_key" "writer" { name = "agent-transcripts-writer" }

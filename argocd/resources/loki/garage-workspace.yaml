@@ -15,7 +15,7 @@ spec:
     module: |
       resource "garage_bucket" "loki" {
         global_alias = "loki"
-        max_size     = 42949672960 # 40Gi — ADR-089: generous for 7-day retention; cap, not target
+        max_size     = 8589934592 # 8Gi — ADR-089 cap; ~11× the 30-day-retention steady state (698MiB measured 2026-08-03, FU-093 tier reconciliation)
       }
       resource "garage_key" "loki" { name = "loki" }
       resource "garage_bucket_permission" "loki_rw" {
