@@ -1860,3 +1860,26 @@ machinery-owned: snore#15 (re-review after my review-fix push), oracle-fleet#166
 agent-runtime#27. Ops lessons this stretch: a && chain skipped a failed merge-path-lint and
 pushed a red FSM view (1-commit window — gate pushes on ALL lints); GitHub sub-issue +
 issue-dependency APIs verified round-trip live before any play relied on them.
+
+## 2026-08-03 — circles chainless-pilot bootstrap (P-1 steps 2-4, operator + homelab session)
+
+**Condition:** new-stack `circles --public --chainless --from sleep-tracking` had run; operator
+did github-tofu apply + PAT + App clicks mid-session. **Commands:** LLM-adaptation pass over
+../circles (donor remnants, ci.sh→chart gate, CLAUDE.md, recipes incl. review.md, devbox
+scripts; `devbox run ci` green — needed the donor package set verbatim: the jail can't eval a
+NEW nixpkgs flake) + claim rewrite in ../circles-iac (oracle sed-residue stripped: chainless,
+routerMode authoritative, claudeTier true, no slo/argo/docker, enforce false) + both repos'
+initial push. Bring-up bugs fixed on the way: chart-test heredoc `[0]`-in-flow-scalar (new-stack
+template), crossplane escalation-check miss on the IAC-G03 claims-read widening (first NEW stack
+CRB since — the FU-072 latent class again), stack-lint GH-04 still reading the FU-098-removed
+docs/github-apps.md (now reads the served exporter /apps via apiserver proxy; heredoc-stdin
+gotcha: `python3 -` eats the pipe), launcher --recipe rejecting the FU-126 `research-<N>-<slug>`
+task keys, fanout ESCALATE verdict print-only (now a real gate, FANOUT_APPROVE_ESCALATE=1
+override). circles-iac token-list coverage: operator extended homelab-agents+reviewer installs
+(exporter /apps verified) → listed. Seeds pushed (specs conventions, circles.yaml stub, fixture
+person), goal issue circles#1 authored self-contained, FU-126 fan-out dispatched: claude/opus
+(subscription leg NEW in research-fanout.sh) + kimi-k3 + deepseek-0731 + mimo-v2.5-pro (draw =
+AA intelligence tier ∩ own reliability evidence; operator picked mimo→pro). **End-state:**
+`stack-lint circles` GREEN, claim Ready, 4 research pods running in ns circles, un-armed
+`research/issue-1-*` PRs pending operator cherry-pick. Filed FU-127 (model ids don't carry
+rail/harness — operator concern), FU-128 (dispatcher backtick noise from env-card text).

@@ -7,10 +7,14 @@ meant to avoid.)
 
 ## Fresh-session pickup (2026-08-03)
 
-- **The circles chainless-pilot bootstrap** — full ordered script (rename decision → new-stack →
-  jail-seeded specs/goal → FU-126 multi-model spec A/B → merge-path proof → tandem builder+iac
-  lanes) lives in `/workspace/life/documents/circles-of-happiness/others-view-plan.md`
-  §"P-1/P0 session order". Enablers all landed (c36c7ed chainless claims, 10ec34a chains reset).
+- **The circles chainless-pilot bootstrap — steps 1-4 DONE 2026-08-03** (plan:
+  `/workspace/life/documents/circles-of-happiness/others-view-plan.md` §"P-1/P0 session order").
+  `stack-lint circles` GREEN; claim Ready (chainless, claudeTier); specs/fixture seed + goal
+  issue circles#1 pushed; FU-126 fan-out DISPATCHED on 4 arms (claude/opus, kimi-k3,
+  deepseek-0731 xs-cap, mimo-v2.5-pro — the last two rode ESCALATE-approved under the $2 top
+  cap). **NEXT: operator cherry-picks the `research/issue-1-*` un-armed PRs**
+  (`gh pr list --repo teststuffstash/circles --search 'head:research/issue-1'`), lands the seed
+  through the human gate → step 5 merge-path proof (one trivial PR E2E) → step 6 tandem lanes.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
