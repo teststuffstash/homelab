@@ -41,7 +41,12 @@ spec:
           properties:
             spec:
               type: object
-              required: [repos, workerModel]
+              # workerModel became OPTIONAL 2026-08-03 (ADR-096 P5 pilot): a claim with NO
+              # workerModel is a CHAINLESS stack — the router's rotation universe (model_tiers ∩
+              # rankings, floors/strikes/cooldowns applied) supplies candidates per dispatch.
+              # Requires routerMode: authoritative (the launcher refuses a chainless dispatch in
+              # shadow/off — no static model exists to fall back to).
+              required: [repos]
               properties:
                 mainRepo:
                   type: string
@@ -148,7 +153,18 @@ spec:
                     need fixer.claudeTier=true so the session secret renders). Chain
                     policy: paid-cached-fast first — free tiers rate-limit below the
                     platform's freshness windows (git-token TTL, budget pacing); they are
-                    scout-canary material.
+                    scout-canary material. OMIT the field entirely for a chainless stack
+                    (router-routed per dispatch — see routerMode).
+                routerMode:
+                  type: string
+                  enum: [shadow, authoritative, "off"]
+                  default: shadow
+                  description: >-
+                    ADR-096 P4 knob, per stack: shadow = consult /route + log divergence,
+                    dispatch the static chain (fleet default during the soak); authoritative =
+                    the routed decision picks the model (REQUIRED for a chainless stack);
+                    off = no consult. The launcher reads this from the stacks.json mirror row
+                    (explicit AGENT_ROUTER env still overrides — jail experiments).
                 workerModelFallbacks:
                   type: array
                   items:

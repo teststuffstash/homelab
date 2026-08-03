@@ -66,10 +66,15 @@ done
 # merges cluster-wins); /route filters it against strikes, cooldowns, class policy and capacity
 # server-side and answers a dispatch or a typed defer. Fail-open: unreachable proxy (jail run
 # without AGENT_EGRESS_PROXY) → static behavior, one loud line.
+_srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
+# Per-stack routerMode (ADR-096 P4 knob, 2026-08-03): the claim/mirror row sets the stack's
+# mode; an EXPLICIT AGENT_ROUTER env still wins (jail experiments). Chainless stacks (no
+# workerModel) declare authoritative — enforced below.
+_stack_rmode="$(printf '%s' "$_srow" | jq -r '.routerMode // ""')"
+if [ -z "${AGENT_ROUTER:-}" ] && [ -n "$_stack_rmode" ]; then AGENT_ROUTER="$_stack_rmode"; fi
 AGENT_ROUTER="${AGENT_ROUTER:-shadow}"
 if [ "$AGENT_ROUTER" != "off" ]; then
   ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
-  _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
   _chain="$(printf '%s' "$_srow" | jq -c '([.workerModel] + (.workerModelFallbacks // [])) | map(select(. != null))' 2>/dev/null)" || _chain="[]"
   if [ -n "${HARNESS_SET:-}" ]; then  # an explicit --harness bounds the rail this pod can ride
     case "$HARNESS" in
@@ -104,6 +109,18 @@ if [ "$AGENT_ROUTER" != "off" ]; then
         exit 1
       fi
     fi
+  fi
+fi
+# Chainless-stack guard (ADR-096 P5 pilot, 2026-08-03): a stack row WITHOUT workerModel has no
+# static chain, and the hardcoded MODEL default would be a silent lie. Only an authoritative
+# routed dispatch (or an explicit --model) may proceed — shadow/off/unreachable-router all
+# refuse LOUDLY (rule #6: the router fail-open must never fail INTO a made-up model here).
+if [ -z "${MODEL_SET:-}" ] \
+   && [ "$(printf '%s' "${_srow:-{}}" | jq -r '.name // ""')" != "" ] \
+   && [ "$(printf '%s' "${_srow:-{}}" | jq -r '.workerModel // ""')" = "" ]; then
+  if [ "$AGENT_ROUTER" != "authoritative" ] || [ "${_verdict:-}" != "dispatch" ] || [ -z "${_rmodel:-}" ]; then
+    echo "FATAL: chainless stack (no workerModel in the claim) needs routerMode=authoritative + a routed dispatch — got AGENT_ROUTER=${AGENT_ROUTER}, verdict=${_verdict:-none}. Refusing the static default model." >&2
+    exit 1
   fi
 fi
 
