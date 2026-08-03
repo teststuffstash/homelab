@@ -337,6 +337,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       AA indices → `capability`, task-tag top-10s → `task_market`), `/route` filters per class
       vs `class_floors` (git policy; permissive on missing data; self-test covers block/pass);
       floors surface in SHADOW decisions until the P4 flip — tighten with that evidence.
+      **P5 pilot RULED 2026-08-03: the `circles` stack bootstraps CHAINLESS** (no workerModel,
+      `routerMode: authoritative` — enablers in c36c7ed; plan: therapy others-view-plan.md;
+      the router is tuned until that project works — P4 fleet-flip evidence comes from it).
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 
 ## Hardware & nodes
