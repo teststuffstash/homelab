@@ -99,11 +99,30 @@ the C6 closeout) — **and that dispatch is what exposed IAC-G01**, below.
   ip-plan ranges (ADR-088), hostname conventions, ADR-076 bucket ownership, tenancy boundaries,
   secret *references-never-values*, `deletionPolicy` guards, workflow-path rules. Every rule kills
   an incident class forever, with a message. This is the decision-table doctrine applied to infra.
-- **L0b — the tamper-proof sentinel (IAC-G04):** in-repo CI runs the PR's own workflow code, so a
-  required check the PR can rewrite is not a gate against the worker itself. The policy check that
-  carries the *security* class runs **cluster-side** (exporter/Argo Events shape), evaluates the
-  PR's rendered manifests against homelab-owned rules, and posts a commit status the PR cannot
-  touch. This — not review — is what closes IAC-G01, because rollback is structurally blind to
+- **L0b — the tamper-proof sentinel (IAC-G04): v1 BUILT 2026-08-03, SHADOW mode.** In-repo CI
+  runs the PR's own workflow code, so a required check the PR can rewrite is not a gate against
+  the worker itself. The sentinel runs cluster-side (`iac-sentinel` CronWorkflow */15,
+  agent-coordinator ns, arc-runner image) with rules and engines from THIS repo's master —
+  the PR tree arrives as a tarball (data, never executed; no helm/hooks in v1 — raw-YAML pass,
+  the render pass is v2). **Engines (operator ruling: no engine sprawl — Kyverno is THE rule
+  engine, CLI seat now, the admission-controller seat is its future; NB no prior roadmap record
+  of kyverno was found — this ruling is the record):** `policy/iac/*.yaml` (5 Kyverno policies:
+  raw-Secret, public-bucket, explicit-Delete deletionPolicy, VIP∈192.168.32.0/19,
+  cluster-scoped power kinds — all synthetically verified firing), gitleaks (secret values,
+  fleet-standard), and a bash path-rule (worker-authored PRs must not touch
+  `.github/workflows/**` — the sleep-iac#28 hole; a GitHub **push ruleset** with restricted
+  file paths is the enforcement-grade native version, to verify+tofu at the flip).
+  **Shadow → enforce is the router-rollout pattern**: v1 posts nothing to GitHub (logs +
+  pushgateway `iac_sentinel_violations`/`_engine_seconds`); the flip adds `statuses: write` to
+  the homelab-REVIEWER App (never the worker's own identity — it could pass itself) + a
+  required check on the -iac repos.
+  **Measured overhead (2026-08-03, both -iac repos at master):** fetch ~0.7–1.0s · collect
+  ~0.2s · kyverno ~0.7–0.8s (5 policies × 17–25 docs) · gitleaks ~0.14s · **total ~1.8–2.1s
+  serial per PR head**. Parallelizing engines saves <1s while ARC job overhead is ~10–30s and
+  the poll tick is 15min — **parallel steps start paying only when serial engine time reaches
+  the job-overhead scale (~10s+)**, i.e. after the v2 render pass (helm templating per chart is
+  the expensive step) or ~10× policy growth; revisit against `iac_sentinel_engine_seconds` then.
+  This — not review — is what closes IAC-G01, because rollback is structurally blind to
   silent security holes (a public bucket never degrades a KPI).
 - **L1 — pre-merge rendered diff:** master-vs-branch manifest diff as a PR comment — grounds any
   reader (human or lens) in the actual delta, catches plausible-YAML-wrong-effect.

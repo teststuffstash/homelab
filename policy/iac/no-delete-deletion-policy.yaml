@@ -1,0 +1,30 @@
+# IAC-G04 rule 3 — nothing explicitly opts stateful claims INTO deletion (docs/agents/iac-lane.md
+# L0 "deletionPolicy guards"). Scoped to EXPLICIT `deletionPolicy: Delete`: absent = provider
+# default and allowed (existing manifests omit it) — the rule catches a PR *flipping* the knob,
+# which is the reviewable act.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-no-delete-deletion-policy
+  annotations:
+    policies.kyverno.io/description: "no explicit deletionPolicy: Delete on claims/managed resources"
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: no-explicit-delete
+      match:
+        any:
+          - resources:
+              kinds: ["*"]
+      celPreconditions:
+        - name: has-deletion-policy
+          expression: "has(object.spec) && has(object.spec.deletionPolicy)"
+      validate:
+        cel:
+          expressions:
+            - expression: "object.spec.deletionPolicy != 'Delete'"
+              message: >-
+                Explicit deletionPolicy: Delete on a claim/managed resource — data-holding
+                platform resources must not opt into cascading deletion from an -iac PR
+                (revert-first doctrine: a merge must stay reversible).

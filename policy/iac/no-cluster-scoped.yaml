@@ -1,0 +1,34 @@
+# IAC-G04 rule 5 — tenancy boundary (docs/agents/iac-lane.md L0, platform-and-stacks.md): an
+# -iac wrapper deploys a STACK into its namespaces; cluster-scoped power objects (RBAC at
+# cluster grain, CRDs, webhooks, namespaces themselves) are platform-owned and arrive via the
+# homelab repo, never a stack -iac PR. This is the privilege-escalation fence: a worker that
+# can merge a ClusterRoleBinding owns the cluster.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-no-cluster-scoped
+  annotations:
+    policies.kyverno.io/description: "-iac repos ship namespaced resources only — cluster-scoped power objects are platform-owned"
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: no-cluster-scoped-power-kinds
+      match:
+        any:
+          - resources:
+              kinds:
+                - ClusterRole
+                - ClusterRoleBinding
+                - CustomResourceDefinition
+                - Namespace
+                - MutatingWebhookConfiguration
+                - ValidatingWebhookConfiguration
+                - APIService
+                - PriorityClass
+      validate:
+        message: >-
+          Cluster-scoped power object in an -iac repo — CRDs, cluster RBAC, webhooks,
+          namespaces and priority classes are platform-owned (homelab repo); a stack wrapper
+          ships namespaced resources only (tenancy fence, iac-lane.md L0).
+        deny: {}

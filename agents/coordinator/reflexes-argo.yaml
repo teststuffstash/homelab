@@ -203,3 +203,53 @@ spec:
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
             limits: { memory: "512Mi" }
+---
+# IAC-G04 policy sentinel (FU-106, built 2026-08-03) — v1 SHADOW: evaluates -iac PR heads
+# against homelab-owned rules (policy/iac/ + scripts/iac-sentinel.sh; Kyverno CLI is THE rule
+# engine per operator ruling — admission seat later) and reports to logs + pushgateway. Posts
+# NOTHING to GitHub and blocks nothing; the enforcement flip (statuses:write on the REVIEWER
+# App — never the worker's own identity — + required check) comes after the shadow soak.
+# Tamper-proof by construction even now: rules and engines come from THIS repo's master clone,
+# the PR tree is fetched as a tarball (data, never executed). Runs on the arc-runner image so
+# `devbox run` serves the pinned toolchain (kyverno/gitleaks ride the warm store).
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: iac-sentinel
+  namespace: agent-coordinator
+spec:
+  schedules:
+    - "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    serviceAccountName: agent-coordinator
+    activeDeadlineSeconds: 900
+    ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+    entrypoint: main
+    volumes:
+      - { name: work, emptyDir: {} }
+      - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+    templates:
+      - name: main
+        container:
+          image: ghcr.io/teststuffstash/homelab/arc-runner:2026.8.3-g79599ff0d65c
+          command: ["bash", "-lc"]
+          args:
+            - |
+              set -e
+              rm -rf /work/homelab
+              git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+              cd /work/homelab
+              exec devbox run -- bash scripts/iac-sentinel.sh
+          env:
+            - { name: HOME, value: "/home/runner" }
+            - { name: ORG, value: "teststuffstash" }
+            - { name: PUSHGATEWAY, value: "http://prometheus-pushgateway.monitoring.svc:9091" }
+            - name: GH_TOKEN
+              valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits: { memory: "1Gi" }

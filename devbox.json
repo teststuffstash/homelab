@@ -23,6 +23,8 @@
     "openssl@latest",
     "tea@latest",
     "keepassxc@latest",
+    "kyverno@latest",
+    "gitleaks@latest",
     "wireguard-tools@latest",
     "qrencode@latest",
     "argocd@latest",

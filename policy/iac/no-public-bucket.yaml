@@ -1,0 +1,31 @@
+# IAC-G04 rule 2 — no public bucket exposure (ADR-076 app-owned buckets; the "never degrades a
+# KPI" class: a public bucket is invisible to every post-merge health signal). Garage's public
+# surface is website_access on a bucket; a hostile/mistaken Workspace module flips it in one
+# line of tf text, so the rule greps the module blob itself.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-no-public-bucket
+  annotations:
+    policies.kyverno.io/description: "Garage buckets stay private — no website_access in Workspace modules"
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: no-website-access-in-module
+      match:
+        any:
+          - resources:
+              kinds: [Workspace]
+      celPreconditions:
+        - name: has-module
+          expression: "has(object.spec) && has(object.spec.forProvider) && has(object.spec.forProvider.module)"
+      validate:
+        cel:
+          expressions:
+            - expression: >-
+                !object.spec.forProvider.module.contains('website_access')
+              message: >-
+                Workspace module configures Garage website_access — public bucket exposure is
+                forbidden (ADR-076); a public surface never degrades a KPI, so nothing
+                post-merge would ever catch it.

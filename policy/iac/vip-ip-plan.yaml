@@ -1,0 +1,33 @@
+# IAC-G04 rule 4 — LoadBalancer VIPs come from the plan (ADR-088 / docs/ip-plan.md): cluster LB
+# VIPs live in 192.168.32.0/19 (third octet 32..63) and NEVER inside a real-host range. A VIP
+# outside the block either collides with a host or silently fails BGP advertisement.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: iac-vip-ip-plan
+  annotations:
+    policies.kyverno.io/description: "LoadBalancer VIPs must sit in 192.168.32.0/19 (ADR-088)"
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: lb-vip-in-plan-range
+      match:
+        any:
+          - resources:
+              kinds: [Service]
+      celPreconditions:
+        - name: is-lb-with-pinned-ip
+          expression: >-
+            has(object.spec) && has(object.spec.type) && object.spec.type == 'LoadBalancer'
+            && has(object.metadata.annotations)
+            && 'lbipam.cilium.io/ips' in object.metadata.annotations
+      validate:
+        cel:
+          expressions:
+            - expression: >-
+                object.metadata.annotations['lbipam.cilium.io/ips']
+                .matches('^192\\.168\\.(3[2-9]|[45][0-9]|6[0-3])\\.[0-9]{1,3}$')
+              message: >-
+                lbipam.cilium.io/ips is outside 192.168.32.0/19 (ADR-088,
+                docs/ip-plan.md) — a VIP must never live inside a real-host range.

@@ -201,10 +201,11 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       **2026-08-03: G05-rung-0 ⚖ ANSWERED + BUILT** (cron-shaped = real-run-as-hook +
       freshness-free read asserts; sleep-tracking#113; doctrine + rejected cron alternatives in
       the iac-lane doc §IAC-G05).
-      **Open:** ⚠ **IAC-G01/G04, the review-gate hole + cluster-side policy sentinel** — an
-      `-iac` worker can rewrite its own CI gate and instant-merge unreviewed (sleep-iac#28,
-      38s); priority RISES with three fixer lanes live. Then G06 advisory lens.
-      Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
+      **2026-08-03: G04 sentinel v1 BUILT (shadow)** — Kyverno-CLI as THE engine + gitleaks +
+      path-rule, cluster-side cron, measured ~2s/PR; detail + enforcement plan (reviewer-App
+      statuses:write, push ruleset, required check): iac-lane.md §L0b. **Open:** the G01
+      ENFORCEMENT flip after the shadow soak (operator: grant + tofu ruleset), then G06
+      advisory lens. Relates FU-086 (archived), FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h

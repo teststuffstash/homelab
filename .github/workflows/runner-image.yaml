@@ -105,9 +105,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
+          # Both pinned consumers: the scale set AND the iac-sentinel CronWorkflow (same image).
           sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
-            argocd/platform/arc-runners.yaml
-          if git diff --quiet argocd/platform/arc-runners.yaml; then
+            argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml
+          if git diff --quiet argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml; then
             echo "pin already current" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
           BRANCH="runner-image-pin"
@@ -122,9 +123,9 @@ jobs:
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" --delete "$BRANCH" 2>/dev/null || true
           git fetch origin master && git checkout -B "$BRANCH" origin/master
           sed -i -E "s|(arc-runner:)[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}|\1${{ steps.tag.outputs.tag }}|g" \
-            argocd/platform/arc-runners.yaml
-          git diff --quiet argocd/platform/arc-runners.yaml && { echo "pin already current on fresh master" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
-          git add argocd/platform/arc-runners.yaml
+            argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml
+          git diff --quiet argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml && { echo "pin already current on fresh master" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          git add argocd/platform/arc-runners.yaml agents/coordinator/reflexes-argo.yaml
           git commit -m "arc-runners: pin runner image ${{ steps.tag.outputs.tag }} (auto-bump after build)"
           git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}" "HEAD:$BRANCH"
           PR="$(gh pr list --repo "${{ github.repository }}" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
