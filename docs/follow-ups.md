@@ -195,11 +195,12 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       CLOSED** (closeout's -iac variant verifies Synced-at-revision + Healthy + claims Ready;
       loop SA granted the read-only RBAC), **G07 pin-follow SHIPPED** (oracle-fleet#167 —
       workflow tags ride the bump commit, pin-hold opt-out).
+      **2026-08-03: G05-rung-0 ⚖ ANSWERED + BUILT** (cron-shaped = real-run-as-hook +
+      freshness-free read asserts; sleep-tracking#113; doctrine + rejected cron alternatives in
+      the iac-lane doc §IAC-G05).
       **Open:** ⚠ **IAC-G01/G04, the review-gate hole + cluster-side policy sentinel** — an
       `-iac` worker can rewrite its own CI gate and instant-merge unreviewed (sleep-iac#28,
-      38s); priority RISES with three fixer lanes live. Then G05 (rung-0 smoke — ⚖ OPEN
-      QUESTION: what does the PostSync curl target on a CronJob-shaped app like the sleep
-      ingester? the sketch assumes an HTTP service) + G06 advisory lens.
+      38s); priority RISES with three fixer lanes live. Then G06 advisory lens.
       Relates FU-086/FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-086** — **Item-scoped dispatch: the four remaining knobs.** Core shipped + E2E-verified
       2026-07-17 (scan emits `(clause, repo, item)` units, `--spawn` dispatches the single

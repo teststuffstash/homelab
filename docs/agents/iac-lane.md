@@ -154,6 +154,20 @@ by design) supports three rungs; **eventually Cloudflare fronts all services** (
   curls the new deployment — `/healthz` plus one real read — so "Synced" only reports after the
   service *answered*, and a failure fails the sync loudly into the existing Degraded→revert path.
   Sleep is the shape-proving pilot: a single user, so the curl IS the user. Zero new components.
+
+  **Cron-shaped apps (⚖ answered 2026-08-03, built as sleep-tracking#113):** a CronJob has no
+  endpoint to curl — its `/healthz` is **a run's exit code**. The hook Job runs the app for real
+  (init step, same podTemplate) then does **freshness-free read assertions** on the output (opens,
+  non-empty, newest record plausibly recent). Two operator rulings baked in: (a) *no
+  run-freshness assert* — upload-on-unchanged-input is incidental behavior today, and such
+  behaviors become contracts only after the pattern emerges across multiple projects, not
+  per-app; (b) *real-run-as-hook presumes runs are idempotent and cheap* (true for sleep's
+  small dataset). For a future cron where reruns are costly or side-effecting, the candidate
+  shapes are: a **dry-run/smoke flag** in the app (parse config + touch dependencies, write
+  nothing), a **data-subset canary** (new logic gated to a slice of ids/tenants via flag —
+  rollback = flag flip), a **parallel shadow CronJob** (new image against a clone/validation
+  pool, compare outputs), or **phased schedule frequency** (canary runs 1×/day before the image
+  lands on the real cadence). Pick per app; none needed for sleep.
 - **Rung 1 — in-cluster traffic split:** Gateway API weighted `backendRefs` (Cilium implements
   them; the ADR-092 sleep Gateway is already this stack): stable + canary Deployments, promotion =
   a weight flip driven by a Workflow step reading Prometheus. If/when analysis-driven promotion
