@@ -19,7 +19,8 @@ on:
       # the fixed-offset cron ordering (lock 03:00 → image 06:00): GitHub cron drifts by HOURS
       # independently per workflow (2026-07-27: the 03:00 lock bump fired 06:19 — the 06:00
       # image cron would have rebaked LAST week's locks), so offsets guarantee nothing.
-      - devbox.json
+      # devbox.json is DELIBERATELY not a trigger (2026-08-03: a scripts-only edit triggered a
+      # full build+pin cycle) — any real toolchain change updates devbox.lock too.
       - devbox.lock
   schedule:
     # Monday fallback rebake only (base-image freshness + the OTHER repos' lock drift — their
@@ -39,11 +40,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Every build fetches ALL repos' lockfiles live, so any same-day build already served the
+      # Monday cron's purpose (other repos' lock drift). Skip the scheduled rebake when today's
+      # pin proves a build already ran (2026-08-03: the drifted cron was the 4th build that day).
+      - name: Skip scheduled rebake if a build already ran today
+        id: guard
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] \
+             && grep -q "arc-runner:$(date +%Y.%-m.%-d)-g" argocd/platform/arc-runners.yaml; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "scheduled rebake skipped — today's pin shows a build already ran" >> "$GITHUB_STEP_SUMMARY"
+          fi
       # Most fleet repos are private — the warm-store lockfiles need an App token (the
       # devbox-update.yaml pattern); this job's own GITHUB_TOKEN is homelab-scoped.
       # ⚠ The list below is the homelab-renovate App INSTALLATION set, not the wishlist:
       # minting for an uninstalled repo 422s the whole step (the exporter /apps page has the live matrix).
       - uses: actions/create-github-app-token@v1
+        if: steps.guard.outputs.skip != '1'
         id: app
         with:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
@@ -51,6 +64,7 @@ jobs:
           owner: teststuffstash
           repositories: homelab,sleep-tracking,sleep-iac,openrouter-operator,oracle-fleet,oracle-iac,agent-coordinator
       - name: Fetch fleet devbox lockfiles into the build context (FU-015 warm store)
+        if: steps.guard.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
@@ -69,15 +83,19 @@ jobs:
           done
           echo "closures staged: $(ls docker/arc-runner/warm/)"
       - uses: docker/login-action@v3
+        if: steps.guard.outputs.skip != '1'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Compute tag (calver-gsha, agent-coordinator convention)
+        if: steps.guard.outputs.skip != '1'
         id: tag
         run: echo "tag=$(date +%Y.%-m.%-d)-g$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
+        if: steps.guard.outputs.skip != '1'
       - name: Build and push
+        if: steps.guard.outputs.skip != '1'
         # Registry layer cache (#80): the hosted builder is ephemeral, so without --cache-from
         # every build re-executes and RE-DIGESTS every layer — consecutive pins shared only the
         # 0.55G of pulled base layers and each bump shipped ~3.5G of "new" bytes. mode=max
@@ -102,6 +120,7 @@ jobs:
       # and rightly, argocd-validate-pins must gate every pin. App token: the workflow's
       # existing homelab-renovate mint (same App that opens the devbox-update PRs on homelab).
       - name: Bump the scale-set pin (auto-merge PR)
+        if: steps.guard.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
