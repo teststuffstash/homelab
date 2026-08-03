@@ -225,8 +225,13 @@ model — the IFBench/τ²-Bench/GPQA proxies are folded inside AA's composites,
 mapping simplifies: coding_index → coding floor, agentic_index → tool-loop floor,
 intelligence_index → research tier) *and* OpenRouter's own evals (gpqa_diamond accuracy +
 measured $/task — a research-tier floor AND a cost sanity check in one row). The curated
-snapshot stays as the delivery vehicle: the weekly scout pulls via MCP into
-`model-classes.json`; nothing reads benchmarks in the data plane. A fourth, cheaper prior from
+snapshot as delivery vehicle was superseded the same day — **BUILT 2026-08-03 with the router
+store as the vehicle**: the standard-key probe made the server-side pull free, so the PROXY
+pulls weekly (`_capability_tick` beside the rankings daemon — AA indices → `capability` table,
+task-classification top-10s → `task_market`) and `/route` filters per class against
+`class_floors` in `model-classes.json` (the git-owned POLICY half; permissive on missing data;
+`capability-floor:` skip reasons visible in shadow decisions until the P4 flip). Nothing calls
+MCP in the request path. A fourth, cheaper prior from
 the same probe: `list-task-classifications` gives 7-day market share per task tag with each
 tag's top-10 models — `code:devops_config`/`devops` is a ready-made market prior for the
 iac-lane chain (and it surfaces `:free` models with real production usage in the class, e.g.

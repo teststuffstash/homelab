@@ -117,5 +117,18 @@
  "rotation_fallback": {
   "coding": [],
   "reasoning": []
+ },
+ "class_floors": {
+  "_comment": "M8 per-class eligibility floors vs the capability table (AA composite indices, proxy-pulled weekly via MCP list-benchmarks). PERMISSIVE: a model without data always passes - the floor acts only on evidence, so a data gap can never brick a chain. Router is AGENT_ROUTER=shadow fleet-wide until the P4 flip: floors show up in shadow decisions first; tighten with that evidence (FU-095).",
+  "coding": {
+   "coding": 35,
+   "agentic": 25
+  },
+  "research": {
+   "intelligence": 45
+  },
+  "audit": {
+   "intelligence": 45
+  }
  }
 }

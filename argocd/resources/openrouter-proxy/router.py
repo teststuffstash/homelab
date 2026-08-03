@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS openrouter_keys(
   ref TEXT PRIMARY KEY, first_seen REAL, last_seen REAL);
 CREATE TABLE IF NOT EXISTS model_cooldowns(
   model TEXT PRIMARY KEY, until REAL, streak INTEGER, reason TEXT, set_ts REAL);
+CREATE TABLE IF NOT EXISTS capability(
+  model TEXT, source TEXT, intelligence REAL, coding REAL, agentic REAL, updated_ts REAL,
+  PRIMARY KEY(model, source));
+CREATE TABLE IF NOT EXISTS task_market(
+  tag TEXT, model TEXT, rank INTEGER, usage_share REAL, token_share REAL, updated_ts REAL,
+  PRIMARY KEY(tag, model));
 CREATE INDEX IF NOT EXISTS ix_pe_model_ts ON provider_events(model, ts);
 """
 
@@ -246,6 +252,63 @@ def record_rotation(source: str, entries: list) -> int:
                    int(e.get("rank") or 0), str(e.get("canary_verdict") or ""), now)):
             n += 1
     return n
+
+
+def record_capability(source: str, entries: list) -> int:
+    """M8 capability feed (FU-095): AA composite indices per model, pulled weekly by the proxy
+    daemon via MCP list-benchmarks (standard account key — probed 2026-08-03). Upsert per
+    (model, source); ids arrive date-normalized from the caller."""
+    n = 0
+    now = time.time()
+    for e in entries if isinstance(entries, list) else []:
+        if not isinstance(e, dict) or not e.get("model"):
+            continue
+        if _write("INSERT OR REPLACE INTO capability VALUES(?,?,?,?,?,?)",
+                  (str(e["model"]), source, e.get("intelligence"), e.get("coding"),
+                   e.get("agentic"), now)):
+            n += 1
+    return n
+
+
+def record_task_market(rows: list) -> int:
+    """M8 market prior (FU-095): 7-day traffic share per task tag with each tag's top models
+    (MCP list-task-classifications). Candidate-ordering DATA for a later leg + the /router-status
+    evidence surface; nothing in the decision path reads it yet."""
+    n = 0
+    now = time.time()
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict) or not r.get("tag") or not r.get("model"):
+            continue
+        if _write("INSERT OR REPLACE INTO task_market VALUES(?,?,?,?,?,?)",
+                  (str(r["tag"]), str(r["model"]), int(r.get("rank") or 0),
+                   r.get("usage_share"), r.get("token_share"), now)):
+            n += 1
+    return n
+
+
+def capability_floor_block(cls: str, model: str) -> str | None:
+    """M8 class floors (FU-095/ADR-096): `class_floors` in model-classes.json is git POLICY
+    (per class, axis → minimum AA index); the capability table is proxy-pulled DATA. PERMISSIVE
+    by construction — no floors for the class, no row for the model, or a missing axis all
+    pass: the floor acts only on present evidence, so a data gap can never brick a chain.
+    Returns the failing 'axis=score<min' string, or None when eligible."""
+    floors = (_classes.get("class_floors") or {}).get(cls) or {}
+    if not floors:
+        return None
+    base = model.split(":")[0]  # laguna:free scores as its base model
+    rows = _read("SELECT source, intelligence, coding, agentic FROM capability "
+                 "WHERE model IN (?, ?)", (model, base))
+    if not rows:
+        return None
+    rows.sort(key=lambda r: 0 if r[0] == "artificial-analysis" else 1)
+    axes = {"intelligence": rows[0][1], "coding": rows[0][2], "agentic": rows[0][3]}
+    for axis, minv in floors.items():
+        if str(axis).startswith("_"):
+            continue  # _comment keys are docs, not floors
+        v = axes.get(str(axis))
+        if v is not None and float(v) < float(minv):
+            return f"{axis}={v}<{minv}"
+    return None
 
 
 def record_circuit_open(session: str, model: str, klass: str, n_4xx: int) -> bool:
@@ -444,6 +507,8 @@ def route(payload: dict, ctx: dict) -> dict:
         elif m in cool:
             skipped.append({"model": m, "reason": f"cooldown:{cool[m]['reason']}",
                             "retry_after_s": cool[m]["remaining_s"]})
+        elif (floor_fail := capability_floor_block(cls, m)) is not None:
+            skipped.append({"model": m, "reason": f"capability-floor:{floor_fail}"})
         elif rail not in rails:
             skipped.append({"model": m, "reason": f"rail-{rail}-not-in-class-{cls}"})
         else:
@@ -529,7 +594,8 @@ def status_summary() -> dict:
     now = time.time()
     counts = {t: (_read(f"SELECT COUNT(*) FROM {t}") or [(0,)])[0][0]
               for t in ("run_reports", "strikes", "provider_events", "rotation", "decisions",
-                        "generations", "circuit_events", "openrouter_keys")}
+                        "generations", "circuit_events", "openrouter_keys", "capability",
+                        "task_market")}
     gen_24h = _read(
         "SELECT requested_model, provider, COUNT(*), ROUND(SUM(cost_usd), 6), "
         "SUM(tokens_cached), SUM(tokens_prompt) FROM generations WHERE ts > ? "
@@ -757,6 +823,22 @@ def self_test() -> int:
     dv = route(dict(base, chain=[]), {**CTX, "price": lambda m: (0.05, "market")})
     assert dv["decision"] == "dispatch" and dv["source"] == "rotation", dv
     assert dv["model"] == "qwen/qwen3-coder", dv
+    # ── M8 capability floors (FU-095): evidence blocks, absence passes ──
+    assert record_capability("artificial-analysis", [
+        {"model": "lowcap/model", "intelligence": 12.0, "coding": 9.0, "agentic": 5.0},
+        {"model": "tencent/hy3", "intelligence": 55.0, "coding": 52.0, "agentic": 41.0}]) == 2
+    _classes.setdefault("class_floors", {})["coding"] = {"coding": 30}
+    df = route(dict(base, chain=["lowcap/model", "deepseek/deepseek-v4-flash", "tencent/hy3"]),
+               CTX)
+    assert df["decision"] == "dispatch" and df["model"] == "deepseek/deepseek-v4-flash", df
+    assert any(s["reason"].startswith("capability-floor:coding=9.0<30")
+               for s in df["skipped"]), df["skipped"]
+    # no capability row (deepseek in this fixture) = permissive pass; a :free variant scores
+    # as its base model
+    assert capability_floor_block("coding", "deepseek/deepseek-v4-flash") is None
+    assert capability_floor_block("coding", "lowcap/model:free") == "coding=9.0<30"
+    assert record_task_market([{"tag": "code:devops_config", "model": "xiaomi/mimo-v2.5",
+                                "rank": 1, "usage_share": 0.182, "token_share": 0.183}]) == 1
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body

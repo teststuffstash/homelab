@@ -740,13 +740,57 @@ def _rankings_tick() -> int:
     return n
 
 
+def _capability_tick() -> int:
+    """M8 capability feed (FU-095, 2026-08-03): AA composite indices + the task-market prior,
+    pulled via the SAME standard account key + _mcp_call the rankings ride (probed: both tools
+    answer a plain API key — no OAuth). Weekly cadence (capability changes per release); data
+    lands in the router store; policy (class_floors) stays in model-classes.json."""
+    resolved = _resolve_ref(ROUTER_ACCOUNT_REF) if ROUTER_ACCOUNT_REF else None
+    if not resolved:
+        return 0
+    bench = _mcp_call(resolved["key"], "list-benchmarks",
+                      {"request": {"source": "artificial-analysis"}}).get("data") or []
+    rows = [{"model": _CAP_ID_RE.sub("", str(r["model_permaslug"])),
+             "intelligence": r.get("intelligence_index"), "coding": r.get("coding_index"),
+             "agentic": r.get("agentic_index")}
+            for r in bench if r.get("model_permaslug")]
+    n = router.record_capability("artificial-analysis", rows)
+    market: list[dict] = []
+    tags = ((_mcp_call(resolved["key"], "list-task-classifications", {"request": {}})
+             .get("data") or {}).get("classifications")) or []
+    for t in tags:
+        for i, m in enumerate((t.get("models") or [])[:10]):
+            if m.get("id"):
+                market.append({"tag": str(t.get("tag") or ""), "rank": i + 1,
+                               "model": _CAP_ID_RE.sub("", str(m["id"])),
+                               "usage_share": m.get("tag_usage_share"),
+                               "token_share": m.get("tag_token_share")})
+    k = router.record_task_market(market)
+    log(f"capability: {n} AA benchmark rows, {k} task-market rows")
+    return n
+
+
+CAPABILITY_POLL_S = int(os.environ.get("CAPABILITY_POLL_S", "604800"))
+# Date-stamped ids with an optional :free tag AFTER the stamp (ling-3.0-flash-20260723:free) —
+# the rankings _RANK_DATE_RE only strips a trailing stamp, this handles both shapes.
+_CAP_ID_RE = re.compile(r"-\d{8}(?=:|$)")
+_last_capability_pull = 0.0
+
+
 def _rankings_loop() -> None:
+    global _last_capability_pull
     time.sleep(60)  # let the pod settle (readiness, ref RBAC) before the first pull
     while True:
         try:
             _rankings_tick()
         except Exception as e:  # noqa: BLE001 — the feed is an upgrade, never a crash source
             log(f"rankings: pull failed: {e} — next tick in {RANKINGS_POLL_S}s")
+        try:
+            if time.time() - _last_capability_pull >= CAPABILITY_POLL_S:
+                _capability_tick()
+                _last_capability_pull = time.time()  # a FAILED pull retries next daily tick
+        except Exception as e:  # noqa: BLE001
+            log(f"capability: pull failed: {e} — retry on a later rankings tick")
         try:
             # ADR-096 addendum 3: free models are deliberate instability canaries — score their
             # verdicts dailyish from the passive (model, provider) aggregates, not by hand.
