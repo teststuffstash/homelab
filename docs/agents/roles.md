@@ -41,9 +41,9 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 
 | family | fires on | members (live) | members (planned) |
 |---|---|---|---|
-| dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer | infra-fixer (FU-106) |
+| dispatch-on-work | scan-emitted work unit (issue/PR state) | fixer; infra-fixer (FU-106 — detector + infra-enrich 2026-07-27, oracle-iac twin 2026-08-02; both -iac repos have merged rides) | |
 | dispatch-on-event | reviewable transition (exporter edge) | reviewer | + lenses (FU-101) |
-| dispatch-on-schedule | cron (level-triggered) | scout; retro (suspended) | prober (FU-102), audit-pass (FU-101 e-ITS) |
+| dispatch-on-schedule | cron (level-triggered) | scout; retro | prober (FU-102), audit-pass (FU-101 e-ITS) |
 | dispatch-on-alert | Alertmanager firing | responder v2 (triage-first, GitOps-verbs) | remediation whitelist; selfQueue |
 | dispatch-on-goal | human-queued `goal` issue | researcher (first mode proven E2E 2026-07-27 — sleep spec PR #38) | FU-090(c) auto-dispatch; meta-coordinator machinery (FU-086/FU-090) |
 
@@ -58,8 +58,10 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
   exists and the environment is unadvertised, which primed a `fixer.docker:true` ride to assume "no docker")
 - **boundary**: fixer ns == repo; branch-scoped ~1h git token, budget-capped OpenRouterKey; per-stack egress CNP
 - **machinery**: predicate = `coordinator-scan.sh` clauses (queued-dispatch, c4c5, changes-requested,
-  merge-conflict, unarmed-major; deps-closed FU-087, lane-free, repo-dispatchable, capacity);
-  edge = `/coordinate` doorbell (item units = FU-085/FU-086 remaining); backstop = `coordinate-<stack>`
+  merge-conflict, unarmed-major; deps-closed FU-087, footprint-free (ADR-097 Touches: intersection)
+  + REPO_MAX_WIP/REPO_PR_CAP ceilings, repo-dispatchable, capacity);
+  edge = `/coordinate` doorbell (item units shipped — ADR-094/FU-086, archived; reviewer verdicts
+  ride a Sensor fast-path); backstop = `coordinate-<stack>`
   cron; key = pod name `agent-<project>-<task>-r<round>` (atomic create, 2026-07-21); capacity =
   subscription-latch pre-spawn + per-key budget; breakers = agent/error excluded everywhere, ROUNDS_MAX
 
@@ -70,7 +72,7 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
   writes = labels/comments/merge via `gh` (+ W1 ⚑ gap-flags, ADR-086; W2+ = FU-059)
 - **machinery**: predicate = `coordinator-scan.sh` (deterministic gate — no LLM on empty wakes);
   edge = `/coordinate` doorbell → `coordinate-perstack` routing (coordinate-argo.yaml); backstop =
-  `coordinate-<stack>` */10 cron; key = `coordinator-scan` mutex + item-scoped dispatch (ADR-094);
+  `coordinate-<stack>` */30 cron; key = `coordinator-scan` mutex + item-scoped dispatch (ADR-094);
   capacity = subscription semaphore (global) / latch (per-stack); breakers = per TICK-LOG §Loop-safety
 
 ### reviewer
@@ -82,15 +84,16 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
   (MP-T03/T04/T08). predicate = reviewable (`review-reflex.sh`: armed ∧ green ∧ (review_required
   ∧ ¬bot_approved_head ∨ reviewable_again)); edge = exporter POST → `review` Sensor → global +
   `review-perstack` triggers (FU-100, 2026-07-27); backstop = global */15 + `review-<stack>` crons;
-  key = pod-label check + STEP-0 self-guard (deterministic-name key = FU-092, open gap MP-G02);
+  key = pod-label check + STEP-0 self-guard (deterministic-name key (repo, pr, head-sha8) —
+  shipped 2026-07-27, MP-G02 closed);
   capacity = semaphore + latch; breakers = verdict-count trip, agent/error, merge-commit staleness guard
 
 ### retro
 
 - **brief**: retro brief (observability-and-retro.md Part B; cross-review cell contract)
 - **boundary**: budget-capped ephemeral key; must not hold the fixer WIP slot (FU-058 P3)
-- **machinery**: backstop = `retro-session` CronWorkflow (retro-argo.yaml) — **born suspended,
-  hand-fired** (FU-058); predicate = `minNewTasks` ledger level-trigger; no edge; keys/breakers
+- **machinery**: backstop = `retro-session` CronWorkflow (retro-argo.yaml) — **self-fires
+  Mondays 05:00 UTC since 2026-08-03** (FU-058); predicate = `minNewTasks` ledger level-trigger; no edge; keys/breakers
   inherit launcher defaults. Planned duty: harvests the local rules delta (§Lenses maintenance).
 
 ### scout (model-scout)
@@ -137,7 +140,7 @@ the AgentStack claim + a launcher read — do it when the first lens earns teeth
 Per-stack claim knob graduates a lens advisory → blocking. Audit-lane model rules (reasoning
 tier allowed, dual-model worth it) are FU-095's.
 
-## Planned roles (machinery checklists)
+## Role machinery checklists (built + planned)
 
 - **prober** (FU-102) — the agentic canary. Product-contract probes (oracle UC-1 probe-e2e is
   the proven brief); prod-read + report-only, $1 ephemeral keys. predicate = post-deploy +
@@ -158,7 +161,7 @@ tier allowed, dual-model worth it) are FU-095's.
   (inert, breaker #1), loop-smell → report-only stop. Graduation dials (NOT built): imperative
   remediation whitelist (needs a scoped Role per stack ns), self-queueing filed issues into
   the fixer loop (the FU-090 `selfQueue` knob).
-- **researcher/planner** (FU-105) — spec/requirements research. dispatch-on-goal (human-queued
+- **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
   `research` egress profile (proxy-logged) or claude-harness server-side WebSearch; safe because
@@ -173,13 +176,14 @@ tier allowed, dual-model worth it) are FU-095's.
   (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
   `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
-- **infra-fixer** (FU-106) — the -iac devops role. Works the **-iac wrapper layer** (charts stay
+- **infra-fixer** (FU-106) — **LIVE** — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic); input = `values.schema.json` diff (the typed infra delta), fulfillment =
   enriched **bump PR** (chart pin + claim change in ONE -iac commit — atomic at the deploy
   boundary, the meta-11 paired-rolls rule generalized); mechanical (schema-valid, within the
   FU-093 quota) rides the ADR-084 CI-only lane, judgment stays codeowner-gated. Hard boundary:
   wires secret *references*, never values. Detector + `infra-enrich` dispatch class built
-  2026-07-27, first live dispatch merged the same day. **Full rollout matrix (a)–(f), the lane
+  2026-07-27, first live dispatch merged the same day; oracle-iac twin live 2026-08-02 — both
+  -iac repos have merged rides. **Full rollout matrix (a)–(f), the lane
   doctrine and the IAC-G01..G06 gap register:** [`iac-lane.md`](iac-lane.md).
 - **audit-pass** — not a role: reviewer machinery × e-ITS lens × schedule predicate (dissolved
   the planned "auditor").

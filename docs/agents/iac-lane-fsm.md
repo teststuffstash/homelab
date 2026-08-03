@@ -15,10 +15,10 @@ stateDiagram-v2
     Enriched --> Green: fulfillment commit into the SAME PR (pin+claim atomic)
     Green --> Merged: CI-only auto-merge (IAC-T01/T03) — ⚠ IAC-G01/G04 fixer-issue lane unpoliced
     Merged --> Syncing: ArgoCD selfHeal (IAC-T04)
-    Syncing --> Healthy: synced + health — ⚠ IAC-G05 no observation window
+    Syncing --> Healthy: synced + health — IAC-G05 rung 0 smoke (sleep); window rungs future
     Syncing --> Degraded: health/probe fails
-    Degraded --> Reverted: deterministic revert PR (IAC-T05) — ⚠ IAC-G02 bumps only
-    Healthy --> [*]: closeout (IAC-T06) — ⚠ IAC-G03 verifies GitHub, not cluster
+    Degraded --> Reverted: deterministic revert PR (IAC-T05)
+    Healthy --> [*]: closeout (IAC-T06) — cluster-verifying since 2026-08-02
     note right of Merged
         merge is the MIDPOINT here — evidence
         arrives post-merge (inverted vs the app lane)
@@ -41,11 +41,9 @@ stateDiagram-v2
 
 | id | gap | detail | disposition |
 |---|---|---|---|
-| **IAC-G01** | fixer-issue merge gate | Nothing stands between a worker's push and master on the fixer-issue lane (38s self-merge, sleep-iac#28) — and the fixer token carries workflows:write (composition, fleet#134 grant), so a worker can edit CI itself. Ruling 2026-07-27: the fix is NOT a human and NOT a blocking LLM review — it is IAC-G04's deterministic policy sentinel + IAC-G06's advisory lens; this gap closes when G04 does. | FU: FU-106 |
-| **IAC-G02** | revert trigger scoped to deploy/* bumps | CLOSED 2026-08-02: the revert candidate is now ANY -iac merge (revert-* branches excluded — never revert a revert) within the window touching the app path (deploy-revert-argo.yaml); was deploy/* only. | FU: FU-106 |
-| **IAC-G03** | C6 closeout verifies GitHub, not the cluster | CLOSED 2026-08-02: the merged-closeout play's -iac variant checks app Synced at/past the merge revision + Healthy + touched Workspace claims Ready before flipping (coordinator README step 1; loop SA granted read-only applications/workspaces). SLO-burn check rides FU-104's rules, not this play. | FU: FU-106 |
-| **IAC-G04** | no tamper-proof policy check | In-repo CI runs the PR's own workflow code — a required check the PR can rewrite (the #28 workflows-edit made this concrete). The platform contract (ip-plan ranges, ADR-076 bucket ownership, tenancy boundaries, secret references-never-values, workflow-path rules, deletionPolicy guards) must be enforced by a CLUSTER-SIDE sentinel evaluating rendered manifests and posting a commit status the PR cannot touch (exporter/Argo Events shape, homelab-owned rules). | FU: FU-106 |
-| **IAC-G05** | no observation window / progressive rung | Healthy is instantaneous — sync-succeeded is treated as done with zero traffic evidence. Rung 0 (sleep, now): ArgoCD PostSync smoke Job (curl healthz + one real read) so a bad deploy fails the sync loudly into the existing degraded path. Rung 1 (in-cluster): Gateway API weighted backendRefs (Cilium) stable/canary split. Rung 2 (edge): Cloudflare in front of all services — key-tier routing, weighted LB, shadow mirroring. Design: iac-lane.md §Progressive delivery. | FU: FU-106 |
+| **IAC-G01** | fixer-issue merge gate | Nothing stands between a worker's push and master on the fixer-issue lane (38s self-merge, sleep-iac#28) — and the fixer token carries workflows:write (composition, fleet#134 grant), so a worker can edit CI itself. Ruling 2026-07-27: the fix is NOT a human and NOT a blocking LLM review — it is IAC-G04's deterministic policy sentinel + IAC-G06's advisory lens; this gap closes when G04 ENFORCES (v1 shadow built 2026-08-03 — iac-lane.md §L0b). | FU: FU-106 |
+| **IAC-G04** | no tamper-proof policy check | In-repo CI runs the PR's own workflow code — a required check the PR can rewrite (the #28 workflows-edit made this concrete). The platform contract (ip-plan ranges, ADR-076 bucket ownership, tenancy boundaries, secret references-never-values, workflow-path rules, deletionPolicy guards) must be enforced by a CLUSTER-SIDE sentinel the PR cannot touch. V1 SHADOW BUILT 2026-08-03 (policy/iac/ Kyverno + scripts/iac-sentinel.sh + the iac-sentinel CronWorkflow — logs/metrics only); the gap closes at the ENFORCEMENT flip: reviewer-App statuses:write + required check + the workflow-path push ruleset (iac-lane.md §L0b). | FU: FU-106 |
+| **IAC-G05** | no observation window / progressive rung | Healthy is instantaneous — sync-succeeded is treated as done with zero traffic evidence. Rung 0 BUILT 2026-08-03 (sleep-tracking#113: PostSync smoke — real ingest run + freshness-free read asserts; cron-shaped doctrine iac-lane.md §IAC-G05). Rung 1 (in-cluster): Gateway API weighted backendRefs (Cilium) stable/canary split. Rung 2 (edge): Cloudflare in front of all services — key-tier routing, weighted LB, shadow mirroring. Design: iac-lane.md §Progressive delivery. | FU: FU-106 |
 | **IAC-G06** | advisory review lens absent | With no blocking review, nothing reads -iac diffs at all: an async post-merge lens (cheap grounding-tier model, FU-095 evidence class) reviewing merged -iac changes and filing findings as INERT issues — evidence generation, never a gate. | FU: FU-106 |
 
-_States/axes: lane, ci, merge, sync, window, policy · events: 9 · transitions: 7 · open gaps: 6 (+0 accepted)_
+_States/axes: lane, ci, merge, sync, window, policy · events: 9 · transitions: 7 · open gaps: 4 (+0 accepted)_

@@ -10,7 +10,7 @@ CronJob), the viewer (`transcripts.local.teststuff.net`,
 `agents/coordinator/transcripts-viewer.yaml`), the exit_status/error_class classifier +
 pushgateway `agent_run_*` metrics + dashboards, and the `ledger-reflex` Argo CronWorkflow
 (30-min cadence, `agents/coordinator/reflexes-argo.yaml`). The retro session itself is a
-CronWorkflow that is **born suspended** — see Part B. Companion to
+CronWorkflow that self-fires Mondays 05:00 UTC (unsuspended 2026-08-03 — see Part B). Companion to
 [`workflow.md`](workflow.md) (control flow) and
 [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 

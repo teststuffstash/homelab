@@ -109,11 +109,10 @@ comma-separated paths/globs (`Touches: chassis/**, pyproject.toml`), same unbull
 grammar as `Depends-on:`. This is where lane knowledge lives now: the authoring LLM judges the
 footprint ONCE, reviewably, at creation (sprouts inherit the parent's line and narrow it);
 the scan enforces overlap deterministically at dispatch
-([workflow.md](workflow.md) §Footprint hold). **Omitting the line is safe and means
-exclusive** — the issue conflicts with everything, i.e. classic WIP=1. `track/*` labels stay
-as reporting decor only; the TRACKS path table documents ownership norms but no longer feeds
-the scheduler. A worker discovering mid-ride that it needs paths outside its declaration files
-a new issue for the owning concern (TRACKS rule 2), and the reviewer flags escaped diffs.
+([workflow.md](workflow.md) §Footprint hold — intersection rules, ceilings and the
+escaped-diff belt live THERE). Authoring-side semantics: **omitting the line is safe and means
+exclusive** (classic WIP=1); a worker discovering mid-ride that it needs paths outside its
+declaration files a new issue for the owning concern (TRACKS rule 2).
 
 ## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
 

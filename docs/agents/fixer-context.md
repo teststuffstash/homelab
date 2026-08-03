@@ -121,9 +121,9 @@ by design (the operator's call: in-pod CI is a typo-saver, not the gate).
 
 ## Build order (design-first, then passes)
 
-1. **L1 — launcher env card** (`agent-session.sh render_env_card()` from `$DOCKER`/`$EGRESS_*`/
-   budget, prepend to recipe). Highest leverage — it alone would have stopped deepseek's
-   assumption. Verify against a real dispatch.
+1. **L1 — launcher env card — BUILT** (2026-07-28, `render_env_card()` in `agent-session.sh` —
+   from `$DOCKER`/`$EGRESS_*`/budget, prepended to the recipe). Highest leverage — it alone would
+   have stopped deepseek's assumption.
 2. **L2 + L3 — BUILT** (FU-114, archived 2026-08-02). L2: `.agents/build.yaml` on sleep-tracking
    (#48 was the first `task/build`) AND oracle-fleet (#166, the role-unification port). L3: the
    scan reads the issue's `task/*` label (default `task/fix`) and emits `class=<c>` in the

@@ -173,14 +173,12 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 
 
-- [ ] **FU-102** — **Prober role: the agentic canary** (meta-11: a manually-run agentic probe was
-      the ONLY detector of a 13h Ready-but-dead prod outage; it also finds product gaps — the
-      lyhend-only resolution catch, 🌱#160). Brief exists (oracle probe-e2e/UC-1); missing =
-      activation machinery: predicate = post-deploy + schedule; edge = deploy doorbell; backstop
-      = cron; key = (endpoint, artifact digest); boundary = prod-read + report-only, $1 ephemeral
-      keys (meta-11-proven cell); breaker = inert 🌱 issues (loop-safety #1) + rate cap.
-      Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes, contract-deep)
-      → FU-103 responder. Composes with FU-044 as its deep post-deploy gate. `roles.md`.
+- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
+      checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
+      [`docs/agents/roles.md`](agents/roles.md) §prober. Origin: meta-11 — a manual agentic
+      probe was the ONLY detector of a 13h Ready-but-dead prod outage.
+      **Next:** build the activation machinery per the checklist (attended-session class).
+      Composes with FU-044 as its deep post-deploy gate.
 
 
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, gap

@@ -82,7 +82,7 @@ paid pick is the one systematically failing. Reliability is a *measurement*, not
 
 ### M1. Failure taxonomy → two counters
 
-Maps 1:1 onto the FU-057 `error_class` (already planned for AGENT_RUN_STATS):
+Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` finalize):
 
 | error_class | counter | reaction |
 |---|---|---|
@@ -125,7 +125,8 @@ customers actually paid). `compute_pin` (proxy) and `pinned_provider(market=)` (
 provider's market row when present and the h-blend only for unmeasured providers; pins carry
 `basis: market|list`. The harvested per-request `/generation` costs (M5) validate it end-to-end.
 
-**Until the registry is code**, the estimator's `--price-per-mtok` override already unblocks any
+The registry IS code now (this doc's header — `estimate_budget.py --lookup`); the
+`--price-per-mtok` override remains the escape hatch that unblocks any
 model today: fetch the price live and pass it (the brief carries the recipe). A `$1.0/M` default in
 the verdict means "unpriced", not "forbidden".
 
@@ -238,6 +239,17 @@ iac-lane chain (and it surfaces `:free` models with real production usage in the
 `nemotron-3-ultra-550b:free` and `ling-3.0-flash:free` in devops/coding tags — rotation
 candidates the new-model diff missed).
 
+### M9. Per-stack routerMode + chainless stacks (ADR-096 P4/P5 knobs, 2026-08-03)
+
+`routerMode` on the AgentStack claim (`shadow` fleet default | `authoritative` | `off`) sets
+`AGENT_ROUTER` per stack — the launcher reads the stacks.json mirror row; explicit env still
+wins. `workerModel` is now OPTIONAL: a claim with no chain is a **chainless stack** — every
+dispatch is routed from the rotation universe (`model_tiers` ∩ rankings, class floors, strikes,
+cooldowns), and the launcher REFUSES a chainless dispatch without an authoritative routed
+verdict (the hardcoded default model never silently stands in; router fail-open excluded).
+First consumer: the **circles pilot** (FU-095 P5 ruling — the router is tuned until that
+project works; the P4 fleet flip rides its evidence).
+
 **Latency is an ordering dimension, not just price (operator + field evidence, 2026-08-02).**
 The free tier makes this acute: every `:free` model prices at $0, so the whole free set lands in
 ONE jitter band and price cannot separate them — yet measured turn shape differs wildly
@@ -333,7 +345,9 @@ Playwright, the ADR-082 shape); **"e2e"** is reserved for the actual target envi
 production traffic). Cf. Fowler's microservice testing pyramid — our "system" ≈ his out-of-process
 component / limited e2e.
 
-## The bundle — why these FUs resolve together
+## The bundle — why these FUs resolved together
+
+_All five archived (2026-07-12…07-25); the table stays as the design rationale._
 
 | FU | role in this design | without it |
 |---|---|---|
@@ -343,17 +357,3 @@ component / limited e2e.
 | **FU-021** | goose hard-stop on auth/limit errors | a strike burns its whole session cap in a retry storm first |
 | **FU-024** | enforced only-free guardrail | scout/free keys are honor-system |
 
-## Do today (before the next coordinator session)
-
-1. ✅ Brief: `MODEL` block → chain + strike policy (`agents/coordinator/README.md`).
-2. ✅ `stacks.json`: `workerModelFallbacks` per stack (oracle leads with `tencent/hy3:free`).
-3. ✅ Estimator: price `tencent/hy3` (+`:free`) in the table; comment corrected (free-tier claim
-   dated, override recipe). Full live registry = the code follow-up.
-4. Oracle #1: close PR #5 (Node scaffold, superseded by the language decision — see oracle-fleet /
-   the teststuff architecture doc: chassis = **Python**), re-queue with the issue re-scoped to the
-   Python scaffold. The re-run doubles as the first live test of the chain policy.
-
-The truncation postmortem and the language call reinforce each other: the cheap-model lane is
-measurably weakest exactly where the Node scaffold stressed it, the entire proven loop
-(sleep-tracking: fixer→reviewer→renovate→deploy) runs on a Python/uv repo, and nothing
-Node has merged to oracle-fleet master — the flip is free today and compounds later.

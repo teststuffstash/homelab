@@ -58,8 +58,8 @@ every key — is [`roles.md`](roles.md); this is the map.
 | **responder** | `agent-coordinator` | an Alertmanager fingerprint | live (v2, triage-first) |
 | **scout** (model-scout) | cluster cron | weekly schedule | live |
 | **researcher/planner** | fixer ns | a human-queued `goal` issue | first mode proven |
-| **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | detector + dispatch built |
-| **retro** | cluster cron | ledger level-trigger | built, **born suspended** |
+| **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | live (both -iac repos; first rides merged) |
+| **retro** | cluster cron | ledger level-trigger | live (Mon 05:00 self-fire since 2026-08-03) |
 | **prober** | — | post-deploy + schedule | planned (FU-102) |
 
 **Lenses** (FU-101) are not roles: a lens is the reviewer's machinery with a different brief

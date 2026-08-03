@@ -73,7 +73,7 @@ transitions run as deterministic reflexes without an LLM turn
 ([`merge-path.md`](merge-path.md) §Reflexes vs judgment).
 
 The state machine itself is maintained in ONE place — **[`merge-path-fsm.md`](merge-path-fsm.md)**
-(generated, lint-anchored; transitions MP-T01…T09 + gap register). The coordinator's two
+(generated, lint-anchored; transitions MP-T01…T13 + gap register). The coordinator's two
 entry/exit arcs around it: `triaged` (labelled, repro + synthetic data table) → spawn worker
 round 1; `cant-repro | max-rounds | flip-flop` → tie-break/escalate to a human. Spawning a
 round = `agents/agent-session.sh` (→ an `agent-sandbox` `Sandbox` CR once that lands,
@@ -86,7 +86,7 @@ the egress proxy's `GET /anthropic-limit`). **Schedules always fire; capacity on
 spawn into a report-only line.** Concretely — the coordinator cron fires while the 5h window sits
 at 85%:
 
-1. The `*/10` CronWorkflow runs the deterministic scan normally (`gh` reads — no LLM, no
+1. The `*/30` CronWorkflow runs the deterministic scan normally (`gh` reads — no LLM, no
    subscription traffic, so the scan itself can never worsen the situation).
 2. When the scan decides a stack needs an LLM tick, `coordinator-session.sh` probes the proxy
    *before* creating the pod. 85% ≥ the 80% threshold (`ANTHROPIC_UTIL_THRESHOLD`) →
@@ -143,7 +143,7 @@ Never suspend a schedule for capacity — `suspend: true` is state that rots.
 LIVE since 2026-07-17: the `/coordinate` doorbell endpoint on the `agent-loop` webhook
 EventSource, the `coordinator` Sensor, and the `coordinate` WorkflowTemplate
 ([`../../agents/coordinator/coordinate-argo.yaml`](../../agents/coordinator/coordinate-argo.yaml));
-the `*/10` `coordinator-reflex` CronWorkflow is the level-triggered BACKSTOP, `workflowTemplateRef`ing
+the `*/30` `coordinator-reflex` CronWorkflow is the level-triggered BACKSTOP, `workflowTemplateRef`ing
 the same template (the design sting that motivated it: oracle-fleet#29's C4/C5 re-tick sat waiting
 on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
 
@@ -181,9 +181,10 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   Scoping went further than the planned `--repo`: ADR-094 item-scoped dispatch (FU-086) — the
   scan emits `(clause, repo, item)` units and the session judges ONE unit via
   `coordinator-session.sh --item`.
-- **Proven out; pending residue (owned by FU-086):** relax the coordinator cron `*/10 → */30`
-  (the review reflex's own `*/5 → */15` move — less GraphQL burn) and the compound where the
-  Sensor submits item units directly with the cron sweep emitting only missed units.
+- **Proven out; residue SHIPPED (FU-086, archived complete):** the coordinator cron relaxed
+  `*/10 → */30` 2026-08-02 (the review reflex's own `*/5 → */15` move — less GraphQL burn), and
+  the FU-085 compound shipped 2026-08-03 — reviewer verdicts carry their unit → Sensor
+  `body.unit` → scan fast-path, with the cron sweeping only the missed units.
   Red-beyond-T stays cron/poller-territory by nature (a timer is level-triggered; the
   github-exporter's CI metrics carry the out-of-band half). Per-stack routing landed the OTHER
   way (decided with FU-080/FU-100): Sensors/EventBus stay GLOBAL (a per-stack JetStream is 3×1Gi
@@ -194,7 +195,7 @@ End state: the whole loop is edge-driven — queued issue → tick → worker �
 → verdict → coordinator Sensor → round N+1 → merge — with cron sweeping behind as the
 level-triggered backstop.
 
-### Footprint hold — parallel dispatch without lanes (ADR-097, design 2026-08-03)
+### Footprint hold — parallel dispatch without lanes (ADR-097, BUILT 2026-08-03)
 
 Supersedes per-lane label counting as the write-conflict guard. The scan's dispatchability
 predicate gains footprint intersection in place of `lane-free`:

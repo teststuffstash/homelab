@@ -214,13 +214,11 @@ Composition's `IssueLabels` block with the platform taxonomy inline,
 `scripts/github-app-bootstrap.sh homelab-labels`; homelab-labels App installed org-wide same day). The
 taxonomy = GitHub defaults + the agent state machine (mirror of `tofu/github/labels.tf` — keep
 the two in sync until every repo is claim-owned and labels.tf dies) + the Renovate/merge-path
-lanes (`dependencies`/`automerge`/`deps-review`). Claim-owned so far: the three oracle repos
-(track/* extras; verified additive on GitHub) + agent-runtime/agent-coordinator (platform
-claim). Migration gotchas, found live: QUOTE label colors (`5319e7` parses as scientific
+lanes (`dependencies`/`automerge`/`deps-review`). Eight repos across all three stacks are
+claim-owned; homelab is the only holdout (FU-068 — then labels.tf dies). Migration gotchas, found live: QUOTE label colors (`5319e7` parses as scientific
 notation), write `labels: { extra: [] }` not `labels: {}` (server-default stamping → ArgoCD
 drift), and the tofu handoff is **`tofu state rm`** — a destroy apply deletes the labels on
-GitHub and the authoritative claim fights it back. Remaining: sleep-stack repos + homelab
-(no claim — decide its home), then delete labels.tf.
+GitHub and the authoritative claim fights it back.
 
 ## Operational notes
 

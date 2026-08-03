@@ -221,11 +221,12 @@ canaries prove nothing here.
 
 ## Build order
 
-Tracked on FU-106; the gap register (IAC-G01..G07) IS the list. Suggested order: G05-rung-0
-(sleep PostSync smoke — smallest, proves the post-merge shape) → G02+G03 (revert widening +
-cluster-verifying closeout — both homelab-side, small) → G04 sentinel skeleton + first rule set
-(closes G01) → G06 advisory lens → rung 1/2 when oracle's gateway metering (T3c) exists.
-**Reprioritization note (2026-08-02, from the commit-history audit):** G07 pin-follow is the
+Tracked on FU-106; the gap register (IAC-G01..G06, `iac-lane-fsm.yaml` — G07 shipped without
+ever entering it) IS the list. The order as EXECUTED: G07 + G02 + G03 (2026-08-02) → G05
+rung-0 (sleep-tracking#113) + G04 sentinel v1 shadow (2026-08-03).
+**Remaining: the G01 ENFORCEMENT flip after the sentinel shadow soak (plan in §L0b), then the
+G06 advisory lens; window rungs 1/2 when oracle's gateway metering (T3c) exists.**
+**Historical reprioritization note (2026-08-02, commit-history audit):** G07 pin-follow was the
 biggest *mechanical* win (no LLM, deterministic, the most frequent human commit in oracle-iac)
 and can ship independently of the order above; and once oracle-iac gains a fixer block (the
 FU-106 twin, operator-wanted), G04 rises with it — fixer volume without the sentinel widens the

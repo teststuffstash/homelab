@@ -343,17 +343,14 @@ Elapsed: each post-merge cycle is update→CI→review ≈ 13 min → **~2.5–3
 Blanket-update for the same morning: 11 + 55 = **66 CI cycles** and a comparable review count —
 roughly a full day of runner wall time and 5× the subscription quota, for the same 11 merges.
 
-Levers that shrink L before it ever hurts (FU-014, decide at Renovate setup):
+Levers that shrink L before it ever hurts (see [`../renovate.md`](../renovate.md)):
 
 - **Grouping** — Renovate group presets (e.g. all non-major weekly) collapse 10 PRs into 1–2.
   The single biggest lever; turns L into M.
 - `rebaseWhen: conflicted` — Renovate must NOT self-rebase for freshness (its default `auto`
   detects strict mode and would race our updater; two writers, one branch). The updater owns
   freshness for *all* PRs, Renovate only rebases its own conflicts.
-- **Policy question (open):** do dep bumps need the LLM reviewer, or is green CI + the lockfile
-  diff enough? Skipping the reviewer for `renovate[bot]` PRs (label-gated in the review reflex)
-  removes 10 of the 12 reviewer runs — but weakens Gate B for supply-chain-shaped changes. Decide
-  when FU-014 lands; default to reviewing everything.
+- **Dep-bump review** — decided: split by class (FU-046), see §Decisions below.
 
 ## Scaling model
 
@@ -491,5 +488,6 @@ git history (pre-2026-07-17) + TICK-LOG meta-7.
 - **Squash** for auto-merge (linear master; what the worker arms).
 - **Reflex runs in-cluster** (reviewer secrets stay in ns `agent-coordinator`, never GitHub org
   secrets; realized as Argo CronWorkflow + Events edge, ADR-093).
-- **Staleness timer T**: still unowned in code — that's gap **MP-G01** (red-beyond-T, FU-086
-  leg); the fix-round bound stays the single knob in [`workflow.md`](workflow.md) §Hazards.
+- **Staleness timer T**: red-beyond-T is owned by the ci-red clause (content-based attempts +
+  arbitrate cap — MP-T12/T13, shipped 2026-07-28/08-02; **MP-G01** closed); the fix-round bound
+  stays the single knob in [`workflow.md`](workflow.md) §Hazards.

@@ -40,7 +40,7 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 | axis | values today | future | owned by |
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
-| **role** | fixer, coordinator, reviewer(+lenses), retro, scout | prober, responder, researcher, infra-fixer, meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
+| **role** | fixer, coordinator, reviewer(+lenses), retro, scout, responder, researcher, infra-fixer | prober, meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
 | **stack** | sleep, oracle, idp | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
 | **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
 
@@ -58,8 +58,8 @@ Known constraint couplings (encode them, don't fight them):
   fires**: the dispatch predicate, the edge trigger (emitter arm → Sensor dep → submit
   Workflow), the level-triggered backstop cron, idempotency/serialization keys, capacity
   gates, and breaker hooks. Never a baked image variant. The reviewer's machinery is
-  inventoried guard-by-guard in [`merge-path-fsm.md`](merge-path-fsm.md) (MP-T03/T04/T08 +
-  gap MP-G02); the coordinator's is the doorbell + scan clauses (ADR-094); retro/scout live
+  inventoried guard-by-guard in [`merge-path-fsm.md`](merge-path-fsm.md) (MP-T03/T04/T08);
+  the coordinator's is the doorbell + scan clauses (ADR-094); retro/scout live
   in `retro-argo.yaml`/`reflexes-argo.yaml`. Two consequences (operator observation
   2026-07-27): standing up a NEW role is mostly machinery design, not prompt work — count the
   reviewer: one rubric vs ~ten machinery pieces; and rendering a role per-stack means the
@@ -172,11 +172,12 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
 ## Migration path
 
 1. **Now:** `stacks.json` + `coordinator-scan` (report) + `--stack` scoping. Supervised interactive ticks.
+   **✅ DONE ~2026-07-17 (superseded by the item-scoped scan).**
 2. **coordinator-reflex** — an Argo **CronWorkflow** (ADR-093; was a k8s CronJob) running
    `coordinator-scan --spawn` per schedule (FU-050); the gate keeps the LLM off empty wakes. The
    review path is event-driven (machinery home: [`roles.md`](roles.md) §reviewer +
    [`merge-path-fsm.md`](merge-path-fsm.md)). Graduating to autonomy is a scheduler swap, not a
-   behavior change.
+   behavior change. **✅ DONE 2026-07-21 — per-stack `coordinate-<stack>` loops.**
 3. **Publish the `AgentStack` XRD + Composition** in homelab; move one stack to a claim in its `-iac`;
    `stacks_json()` → `kubectl get agentstacks` (FU-048). **✅ DONE 2026-07-12 — first claim = oracle
    (not sleep: oracle's `-iac` agent dir was already GitOps-owned). See
