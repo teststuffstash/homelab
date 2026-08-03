@@ -43,3 +43,21 @@ jobs:
       # discipline — see docs/follow-ups.md "Conventions".
       - name: FU tracker lint (devbox run follow-ups-lint)
         run: devbox run follow-ups-lint
+
+      # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
+      # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
+      # herd after the ArgoCD flip then hits a warm cache (pure reads), instead of N concurrent
+      # multi-GB _uploads streams (the #80 ENOSPC storm: pin merge → disk full in 36 min).
+      # Sits INSIDE the required `ci` job so warm-before-flip ordering is structural.
+      # continue-on-error: a mirror outage must not block a runner update — nodes fall back to
+      # upstream ghcr, and RegistryMirrorCacheAlmostFull/mirror alerts own that failure mode.
+      - name: Pre-warm the ghcr mirror on a runner-image pin bump (#80)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff "${{ github.event.pull_request.number }}" --name-only \
+            | grep -qx "argocd/platform/arc-runners.yaml" || { echo "runner pin untouched — skipping"; exit 0; }
+          IMAGE="$(grep -oE 'ghcr\.io/[^" ]*/arc-runner:[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]{12}' argocd/platform/arc-runners.yaml | head -1)"
+          bash scripts/warm-registry-mirror.sh "$IMAGE"
