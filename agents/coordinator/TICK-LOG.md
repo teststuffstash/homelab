@@ -1923,5 +1923,9 @@ minor tool fumbles/62 calls; kimi 0/28 (+ exemplary A/B-independence refusal); d
 hard/33 but 53% wall in loops; mimo attempt-1 death = provider-side truncation (-32602, tool-id
 format flip mid-session ⇒ upstream endpoint switch — router cooldown lever, not a goose fix);
 mimo retry 3/39. Estimator: kimi ≈$4.2 actual vs $4.38 estimate; cap is SOFT (+11% overshoot).
-OPERATOR CLICK still open: flip ghcr `circles/devbox-cache` package PUBLIC (published 17:25 but
-private ⇒ all rides ran cold — the 433 MB nix pulls + 659 s queue waits).
+CORRECTION (operator caught it): `circles/devbox-cache` IS public (inherit-access; anonymous
+manifest 200 with OCI Accept headers — the bare-curl 404 was a missing Accept header) and the
+mount probe was truthful. The 433 MB / 132-path pulls came from the LAN nixcache (fast) with
+28 names spilling to cache.nixos.org; the 659 s queue waits were FIRST-batch agent-base image
+pulls on cold nodes, not the devbox cache. Whether the warm-store OCI should have eliminated
+the per-pod devbox install entirely = the FU-130 cache-warming probe.
