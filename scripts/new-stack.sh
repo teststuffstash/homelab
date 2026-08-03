@@ -57,7 +57,10 @@ echo "→ scaffolding stack '$STACK' (main: $MAIN, iac: $IAC)"
 
 # ── 1. tofu/github — both repos (idempotent; new-agent-repo.sh prints its own next-steps) ─────────
 bash scripts/new-agent-repo.sh "$MAIN" "$VIS"
-bash scripts/new-agent-repo.sh "$IAC" --private
+# --public applies to BOTH repos (operator 2026-08-03, circles ruling): an -iac carries
+# references-never-values by hard rule, so visibility is a per-stack choice, not a safety one.
+# Bonus of a public -iac: ArgoCD needs NO repo credential for it.
+bash scripts/new-agent-repo.sh "$IAC" "$VIS"
 # -iac protected_repos entry → CI-gated only (deploy-bump PRs auto-merge on ci, no approver)
 if grep -qE "^\s+$IAC\s*=\s*\{ required_checks = \[\"ci\"\] \}\s*$" tofu/github/variables.tf; then
   sed -E -i "s|^(\s+)$IAC(\s*= \{ required_checks = \[\"ci\"\] \})\s*$|\1$IAC\2 # CI-gated deploy target (sleep-iac shape)|" tofu/github/variables.tf
@@ -318,7 +321,8 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
 
   A. Review + commit:  git diff  (homelab)   and   git -C ../$IAC diff  (the skeleton)
   B. tofu/argocd.tf — hand-write two blocks (oracle is the reference, ~lines 147+274):
-       - repo credential 'repo-$IAC-github' (private -iac; also add $IAC to the ArgoCD PAT's repo list)
+       - repo credential 'repo-$IAC-github' — ONLY if the -iac is PRIVATE (public needs no
+         credential; skip the block and the ArgoCD PAT list entry entirely)
        - the root '$STACK' app-of-apps Application over $IAC//apps
   C. OUT-OF-JAIL applies:
        devbox run github-tofu apply       (repos + rulesets + labels; untaint recipe in new-agent-repo output)
