@@ -87,8 +87,8 @@ resource "helm_release" "argocd" {
     # FU-082: the remaining argo-cd components were all BestEffort. Requests + modest memory limits
     # (steady usage from `kubectl top`, ×~3 headroom). repoServer spikes on manifest render, so no
     # memory limit there — a spike degrades instead of OOM-killing mid-sync.
-    repoServer            = { resources = { requests = { cpu = "50m", memory = "128Mi" } } }                                    # ~68Mi, render spikes
-    applicationSet        = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } }     # ~40Mi
+    repoServer     = { resources = { requests = { cpu = "50m", memory = "128Mi" } } }                                # ~68Mi, render spikes
+    applicationSet = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } } # ~40Mi
     # FU-044 (deterministic revert half, 2026-07-27): a post-sync Degraded app rings the
     # agent-loop EventSource; the deploy-revert Sensor/Workflow decides revert-eligibility
     # deterministically (agents/coordinator/deploy-revert-argo.yaml). oncePer revision = the
@@ -124,8 +124,8 @@ resource "helm_release" "argocd" {
         { recipients = ["webhook:agent-loop"], triggers = ["on-health-degraded"] },
       ]
     }
-    dex                   = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~25Mi
-    redis                 = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } }      # ~13Mi
+    dex   = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } } # ~25Mi
+    redis = { resources = { requests = { cpu = "25m", memory = "64Mi" }, limits = { memory = "128Mi" } } } # ~13Mi
   })]
 }
 
@@ -361,6 +361,28 @@ resource "helm_release" "argocd_apps" {
         project   = "default"
         source = {
           repoURL        = "https://github.com/teststuffstash/oracle-iac.git"
+          targetRevision = "master"
+          path           = "apps"
+          directory      = { recurse = false }
+        }
+        destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+        syncPolicy = {
+          automated   = { prune = true, selfHeal = true }
+          syncOptions = ["CreateNamespace=true", "ApplyOutOfSyncOnly=true"]
+        }
+      }
+      # Root app-of-apps for the circles stack (chainless pilot, bootstrap 2026-08-03) — same
+      # three-layer shape as `sleep`: circles-iac is PUBLIC (operator ruling 2026-08-03, the
+      # --public-applies-to-the-iac rule), so this root app reads it anonymously — NO repo
+      # credential, NO ArgoCD PAT-list entry. Children in circles-iac/apps/ set
+      # `project: circles` (argocd/platform/circles-project.yaml); apps/ carries the `circles`
+      # infra Application over an empty placeholder dir until the first chart pin lands.
+      # Content was pushed 2026-08-03 BEFORE this root app (docs/sleep-iac.md §Risks ordering).
+      circles = {
+        namespace = "argocd"
+        project   = "default"
+        source = {
+          repoURL        = "https://github.com/teststuffstash/circles-iac.git"
           targetRevision = "master"
           path           = "apps"
           directory      = { recurse = false }
