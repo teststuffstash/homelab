@@ -130,10 +130,12 @@ lint_stack() { # <name>
     else
       say FAIL GH-02 "$stack" "$repo missing from protected_repos (tofu/github/variables.tf) — unprotected: agent PRs could stall or bypass CI"
     fi
-    if grep -qE "label_repos\s*=.*\"$repo\"" tofu/github/labels.tf; then
-      say OK GH-03 "$stack" "$repo in label_repos (state-machine labels)"
+    # Labels are claim-owned for stack repos (FU-068, shipped 2026-07-16): the claim's composed
+    # IssueLabels is AUTHORITATIVE, so a label_repos entry is a second manager that fights it.
+    if grep -qE "^\s*label_repos\s*=.*\"$repo\"" tofu/github/labels.tf; then
+      say FAIL GH-03 "$stack" "$repo in label_repos — labels are claim-owned (FU-068); drop it (if ever applied: tofu state rm scoped to ^github_issue_label\\. first)"
     else
-      say FAIL GH-03 "$stack" "$repo missing from label_repos (tofu/github/labels.tf; moves into the claim with FU-068)"
+      say OK GH-03 "$stack" "$repo labels claim-owned (FU-068) — label_repos clean"
     fi
 
     # GH-04 — App installs (generated matrix; a miss is a CLICK, then `devbox run github-apps`)

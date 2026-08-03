@@ -1,0 +1,34 @@
+# Platform-precreated namespace for the circles tenant (pattern from
+# sleep-namespaces.yaml). homelab owns namespace lifecycle; the `circles` AppProject only
+# *allowlists* it as a destination, and the child apps run CreateNamespace=false — the tenant
+# cannot spawn arbitrary namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circles
+  labels:
+    # circles rides run plain runc today (claim fixer.docker=false) — baseline enforce is the
+    # cluster-default posture. If the claim ever flips docker=true, kata microVM + dind applies
+    # (the apiserver admission config exempts the kata runtimeClass, FU-077 — see
+    # oracle-namespaces.yaml for the full note). Labels pinned explicitly so the posture is
+    # visible in git.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the circles child apps deploy into it
+---
+# FU-106 twin (2026-08-02, operator directive "steady-state -iac work is the stack's lane"): the
+# circles-iac FIXER namespace — fixer ns == repo by platform convention; the AgentStack Composition
+# renders worker infra into it once the claim carries a fixer block (mirrors sleep-iac in
+# sleep-namespaces.yaml). docker=false ⇒ plain runc rides ⇒ baseline enforce is right.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: circles-iac
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"

@@ -43,6 +43,8 @@ variable "protected_repos" {
     require_code_owner_review = optional(bool, false)
   }))
   default = {
+    circles-iac = { required_checks = ["ci"], require_approval = false } # CI-gated deploy target (sleep-iac shape)
+    circles = { required_checks = ["ci"] }
     homelab             = { required_checks = ["ci"], require_approval = false } # CI-gated only (like sleep-iac): deploy-pin bumps auto-merge on ci-green, no approver; not a fixer-target
     agent-coordinator   = { required_checks = ["ci"] }
     agent-runtime       = { required_checks = ["ci"] }

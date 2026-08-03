@@ -1,0 +1,34 @@
+# The `circles` AppProject — the tenancy boundary for the circles stack, same shape as `sleep`
+# (sleep-project.yaml, the reference: docs/sleep-iac.md). Every child Application in the
+# circles-iac repo (apps/) sets `project: circles`. Applied by the `platform` app-of-apps so it
+# exists before the root `circles` Application (tofu/argocd.tf) points its children here.
+#
+# circles-iac is PUBLIC (operator ruling 2026-08-03: --public applies to the -iac too) — ArgoCD
+# reads it anonymously; NO repo credential and NO ArgoCD PAT-list entry exist for it.
+#
+# What it allows — deliberately narrow:
+#  - sourceRepos: ONLY the circles-iac repo + the ghcr OCI chart registry (the fleet's charts land
+#    there once its deploy pipeline exists). The app repo (circles) is never an ArgoCD source.
+#  - destinations: ONLY the circles namespace, in-cluster.
+#  - clusterResourceWhitelist: ONLY the Crossplane `Workspace` (cluster-scoped; the stack owns any
+#    future Garage buckets the ADR-076 way). `Namespace` intentionally absent → the tenant cannot
+#    create namespaces; they're platform-precreated (circles-namespaces.yaml) and child apps run
+#    CreateNamespace=false.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: circles
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before the child apps that reference it
+spec:
+  description: Circles stack tenant, deployed from the public circles-iac repo.
+  sourceRepos:
+    - https://github.com/teststuffstash/circles-iac.git
+    - ghcr.io/teststuffstash/charts
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: circles
+  clusterResourceWhitelist:
+    - group: tf.upbound.io
+      kind: Workspace

@@ -41,6 +41,13 @@ spec:
           - path: "*/agent"
         values:
           repoURL: https://github.com/teststuffstash/sleep-iac.git
+    - git:
+        repoURL: https://github.com/teststuffstash/circles-iac.git
+        revision: master
+        directories:
+          - path: "*/agent"
+        values:
+          repoURL: https://github.com/teststuffstash/circles-iac.git
   template:
     metadata:
       name: 'agent-fixer-{{if eq .path.basename "agent"}}{{index .path.segments 0}}{{else}}{{.path.basename}}{{end}}'

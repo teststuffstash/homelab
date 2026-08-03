@@ -118,10 +118,11 @@ fi
 # ── 3. labels.tf — label_repos (the agent/* state-machine labels) ──────────────────────────────────
 if [ "$LABELS" = 0 ]; then
   echo "  labels.tf: --no-labels — skip (repo won't carry the agent/* taxonomy)"
-elif grep -qE "label_repos = \[[^]]*\"$NAME\"" "$TF/labels.tf"; then
+elif grep -qE "^\s*label_repos = \[[^]]*\"$NAME\"" "$TF/labels.tf"; then
   echo "  labels.tf: label_repos already includes $NAME — skip"
 else
-  sed -E -i "s/(label_repos = \[[^]]*)\]/\1, \"$NAME\"]/" "$TF/labels.tf"
+  # anchored so track_label_repos never matches; empty-list branch avoids a leading comma
+  sed -E -i "s/^(\s*label_repos = \[)\]/\1\"$NAME\"]/; t; s/^(\s*label_repos = \[[^]]+)\]/\1, \"$NAME\"]/" "$TF/labels.tf"
   echo "  labels.tf: added \"$NAME\" to label_repos"
 fi
 

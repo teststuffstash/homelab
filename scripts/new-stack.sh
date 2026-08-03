@@ -56,11 +56,13 @@ IAC="${IAC:-$STACK-iac}"
 echo "→ scaffolding stack '$STACK' (main: $MAIN, iac: $IAC)"
 
 # ── 1. tofu/github — both repos (idempotent; new-agent-repo.sh prints its own next-steps) ─────────
-bash scripts/new-agent-repo.sh "$MAIN" "$VIS"
+# --no-labels: stack repo labels are claim-owned (FU-068) — the AgentStack claim's spec.repos[].labels
+# renders an AUTHORITATIVE IssueLabels; a label_repos entry would be a second, fighting manager.
+bash scripts/new-agent-repo.sh "$MAIN" "$VIS" --no-labels
 # --public applies to BOTH repos (operator 2026-08-03, circles ruling): an -iac carries
 # references-never-values by hard rule, so visibility is a per-stack choice, not a safety one.
 # Bonus of a public -iac: ArgoCD needs NO repo credential for it.
-bash scripts/new-agent-repo.sh "$IAC" "$VIS"
+bash scripts/new-agent-repo.sh "$IAC" "$VIS" --no-labels
 # -iac protected_repos entry → CI-gated only (deploy-bump PRs auto-merge on ci, no approver)
 if grep -qE "^\s+$IAC\s*=\s*\{ required_checks = \[\"ci\"\] \}\s*$" tofu/github/variables.tf; then
   sed -E -i "s|^(\s+)$IAC(\s*= \{ required_checks = \[\"ci\"\] \})\s*$|\1$IAC\2 # CI-gated deploy target (sleep-iac shape)|" tofu/github/variables.tf
@@ -185,15 +187,16 @@ if [ -n "$FROM" ]; then
     SURFACES_OPT=".github/workflows/devbox-cache.yml .github/workflows/ghcr-cleanup.yaml
       .github/workflows/renovate-approve.yaml .github/workflows/update-pr-branch.yml
       .pre-commit-config.yaml .dockerignore
-      .agents/fix.yaml .agents/review.yaml .agents/research.yaml .agents/build.yaml
+      .agents/fix.yaml .agents/review.yaml .agents/review.md .agents/research.yaml .agents/build.yaml
       scripts/ci.sh scripts/test-chart.sh scripts/validate-chart.sh scripts/package-chart.sh
       scripts/build-image.sh scripts/deploy-pin.sh"
     for f in $SURFACES_REQ; do dcopy req "$f"; done
     for f in $SURFACES_OPT; do dcopy opt "$f"; done
     # donor growth: workflows the donor has that the list does not know
+    ALL_SURFACES=$(echo $SURFACES_REQ $SURFACES_OPT) # unquoted on purpose: newlines → single spaces
     for wf in "../$FROM/.github/workflows/"*; do
       b=".github/workflows/$(basename "$wf")"
-      case " $SURFACES_REQ $SURFACES_OPT " in *" $b "*) ;; *)
+      case " $ALL_SURFACES " in *" $b "*) ;; *)
         echo "  ⚠ donor has $b — NOT in the surface list (product-specific like integration.yaml, or the list is behind; judge)";;
       esac
     done
@@ -280,7 +283,10 @@ tests:
     set: { image: { tag: 1.2.3 } }
     asserts:
       - isKind: { of: Deployment }
-      - equal: { path: spec.template.spec.containers[0].image, value: "ghcr.io/$ORG/$MAIN:1.2.3" }
+      # block style on purpose: '[0]' brackets are invalid in a flow-mapping plain scalar
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/$ORG/$MAIN:1.2.3"
 CH
       cat > "../$MAIN/Dockerfile" <<CH
 # Vanilla bootstrap image ($STACK): serves the hello page so the deploy pipeline is E2E-provable
