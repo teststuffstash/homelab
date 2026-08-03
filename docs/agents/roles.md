@@ -227,6 +227,13 @@ So the map has at least **three context classes**:
 `render_env_card()` and the missing nix-cache proxy added. The duplication is accepted on purpose;
 FU-117 tracks the dedup.
 
+**Sighting 2026-08-03 (circles FU-126 A/B):** recipe text carried egress FOLKLORE ("WebFetch will
+mostly be blocked") while the truth is per-HARNESS capability — claude rides have server-side
+WebSearch (unaffected by pod egress), goose rides have no web tool at all (kimi's spec arm could
+only disclaim "reasoned from training knowledge"). Capability truth moved into the env card (a
+harness-conditional "Web research:" line); recipes should stop asserting it. Class-1 context that
+recipes were squatting on.
+
 **The refactor, when it has piled up enough:** a **role × context × source** map that separates
 *dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
 ground rules* (authored once, delivered to goose via a launcher-injected static block — the env

@@ -236,6 +236,16 @@ render_env_card() {
     printf '%s\n' "- **Egress: monitored, not blocked** — calls work; destinations are logged for the allowlist harvest."
   fi
 
+  # WHY: the circles FU-126 A/B surfaced that recipes carried egress FOLKLORE ("WebFetch will
+  # mostly be blocked") while the actual truth is per-HARNESS: claude has server-side WebSearch,
+  # goose has no web tool at all. Capability truth belongs HERE, not in recipe text (operator,
+  # 2026-08-03). FU-117 sighting noted in roles.md §Context delivery.
+  if [ "$HARNESS" = "claude" ]; then
+    printf '%s\n' "- **Web research: WebSearch available** (server-side — runs OUTSIDE this pod, unaffected by the egress posture). WebFetch fetches FROM this pod and rides the egress posture above; if it fails, use WebSearch and mark snippet-level provenance."
+  else
+    printf '%s\n' "- **Web research: NONE.** This harness has no WebSearch/WebFetch tool. Reason from training knowledge, mark externally-unverified claims as such (⚖/provenance notes), and leave verification to a follow-up — never present an unverified claim as checked."
+  fi
+
   printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-3} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
   printf '%s\n' "- **Write scope:** you can only push a \`fix/\`-prefixed branch and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
 }
