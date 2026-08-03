@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-127**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-128**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -218,6 +218,15 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
       specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
       output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
+- [ ] **FU-127** — **Model ids don't carry their rail/harness — overloaded-prefix hazard
+      (operator concern, 2026-08-03 circles bootstrap).** Today the string encodes it by magic
+      prefix: `claude/<alias>` = subscription claude harness (FU-066 shape; XRD has no harness
+      field), `openrouter/…` sometimes rail-prefix, sometimes OpenRouter's own cloaked-model
+      namespace (`openrouter/owl-alpha`), bare `vendor/model` = OpenRouter+goose implied. Bites
+      as: ambiguous parsing at every consumer (launcher, router, fanout, stacks.json mirror),
+      and a future rail (e.g. local vLLM) has no place to live. Next: pick the explicit shape —
+      structured `{rail, harness, model}` in claims/mirror with the string form kept as
+      display/shorthand — and migrate consumers behind one parser. Relates FU-095, ADR-096.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if

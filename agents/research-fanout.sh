@@ -6,7 +6,10 @@
 #
 #   bash agents/research-fanout.sh <project> <goal-issue> <model> [model ...]
 #   bash agents/research-fanout.sh oracle-fleet 210 nvidia/nemotron-3-ultra-550b-a55b \
-#        qwen/qwen3-max moonshotai/kimi-k2.5
+#        qwen/qwen3-max moonshotai/kimi-k2.5 claude/opus
+#
+# `claude/<alias>` entries ride the SUBSCRIPTION claude harness (no OpenRouter key/mint —
+# the FU-066 rail; the claim needs fixer.claudeTier: true).
 #
 # Per model: a short slug (vendor stripped, :free stripped, non-alnum → '-') keys EVERYTHING —
 # the task (`research-<issue>-<slug>`), the ephemeral budget key session, the pod name — so N
@@ -42,6 +45,20 @@ for MODEL in "$@"; do
   TASK="research-${ISSUE}-${SLUG}"
   SESSION="${TASK}-round-1"
   echo "── ${MODEL} (task ${TASK}) ──"
+
+  # SUBSCRIPTION rail (operator 2026-08-03): a `claude/<alias>` entry rides the claude harness —
+  # no OpenRouter key, no estimate/mint (the subscription is the budget; FU-088 latch gates load).
+  # The launcher derives --harness claude from the prefix; the pod's only cred is the
+  # claude-session ref (needs fixer.claudeTier: true on the claim). NB the branch model-slug rule
+  # keys on GOOSE_MODEL, which a claude pod lacks — its branch carries the topic slug instead
+  # (collision-free vs the goose arms; one claude arm per fan-out).
+  case "$MODEL" in claude/*)
+    AGENT_WIP_LIMIT="$N" bash "${HERE}/agent-session.sh" "$PROJECT" \
+      --model "$MODEL" \
+      --task "$TASK" --round 1 --recipe "$RECIPE" &
+    sleep 5
+    continue;;
+  esac
 
   # Estimate + mint the per-ride ephemeral key (the coordinator's steps 3-4, deterministic).
   # ESCALATE for one model skips THAT model only — the others still ride.
