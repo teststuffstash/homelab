@@ -45,7 +45,7 @@ blocks below. Before any assignment: `git grep <ip>` + `nmap -sn <candidates>`.
 - **VLAN plan fits without touching this table:** each new SSID/VLAN takes the next subnet from
   the VLAN blocks; DHCP pool top-half, statics bottom-half, same as `2.0/24` today.
 - **Existing `2.0/24` VIPs** (`.2`–`.29`: ha, grafana, prometheus, alertmanager, forgejo,
-  garage-s3, argocd, infisical) migrate to `3.0/24` opportunistically (FU-071) — new exposures
+  garage-s3, argocd, infisical) all migrated to `3.0/24` (FU-071 archived 2026-07-13) — new exposures
   land in `3.0/24` from day one. The haproxy role rebinds on VIP change; stale aliases + Unbound
   overrides need the API cleanup (see `ansible/group_vars/opnsense.yml` header).
 - **Per-stack subdomain delegation** (ADR-092): a stack that opts in gets ONE VIP pair for its

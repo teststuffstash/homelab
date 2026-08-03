@@ -22,6 +22,8 @@ then apply the matching playbook with the wrapper. Never click-ops it.
 | Expose an in-cluster service as `<name>.teststuff.net` (HTTPS) | `haproxy_proxied_services` — ⚠️ acme play only CREATES the cert spec; **SIGN it before the haproxy play** (`POST /api/acmeclient/certificates/sign/<uuid>`, poll `statusCode==200`) or the frontend binds an empty cert and serves the opnsense CN (recovery = delFrontend + re-run; full order: `docs/runbook.md` §HTTPS name — bit twice, forgejo 2026-06-11 + oracle-specs 2026-07-14) | `ansible/opnsense-haproxy.yml` |
 | Issue/renew a cert | `acme_cert_specs` | `ansible/opnsense-acme.yml` |
 | BGP/FRR peering with Cilium | `bgp_node_ips` / ASNs | `ansible/opnsense-bgp.yml` |
+| WireGuard VPN (peers, tunnel) | `wireguard_*` vars | `ansible/opnsense-wireguard.yml` |
+| Dynamic DNS | `ddclient_*` | `ansible/opnsense-ddclient.yml` |
 | LAN DHCP (reservations, range) | — | `opnsense/dnsmasq-dhcp.py` (run `python3 opnsense/dnsmasq-dhcp.py` with OPN creds) |
 
 To change *behaviour* (not just values), edit the role's `roles/opnsense-<x>/tasks/main.yml`.

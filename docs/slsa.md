@@ -154,7 +154,7 @@ A **hosted (not-a-laptop) runner** → generate provenance → **cosign sign** +
 model. NOTE (2026-06-24): the homelab now has **two** hosted runners (see [`ci.md`](ci.md)) — **ARC**
 for GitHub-canonical projects (→ ghcr; GitHub OIDC also unlocks **keyless** cosign + native build
 attestations) and **`act_runner`** for Forgejo-only projects (→ Forgejo registry). Either is a valid
-L2 base; pick per project's tier. The cosign/SBOM/scan layer is still TODO on both.
+L2 base; pick per project's tier. FU-016: the cosign/SBOM/scan layer is still open on both.
 
 **Phase 2 — Hermetic + reproducible (the software "L4" leg, medium effort).**
 Move the *actual software* to **melange** (build packages in isolated envs) + **apko** (assemble

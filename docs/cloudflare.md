@@ -141,7 +141,7 @@ Don't import the old Route53 zone — start clean on Cloudflare with only what's
 
 Cleanup of the Route53 zone + the associated **ACM/Sectigo certs** (the `_*` validation CNAMEs
 imply leftover ACM certificates) is the first job for the AWS-IaC track (`tofu/aws/`), done as a
-reviewable delete-diff after a read-only audit. See [[cloudflare-direction]] and the AWS auth notes.
+reviewable delete-diff after a read-only audit. See the AWS auth notes.
 
 ## The nameserver cutover (one-time, manual) — ✅ DONE
 

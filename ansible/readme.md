@@ -36,6 +36,8 @@ because their real values are here, not baked in).
 | `opnsense-acme.yml` | `opnsense-acme` | Let's Encrypt certs (DNS-01 via **Cloudflare** — `ACME_CF_TOKEN`) |
 | `opnsense-haproxy.yml` | `opnsense-haproxy` | HTTPS reverse proxy → in-cluster service VIPs |
 | `opnsense-unbound.yml` | `opnsense-unbound` | static Unbound host overrides (e.g. `ubiquiti.teststuff.net`) |
+| `opnsense-wireguard.yml` | `opnsense-wireguard` | WireGuard full-LAN VPN (ADR-090) |
+| `opnsense-ddclient.yml` | `opnsense-ddclient` | dynamic DNS (ddclient) |
 | `matchbox.yml` | `matchbox` | install Matchbox on the PXE LXC |
 | `matchbox-ipxe-tftp.yml` | `matchbox-ipxe-tftp` | iPXE binaries + TFTP (PXE stage-1) |
 | `matchbox-proxydhcp.yml` | `matchbox-proxydhcp` | dnsmasq proxy-DHCP boot server |

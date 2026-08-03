@@ -11,19 +11,14 @@ there it reconciles this directory from git. Decision background: `docs/secrets.
 
 ```
 tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db, infisical-pg-app,
-       │                     repo-homelab-github, repo-oracle-iac-github
+       │                     repo-homelab-github, repo-oracle-iac-github (full set: `tofu/argocd.tf`)
        └──applies──► THREE root Applications (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
                           │
           "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
-             wave 0  cnpg-operator · eso-operator · arc-controller
-             wave 1  postgres (CNPG Cluster) · crossplane · nix-cache
-             wave 2  infisical          (infisical-standalone on the CNPG cluster)
-             wave 3  platform-extras    → argocd/resources/extras/  (UI VIP + ClusterSecretStore)
-             wave 4  crossplane-providers · github-runner-secrets
-             wave 5  arc-runners · openrouter-operator · agent-coordinator
-             wave 6  logging            → argocd/resources/loki/    (Loki + Alloy)
-             wave 6  github-exporter    → argocd/resources/github-exporter/  (GitHub CI+billing poller)
-             wave 6  agent-fixer        (ApplicationSet → one app per agents/fixer/<repo>/)
+             Sync waves 0→6 — authoritative list = the `argocd.argoproj.io/sync-wave`
+             annotations in `argocd/platform/*.yaml`.
+             agent-fixer = an ApplicationSet with three generators (homelab `agents/fixer/*`,
+             sleep-iac `*/agent`, oracle-iac `*/agent`)
           "sleep" ──► github.com/teststuffstash/sleep-iac//apps  (the sleep stack, EXTRACTED to its
                       own public IaC repo — app infra Workspaces/ESO + the OCI-chart ingester, each
                       project: sleep. FU-025. The `sleep` AppProject + its namespaces live here in

@@ -7,7 +7,8 @@ Garage, Forgejo, ArgoCD + its bootstrap seeds. Grew out of ROADMAP.md Phases 1�
 
 > **Status: APPLIED & LIVE.** Talos `v1.13.2` / Kubernetes `v1.36.1`, Cilium `1.19.1`
 > (kube-proxy-free). Nodes: VMs cp-01 `.51` / wk-01 `.61` / wk-02 `.62` **+ bare-metal**
-> thinkcentre `.53`, hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250) — all
+> thinkcentre `.53`, hp-01 `.54`, wk-metal-01 `.182` (X240), wk-metal-02 `.183` (X250),
+> wk-metal-03 `.184`, wk-metal-04 `.186` (kata) — all
 > `Ready`. **Longhorn** is the storage; Home Assistant, the **UniFi controller**, and the
 > monitoring stack run in-cluster on BGP VIPs (`192.168.40.0/24`). State is local
 > (`terraform.tfstate`, gitignored). Always `tofu plan` and review before any `apply`.
@@ -55,7 +56,8 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `monitoring.tf` — Prometheus + Grafana + Alertmanager (BGP VIPs `.13`/`.11`/`.14`);
   `dashboards/` holds the provisioned Grafana dashboard JSON.
 - `metrics-server.tf` — `kubectl top` / HPA.
-- `argocd.tf` — ArgoCD install + bootstrap secret seeds + the two app-of-apps roots
+- `argocd.tf` — ArgoCD install + bootstrap secret seeds + the three app-of-apps roots
+  (platform, sleep, oracle)
   (`../argocd/README.md`); `infisical/` (sub-root) declares the Infisical project + ESO identity.
 - `garage.tf` — Garage S3 object store (vendored chart `charts/garage/`; `../docs/garage.md`).
 - `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo (CNPG-backed) + the Tier-B

@@ -20,8 +20,8 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   label, Depends-on lines per FU-087). Queue = `agent-fix` + `agent/queued`. Bot-authored 🌱
   sprouts stay unlabeled for the operator.
 - **C6 close-the-loop — MACHINE-OWNED since 2026-07-27** (the `merged-closeout` clause,
-  MP-T10): the scan flips `agent/done` and harvests review `Follow-ups:` bullets as inert
-  issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
+  MP-T10): the scan dispatches a `merged-closeout` unit; the coordinator session verifies,
+  flips `agent/done` and harvests review `Follow-ups:` bullets as inert issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
   their flip + harvest; a missed one is a clause bug to fix, not a label to hand-flip.
 - **Operator-lane work** the loop CANNOT do: `.github/workflows/*` changes (worker recipes +
   tokens forbid them), platform/homelab changes, Composition/XRD work. Do these directly,
@@ -86,7 +86,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   (verify the bump POST-DATES the merge — the chain once pinned a stale tag) → pin-follow PR
   bumping `oracle-fleet/infra/workflow-ert-*.yaml` image refs → ArgoCD sync → submit the
   verification run (`ert-pipeline` WorkflowTemplate; `start-from=build` for build-side
-  iteration, scratchpad manifests in git under agents/meta/ if needed) → Monitor the run.
+  iteration) → Monitor the run.
 - **Real-corpus shape failures**: read the step's own JSON events + traceback; file the issue
   with the ⚖ pre-decided (precedents: normalize-at-parse for display noise; exclude-and-count
   for unrepresentable data — NEVER fabricate; constraint-relaxation when the constraint was a

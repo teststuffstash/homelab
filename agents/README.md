@@ -50,11 +50,11 @@ bash agents/agent-session.sh sleep-tracking --harness opencode --model openroute
 
 # non-interactive: run a recipe to a branch+PR, stream logs, post a stats comment, pod self-terminates
 bash agents/agent-session.sh sleep-tracking --harness goose --model openrouter/deepseek/deepseek-v4-flash \
-    --run "goose run --recipe .agents/fix.yaml --params issue=42"
+    --recipe /work/sleep-tracking/.agents/fix.yaml --task issue-42
 ```
 
 Flags: `--run "<cmd>"` · `--ref <base>` · `--repo <url>` · `--harness goose|opencode|claude` ·
-`--model <provider/model>` · `--recipe <path>` (claude: launcher-built run command, ADR-094) ·
+`--model <provider/model>` · `--recipe <path>` (goose + claude — the launcher-owned path, FU-114; opencode uses `--run`) ·
 `--task issue-N|pr-N` + `--round N` (idempotency key + transcript prefix) · `--work-branch <br>`
 (resume a PR branch) · `--docker` (kata+dind; auto-derived from the claim's `fixer.docker`) ·
 `--openrouter-secret <name>` · `--no-arm` (human-gated PR, FU-105 researcher; auto-derived from a
@@ -101,7 +101,7 @@ used to carry its own "Known gaps" and "Follow-ups" lists, and by 2026-08-01 eig
 in them had shipped and been archived while the text still called them open).
 
 - **opencode needs AVX2; goose runs anywhere.** opencode's Bun runtime SIGILLs (`Illegal
-  instruction`) on the non-AVX2 nodes (`hp-01`, `thinkcentre`). The launcher pins the **opencode**
+  instruction`) on the non-AVX2 nodes (`hp-01`, `thinkcentre`, `wk-metal-04`). The launcher pins the **opencode**
   harness to nodes labelled `homelab.io/cpu-avx2=true` (the Xeon VMs + the Haswell/Broadwell
   ThinkPads); the label is codified in Talos `machine.nodeLabels` (`tofu/locals.tf` `avx2_nodes`).
 - **Run observability.** Agent pods are Loki-labelled `app=agent-session` + `pod`/`node`. Review any

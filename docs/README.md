@@ -17,9 +17,10 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | Doc | Summary |
 |---|---|
 | [adr.md](adr.md) | **Architecture Decision Record** — what was considered (e.g. Ceph vs Longhorn) and what was chosen, with rationale. Start here for *why*. |
-| [agents/](agents/README.md) | **Agent platform** — an interactive meta-coordinator in the jail + an autonomous per-stack loop in the cluster; roles, trust boundaries, testing doctrine, and the index to the 12 sub-docs |
+| [agents/](agents/README.md) | **Agent platform** — an interactive meta-coordinator in the jail + an autonomous per-stack loop in the cluster; roles, trust boundaries, testing doctrine, and the sub-doc index |
 | [runbook.md](runbook.md) | Day-to-day operational recipes — devbox, OPNsense-as-code, DHCP/DNS, storage, CNPG, HA, UniFi, Cloudflare, ESPHome — and the gotchas behind them |
 | [follow-ups.md](follow-ups.md) | **The FU tracker** — every loose end / deferred item as a stable `FU-NNN` id (conventions in its header) |
+| [follow-ups-archive.md](follow-ups-archive.md) | Resolved-FU residue — rolling buffer (≈a month) of archived items, trimmed to the grep residue |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
 | [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
 | [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps, and why a breach is currently invisible until a workload fails (FU-093) |
@@ -29,12 +30,15 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | [dependency-upgrades.md](dependency-upgrades.md) | **homelab's own dependency lifecycle** — propose → review → test/lint → rollout → monitor, per dependency class; plus what Renovate has *measurably* done here (FU-097/FU-051) |
 | [renovate.md](renovate.md) | The **org-wide Renovate policy** — threat model (Trivy-style compromise), cooldown/SHA-pinning/OSV, the automerge-vs-review split, coordinator × Renovate verbs |
 | [garage.md](garage.md) | Garage S3 platform reference — deploy, layout bootstrap, LAN-only access model |
+| [garage-bulk-migration.md](garage-bulk-migration.md) | Garage data → longhorn-bulk migration recipe — repeats for any STS volumeClaimTemplate change |
 | [patterns/app-owned-resources.md](patterns/app-owned-resources.md) | How an app provisions its own buckets/keys/DBs from its own repo (ADR-074/076) |
 | [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |
-| [sleep-iac.md](sleep-iac.md) | Blueprint: extract the sleep stack into its own IaC repo (FU-025) — AppProject tenancy, what moves, prune-safe migration |
+| [sleep-iac.md](sleep-iac.md) | The live three-layer sleep stack + deploy pipeline (ADR-084) — AppProject tenancy, what moves, prune-safe migration |
+| [oracle-iac.md](oracle-iac.md) | The oracle stack — sleep-shaped three-layer topology; records only the deltas from the sleep reference design |
 | [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
+| [ip-plan.md](ip-plan.md) | **The address-plan authority** (ADR-088) — which range a new IP/VIP comes from |
 | [network-physical.md](network-physical.md) | Cabling / switch layout (distinct from the logical IP view) |
 | [power-measurements.md](power-measurements.md) | Node max-power (stress) + perf/watt benchmarks |
 | [../machines/README.md](../machines/README.md) | Machine inventory + perf/watt table (generated from `machines/machines.yaml`) |

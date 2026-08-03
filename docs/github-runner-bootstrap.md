@@ -153,6 +153,5 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n arc-runners get pods -w   
   build-image`). See [`ci.md`](ci.md).
 - Deploys are automated (ADR-084): the sleep-tracking `deploy` workflow builds the image + chart and
   opens an auto-merging version-bump PR in sleep-iac → ArgoCD syncs — no manual `image.tag` bump (the
-  image tag is the chart appVersion; sleep-iac pins only the chart version). Just retire the old
-  `SLEEP_FORGEJO_REGISTRY_TOKEN` Infisical key once ghcr is the canonical registry. See
+  image tag is the chart appVersion; sleep-iac pins only the chart version). See
   [`sleep-iac.md`](sleep-iac.md) §"Deploy pipeline".

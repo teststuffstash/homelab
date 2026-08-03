@@ -81,17 +81,18 @@ re-check on the next metal (re)install whether install.image is honored from mai
 (Likely also the origin of the /dev/kmsg regression: the upgrade pulled a newer kata extension
 whose agent no longer creates it.)
 
-## The caching design (FU-073) — LANDED 2026-07-14 as ADR-091
+## The caching design — LANDED 2026-07-14 as ADR-091 (FU-073 archived COMPLETE 2026-07-26)
 
 _Below is the spike-time design; the build (registry:3 pair, `registry-cache` ns, BGP VIPs
 `.40.20/.21`, docker-mode rides wired, docker.io FQDNs dropped from the agent egress) is
-recorded in ADR-091 + SERVICES.md; the remaining consumers live in FU-073._
+recorded in ADR-091 + SERVICES.md, which own the current state; all consumers are wired (no
+remainder)._
 
 Adopt the nix-cache pattern (ADR-083) for OCI images: **pull-through registry mirrors as a
 platform service** (`registry-cache` ns). One mirror per upstream (registry:2 proxy mode is
 single-upstream): `mirror-docker-io`, `mirror-ghcr` (evaluate zot/spegel if a single
 multi-upstream instance is preferred). Storage: cache-semantics PVCs (re-warmable — replica-1 is
-fine); NOTE the std Longhorn pool is capacity-crunched (ADR-089) — size small (≤8Gi each) or
+fine); NOTE the std Longhorn pool is capacity-crunched (ADR-089) — size small (≤8Gi each; superseded: 20Gi since 2026-07-27) or
 wait for the next disk.
 
 Consumers, all pointed at the mirrors instead of the internet:

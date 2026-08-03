@@ -1,6 +1,6 @@
 # sleep-iac — the sleep stack's own IaC repo + deploy pipeline (three-layer topology)
 
-_Reference for the extracted sleep stack — **built + live** (executed **FU-025**; decision recorded in
+_Reference for the extracted sleep stack — **built + live** (executed **FU-025**, archived 2026-07-04; decision recorded in
 **ADR-084**; doctrine in [`patterns/app-owned-resources.md`](patterns/app-owned-resources.md)
 §"Direction"). Began as a planning record (2026-07-02 → 07-04 revisions: public repo, Grafana dashboard
 migration, platform-precreated namespaces); now documents the live system. The "Migration sequence"
@@ -14,8 +14,9 @@ section below is kept as the build record — the status banner is the current s
 > `sleep-iac`; the unused `repo-sleep-tracking-github` credential removed; the **Sleep Overview
 > dashboard moved to GitOps** (`sleep-tracking/` kustomize `configMapGenerator`; tofu CM +
 > `tofu/dashboards/sleep-overview.json` removed; Grafana provisions it from the sleep-tracking ns).
-> **Remaining (FU-025 stays open):** coordinator step-7a automation (flag-and-stop → version-bump PR in
-> sleep-iac) and enabling Renovate on the repo (FU-014). Op note: the Grafana k8s-sidecar
+> **Done (FU-025 archived 2026-07-04):** step-7a shipped as the ADR-084 deploy-pin flow (§Deploy
+> pipeline); repo dependency automation is FU-125's problem (see [`renovate.md`](renovate.md)).
+> Op note: the Grafana k8s-sidecar
 > (`UNIQUE_FILENAMES=false`) only writes on CM watch events, so removing one of two same-key dashboard
 > CMs needs a MODIFY event / grafana restart on the survivor to rewrite the file.
 
@@ -27,8 +28,8 @@ Three layers, so app repos know nothing about homelab and a deploy is a reviewab
   to ghcr on a `v*` tag. Standard Kubernetes; zero homelab knowledge.
 - **`sleep-iac`** (new): the stack's deployment truth — ArgoCD child Applications + values +
   version pins **+ the apps' infra CRs** (Garage Workspaces, ExternalSecrets, OpenRouterKeys,
-  agent git-token). Own CI gates; **a deploy = a version-bump PR here** (Renovate FU-014 and the
-  coordinator's step-7a automation both plug in at this seam).
+  agent git-token). Own CI gates; **a deploy = a version-bump PR here** (Renovate — see
+  [`renovate.md`](renovate.md) / FU-125 — and the coordinator's step-7a automation both plug in at this seam).
 - **homelab**: the platform — operators, SERVICES.md, the `sleep` **AppProject** (tenancy
   boundary), and one root Application pointing at sleep-iac. **sleep-iac is public** (it's
   deployment config with no secret material — the CRs carry Garage *key ids* and Infisical
@@ -71,7 +72,7 @@ sleep-iac/
   snore-recorder/            # the CRs formerly in snore-recorder/infra/
   devbox.json                # ci seam: yamllint + kubeconform + helm-template-with-pinned-values
   .github/workflows/ci.yaml  # thin: devbox run ci; runs-on homelab-ephemeral
-  renovate.json              # watches the ghcr chart/image pins (FU-014)
+  renovate.json              # watches the ghcr chart/image pins (see renovate.md / FU-125)
 ```
 
 ## Grafana dashboard migration
@@ -248,7 +249,7 @@ broken sync) is **FU-044** — deferred; harden app CI first so it's the safety 
   is the platform contract the GitOps dashboard binds to. Namespaces are **platform-precreated**, the
   `sleep` AppProject only allowlists them (`CreateNamespace=false`, no `Namespace` in the cluster
   whitelist).
-- FU-025 closes; the repo-creation part of **FU-039** gets its first data point (was the
+- FU-025 closed (archived 2026-07-04); the repo-creation part of **FU-039** got its first data point (was the
   tofu/github seam painful enough to want a Crossplane GitHub provider?).
 
 ## Risks / gotchas

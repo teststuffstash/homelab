@@ -19,6 +19,7 @@ Plus, the repos themselves are managed here (fully, not click-ops):
   declared — visibility, merge methods, and the auto-merge + auto-delete-branch that complete the flow.
 - **Agent labels** (`labels.tf`, `github_issue_label`): the coordinator's state-machine label taxonomy
   (`agent-fix`, `agent/*`, `agent-budget/*`) — non-authoritative, so other labels are left alone.
+  Shrank to **homelab only** — the stack repos' labels are claim-owned (FU-068).
 - **App installation scope** — NOT manageable here. `github_app_installation_repositories` reads via
   `GET /user/installations/{id}/repositories`, a user-to-server endpoint that a **fine-grained PAT
   can't access (403)** — and this root is deliberately fine-grained-PAT-only. So which repos an App is
@@ -52,6 +53,13 @@ owner:
 - **Repository permissions → Issues: Read and write**  ← for the agent labels (labels.tf; labels live under Issues, not Administration)
 
 If the org enforces PAT approval the token sits "pending"; approve it yourself as owner. Then:
+
+```sh
+devbox run github-tofu plan     # the wrapper (scripts/github-tf.sh) supplies the App vars + the KeePass admin token
+devbox run github-tofu apply
+```
+
+Manual fallback (export the token yourself):
 
 ```sh
 export GITHUB_TOKEN=github_pat_xxxxx            # the fine-grained token (NOT gh auth token)

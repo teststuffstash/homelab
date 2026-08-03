@@ -32,7 +32,7 @@ Gotchas:
 ## Secrets (out of repo)
 
 The **KeePass wallet** (`~/.claude/homelab-keepass/`, key-file-only) holds ALL Tier-0 values —
-OPNsense/Proxmox/Cloudflare/Garage/HA/AWS/droplet/GitHub-App creds (FU-001, docs/secrets.md).
+OPNsense/Proxmox/Cloudflare/Garage/HA/AWS/droplet/GitHub-App creds (docs/secrets.md).
 String secrets: `source scripts/keepass-env.sh` (tofu vars + `CLOUDFLARE_API_TOKEN`/`ACME_CF_TOKEN`).
 File-shaped ones (SSH keys, matchbox certs, App PEMs, the `.p12`, esphome `secrets.yaml`):
 `bash scripts/wallet-files.sh` regenerates any missing `~/.claude/<dir>/` cache file from the wallet

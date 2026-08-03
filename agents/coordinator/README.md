@@ -66,8 +66,9 @@ sessions from specs — the dependency graph is known exactly at authoring time,
 lines then* (a reader without coverage leaves the graph in prose; the scan can only enforce what
 the body encodes). Native sub-issues/Projects may mirror this for UI, never replace it.
 
-> **Labels are provisioned as code** in [`tofu/github/labels.tf`](../../tofu/github/labels.tf) (this
-> table = its source of truth — add any new state label there too, or it won't exist on the repos).
+> **Labels are provisioned as code** — the stack repos' labels are claim-owned (AgentStack `labels:`
+> → IssueLabels, FU-068); [`tofu/github/labels.tf`](../../tofu/github/labels.tf) covers homelab only.
+> Add any new state label to the owning source, or it won't exist on the repos.
 > **Never leave a relabel half-applied.** `gh issue edit --add-label X --remove-label Y` is *not* atomic:
 > if `X` doesn't exist the add fails but the remove still lands, corrupting state (learned live on #18).
 > So: ensure the label exists first (`gh label create <name> --force`), and **add the new label before
@@ -205,17 +206,14 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    ```
    `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
    `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
-   burned a session until the FU-069 breaker caught it). (FU-114 L3 will swap `fix.yaml` for the
-   `.agents/<class>.yaml` chosen by the issue's `task/*` label — until then it is always `fix.yaml`.)
+   burned a session until the FU-069 breaker caught it).
    `--max-turns 200` is the GOOSE_MAX_TURNS counterpart (raised from 80, operator 2026-07-17 —
    haiku rides hit the 80 ceiling; 200 matches the goose belt that clears every measured legit
    run). Keep it unless the recipe declares its own cap. Fix rounds add `--work-branch` exactly like goose. The launcher self-derives
    `--harness claude` from the model prefix and the pod runs on agent-base (devbox + docker mode
    work; `fixer.docker` repos ride kata as usual).
-   **Parallel track lanes:** when dispatching a SECOND worker into a repo whose open issues sit on
-   independent `track/*` lanes (TRACKS.md — disjoint path ownership), prefix the dispatch with
-   `AGENT_WIP_LIMIT=<number of lanes>`; the default cap is 1 worker per project. Never run two
-   workers on the SAME lane.
+   **Parallelism is footprint-based** (ADR-097, `Touches:` intersection — the scan computes it):
+   `AGENT_WIP_LIMIT` arrives scan-computed in your pod env via `--wip`; NEVER set it yourself.
    For a **fix round on an existing PR** (or resuming a salvaged WIP branch from a strike comment),
    add `--work-branch <branch>` — the pod checks that branch out tracking origin deterministically
    (finding C: never leave "which branch" to the model). The launcher **pre-flight** (FU-042) refuses
@@ -434,7 +432,9 @@ An ARMED red PR is invisible to the whole merge path (updater and reviewer both 
 design). The scan now emits a `ci-red` **dispatch** unit to you the moment it sees one — no more
 4h `updatedAt` timer (a no-op round's own comment reset that clock → the 4h-spaced livelock; the
 red loop is now edge-woken by the exporter's `/coordinate` red-doorbell + attempt-bounded, symmetric
-with the review loop). The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
+with the review loop). The scan only dispatches `ci-red` for LOOP-AUTHORED PRs (the WORKER_AUTHOR
+predicate, homelab#88 2026-08-03) — a human's armed+red PR is a report-only line, never yours.
+The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
 your play: **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
 context (the usual case — a worker's own Gate-A escape, a flaky base, a missing platform fact like
 sleep-tracking#67's kind mirror); **park** (`agent/blocked` + why) when the red is environmental and
@@ -569,8 +569,8 @@ session key by `kubectl apply`-ing the estimator's `--emit-cr` output, then **wa
 ## Bootstrap (one-time)
 
 > **Now GitOps-managed (2026-07-06).** The subsystem manifests — `rbac.yaml` (Namespace + SA + roles),
-> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and the four
-> agent-loop reflexes as **Argo CronWorkflows** in `reflexes-argo.yaml` + the event-driven review path
+> `transcripts-pvc.yaml`, `git-token.yaml` + `reviewer-git.yaml` (ESO ExternalSecrets), and the five
+> agent-loop reflexes (iac-sentinel joined) as **Argo CronWorkflows** in `reflexes-argo.yaml` + the event-driven review path
 > in `review-argo.yaml` (ADR-093; each reflex shows in the argo-server UI and emits `argo_workflows_*`
 > Prometheus metrics) — are reconciled from `agents/coordinator/` by the **`agent-coordinator`
 > ArgoCD Application** (`argocd/platform/agent-coordinator.yaml`, wave 5). So a change (e.g. a reflex
@@ -592,8 +592,9 @@ devbox run infisical-secret COORDINATOR_CLAUDE_OAUTH_TOKEN="$(claude setup-token
 
 The image is built + pushed by CI in the
 [`agent-coordinator`](https://github.com/teststuffstash/agent-coordinator) repo and **pinned by version**
-(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + `reflexes-argo.yaml`
-/ `review-argo.yaml` (the Argo CronWorkflows, ArgoCD-synced); the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
+(`2026.<m>.<d>-g<sha>`, off `:latest`) in `agents/images.env` (the session scripts) + every
+`agents/coordinator/*-argo.yaml` (the Argo CronWorkflows, ArgoCD-synced) + the transcripts
+manifests; the repo's `deploy.yaml` opens the homelab bump PR (FU-051). The ghcr package
 is public. `coordinator-git` and `coordinator-claude` are both GitOps'd via ESO (`git-token.yaml`,
 `claude-token.yaml` — the latter folded into Infisical 2026-07-12, FU-001 leg A).
 

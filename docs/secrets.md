@@ -23,8 +23,9 @@ git PAT, Postgres app passwords, the Grafana/HA creds — and, since 2026-07-12 
 former `~/.claude/homelab-*` flat-file secret** (OPNsense/Proxmox/Matchbox/Cloudflare/Garage/
 Forgejo/AWS/droplet/GitHub-App creds; multi-line key/cert material as entry *attachments*, e.g.
 `keepassxc-cli attachment-export … matchbox-grpc client.key <out>` — note `--stdout` mangles binary
-attachments like the `.p12`, export to a file). The wallet is **authoritative**; the flat files are
-a legacy read path that shrinks as consumers convert (checklist in FU-001) — don't add new ones.
+attachments like the `.p12`, export to a file). The wallet + Infisical are the **only stores**
+(FU-001 complete 2026-07-13); the legacy flat files were parked in `~/.claude/.fu001-retired/` —
+don't add new ones.
 **This is the only ring you decrypt by hand.**
 
 **Tier 1·2 (Infisical → ESO).** Infisical (`infisical.teststuff.net`, on CloudNativePG, ADR-046) is the

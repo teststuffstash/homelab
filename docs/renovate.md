@@ -2,7 +2,8 @@
 
 Self-hosted Renovate keeps our dependencies current **and** is our first line of defence for the
 things we *ingest* — the consumer side of the supply chain ([`slsa.md`](slsa.md) names this **S2C2F**
-but hadn't built it). FU-014.
+but hadn't built it — since built). The LIVE status is FU-125 — Renovate regressed to zero
+delivered PRs, see [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth.
 
 ## Shape
 
@@ -20,6 +21,9 @@ reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automer
 
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).
 Bootstrap: `scripts/github-app-bootstrap.sh homelab-renovate`.
+
+⚠ As of 2026-08-01 this path delivers ZERO PRs org-wide while reporting success — FU-125; verify
+against [`dependency-upgrades.md`](dependency-upgrades.md) §Ground truth before trusting it.
 
 ## Threat model — mitigate a Trivy-style compromise
 
@@ -67,15 +71,16 @@ not the coordinator, owns whether an update should exist:
   `matchPackageNames … "enabled": false` rule, or an `allowedVersions`/`matchCurrentVersion` pin. That is
   the coordinator's (or human's) "don't do this bump" verb for Renovate PRs.
 
-Until coordinator ticking is automated (run interactively today, and the changes-requested→worker
-transition isn't built yet), a reviewer-rejected Renovate PR simply **parks** — open, changes-requested,
+The coordinator loop runs in-cluster, unsuspended since 2026-07-28 (`reflexes-argo.yaml`), but the
+changes-requested→worker transition isn't built yet, so a reviewer-rejected Renovate PR simply **parks** — open, changes-requested,
 auto-merge hard-blocked. Safe: no duplication, no churn, nothing auto-acts on it.
 
 ## Gotchas encountered
 
 - **`@latest` devbox/nix pins are un-trackable** → Renovate mis-resolves them (it once proposed
   downgrading gitleaks to a dead 5-yr-old release). The `nix`/`devbox` manager is **disabled**; devbox
-  updates are owned instead by the weekly **`devbox-update`** job (**FU-022**), which keeps `@latest` but
+  updates are owned instead by the weekly **`devbox-update`** job (`scripts/devbox-update.sh` /
+  `.github/workflows/devbox-update.yaml`), which keeps `@latest` but
   re-resolves *all* repos' locks in one pass so the shared toolchain aligns (nix cache + agent-base bake
   hits) — alignment a per-repo Renovate bump can't give.
 - **Don't double-manage Docker digests** — the built-in `dockerfile` manager already updates

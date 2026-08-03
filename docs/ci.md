@@ -49,7 +49,8 @@ test-chart` = helm-unittest; `devbox run scan-secrets` = gitleaks. The workflow 
   snore-recorder's **arm64** image — the Talos node kernel has no `binfmt_misc`, so QEMU emulation
   fails. arm64 images build **off-cluster** via `devbox run build-image` on a binfmt-capable host.
 
-Open items: FU-015 (custom runner image + LAN substituter), FU-014 (Renovate) — `docs/follow-ups.md`.
+Dependency automation status lives in `docs/dependency-upgrades.md` §Ground truth (FU-125 —
+Renovate currently delivering zero PRs).
 
 ## Tier B — act_runner (Forgejo-only)
 
@@ -149,17 +150,22 @@ Workflows go straight to `devbox run <task>` — no install steps at all:
 - run: devbox run ci     # nix + devbox + warm store are in the runner image
 ```
 
+The image build now uses buildx registry layer-cache with one layer per repo closure + a ci-gate
+mirror pre-warm on pin PRs (2026-08-03) — mechanism in `.github/workflows/runner-image.yaml` +
+`docker/arc-runner/Dockerfile` comments.
+
 `cachix/install-nix-action` is a 0s no-op on the baked image (it detects existing nix), so
 unmigrated workflows keep working — slimming is a speedup, never a flag-day.
 
 **Measured** (2026-07-25): homelab `ci` 180-210s → **38s**; oracle-fleet `ci` 610s (454s of it
-toolchain install) → **~290-300s**. Decomposition of the warm job (16:33Z run): 94s devbox
+toolchain install) → **127s**. Decomposition of the warm job (16:33Z run): 94s devbox
 `ensure-packages` — nix profile REALIZATION, CPU-bound; the store paths are baked, homelab's
 smaller closure realizes in 28s — then ~12s gates+uv, 87s pytest, 87s evidence/specs-site S3
-publish. Shrinking realization further means baking per-repo `.devbox` project state; parked
-(FU-015 residual = renovate-tracking the image pins). The dind
+publish. Realization shrank by baking the eval cache into the image too (the Dockerfile keeps
+`~/.cache/{nix,devbox}`, 2026-07-25): `ensure-packages` 94s → **5s**. The dind
 sidecar is owned in `arc-runners.yaml` too (the chart appends rather than merges initContainers):
-pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-through VIP (FU-073c).
+pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-through VIP
+(`argocd/resources/registry-cache/`).
 
 ### Trade-offs
 
@@ -176,6 +182,7 @@ pinned `docker:dind` + `--registry-mirror` → the ADR-091 docker.io pull-throug
 **Direction (realized 2026-07-25, FU-015):** the custom warm runner image is the live default —
 per-job apt and cold-start are gone (numbers above). The **Proxmox VM runner** (ADR-082,
 `tofu/ci-runner.tf`) carries the jobs a container can't (binfmt/arm64, full-VM kind gates; its
-dockerd also rides the docker.io mirror via cloud-init `daemon.json`, FU-073b); `ubuntu-latest`
+dockerd also rides the docker.io mirror via cloud-init `daemon.json`, ADR-091 /
+`argocd/resources/registry-cache/`); `ubuntu-latest`
 remains the zero-infra escape hatch — and deliberately builds the runner image itself
 (bootstrap: the image must not depend on the fleet it provisions).
