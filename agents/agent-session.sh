@@ -951,8 +951,14 @@ if [ -n "$RUN_CMD" ]; then
     ARMED_BY_POD="$(printf '%s' "$STATS" | jq -r '.armed_by_pod // false' 2>/dev/null)"
     COMMENT_BY_POD="$(printf '%s' "$STATS" | jq -r '.stats_comment_by_pod // false' 2>/dev/null)"
     STRIKE_BY_POD="$(printf '%s' "$STATS" | jq -r '.strike_by_pod // false' 2>/dev/null)"
-    if [ "$ARMED_BY_POD" = "true" ] && [ "$COMMENT_BY_POD" = "true" ]; then
-      echo "→ PR bookkeeping done in-pod (armed + stats comment) — launcher fallback skipped"
+    # --no-arm rides (research, FU-105/FU-126): "not armed" IS the desired end state — the pod's
+    # armed_by_pod=false is BY DESIGN, not an in-pod failure, and must never trip this fallback.
+    # Observed live 2026-08-03: the circles fan-out's research PRs #2/#3 were armed by this leg
+    # (defeating the human gate, hand-disarmed) and got double stats comments.
+    ARM_SATISFIED="$ARMED_BY_POD"
+    [ -n "${NO_ARM:-}" ] && ARM_SATISFIED="true"
+    if [ "$ARM_SATISFIED" = "true" ] && [ "$COMMENT_BY_POD" = "true" ]; then
+      echo "→ PR bookkeeping done in-pod (armed-or-no-arm + stats comment) — launcher fallback skipped"
       PR_BOOKKEEPING_DONE=1
     else
       PR_BOOKKEEPING_DONE=""
@@ -963,8 +969,12 @@ if [ -n "$RUN_CMD" ]; then
       # current, the review reflex only reviews armed PRs, and GitHub completes an armed PR the moment
       # approval + CI land. An un-armed PR is invisible to all of it and stalls. Squash keeps master linear
       # (matches the reviewer-session.sh header + repos.tf squash config). Idempotent — re-arming is a no-op.
-      echo "→ arming auto-merge (squash) on ${PR_URL}"
-      gh pr merge "$PR_URL" --auto --squash 2>&1 | tail -1 || echo "  (arm failed — non-fatal; coordinator re-arms in step 6)"
+      if [ -n "${NO_ARM:-}" ]; then
+        echo "→ arming SKIPPED (--no-arm — human-gated PR; comment fallback only)"
+      else
+        echo "→ arming auto-merge (squash) on ${PR_URL}"
+        gh pr merge "$PR_URL" --auto --squash 2>&1 | tail -1 || echo "  (arm failed — non-fatal; coordinator re-arms in step 6)"
+      fi
       GRAFANA_URL="${GRAFANA_URL:-https://grafana.teststuff.net}"
       PANES="$(jq -cn --arg pod "$POD" '{ag:{datasource:"loki",queries:[{refId:"A",expr:("{pod=\""+$pod+"\"}"),datasource:{type:"loki",uid:"loki"}}],range:{from:"now-6h",to:"now"}}}')"
       LOGS_URL="${GRAFANA_URL}/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$PANES" '$p|@uri')"
