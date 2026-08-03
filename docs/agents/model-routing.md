@@ -29,7 +29,7 @@ Bearer <key>` everywhere; "probed" = verified against our account, with date.
 | `GET /api/v1/generation?id=` | billed `total_cost` + native tokens + provider per request | same session key works; feeds `router_observed_cache_hit` |
 | `GET /api/v1/activity` | account-wide usage | **management-key only** — not worth holding one in-cluster (FU-095 backfill idea parked) |
 | frontend `/api/frontend/v1/benchmarks` | model quality scores | **session-cookie-gated, API key 401s** (2026-08-02) — see MCP row |
-| MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`** | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). `list-benchmarks` is the un-gated path to the M8 capability feed |
+| MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`**, `get-endpoint-uptime-history`, `list-presets`/`get-preset` | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). Probed 2026-08-03 (OAuth): `list-benchmarks` sources = `artificial-analysis` (AA intelligence/coding/agentic composite indices, ~126 models) **and `openrouter` — OpenRouter's OWN evals (gpqa_diamond accuracy + $/task), i.e. the formerly session-gated frontend data**; `list-task-classifications` = 7d traffic share per task tag (incl. `code:devops_config`, `devops`, `security_audit`, `research_report`) with top-10 models each; `get-endpoint-uptime-history` = 72h hourly per-provider uptime **with quantization in the endpoint label** (fp8/fp4 — the §M4 staleness/quant filter's data). **Probed 2026-08-03: the standard account key pulls `list-benchmarks` AND `list-task-classifications`** (jail replay of the proxy's exact `_mcp_call` shape with the `router-account-key` Secret) — the scout's weekly capability/market pull is fully automatable server-side; OAuth is only needed for the interactive/billable tools |
 | provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | scout canary keys ride this with `only-free` guardrail (FU-024) |
 
 **No "top weekly / rising" view exists upstream for us**: daily popularity comes from the MCP
@@ -219,6 +219,19 @@ OpenRouter's own benchmark data (`/api/frontend/v1/benchmarks?permaslug=`) is **
 Artificial Analysis API (documented, free key — an operator mint) or a **curated snapshot in
 `model-classes.json`** refreshed by the weekly scout digest (start here: capability changes per
 release, not per day, and graduation-stays-human already reviews that digest).
+**Un-gated 2026-08-03 (MCP probe): the source question is closed.** MCP `list-benchmarks`
+serves both the AA composite indices (`intelligence_index`/`coding_index`/`agentic_index` per
+model — the IFBench/τ²-Bench/GPQA proxies are folded inside AA's composites, so the axis
+mapping simplifies: coding_index → coding floor, agentic_index → tool-loop floor,
+intelligence_index → research tier) *and* OpenRouter's own evals (gpqa_diamond accuracy +
+measured $/task — a research-tier floor AND a cost sanity check in one row). The curated
+snapshot stays as the delivery vehicle: the weekly scout pulls via MCP into
+`model-classes.json`; nothing reads benchmarks in the data plane. A fourth, cheaper prior from
+the same probe: `list-task-classifications` gives 7-day market share per task tag with each
+tag's top-10 models — `code:devops_config`/`devops` is a ready-made market prior for the
+iac-lane chain (and it surfaces `:free` models with real production usage in the class, e.g.
+`nemotron-3-ultra-550b:free` and `ling-3.0-flash:free` in devops/coding tags — rotation
+candidates the new-model diff missed).
 
 **Latency is an ordering dimension, not just price (operator + field evidence, 2026-08-02).**
 The free tier makes this acute: every `:free` model prices at $0, so the whole free set lands in
