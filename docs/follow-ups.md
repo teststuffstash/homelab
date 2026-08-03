@@ -267,10 +267,11 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2. Cron
       exists (`agents/coordinator/retro-argo.yaml`, **born SUSPENDED** — Mon 05:00 declared,
       hand-fired via `argo submit --from` until proven).
-      **Remaining:** (1) run 3 (the swapped-cell cross-review) hand-supervised; (2) fix the ledger
-      emitter gaps brief-v2(b) named — they, not tool access, are why reports say "could not
-      verify"; (3) MCP transcript slices; (4) act on the reports' queued-issue candidates;
-      (5) unsuspend after clean runs. Absorbs FU-057's residue: ledger-reflex consuming `key_hash`
+      **(5) UNSUSPENDED 2026-08-03 (operator ruling)** — the cron self-fires Mondays 05:00 now.
+      **Remaining:** (1) run 3 (the swapped-cell cross-review) — next Monday's fire IS it, watch
+      it; (2) fix the ledger emitter gaps brief-v2(b) named — they, not tool access, are why
+      reports say "could not verify"; (3) MCP transcript slices; (4) act on the reports'
+      queued-issue candidates. Absorbs FU-057's residue: ledger-reflex consuming `key_hash`
       for the OpenRouter activity-API per-request backfill. Relates FU-095.
 
 - [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags

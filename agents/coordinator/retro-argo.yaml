@@ -1,7 +1,7 @@
 # FU-058 P3: the scheduled retro session as an Argo CronWorkflow — sibling of the reflexes
-# (reflexes-argo.yaml), BORN SUSPENDED: the schedule is declared, every run is hand-fired
+# (reflexes-argo.yaml). Born suspended 2026-07; UNSUSPENDED 2026-08-03 (operator, FU-058) after
+# the hand-fired runs proved clean — Mondays 05:00 UTC on its own. Manual fire stays available:
 #   argo -n agent-coordinator submit --from cronworkflow/retro-session
-# until a couple of clean runs earn the unsuspend (the hand-supervised doctrine).
 #
 # Shape (run-3, docs/agents/retros/BRIEF.md is the spec): guard → assemble → cell A (claude+opus,
 # subscription, FU-088 semaphore) → cell B (goose+API model) → harvest→PR. Sequential cells: the
@@ -20,7 +20,7 @@ metadata:
 spec:
   schedules:
     - "0 5 * * 1" # Mondays 05:00 UTC — off-peak, after the 03:00 devbox-update, before the day's queue
-  suspend: true # FU-058: hand-fired until proven; unsuspend is an operator decision
+  suspend: false # unsuspended 2026-08-03 (operator, FU-058 — proven via hand-fired runs 1+2)
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:
