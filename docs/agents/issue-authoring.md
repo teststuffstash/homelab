@@ -98,12 +98,25 @@ BAR** (inert / not-a-gap / won't-fix / style stay comments, never `Follow-ups:`)
 
 **Next rung = the structured sub-issue lineage** — the index everything else keys off.
 
+## Touches: the declared footprint (ADR-097, 2026-08-03)
+
+Every authored agent issue carries a **`Touches:`** body line — the expected write surface as
+comma-separated paths/globs (`Touches: chassis/**, pyproject.toml`), same unbulleted body-line
+grammar as `Depends-on:`. This is where lane knowledge lives now: the authoring LLM judges the
+footprint ONCE, reviewably, at creation (sprouts inherit the parent's line and narrow it);
+the scan enforces overlap deterministically at dispatch
+([workflow.md](workflow.md) §Footprint hold). **Omitting the line is safe and means
+exclusive** — the issue conflicts with everything, i.e. classic WIP=1. `track/*` labels stay
+as reporting decor only; the TRACKS path table documents ownership norms but no longer feeds
+the scheduler. A worker discovering mid-ride that it needs paths outside its declaration files
+a new issue for the owning concern (TRACKS rule 2), and the reviewer flags escaped diffs.
+
 ## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
 
 Authoring a dependency = **create the native edge** (verified live: create, cross-repo, list-ride
 all work — `gh api -X POST repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by -F
 issue_id=<the BLOCKER's numeric id>`) **and keep the `Depends-on:` body line** during the
-transition (unbulleted — a markdown bullet slips the scan regex). The scan reads the UNION of
+transition (the merged-closeout play instructs both since 2026-08-03 — the FU-111 authoring flip) (unbulleted — a markdown bullet slips the scan regex). The scan reads the UNION of
 both (same probe path), so either alone gates correctly; the body-line reader retires once
 native edges are observed flowing under the App token in scan logs (the one leg a jail probe
 cannot verify — FU-108's lesson applied).

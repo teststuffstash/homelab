@@ -31,6 +31,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ORG="${ORG:-teststuffstash}"
 STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
+# ADR-097 footprint-intersection dispatch: the predicate lives in a sourceable helper so the
+# double-dispatch belt (agents/footprint-test.sh, in ci) exercises the exact code the scan runs.
+. "${HERE}/footprint.sh"
+# Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
+# (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
+REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
 # kubectl for the v2 (C4/C5) predicate — same resolution as agent-session.sh: jail → tofu/kubeconfig;
 # in-cluster (the coordinator-reflex CronJob) → the pod ServiceAccount (KUBE empty).
@@ -124,7 +131,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   # mainRepo is stack POLICY (the coordinator's cwd) — default homelab for stacks whose
   # deploy/agent knowledge still lives in homelab docs.
   mainrepo="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
-  items=""; orphans=""; units=""; punits=""
+  items=""; orphans=""; units=""; punits=""; wipmap=""
   # ADR-094 dispatchability: repos with a fixer block (from the claim; null = unknown → permissive)
   fixer_repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|(.fixerRepos // ["__ALL__"])[]' | tr '\n' ' ')"
   for repo in $repos; do
@@ -146,25 +153,36 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
-    # In-progress issues once per repo — the C4/C5 clause below AND the ADR-094 lane predicate
-    # (`track/*` labels = the human-declared independence assertion; ≤1 in flight per lane) read it.
+    # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
+    # predicate (declared `Touches:` body lines; no line = exclusive `*`) read it.
     # NB agent/error stays IN this fetch (an error-flagged in-progress issue still holds its
-    # lane — a human is on it) but is excluded from the C4/C5 clause below: FU-069 makes it
+    # footprint — a human is on it) but is excluded from the C4/C5 clause below: FU-069 makes it
     # invisible to every ACTIONABLE clause (missed on the first item-mode cut — two workers were
     # dispatched INTO a breaker-flagged issue 2026-07-21 before the breaker was cleared).
-    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels \
+    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
-    busy_tracks="$(printf '%s' "$inprog" | jq -r '.[].labels[].name | select(startswith("track/"))' | sort -u | tr '\n' ' ')"
-    # ADR-094 project-WIP predicate (found live meta-8: two dispatchers raced #52 inside one scan
-    # window; 2026-07-21 #55: two CRON ticks raced through the phase=Running filter while a kata
-    # pod sat Pending — so the probe counts everything non-terminal): a live worker in the repo
-    # ns HOLDS this repo's queued-dispatch units — the
-    # launcher's WIP=1 pre-flight would refuse the spawn anyway; better to never wake the session.
-    # Probe-first: a FAILED pod probe leaves the units flowing (the launcher refusal is the belt).
+    # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
+    # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
+    busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
+      | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
+      | if . == "" then "*" else . end')"
+    # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
+    # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest 2>/dev/null)" || prsjson='[]'
+    jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
+    open_prs="$(jq length <<<"$prsjson")"
+    # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
+    # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
+    # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
+    # live-pod COUNT feeds the ceiling (hold everything at ≥ REPO_MAX_WIP) and the AGENT_WIP_LIMIT
+    # the dispatch passes down (live+1 — the launcher pre-flight belt matches the raise, and a
+    # stale count only ever DEFERS: the belt refuses, the next scan recomputes).
+    # Probe-first: a FAILED pod probe leaves the units flowing at wip_allow=1 (belt-only — the
+    # parallel raise NEVER rides a dead probe; rule #6).
     # Fixerless (context-only) repos never run workers and have no ns RBAC — probing them is a
     # guaranteed per-tick FAILED warning (snore-recorder, 2026-08-02), so skip, don't probe.
-    wip_busy=""
+    wip_busy=""; wip_allow=1
     if [ -z "$dispatchable" ]; then
       :
     elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
@@ -189,11 +207,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       live="$(printf '%s' "$WIPPODS_JSON" | jq -r '[.items[]
           | select(([.status.containerStatuses[]? | select(.name == "agent") | .state.terminated
                      | select(. != null)] | length) == 0)] | length')"
-      [ "${live:-0}" -gt 0 ] 2>/dev/null && wip_busy=1
+      case "${live:-}" in ''|*[!0-9]*) live=0;; esac
+      if [ "$live" -ge "$REPO_MAX_WIP" ]; then
+        wip_busy=1
+      else
+        wip_allow=$((live + 1))
+      fi
     else
       # Rule #6: a dead probe must not read as calm — the launcher belt still refuses, but say so.
-      echo "  [$repo] ⚠ WIP pod probe FAILED (kubectl error) — units flow, launcher belt only"
+      echo "  [$repo] ⚠ WIP pod probe FAILED (kubectl error) — units flow at wip=1, launcher belt only"
     fi
+    # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
+    # stack-pooled there, so carry the per-repo value out of the loop).
+    wipmap="${wipmap}${repo} ${wip_allow}\n"
     # COMPLETED-POD JANITOR (2026-07-22 — the #41/#63 scratch-pool exhaustion): a Completed ride
     # pod pins its GENERIC EPHEMERAL docker-lib PVC (20Gi longhorn-scratch each) until the POD
     # object is deleted — 8 kept-for-reading pods held ~160Gi, the pool filled, and every new
@@ -229,11 +255,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtracks qdeps qpin qclass; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
-      [ "$qtracks" = "-" ] && qtracks=""
+      # ADR-097: "-" = no Touches: line = exclusive footprint (`*` conflicts with everything —
+      # legacy issues keep WIP=1 semantics without backfill).
+      [ "$qtouches" = "-" ] && qtouches="*"
       [ "$qdeps" = "-" ] && qdeps=""
       blocked=""; stale=""
       for dep in $(printf '%s' "$qdeps" | tr ',' ' '); do
@@ -265,16 +293,23 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         orphans="${orphans}[$repo] ⚠ queued but NOT dispatchable (no fixer block — context-only repo; jail work):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
-      lane_busy=""
-      for t in $(printf '%s' "$qtracks" | tr ',' ' '); do
-        case " $busy_tracks" in *" $t "*) lane_busy="$t";; esac
-      done
-      if [ -n "$lane_busy" ]; then
-        orphans="${orphans}[$repo] ⏳ lane busy (ADR-094: ≤1 in flight per track):\n  issue #${qnum} — ${qtitle} (lane ${lane_busy} has an in-progress issue)\n"
+      # ADR-097 footprint hold (supersedes the track-label lane hold): a queued unit is held iff
+      # its declared footprint intersects ANY in-progress issue's footprint. Undeclared (`*`)
+      # conflicts with everything, so a repo with any in-progress work keeps WIP=1 for legacy
+      # issues; disjoint declared footprints dispatch in parallel (launcher limit rides wipmap).
+      if fp_conflict_multi "$qtouches" "$(printf '%b' "$busy_fps")"; then
+        orphans="${orphans}[$repo] ⏳ footprint held (ADR-097: overlaps an in-progress issue's Touches):\n  issue #${qnum} — ${qtitle} (declared: ${qtouches})\n"
         continue
       fi
       if [ -n "$wip_busy" ]; then
-        orphans="${orphans}[$repo] ⏳ project WIP busy (a worker is Running in ${repo} — launcher WIP=1):\n  issue #${qnum} — ${qtitle}\n"
+        orphans="${orphans}[$repo] ⏳ project WIP at ceiling (${REPO_MAX_WIP} live workers in ${repo} — ADR-097 hard max):\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP open PRs — the
+      # updater reflex rebases every open PR on every merge (churn is O(open PRs × merges)).
+      # In-flight recovery clauses (c4c5, merge-conflict, …) are exempt: they REDUCE the count.
+      if [ "${open_prs:-0}" -ge "$REPO_PR_CAP" ]; then
+        orphans="${orphans}[$repo] ⏳ PR budget (${open_prs} open ≥ cap ${REPO_PR_CAP} — TRACKS rule 1, updater churn):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
       if [ -n "$stale" ]; then
@@ -292,7 +327,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
       fi
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, ([.labels[].name | select(startswith("track/"))] | join(",") | if . == "" then "-" else . end), ((([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten)
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ((([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten)
              + [((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"])
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
@@ -311,8 +346,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     [ -n "$errs" ] && orphans="${orphans}[$repo] ⚠ agent/error (anomaly breaker, FU-069) — human-first, NOT dispatched:\n${errs}\n"
     # `major` is now set on Renovate majors too (renovate-global.json), so gate the major clause on
     # UN-ARMED — an armed PR is the review reflex's, never the coordinator's (arming is the boundary).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest 2>/dev/null)" || prsjson='[]'
-    jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
+    # (prsjson fetched ABOVE the queued loop since ADR-097 — the open-PR cap reads it first.)
     prs="$(printf '%s' "$prsjson" | jq -r '[.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and ((($L|index("major")) and (.autoMergeRequest==null)) or ($L|index("merge-conflict")) or (.reviewDecision=="CHANGES_REQUESTED")))|"  PR #\(.number) — \(.title)"]|.[]')"
     # FU-124: an ARMED PR stuck BEHIND relies on GitHub's cron sweeper as its sole updater
     # trigger for the LAST open PR, and GitHub drops scheduled runs (sleep#100 hung ~1h).
@@ -607,11 +641,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
-    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}, model ${cmodel})…"
+    # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
+    # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
+    uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
+    case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
+    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} \
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" \
       --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}"
   else
     echo "  run it (interactive, supervised):"

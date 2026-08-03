@@ -1162,3 +1162,26 @@ Surfaces: `router_decisions_total`, `router_cooldowns_active`, cooldowns + decis
 `/router-status`. Verified: 11-check jail sim of the full
 429→cooldown→paid-fallback→half-open-re-pick→2xx-clear→escalated-re-trip cycle through the
 real data plane; live entry = the sleep free-first chain test (claim reorder, same date).
+
+### ADR-097 — Dispatch parallelism keys on declared footprints, not track labels
+
+**Accepted 2026-08-03.** Closes FU-086 knob 3's design question. **Decision:** per-repo worker
+parallelism is bounded by **footprint intersection**: every agent issue declares its expected
+write surface as a machine-readable `Touches:` body line (paths/globs), authored ONCE at issue
+creation by the authoring LLM (FU-090 contract, [issue-authoring.md](agents/issue-authoring.md));
+the deterministic scan holds a queued unit iff its declared footprint intersects any in-progress
+issue's footprint ([workflow.md](agents/workflow.md) §Footprint hold). **An undeclared footprint
+is exclusive** — it conflicts with everything, preserving WIP=1 semantics for legacy issues; the
+scan raises `AGENT_WIP_LIMIT` per extra dispatch, capped repo-wide alongside the ≤3-open-PR
+updater-churn bound (oracle-fleet TRACKS rule 1). `track/*` labels demote to reporting decor;
+the TRACKS path table becomes documentation of ownership norms, not the scheduler's input.
+**Considered:** per-lane label counting (the original knob 3 — rejected: hand-maintained
+ownership tables drift, conflicts aren't always path-shaped, and oracle already granted lane
+parallelism 2026-07-10 that the binary hold ignored); LLM-computed conflict sets at dispatch
+time (rejected: ADR-094's line — scheduling stays deterministic prose-free bash; a per-tick
+judgment re-opens the issue-96 burn class and downgrades miscounts from wasted-session to
+same-lane double-dispatch); optimistic dispatch + arbitration (rejected: rebase churn is
+O(open PRs × merges), priced by TRACKS rule 1). **Consequences:** ordering (native blockedBy,
+FU-111) ∧ conflicts (footprints) ∧ burn (FU-088 semaphore) are all deterministic at dispatch;
+judgment happens once, at authoring, where it is reviewable. A worker escaping its declared
+footprint is the residual risk — the reviewer flags escapes (belt, FU-086). Builds: FU-086.

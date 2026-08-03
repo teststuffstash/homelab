@@ -149,6 +149,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       blocks); authoring guidance updated (issue-authoring.md §Dependencies). **Remaining:**
       observe native edges under the APP token in live scan logs (the jail cannot mint that
       token — FU-108's probe-that-looks lesson), then retire the body-line reader + lines.
+      **Authoring FLIPPED 2026-08-03**: the merged-closeout play now creates the native edge
+      alongside the body line (failed create = noted in the closing comment for this soak).
+      Remaining: observe native edges flowing under the App token in scan logs → retire.
       Relates FU-086, FU-087/FU-110 (archived), FU-090.
 
 
@@ -209,10 +212,12 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       the scan's scheduling predicates and the unit taxonomy live there and in
       [`docs/agents/workflow.md`](agents/workflow.md).
       **Still open:** (1) the FU-085 compound — the Sensor submits item units directly and the cron
-      sweep emits only MISSED units; (3) lift WIP>1 for lane-parallel dispatch (the FU-088
-      capacity gates are in — held back 2026-08-02: interacts with the wip_busy hold, the #55
-      double-dispatch class; wants operator appetite); (4) demote the janitor tick to its own
+      sweep emits only MISSED units; (4) demote the janitor tick to its own
       ~daily report-only cron (under-specified — which judgment sweeps exactly?).
+      **(3) SHIPPED 2026-08-03 as ADR-097 footprint dispatch** (supersedes lane labels:
+      `Touches:` intersection hold + wipmap→`--wip`→`AGENT_WIP_LIMIT`, undeclared=exclusive,
+      PR-cap + REPO_MAX_WIP ceilings, `footprint-test` ci belt; live-verified report-mode.
+      Residual: reviewer escape-flag rubric case — with the FU-111 retirement soak).
       **(2) DONE 2026-08-02:** cron relaxed `*/10 → */30` in the Composition (edge-primary,
       cron = 30min staleness bound); meta-watch stall clause moved 25→40min to match.
       Relates FU-050, FU-085, ADR-094, oracle-fleet `specs/TRACKS.md`.
@@ -243,7 +248,9 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       sub-issues over alternatives — semantics-not-decorations; API round-trip verified live):
       the merged-closeout play now links each harvested issue as a native sub-issue of the
       ORIGINATING issue (PR provenance stays in the body; failed link = non-fatal + noted) with
-      a ⚠ deep-sprout flag when harvesting at depth ≥2. **Next rungs:** the exporter sprout-RATE
+      a ⚠ deep-sprout flag when harvesting at depth ≥2. **Authoring contract grew `Touches:`
+      2026-08-03 (ADR-097)** — the declared footprint the FU-086 parallel dispatch keys on.
+      **Next rungs:** the exporter sprout-RATE
       gauge (walk `parent`/sub_issues on the FU-108 GraphQL walk) + the depth-aware harvest gate
       reading it. **Deferred by the operator:** leg (c) goal-budget decomposition, and the
       `issueAuthoring.selfQueue` graduation knob.

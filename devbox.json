@@ -141,6 +141,9 @@
       "merge-path-lint": [
         "python3 scripts/merge-path-lint.py \"$@\""
       ],
+      "footprint-test": [
+        "bash agents/footprint-test.sh"
+      ],
       "github-apps-lint": [
         "python3 scripts/github-apps-lint.py"
       ],

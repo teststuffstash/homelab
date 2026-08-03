@@ -42,7 +42,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 ORG="${ORG:-teststuffstash}"   # org the stack repos live under (for `gh repo clone <org>/<repo>`)
 while [ $# -gt 0 ]; do
@@ -50,6 +50,7 @@ while [ $# -gt 0 ]; do
     --run)             RUN_CMD="$2"; shift 2;;
     --run-tick)        RUN_CMD="$TICK_PROMPT"; shift;;   # headless one tick (the reflex's call)
     --item)            ITEM="$2"; shift 2;;               # ADR-094/FU-086: reconcile ONE unit — "<repo> <issue-N|pr-N> <clause>"
+    --wip)             WIP_LIMIT="$2"; shift 2;;          # ADR-097: launcher-owned AGENT_WIP_LIMIT for this item's repo (scan-computed, never LLM-assembled)
     --loop-ns)         LOOP_NS_ARG="$2"; shift 2;;        # FU-080 perStack: run the tick pod in <stack>-agents as agentstack-loop; git creds fetched per-op from the proxy's TokenReview-gated /loop-git-token (no Secrets in that ns)
     --tick)            SEED="$TICK_PROMPT"; shift;;       # interactive, seeded with the canonical prompt
     --seed)            SEED="$2"; shift 2;;               # interactive, seeded with your prompt
@@ -226,6 +227,11 @@ spec:
           value: "${STACK_REPOS}"
         - name: MAIN_REPO
           value: "${MAIN_REPO}"
+        # ADR-097: the scan-computed worker-parallelism allowance for this item's repo. The
+        # session's agent-session.sh invocations inherit it (its WIP pre-flight reads this env),
+        # so the raise stays launcher-owned end-to-end — the LLM never assembles the number.
+        - name: AGENT_WIP_LIMIT
+          value: "${WIP_LIMIT}"
         # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
         - name: MODEL
           value: "${MODEL}"

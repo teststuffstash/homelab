@@ -194,6 +194,30 @@ End state: the whole loop is edge-driven — queued issue → tick → worker �
 → verdict → coordinator Sensor → round N+1 → merge — with cron sweeping behind as the
 level-triggered backstop.
 
+### Footprint hold — parallel dispatch without lanes (ADR-097, design 2026-08-03)
+
+Supersedes per-lane label counting as the write-conflict guard. The scan's dispatchability
+predicate gains footprint intersection in place of `lane-free`:
+
+- **Declared footprint** = the issue's machine-readable `Touches:` body line (paths/globs,
+  comma-separated; same body-line grammar as `Depends-on:`), authored once at issue creation
+  ([issue-authoring.md](issue-authoring.md) §Touches). **No line = exclusive**: an undeclared
+  issue conflicts with everything in its repo — legacy issues keep WIP=1 semantics, and the
+  migration needs no backfill.
+- **The hold**: a queued unit is held iff its footprint intersects the footprint of ANY
+  `agent/in-progress` issue in the repo. Intersection is prefix-overlap on normalized entries
+  (`chassis/**` ∩ `chassis/api.py` = conflict) — set logic in the scan, zero tokens, testable.
+  Live footprints come from the in-progress ISSUES (the scan already lists them for the old
+  lane hold); the `wip_busy` pod probe stays as the liveness belt underneath, now counting
+  against the raised limit rather than 1.
+- **Ceilings stack**: scan sets `AGENT_WIP_LIMIT` = concurrent dispatches (launcher pre-flight
+  belt matches); hard per-repo max (default 3) and the ≤3-open-PR bound (updater churn is
+  O(open PRs × merges) — oracle TRACKS rule 1) hold regardless of footprints; FU-088 capacity
+  semaphore caps globally.
+- **Residual risk**: a worker escaping its declaration. Belt: the reviewer flags diff paths
+  outside the issue's `Touches:` (a narrow-blocking case, reviewer rubric); TRACKS rule 2 still
+  routes shared-file work through its owning concern as a separate issue.
+
 ### Hazards to bake in from day one
 
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns

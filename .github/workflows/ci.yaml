@@ -32,6 +32,10 @@ jobs:
         run: devbox run agents-registration-lint
       - name: Merge-path FSM model matches code (devbox run merge-path-lint)
         run: devbox run merge-path-lint
+      # ADR-097 double-dispatch belt: the footprint predicate the scan sources, under synthetic
+      # rules — a predicate bug must fail HERE, not double-dispatch two workers into one lane.
+      - name: Footprint-intersection predicate rules (devbox run footprint-test)
+        run: devbox run footprint-test
       - name: GitHub App mint sites ⊆ declared permissions (FU-098)
         run: devbox run github-apps-lint
       # ADR-096 router: DB round-trip + model-classes.json parse/threshold sanity — the same

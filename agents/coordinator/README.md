@@ -354,7 +354,20 @@ job, in order (re-read live state first, exit clean if someone already closed it
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
    (`Harvested from PR #N review (issue #M)`), any `track/*` label inherited from the source
-   issue, and a `Depends-on:` body line only if the bullet states one. **INERT by loop-safety
+   issue (reporting decor only since ADR-097 — the scheduler no longer reads it).
+   **The body carries two machine-readable lines (both unbulleted — a markdown bullet slips
+   the scan regex):**
+   - **`Touches:`** (ADR-097, docs/agents/issue-authoring.md §Touches) — your judged write
+     surface for the fix, as comma-separated path prefixes/globs, STARTING from the parent
+     issue's own `Touches:` narrowed to what this follow-up actually needs. Judge it from the
+     merged diff + the bullet; when honestly unsure, OMIT the line — omitted means exclusive
+     (safe, just serial), a wrong narrow line risks two workers in one file.
+   - **`Depends-on:`** only if the bullet states one — AND create the native edge in the same
+     breath (FU-111: `gh api -X POST repos/<slug>/issues/<harvested-N>/dependencies/blocked_by
+     -F issue_id=<the BLOCKER's numeric .id>`); the body line stays during the transition, the
+     scan reads the union. A failed edge-create is non-fatal (the body line still gates) —
+     note it in the closing comment so the FU-111 retirement soak sees it.
+   **INERT by loop-safety
    breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
    for human triage (the claim's `issueAuthoring.selfQueue` knob is the graduation, not yours).
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
