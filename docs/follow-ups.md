@@ -291,7 +291,7 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       (P1–P3+P5 + cooldowns live).
       **Next:** the P4 authoritative flip after the shadow soak — evidence comes from the
       `circles` CHAINLESS pilot (ruled 2026-08-03: no workerModel, routerMode authoritative;
-      plan in therapy others-view-plan.md). **Open:** legs (b)+(c) unstarted.
+      plan in the life repo's others-view-plan.md). **Open:** legs (b)+(c) unstarted.
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
