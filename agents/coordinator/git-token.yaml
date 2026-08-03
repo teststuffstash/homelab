@@ -68,6 +68,7 @@ spec:
     - agent-coordinator      # ditto — trailing comments only, the lint parser stops at non-item lines
     - allure-behavior-snippets # oracle stack context-only; Apps installed 2026-07-16
     - circles                # added 2026-08-03: circles stack (homelab-agents App covers it — verified on exporter /apps)
+    - circles-iac            # ditto (install extended 2026-08-03 — the -iac issue lane needs coordinator labels)
 ---
 # 3) Drive the generator → write the Secret the coordinator pod reads as GH_TOKEN. The generator
 # yields key `token`; remap it to GH_TOKEN (what coordinator-session.sh's secretKeyRef expects).

@@ -154,8 +154,15 @@ if [ -n "${RECIPE:-}" ]; then
   case "$HARNESS" in claude|goose) ;; *) echo "FATAL: --recipe supports the claude/goose harnesses (got '${HARNESS}'); opencode uses --run" >&2; exit 2;; esac
   [ -f "$RECIPE" ] || { echo "FATAL: --recipe ${RECIPE} not found (pass the dispatcher-side clone's path)" >&2; exit 2; }
   [ -z "$RUN_CMD" ] || { echo "--recipe and --run are mutually exclusive" >&2; exit 2; }
-  ISSUE_N="${TASK#issue-}"
-  case "$ISSUE_N" in ''|*[!0-9]*) echo "FATAL: --recipe needs --task issue-<N> (got '${TASK}')" >&2; exit 2;; esac
+  # Task key → issue number. `issue-<N>` is the fixer shape; `research-<N>-<slug>` is the
+  # FU-126 fan-out shape (per-model adhoc keys — no strike bookkeeping, no issue-* atomic gate;
+  # the finalize strike path already matches issue-* only).
+  case "$TASK" in
+    issue-*)    ISSUE_N="${TASK#issue-}";;
+    research-*) ISSUE_N="${TASK#research-}"; ISSUE_N="${ISSUE_N%%-*}";;
+    *)          ISSUE_N="";;
+  esac
+  case "$ISSUE_N" in ''|*[!0-9]*) echo "FATAL: --recipe needs --task issue-<N> or research-<N>-<slug> (got '${TASK}')" >&2; exit 2;; esac
   # A research recipe's PR is human-gated BY DESIGN (FU-105) — derive --no-arm from the recipe
   # name so the un-armed gate is launcher-owned, never a dispatcher memory test (ADR-094; the
   # first live ride was armed by finalize right past the recipe's "do not arm").

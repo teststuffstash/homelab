@@ -60,6 +60,7 @@ spec:
     - agent-coordinator      # SUBMIT — App installed, token not scoped here
     - allure-behavior-snippets # oracle stack context-only; Apps installed 2026-07-16
     - circles                # added 2026-08-03: circles stack (homelab-reviewer App covers it — verified on exporter /apps)
+    - circles-iac            # ditto (install extended 2026-08-03 — the -iac issue lane needs coordinator labels)
 ---
 # 3) Drive the generator → the Secret the reviewer pod reads as GH_TOKEN (key `token` → GH_TOKEN).
 apiVersion: external-secrets.io/v1
