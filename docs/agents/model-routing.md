@@ -12,6 +12,30 @@ ledger this feeds) and
 [`../../agents/coordinator/README.md`](../../agents/coordinator/README.md) (the brief that
 executes it).
 
+## The OpenRouter API surface (probed — the one reference)
+
+Consolidated 2026-08-03 (this kept living in operator conversations; the probes are scattered
+through ADR-096's addenda, which stay the decision record — THIS list is the lookup table).
+Upstream reference: <https://openrouter.ai/docs/api_reference/overview>. Auth = `Authorization:
+Bearer <key>` everywhere; "probed" = verified against our account, with date.
+
+| surface | what it gives us | gotchas (probed) |
+|---|---|---|
+| `POST /api/v1/chat/completions` | the data plane (proxy-fronted, ADR-081/087) | `provider.order` matches **tag slugs**; omitted `provider` = 1/price² lottery (the $5.79 lesson) |
+| `GET /api/v1/models` | catalog + headline prices (the registry cache) | `order=top-weekly` is **ignored** — no rankings REST API exists (2026-08-02) |
+| `GET /api/v1/models/:author/:slug/endpoints` | per-provider price/uptime (effective-price basis) | `uptime_last_5m/_1d` is OpenRouter's routing view — **blind to per-account limits** (laguna: "100% up" while we saw 81% 429) |
+| `GET /api/v1/auth/key` | live headroom: `limit`, `limit_reset: weekly` (2026-07-27) | — |
+| `GET /api/v1/credits` | account balance (breaker floor `OPENROUTER_MIN_CREDIT`) | — |
+| `GET /api/v1/generation?id=` | billed `total_cost` + native tokens + provider per request | same session key works; feeds `router_observed_cache_hit` |
+| `GET /api/v1/activity` | account-wide usage | **management-key only** — not worth holding one in-cluster (FU-095 backfill idea parked) |
+| frontend `/api/frontend/v1/benchmarks` | model quality scores | **session-cookie-gated, API key 401s** (2026-08-02) — see MCP row |
+| MCP `https://mcp.openrouter.ai/mcp` | `list-daily-model-rankings` (rotation feed, top-30 daily, live since 2026-07-27), `list-models`/`get-model`, `search-docs`, **`list-benchmarks`**, **`list-task-classifications`** | standard API key works for rankings (no OAuth dance, 2026-08-02); full tool set via OAuth (7-day key, $10 cap, includes BILLABLE `send-message`). `list-benchmarks` is the un-gated path to the M8 capability feed |
+| provisioning keys API | mint per-run capped keys (the ADR-081 runtime-key design) | scout canary keys ride this with `only-free` guardrail (FU-024) |
+
+**No "top weekly / rising" view exists upstream for us**: daily popularity comes from the MCP
+rankings tool; *new* models come from the scout's weekly `/models` diff. A 1–2-week riser view
+would be a derivation over retained daily-rankings snapshots (rotation store) — not built.
+
 ## The problem, from evidence
 
 Three incidents, three different lessons, one root cause — **the worker model is a single hardcoded

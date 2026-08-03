@@ -179,7 +179,15 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
     + "\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider ="
     + " the tools-capable session pin `--lookup` would choose (§M4).*\n\n"
     + "**Graduation is a human call**: add worthy entries to `agents/stacks.json`"
-    + " `workerModelFallbacks` — evidence, not vibes."
+    + " `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers"
+    + " line (router-self-test enforces chain ⊆ tiers since 2026-08-03) — ready to paste:\n\n"
+    + (map("`\"" + .model + "\": \""
+        + (if (.model | endswith(":free")) or (.price_per_mtok == 0) then "free"
+           elif .price_per_mtok < 0.5 then "cheap"
+           elif .price_per_mtok < 3 then "large"
+           else "premium" end)
+        + "\"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)")
+       | join("\n"))
   ' "$WORK/enriched.json")${CANARY_BLOCK}"
   log "→ posting digest issue on ${ORG}/${DIGEST_REPO}"
   gh issue create --repo "${ORG}/${DIGEST_REPO}" --title "$TITLE" --body "$BODY"

@@ -779,6 +779,38 @@ def self_test() -> int:
         cb = _classes.get("circuit_breaker") or {}
         assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
             "auth breaker must trip before the generic one (auth never self-heals)"
+        # Chain ⊆ model_tiers parity (the invariant this file's _comment has CLAIMED since P3 but
+        # nothing enforced — found 2026-08-03 when mimo graduated into sleep's chain and its tier
+        # entry became a human to-do item instead of a CI failure). model_tiers is the rotation
+        # path's human-approved universe (P5): a chain model missing from it silently loses
+        # rotation visibility. Jail/CI-only: in-pod runs have no stacks.json and skip.
+        stacks_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "agents", "stacks.json")
+        if os.path.exists(stacks_path):
+            with open(stacks_path) as fh:
+                stacks = json.load(fh).get("stacks") or []
+            tiers = _classes.get("model_tiers") or {}
+            chain_models = set()
+            for st in stacks:
+                if st.get("workerModel"):
+                    chain_models.add(st["workerModel"])
+                chain_models.update(st.get("workerModelFallbacks") or [])
+            missing = sorted(m for m in chain_models if m not in tiers)
+            if missing:
+                reg_path = os.path.join(os.path.dirname(stacks_path), ".openrouter-registry.json")
+                prices = {}
+                if os.path.exists(reg_path):
+                    with open(reg_path) as fh:
+                        prices = {k: v.get("prompt") for k, v in json.load(fh).get("models", {}).items()}
+                for m in missing:
+                    p = prices.get(m)
+                    tier = ("free" if (m.endswith(":free") or p == 0) else
+                            "cheap" if p is not None and p < 0.5 else
+                            "large" if p is not None and p < 3 else
+                            "premium" if p is not None else "cheap?")
+                    print(f'  model_tiers MISSING chain entry — add: "{m}": "{tier}"'
+                          f'{f"  (${p}/M prompt)" if p is not None else "  (not in registry — verify price)"}')
+                raise AssertionError(
+                    f"model_tiers must cover every stacks.json chain entry; missing: {missing}")
     print("router self-test: OK "
           f"(classes {'loaded' if _classes else 'absent — jail run without the file is fine'})")
     return 0

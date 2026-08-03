@@ -330,7 +330,13 @@ moved to `docs/incidents/`, `docs/storage-ledger.md`, `docs/agents/*`, `ROADMAP.
       P4 authoritative flip after the shadow soak. **Open here:** legs (b)+(c) unstarted.
       P1 coverage gap CLOSED 2026-08-02: the in-pod `agent-finalize` /report twin shipped
       (agent-runtime#27 + launcher-injected AGENT_STACK/AGENT_REPORT_URL) — coordinator-path
-      ride outcomes now reach the shadow store. Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
+      ride outcomes now reach the shadow store. **Operator direction 2026-08-03: the M8
+      capability feed is the next leg** — model_tiers is price/capacity only; per-CLASS
+      strengths (-iac vs research vs coding) need the class-eligibility floors, and the MCP's
+      `list-benchmarks`/`list-task-classifications` (probed reachable, model-routing §API
+      surface) un-gates the source the frontend endpoint blocked. Shape: scout pulls benchmarks
+      per candidate → class floors beside model_tiers → /route filters per class.
+      Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 
 ## Hardware & nodes
 
