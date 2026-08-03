@@ -12,9 +12,11 @@ meant to avoid.)
   `stack-lint circles` GREEN; claim Ready (chainless, claudeTier); specs/fixture seed + goal
   issue circles#1 pushed; FU-126 fan-out DISPATCHED on 4 arms (claude/opus, kimi-k3,
   deepseek-0731 xs-cap, mimo-v2.5-pro — the last two rode ESCALATE-approved under the $2 top
-  cap). **NEXT: operator cherry-picks the `research/issue-1-*` un-armed PRs**
-  (`gh pr list --repo teststuffstash/circles --search 'head:research/issue-1'`), lands the seed
-  through the human gate → step 5 merge-path proof (one trivial PR E2E) → step 6 tandem lanes.
+  cap). **NEXT: operator cherry-picks the four un-armed, reviewer-approved
+  `research/issue-1-*` PRs — circles#3 (opus) / #4 (kimi-k3) / #2 (deepseek-0731) / #5
+  (mimo-v2.5-pro)** — lands the seed through the human gate → step 5 merge-path proof (one
+  trivial PR E2E) → step 6 tandem lanes (operator leaning: ⚖ RENDER-TECH via N-way PoC spike
+  issues; search-shaped gaps route task/research to the claude rail — awaiting ruling).
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),

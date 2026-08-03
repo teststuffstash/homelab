@@ -1894,3 +1894,15 @@ rename-fix its stale self-tracking annotation made prune DELETE the root. Fixed:
 `circles-infra` (circles-iac 8b1195d), root recreated with helm ownership metadata, guard added
 to new-stack.sh. End-state verified: circles(root, default, apps) → circles-infra(circles,
 circles/infra) + agent-fixer-circles, all Synced/Healthy.
+
+**Addendum 2 (fan-out completion):** all four arms landed un-armed reviewer-approved spec PRs —
+#3 opus (15pg/64req/33⚖, 21min, subscription), #4 kimi-k3 (13pg/68req/26⚖ — r1 died budget-403
+at the $2 cap, r2 resumed the banked branch and FINISHED incl. PR before exhausting its own cap;
+total ≈$4.2 vs the $4.38 estimate — estimator calibrated; stuck breaker-retry pod killed by
+hand), #2 deepseek-0731 (xs tier $0.25 cap), #5 mimo-v2.5-pro (retry after a goose-32602
+truncation death; 49min $0.45). TWO launcher/reflex bugs found live: the FU-064 post-run
+fallback armed --no-arm research PRs + double-posted stats (fixed: NO_ARM satisfies the
+bookkeeping check); recipes asserted per-harness web-capability folklore (fixed: env card now
+carries a harness-conditional "Web research:" line — FU-117 sighting; goose arms have NO web
+tool, an A/B fairness asymmetry to weigh in the comparison). Reviews normalized across all four
+via single doorbell rings (fairness, operator ask).
