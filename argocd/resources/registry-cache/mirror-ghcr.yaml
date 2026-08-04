@@ -47,14 +47,18 @@ spec:
       # obvious ways to stop one — scale to 0, or flip READONLY — both mutate this Deployment,
       # which ArgoCD self-heals back mid-collection. An initContainer needs no mutation at all:
       # the trigger is `kubectl delete pod` (the gc-mirrors CronJob), which is not drift.
-      # Failure here must never wedge the cache: GC exits non-zero on a store it can't read, so
-      # `|| true` keeps the mirror starting — a skipped collection is a full disk later, a
-      # blocked start is a broken mirror now.
+      # Failure here must never wedge the cache: a blocked start is a broken mirror now, while a
+      # skipped collection is only a full disk later — so the mirror starts either way, and the
+      # failure is LOUD in the init log instead of silent. It does happen: docker-io's collection
+      # died on `Path not found: .../library/debian/_layers`, an aborted pull leaving a repo dir
+      # with _manifests and no _layers, which stops the mark phase dead (cleared 2026-08-04).
       initContainers:
         - name: garbage-collect
           image: registry:3.0.0
           command: ["/bin/sh", "-c"]
-          args: ["registry garbage-collect --delete-untagged /etc/distribution/config.yml || true"]
+          args:
+            - registry garbage-collect --delete-untagged /etc/distribution/config.yml
+              || echo "WARN garbage-collect FAILED — starting anyway, the store is not being reclaimed (homelab#93)"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }

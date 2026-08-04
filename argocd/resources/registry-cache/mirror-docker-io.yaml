@@ -50,7 +50,9 @@ spec:
         - name: garbage-collect
           image: registry:3.0.0
           command: ["/bin/sh", "-c"]
-          args: ["registry garbage-collect --delete-untagged /etc/distribution/config.yml || true"]
+          args:
+            - registry garbage-collect --delete-untagged /etc/distribution/config.yml
+              || echo "WARN garbage-collect FAILED — starting anyway, the store is not being reclaimed (homelab#93)"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
