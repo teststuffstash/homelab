@@ -225,6 +225,46 @@ spec:
               else
                 ROUTE_REPO="teststuffstash/$(printf '%s' "$CLAIMS" | jq -r --arg s "$ROUTE_STACK"                   '[.items[] | select(.metadata.name == $s) | .spec.repos[].name | select(endswith("-iac"))] | first // ($s + "-iac")')"
               fi
+              # ── subject: key (FU-133) — the resource this alert is ABOUT ────────────────────
+              # The lane deduped on FINGERPRINT, which is per-alert-instance: homelab#94 and #98
+              # were the same PVC failing the same way 25 minutes apart, but different pod names
+              # meant different fingerprints, so it filed twice. The subject is what makes a
+              # recurrence findable — including one 8 days later, which no time window catches
+              # (the ghcr mirror: #47 → #80 → #93, three issues, one resource).
+              # Pod names are stripped of their generated suffixes, which is the whole trick:
+              # coordinator-104803 and coordinator-110038 both become workload:platform-agents/coordinator.
+              _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              _pvc="$(printf '%s' "$a" | jq -r '.labels.persistentvolumeclaim // empty')"
+              _pod="$(printf '%s' "$a" | jq -r '.labels.pod // empty')"
+              _node="$(printf '%s' "$a" | jq -r '.labels.node // empty')"
+              _repo="$(printf '%s' "$a" | jq -r '.labels.repo // empty')"
+              _wf="$(printf '%s' "$a" | jq -r '.labels.workflow // empty')"
+              _strip() { printf '%s' "$1" | sed -E 's/-[a-z0-9]{5}$//; s/-[0-9]{4,}$//; s/-[a-f0-9]{8,10}$//'; }
+              if   [ -n "$_pvc" ];                    then SUBJ="pvc:${_ns}/${_pvc}"
+              elif [ -n "$_repo" ] && [ -n "$_wf" ];  then SUBJ="workflow:${_repo}/${_wf}"
+              elif [ -n "$_pod" ];                    then SUBJ="workload:${_ns}/$(_strip "$_pod")"
+              elif [ -n "$_node" ];                   then SUBJ="node:${_node}"
+              elif [ -n "$_ns" ];                     then SUBJ="ns:${_ns}"
+              else                                         SUBJ="alert:${NAME}"; fi
+              echo "→ $NAME ($FP): subject=$SUBJ"
+
+              # ── observation-window hand-off (IAC-G10) ───────────────────────────────────────
+              # Two entry points reach the same post-merge machinery: change-triggered (a merge
+              # opens a window; Degraded ≤120m auto-reverts, FU-044) and symptom-triggered (this
+              # lane). Undefined ownership means a deterministic revert racing an LLM fix at the
+              # same symptom. Rule: inside an open window the -iac lane owns it — attach evidence,
+              # dispatch nothing. 120m matches the revert chain's own bound.
+              WIN=""
+              if [ -n "$_ns" ]; then
+                WIN="$(kubectl get applications.argoproj.io -n argocd -o json 2>/dev/null \
+                  | jq -r --arg ns "$_ns" --argjson cut "$(( $(date -u +%s) - 7200 ))" '
+                      [ .items[]
+                        | select(.spec.destination.namespace == $ns)
+                        | select(((.status.operationState.finishedAt // "") | if . == "" then 0 else (fromdateiso8601? // 0) end) > $cut)
+                        | .metadata.name ] | first // empty' 2>/dev/null || true)"
+              fi
+              [ -n "$WIN" ] && echo "→ $NAME ($FP): INSIDE the observation window of ArgoCD app '$WIN' (synced <120m) — the -iac lane owns this symptom"
+
               # Self-referential gate (2026-08-04) — deterministic, never the model's judgment.
               # Of the 27 issues this lane has filed, the ones most likely to want a fixer are
               # exactly the ones that DISABLE it: the registry mirror, CNI/Longhorn, the ARC
@@ -276,6 +316,8 @@ spec:
               }
               if [ -n "$SELF_REF" ]; then
                 echo "→ selfQueue: REFUSED for $FP — self-referential substrate"
+              elif [ -n "$WIN" ]; then
+                echo "→ selfQueue: REFUSED for $FP — inside app '$WIN' observation window; the -iac lane owns it"
               else
                 sq="$(gh search issues --owner "$ORG" "alert-fp:$FP" --state open --json repository,number --limit 3 2>/dev/null \
                       | jq -r '.[] | "\(.repository.nameWithOwner) \(.number)"' | head -1)"
@@ -299,6 +341,9 @@ spec:
 
             THE ALERT (JSON): $(cat /tmp/alert-one.json)
 
+            SUBJECT (computed deterministically — the RESOURCE this alert is about): $SUBJ
+            Before filing anything, search the target repo for an issue containing 'subject:$SUBJ' — OPEN or CLOSED, and regardless of age. A match means this resource has failed before: comment there (reopening if closed) instead of filing a new issue, and say what is DIFFERENT this time. One root cause owns one issue; the fingerprint belt below is the narrower same-alert check, this is the same-RESOURCE one. Whatever you file or comment on must carry the literal marker 'subject:$SUBJ' on its own line.
+
             Context available: /work/homelab is a fresh homelab clone (docs/, agents/stacks.json). kubectl READS may work (degrade gracefully if RBAC-denied). gh is authenticated (issues + PRs + contents on the agent repos). Shallow-clone a stack repo under /work/ if you need code context.
 
             STEP 1 — the route is ALREADY COMPUTED deterministically: owner stack = '$ROUTE_STACK', target repo for any issue/PR = '$ROUTE_REPO'. Do NOT re-derive or re-route to a different stack. The ONE allowed override: escalate platform-ward (file on teststuffstash/homelab instead) when your diagnosis shows the fix needs something only the platform can change — and state that reason in the issue.
@@ -306,6 +351,8 @@ spec:
             STEP 2 — diagnose from the alert labels/annotations + whatever context you can actually reach. Say what you verified vs assumed.
 
             $SELF_NOTE
+
+            ${WIN:+⚠ OBSERVATION WINDOW: ArgoCD app '$WIN' synced into this namespace within the last 120 minutes, so a deploy is the prime suspect and the -iac lane already owns this symptom — its deterministic revert (FU-044) may be acting on it right now. Do NOT open a fix PR and do NOT propose one: a revert racing a fix at the same symptom is the failure this rule exists to prevent. Report your evidence, name the app, and stop.}
 
             STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
             (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.
