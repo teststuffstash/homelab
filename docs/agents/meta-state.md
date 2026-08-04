@@ -45,13 +45,14 @@ meant to avoid.)
   self-referential gate, resolve leg (`send_resolved`), `Touches:` emission, `selfQueue`,
   `subject:` correlation and the IAC-G10 window hand-off. An alert can now reach a merged-blocked
   PR with no human; the merge itself still needs a code owner everywhere that matters.
-  **Phase 3, in order:** (3.1) the ArgoCD lever — runbook + migration order + the ONE unverified
-  fact (does ArgoCD adopt a tofu-created helm_release?) are written up in
-  `docs/dependency-upgrades.md` §"Executing the lever"; start with metrics-server as the canary,
-  garage LAST. (3.2) FU-012 — no machine yet, but write the backend + migration scripts anyway;
-  the operator merges/applies by hand. (3.3) FU-044's scoped revert for the reversible class
-  (first-party image pins only — the ruling is in `iac-lane.md`). ⚠ Do NOT start 3.1 without room
-  to verify between releases; a bad adoption on garage is unrecoverable.
+  **Phase 3:** (3.1) the ArgoCD lever — **release 1 of 4 DONE 2026-08-04**: metrics-server adopted
+  clean, ArgoCD-adopts-a-tofu-release settled (it templates, it never installs; names agree by
+  construction). The other three are **blocked and now tracked as FU-136** — each injects a secret
+  through Helm values and the destination repo is public, so each needs a preparatory
+  value→Secret-reference apply first. Do NOT resume 3.1 by "just repeating" release 1; the shape
+  changed. (3.2) FU-012 — no machine yet, write the backend + migration scripts anyway; the
+  operator merges/applies by hand. (3.3) FU-044's scoped revert for the reversible class
+  (first-party image pins only — ruling in `iac-lane.md`).
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),

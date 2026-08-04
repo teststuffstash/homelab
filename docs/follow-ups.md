@@ -102,6 +102,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 ## CI & dependency automation
 
+- [ ] **FU-136** — **Finish the ArgoCD lever: move `forgejo`, `kube-prometheus-stack` and `garage`
+      off tofu `helm_release`** (shrinks tofu class 4 → GitOps class 1, so ArgoCD OutOfSync becomes
+      the drift belt and FU-097 needs no plan-cron for them). **Release 1 of 4 DONE 2026-08-04** —
+      metrics-server adopted clean; ArgoCD-adopts-a-tofu-release is settled, not a risk any more.
+      **Blocker for the other three: each injects a secret through Helm values, into a public repo.**
+      Each needs a preparatory tofu apply converting that value to a k8s Secret *reference* (verified
+      live) BEFORE its migration; garage is the least-certain mechanism AND the unrecoverable one, so
+      it stays last. Runbook, per-release secret table, chart mechanisms, measured adoption/rollback:
+      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Executing the lever".
+      Relates FU-097, ADR-005, FU-012.
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
       auto-merged). **snore-recorder leg BUILT 2026-08-02** (most of it had landed earlier via

@@ -176,9 +176,49 @@ first" rule block a rollback.
 | # | release | why here |
 |---|---|---|
 | 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history. **DONE 2026-08-04** (`argocd/platform/metrics-server.yaml`) |
-| 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable |
-| 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering |
-| 4 | `garage` | LAST. Holds transcripts, buckets, the ledger's own subject. A destroy here is unrecoverable |
+| 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable. **Blocked on the secret gate below** (admin + DB passwords) |
+| 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering. **Blocked on the secret gate below** (Grafana admin password) |
+| 4 | `garage` | LAST. Holds transcripts, buckets, the ledger's own subject. A destroy here is unrecoverable. **Blocked on the secret gate below** (`GARAGE_ADMIN_TOKEN`) |
+
+### The secret-in-values gate — why release 1 was free and 2-4 are not
+
+**Discovered while executing 2026-08-04, and it changes the shape of the remaining work: all three
+remaining releases inject a secret into the chart through tofu-rendered Helm values.** The
+destination (`argocd/platform/`) is a **public git repo**, so a literal lift-and-shift of the values
+block publishes a live credential. metrics-server was the only release with no secret in its values
+— which is *also* why it was the free canary, a coincidence worth naming rather than trusting again.
+
+| release | the secret in values | tofu source |
+|---|---|---|
+| `forgejo` | `gitea.admin.password` **and** `gitea.config.database.PASSWD` | `random_password.forgejo_admin` / `random_password.forgejo_db` |
+| `kube-prometheus-stack` | `grafana.adminPassword` | `var.grafana_admin_password` (KeePass wallet via `keepass-env.sh`) |
+| `garage` | `GARAGE_ADMIN_TOKEN` as a literal env `value` | `random_password.garage_admin_token` |
+
+So each of 2-4 needs a **preparatory step that release 1 didn't have**: convert the value into a
+*reference* to a k8s Secret **while tofu still owns the release**, verify the workload is happy
+reading it that way, and only then run the migration sequence. Reference-not-value is the
+repo's standing rule for the public repo; this is the same rule arriving at a new surface.
+
+Two consequences:
+
+- **The empty-diff pre-flight is what proves the conversion**, not just the migration. Flipping
+  `adminPassword: <literal>` → `admin.existingSecret` re-renders the Deployment (env source
+  changes), so that diff will NOT be empty — it is a real, intended change that must go through
+  tofu apply first. Only once the release is on the reference does the migration diff go empty
+  again. Two separate changes, two separate verifications; collapsing them is how a canary stops
+  being a canary.
+- **The `random_password` resources outlive the `helm_release`.** They stay in tofu state, feeding
+  the k8s Secret the chart now reads — so for forgejo and garage, tofu keeps owning the *secret*
+  after it stops owning the *release*. That is fine, and it's the ESO/Infisical migration's
+  natural next target (`minimize-tofu` direction), not something the lever has to solve first.
+
+Chart support to confirm per release before designing the conversion (each is claimed by the
+chart's docs, none verified here): forgejo `gitea.admin.existingSecret` + `gitea.additionalConfigFromEnvs`
+for `FORGEJO__database__PASSWD`; kube-prometheus-stack `grafana.admin.existingSecret`; garage's
+`environment` list needs a `valueFrom`/`envFrom` path or an ESO-managed Secret mounted another way
+— **garage is the one where the mechanism is least certain, and it is also the unrecoverable one**.
+
+Tracked as **FU-136**.
 
 **Per release, the sequence is the labels-handoff shape** (`scripts/labels-handoff.sh` is the worked
 example — dry-run by default, refuses to report success when it cannot see state):
