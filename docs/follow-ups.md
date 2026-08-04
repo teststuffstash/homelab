@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-139**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-140**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -395,6 +395,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
+- [ ] **FU-139** — **The VM workers have NO kubelet reservation, so Talos's OOMController is the
+      only backstop there.** FU-112(b)'s `systemReserved`/`kubeReserved`/`evictionHard` hardening is
+      gated `each.value.kata ? … : []` in `tofu/metal.tf` — wk-metal only ("desktops/VMs use
+      different math and aren't urgent"). **Measured on wk-02, 2026-08-04 18:34:28** (`talosctl
+      dmesg`): the OOMController SIGKILLed 5 cgroups incl. a *burstable* one with 42 pids, which
+      killed Longhorn CSI → iSCSI `conn error 1020` → EXT4 superblock I/O errors → a 5-pod
+      SandboxChanged storm (homelab#101, #63, #65). ⚠ `node_memory_MemAvailable` was flat at
+      **5.73Gi** at 15s resolution through the kill — this fires on PSI stall, not exhaustion, so
+      "the VM has headroom" is not protection. **Next:** decide the VM-tier reservation math and
+      extend the patch past the `kata` gate. Relates FU-112 (archived), FU-082, ADR-044.
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's one unexplained reboot. On recurrence: chase cable/switch-port
       (thinkcentre) resp. battery/power (wk-metal-02, plug `laptop4`).
