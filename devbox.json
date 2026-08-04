@@ -45,15 +45,16 @@
         "tofu -chdir=tofu validate"
       ],
       "tf-plan": [
-        "tofu -chdir=tofu init -input=false",
         "sh scripts/tf.sh plan \"$@\""
       ],
       "tf-apply": [
-        "tofu -chdir=tofu init -input=false",
         "sh scripts/tf.sh apply \"$@\""
       ],
       "labels-handoff": [
         "bash scripts/labels-handoff.sh \"$@\""
+      ],
+      "tofu-state-migrate": [
+        "bash scripts/tofu-state-migrate.sh \"$@\""
       ],
       "github-tofu": [
         "tofu -chdir=tofu/github init -input=false",

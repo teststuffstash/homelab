@@ -1,0 +1,31 @@
+# The Garage bucket + key behind OpenTofu's remote state (FU-012, docs/tofu-state.md).
+# Wave 4: needs Crossplane + provider-terraform (wave 2) and the ESO-delivered `garage-admin`
+# credential the provider authenticates with.
+#
+# Note the inversion this creates and which docs/tofu-state.md rules on: everything else ArgoCD
+# manages is downstream of tofu, but tofu's *state* would now be downstream of ArgoCD. That is
+# why only the roots outside the cluster's dependency cone migrate first.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tofu-state
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/tofu-state
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: crossplane-system
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

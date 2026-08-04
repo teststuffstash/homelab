@@ -1,0 +1,49 @@
+# The Garage bucket + read/write key that back the OpenTofu **remote state** (FU-012).
+# Same CREATE-pattern as argo-artifacts (ADR-076): Crossplane provider-terraform wraps the
+# jkossis/garage module, mints the bucket and a scoped key, and writes both into a connection
+# Secret. Design, migration runbook and the dependency-cone caveat: docs/tofu-state.md.
+#
+# ⚠ The key this mints is the credential for EVERY root's state, so it is the one Garage key whose
+# leak is worth more than any single service: state files carry the Grafana admin password, the
+# Infisical bootstrap secrets and the Talos machine secrets. It is read/write, never owner —
+# nothing here should be able to delete the bucket itself.
+#
+# 1Gi cap (ADR-089 quota-as-contract, docs/storage-ledger.md): the main root's state is ~1.4MB and
+# there are five roots. This is deliberately far below anything that could crowd the bulk tier.
+apiVersion: tf.upbound.io/v1beta1
+kind: Workspace
+metadata:
+  # Workspace is CLUSTER-scoped in provider-terraform v1 (`kubectl api-resources` says
+  # NAMESPACED=false) — the `namespace:` the sibling argo-artifacts manifest carries is inert.
+  name: tofu-state-garage
+spec:
+  providerConfigRef:
+    name: default
+  forProvider:
+    source: Inline
+    module: |
+      resource "garage_bucket" "state" {
+        global_alias = "homelab-tofu-state"
+        max_size     = 1073741824 # 1Gi
+      }
+      resource "garage_key" "rw" { name = "tofu-state-rw" }
+      resource "garage_bucket_permission" "rw" {
+        bucket_id     = garage_bucket.state.id
+        access_key_id = garage_key.rw.id
+        read  = true
+        write = true
+        owner = false
+      }
+      output "access_key_id" {
+        value = garage_key.rw.id
+      }
+      output "secret_access_key" {
+        value     = garage_key.rw.secret_access_key
+        sensitive = true
+      }
+      output "bucket" {
+        value = garage_bucket.state.global_alias
+      }
+  writeConnectionSecretToRef:
+    namespace: crossplane-system
+    name: tofu-state-s3

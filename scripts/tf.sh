@@ -32,4 +32,12 @@ export TF_VAR_github_app_private_key_file="$CRED/homelab-runner-app/private-key.
 # Wallet exports (returns non-zero — and aborts under set -e — if the wallet is missing).
 . "$ROOT/scripts/keepass-env.sh"
 
+# FU-012: the S3-backend credentials + the state-encryption passphrase, for once the root has a
+# backend.tf. Non-fatal while the root is still on local state — a missing state key must not stop
+# a plan that doesn't need one. `init` MOVED IN HERE from devbox.json for the same reason it has to
+# be here at all: after migration the bare `tofu init` in a devbox script has no credentials and
+# fails before tf.sh ever runs.
+. "$ROOT/scripts/tofu-state-env.sh" || true
+
+tofu -chdir="$ROOT/tofu" init -input=false >&2
 exec tofu -chdir="$ROOT/tofu" "$@"
