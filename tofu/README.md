@@ -59,7 +59,7 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
 - `argocd.tf` — ArgoCD install + bootstrap secret seeds + the three app-of-apps roots
   (platform, sleep, oracle)
   (`../argocd/README.md`); `infisical/` (sub-root) declares the Infisical project + ESO identity.
-- `garage.tf` — Garage S3 object store (vendored chart `charts/garage/`; `../docs/garage.md`).
+- `garage.tf` — Garage S3 object store (vendored chart `../argocd/charts/garage/` — outside tofu/ so ArgoCD can read it, FU-136; `../docs/garage.md`).
 - `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo (CNPG-backed) + the Tier-B
   `act_runner` (`../docs/ci.md`).
 - `ci-runner.tf` — the Proxmox VM GitHub Actions runner `ci-runner-01` @ `.2.55` (ADR-082).

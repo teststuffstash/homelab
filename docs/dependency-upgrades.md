@@ -178,7 +178,7 @@ first" rule block a rollback.
 | 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history. **DONE 2026-08-04** (`argocd/platform/metrics-server.yaml`) |
 | 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable. **DONE 2026-08-04** (`argocd/platform/forgejo.yaml`) — needed TWO conversions (admin + DB) and an ArgoCD OCI repo registration |
 | 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering. **DONE 2026-08-04** (`argocd/platform/kube-prometheus-stack.yaml` + `values/`) — the release that moves alert rules out of the tofu class |
-| 4 | `garage` | LAST, and now gated on a BACKUP existing (FU-137), not just on the secret gate. Mechanism settled: the vendored chart `toYaml`s `.Values.environment` straight into `env:`, so a `valueFrom.secretKeyRef` works with no chart change — but the chart is vendored at `tofu/charts/garage` and would need moving to a path ArgoCD reads |
+| 4 | `garage` | LAST, and now gated on a BACKUP existing (FU-137), not just on the secret gate. Mechanism settled: the vendored chart `toYaml`s `.Values.environment` straight into `env:`, so a `valueFrom.secretKeyRef` works with no chart change — the chart was vendored at `tofu/charts/garage` (invisible to ArgoCD) and **moved to `argocd/charts/garage` 2026-08-04**, proven a no-op by rendering from the new path and diffing against live |
 
 ### The secret-in-values gate — why release 1 was free and 2-4 are not
 

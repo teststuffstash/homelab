@@ -126,8 +126,7 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       GitOps PRs) and forgejo, each empty-diff-verified and adopted with nothing recreated. The
       secret gate is closed for all three (every credential is a Secret REFERENCE, still
       tofu-created). **Remaining: `garage` — gated on a backup existing (FU-137), not just on the
-      secret gate**; mechanism settled, but its chart is vendored under `tofu/charts/garage` and
-      must move somewhere ArgoCD reads. Runbook + measured facts:
+      secret gate**; secrets + chart relocation both DONE 2026-08-04, migration is the last step. Runbook + measured facts:
       [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Executing the lever".
       Relates FU-097, FU-137, ADR-005.
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**

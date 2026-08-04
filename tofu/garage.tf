@@ -9,10 +9,10 @@
 # WiFi, your laptop) reach it at https://s3.teststuff.net via OPNsense HAProxy -> the BGP VIP
 # below. No Cloudflare tunnel, no public LoadBalancer. Admin (3903) + RPC (3901) stay internal.
 #
-# Chart is VENDORED at tofu/charts/garage (Garage v2.3.0 / chart 0.9.3) so apply doesn't depend
-# on git.deuxfleurs.fr — see charts/garage/VENDORED.md. Kept strictly chart-shaped (homelab adds
-# only the LoadBalancer Service as platform wiring) so an ArgoCD Application can later re-point at
-# the same chart with no rewrite (ADR-003/004 GitOps migration).
+# Chart is VENDORED at argocd/charts/garage (Garage v2.3.0 / chart 0.9.3) so apply doesn't depend
+# on git.deuxfleurs.fr — see that dir's VENDORED.md. Kept strictly chart-shaped (homelab adds only
+# the LoadBalancer Service as platform wiring), which is what makes the ArgoCD re-point a move
+# rather than a rewrite (ADR-003/004 GitOps migration).
 # Try it:  aws --endpoint-url https://s3.teststuff.net --region garage s3 ls   (after bootstrap)
 
 locals {
@@ -70,8 +70,12 @@ resource "kubernetes_secret" "garage_admin_token" {
 resource "helm_release" "garage" {
   name      = "garage"
   namespace = kubernetes_namespace.garage.metadata[0].name
-  chart     = "${path.module}/charts/garage" # vendored; version pinned by the files on disk
-  timeout   = 600
+  # The vendored chart moved to argocd/charts/garage on 2026-08-04 (FU-136 step 2/3) so ArgoCD can
+  # read it from a git path — ArgoCD cannot see anything under tofu/. tofu points at the SAME files
+  # from its new home while it still owns the release, which is what lets the empty-diff pre-flight
+  # prove the relocation changed nothing before the release moves.
+  chart   = "${path.module}/../argocd/charts/garage" # vendored; version pinned by the files on disk
+  timeout = 600
 
   values = [yamlencode({
     garage = {

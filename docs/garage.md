@@ -3,7 +3,7 @@
 Garage (Deuxfleurs) is the in-cluster S3-compatible object store (ADR-031). It's the convergence
 point for the sleep-tracking pipeline (ADR-045) and a future home for Longhorn/HA backups.
 
-- **Deploy:** `tofu/garage.tf` (Helm, chart vendored at `tofu/charts/garage`, Garage **v2.3.0**).
+- **Deploy:** `tofu/garage.tf` (Helm, chart vendored at `argocd/charts/garage` — moved out of `tofu/` 2026-08-04 so ArgoCD can read it, FU-136 — Garage **v2.3.0**).
 - **Access model: LAN-only.** In-cluster clients use the ClusterIP Service; LAN clients use
   `https://s3.teststuff.net` (OPNsense HAProxy → BGP VIP **192.168.40.16**:3900). No Cloudflare
   tunnel, no public LoadBalancer. Admin (3903) + RPC (3901) never leave the cluster.
@@ -74,7 +74,7 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 - **rpc_secret** is pinned in tofu state (`random_id.garage_rpc`) so applies don't churn it.
 - Chart is kept **chart-shaped** (homelab adds only the LoadBalancer Service); migrating to an
   ArgoCD Application later is a re-point, not a rewrite (ADR-003/004).
-- Updating Garage: re-vendor the chart at the new tag (see `charts/garage/VENDORED.md`), bump
+- Updating Garage: re-vendor the chart at the new tag (see `argocd/charts/garage/VENDORED.md`), bump
   values in `garage.tf`, `plan`, review, `apply`.
 
 ## Durability — what actually stands between you and losing all of it
