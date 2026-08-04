@@ -37,7 +37,16 @@ tag() { # node disk tags-json
 }
 
 for n in thinkcentre hp-01; do tag "$n" "$(default_disk "$n")" '["std"]'; done
-tag wk-02 "$(default_disk wk-02)" '["std","bulk"]'
+# wk-02: BULK-ONLY since 2026-08-04 (homelab#94). It was dual-tagged std+bulk, the only disk in
+# two tiers — and since Longhorn places on the disk with the most provisioning room and wk-02 is
+# the largest (235.9G vs 109.6/117.0), it won std placements AND absorbed bulk demand until it sat
+# at 104% of its own physical size while thinkcentre idled at 18%. That was not bad luck; with this
+# tagging it was the only possible outcome. Untagging std leaves the bulk pair intact (wk-02 +
+# wk-metal-01, the two-zone design that survives the laptop being reprovisioned) and puts std back
+# on hp-01 + thinkcentre. ⚠ Consequence accepted by the operator: std drops from three zones to two,
+# i.e. no spare zone to rebuild into. Existing std replicas on this disk do NOT move on a tag
+# change — they are evicted separately (see #94).
+tag wk-02 "$(default_disk wk-02)" '["bulk"]'
 # wk-02's reservation was auto-sized (30%) against the ORIGINAL 81G disk; after the 240G grow,
 # 15Gi is still generous for a dedicated Talos-VM /var (images+logs) and frees the headroom the
 # 150Gi bulk grant needs (253 - 15 - ~86 scheduled ≈ 152G).
