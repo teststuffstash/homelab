@@ -13,6 +13,27 @@ tracker carried multi-screen narratives that no longer had an action in them.
 So: **the incident doc owns the story; the FU owns whatever is still undone.** When every residual
 is closed, the FU archives and this file stays.
 
+## When to write one
+
+The contract below is about *shape*; this is about whether the file should exist at all. Write an
+incident when **any** of these hold, and not otherwise:
+
+- **Cascade** — one cause produced failures in ≥2 components or namespaces. The expensive kind, and
+  the kind no single alert can show you.
+- **Third occurrence** — the same subject has failed three times. Twice is bad luck; the third says
+  the earlier fixes were treating symptoms, and *that* reasoning is what the doc preserves.
+- **Silent failure** — it broke in a way the monitoring didn't show, or a probe reported success
+  while doing nothing.
+- **A fix shipped on a diagnosis later proven wrong** — the wrong diagnosis is the artifact worth
+  keeping. The right one is just a commit.
+
+**Not** for a single alert with an obvious fix, however urgent — that is what the issue is for. A
+postmortem nobody needed dilutes the ones that matter.
+
+Two of those triggers are recurrence-shaped, so they only fire if someone can *see* the recurrence.
+That is the weak point today: "this is the third time" has so far only ever been noticed by a human
+reading old issue titles — the alert lane files one issue per alert and links nothing.
+
 ## Contract
 
 - **Timeline with timestamps** (UTC) — what fired, what was observed, in what order.
@@ -32,6 +53,7 @@ the same exemption the TICK-LOG and ADRs carry.
 | Date | Incident | Residual |
 |---|---|---|
 | 2026-07-27 | [Kata ride OOM cascade — agents killed platform daemons on three nodes](2026-07-27-kata-ride-oom-cascade.md) | FU-112, FU-116 |
+| 2026-07-27 | [The ghcr mirror filled four times in eight days — three mechanisms, five peer issues](2026-07-27-ghcr-mirror-recurring-fill.md) | FU-093 |
 | 2026-07-27 | [Responder deferred an alert into silence](2026-07-27-responder-silent-defer.md) | FU-113 |
 | 2026-07-29 | [`agent-finalize` bookkeeping fragility (PATH loss + unauthed `gh`)](2026-07-29-agent-finalize-bookkeeping.md) | FU-120, FU-123 |
 | 2026-07-31 | [Last PR in a batch hung BEHIND on an unreliable GitHub cron](2026-07-31-last-pr-behind-hang.md) | FU-124 |
