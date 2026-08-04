@@ -116,8 +116,42 @@ spec:
           - |
             set -euo pipefail
             printf '%s' "$PAYLOAD" > /tmp/alerts.json
+            # ── RESOLVE LEG (FU-133, 2026-08-04) ────────────────────────────────────────────
+            # "Alert cleared, issue remains" was never a bug in the triage — the event was never
+            # DELIVERED: the responder receiver ran send_resolved = false, so nothing downstream
+            # ever learned an alert stopped firing. Three issues (#77/#91/#92) outlived their
+            # alerts by up to a day and were closed by hand.
+            #
+            # Deterministic, no LLM, no session: find the fingerprint's issue and record the clear.
+            # Closing is conditional ON PURPOSE — a human comment means someone owns it, and
+            # auto-closing under them is worse than leaving it open. A flapping alert cannot churn
+            # issues either: the firing path's fp-issue belt REOPENS what this closed rather than
+            # filing a new one.
+            jq -r '.alerts[]? | select(.status == "resolved") | [(.fingerprint // ""), (.labels.alertname // "?")] | @tsv' \
+              /tmp/alerts.json 2>/dev/null | while IFS="$(printf '\t')" read -r rfp rname; do
+              [ -n "$rfp" ] || continue
+              hit="$(gh search issues --owner "$ORG" "alert-fp:$rfp" --state open --json repository,number \
+                     --limit 5 2>/dev/null | jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' | head -1)"
+              if [ -z "$hit" ]; then echo "→ resolved $rname ($rfp): no open issue — nothing to close"; continue; fi
+              rrepo="${hit%#*}"; rnum="${hit#*#}"
+              # Human engagement = anyone whose login is not a bot. gh renders App logins with a
+              # [bot] suffix HERE (REST); the reviewer's REST-vs-GraphQL mismatch (FU-069) does not
+              # apply to this endpoint, but the test stays suffix-tolerant on purpose.
+              humans="$(gh issue view "$rnum" --repo "$rrepo" --json comments \
+                        --jq '[.comments[]? | select((.author.login // "") | test("\\[bot\\]$") | not)] | length' 2>/dev/null || echo 0)"
+              gh issue comment "$rnum" --repo "$rrepo" \
+                --body "✅ **Alert cleared** — \`$rname\` (alert-fp:\`$rfp\`) stopped firing at $(date -u +%Y-%m-%dT%H:%M:%SZ). Posted by the responder's resolve leg (FU-133); the issue does not have to be true any more just because it was filed." >/dev/null 2>&1 || true
+              if [ "${humans:-0}" -eq 0 ]; then
+                gh issue close "$rnum" --repo "$rrepo" --reason completed >/dev/null 2>&1 \
+                  && echo "→ resolved $rname ($rfp): commented + CLOSED $hit (no human had engaged)" \
+                  || echo "→ resolved $rname ($rfp): commented $hit, close failed (non-fatal)"
+              else
+                echo "→ resolved $rname ($rfp): commented $hit, left OPEN — $humans human comment(s), someone owns it"
+              fi
+            done
+
             COUNT="$(jq -r '[.alerts[]? | select(.status == "firing")] | length' /tmp/alerts.json 2>/dev/null || echo 0)"
-            [ "${COUNT:-0}" -gt 0 ] || { echo "no firing alerts in payload — nothing to do"; exit 0; }
+            [ "${COUNT:-0}" -gt 0 ] || { echo "no firing alerts in payload — resolve leg done, nothing to triage"; exit 0; }
 
             rm -rf /work/homelab
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
@@ -230,7 +264,7 @@ spec:
             (c) needs real work → file EXACTLY ONE issue on '$ROUTE_REPO' (or the stack's app repo instead if your diagnosis clearly points at app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP'. NO agent labels — the issue is inert; the stack loop/human triages it.
             (d) platform-ward escalation only (see STEP 1): the issue goes on teststuffstash/homelab with the stated reason.
 
-            HARD RULES: before filing, search the target repo for an OPEN issue containing 'alert-fp:$FP' — if found, add ONE comment there instead of a new issue. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
+            HARD RULES: before filing, search the target repo for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
                 --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
             done

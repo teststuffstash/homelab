@@ -259,8 +259,13 @@ resource "helm_release" "kube_prometheus_stack" {
             # drops the POST (alerts still reach HA via the route above).
             name = "agent-responder"
             webhook_configs = [{
-              url           = "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/alert"
-              send_resolved = false
+              url = "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/alert"
+              # FU-133, 2026-08-04: was false, which is why "alert cleared, issue remains" was
+              # structural rather than a triage miss — nothing downstream ever learned an alert
+              # stopped firing (#77/#91/#92 outlived theirs by up to a day). The responder's
+              # resolve leg (deterministic, no session) comments the clear and closes the issue
+              # when no human has engaged; the firing path reopens on a flap.
+              send_resolved = true
             }]
           },
           {
