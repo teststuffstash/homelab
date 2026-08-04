@@ -15,9 +15,17 @@ loudly — it plans to **create** everything it already owns. Everything below i
 | Garage bucket `homelab-tofu-state` + rw key | `argocd/resources/tofu-state/garage-workspace.yaml` (Crossplane Workspace, ADR-076 CREATE-pattern, 1Gi cap) | **LIVE** — reconciled, key in the `tofu-state-s3` connection Secret |
 | Credential + endpoint + encryption env | `scripts/tofu-state-env.sh` (source-me) | built |
 | Per-root migration | `scripts/tofu-state-migrate.sh` → `devbox run tofu-state-migrate` | built, dry-run exercised |
-| Generated backend block | written by the script into `<root>/backend.tf` | not yet written to any root |
+| Generated backend block | written by the script into `<root>/backend.tf` | **`tofu/cloudflare/backend.tf` LIVE** |
+| Wallet entries | `tofu-state-{key-id,secret,passphrase}`, seeded by `scripts/keepass-init.sh` | **seeded 2026-08-04** |
 
-**No root has been migrated.** The blocker is measured, not procedural — see the locking ruling.
+**`cloudflare` is migrated (2026-08-04, 14 resources).** Verified with the local state file
+*deleted*, so the plan can only be reading Garage: `0 to add, 1 to change, 0 to destroy` — the one
+change is pre-existing comment drift on the ddclient-owned DDNS record, unrelated to the move. The
+remote object is genuine ciphertext (top-level keys are `encrypted_data`/`meta`/`serial`/`lineage`,
+no `resources`, and the string "cloudflare" appears nowhere in it). It runs
+**`use_lockfile = false`**, deliberately — see the ruling below.
+
+The other four roots are unmigrated.
 
 ## Encryption: OpenTofu's, not the backend's
 
@@ -47,10 +55,19 @@ OpenTofu's S3 backend gets mutual exclusion from `use_lockfile = true`, which is
 locking**: it works only if the object store honours `If-None-Match: *` — a second PUT to an
 existing key must fail with `412 PreconditionFailed`.
 
-**Measured on the live Garage (v2.3.0), twice, once through the script's probe and once by hand:
-the second conditional PUT SUCCEEDS**, returning a fresh `VersionId`. Conditional writes are not
-enforced. `use_lockfile = true` here would give the *appearance* of state locking with none of the
-substance, and two concurrent applies could interleave into a corrupt state.
+**Measured on the live Garage (v2.3.0) over 20 trials — 20/20 the second conditional PUT SUCCEEDS**,
+returning a fresh `VersionId`; identical whether the two PUTs are back-to-back or separated by a
+round trip, so it is not a consistency race, it is simply not implemented. Conditional writes are
+not enforced. `use_lockfile = true` here would give the *appearance* of state locking with none of
+the substance, and two concurrent applies could interleave into a corrupt state.
+
+> The 20-trial run happened because the probe **disagreed with itself** between two consecutive
+> runs. Cause: the first version read the verdict by grepping the output for `412` on both paths,
+> so a *successful* PUT whose random ETag/VersionId contained the substring `412` reported
+> "conditional writes honoured" — the exact opposite of the truth, from the check whose whole job
+> is to refuse. Fixed to key off the **exit status**, inspecting the error string only on the
+> failure path; now deterministic (5/5). Worth keeping as a specimen: this is the
+> silent-success class (FU-125/FU-108/FU-131) reappearing *inside the guard built to prevent it*.
 
 `scripts/tofu-state-migrate.sh` therefore **refuses to migrate by default** and prints this, rather
 than writing a backend block that lies. The ruling that follows from it:
@@ -81,7 +98,7 @@ So the roots do not migrate as a set:
 
 | Root | In the cone? | Ruling |
 |---|---|---|
-| `cloudflare` | no — external zone, no cluster dependency | **migrate first**, it is the safe canary |
+| `cloudflare` | no — external zone, no cluster dependency | **MIGRATED 2026-08-04** — the safe canary, and it worked |
 | `provisioning` | no — Matchbox LXC on Proxmox | migrate |
 | `infisical` | partly | migrate, but it is slated to leave tofu anyway (`minimize-tofu` direction) |
 | `github` | no | operator-only root, host wallet; migrate last if at all |
@@ -100,14 +117,20 @@ whose local state it cannot read (empty and already-migrated must never look ali
 file up outside the repo first, it verifies the resource **count** survived, and it **never deletes
 the local state file**. A human does that, after seeing a clean plan.
 
-**Before the first real run** the operator seeds two wallet entries (`scripts/keepass-init.sh`):
+The three wallet entries are **seeded and idempotent** — `scripts/keepass-init.sh` now owns them, so
+a fresh wallet gets them without a manual step:
 
-- `tofu-state-key-id` / `tofu-state-secret` — from the connection Secret:
-  `kubectl -n crossplane-system get secret tofu-state-s3 -o jsonpath='{.data.access_key_id}' | base64 -d`
-  (and `.secret_access_key`). The in-cluster Secret is a **bootstrap fallback only** — a credential
-  that lives only in the cluster is unreachable when the cluster is what you are rebuilding.
-- `tofu-state-passphrase` — new, high-entropy. **Losing it loses the state.** It belongs in the
-  Tier-0 wallet next to the other bootstrap secrets (`docs/secrets.md`).
+- `tofu-state-key-id` / `tofu-state-secret` — copied out of the `tofu-state-s3` connection Secret.
+  That in-cluster Secret is a **bootstrap fallback only**: a credential that lives only in the
+  cluster is unreachable exactly when the cluster is what you are rebuilding.
+- `tofu-state-passphrase` — generated there, alphanumeric (it lands in an HCL string inside a shell
+  heredoc, where `$`, `\` and `"` all mean something). **Losing this entry loses every migrated
+  root's state**, which makes the wallet backup the real dependency, not the bucket.
+
+⚠ **Do not delete a root's `backend.tf` to regenerate it.** Once `.terraform/` points at S3, a
+missing backend block makes `init` fail and the state look unreadable. The script refuses at that
+point rather than proceeding (confirmed live, 2026-08-04) — but the fix is to restore the file, not
+to re-run the migration.
 
 ## Why `tofu init` moved into `scripts/tf.sh`
 

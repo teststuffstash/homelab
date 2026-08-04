@@ -106,6 +106,25 @@ add_secret github-reviewer-slug  "$(file_or "$HOME/.claude/homelab-github-review
 add_secret snore-recorder-key    "$(file_or "$HOME/.claude/homelab-snore-recorder/key.txt" REPLACE)"
 # (homelab-ha/{auth_code,esphome_flow_id} are expired one-time OAuth/flow artifacts — not migrated.)
 
+# --- OpenTofu remote state on Garage (FU-012, docs/tofu-state.md) ---------------
+# The key is MINTED IN-CLUSTER by the tofu-state Crossplane Workspace, so unlike everything above
+# its source is a k8s Secret rather than a file. Copying it here is not redundancy for its own
+# sake: a state credential that lives only inside the cluster is unreachable exactly when the
+# cluster is what you are rebuilding.
+k8s_key() {
+  local kc="${KUBECONFIG:-$(dirname "$0")/../tofu/kubeconfig}"
+  [ -f "$kc" ] || { echo REPLACE; return 0; }
+  kubectl --kubeconfig "$kc" -n crossplane-system get secret tofu-state-s3 \
+    -o jsonpath="{.data.$1}" 2>/dev/null | base64 -d 2>/dev/null || echo REPLACE
+}
+add_secret tofu-state-key-id "$(k8s_key access_key_id)"
+add_secret tofu-state-secret "$(k8s_key secret_access_key)"
+# ⚠ THE passphrase for every root's encrypted state. Generated here and nowhere else — losing this
+# entry loses the state, so the wallet backup is the real dependency. Alphanumeric on purpose: it
+# is interpolated into an HCL string inside a shell heredoc (scripts/tofu-state-env.sh), and `$`,
+# `\` and `"` all mean something in that path.
+add_secret tofu-state-passphrase "$(gen_b64 48 | tr -d '/+=')"
+
 # add_attachment <entry> <name> <file> — multi-line material (keys/certs/p12) rides as an
 # attachment on its entry (created empty if missing). Import only when absent, like add_secret.
 add_attachment() {

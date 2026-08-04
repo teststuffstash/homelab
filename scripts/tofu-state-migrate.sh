@@ -93,13 +93,28 @@ echo "✓ bucket ${BUCKET} reachable at ${AWS_ENDPOINT_URL_S3}"
 #     still WORKS but silently offers no mutual exclusion, and two applies can interleave into a
 #     corrupt state. That is not a warning to print at the end — it is a reason to stop.
 # ---------------------------------------------------------------------------
+#
+#     The verdict is the EXIT STATUS of the second PUT, and the error string is only ever inspected
+#     on the failure path. The first version of this probe grepped the output for `412` either way —
+#     which meant a SUCCESSFUL put whose random ETag/VersionId happened to contain "412" read as
+#     "conditional writes honoured". It fired once, mid-session, and reported the opposite of the
+#     truth. A check that can green-light because of a substring is the same failure class this
+#     script exists to refuse.
 PROBE_KEY=".lockprobe/$(date +%s)-$$"
 probe_out=""
 if aws s3api put-object --bucket "$BUCKET" --key "$PROBE_KEY" --if-none-match '*' >/dev/null 2>&1; then
-  probe_out="$(aws s3api put-object --bucket "$BUCKET" --key "$PROBE_KEY" --if-none-match '*' 2>&1 || true)"
+  if probe_out="$(aws s3api put-object --bucket "$BUCKET" --key "$PROBE_KEY" --if-none-match '*' 2>&1)"; then
+    probe_verdict=accepted   # the store took a second conditional PUT — enforcement absent
+  else
+    case "$probe_out" in
+      *PreconditionFailed*|*412*) probe_verdict=rejected ;;
+      *) echo "FAIL: lock probe errored for an unrelated reason, refusing to guess:" >&2
+         printf '%s\n' "$probe_out" >&2; exit 2 ;;
+    esac
+  fi
   aws s3api delete-object --bucket "$BUCKET" --key "$PROBE_KEY" >/dev/null 2>&1 || true
-  case "$probe_out" in
-    *PreconditionFailed*|*412*)
+  case "$probe_verdict" in
+    rejected)
       echo "✓ conditional writes honoured — use_lockfile is safe on this Garage" ;;
     *)
       cat >&2 <<EOF
@@ -117,7 +132,14 @@ else
   exit 2
 fi
 USE_LOCKFILE=true
-[ "${TOFU_STATE_NO_LOCK:-0}" = "1" ] && USE_LOCKFILE=false
+LOCK_NOTE=""
+if [ "${TOFU_STATE_NO_LOCK:-0}" = "1" ]; then
+  USE_LOCKFILE=false
+  LOCK_NOTE="    # false, DELIBERATELY: this Garage does not enforce conditional writes (measured
+    # 20/20). Safe only while this root has ONE writer — the operator. An automated APPLIER against
+    # this root is blocked on real locking; docs/tofu-state.md carries the ruling.
+"
+fi
 
 # ---------------------------------------------------------------------------
 # 4 · The local state must be READABLE and non-empty. Count only lines shaped like a tofu address —
@@ -202,9 +224,9 @@ terraform {
     skip_requesting_account_id  = true
     skip_metadata_api_check     = true
 
-    # S3-native locking via conditional writes. scripts/tofu-state-migrate.sh PROVES Garage
-    # enforces them before ever writing this line.
-    use_lockfile = ${USE_LOCKFILE}
+    # S3-native locking via conditional writes. scripts/tofu-state-migrate.sh probes whether Garage
+    # actually enforces them and writes the ANSWER here — it never writes true on faith.
+${LOCK_NOTE}    use_lockfile = ${USE_LOCKFILE}
   }
 }
 EOF
