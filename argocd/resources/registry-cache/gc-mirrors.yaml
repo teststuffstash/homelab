@@ -1,0 +1,88 @@
+# Weekly trigger for the mirrors' garbage collection (homelab#93).
+#
+# The collection itself lives in each mirror Deployment's `garbage-collect` initContainer — see the
+# comment there for why. All this CronJob does is delete the mirror pods, which is deliberately the
+# dumbest possible trigger: it needs no coordination with the registry, mutates nothing ArgoCD
+# manages (a deleted pod is not drift — the ReplicaSet just makes a new one, and `strategy:
+# Recreate` + RWO means the old one is gone before the new one mounts the store), and if this
+# CronJob never runs, the only consequence is that GC waits for the next restart.
+#
+# Cost of a run: each mirror is unavailable for the length of one collection. Consumers fall through
+# to upstream while it is down, so the window is a slowdown, not an outage — scheduled Sunday 04:00
+# UTC accordingly. If the caches ever grow enough that a collection outlasts a CI job, split the two
+# mirrors onto different days rather than making this smarter.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gc-mirrors
+  namespace: registry-cache
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gc-mirrors
+  namespace: registry-cache
+rules:
+  # list to find them, delete to restart them. Nothing else — this SA must not be able to edit the
+  # Deployments, which is the whole point of triggering GC by pod deletion.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gc-mirrors
+  namespace: registry-cache
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: gc-mirrors }
+subjects:
+  - { kind: ServiceAccount, name: gc-mirrors, namespace: registry-cache }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gc-mirrors
+  namespace: registry-cache
+spec:
+  schedule: "0 4 * * 0" # Sunday 04:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: gc-mirrors
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: trigger
+              image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  for app in mirror-ghcr mirror-docker-io; do
+                    echo "→ restarting $app (its initContainer collects garbage before serving)"
+                    kubectl delete pod -n registry-cache -l "app=$app" --wait=false
+                  done
+                  # Report the end state rather than assuming it: a collection that silently did
+                  # nothing looks identical to one that worked, and this line is the only place
+                  # anyone would notice.
+                  sleep 120
+                  for app in mirror-ghcr mirror-docker-io; do
+                    echo "→ $app now:"
+                    kubectl get pod -n registry-cache -l "app=$app" \
+                      -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,START:.status.startTime
+                  done
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+              resources:
+                requests: { cpu: "10m", memory: "64Mi" }
+                limits:   { cpu: "500m", memory: "256Mi" }

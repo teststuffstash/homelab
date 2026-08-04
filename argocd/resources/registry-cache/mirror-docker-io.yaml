@@ -42,6 +42,23 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
         seccompProfile: { type: RuntimeDefault }
+      # Same GC-in-init as the ghcr sibling — see mirror-ghcr.yaml for why it lives here and not
+      # in a job that stops the registry (homelab#93). This mirror is not the one that filled up,
+      # but it is the same component with the same unbounded growth; the gc-mirrors CronJob
+      # restarts both.
+      initContainers:
+        - name: garbage-collect
+          image: registry:3.0.0
+          command: ["/bin/sh", "-c"]
+          args: ["registry garbage-collect --delete-untagged /etc/distribution/config.yml || true"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/registry }
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits:   { cpu: "1",   memory: "512Mi" }
       containers:
         - name: registry
           image: registry:3.0.0
