@@ -169,9 +169,14 @@ tier allowed, dual-model worth it) are FU-095's.
   one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`
   on the responder receiver — the resolve event is never delivered, so a cleared alert leaves an
   open issue); and **ownership vs the -iac observation window is undefined** (IAC-G10 —
-  [`iac-lane.md`](iac-lane.md) §Who owns a symptom). Before any `selfQueue` graduation: a
-  self-referential gate, since the alerts most likely to need a fixer are the ones about the
-  fixer's own substrate (registry mirror, CNI/Longhorn OOM, ARC runners, the token broker).
+  [`iac-lane.md`](iac-lane.md) §Who owns a symptom).
+  **Self-referential gate BUILT 2026-08-04** (`responder-argo.yaml`, deterministic — namespace ∈
+  {kube-system, argocd, longhorn-system, registry-cache, arc-runners, agent-coordinator,
+  agent-egress, *-agents} ∨ alertname `Agent*`): those alerts cap the outcome at report-only and
+  stamp `self-referential: true` on the issue, because the alerts most likely to want a fixer are
+  the ones that disable it — the pod, the pull, the PVC attach, the git token or the CI runners it
+  needs are the broken thing. The future `selfQueue` knob reads the marker instead of re-deriving
+  it. Verified against 11 alert shapes from the corpus (7 self, 4 dispatchable).
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a

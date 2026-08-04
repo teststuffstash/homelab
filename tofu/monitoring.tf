@@ -63,9 +63,9 @@ resource "helm_release" "kube_prometheus_stack" {
     # ---- Requests for the stack's own sub-charts (FU-082) -----------------
     # All BestEffort by chart default → first in the Talos OOMController kill order. Requests-only
     # (steady usage + headroom); the operator + KSM get small memory limits (bounded workloads).
-    prometheusOperator             = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } } # ~42Mi
-    "prometheus-node-exporter"     = { resources = { requests = { cpu = "20m", memory = "32Mi" } } }                                  # DaemonSet, ~10-22Mi
-    "kube-state-metrics"           = { resources = { requests = { cpu = "20m", memory = "64Mi" }, limits = { memory = "192Mi" } } }   # ~40Mi, grows with object count
+    prometheusOperator         = { resources = { requests = { cpu = "50m", memory = "128Mi" }, limits = { memory = "256Mi" } } } # ~42Mi
+    "prometheus-node-exporter" = { resources = { requests = { cpu = "20m", memory = "32Mi" } } }                                 # DaemonSet, ~10-22Mi
+    "kube-state-metrics"       = { resources = { requests = { cpu = "20m", memory = "64Mi" }, limits = { memory = "192Mi" } } }  # ~40Mi, grows with object count
 
     # ---- Prometheus -------------------------------------------------------
     prometheus = {
@@ -95,7 +95,7 @@ resource "helm_release" "kube_prometheus_stack" {
         # perpetual ~13% headroom — KubePersistentVolumeFillingUp extrapolated that into a
         # standing warning, and a WAL spike over the cap would fill the disk outright
         # (2026-07-26; the metric-count growth is agents+ert step series, organic).
-        retentionSize  = "16GB"
+        retentionSize = "16GB"
         # Defensive: ensure the data dir is owned by the Prometheus user (uid 1000/gid
         # 2000). Longhorn respects fsGroup so this is usually redundant, but it's cheap
         # insurance and re-runs on every pod/node rebuild.

@@ -191,6 +191,26 @@ spec:
               else
                 ROUTE_REPO="teststuffstash/$(printf '%s' "$CLAIMS" | jq -r --arg s "$ROUTE_STACK"                   '[.items[] | select(.metadata.name == $s) | .spec.repos[].name | select(endswith("-iac"))] | first // ($s + "-iac")')"
               fi
+              # Self-referential gate (2026-08-04) — deterministic, never the model's judgment.
+              # Of the 27 issues this lane has filed, the ones most likely to want a fixer are
+              # exactly the ones that DISABLE it: the registry mirror, CNI/Longhorn, the ARC
+              # runners that gate every agent PR, the token broker, the loop's own namespaces.
+              # A fix proposed there cannot be dispatched — the pod, the pull, the PVC attach, the
+              # git token or the CI runner it needs is the broken thing. So the outcome is capped
+              # at report-only and the issue carries a machine-readable marker, so the future
+              # selfQueue knob (FU-090) refuses it without re-deriving any of this.
+              # Widening this list is cheap; narrowing it after a loop has eaten its own outage is
+              # not. Rationale + the corpus: docs/agents/roles.md §responder, FU-133.
+              ANS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              SELF_REF=""
+              case "$ANS" in
+                kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1;;
+              esac
+              case "$NAME" in Agent*) SELF_REF=1;; esac
+              SELF_NOTE=""
+              [ -n "$SELF_REF" ] && SELF_NOTE="
+            ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate, so any fix needs the very thing that is broken — pod scheduling, image pull, PVC attach, the git-token broker, or the CI runners that gate every agent PR. Your outcome is CAPPED AT REPORT-ONLY: do not open a PR and do not propose one as the next step; describe the fix in prose for a human instead. End any issue body you file with the line 'self-referential: true' on its own line."
+              [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — outcome capped at report-only"
               echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
@@ -201,6 +221,8 @@ spec:
             STEP 1 — the route is ALREADY COMPUTED deterministically: owner stack = '$ROUTE_STACK', target repo for any issue/PR = '$ROUTE_REPO'. Do NOT re-derive or re-route to a different stack. The ONE allowed override: escalate platform-ward (file on teststuffstash/homelab instead) when your diagnosis shows the fix needs something only the platform can change — and state that reason in the issue.
 
             STEP 2 — diagnose from the alert labels/annotations + whatever context you can actually reach. Say what you verified vs assumed.
+
+            $SELF_NOTE
 
             STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
             (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.

@@ -1,0 +1,55 @@
+# Path ownership for the platform lane — the gate that lets a fixer author in this repo without
+# being able to edit its own governor. Tier table + reasoning:
+# docs/agents/iac-lane.md §"The platform lane — homelab is one repo, so the gate is per PATH".
+#
+# ⚠ INERT UNTIL THE RULESET FLIPS. This file only bites once tofu/github sets homelab to
+#   require_approval = true + require_code_owner_review = true, and that flip is COUPLED to
+#   reviewer coverage: require_approval is repo-wide (only code-owner review is path-scoped), and
+#   review-reflex.sh derives its scan set from the AgentStack claims — homelab is in none, so no
+#   bot approval exists for it today. Flipping first would stall the deploy-pin lane on an approval
+#   nothing can give (GitHub's App/Integration bypass cannot waive required-approval — only an
+#   OrganizationAdmin can). Sequence: claim coverage (FU-068) → flip → point a fixer here.
+#   Until then this file is documentation with a review-request side effect, which is the point:
+#   it is reviewable now, and wrong ownership is cheap to fix now and expensive to fix later.
+#
+# GitHub semantics that shape the layout below: LAST matching pattern wins, and a pattern with NO
+# owner REMOVES ownership. So general tiers come first and carve-outs come last.
+
+# ── Tier 3 — governance & supply chain. Never agent-authored (deny row in the tier table).
+# agents/ is the launcher that builds its own dispatch command (ADR-094), the scan that decides
+# what gets dispatched, and the reflex that approves its own PRs. tofu/github/ is the ruleset
+# governing all of it. An agent able to edit these is not gated at all, whatever the ruleset says.
+/agents/            @RasmusSoot
+/scripts/           @RasmusSoot
+/policy/            @RasmusSoot
+/.github/           @RasmusSoot
+
+# ── Tier 2 — applied out-of-band (tofu apply, ansible → the router, ArgoCD app-of-apps).
+# A human reads the diff before it reaches a machine; the apply itself stays outside the cluster's
+# own dependency cone (docs/dependency-upgrades.md §"Where the runner sits").
+/tofu/              @RasmusSoot
+/ansible/           @RasmusSoot
+/opnsense/          @RasmusSoot
+/machines/          @RasmusSoot
+# argocd/platform/ carries the Applications themselves and syncs with prune: true — an edit here
+# DELETES services, which is why it is tier 2 while argocd/resources/ is tier 1.
+/argocd/platform/   @RasmusSoot
+
+# ── Tier 3 (continued) — more specific than /tofu/, so they must come after it.
+/tofu/github/       @RasmusSoot
+/tofu/cloudflare/   @RasmusSoot
+
+# ── Tier 1 — ArgoCD applies on merge, CI is the gate. Deliberately UNOWNED:
+#   argocd/resources/**   docs/**   SERVICES.md   README.md
+# ⚠ Unowned is only safe once CI actually validates these (kubeconform / server-side dry-run over
+#   argocd/resources/*). Until then "CI-green" means "the pinned OCI charts still render" and
+#   nothing more — docs/agents/iac-lane.md §"Automerge safety is a function of check coverage".
+
+# ── Carve-outs, last so they win.
+# The deploy-pin lane is mechanical: the homelab-deploy App bumps this file (ADR-084) and
+# auto-merges on CI-green. No owner = no code-owner review = the lane keeps working after the flip.
+/agents/images.env
+
+# The ownership file owns itself — otherwise the first thing an agent could propose is its own
+# ungating (oracle-fleet's CODEOWNERS carries the same line for the same reason).
+/CODEOWNERS         @RasmusSoot

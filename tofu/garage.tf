@@ -78,7 +78,7 @@ resource "helm_release" "garage" {
     # or the volumeClaimTemplates omit storageClassName.
     persistence = {
       enabled = true
-      meta = { size = "1Gi", storageClass = "longhorn" }
+      meta    = { size = "1Gi", storageClass = "longhorn" }
       # data on the ADR-089 bulk tier (150Gi ≈ the advertised bulk ceiling; Garage takes the
       # whole grant — it IS the bulk consumer). Garage stays replication_factor=1; redundancy
       # comes from longhorn-bulk's 2 replicas (MX500 + wk-02). Migrated off 10Gi/longhorn

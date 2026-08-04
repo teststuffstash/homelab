@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# manifest-lint — schema-validate the raw manifests ArgoCD applies (platform-lane tier 1).
+#
+#   devbox run manifest-lint
+#
+# WHY: `argocd/resources/**` is the ONE path tier where CI is the only gate — it is deliberately
+# unowned in CODEOWNERS, and a merge there IS the deploy. Until this existed the repo's required
+# `ci` check was `argocd-validate-pins`, which proves a pinned OCI chart still renders and looks at
+# nothing else: a hand-written Deployment with a typo'd field passed CI and failed at sync.
+# "Automerge safety is a function of check coverage, not of the path"
+# (docs/agents/iac-lane.md §The platform lane).
+#
+# HONESTY REQUIREMENT: kubeconform cannot check CRs whose CRD schema it doesn't have (ArgoCD
+# Applications, AgentStacks, CiliumNetworkPolicies, Prometheus rules...). Those are SKIPPED, not
+# validated — and a check that reports success while skipping most of its input is the FU-125 /
+# FU-108 / FU-131 failure class this platform keeps paying for. So the skip count is printed loudly
+# every run, and a run where NOTHING was validated fails.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+DIRS="${*:-argocd/resources argocd/platform}"
+K8S_VERSION="${K8S_VERSION:-1.36.1}"
+
+# YAML under these paths is INPUT to something else, never applied: helm values consumed by an
+# Application, and kustomize configMapGenerator sources. Listed explicitly rather than auto-skipping
+# every doc without a `kind:` — a real manifest that LOST its kind must still fail loudly.
+NOT_MANIFESTS='argocd/platform/values/|argocd/resources/otel-collector/otel-config\.yaml'
+
+echo "manifest-lint: kubeconform ${K8S_VERSION} over ${DIRS}"
+files=$(find $DIRS -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -Ev "$NOT_MANIFESTS" | sort)
+[ -n "$files" ] || { echo "manifest-lint: FAIL — no manifests found under ${DIRS}" >&2; exit 1; }
+
+# -ignore-missing-schemas: skip unknown CRs rather than fail (we do not vendor every CRD schema).
+# -strict: reject unknown fields in the kinds we DO know — that is the typo class this exists for.
+out="$(printf '%s\n' "$files" | xargs kubeconform \
+  -kubernetes-version "$K8S_VERSION" -strict -ignore-missing-schemas -summary 2>&1)" || rc=$?
+echo "$out"
+
+# Summary line shape: "Summary: N resources found in M files - Valid: V, Invalid: I, Errors: E, Skipped: S"
+valid=$(printf '%s' "$out" | sed -n 's/.*Valid: \([0-9]*\).*/\1/p' | tail -1)
+skipped=$(printf '%s' "$out" | sed -n 's/.*Skipped: \([0-9]*\).*/\1/p' | tail -1)
+: "${valid:=0}"; : "${skipped:=0}"
+
+if [ "${rc:-0}" != "0" ]; then
+  echo "manifest-lint: FAIL — kubeconform rejected a manifest (see above)" >&2
+  exit 1
+fi
+if [ "$valid" -eq 0 ]; then
+  echo "manifest-lint: FAIL — 0 resources validated (${skipped} skipped). A check that validates" >&2
+  echo "  nothing must not report green; either the schemas broke or the paths moved." >&2
+  exit 1
+fi
+echo "manifest-lint: OK — ${valid} validated, ${skipped} SKIPPED (no local CRD schema: Applications,"
+echo "  AgentStacks, CiliumNetworkPolicies, PrometheusRules…). Skipped resources are NOT checked —"
+echo "  vendoring those CRD schemas is what would close the gap."

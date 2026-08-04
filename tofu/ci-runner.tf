@@ -152,7 +152,7 @@ resource "proxmox_virtual_environment_vm" "ci_runner" {
     size         = var.ci_runner_disk_gb
     # local-lvm is LVM-thin → raw is the ONLY format; Proxmox silently ignores qcow2 here,
     # so declaring it drifts forever.
-    file_format  = "raw"
+    file_format = "raw"
   }
 
   network_device {

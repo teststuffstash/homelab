@@ -31,9 +31,9 @@ resource "helm_release" "cilium" {
     # DNS 10.96.x) black-holed from kata pods (found live 2026-07-13: TCP-by-IP fine, DNS dead).
     # hostNamespaceOnly keeps socket-LB for host processes and does per-packet translation at the
     # veth for pod traffic — the Cilium-documented setting for kata/VM runtimes.
-    socketLB = { hostNamespaceOnly = true }
-    k8sServiceHost       = "localhost"
-    k8sServicePort       = 7445
+    socketLB       = { hostNamespaceOnly = true }
+    k8sServiceHost = "localhost"
+    k8sServicePort = 7445
     # BGP control plane: advertise LoadBalancer service IPs to OPNsense (FRR).
     bgpControlPlane = { enabled = true }
     # Gateway API (ADR-092): the in-cluster host-router for per-stack subdomain delegation

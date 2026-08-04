@@ -44,13 +44,23 @@ variable "protected_repos" {
   }))
   default = {
     circles-iac = { required_checks = ["ci"], require_approval = false } # CI-gated deploy target (sleep-iac shape)
-    circles = { required_checks = ["ci"] }
-    homelab             = { required_checks = ["ci"], require_approval = false } # CI-gated only (like sleep-iac): deploy-pin bumps auto-merge on ci-green, no approver; not a fixer-target
+    circles     = { required_checks = ["ci"] }
+    # homelab: CI-gated only (like sleep-iac) — deploy-pin bumps auto-merge on ci-green, no approver.
+    # ⚠ FLIP PRECONDITION (2026-08-04). The platform-lane gate wants
+    # `require_approval = true, require_code_owner_review = true` against the repo-root CODEOWNERS.
+    # Do NOT flip until homelab has reviewer coverage: require_approval is repo-WIDE (only
+    # code-owner review is path-scoped), and review-reflex.sh derives its scan set from the
+    # AgentStack claims — homelab is in none, so no bot approval exists for it. Flipping first
+    # stalls the deploy-pin lane (agents/images.env, e.g. #95) on an approval nothing can give;
+    # the App/Integration bypass cannot waive required-approval, only an OrganizationAdmin can.
+    # Sequence: claim coverage (FU-068) → flip both flags → point a fixer here.
+    # Tier table: docs/agents/iac-lane.md §The platform lane.
+    homelab             = { required_checks = ["ci"], require_approval = false }
     agent-coordinator   = { required_checks = ["ci"] }
     agent-runtime       = { required_checks = ["ci"] }
     openrouter-operator = { required_checks = ["ci"] }
     oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true } # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
-    oracle-iac          = { required_checks = ["ci"], require_approval = false } # same shape as sleep-iac: deploy-bump PRs gate on CI only
+    oracle-iac          = { required_checks = ["ci"], require_approval = false }         # same shape as sleep-iac: deploy-bump PRs gate on CI only
     sleep-iac           = { required_checks = ["ci"], require_approval = false }
     sleep-tracking      = { required_checks = ["ci"] }
     snore-recorder      = { required_checks = ["ci"] } # PR `ci` check confirmed live 2026-07-24 (PR #8 era runs)

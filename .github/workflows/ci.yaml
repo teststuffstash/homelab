@@ -26,6 +26,20 @@ jobs:
       - name: Validate ArgoCD OCI chart pins (devbox run argocd-validate-pins)
         run: devbox run argocd-validate-pins
 
+      # Platform-lane tier 1 (docs/agents/iac-lane.md): argocd/resources/** is deliberately UNOWNED
+      # in CODEOWNERS, so CI is its only gate — and the pin check above only proves that OCI charts
+      # render, not that the hand-written manifests beside them are valid. kubeconform -strict is
+      # what makes "CI-green" mean something for that tier. NB it SKIPS CRs with no local schema and
+      # says so loudly; the script fails if it ever validates nothing.
+      - name: Schema-validate the raw manifests ArgoCD applies (devbox run manifest-lint)
+        run: devbox run manifest-lint
+
+      # tofu paths are CODEOWNERS-gated (a human reads the diff), so CI buys the cheap half only:
+      # fmt is free, while `tofu validate` needs a provider download per PR (the FU-130 WAN class).
+      # `devbox run tf-validate` stays the local/manual gate.
+      - name: OpenTofu formatting (fmt -check, all roots)
+        run: devbox run -- tofu fmt -check -recursive tofu/
+
       # Stale-registration gate (TICK-LOG meta-1: 5/6 reflex gaps were a stack repo missing from a
       # per-identity token list). Interim until the AgentStack XRD (FU-048) renders all from one claim.
       - name: Agents registration lint (stacks.json ⊆ coordinator/reviewer token lists)

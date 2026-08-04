@@ -30,9 +30,9 @@ locals {
 # resource silently deleted longhorn_bulk_zone's topology.kubernetes.io/zone off wk-metal-01
 # (found 2026-07-14; a day of bulk-tier anti-affinity blindness).
 resource "kubernetes_labels" "ephemeral_tier" {
-  for_each      = toset(["wk-metal-01", "wk-metal-02"])
-  api_version   = "v1"
-  kind          = "Node"
+  for_each    = toset(["wk-metal-01", "wk-metal-02"])
+  api_version = "v1"
+  kind        = "Node"
   metadata { name = each.value }
   labels        = { "homelab.io/ephemeral" = "true" }
   field_manager = "tofu-ephemeral-tier"

@@ -502,7 +502,7 @@ resource "github_repository" "circles" {
   allow_rebase_merge          = true
   allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
   allow_update_branch         = false
-  allow_forking               = false
+  allow_forking               = true # PUBLIC repos are always forkable — GitHub ignores false, so match it (no perpetual diff)
   delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
   web_commit_signoff_required = false
 
@@ -543,7 +543,7 @@ resource "github_repository" "circles_iac" {
   allow_rebase_merge          = true
   allow_auto_merge            = true # GitHub completes the PR once approval + CI pass
   allow_update_branch         = false
-  allow_forking               = false
+  allow_forking               = true # PUBLIC repos are always forkable — GitHub ignores false, so match it (no perpetual diff)
   delete_branch_on_merge      = true # clean up the worker's agent/* branch after merge
   web_commit_signoff_required = false
 
