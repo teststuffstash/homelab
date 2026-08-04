@@ -41,6 +41,52 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
    ~15–17 sustained 2h+, no rebuilds or degraded volumes — plain workload IO grinding a near-full
    bulk disk. The alert was, again, the only visibility.
 
+## The Longhorn side has a SECOND sum — provisioning, not bytes (2026-08-04)
+
+The rule above meters **bytes committed vs bytes available**. Longhorn enforces a different sum
+first, and a tier can pass the byte check while failing this one: `storageOverProvisioningPercentage`
+bounds what may be *promised* per disk at `(max − reserved) × pct`, regardless of free space.
+
+homelab#94 fired twice on it. At `pct = 100`, with real free space sitting unused:
+
+| std disk | physically free | provisioning headroom |
+|---|---|---|
+| hp-01 | 25.2G | 7.9G — and under the 25% minimal-available floor → `DiskPressure` |
+| thinkcentre | 87.3G | **0.7G** |
+| wk-02 | 99.8G | **−0.1G** |
+
+A 2Gi volume could not place **anywhere**, which stalled the platform coordinator. Note the trap:
+Longhorn reports `Schedulable=True` on a disk that cannot accept the volume in question — the
+status field answers "is this disk usable at all", not "does what I need fit". **Measure
+`max − reserved − scheduled`; do not trust `Schedulable`.**
+
+**Raised to 200 (operator, 2026-08-04, `tofu/longhorn.tf`).** It bought immediate headroom and the
+volume scheduled. What it did NOT do is create disk — it converts a loud early failure (cannot
+schedule, nothing breaks) into a late destructive one (volume fills mid-write, goes read-only).
+That trade is only sound with metering, so the **Longhorn per-disk alert below stops being optional
+and becomes the prerequisite it was always described as.**
+
+### Where the physical bytes actually are (measured 2026-08-04, post-raise)
+
+| tier | physical used | committed | committed as % of physical |
+|---|---|---|---|
+| `std` (hp-01 + thinkcentre) | 110.5G / 226.6G (49%) | 135.0G | 60% |
+| `bulk,std` (wk-02, one disk in both tiers) | 138.0G / 235.9G (58%) | **246.0G** | **104%** |
+| `bulk` (wk-metal-01) | 272.0G / 463.4G (59%) | 230.0G | 50% |
+| `fast` (Optane ×2) | 9.7G / 26.7G (36%) | 17.0G | 64% |
+
+Two things this says, and they are not the same thing:
+
+1. **The cluster is not out of disk** — every tier is 36–59% physically used.
+2. **wk-02 is committed at 104% of its own physical size**, and hp-01 is 78% full with 26G free.
+   So the pressure is *distribution*, not total capacity: one disk carries commitments it cannot
+   honour if the volumes on it ever fill, while thinkcentre sits at 18% used. Adding disk is not
+   the first lever — rebalancing replicas off wk-02, and reclaiming hp-01, are.
+
+The honest summary: raising the percentage removed a scheduling wall that was blocking work, and in
+exchange it removed the mechanism that was refusing to let wk-02 get any more overcommitted. That
+refusal was doing real work. Metering is what replaces it.
+
 ## Build
 
 - **The ledger itself — BUILT 2026-08-02 (FU-093a)**: `devbox run storage-ledger`
@@ -57,8 +103,11 @@ A ledger that isn't measured is a spreadsheet. Four sightings in six days, all t
   decision, not a rubber stamp.
 - **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
   usage-vs-cap panels; a **>80% alert**.
-- **Longhorn metering** — per-disk `storageScheduled`-vs-cap. The kubelet metrics already exist
-  (`longhorn_disk_*`); add the >80% alert alongside the Garage one.
+- **Longhorn metering — now the PREREQUISITE, not a nice-to-have** (see the over-provisioning
+  section above; raising the percentage to 200 removed the scheduler's own refusal). Two alerts,
+  not one: per-disk `storageScheduled` vs `(max − reserved) × pct` (the provisioning sum, the one
+  homelab#94 hit twice) **and** per-disk physical used vs max (the byte sum, which now has nothing
+  bounding it). The kubelet metrics already exist (`longhorn_disk_*`).
 
 ## Consumer
 

@@ -97,7 +97,16 @@ resource "helm_release" "longhorn" {
       replicaSoftAntiAffinity           = true
       replicaZoneSoftAntiAffinity       = true # spread the 2 replicas across zones
       defaultDataLocality               = "best-effort"
-      storageOverProvisioningPercentage = 100
+      # 100 → 200 (2026-08-04, homelab#94's SECOND firing). At 100 Longhorn may promise only
+      # `max - reserved` per disk, and the std tier hit that wall with real free space sitting
+      # unused: thinkcentre had 87.3G free but 0.7G of provisioning headroom, wk-02 99.8G free and
+      # -0.1G headroom. A 2Gi transcripts volume could not place ANYWHERE, which stalled the
+      # platform coordinator.
+      # ⚠ This does NOT create disk. It trades a loud early failure (cannot schedule) for a late
+      # destructive one (volume fills mid-write → read-only). It is only safe with metering, and
+      # the Longhorn per-disk alert is still an unbuilt item in docs/storage-ledger.md — that is
+      # now a prerequisite, not a nice-to-have.
+      storageOverProvisioningPercentage = 200
       orphanAutoDeletion                = true
       # Let Longhorn read the Metrics Server (metrics-server.tf) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
