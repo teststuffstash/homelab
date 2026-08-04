@@ -60,9 +60,16 @@ for b in $buckets; do
     bash "$ROOT/scripts/garage-s3.sh" s3 sync "s3://$b" "$DEST/$b" --only-show-errors
   fi
 
+  # The assertion is `local >= remote-at-start`, NOT equality. `remote` was read BEFORE this
+  # bucket synced, so everything that existed then must be in the copy — but a LIVE bucket keeps
+  # growing underneath, and equality then fails on a backup that is perfectly good. Measured
+  # 2026-08-04: loki read 53696, synced 53712, and was 53807 by the time the run finished. A
+  # backup of a moving target is a point-in-time snapshot; only a SHORT copy is a failure.
   local_n="$(find "$DEST/$b" -type f | wc -l | tr -d ' ')"
-  if [ "$remote" != "?" ] && [ "$local_n" != "$remote" ]; then
-    printf '  ✗ %-28s local %s != remote %s\n' "$b" "$local_n" "$remote"; rc=1
+  if [ "$remote" != "?" ] && [ "$local_n" -lt "$remote" ]; then
+    printf '  ✗ %-28s local %s < remote %s — SHORT COPY\n' "$b" "$local_n" "$remote"; rc=1
+  elif [ "$remote" != "?" ] && [ "$local_n" -gt "$remote" ]; then
+    printf '  ✓ %-28s %s objects (+%s written while syncing — live bucket)\n' "$b" "$local_n" "$((local_n - remote))"
   else
     printf '  ✓ %-28s %s objects\n' "$b" "$local_n"
   fi
@@ -76,4 +83,4 @@ if [ "$rc" != 0 ]; then
   echo "FAIL: at least one bucket's local copy does not match Garage — this is NOT a usable backup." >&2
   exit 1
 fi
-echo "OK — every non-excluded bucket matches Garage object-for-object."
+echo "OK — every non-excluded bucket holds at least everything Garage had when its sync started."
