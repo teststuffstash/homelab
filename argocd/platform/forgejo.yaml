@@ -92,9 +92,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: forgejo
   syncPolicy:
-    # prune: false for the FIRST sync — a stray prune here deletes the /data PVC holding the git
-    # repos. Flipped to true only after the adoption is verified to have recreated nothing.
-    automated: { prune: false, selfHeal: true }
+    # prune was false for the first sync — a stray prune here deletes the /data PVC holding the git
+    # repos. Flipped 2026-08-04 after the adoption verified clean: Synced/Healthy, the pod still the
+    # one from the pre-migration apply with 0 restarts, gitea-shared-storage untouched at 54d, and
+    # the API still answering (admin 200, DB-backed repo search 200, wrong password 401).
+    automated: { prune: true, selfHeal: true }
     retry:
       limit: 5
       backoff: { duration: 15s, factor: 2, maxDuration: 5m }
