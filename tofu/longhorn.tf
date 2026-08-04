@@ -115,7 +115,7 @@ resource "helm_release" "longhorn" {
       # now a prerequisite, not a nice-to-have.
       storageOverProvisioningPercentage = 200
       orphanAutoDeletion                = true
-      # Let Longhorn read the Metrics Server (metrics-server.tf) so it populates the
+      # Let Longhorn read the Metrics Server (argocd/platform/metrics-server.yaml) so it populates the
       # longhorn_*_cpu/memory_* metrics behind the dashboard's "CPU & Memory" panels.
       kubernetesMetricsServerMetricsEnabled = true
       # ADR-089: system components (instance-manager, CSI, engine-image DS) must run on the

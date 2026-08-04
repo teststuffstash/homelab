@@ -1,0 +1,42 @@
+# Kubernetes Metrics Server (metrics.k8s.io). Talos ships none, so without it the cluster has no
+# `kubectl top`, no HPA, and Longhorn can't read pod/node CPU+memory (the Longhorn dashboard's
+# "CPU & Memory" panels go empty).
+#
+# --kubelet-insecure-tls: Talos kubelet serving certs are self-signed (not cluster-CA-signed) unless
+# server-cert rotation is enabled, so metrics-server can't verify them — skip verification
+# (LAN-internal; it scrapes the kubelet on each node's InternalIP:10250).
+#
+# MIGRATED from tofu `helm_release.metrics_server` on 2026-08-04 — the first release through the
+# ArgoCD lever (docs/dependency-upgrades.md §"Executing the lever"): it was the adoption canary,
+# chosen because losing it costs nothing. The release name and values are unchanged, so the chart
+# renders `app.kubernetes.io/instance: metrics-server` exactly as the live objects already carry it
+# and ArgoCD adopts in place. The orphaned `sh.helm.release.v1.metrics-server.v1` Secret in
+# kube-system is left deliberately: it is the rollback path (`tofu import`), not residue.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 3.12.2
+    helm:
+      valuesObject:
+        args:
+          - --kubelet-insecure-tls
+          - --kubelet-preferred-address-types=InternalIP
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    # prune: false for the FIRST sync — an adoption that renders anything differently must not be
+    # allowed to delete the live object. Flipped to true once the adoption is verified.
+    automated: { prune: false, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
