@@ -1,0 +1,85 @@
+# Garage — self-hosted S3-compatible object store (Deuxfleurs), ADR-031. THE store: every bucket in
+# docs/garage.md §Durability lives here, including agent-transcripts and the tofu remote state.
+#
+# MIGRATED off tofu `helm_release.garage` on 2026-08-04 — the LAST release of the ArgoCD lever
+# (FU-136), and the one the runbook said to leave until last because a destroy here is
+# unrecoverable. It was gated on three things, all now satisfied:
+#   1. a backup existing (FU-137 — `devbox run garage-backup`, 351,682 objects verified);
+#   2. both secrets behind references (rpcSecret AND the admin token — see tofu/garage.tf);
+#   3. the vendored chart relocated to argocd/charts/garage, where ArgoCD can read it.
+#
+# The Application name MUST stay `garage` — it equals the Helm release name, which is what makes
+# ArgoCD's label tracking agree with the labels already on the live objects.
+#
+# Verified before the move: this chart path + these values rendered and diffed against live with
+# `kubectl diff -n garage` — 7 objects, zero differences. (Use -n garage: the chart emits no
+# metadata.namespace, so an unscoped diff compares against the wrong namespace and reports
+# five phantom differences.)
+#
+# ⚠ The StatefulSet's volumeClaimTemplates are IMMUTABLE and hold 63 GB. Nothing here may change
+# `persistence` — a resize is the PV-rebind dance in docs/garage-bulk-migration.md, never an edit.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: garage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    # The chart is VENDORED IN THIS REPO (argocd/charts/garage, Garage v2.3.0 / chart 0.9.3) so a
+    # sync never depends on git.deuxfleurs.fr. Upgrades = re-vendor at the new tag, per that dir's
+    # VENDORED.md.
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/charts/garage
+    helm:
+      valuesObject:
+        deployment:
+          kind: StatefulSet
+          replicaCount: 1
+        environment:
+          - name: GARAGE_ADMIN_TOKEN
+            valueFrom:
+              secretKeyRef:
+                key: token
+                name: garage-admin-token
+        garage:
+          consistencyMode: consistent
+          existingRpcSecret: garage-rpc
+          replicationFactor: "1"
+          s3:
+            api:
+              region: garage
+            web:
+              rootDomain: .teststuff.net
+        monitoring:
+          metrics:
+            enabled: false
+        persistence:
+          data:
+            size: 150Gi
+            storageClass: longhorn-bulk
+          enabled: true
+          meta:
+            size: 1Gi
+            storageClass: longhorn
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        service:
+          type: ClusterIP
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: garage
+  syncPolicy:
+    # prune: false for the FIRST sync. On this Application a stray prune is not an inconvenience —
+    # it is the StatefulSet and its 63 GB of PVCs. Flipped only after the adoption is verified.
+    automated: { prune: false, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

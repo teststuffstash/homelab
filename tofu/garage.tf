@@ -67,81 +67,11 @@ resource "kubernetes_secret" "garage_admin_token" {
   type = "Opaque"
 }
 
-resource "helm_release" "garage" {
-  name      = "garage"
-  namespace = kubernetes_namespace.garage.metadata[0].name
-  # The vendored chart moved to argocd/charts/garage on 2026-08-04 (FU-136 step 2/3) so ArgoCD can
-  # read it from a git path — ArgoCD cannot see anything under tofu/. tofu points at the SAME files
-  # from its new home while it still owns the release, which is what lets the empty-diff pre-flight
-  # prove the relocation changed nothing before the release moves.
-  chart   = "${path.module}/../argocd/charts/garage" # vendored; version pinned by the files on disk
-  timeout = 600
-
-  values = [yamlencode({
-    garage = {
-      replicationFactor = "1" # single node, no redundancy at the Garage layer
-      consistencyMode   = "consistent"
-      # FU-136: reference, never a value (see kubernetes_secret.garage_rpc above). The chart reads
-      # key `rpcSecret` from this Secret in its init container and stops rendering its own.
-      existingRpcSecret = kubernetes_secret.garage_rpc.metadata[0].name
-      s3 = {
-        api = { region = "garage" } # S3 clients must use region "garage"
-        # Static-website endpoint (3902): anonymous GET on website-enabled buckets — the one
-        # Garage seam browsers can consume (the S3 API 403s anonymous reads). First consumer:
-        # the oracle-specs spec site (oracle-fleet#16 / oracle-iac#5).
-        web = { rootDomain = ".teststuff.net" } # bucket <b> → https://<b>.teststuff.net (3902)
-      }
-    }
-
-    deployment = {
-      kind         = "StatefulSet"
-      replicaCount = 1
-    }
-
-    # FU-082: the S3 store was BestEffort — every LAN app's object storage, shouldn't be
-    # first-to-die. Requests + a limit with headroom over the ~20Mi steady state (lmdb metadata
-    # cache grows with object count).
-    resources = {
-      requests = { cpu = "100m", memory = "128Mi" }
-      limits   = { memory = "512Mi" }
-    }
-
-    # meta (lmdb) + data on replicated Longhorn. RWO; the pod avoids the ephemeral/laptop nodes
-    # (taint, ADR-044) by default, landing on a storage node. storageClass must be set explicitly
-    # or the volumeClaimTemplates omit storageClassName.
-    persistence = {
-      enabled = true
-      meta    = { size = "1Gi", storageClass = "longhorn" }
-      # data on the ADR-089 bulk tier (150Gi ≈ the advertised bulk ceiling; Garage takes the
-      # whole grant — it IS the bulk consumer). Garage stays replication_factor=1; redundancy
-      # comes from longhorn-bulk's 2 replicas (MX500 + wk-02). Migrated off 10Gi/longhorn
-      # 2026-07-13 via the PV-rebind dance in docs/garage-bulk-migration.md (STS
-      # volumeClaimTemplates are immutable — that doc is the recipe for any repeat).
-      data = { size = "150Gi", storageClass = "longhorn-bulk" }
-    }
-
-    # Chart Service stays ClusterIP — that's what the in-cluster CronJob ingester talks to. The LAN
-    # VIP is a separate resource below (the chart Service can't carry the bgp=advertise label).
-    service = { type = "ClusterIP" }
-
-    # Honour ADR-042 (Prometheus scrapes only Home Assistant) — no metrics Service/ServiceMonitor.
-    monitoring = { metrics = { enabled = false } }
-
-    # Sets [admin] admin_token (env override). Enables the HTTP admin API the app bucket-provisioning
-    # uses. List form because the chart renders this straight into the pod's `env:`.
-    # FU-136: the token arrives by reference. The chart toYaml's this list straight into the pod's
-    # `env:`, so a valueFrom entry works with no chart change.
-    environment = [{
-      name = "GARAGE_ADMIN_TOKEN"
-      valueFrom = {
-        secretKeyRef = {
-          name = kubernetes_secret.garage_admin_token.metadata[0].name
-          key  = "token"
-        }
-      }
-    }]
-  })]
-}
+# garage MOVED to ArgoCD on 2026-08-04 (FU-136, the ArgoCD lever's last release):
+#   argocd/platform/garage.yaml, chart vendored at argocd/charts/garage.
+# What stays here is what tofu still owns: the namespace, both Secrets the chart REFERENCES
+# (garage-rpc, garage-admin-token) and the LAN VIP Service below — the VIP is platform wiring the
+# chart cannot express (BGP keys off a label the chart's Service template doesn't expose).
 
 # LAN VIP for the S3 API (3900) + the static-website endpoint (3902 — deliberately ON the VIP
 # since 2026-07-14: HAProxy fronts it as https://<bucket>.teststuff.net for browser-served
@@ -176,7 +106,9 @@ resource "kubernetes_service" "garage_s3_lb" {
       protocol    = "TCP"
     }
   }
-  depends_on = [helm_release.garage]
+  # The chart's Service is an ArgoCD Application since 2026-08-04 (FU-136), so there is no tofu
+  # resource left to depend on. This VIP Service selects the chart's pods by label and is
+  # independent of ordering — Cilium assigns the IP whenever the endpoints appear.
 }
 
 output "garage_s3_endpoint" {
