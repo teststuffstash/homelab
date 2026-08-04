@@ -239,6 +239,26 @@ resource "kubernetes_secret" "argocd_repo_ghcr_charts_oci" {
   depends_on = [helm_release.argocd]
 }
 
+# Forgejo's Helm chart is published ONLY as an OCI artifact (code.forgejo.org/forgejo-helm), so
+# ArgoCD needs it registered as an OCI helm repository before it can pull the chart — this is what
+# a plain HTTP chart repo (metrics-server, kube-prometheus-stack) needs no equivalent of. Anonymous:
+# the registry serves the chart without credentials, so there is no secret here beyond the pointer
+# itself. Added 2026-08-04 with FU-136 release 3 (argocd/platform/forgejo.yaml).
+resource "kubernetes_secret" "argocd_repo_forgejo_oci" {
+  metadata {
+    name      = "repo-forgejo-helm-oci"
+    namespace = "argocd"
+    labels    = { "argocd.argoproj.io/secret-type" = "repository" }
+  }
+  data = {
+    type      = "helm"
+    name      = "forgejo-helm"
+    url       = "code.forgejo.org/forgejo-helm"
+    enableOCI = "true"
+  }
+  depends_on = [helm_release.argocd]
+}
+
 # ---------------------------------------------------------------------------
 # 2 · Infisical bootstrap secrets (seeded here; ArgoCD/CNPG reference them by name)
 #     These are NOT in git and NOT ArgoCD-managed, so ArgoCD never prunes them.

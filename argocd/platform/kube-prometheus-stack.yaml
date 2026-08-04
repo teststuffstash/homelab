@@ -47,9 +47,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: monitoring
   syncPolicy:
-    # prune: false for the FIRST sync — a stray prune here deletes the Prometheus CR and its TSDB.
-    # Flipped to true only after the adoption is verified to have recreated nothing.
-    automated: { prune: false, selfHeal: true }
+    # prune was false for the first sync — a stray prune here deletes the Prometheus CR and its
+    # TSDB. Flipped 2026-08-04 after the adoption verified clean: Synced/Healthy, Deployments still
+    # dated 2026-06-02, the 20Gi TSDB PVC untouched at 61d, and Prometheus still serving 50 rule
+    # groups / 294 rules.
+    automated: { prune: true, selfHeal: true }
     retry:
       limit: 5
       backoff: { duration: 15s, factor: 2, maxDuration: 5m }

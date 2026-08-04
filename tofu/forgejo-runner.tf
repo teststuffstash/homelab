@@ -5,7 +5,7 @@
 # the namespace is opted up to PodSecurity=privileged (same as monitoring).
 #
 # ⚠ Two-phase bootstrap (Actions must be ENABLED — tofu/forgejo.tf — and applied first):
-#   1. devbox run -- tofu -chdir=tofu apply -target=helm_release.forgejo      # turn Actions on
+#   1. Forgejo Actions are on in argocd/platform/forgejo.yaml (gitea.config.actions.ENABLED)
 #   2. TOKEN=$(devbox run -- kubectl --kubeconfig tofu/kubeconfig -n forgejo \
 #        exec deploy/forgejo -- forgejo forgejo-cli actions generate-runner-token)
 #      export TF_VAR_forgejo_runner_token="$TOKEN"                            # (or Admin → Actions → Runners)
@@ -161,7 +161,8 @@ resource "kubernetes_deployment" "forgejo_runner" {
       }
     }
   }
-  depends_on = [helm_release.forgejo]
+  # forgejo itself is an ArgoCD Application since 2026-08-04 (FU-136), so there is no tofu resource
+  # left to depend on. The runner registers against a live Forgejo; if it starts first it retries.
 }
 
 output "forgejo_runner" {

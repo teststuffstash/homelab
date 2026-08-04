@@ -1,0 +1,100 @@
+# Forgejo — self-hosted Git (Gitea-based), CNPG-backed, one 5Gi Longhorn PVC for /data.
+#
+# MIGRATED off tofu `helm_release.forgejo` on 2026-08-04 — release 4 of the ArgoCD lever (FU-136,
+# docs/dependency-upgrades.md §"Executing the lever").
+#
+# The Application name MUST stay `forgejo` — it equals the Helm release name, which is what makes
+# ArgoCD's label tracking agree with the labels the chart already rendered on the live objects.
+#
+# Verified before the move: `helm template` with these values and this chart version, diffed
+# against live with `kubectl diff` — 7 objects, zero differences.
+#
+# ⚠ NO SECRET APPEARS BELOW, and both credentials took a preparatory tofu apply to get that way
+# (FU-136's secret gate): the admin password is now `admin.existingSecret: forgejo-admin-creds`
+# (named -creds because the CHART owns the name `forgejo-admin`), and the database password rides
+# `additionalConfigFromEnvs` out of the CNPG `forgejo-pg-app` Secret into the init-app-ini
+# container, where config_environment.sh turns FORGEJO__DATABASE__PASSWD into app.ini. Both
+# Secrets are still created by tofu.
+#
+# The chart is OCI-only, which needed an ArgoCD helm repository registration
+# (`kubernetes_secret.argocd_repo_forgejo_oci`, tofu/argocd.tf) — a plain HTTP chart repo needs no
+# equivalent, so this is forgejo-specific, not a lever-wide step.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 17.1.1
+    helm:
+      skipCrds: true
+      valuesObject:
+        gitea:
+          additionalConfigFromEnvs:
+            - name: FORGEJO__DATABASE__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: forgejo-pg-app
+          admin:
+            email: admin@teststuff.net
+            existingSecret: forgejo-admin-creds
+          config:
+            actions:
+              DEFAULT_ACTIONS_URL: github
+              ENABLED: "true"
+            cache:
+              ADAPTER: memory
+            database:
+              DB_TYPE: postgres
+              HOST: forgejo-pg-rw.forgejo.svc.cluster.local:5432
+              NAME: forgejo
+              USER: forgejo
+            server:
+              DOMAIN: forgejo.teststuff.net
+              HTTP_PORT: "3000"
+              ROOT_URL: https://forgejo.teststuff.net/
+              SSH_DOMAIN: forgejo.teststuff.net
+              SSH_PORT: "22"
+            service:
+              DISABLE_REGISTRATION: true
+            session:
+              PROVIDER: memory
+        persistence:
+          enabled: true
+          size: 5Gi
+          storageClass: longhorn
+        replicaCount: 1
+        service:
+          http:
+            annotations:
+              lbipam.cilium.io/ips: 192.168.40.15
+              lbipam.cilium.io/sharing-key: forgejo
+            labels:
+              bgp: advertise
+            port: 3000
+            type: LoadBalancer
+          ssh:
+            annotations:
+              lbipam.cilium.io/ips: 192.168.40.15
+              lbipam.cilium.io/sharing-key: forgejo
+            labels:
+              bgp: advertise
+            port: 22
+            type: LoadBalancer
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    # prune: false for the FIRST sync — a stray prune here deletes the /data PVC holding the git
+    # repos. Flipped to true only after the adoption is verified to have recreated nothing.
+    automated: { prune: false, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
