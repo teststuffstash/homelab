@@ -205,6 +205,30 @@ resource "kubernetes_storage_class" "longhorn_bulk" {
 # where overlay2 works inside the microVM). replica=1 on the bulk disks: scratch data on the
 # roomy pool, and losing a replica just kills a ride that dies with it anyway. No fsType —
 # consumers take volumeMode: Block and mkfs themselves.
+# ---- Single-replica standard tier (homelab#94) ------------------------------
+# For volumes whose durability already lives somewhere else — the coordinator transcript stores
+# are synced to Garage by transcripts-sync, so the second replica buys re-attach convenience, not
+# safety. It costs more than it looks: a 2-replica volume needs TWO schedulable std disks, and on
+# 2026-08-04 there was exactly one (hp-01 under the 25% minimal-available floor, wk-02 at the
+# storageOverProvisioningPercentage=100 ceiling) — so the janitor pod hung 40min on a volume that
+# could not place. Same std fence as the default class, half the disks required.
+# FU-132 migrates the existing coordinator-transcripts PVCs onto this (storageClassName is
+# immutable — it needs a delete+recreate, and the live volumes are patched to 1 replica already).
+resource "kubernetes_storage_class" "longhorn_single" {
+  metadata { name = "longhorn-single" }
+  storage_provisioner    = "driver.longhorn.io"
+  reclaim_policy         = "Delete"
+  allow_volume_expansion = true
+  volume_binding_mode    = "Immediate"
+  parameters = {
+    numberOfReplicas    = "1"
+    diskSelector        = "std"
+    dataLocality        = "best-effort"
+    staleReplicaTimeout = "30"
+  }
+  depends_on = [helm_release.longhorn]
+}
+
 resource "kubernetes_storage_class" "longhorn_scratch" {
   metadata { name = "longhorn-scratch" }
   storage_provisioner    = "driver.longhorn.io"
