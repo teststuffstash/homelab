@@ -254,6 +254,67 @@ lint_stack() { # <name>
     say PROBE-FAILED K8S-02 "$stack" "cluster unreachable — workbench SA unknown"
   fi
 
+  # ── WEB-01..03 — per-stack subdomain delegation + specs publishing (ADR-092) ────────────
+  # OPT-IN: only checked once the stack shows intent — a `stack_gateways` entry here, or a
+  # specs-publish workflow in its main repo. A stack with neither is not behind on anything.
+  #
+  # Why there is no "are the repo Actions secrets set?" check: the jail PAT deliberately lacks the
+  # Secrets permission (docs/github-setup.md, verified 403 again 2026-08-04), so such a probe could
+  # only ever be PROBE-FAILED — and "cannot see" is never "missing". The END STATE is visible
+  # instead, and it is strictly better evidence: if specs.<stack> serves 200, then the secrets, CI,
+  # Garage, the Gateway, HAProxy and DNS all work. That matters here because the publish script
+  # SOFT-SKIPS on absent credentials (`specs-publish: no S3 credentials in env — skipping`), so a
+  # stack with unset secrets has GREEN CI and an empty site. Green-and-doing-nothing is the failure
+  # this check exists to make loud.
+  local gw_entry="" specs_wf=0
+  # yq, not grep: the stack_gateways entries wrap across two lines, so a line-oriented match
+  # silently reports "no entry" for one that is right there (caught on circles, 2026-08-04).
+  if command -v yq >/dev/null 2>&1; then
+    gw_entry=$(yq -r ".stack_gateways[] | select(.name == \"${stack}-gw\") | .vip" ansible/group_vars/opnsense.yml 2>/dev/null | grep -E '^[0-9.]+$' || true)
+  fi
+  if [ "$HAVE_GH" = 1 ] && gh api "repos/$ORG/$mainRepo/contents/.github/workflows/specs-site.yaml" >/dev/null 2>&1; then specs_wf=1; fi
+
+  if [ -n "$gw_entry" ] || [ "$specs_wf" = 1 ]; then
+    # WEB-01 — homelab's half: the wildcard cert + the 3.x↔40.x HAProxy VIP entry.
+    if [ -z "$gw_entry" ]; then
+      say FAIL WEB-01 "$stack" "$mainRepo publishes a specs site but there is no ${stack}-gw in ansible/group_vars/opnsense.yml — add the wildcard cert + a free 3.x↔40.x pair, then run opnsense-{acme,haproxy}.yml"
+    elif ! grep -q "\*\.${stack}\.teststuff\.net" ansible/group_vars/opnsense.yml 2>/dev/null; then
+      say FAIL WEB-01 "$stack" "${stack}-gw exists but no *.${stack}.teststuff.net wildcard in acme_cert_specs — HAProxy will serve the wrong cert"
+    else
+      say OK WEB-01 "$stack" "wildcard cert + ${stack}-gw VIP $gw_entry in group_vars"
+    fi
+
+    # WEB-02 — the wildcard override actually resolves. Probed with a name nobody would ever add,
+    # so this proves the WILDCARD, not a leftover per-name override.
+    if command -v dig >/dev/null 2>&1 && [ -n "$gw_entry" ]; then
+      local got
+      got=$(timeout 8 dig +short "stack-lint-probe.${stack}.teststuff.net" @192.168.2.1 2>/dev/null | tail -1)
+      if [ "$got" = "$gw_entry" ]; then
+        say OK WEB-02 "$stack" "*.${stack}.teststuff.net resolves to $gw_entry (wildcard, not per-name)"
+      elif [ -z "$got" ]; then
+        say FAIL WEB-02 "$stack" "*.${stack}.teststuff.net does not resolve — run opnsense-haproxy.yml (it writes the wildcard Unbound override)"
+      else
+        say FAIL WEB-02 "$stack" "*.${stack}.teststuff.net resolves to $got, expected $gw_entry — stale override, API-delete it (runbook: retire a per-name HTTPS entry)"
+      fi
+    else
+      say PROBE-FAILED WEB-02 "$stack" "no dig / no gateway entry — wildcard DNS unknown"
+    fi
+
+    # WEB-03 — the whole chain, end to end. 000/timeout = TLS terminates but 40.x has no BGP route
+    # (the stack's Gateway is missing); 404 = Gateway up, no HTTPRoute; 200 = published.
+    if command -v curl >/dev/null 2>&1 && [ "$specs_wf" = 1 ]; then
+      local code
+      code=$(timeout 15 curl -sk -o /dev/null -w '%{http_code}' "https://specs.${stack}.teststuff.net" 2>/dev/null || echo 000)
+      case "$code" in
+        200) say OK WEB-03 "$stack" "specs.${stack}.teststuff.net serves 200 — secrets, CI, Garage, Gateway and HAProxy all work" ;;
+        404) say WARN WEB-03 "$stack" "specs.${stack}.teststuff.net → 404: Gateway is up but no HTTPRoute yet (stack's -iac owes it)" ;;
+        000) say WARN WEB-03 "$stack" "specs.${stack}.teststuff.net terminates TLS then hangs — nothing owns the 40.x VIP yet (stack's -iac owes the Gateway)" ;;
+        403) say FAIL WEB-03 "$stack" "specs.${stack}.teststuff.net → 403 — bucket not website-enabled, or the site was published with the READER key (publishing needs writer_access_key_id)" ;;
+        *)   say WARN WEB-03 "$stack" "specs.${stack}.teststuff.net → HTTP $code" ;;
+      esac
+    fi
+  fi
+
   # JAIL-01 — operator-machine wiring (visible only from the claude-jail checkout)
   if [ -f ../tools/stack-jail.sh ]; then
     if grep -qE "^\s+$stack\)" ../tools/stack-jail.sh; then

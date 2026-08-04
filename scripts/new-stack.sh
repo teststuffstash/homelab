@@ -359,5 +359,30 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
        [+ private mounts]) in tools/stack-jail.sh — repos/ns derive from stacks.json since
        2026-08-03 — + mint the per-stack PAT into .env.$STACK (template in the script header).
 
+  G. OPTIONAL, and only if the stack serves a specs site under its own subdomain (ADR-092 —
+       the WEB-01..03 checks stay silent for stacks that don't). Three parts, in this order:
+       1. homelab wildcard — add to ansible/group_vars/opnsense.yml a wildcard cert
+          ({ name: $STACK.teststuff.net, alt_names: ["*.$STACK.teststuff.net"], … }; the CN must
+          be a real domain, the wildcard rides alt_names) and a stack_gateways entry on a FREE
+          3.x <-> 40.x mirror pair. Then:
+            bash scripts/opnsense-playbook.sh ansible/opnsense-acme.yml
+            bash scripts/opnsense-playbook.sh ansible/opnsense-haproxy.yml
+          The VIP-alias reconfigure can flush FRR's kernel routes and black-hole every 40.x while
+          BGP still reads Established — re-probe a couple of existing VIPs after (runbook).
+          If the site is served from Garage, add a ReferenceGrant in ns garage for HTTPRoutes
+          from the stack's ns (argocd/platform/<stack>-gateway-refgrant.yaml).
+       2. the stack's -iac — a Gateway on the 40.x VIP + one HTTPRoute per hostname. NOT homelab's.
+       3. OPERATOR, once, and the jail cannot do it: the repo Actions secrets for the publish
+          workflow, from the Crossplane-minted connection Secret. The jail PAT deliberately lacks
+          the Secrets permission (docs/github-setup.md), so this is a host-side step:
+            kubectl get secret <stack>-specs-s3 -n <stack> \
+              -o jsonpath='{.data.writer_access_key_id}' | base64 -d \
+              | gh secret set SPECS_S3_ACCESS_KEY_ID -R $ORG/$MAIN
+            # …and writer_secret_access_key -> SPECS_S3_SECRET_ACCESS_KEY
+          Use the WRITER pair. The reader pair authenticates fine and then 403s on upload.
+       WHY THIS IS EASY TO MISS: specs-publish.sh SOFT-SKIPS when the credentials are absent, so
+       until step 3 lands CI is green and the site is empty. WEB-03 probes the served site rather
+       than the secrets (which the jail cannot read) precisely to catch that.
+
   Definition of done:   devbox run stack-lint $STACK
 EOF

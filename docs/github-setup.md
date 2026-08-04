@@ -172,5 +172,17 @@ kubectl get secret ert-snapshots-s3 -n oracle-fleet -o jsonpath='{.data.reader_a
 # …and the same for reader_secret_access_key → ERT_S3_READER_SECRET_ACCESS_KEY
 ```
 
-The jail PAT deliberately lacks the Secrets permission (verified 403, 2026-07-24) — setting these
-is an operator action, once per stack that grows a release workflow.
+The jail PAT deliberately lacks the Secrets permission (verified 403 again 2026-08-04, on both
+`actions/secrets` and `actions/secrets/public-key` — the write path) — setting these is an operator
+action, once per stack that grows a release or specs-publish workflow.
+
+⚠ **Pick the right key of the pair.** A Crossplane connection secret carries BOTH
+`reader_*` and `writer_*` credentials. oracle-fleet's `ERT_S3_READER_*` reads, so it takes the
+reader pair; a **specs-publish** workflow uploads, so it takes `writer_access_key_id` /
+`writer_secret_access_key`. The reader pair authenticates fine and then 403s on PUT.
+
+⚠ **The failure mode is silence.** `specs-publish.sh` soft-skips when the credentials are absent
+(`no S3 credentials in env — skipping`), so a stack whose secrets were never set has **green CI and
+an empty site**. `devbox run stack-lint <stack>`'s **WEB-03** probes the *served* site rather than
+the secrets (which the lint cannot read either) exactly to catch that; WEB-01/02 cover the homelab
+wildcard half. `devbox run new-stack` prints the whole three-part sequence as step G.

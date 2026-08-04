@@ -65,6 +65,9 @@ locals {
     github_repository.agent_coordinator.repo_id,
     github_repository.oracle_fleet.repo_id,   # oracle-fleet deploy.yaml mints a token to open the oracle-iac bump PR
     github_repository.snore_recorder.repo_id, # build-image.yaml mints a token for the sleep-iac SNORE_IMAGE pin PR (FU-051)
+    github_repository.circles.repo_id,        # deploy.yaml bump PRs + specs-pr-site.yaml preview routes → circles-iac
+                                              # (missed at new-stack bootstrap — circles' only deploy run failed on the
+                                              # absent secret 2026-08-03; found via the specs-lane route job 2026-08-04)
   ]
 }
 
