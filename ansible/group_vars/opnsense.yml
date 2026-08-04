@@ -61,6 +61,7 @@ acme_cert_specs:                             # name + the service to reload post
   # oracle-specs entries (runbook "retire a per-name HTTPS entry").
   - { name: oracle.teststuff.net, alt_names: ["*.oracle.teststuff.net"], restart_action: "reload haproxy" }
   - { name: sleep.teststuff.net, alt_names: ["*.sleep.teststuff.net"], restart_action: "reload haproxy" }
+  - { name: circles.teststuff.net, alt_names: ["*.circles.teststuff.net"], restart_action: "reload haproxy" }
 
 # --- opnsense-haproxy : HTTPS reverse proxy for LAN-exposed cluster services ---
 # name -> object prefix + Unbound/cert hostname. Keep `ha` first/unchanged so the
@@ -128,6 +129,11 @@ stack_gateways:
   # Sleep stack delegation (specs.sleep first — sleep-tracking#38's specs/ tree served à la oracle).
   - { name: sleep-gw, cert_domain: sleep.teststuff.net, wildcard_domain: sleep.teststuff.net,
       vip: 192.168.3.26, backend_ip: 192.168.40.26, backend_port: 80 }
+  # 3.28 ↔ 40.28: next free mirror pair — 40.10-40.27 are all taken (40.27 = devbox-search was
+  # the last), and 3.28 is free on the HAProxy side. Circles stack delegation (specs.circles
+  # first, the same Garage-served specs tree as oracle/sleep).
+  - { name: circles-gw, cert_domain: circles.teststuff.net, wildcard_domain: circles.teststuff.net,
+      vip: 192.168.3.28, backend_ip: 192.168.40.28, backend_port: 80 }
 
 # --- opnsense-wireguard : road-warrior VPN (full-LAN remote access, ADR-090) ---
 # The server keypair is generated ON the router at first run (privkey never leaves it).

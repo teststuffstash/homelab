@@ -1,0 +1,30 @@
+# ReferenceGrant: lets the circles stack's Gateway (ns circles) route its spec site to the Garage
+# web endpoint (Service garage-s3 in ns garage) across namespaces (ADR-092, mirroring
+# sleep-gateway-refgrant.yaml and oracle-gateway-refgrant.yaml). Gateway API forbids
+# cross-namespace backend refs unless the TARGET namespace grants them — so this lives in ns
+# `garage` and is PLATFORM-owned: the circles AppProject cannot write to the garage ns, and garage
+# is platform territory.
+#
+# Scope is deliberately tight: only HTTPRoutes from ns circles, only the garage-s3 Service — it
+# exists solely for the Garage-served specs.circles.teststuff.net site. In-namespace circles
+# surfaces need no grant.
+#
+# This is the homelab half of the delegation. The other half — the `Gateway` itself
+# (gatewayClassName: cilium, addresses = 192.168.40.28, bgp=advertise, an HTTP :80 listener for
+# `*.circles.teststuff.net`) and one HTTPRoute per hostname — belongs in circles-iac, NOT here.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: circles-httproute-to-garage-s3
+  namespace: garage
+  annotations:
+    argocd.argoproj.io/sync-wave: "2" # after the gateway-api-crds app (ReferenceGrant CRD)
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: circles
+  to:
+    - group: ""
+      kind: Service
+      name: garage-s3
