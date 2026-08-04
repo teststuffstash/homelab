@@ -1,0 +1,71 @@
+# Longhorn capacity metering — the prerequisite that raising storageOverProvisioningPercentage to
+# 200 created (docs/storage-ledger.md §"The Longhorn side has a SECOND sum").
+#
+# At pct=100 the scheduler itself was the belt: it refused to promise more than a disk could hold,
+# and homelab#94 was that refusal firing. Raising it to 200 removed the refusal to unblock real
+# work, which converts a loud early failure (cannot schedule) into a late destructive one (volume
+# fills mid-write → read-only). These two rules are what replaces it.
+#
+# TWO sums, deliberately, because a tier can pass one and fail the other:
+#   • BYTES     — is the disk physically filling? (nothing bounds this now)
+#   • PROVISION — how much have we PROMISED vs what the disk may promise? (the #94 wall)
+#
+# ⚠ Metric shape forced a compromise: longhorn exports usage/capacity/reservation PER DISK, but
+# `scheduled` only PER NODE (longhorn_node_storage_scheduled_bytes — there is no
+# longhorn_disk_storage_scheduled_bytes). So the provisioning rule is node-scoped. That is exact
+# for hp-01/wk-02/wk-metal-01 (one disk each) and slightly pessimistic for thinkcentre, whose two
+# Optanes are summed in with its std disk. Verified against the live series list before writing.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-capacity
+  namespace: monitoring
+  labels:
+    app: longhorn-alerts
+spec:
+  groups:
+    - name: longhorn-capacity
+      rules:
+        # BYTE SUM. Thresholds chosen against measured state (2026-08-04: hp-01 78%, wk-metal-01
+        # 59%, wk-02 58%, thinkcentre 18%) so this gives runway instead of firing on arrival.
+        - alert: LonghornDiskFillingUp
+          expr: |
+            longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.85
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} physically full"
+            description: >-
+              Physical bytes, not provisioning. Since storageOverProvisioningPercentage=200 nothing
+              refuses new promises on this disk, so a full disk now surfaces as volumes going
+              read-only mid-write rather than as a scheduling failure. Check
+              `kubectl -n longhorn-system get nodes.longhorn.io -o json` for usage vs capacity, and
+              docs/storage-ledger.md for which tier owns the sum.
+        - alert: LonghornDiskAlmostFull
+          expr: |
+            longhorn_disk_usage_bytes / longhorn_disk_capacity_bytes > 0.93
+          for: 10m
+          labels: { severity: critical }
+          annotations:
+            summary: "Longhorn disk {{ $labels.node }}/{{ $labels.disk }} is {{ $value | humanizePercentage }} full — volumes on it can go read-only"
+            description: >-
+              Act now: evict replicas off this disk (`evictionRequested: true` on the disk) or free
+              space. A Longhorn volume that fills does not fail politely.
+        # PROVISIONING SUM — how close a node is to the 200% ceiling. Measured 2026-08-04:
+        # wk-02 1.11, thinkcentre 0.90, hp-01 0.84, wk-metal-01 0.63. 1.5 = halfway to the wall.
+        - alert: LonghornNodeOverProvisioned
+          expr: |
+            longhorn_node_storage_scheduled_bytes
+              / (longhorn_node_storage_capacity_bytes - longhorn_node_storage_reservation_bytes)
+              > 1.5
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "Longhorn node {{ $labels.node }} has promised {{ $value | humanizePercentage }} of its allocatable storage"
+            description: >-
+              The ceiling is storageOverProvisioningPercentage (200 since 2026-08-04); at 100% of
+              allocatable the scheduler used to refuse, and that refusal is gone. Promised bytes far
+              exceeding physical capacity means the disk cannot honour its volumes if they fill.
+              Levers, in order (homelab#94): fix tier tagging so one disk is not in two tiers,
+              evict replicas off the loaded node, enable replicaAutoBalance, even out
+              storageReserved. docs/storage-ledger.md carries the reasoning.

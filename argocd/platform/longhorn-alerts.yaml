@@ -1,0 +1,24 @@
+# Longhorn capacity metering (homelab#94, docs/storage-ledger.md). A tiny app because the rules
+# must live somewhere ArgoCD syncs and Longhorn itself is tofu-managed (helm_release) — mixing
+# alert rules into that release would put them behind a tofu apply, which is exactly the gate this
+# metering exists to compensate for.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: longhorn-alerts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/longhorn-alerts
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false]
