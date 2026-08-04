@@ -67,6 +67,7 @@ done
 # server-side and answers a dispatch or a typed defer. Fail-open: unreachable proxy (jail run
 # without AGENT_EGRESS_PROXY) → static behavior, one loud line.
 _srow="$(jq -c --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0] // {}' "$HERE/stacks.json" 2>/dev/null)" || _srow="{}"
+[ -n "$_srow" ] || _srow='{}'   # normalize ONCE — `${_srow:-{}}` is a trap, see the guard below
 # Per-stack routerMode (ADR-096 P4 knob, 2026-08-03): the claim/mirror row sets the stack's
 # mode; an EXPLICIT AGENT_ROUTER env still wins (jail experiments). Chainless stacks (no
 # workerModel) declare authoritative — enforced below.
@@ -115,9 +116,14 @@ fi
 # static chain, and the hardcoded MODEL default would be a silent lie. Only an authoritative
 # routed dispatch (or an explicit --model) may proceed — shadow/off/unreachable-router all
 # refuse LOUDLY (rule #6: the router fail-open must never fail INTO a made-up model here).
+# ⚠ NOT `${_srow:-{}}`: bash parses that as ${_srow:-{} plus a literal }, so a NON-empty row came
+# out as `<json>}` and every jq here printed "parse error: Unmatched '}'" (found 2026-08-04). The
+# values were still right — jq streams the leading value before choking on the trailing brace — so
+# it read as harmless noise while actually leaving this guard one jq-behaviour change from
+# silently inverting. _srow is normalized at its assignment; use it plainly.
 if [ -z "${MODEL_SET:-}" ] \
-   && [ "$(printf '%s' "${_srow:-{}}" | jq -r '.name // ""')" != "" ] \
-   && [ "$(printf '%s' "${_srow:-{}}" | jq -r '.workerModel // ""')" = "" ]; then
+   && [ "$(printf '%s' "$_srow" | jq -r '.name // ""')" != "" ] \
+   && [ "$(printf '%s' "$_srow" | jq -r '.workerModel // ""')" = "" ]; then
   if [ "$AGENT_ROUTER" != "authoritative" ] || [ "${_verdict:-}" != "dispatch" ] || [ -z "${_rmodel:-}" ]; then
     echo "FATAL: chainless stack (no workerModel in the claim) needs routerMode=authoritative + a routed dispatch — got AGENT_ROUTER=${AGENT_ROUTER}, verdict=${_verdict:-none}. Refusing the static default model." >&2
     exit 1
