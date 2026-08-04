@@ -27,6 +27,18 @@ meant to avoid.)
   instead of continuing at 104k — one uninterrupted run models to ≈$4.4. Cost driver is token
   volume × $3/$15, not the restart; the real lever is `reasoning_effort` (49.2k reasoning tokens =
   $0.74, incl. a 432s/16.2k-token think that wrote nothing). Ledger gap → FU-131.
+- **Platform lane is LIVE — homelab is gated, not yet a fixer target.** Shipped 2026-08-04 and
+  applied: CODEOWNERS path tiers + `require_approval`/`require_code_owner_review` (ruleset created),
+  homelab in the platform claim as CONTEXT-ONLY (reviewer coverage, claim-owned labels, no dispatch),
+  `labels.tf` retired, `agent-read-app`/`agent-read-infra` ClusterRoles (responder can finally read
+  `events` — the #94 wrong-diagnosis cause), CI gained `manifest-lint` + `pin-only-lint`, and the
+  responder gained a self-referential gate + the FU-133 resolve leg (`send_resolved` now true).
+  **NEXT, in order:** (1) homelab's `fixer:` block in the claim — it creates the per-repo ns the
+  worker's `agent-read-infra` RoleBinding needs; use the -iac model chain, NOT `claudeTier` (FU-134
+  ruling: web research must be platform-wide, not harness luck); (2) FU-133's correlation half
+  (`subject:` key); (3) extend the IAC-G04 sentinel to homelab so tier 1 (`argocd/resources/`) can
+  drop back to unowned — the CODEOWNERS line says to delete itself. Tiers + rulings:
+  `docs/agents/iac-lane.md` §The platform lane. ⚠ agent-runtime#29 (watchdog) is open + un-armed.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),

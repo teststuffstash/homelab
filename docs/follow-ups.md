@@ -199,14 +199,13 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       Relates FU-117, FU-095, FU-020.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
-      across 8 days). Two mechanisms: the responder iterates `.alerts[]` and files per fingerprint,
-      un-grouping what Alertmanager grouped; `group_by = ["alertname"]` keeps causally-related
-      alerts apart. Also unmodelled: nothing closes an issue when its alert clears
-      (`send_resolved = false` — the event is never delivered), and ownership vs the -iac
-      observation window is undefined (IAC-G10). **Next:** a `subject:` key searched before filing
-      (append/reopen, not a new issue), then the window hand-off. Class postmortem:
-      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md);
-      lane gaps: [`docs/agents/roles.md`](agents/roles.md) §responder. Relates FU-103, FU-106.
+      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e): `send_resolved = true` + a
+      deterministic resolve leg (comment the clear, close only when no human engaged) + a firing
+      path that REOPENS a closed fingerprint instead of duplicating it. **Remaining — correlation:**
+      the responder still files per fingerprint and `group_by = ["alertname"]` keeps related alerts
+      apart. **Next:** a `subject:` key (pvc/node/workload) searched before filing, then the
+      observation-window hand-off (IAC-G10). Class postmortem:
+      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-131** — **The ADR-096 cost ledger undercounts ~2× under fan-out concurrency — the
       `/generation` harvest gives up after 7s** (`_generation_lookup` retries 2s, 5s, then logs
       `never appeared — skipped`). Measured against OpenRouter's own activity export
