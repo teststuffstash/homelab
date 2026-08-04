@@ -304,6 +304,22 @@ if [ -n "${RECIPE:-}" ]; then
     cp "$RECIPE" "$RECIPE_WITH_CARD"
     echo "WARN FU-114: no {{PLATFORM_ENV_CARD}} marker and no 'instructions: |' block in ${RECIPE} — dispatching WITHOUT the environment card" >&2
   fi
+  # Recipe YAML gate (2026-08-04, agents/recipe-lint.sh). An unparseable recipe kills the ride ~30s
+  # in — AFTER the pod exists, the git token is minted and (on a paid rail) real money is spent: the
+  # missing colon-space in sleep-tracking's research.yaml did exactly that to all four goose arms of
+  # the FU-126 fan-out once new-stack.sh copied it into circles. Split of blame decides the verdict:
+  # a broken RAW recipe is repo content the ride cannot survive → FATAL before pod create; a break
+  # that only appears AFTER the splice is OUR bug → drop the card and dispatch anyway, never wedge
+  # the loop (same degrade-loudly rule as the missing-marker WARN above).
+  if ! bash "$HERE/recipe-lint.sh" "$RECIPE"; then
+    rm -f "$RECIPE_WITH_CARD"
+    echo "FATAL: ${RECIPE} is not parseable YAML — goose would die 'Invalid recipe' after the pod exists. Fix it in ${PROJECT} (bash agents/recipe-lint.sh <file> reproduces this)." >&2
+    exit 2
+  fi
+  if ! bash "$HERE/recipe-lint.sh" "$RECIPE_WITH_CARD"; then
+    echo "WARN: the env-card splice broke the recipe YAML (launcher bug, not repo content) — dispatching the UN-CARDED ${RECIPE}" >&2
+    cp "$RECIPE" "$RECIPE_WITH_CARD"
+  fi
   RECIPE_B64="$(base64 -w0 "$RECIPE_WITH_CARD")"; rm -f "$RECIPE_WITH_CARD"
   case "$HARNESS" in
     claude) RUN_CMD="printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;

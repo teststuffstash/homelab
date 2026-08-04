@@ -188,6 +188,29 @@ lint_stack() { # <name>
             say FAIL REPO-03 "$stack" "$repo missing $f (worker/reviewer recipe — repo content, versioned with the code)"
           fi
         done
+        # REPO-06 — every recipe must PARSE. An unparseable one is invisible until ~30s into a
+        # ride (goose "Invalid recipe"), by which time the pod, the token and the spend are gone;
+        # the missing colon-space that new-stack.sh copied sleep-tracking→circles killed all four
+        # FU-126 goose arms that way. Same gate the launcher runs pre-dispatch (agents/recipe-lint.sh).
+        local y tmp why
+        # NB process substitution, NOT a pipe: `... | while read` runs the loop in a SUBSHELL and
+        # every say FAIL would be lost from the exit code.
+        while read -r y; do
+          [ -n "$y" ] || continue
+          tmp="$(mktemp)"
+          if timeout 15 gh api "repos/$ORG/$repo/contents/.agents/$y" --jq .content 2>/dev/null \
+               | base64 -d > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+            if why="$(bash "$ROOT/agents/recipe-lint.sh" "$tmp" 2>&1)"; then
+              say OK REPO-06 "$stack" "$repo .agents/$y parses"
+            else
+              say FAIL REPO-06 "$stack" "$repo .agents/$y is UNPARSEABLE — ${why#*— }"
+            fi
+          else
+            say PROBE-FAILED REPO-06 "$stack" "$repo .agents/$y unreadable — parse check skipped"
+          fi
+          rm -f "$tmp"
+        done < <(timeout 15 gh api "repos/$ORG/$repo/contents/.agents" \
+                   --jq '.[]|select(.name|endswith(".yaml"))|.name' 2>/dev/null)
       fi
       if [ "$repo" = "$mainRepo" ]; then
         if timeout 15 gh api "repos/$ORG/$repo/contents/CLAUDE.md" --jq .name >/dev/null 2>&1; then

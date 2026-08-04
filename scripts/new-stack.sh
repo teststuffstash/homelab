@@ -209,6 +209,15 @@ if [ -n "$FROM" ]; then
     done
     [ "$LIST_STALE" = 1 ] && echo "  ⚠ STALE SURFACE LIST above — extend it in scripts/new-stack.sh before trusting this copy"
 
+    # A donor defect is inherited SILENTLY: sleep-tracking's research.yaml carried a missing
+    # colon-space here, latent (its own rides used the claude harness, which never YAML-parses the
+    # recipe) until circles' goose arms all died on it. Parse what we just copied, at copy time.
+    for f in "../$MAIN/.agents/"*.yaml; do
+      [ -f "$f" ] || continue
+      bash "$ROOT/agents/recipe-lint.sh" "$f" \
+        || echo "  ⚠ INHERITED a broken recipe from $FROM — fix it in BOTH repos (the donor is still shipping it)"
+    done
+
     # Vanilla deployable: chart + Dockerfile + hello page (only if absent)
     if [ ! -d "../$MAIN/chart" ]; then
       mkdir -p "../$MAIN/chart/templates" "../$MAIN/chart/tests" "../$MAIN/public"

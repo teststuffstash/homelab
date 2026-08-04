@@ -1185,3 +1185,23 @@ O(open PRs × merges), priced by TRACKS rule 1). **Consequences:** ordering (nat
 FU-111) ∧ conflicts (footprints) ∧ burn (FU-088 semaphore) are all deterministic at dispatch;
 judgment happens once, at authoring, where it is reviewable. A worker escaping its declared
 footprint is the residual risk — the reviewer flags escapes (belt, FU-086). Builds: FU-086.
+
+### ADR-098 — Recipe validity is a platform gate, not a stack CI check
+
+**Accepted 2026-08-04.** **Decision:** `.agents/*.yaml` recipes are parse-checked **platform-side**
+by `agents/recipe-lint.sh`, called at the three points the platform already owns: `agent-session.sh`
+before pod create (FATAL on a broken recipe; a break introduced by the env-card splice degrades to
+dispatching un-carded rather than wedging the loop), `stack-lint` REPO-06 (sweep every stack's
+recipes), and `new-stack.sh` at donor-copy time. No stack repo gains a check. The linter is
+deliberately dependency-free — it uses `yq`/PyYAML when present, else a block-scalar-aware scanner
+for the fatal shapes (missing colon-space, tab indentation) — because the launcher also runs inside
+the agent-coordinator image, which has python3 but neither parser (probed 2026-08-04).
+**Considered:** a required CI check in each stack repo (rejected: a platform contract billed to
+every product repo's pipeline, and it fires after the money is spent, not before); a `check-yaml`
+pre-commit hook in the donor `.pre-commit-config.yaml` (rejected as the gate, still welcome as
+decor: hooks are per-clone opt-in and absent exactly where these files are written — a scripted
+donor copy and agent pods committing from containers); teaching goose to fail earlier (not ours).
+**Consequences:** a third recurrence of the class costs one loud launcher line and zero dollars
+instead of a dead ride per arm. The residual risk is scanner false-positives where no real parser
+exists; it flags only `key:<nonspace>` outside block scalars, and all 12 live recipes pass both
+paths. Triggered by the sleep-tracking→circles inheritance (sleep-tracking#114, FU-126 fan-out).

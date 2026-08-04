@@ -137,6 +137,9 @@
       "stack-lint": [
         "bash scripts/stack-lint.sh \"$@\""
       ],
+      "recipe-lint": [
+        "bash agents/recipe-lint.sh \"$@\""
+      ],
       "new-stack": [
         "bash scripts/new-stack.sh \"$@\""
       ],
