@@ -145,7 +145,10 @@ lint_stack() { # <name>
     fi
     # Labels are claim-owned for stack repos (FU-068, shipped 2026-07-16): the claim's composed
     # IssueLabels is AUTHORITATIVE, so a label_repos entry is a second manager that fights it.
-    if grep -qE "^\s*label_repos\s*=.*\"$repo\"" tofu/github/labels.tf; then
+    if [ ! -f tofu/github/labels.tf ]; then
+      # The file is GONE (FU-068 handoff complete, 2026-08-04) — there is no second manager left.
+      say OK GH-03 "$stack" "$repo labels claim-owned (FU-068) — tofu/github/labels.tf retired"
+    elif grep -qE "^\s*label_repos\s*=.*\"$repo\"" tofu/github/labels.tf; then
       say FAIL GH-03 "$stack" "$repo in label_repos — labels are claim-owned (FU-068); drop it (if ever applied: tofu state rm scoped to ^github_issue_label\\. first)"
     else
       say OK GH-03 "$stack" "$repo labels claim-owned (FU-068) — label_repos clean"

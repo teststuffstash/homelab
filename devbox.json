@@ -52,6 +52,9 @@
         "tofu -chdir=tofu init -input=false",
         "sh scripts/tf.sh apply \"$@\""
       ],
+      "labels-handoff": [
+        "bash scripts/labels-handoff.sh \"$@\""
+      ],
       "github-tofu": [
         "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""

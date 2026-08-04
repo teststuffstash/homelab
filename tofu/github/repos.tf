@@ -11,7 +11,7 @@
 # for labels.tf). See README.md. The `import` blocks adopt the live repos on first apply.
 #
 # Adding a repo: run `scripts/new-agent-repo.sh <name> [--public|--private] [--no-labels]` — it appends
-# the block here (with an `import` iff the repo already exists), wires protected_repos + label_repos, and
+# the block here (with an `import` iff the repo already exists), wires protected_repos, and
 # prints the App-install click + the out-of-jail apply. Or copy a block + its `import` by hand. Both
 # current repos are private with identical settings, but they're spelled out per-repo (not for_each) so
 # each stays independently editable.

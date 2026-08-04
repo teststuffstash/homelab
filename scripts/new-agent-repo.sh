@@ -115,15 +115,15 @@ else
   echo "  variables.tf: added $NAME = { required_checks = [\"ci\"] } to protected_repos"
 fi
 
-# ── 3. labels.tf — label_repos (the agent/* state-machine labels) ──────────────────────────────────
+# ── 3. agent/* labels — CLAIM-owned since FU-068 (labels.tf is gone) ───────────────────────────────
+# The state-machine taxonomy now rides the repo's AgentStack claim (`repos[].labels`, rendered as an
+# authoritative IssueLabels), not tofu. Nothing to generate here: add the repo to its stack claim in
+# <stack>-iac (or agents/fixer/<stack>/agentstack.yaml for the platform stack) and the labels follow.
 if [ "$LABELS" = 0 ]; then
-  echo "  labels.tf: --no-labels — skip (repo won't carry the agent/* taxonomy)"
-elif grep -qE "^\s*label_repos = \[[^]]*\"$NAME\"" "$TF/labels.tf"; then
-  echo "  labels.tf: label_repos already includes $NAME — skip"
+  echo "  labels: --no-labels — skip (repo won't carry the agent/* taxonomy)"
 else
-  # anchored so track_label_repos never matches; empty-list branch avoids a leading comma
-  sed -E -i "s/^(\s*label_repos = \[)\]/\1\"$NAME\"]/; t; s/^(\s*label_repos = \[[^]]+)\]/\1, \"$NAME\"]/" "$TF/labels.tf"
-  echo "  labels.tf: added \"$NAME\" to label_repos"
+  echo "  labels: CLAIM-owned (FU-068) — add $NAME to its AgentStack claim's repos[] with"
+  echo "          labels: { extra: [] }; tofu no longer manages the agent/* taxonomy."
 fi
 
 # ── Manual follow-ups (cannot be codified with the admin PAT — see docs/github-setup.md) ────────────

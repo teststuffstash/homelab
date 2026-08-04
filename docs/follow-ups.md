@@ -340,15 +340,15 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
       an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
 - [ ] **FU-068** — **Decide homelab's fixer scope — the gate on platform alerts being
-      agent-fixable at all.** Filed as "so `labels.tf` can die"; the labels are the consequence.
-      ~18 of the 27 responder-filed issues land in homelab paths, and `is_fixer()` excludes it —
-      while homelab holds its own governor (`agents/**`, `tofu/github/**`) and runs the permissive
-      ruleset (`require_approval = false`, no CODEOWNERS). **Next:** land the path gate (CODEOWNERS
-      + `require_approval`), then the claim/label migration — scope the state `rm` to
-      `^github_issue_label\.` ONLY (the generated plural resource is authoritative and deletes
-      unmanaged labels). Tiers, deny row, check-coverage caveat:
+      agent-fixable at all.** ~18 of 27 responder-filed issues land in homelab paths while
+      `is_fixer()` excludes it, and homelab holds its own governor (`agents/**`, `tofu/github/**`).
+      **Label half DONE in code 2026-08-04** (`labels.tf` retired; operator runs
+      `devbox run labels-handoff -- --apply` OUTSIDE the jail BEFORE the next apply — a destroy
+      would delete `automerge`, live on 17 PRs). CODEOWNERS landed; the ruleset flip is deferred.
+      **Blocked on a CLICK:** homelab-agents + homelab-reviewer are not installed on homelab, so
+      adding it to the token lists would 422 ESO and break the live token. **Next:** install both
+      → verify /apps → claim + stacks.json + token lists → flip `require_approval`. Tiers:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane (IAC-G08).
-      Relates FU-048, FU-106, ADR-085, ADR-097.
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (M8 capability feed
       BUILT 2026-08-03 — router-store delivery, class_floors shadow); decision record ADR-096
