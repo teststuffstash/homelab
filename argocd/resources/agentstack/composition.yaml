@@ -839,6 +839,22 @@ spec:
                 egress: false
               {{- end }}
               egress:
+                # The Kubernetes API. Added 2026-08-04 (homelab#97): the platform lane started
+                # granting workers READ RBAC (agent-read-app / agent-read-infra — pods, events,
+                # PVCs, Longhorn volumes) so a fixer can SEE the thing it is fixing, and that
+                # permission was decorative without a network path — kubectl from the pod had
+                # nowhere to go. The first homelab ride found it and correctly refused to dispatch
+                # rather than guess. Read verbs are still bounded by RBAC, which is where the
+                # boundary belongs; this only makes the apiserver reachable, never `secrets`
+                # readable. NB in-cluster consumers must use service DNS
+                # (kube-prometheus-stack-prometheus.monitoring:9090), NOT the LAN VIP — a
+                # LoadBalancer IP is a `world` destination and stays blocked by design.
+                - toEntities:
+                    - kube-apiserver
+                  toPorts:
+                    - ports:
+                        - { port: "6443", protocol: TCP }
+                        - { port: "443", protocol: TCP }
                 - toEndpoints:
                     - matchLabels:
                         k8s:io.kubernetes.pod.namespace: kube-system
