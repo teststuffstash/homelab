@@ -77,22 +77,26 @@ command (ADR-094), the scan that decides what gets dispatched, and the reflex th
 PRs; `tofu/github/**` holds the ruleset governing all of it. **A fixer permitted to edit its own
 governor is not gated at all**, whatever the ruleset says.
 
-Two things are missing before homelab can be a fixer target (FU-068):
+**Both preconditions landed 2026-08-04** (FU-068): the repo-root `CODEOWNERS` encodes the tiers
+above, and `tofu/github` flipped homelab to `require_approval = true, require_code_owner_review =
+true` — applied, ruleset `required_approval["homelab"]` created. Ordering mattered and was not
+cosmetic: `require_approval` is repo-WIDE while only code-owner review is path-scoped, and
+`review-reflex.sh` derives its scan set from the AgentStack claims, so flipping before homelab
+joined a claim would have stalled every armed PR on an approval nothing could give (an
+App/Integration bypass cannot waive required-approval — only an OrganizationAdmin can, ADR-084).
 
-1. **No CODEOWNERS file exists**, so the gate column has nothing enforcing it. `oracle-fleet`
-   already runs exactly this shape (`require_code_owner_review = true`, CODEOWNERS gating `/specs/`
-   and `/.agents/`) — homelab is the one repo that never got it.
-2. **homelab's ruleset is the permissive one** — `require_approval = false`, deliberately, so
-   deploy-pin bumps auto-merge on CI-green ("not a fixer-target", says the comment in
-   `tofu/github/variables.tf`). Correct today; the day a fixer authors here it means an agent PR
-   lands with no human anywhere in the path.
+**Automerge safety is a function of check coverage, not of the path.** `ci` was
+`argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a
+hand-written Deployment with a typo passed. `kubeconform -strict` over `argocd/resources/*` and
+`tofu fmt` landed with the tiers; the honest residue is that **87 of 154 resources are SKIPPED** for
+want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies, PrometheusRules) —
+`manifest-lint` prints that every run and fails if it ever validates nothing. Vendoring those
+schemas, and `tofu validate` (a provider download per PR, the FU-130 WAN class), are what remain.
 
-**Automerge safety is a function of check coverage, not of the path.** homelab's `ci` is
-`argocd-validate-pins`: it proves a pinned OCI chart still renders with this repo's values, and
-looks at nothing else. Widening the auto tier must land the missing checks first — `kubeconform` /
-server-side dry-run over `argocd/resources/*`, `tofu validate`/`fmt`
-([`dependency-upgrades.md`](../dependency-upgrades.md) §3 owns that list). Otherwise the ruleset
-says "gated" and means "unreviewed".
+**What is still missing before a fixer authors here** is no longer the gate — it is the fixer
+block itself (which creates the per-repo namespace its worker RoleBinding needs, `agent-read-infra`
+since homelab is the platform's own `-iac`), and the IAC-G04 sentinel covering homelab so tier 1 can
+go back to being unowned. Until then tier 1 is owned as a scaffold and says so.
 
 ### ⚖ Auto-revert does NOT generalize to the platform (operator ruling, 2026-08-04)
 
