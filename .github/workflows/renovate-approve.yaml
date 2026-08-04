@@ -1,0 +1,25 @@
+# renovate-approve.yaml — homelab's own caller of the org reusable it hosts (FU-014/FU-041).
+#
+# homelab implements `renovate-approve.reusable.yml` for every agent repo and, until now, was the one
+# repo that never CALLED it — invisible while homelab sat outside the stack claims. It joined the
+# platform claim as a context-only repo (FU-068, 2026-08-04), and agents-registration-lint's CALLERS
+# check then failed it correctly: every stack repo must carry both merge-path callers or an armed PR
+# deadlocks (the oracle-fleet BEHIND stall, TICK-LOG meta-3).
+#
+# It is a NO-OP today and that is deliberate. homelab still runs `require_approval = false`, so its
+# armed PRs merge on CI alone and an approval changes nothing. It stops being a no-op the moment the
+# platform-lane gate flips that flag (docs/agents/iac-lane.md §The platform lane) — at which point
+# every Renovate `automerge` PR here needs a distinct approving review, exactly as the other repos
+# do. Landing the caller now makes that flip a pure ruleset change with nothing else moving.
+#
+# Scope is Renovate's `automerge`-labelled PRs only (the reusable enforces it) — the mechanical lane.
+# CI is the real gate; this is the rubber-stamp a Renovate PR cannot give itself.
+name: renovate-approve
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled]
+permissions: {} # uses the reviewer App token, not GITHUB_TOKEN
+jobs:
+  approve:
+    uses: teststuffstash/homelab/.github/workflows/renovate-approve.reusable.yml@master
+    secrets: inherit

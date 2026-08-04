@@ -29,6 +29,7 @@
       "repos": [
         "agent-runtime",
         "agent-coordinator",
+        "homelab",
         "openrouter-operator"
       ],
       "mainRepo": "homelab",
