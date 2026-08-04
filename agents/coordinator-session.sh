@@ -220,6 +220,13 @@ metadata:
   labels: { app: agent-coordinator, "homelab.teststuff.net/subscription-session": claude }
 spec:
   restartPolicy: Never
+  # This is a BARE pod — no Job, no controller, no owner. Without a deadline a wedge at any phase
+  # hangs forever and only surfaces via KubePodNotReady 15+ min later (homelab#94: the janitor sat
+  # 40min in ContainerCreating on a volume that could not attach, while its two sibling namespaces
+  # completed in seconds). activeDeadlineSeconds counts from pod START, so it reaps Pending wedges
+  # too, not just runaway sessions. Matches the Argo coordinate/review ticks (1800) with headroom;
+  # ride pods use their own 4h key-TTL bound (agent-session.sh).
+  activeDeadlineSeconds: ${COORDINATOR_POD_DEADLINE_S:-3600}
   terminationGracePeriodSeconds: 5
   serviceAccountName: ${POD_SA}
   containers:
