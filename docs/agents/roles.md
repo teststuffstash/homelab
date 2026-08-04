@@ -250,6 +250,15 @@ only disclaim "reasoned from training knowledge"). Capability truth moved into t
 harness-conditional "Web research:" line); recipes should stop asserting it. Class-1 context that
 recipes were squatting on.
 
+**⚖ Ruling 2026-08-04 — advertising the difference is not enough; remove it.** A harness-conditional
+env-card line makes the platform HONEST about capability, and honest is where we stopped. But it
+leaves "can this ride check whether the bug is already known upstream?" answered by which harness
+happened to be picked — and opencode, hermes and whatever comes next are unknowns we would discover
+the same way, one wrong ride at a time. If one harness has web research, every harness should: it
+belongs to the platform (an egress-allowlisted docs/search endpoint, or an MCP tool the launcher
+wires) rather than to the harness. Nothing that decides whether a fixer can SEE something should be
+a property of the binary we happened to spawn. Tracked as FU-134.
+
 **The refactor, when it has piled up enough:** a **role × context × source** map that separates
 *dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
 ground rules* (authored once, delivered to goose via a launcher-injected static block — the env

@@ -1,0 +1,110 @@
+# agent-read-rbac — what an agent may SEE. Two ClusterRoles because the two lanes debug different
+# things (operator, 2026-08-04), and neither may ever read a Secret.
+#
+# WHY THIS EXISTS. Measured before writing it: the worker SA (`agentstack-worker`) can do
+# selfsubjectreviews and read `/api` discovery — that is ALL. A fixer today is not half-blind, it is
+# fully blind: it works from the issue text and the repo tree, and every claim it makes about the
+# running system is inference. The responder is better off (pods, pods/log, pods/exec, PVCs) but is
+# denied `events`, `nodes` and `secrets` — and that exact denial produced a WRONG diagnosis on
+# homelab#94: it concluded "image-pull race through the mirror" while the events it could not read
+# said `FailedAttachVolume … ReplicaSchedulingFailure`. Granting `events` is the cheapest fix for
+# the largest measured error in this platform's triage history.
+#
+# ⚠ A CEILING RBAC CANNOT RAISE: the agent-coordinator image carries no devbox, so no talosctl,
+# no helm, no tofu. Node-LEVEL truth (Talos dmesg, machine config) is unreachable by any in-cluster
+# agent whatever its RBAC — which is one reason the BestEffort-OOM class (#57, #63–#69, fixed by a
+# kubelet reservation in tofu/metal.tf) stayed operator work. Grant reads that `kubectl` and `curl`
+# can actually use; anything below the kubelet is out of scope by construction, not by permission.
+#
+# NEVER GRANTED, in either role: `secrets`. The platform's standing boundary is that agents wire
+# secret REFERENCES, never values (iac-lane.md). `configmaps` is also withheld — most are harmless,
+# but "most" is not a boundary and configmaps are where credentials get left by accident.
+---
+# The APP lane: a worker fixing its own service. Scope is the service's own runtime — is it up, what
+# did it log, what did the kubelet say about it. Deliberately nothing cluster-wide: an app worker has
+# no business reading nodes or another stack's namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-read-app
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: ["", events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+---
+# The -IAC lane: an infra-fixer working the wrapper layer. Its subject is platform FULFILLMENT, so it
+# needs the resources an app worker must not see — where a volume can schedule, whether the claim
+# reconciled, what ArgoCD thinks it deployed. This is the read set homelab#94 needed end to end:
+# pod → events → PVC → Longhorn volume → node capacity.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-read-infra
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, services, endpoints, persistentvolumeclaims, persistentvolumes, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: ["", events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list] # conditions/allocatable via kubectl; Talos-level reads need talosctl (absent)
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list]
+  - apiGroups: [longhorn.io]
+    resources: [volumes, replicas, nodes, engines]
+    verbs: [get, list] # the #94 chain ends here: ReplicaSchedulingFailure is only visible on the volume
+  - apiGroups: [argoproj.io]
+    resources: [applications, workflows]
+    verbs: [get, list]
+  - apiGroups: [external-secrets.io, generators.external-secrets.io]
+    resources: ["*"]
+    verbs: [get, list] # specs carry remote REFERENCES (names), never values — the Secret itself stays unreadable
+  - apiGroups: [platform.teststuff.net]
+    resources: ["*"]
+    verbs: [get, list]
+---
+# BINDING #1 — the responder, cluster-wide, today. It triages alerts in any namespace and is the
+# identity whose blindness has already cost a wrong diagnosis. This closes the events/nodes gap
+# without touching its existing write verbs (which stay in the agent-coordinator ClusterRole).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-coordinator-read-infra
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: agent-coordinator, namespace: agent-coordinator }
+---
+# BINDING #2 — the per-stack loop identities (coordinator/reviewer sessions), same reasoning.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agentstack-loop-read-infra
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: agentstack-loop, namespace: platform-agents }
+  - { kind: ServiceAccount, name: agentstack-loop, namespace: sleep-agents }
+  - { kind: ServiceAccount, name: agentstack-loop, namespace: oracle-agents }
+  - { kind: ServiceAccount, name: agentstack-loop, namespace: circles-agents }
+#
+# NOT BOUND HERE — the WORKERS. `agentstack-worker` lives in a per-repo namespace the AgentStack
+# Composition renders, so its binding belongs there (a RoleBinding to agent-read-app for an app repo,
+# to agent-read-infra for an -iac repo) and lands with the fixer block that creates the namespace.
+# The roles above are the reusable half; wiring them per-stack is FU-068's remaining work.

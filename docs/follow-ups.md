@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-134**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-135**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -187,6 +187,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       onto `longhorn-single` in a quiet window (data is already in Garage via `transcripts-sync`),
       then switch `agents/coordinator/transcripts-pvc.yaml` + the agentstack Composition's
       template. Relates ADR-089, homelab#94.
+- [ ] **FU-134** — **Web research is a harness accident, not a platform capability.** claude rides
+      get server-side WebSearch (unaffected by pod egress); goose rides have no web tool at all —
+      kimi's FU-126 spec arm could only disclaim "reasoned from training knowledge". So "is this a
+      known upstream bug in that version?" is answerable or not depending on which binary was
+      spawned, and opencode/hermes/next are unknowns. **Ruling 2026-08-04: if one harness has it,
+      all should** — deliver it as a platform capability (egress-allowlisted docs/search endpoint,
+      or an MCP tool the launcher wires) instead of a per-harness truth the env card merely
+      ADVERTISES. **Next:** pick the delivery shape, then let the card state a guarantee rather than
+      a coin flip. Detail: [`docs/agents/roles.md`](agents/roles.md) §Context delivery.
+      Relates FU-117, FU-095, FU-020.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
       across 8 days). Two mechanisms: the responder iterates `.alerts[]` and files per fingerprint,

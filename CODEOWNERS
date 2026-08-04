@@ -39,11 +39,20 @@
 /tofu/github/       @RasmusSoot
 /tofu/cloudflare/   @RasmusSoot
 
-# ── Tier 1 — ArgoCD applies on merge, CI is the gate. Deliberately UNOWNED:
-#   argocd/resources/**   docs/**   SERVICES.md   README.md
-# ⚠ Unowned is only safe once CI actually validates these (kubeconform / server-side dry-run over
-#   argocd/resources/*). Until then "CI-green" means "the pinned OCI charts still render" and
-#   nothing more — docs/agents/iac-lane.md §"Automerge safety is a function of check coverage".
+# ── Tier 1 — ArgoCD applies on merge, CI is the gate. Unowned by design:
+#   docs/**   SERVICES.md   README.md
+#
+# EXCEPT, for now, argocd/resources/ — see below.
+#
+# ⚠ TEMPORARY, and the whole point of it is to be removed (operator, 2026-08-04). Tier 1 is the one
+#   path where merge IS deploy to the live cluster and no human is in the loop by design, so it is
+#   also the one place "the CODEOWNERS gate will hold" is FALSE. The doctrine's answer for this tier
+#   was never review — it is the IAC-G04 policy sentinel, which today runs in SHADOW mode and is
+#   pointed at the -iac repos, not homelab. Until the sentinel covers homelab (or agent output here
+#   has earned the trust), owning this path makes the gate real while we find out what a fixer
+#   actually produces against real alerts. Cost: review latency on a handful of PRs a week.
+#   REMOVE THIS LINE when IAC-G04 enforces for homelab — it is a scaffold, not a policy.
+/argocd/resources/  @RasmusSoot
 
 # ── Carve-outs, last so they win.
 # The deploy-pin lane is mechanical: the homelab-deploy App bumps this file (ADR-084) and
