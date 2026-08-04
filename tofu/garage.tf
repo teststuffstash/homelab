@@ -32,12 +32,39 @@ resource "random_id" "garage_rpc" {
 # Admin-API bearer token. This is the platform-provided SEAM that apps use to provision their own
 # buckets/keys (app-owned model, ADR-031 amended): an app's tofu (jkossis/garage provider) talks to
 # the admin API (3903) through a kubectl port-forward, authenticated with this token. The admin API
-# itself stays ClusterIP-only — never on the VIP. Injected via env (Garage reads GARAGE_ADMIN_TOKEN);
-# this lands plaintext in the pod spec + tofu state, acceptable for the trial (move to a Secret +
-# secretKeyRef if it graduates). Stashed to ~/.claude/homelab-garage/admin-token for app wrappers.
+# itself stays ClusterIP-only — never on the VIP. Garage reads it from env GARAGE_ADMIN_TOKEN,
+# delivered by secretKeyRef since 2026-08-04 (FU-136) — no longer plaintext in the pod spec,
+# though it does still live in tofu state. Stashed to ~/.claude/homelab-garage/admin-token for app
+# wrappers.
 resource "random_password" "garage_admin_token" {
   length  = 32
   special = false # bearer token: keep it header-safe (alphanumeric)
+}
+
+# FU-136 secret gate — garage carries TWO secrets in its values, not one, and the second is easy to
+# miss: `rpcSecret` comes from `random_id`, so a grep for `random_password` does not find it. Both
+# become Secrets the chart REFERENCES so the release can move to the PUBLIC argocd/platform/.
+#
+# Names avoid the chart's own: it creates `garage-rpc-secret` itself when `existingRpcSecret` is
+# unset, and reusing that name would race Helm's delete of the old against tofu's create of the new
+# (the trap forgejo-admin sprang earlier today). VALUES are unchanged — the rpc secret is the
+# cluster's identity and a new one would orphan the node from itself.
+resource "kubernetes_secret" "garage_rpc" {
+  metadata {
+    name      = "garage-rpc"
+    namespace = kubernetes_namespace.garage.metadata[0].name
+  }
+  data = { rpcSecret = random_id.garage_rpc.hex } # key name is the chart's contract
+  type = "Opaque"
+}
+
+resource "kubernetes_secret" "garage_admin_token" {
+  metadata {
+    name      = "garage-admin-token"
+    namespace = kubernetes_namespace.garage.metadata[0].name
+  }
+  data = { token = random_password.garage_admin_token.result }
+  type = "Opaque"
 }
 
 resource "helm_release" "garage" {
@@ -50,7 +77,9 @@ resource "helm_release" "garage" {
     garage = {
       replicationFactor = "1" # single node, no redundancy at the Garage layer
       consistencyMode   = "consistent"
-      rpcSecret         = random_id.garage_rpc.hex
+      # FU-136: reference, never a value (see kubernetes_secret.garage_rpc above). The chart reads
+      # key `rpcSecret` from this Secret in its init container and stops rendering its own.
+      existingRpcSecret = kubernetes_secret.garage_rpc.metadata[0].name
       s3 = {
         api = { region = "garage" } # S3 clients must use region "garage"
         # Static-website endpoint (3902): anonymous GET on website-enabled buckets — the one
@@ -96,7 +125,17 @@ resource "helm_release" "garage" {
 
     # Sets [admin] admin_token (env override). Enables the HTTP admin API the app bucket-provisioning
     # uses. List form because the chart renders this straight into the pod's `env:`.
-    environment = [{ name = "GARAGE_ADMIN_TOKEN", value = random_password.garage_admin_token.result }]
+    # FU-136: the token arrives by reference. The chart toYaml's this list straight into the pod's
+    # `env:`, so a valueFrom entry works with no chart change.
+    environment = [{
+      name = "GARAGE_ADMIN_TOKEN"
+      valueFrom = {
+        secretKeyRef = {
+          name = kubernetes_secret.garage_admin_token.metadata[0].name
+          key  = "token"
+        }
+      }
+    }]
   })]
 }
 
