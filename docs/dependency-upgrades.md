@@ -202,7 +202,15 @@ This is where the three regimes diverge and where the design work is:
   Degraded ≤120m after a `deploy/*` bump → auto-revert PR
   ([`agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the post-deploy gate", FU-044)
   — but it is scoped to `-iac` deploy bumps, **not to a platform chart bump merged into homelab**.
-  Extending that trigger to homelab's own ArgoCD apps is the concrete next step.
+  **⚖ Extending it wholesale is REJECTED (operator, 2026-08-04).** The platform barely has the
+  trigger — only first-party image pins move as `deploy/*` (class 3), while classes 1/2/4 move by
+  chart-version bumps and hand edits — and revert is not free for the stateful ones (garage, CNPG:
+  CRD/schema downgrade, PVC expectations, data-layer skew), with no second net if the revert also
+  fails. The extension is scoped to the **reversible class**: a first-party image pin, no
+  CRD/schema migration, no data-layer coupling. Everything else Degraded goes to the responder as
+  an alert + report-only issue. Ruling + precondition:
+  [`agents/iac-lane.md`](agents/iac-lane.md) §"Auto-revert does NOT generalize to the platform"
+  (IAC-G09).
 - **Tofu classes (4, 5)** — keep the human gate. Add the belt FU-097 asks for: a **`tofu plan` cron
   → alert on non-empty diff**, so "merged but not applied" and "live drifted from state" both become
   visible instead of silent. **Prerequisite: FU-012** — state is local + gitignored in the jail, so
@@ -261,7 +269,12 @@ and then nothing is watching.
    check, or a `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix.
 3. **Close the CI gaps** — `tofu validate`/`fmt`, `kubeconform` over `argocd/resources/*`
    (`follow-ups-lint` joined `ci` with this doc).
-4. **Extend the FU-044 deterministic revert** from `-iac` deploy bumps to homelab's own ArgoCD apps.
+4. **Extend the FU-044 deterministic revert** to homelab's own ArgoCD apps **for the reversible
+   class only** (first-party image pins — no CRD/schema migration, no data-layer coupling); the
+   rest stay responder + report-only, per the ruling in §4 above.
+4b. **Land the platform lane's path gate** — CODEOWNERS + `require_approval`, and the checks that
+   make an auto tier honest (`kubeconform`/dry-run, `tofu validate`) — before homelab is a fixer
+   target at all: [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane, FU-068.
 5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
    change reaches a *live network device* by hand or not at all.
 6. **The prober (FU-102)** is what turns "it synced" into "it works".

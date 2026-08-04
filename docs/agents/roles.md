@@ -146,7 +146,10 @@ tier allowed, dual-model worth it) are FU-095's.
   the proven brief); prod-read + report-only, $1 ephemeral keys. predicate = post-deploy +
   schedule; edge = deploy doorbell; backstop = cron; key = (endpoint, artifact digest);
   breaker = inert 🌱 issues + rate cap. Detection belts stack: FU-099 blackbox (seconds, dumb)
-  → prober (minutes, contract-deep) → responder.
+  → prober (minutes, contract-deep) → responder. **The middle rung is the one that doesn't
+  exist**, so today the stack is blackbox → *nothing* → responder: contract breakage is
+  discovered as an alert (or by a consumer failing) rather than as a failed probe, which is why
+  the alert lane carries load the prober was designed to take.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in `tofu/monitoring.tf`);
@@ -161,6 +164,14 @@ tier allowed, dual-model worth it) are FU-095's.
   (inert, breaker #1), loop-smell → report-only stop. Graduation dials (NOT built): imperative
   remediation whitelist (needs a scoped Role per stack ns), self-queueing filed issues into
   the fixer loop (the FU-090 `selfQueue` knob).
+  **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
+  files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
+  one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`
+  on the responder receiver — the resolve event is never delivered, so a cleared alert leaves an
+  open issue); and **ownership vs the -iac observation window is undefined** (IAC-G10 —
+  [`iac-lane.md`](iac-lane.md) §Who owns a symptom). Before any `selfQueue` graduation: a
+  self-referential gate, since the alerts most likely to need a fixer are the ones about the
+  fixer's own substrate (registry mirror, CNI/Longhorn OOM, ARC runners, the token broker).
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a

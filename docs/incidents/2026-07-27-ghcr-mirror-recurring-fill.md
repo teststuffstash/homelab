@@ -1,5 +1,7 @@
 # The ghcr pull-through mirror filled four times in eight days
 
+**Tracked by:** FU-133 (the lane gap this exposes — one issue per fingerprint, no correlation).
+
 **Residual:** FU-093 (storage-tier ledger + metering — Longhorn per-disk usage is still unwatched,
 which is why every one of these was discovered by a *consumer* failing rather than by the disk).
 

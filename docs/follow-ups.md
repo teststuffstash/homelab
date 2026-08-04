@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-133**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-134**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -187,6 +187,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       onto `longhorn-single` in a quiet window (data is already in Garage via `transcripts-sync`),
       then switch `agents/coordinator/transcripts-pvc.yaml` + the agentstack Composition's
       template. Relates ADR-089, homelab#94.
+- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
+      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
+      across 8 days). Two mechanisms: the responder iterates `.alerts[]` and files per fingerprint,
+      un-grouping what Alertmanager grouped; `group_by = ["alertname"]` keeps causally-related
+      alerts apart. Also unmodelled: nothing closes an issue when its alert clears
+      (`send_resolved = false` — the event is never delivered), and ownership vs the -iac
+      observation window is undefined (IAC-G10). **Next:** a `subject:` key searched before filing
+      (append/reopen, not a new issue), then the window hand-off. Class postmortem:
+      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md);
+      lane gaps: [`docs/agents/roles.md`](agents/roles.md) §responder. Relates FU-103, FU-106.
 - [ ] **FU-131** — **The ADR-096 cost ledger undercounts ~2× under fan-out concurrency — the
       `/generation` harvest gives up after 7s** (`_generation_lookup` retries 2s, 5s, then logs
       `never appeared — skipped`). Measured against OpenRouter's own activity export
@@ -300,15 +310,15 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
-- [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** The deterministic
-      rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`
-      Sensor/Workflow, no LLM); what's left is dispatching a worker against the APP repo to fix the
-      breakage, in-cluster off ArgoCD app-health events (never in the Actions deploy run). Design +
-      why ArgoCD health is only a shallow gate (the meta-11 schema-skew outage stayed GREEN):
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the post-deploy gate".
-      Deep acceptance stays the FU-102 prober. Operator prereq in flight: harden app CI so prod
-      breakages are rare — rollback is the safety net, not the primary control. Relates FU-041,
-      FU-102, FU-090 (lineage-scoped revert).
+- [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** Deterministic
+      rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`,
+      no LLM); what's left is dispatching a worker against the APP repo, in-cluster off ArgoCD
+      health events (never in the Actions deploy run). Deep acceptance stays the FU-102 prober;
+      operator prereq: harden app CI so breakages are rare. **⚖ Platform scope ruled 2026-08-04
+      (IAC-G09): extend to homelab only for the REVERSIBLE class** — first-party image pins, no
+      CRD/schema migration, no data-layer coupling — never stateful charts. Design + the ruling:
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the post-deploy gate"
+      + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
@@ -329,15 +339,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
       Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
       an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
-- [ ] **FU-068** — **Decide homelab's own claim home so `labels.tf` can die.** The Issues-tier
-      split shipped 2026-07-16 and eight repos across all three stacks are claim-owned; homelab is
-      the only holdout, and `label_repos=[homelab]` keeps `labels.tf` alive for it alone. Mechanism,
-      migration state and the live gotchas:
-      [`docs/agents/agentstack.md`](agents/agentstack.md) §"The GitHub side" + §Operational notes.
-      ⚠ The generated `github_issue_labels` is AUTHORITATIVE — it deletes unmanaged labels, so two
-      managers fight; a state `rm` must be scoped to `^github_issue_label\.` ONLY (a broad grep also
-      matches rulesets). Relates FU-048, ADR-085.
-
+- [ ] **FU-068** — **Decide homelab's fixer scope — the gate on platform alerts being
+      agent-fixable at all.** Filed as "so `labels.tf` can die"; the labels are the consequence.
+      ~18 of the 27 responder-filed issues land in homelab paths, and `is_fixer()` excludes it —
+      while homelab holds its own governor (`agents/**`, `tofu/github/**`) and runs the permissive
+      ruleset (`require_approval = false`, no CODEOWNERS). **Next:** land the path gate (CODEOWNERS
+      + `require_approval`), then the claim/label migration — scope the state `rm` to
+      `^github_issue_label\.` ONLY (the generated plural resource is authoritative and deletes
+      unmanaged labels). Tiers, deny row, check-coverage caveat:
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane (IAC-G08).
+      Relates FU-048, FU-106, ADR-085, ADR-097.
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (M8 capability feed
       BUILT 2026-08-03 — router-store delivery, class_floors shadow); decision record ADR-096

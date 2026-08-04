@@ -47,6 +47,78 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 | `revert` | FU-044 chain | CI-only, must NEVER gain a gate | the emergency path stays instant |
 | `renovate` | Renovate | existing classification (renovate.md) | |
 
+## The platform lane — homelab is one repo, so the gate is per PATH
+
+Every stack splits an app repo (behavior; CI carries the evidence) from `-iac` (form + post-merge
+truth). **homelab has no such split.** It *is* the platform's own `-iac` — ArgoCD watches
+`argocd/`, `agents/coordinator`, `agents/fixer/*` and syncs on merge, so merge is the midpoint here
+too — and it is simultaneously where the loop's own machinery lives. So the lane taxonomy above
+cannot key on the repo. It keys on the **path**.
+
+| paths | applied by | agent may author | gate |
+|---|---|---|---|
+| `docs/**` | nothing | ✅ | CI |
+| `argocd/resources/**` | ArgoCD — merge *is* deploy | ✅ | CI (see the check-coverage caveat below) |
+| `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
+| `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |
+| `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply |
+| `agents/**`, `scripts/**`, `policy/**`, `.github/workflows/**`, `tofu/github/**`, `tofu/cloudflare/**` | governance & supply chain | ❌ **never** | operator only |
+
+The deny row is the load-bearing one. `agents/**` holds the launcher that builds its own dispatch
+command (ADR-094), the scan that decides what gets dispatched, and the reflex that approves its own
+PRs; `tofu/github/**` holds the ruleset governing all of it. **A fixer permitted to edit its own
+governor is not gated at all**, whatever the ruleset says.
+
+Two things are missing before homelab can be a fixer target (FU-068):
+
+1. **No CODEOWNERS file exists**, so the gate column has nothing enforcing it. `oracle-fleet`
+   already runs exactly this shape (`require_code_owner_review = true`, CODEOWNERS gating `/specs/`
+   and `/.agents/`) — homelab is the one repo that never got it.
+2. **homelab's ruleset is the permissive one** — `require_approval = false`, deliberately, so
+   deploy-pin bumps auto-merge on CI-green ("not a fixer-target", says the comment in
+   `tofu/github/variables.tf`). Correct today; the day a fixer authors here it means an agent PR
+   lands with no human anywhere in the path.
+
+**Automerge safety is a function of check coverage, not of the path.** homelab's `ci` is
+`argocd-validate-pins`: it proves a pinned OCI chart still renders with this repo's values, and
+looks at nothing else. Widening the auto tier must land the missing checks first — `kubeconform` /
+server-side dry-run over `argocd/resources/*`, `tofu validate`/`fmt`
+([`dependency-upgrades.md`](../dependency-upgrades.md) §3 owns that list). Otherwise the ruleset
+says "gated" and means "unreviewed".
+
+### ⚖ Auto-revert does NOT generalize to the platform (operator ruling, 2026-08-04)
+
+The obvious next step from FU-044 — point the Degraded→revert chain at homelab's own ArgoCD apps —
+is **rejected as a blanket rule**, for two reasons that are properties of the platform rather than
+of the mechanism:
+
+- **The platform barely has the trigger.** The chain reverts *"the newest `deploy/*` bump merged
+  ≤120m"*. In homelab only the first-party image pins move that way (agent-base,
+  agent-coordinator, arc-runner). garage, kube-prometheus-stack, loki and forgejo move by
+  chart-version bumps and hand edits — there is usually no `deploy/*` commit to revert to.
+- **Revert is not free for stateful services, and this is the last net.** Reverting a garage or
+  CNPG chart can be worse than the failure it answers: CRD/schema downgrades, PVC expectations,
+  data-layer skew. And if the revert *also* fails, nothing catches it — on a stack that costs the
+  stack, here it costs the machinery that would have fixed it.
+
+**Ruling: auto-revert extends to homelab only for the reversible class** — a first-party image
+**pin** bump, no CRD/schema migration, no data-layer coupling. Everything else that goes Degraded
+reaches the responder as an alert plus a report-only issue, and a human decides. Stated as a
+precondition rather than an app list so it survives new apps: *revert automatically only where the
+change is a pin and the rollback is provably as safe as the roll-forward.*
+
+### Who owns a symptom — the alert lane vs the observation window
+
+Two entry points reach the same post-merge machinery: **change-triggered** (a merge opens a window,
+IAC-T04/T05) and **symptom-triggered** (the responder, IAC-T07). They already overlap in
+production — the responder's cheapest-sufficient outcome list includes a GitOps quick fix on the
+stack's `-iac`, which *is* this lane's revert path. Undefined ownership means a revert racing a fix.
+
+**Rule: inside an open observation window for a recent deploy, the -iac lane owns the symptom** —
+the alert lane attaches evidence to that unit and dispatches nothing. Outside a window, the alert
+lane owns it. Modelled as IAC-G10; the correlation half (one issue per root cause via a `subject:`
+key, instead of one per fingerprint) is FU-133.
+
 ## The infra-delta rollout matrix — what an upstream chart change costs the wrapper
 
 The whole role exists because of the **target-agnostic-chart constraint**
