@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-131**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-132**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -177,6 +177,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       + 28 cache.nixos.org lookups). Next: pre-seed helm-unittest (nixpkgs
       `kubernetes-helmPlugins` or vendored tarball via the devbox-cache image) + warm the LAN
       nix cache with new-stack toolchains at scaffold time. Relates FU-073, FU-096.
+- [ ] **FU-131** — **The ADR-096 cost ledger undercounts ~2× under fan-out concurrency — the
+      `/generation` harvest gives up after 7s** (`_generation_lookup` retries 2s, 5s, then logs
+      `never appeared — skipped`). Measured against OpenRouter's own activity export
+      (kimi-k3 arm, 2026-08-03): **29 of 56 generations stored, $2.196 of $4.328 — 49% of spend
+      missing**; the 29 it caught match the export to the cent, so the harvest is accurate, just
+      incomplete. Second hole: the round-2 session posted **no `/report`** (no cost, no outcome,
+      though it opened circles#4). Every economics signal built on the store — P4-flip evidence,
+      per-arm cost comparisons, FU-126-style experiments — therefore reads low and unevenly.
+      **Next:** back off harder (2/5/15/45s) **+** a T+1 sweep over `GET /activity?api_key_hash=`
+      (per-session keys make attribution exact; needs a management key). Relates ADR-096, FU-095.
 - [ ] **FU-128** — **Dispatcher executes backticks from env-card text (cosmetic, every jail
       dispatch).** Symptom (circles fan-out, 2026-08-03): `Usage: devbox add`, `Try 'timeout
       --help'`, `placeholder-*: command not found` printed between the devbox-cache mount line

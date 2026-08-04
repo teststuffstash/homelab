@@ -202,4 +202,21 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   — they execute.
 - Don't claim "done" without an isolated end-state check.
 
+## How changes land (jail sessions)
+
+Sessions in this jail work **directly on `master`** — apply the change, verify it against the real
+thing, then commit and push. No feature branch, no PR, no review gate: **this repo has no CI**, so a
+PR would add ceremony without adding a check, and the branch would only delay the verification that
+actually protects us. (Stack repos are the opposite — every agent change there is a strict PR
+through the reviewer gate. That asymmetry is deliberate: they have CI, this repo has an operator.)
+
+- **Verify, then commit** — never the reverse, and never commit a change that was not applied. The
+  end-state check IS the gate here, so it must be an isolated probe against the live thing, not a
+  re-reading of the diff.
+- **Commit in coherent units and push right away.** An unpushed jail commit is invisible to the
+  agent loop: the coordinator/worker pods `git clone --depth 1 master`, so anything still sitting in
+  the jail's working tree simply does not exist for them.
+- Uncommitted work from a previous session may be in the tree — check `git status` before you start
+  and leave what isn't yours alone.
+
 More detail and the full set of operational recipes live in **`docs/runbook.md`**.

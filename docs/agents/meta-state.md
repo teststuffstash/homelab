@@ -17,6 +17,16 @@ meant to avoid.)
   (mimo-v2.5-pro)** — lands the seed through the human gate → step 5 merge-path proof (one
   trivial PR E2E) → step 6 tandem lanes (operator leaning: ⚖ RENDER-TECH via N-way PoC spike
   issues; search-shaped gaps route task/research to the claude rail — awaiting ruling).
+- **kimi-k3 arm cost autopsy (2026-08-04, from OpenRouter's activity export — feeds the arm
+  comparison, not an action):** **$4.328 total**, Moonshot AI first-party, 56 calls, 2.95M prompt
+  / 89.4k output (55% reasoning), **73.6% cache hit** billed correctly at $0.30/M (caching saved
+  $5.87 — uncached this was $10.20). Two legs: r1 $2.2894 (25 calls, 18:24–18:46, budget-403 after
+  banking `24c3f94` = 45% of the specs) + r2 $2.0386 (31 calls, **fresh context on the salvaged
+  branch** — identical 5,769-token opening prompt, no transcript carry-over). **The cap cost ~$0:**
+  re-orientation was $0.39, offset by ~$0.40 of cache reads saved by restarting at a 29k context
+  instead of continuing at 104k — one uninterrupted run models to ≈$4.4. Cost driver is token
+  volume × $3/$15, not the restart; the real lever is `reasoning_effort` (49.2k reasoning tokens =
+  $0.74, incl. a 432s/16.2k-token think that wrote nothing). Ledger gap → FU-131.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
