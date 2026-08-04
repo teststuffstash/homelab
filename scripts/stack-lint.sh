@@ -54,17 +54,21 @@ HAVE_GH=0; command -v gh >/dev/null 2>&1 && HAVE_GH=1
 # Source is the SERVED live view (github-exporter /apps, FU-098 finale) — docs/github-apps.md is
 # no longer committed (the deep-verify report goes to /tmp). Fetched ONCE via the apiserver
 # service proxy; without a cluster the check degrades to PROBE-FAILED, never "missing".
-APPS_HTML=""
+APPS_HTML="/tmp/stack-lint-apps.$$"
+trap 'rm -f "$APPS_HTML"' EXIT
 if [ "$KUBE_OK" = 1 ]; then
-  APPS_HTML=$(timeout 15 kubectl get --raw \
-    "/api/v1/namespaces/monitoring/services/github-exporter:9504/proxy/apps" 2>/dev/null || true)
+  timeout 15 kubectl get --raw \
+    "/api/v1/namespaces/monitoring/services/github-exporter:9504/proxy/apps" \
+    >"$APPS_HTML" 2>/dev/null || true
 fi
 app_installed() { # <repo> <app-base>
-  [ -n "$APPS_HTML" ] || { echo "NO-SOURCE"; return; }
-  printf '%s' "$APPS_HTML" | python3 - "$1" "$2" <<'PY'
+  # NB the page file is argv[3], NOT piped: `python3 -` takes its PROGRAM from stdin (the
+  # heredoc), so piping data into the same stdin silently reads empty.
+  [ -s "$APPS_HTML" ] || { echo "NO-SOURCE"; return; }
+  python3 - "$1" "$2" "$APPS_HTML" <<'PY'
 import html, re, sys
 repo, app = sys.argv[1], sys.argv[2]
-text = html.unescape(sys.stdin.read())
+text = html.unescape(open(sys.argv[3]).read())
 # page shape per app: <h2><code>NAME</code></h2> … <p>installs: selected → r1, r2, …</p>
 for sec in re.split(r"<h2><code>", text)[1:]:
     if sec.split("</code>", 1)[0] != app:
