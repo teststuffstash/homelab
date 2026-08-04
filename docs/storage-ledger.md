@@ -100,7 +100,9 @@ refusal was doing real work. Metering is what replaces it.
   (698MiB actual at 30-day retention) and agent-transcripts 20→5Gi (448MiB actual) → **134Gi/150
   (89%)**. ert-snapshots keeps 90Gi — its 2×42GB snapshot pairs need ~78GiB, the one cap that was
   honest. The tier sits in the >80% WARN band deliberately: the next claim is a capacity
-  decision, not a rubber stamp.
+  decision, not a rubber stamp. **135Gi/150 (90%) since 2026-08-04** — `tofu-state` took 1Gi
+  ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
+  precisely because the tier has no room for a round-number guess.
 - **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
   usage-vs-cap panels; a **>80% alert**.
 - **Longhorn metering — now the PREREQUISITE, not a nice-to-have** (see the over-provisioning

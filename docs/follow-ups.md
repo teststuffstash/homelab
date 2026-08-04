@@ -76,15 +76,15 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 - [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the
       `:v1.1.1` tag).
 - [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).
-      Hard prerequisite for anything that plans or applies off the operator's machine — the
-      out-of-cluster applier (Phase 3.2) and the FU-097 drift cron both need it. **The machine is
-      not available yet, but the WORK IS NOT BLOCKED on it** (operator, 2026-08-04): write the
-      backend config + migration scripts now, in the labels-handoff shape (dry-run default, refuse
-      to report success when state is unreadable), and the operator merges + applies them by hand.
-      Garage is the obvious backend — it is LIVE, S3-compatible and already holds the transcripts.
-      ⚠ Migrating state is the one operation where a mistake orphans live infrastructure: per root,
-      `tofu init -migrate-state` with the local file backed up first, verified by a plan showing
-      0 changes before the old state is deleted. Relates FU-097, dependency-upgrades.md §3.2.
+      Hard prerequisite for anything that plans/applies off the operator's machine — the FU-097
+      drift belt and the out-of-cluster applier. **Scripts + bucket exist since 2026-08-04, no root
+      migrated yet:** Garage bucket + key LIVE, `devbox run tofu-state-migrate` (one root per run,
+      dry-run default), `TF_ENCRYPTION` encryption **verified**. **Blocker is measured, not
+      procedural — Garage v2.3.0 does not enforce `If-None-Match`, so `use_lockfile` would be
+      theatre**; safe for the read-only belt (one writer), NOT for an automated applier.
+      **Next:** operator seeds the wallet entries, then migrate `cloudflare` first. Ruling, cone
+      table (⚠ the `main` root is inside its own blast radius), runbook:
+      [`docs/tofu-state.md`](tofu-state.md). Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
