@@ -145,17 +145,37 @@ What remains is mechanical, and dangerous in a specific way: each release is a `
 an ArgoCD Application that must **adopt** the live Helm release. Get adoption wrong on garage and
 you do not get a failed apply, you get an empty bucket.
 
-**The unverified fact, and it gates everything else:** does ArgoCD adopt a Helm release created by
-tofu's `helm_release`, or does it fight the existing Helm metadata (release name/namespace ownership
-labels) and try to install alongside it? Establish this on **metrics-server** — the release whose
-loss costs least — before touching anything with data. If adoption is clean there, the rest is
-repetition; if it is not, the whole lever needs a different shape and nothing valuable was risked.
+**The gating fact — SETTLED on metrics-server, 2026-08-04: ArgoCD adopts, and it adopts silently.**
+It does not install alongside, because it never installs at all: ArgoCD `helm template`s the chart
+and applies the rendered objects, so there is no second Helm release to collide with the first. The
+two ownership systems agree *by construction*, not by luck, as long as the **Application name equals
+the Helm release name** — the chart renders `app.kubernetes.io/instance: {{ .Release.Name }}`, and
+ArgoCD's default `label` tracking wants that same key set to the Application name. Keep those names
+equal for every remaining release; that equality is the whole mechanism.
+
+Two consequences worth carrying forward:
+
+- **The live Helm metadata survives and is harmless.** `meta.helm.sh/release-*` annotations and
+  `app.kubernetes.io/managed-by: Helm` stay on the objects — ArgoCD's rendered output doesn't
+  contain them, so the 3-way merge leaves them alone and they don't show as OutOfSync.
+- **The pre-flight is free and it is the real gate.** `helm template <release> <chart> --version
+  <same> -n <ns>` piped into `kubectl diff -f -` answers "will adoption change anything?" *before*
+  any `state rm`. On metrics-server it came back empty, and the subsequent adoption changed nothing
+  (Synced/Healthy, one ReplicaSet, pod start time unmoved). Run it per release; an empty diff is the
+  green light, a non-empty one is the whole reason the order is least-valuable-first.
+
+⚠ **Rollback works but does not plan clean** (measured, not assumed). `tofu import` restores
+ownership with **0 to destroy** — but the helm provider cannot read `repository` or `values` back
+out of a release, so the next plan shows **1 to change, in place**: it re-attaches those two
+attributes and recomputes `metadata`. Applying it is a no-op Helm upgrade (revision bump), not a
+recreate. Do not read that diff as "the import was wrong" — and do not let step 1's "plan clean
+first" rule block a rollback.
 
 **Order, least-valuable first:**
 
 | # | release | why here |
 |---|---|---|
-| 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history |
+| 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history. **DONE 2026-08-04** (`argocd/platform/metrics-server.yaml`) |
 | 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable |
 | 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering |
 | 4 | `garage` | LAST. Holds transcripts, buckets, the ledger's own subject. A destroy here is unrecoverable |
@@ -165,6 +185,8 @@ example — dry-run by default, refuses to report success when it cannot see sta
 
 1. `devbox run tf-plan` clean first — never migrate on top of unrelated drift.
 2. `tofu state list | grep '^helm_release\.<name>$'` — scoped exactly, never a bare name grep.
+2b. The **empty-diff pre-flight** above (`helm template` → `kubectl diff -f -`), while tofu still
+   owns the release. Nothing is committed to until it comes back empty.
 3. `tofu state rm 'helm_release.<name>'` — tofu FORGETS; Helm and the workload are untouched.
 4. Add `argocd/platform/<name>.yaml` pinning the SAME chart version and values, `syncPolicy` with
    `selfHeal` but **`prune: false` on the first sync** — a stray prune is the destructive path.

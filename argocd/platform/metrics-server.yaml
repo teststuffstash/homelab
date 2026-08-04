@@ -34,9 +34,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: kube-system
   syncPolicy:
-    # prune: false for the FIRST sync — an adoption that renders anything differently must not be
-    # allowed to delete the live object. Flipped to true once the adoption is verified.
-    automated: { prune: false, selfHeal: true }
+    # prune was false for the first sync (an adoption that renders anything differently must not be
+    # allowed to delete the live object); flipped to true 2026-08-04 after the adoption verified
+    # clean — Synced/Healthy, one ReplicaSet, pod untouched.
+    automated: { prune: true, selfHeal: true }
     retry:
       limit: 5
       backoff: { duration: 10s, factor: 2, maxDuration: 3m }
