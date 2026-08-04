@@ -342,9 +342,9 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 - [ ] **FU-068** — **Decide homelab's fixer scope — the gate on platform alerts being
       agent-fixable at all.** ~18 of 27 responder-filed issues land in homelab paths while
       `is_fixer()` excludes it, and homelab holds its own governor (`agents/**`, `tofu/github/**`).
-      **Label half DONE in code 2026-08-04** (`labels.tf` retired; operator runs
-      `devbox run labels-handoff -- --apply` OUTSIDE the jail BEFORE the next apply — the claim
-      ADOPTS an existing taxonomy, a destroy leaves none). CODEOWNERS landed; ruleset flip deferred.
+      **Label half DONE + APPLIED 2026-08-04** (`labels.tf` retired, 16 resources state-rm'd via
+      `devbox run labels-handoff`; all 27 GitHub labels intact, `github-tofu plan` clean).
+      CODEOWNERS landed; the ruleset flip stays deferred until reviewer coverage exists.
       **Blocked on a CLICK:** homelab-agents + homelab-reviewer are not installed on homelab, so
       adding it to the token lists would 422 ESO and break the live token. **Next:** install both
       → verify /apps → claim + stacks.json + token lists → flip `require_approval`. Tiers:
