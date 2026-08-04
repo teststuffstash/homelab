@@ -64,6 +64,14 @@ cannot key on the repo. It keys on the **path**.
 | `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply |
 | `agents/**`, `scripts/**`, `policy/**`, `.github/workflows/**`, `tofu/github/**`, `tofu/cloudflare/**` | governance & supply chain | ❌ **never** | operator only |
 
+Two files are carved back OUT of that table because the arc-runner auto-bump commits both
+(`argocd/platform/arc-runners.yaml`, `agents/coordinator/reflexes-argo.yaml`) and a mechanical tag
+bump should not wait for a human. Ownership is **replaced, not dropped**: `pin-only-lint` (in the
+required `ci`) allows only arc-runner image-pin lines into them via a PR — stricter than the review
+it stands in for, since a regex cannot approve a smuggled fourth line. Real edits take the operator
+path (direct to master), which is not a PR and not gated. That is the general shape for anything
+else that needs un-gating: **replace the owner with a rule, never just remove the owner.**
+
 The deny row is the load-bearing one. `agents/**` holds the launcher that builds its own dispatch
 command (ADR-094), the scan that decides what gets dispatched, and the reflex that approves its own
 PRs; `tofu/github/**` holds the ruleset governing all of it. **A fixer permitted to edit its own

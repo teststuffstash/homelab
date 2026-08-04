@@ -68,6 +68,9 @@
       "argocd-validate-pins": [
         "bash scripts/argocd-validate-pins.sh"
       ],
+      "pin-only-lint": [
+        "bash scripts/pin-only-lint.sh \"$@\""
+      ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
       ],

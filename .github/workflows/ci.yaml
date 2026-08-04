@@ -34,6 +34,16 @@ jobs:
       - name: Schema-validate the raw manifests ArgoCD applies (devbox run manifest-lint)
         run: devbox run manifest-lint
 
+      # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
+      # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
+      - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          devbox run pin-only-lint FETCH_HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+
       # tofu paths are CODEOWNERS-gated (a human reads the diff), so CI buys the cheap half only:
       # fmt is free, while `tofu validate` needs a provider download per PR (the FU-130 WAN class).
       # `devbox run tf-validate` stays the local/manual gate.
