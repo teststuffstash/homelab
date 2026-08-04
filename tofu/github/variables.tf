@@ -45,17 +45,26 @@ variable "protected_repos" {
   default = {
     circles-iac = { required_checks = ["ci"], require_approval = false } # CI-gated deploy target (sleep-iac shape)
     circles     = { required_checks = ["ci"] }
-    # homelab: CI-gated only (like sleep-iac) — deploy-pin bumps auto-merge on ci-green, no approver.
-    # ⚠ FLIP PRECONDITION (2026-08-04). The platform-lane gate wants
-    # `require_approval = true, require_code_owner_review = true` against the repo-root CODEOWNERS.
-    # Do NOT flip until homelab has reviewer coverage: require_approval is repo-WIDE (only
-    # code-owner review is path-scoped), and review-reflex.sh derives its scan set from the
-    # AgentStack claims — homelab is in none, so no bot approval exists for it. Flipping first
-    # stalls the deploy-pin lane (agents/images.env, e.g. #95) on an approval nothing can give;
-    # the App/Integration bypass cannot waive required-approval, only an OrganizationAdmin can.
-    # Sequence: claim coverage (FU-068) → flip both flags → point a fixer here.
-    # Tier table: docs/agents/iac-lane.md §The platform lane.
-    homelab             = { required_checks = ["ci"], require_approval = false }
+    # homelab — the platform lane's gate (docs/agents/iac-lane.md §The platform lane).
+    # FLIPPED 2026-08-04, once its three preconditions held: homelab joined the platform claim as a
+    # context-only repo (so review-reflex.sh, which derives its scan set from the claims, finally
+    # SEES its PRs and a bot approval exists at all); both merge-path callers are present
+    # (renovate-approve added with the claim, update-pr-branch already there); and CODEOWNERS
+    # encodes the path tiers. Flipping before that would have stalled every armed PR on an approval
+    # nothing could give — an App/Integration bypass cannot waive required-approval, only an
+    # OrganizationAdmin can (ADR-084).
+    #
+    # require_approval is repo-WIDE; only require_code_owner_review is path-scoped. So every PR now
+    # needs SOME approving review (the reviewer bot's counts), and PRs touching an OWNED path
+    # additionally need a human code owner. Deliberate consequences, both verified against the
+    # actual automation before flipping:
+    #   • agents/images.env is UNOWNED — the deploy-pin lane keeps auto-merging on the bot approval.
+    #   • devbox-update touches devbox.lock/json — unowned, unaffected.
+    #   • the arc-runner auto-bump commits argocd/platform/ + agents/coordinator/ — OWNED, so it now
+    #     waits for a human. That is the intended reading of those tiers, not an accident.
+    #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
+    #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
+    homelab             = { required_checks = ["ci"], require_approval = true, require_code_owner_review = true }
     agent-coordinator   = { required_checks = ["ci"] }
     agent-runtime       = { required_checks = ["ci"] }
     openrouter-operator = { required_checks = ["ci"] }
