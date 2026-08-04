@@ -1,0 +1,28 @@
+# Platform-precreated namespace for the PLATFORM tenant's own fixer (pattern from
+# sleep-namespaces.yaml / circles-namespaces.yaml). Every other tenant got one of these when it
+# gained a fixer; the platform never did, because homelab was a context/deploy target and had no
+# fixer namespace to precreate. It became a fixer target 2026-08-04 (FU-068) and the composition
+# surfaced the gap immediately and correctly:
+#
+#   cannot compose resources: cannot apply composed resource "homelab-proxy-role":
+#   namespaces "homelab" not found
+#
+# The AgentStack Composition deliberately does NOT create namespaces — ns/repo precreation is one of
+# the "irreducibly operator" slots (iac-lane.md §Greenfield; FU-039 tracks making it self-service).
+# So the claim renders the fixer's key, token trio, egress policy and proxy RBAC INTO a namespace
+# the platform owns, and homelab owns namespace lifecycle for every tenant including itself.
+#
+# fixer ns == repo by platform convention, so this is `homelab`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homelab
+  labels:
+    # claim fixer.docker=false → plain runc rides, so the cluster-default baseline posture applies
+    # (no kata/dind exemption needed here, unlike sleep-tracking). Pinned explicitly so the posture
+    # is visible in git rather than inherited silently — same reasoning as the sibling files.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # before anything composes or binds into it
