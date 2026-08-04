@@ -94,6 +94,13 @@ resource "helm_release" "longhorn" {
       createDefaultDiskLabeledNodes     = true
       defaultDataPath                   = "/var/lib/longhorn"
       defaultReplicaCount               = 2
+      # least-effort, not best-effort (2026-08-04, homelab#94): rebalance only when a node is
+      # genuinely under-used, rather than continuously chasing an even spread — every move is a
+      # replica REBUILD, real IO across disks that are already tight (homelab#56 was
+      # NodeDiskIOSaturation on wk-02's disk). Standing belt, not the fix: it balances replica
+      # COUNT, and #94's imbalance is bytes-and-tiers — thinkcentre already carries 19 replicas to
+      # wk-02's 15. Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
+      replicaAutoBalance                = "least-effort"
       replicaSoftAntiAffinity           = true
       replicaZoneSoftAntiAffinity       = true # spread the 2 replicas across zones
       defaultDataLocality               = "best-effort"
