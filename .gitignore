@@ -24,3 +24,6 @@
 # OpenRouter model-registry cache (estimate_budget.py --registry-cache; refetched, 24h TTL).
 /agents/.openrouter-registry.json
 __pycache__/
+
+# Local Garage backups (scripts/garage-backup.sh) — bulk object data, never a git artifact.
+/backups/

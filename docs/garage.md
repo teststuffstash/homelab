@@ -77,6 +77,36 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 - Updating Garage: re-vendor the chart at the new tag (see `charts/garage/VENDORED.md`), bump
   values in `garage.tf`, `plan`, review, `apply`.
 
+## Durability — what actually stands between you and losing all of it
+
+Measured 2026-08-04, because "can I afford to lose this?" deserves numbers rather than a shrug.
+
+**~63.7 GB across 12 buckets**, and the shape matters more than the total: `ert-snapshots` is 60.4
+GB / 252k objects of it and is **recoverable** — the oracle-fleet ingestion re-downloads its source
+zip, so losing it costs a long re-ingest, not data. Everything else together is ~3.3 GB, and the
+part that is genuinely irreplaceable is small: `agent-transcripts` (491 MB, the loop's own
+observability record) and the `sleep-*` buckets (27.5 MB of real personal data). `allure-reports`
+and `oracle-specs` regenerate from CI and from `specs/` in the stack repos; `loki` self-expires at
+7 days.
+
+**What protects it:** Garage runs `replication_factor = 1` on a single node, so *all* redundancy is
+Longhorn's — 2 replicas per volume, currently healthy on distinct nodes (data `wk-metal-01`+`wk-02`,
+meta `thinkcentre`+`wk-02`). Note `wk-02` carries a replica of both; losing it degrades both at once
+without losing either.
+
+**What does not protect it:** nothing backs Garage *out*. FU-013 backs other things *into* it. The
+sharp edge is the **meta volume** — 10Gi of LMDB on `longhorn`, tiny next to the data, and losing it
+makes the ~60 GB of blocks unreadable.
+
+Two consequences worth holding:
+
+- `scripts/garage-backup.sh` (`devbox run garage-backup`) pulls every non-excluded bucket to
+  `backups/garage/` (gitignored) and **verifies object counts against Garage**, refusing to call a
+  short copy a backup. It copies **objects, not volumes**, on purpose: an object copy survives a
+  metadata loss, a block-level snapshot does not. Offsite (AWS/Civo) is the real answer — **FU-137**.
+- Garage durability is now load-bearing for **tofu state** too (FU-012 put three roots there). Those
+  additionally have timestamped copies in `~/.claude/homelab-tofu-state-backups/`.
+
 ## Static-website serving (3902, live 2026-07-14)
 
 `s3.web.rootDomain = ".teststuff.net"` (garage.tf): any **website-enabled** bucket is served

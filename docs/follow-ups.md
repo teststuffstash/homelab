@@ -57,6 +57,14 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 ## GitOps & platform
 
+- [ ] **FU-137** — **Garage has no offsite backup** — `replication_factor = 1` on one node, all
+      redundancy borrowed from Longhorn's 2 replicas, and nothing copies the objects off the
+      cluster. (FU-013 backs things *into* Garage; this is the other direction.) **Interim taken
+      2026-08-04:** `devbox run garage-backup` → `backups/garage/` on the jail host, count-verified,
+      `ert-snapshots` excluded as re-ingestable. **Next:** the operator's AWS/Civo bucket — parked
+      behind oracle-fleet/idp reaching prod, so the interim carries the risk until then; a cron
+      would need FU-012-style creds and a runner. ⚠ now load-bearing for tofu state as well.
+      Posture + numbers: [`docs/garage.md`](garage.md) §Durability. Relates FU-013, FU-012, ADR-031.
 - [ ] **FU-076** — **Re-check the metal reinstall mystery on the next metal (re)install**: a
       maintenance-mode reinstall of wk-metal-03 applied config verifiably carrying the
       metal_kata installer URL yet produced the plain-metal schematic (fixed via `talosctl

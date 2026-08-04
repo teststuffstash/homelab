@@ -56,6 +56,9 @@
       "tofu-state-migrate": [
         "bash scripts/tofu-state-migrate.sh \"$@\""
       ],
+      "garage-backup": [
+        "bash scripts/garage-backup.sh \"$@\""
+      ],
       "github-tofu": [
         "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""
