@@ -37,7 +37,7 @@ export TF_VAR_github_app_private_key_file="$CRED/homelab-runner-app/private-key.
 # a plan that doesn't need one. `init` MOVED IN HERE from devbox.json for the same reason it has to
 # be here at all: after migration the bare `tofu init` in a devbox script has no credentials and
 # fails before tf.sh ever runs.
-. "$ROOT/scripts/tofu-state-env.sh" || true
+TOFU_STATE_ROOT_DIR="$ROOT/tofu" . "$ROOT/scripts/tofu-state-env.sh" || true
 
 tofu -chdir="$ROOT/tofu" init -input=false >&2
 exec tofu -chdir="$ROOT/tofu" "$@"

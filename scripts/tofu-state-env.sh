@@ -75,10 +75,36 @@ fi
 # The unencrypted FALLBACK is opt-in and temporary: it is what lets a migration read the existing
 # plaintext state once. Left on permanently it would silently accept a plaintext state forever, so
 # it is off by default — set TOFU_STATE_ENC_FALLBACK=1 for the migrating run only.
-_ts_pass="${TOFU_STATE_PASSPHRASE:-$(_ts_get tofu-state-passphrase)}"
-if [ -n "$_ts_pass" ]; then
+# Encryption is PER ROOT, not per shell. Exporting TF_ENCRYPTION globally broke `devbox run tf-plan`
+# the moment the passphrase existed: the main root's state is still plaintext, and tofu refuses an
+# "unencrypted payload without unencrypted method configured". So `auto` (the default) turns it on
+# only for a root that has already migrated — `backend.tf` present means the migration wrote its
+# state encrypted. Callers name the root via TOFU_STATE_ROOT_DIR; `on` forces it (the migration
+# itself needs the passphrase BEFORE it writes backend.tf).
+#
+# Sourcing this with no root named yields no TF_ENCRYPTION, so a migrated root then fails LOUDLY on
+# read rather than being rewritten in plaintext. Fail-closed in the direction that matters.
+_ts_enc="${TOFU_STATE_ENC:-auto}"
+if [ "$_ts_enc" = auto ]; then
+  if [ -n "${TOFU_STATE_ROOT_DIR:-}" ] && [ -f "${TOFU_STATE_ROOT_DIR}/backend.tf" ]; then
+    _ts_enc=on
+  else
+    _ts_enc=off
+  fi
+fi
+
+_ts_pass=""
+if [ "$_ts_enc" = on ]; then
+  _ts_pass="${TOFU_STATE_PASSPHRASE:-$(_ts_get tofu-state-passphrase)}"
+fi
+
+# if/elif rather than `[ … ] && x=y`: this file is SOURCED into `set -e` scripts, where a trailing
+# false test is an aborting command rather than a skipped assignment.
+if [ "$_ts_enc" = on ] && [ -n "$_ts_pass" ]; then
   _ts_fallback=""
-  [ "${TOFU_STATE_ENC_FALLBACK:-0}" = "1" ] && _ts_fallback='fallback { method = method.unencrypted.migrate }'
+  if [ "${TOFU_STATE_ENC_FALLBACK:-0}" = "1" ]; then
+    _ts_fallback='fallback { method = method.unencrypted.migrate }'
+  fi
   TF_ENCRYPTION="$(cat <<EOF
 key_provider "pbkdf2" "wallet" {
   passphrase = "${_ts_pass}"
@@ -98,8 +124,8 @@ plan {
 EOF
 )"
   export TF_ENCRYPTION
-else
-  echo "tofu-state-env: ⚠ no \`tofu-state-passphrase\` in the wallet — state will be written UNENCRYPTED." >&2
+elif [ "$_ts_enc" = on ]; then
+  echo "tofu-state-env: ⚠ no \`tofu-state-passphrase\` in the wallet — state would be written UNENCRYPTED." >&2
 fi
 
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY

@@ -1,9 +1,10 @@
 # OpenTofu state — where it lives, and why that is a design question (FU-012)
 
-Every tofu root in this repo keeps its state as a **local, gitignored file in the jail**. That is
-the status quo this doc exists to change, and the reason it must change is not tidiness: nothing
-that runs anywhere else can `plan` at all. The FU-097 drift belt and any out-of-cluster applier are
-both blocked on it.
+Every tofu root in this repo *kept* its state as a **local, gitignored file in the jail** — and
+the reason that had to change is not tidiness: nothing running anywhere else can `plan` at all. The
+FU-097 drift belt and any out-of-cluster applier were both blocked on it. As of 2026-08-04 three of
+the five roots are on encrypted remote state in Garage; `main` and `github` are not, for reasons
+that are rulings rather than backlog (see the cone table).
 
 It is also the single most dangerous change in the repo. A root that loses its state does not fail
 loudly — it plans to **create** everything it already owns. Everything below is shaped by that.
@@ -14,18 +15,25 @@ loudly — it plans to **create** everything it already owns. Everything below i
 |---|---|---|
 | Garage bucket `homelab-tofu-state` + rw key | `argocd/resources/tofu-state/garage-workspace.yaml` (Crossplane Workspace, ADR-076 CREATE-pattern, 1Gi cap) | **LIVE** — reconciled, key in the `tofu-state-s3` connection Secret |
 | Credential + endpoint + encryption env | `scripts/tofu-state-env.sh` (source-me) | built |
-| Per-root migration | `scripts/tofu-state-migrate.sh` → `devbox run tofu-state-migrate` | built, dry-run exercised |
-| Generated backend block | written by the script into `<root>/backend.tf` | **`tofu/cloudflare/backend.tf` LIVE** |
+| Per-root migration | `scripts/tofu-state-migrate.sh` → `devbox run tofu-state-migrate` | used for real on 3 roots |
+| Generated backend block | written by the script into `<root>/backend.tf` | **3 roots LIVE** |
 | Wallet entries | `tofu-state-{key-id,secret,passphrase}`, seeded by `scripts/keepass-init.sh` | **seeded 2026-08-04** |
 
-**`cloudflare` is migrated (2026-08-04, 14 resources).** Verified with the local state file
-*deleted*, so the plan can only be reading Garage: `0 to add, 1 to change, 0 to destroy` — the one
-change is pre-existing comment drift on the ddclient-owned DDNS record, unrelated to the move. The
-remote object is genuine ciphertext (top-level keys are `encrypted_data`/`meta`/`serial`/`lineage`,
-no `resources`, and the string "cloudflare" appears nowhere in it). It runs
+**Three roots migrated 2026-08-04** — all verified the same way, with the local state file
+**deleted** first so the plan can only be reading Garage, and each compared against a plan taken
+*before* the move:
+
+| root | resources | before → after |
+|---|---|---|
+| `cloudflare` | 14 | `0 add / 1 change / 0 destroy` both sides — the one change is pre-existing comment drift on the ddclient-owned DDNS record |
+| `provisioning` | 2 | `No changes` → `No changes` |
+| `infisical` | 13 | `No changes` → `No changes` |
+
+Every object in the bucket is genuine ciphertext: top-level keys are
+`encrypted_data`/`encryption_version`/`meta`/`serial`/`lineage`, no `resources`. All three run
 **`use_lockfile = false`**, deliberately — see the ruling below.
 
-The other four roots are unmigrated.
+`main` and `github` are unmigrated.
 
 ## Encryption: OpenTofu's, not the backend's
 
@@ -48,6 +56,19 @@ Verified 2026-08-04 on a throwaway root, both directions:
 The fallback is **opt-in and temporary** (`TOFU_STATE_ENC_FALLBACK=1`, which
 `tofu-state-migrate.sh` sets for its own run only). Left on permanently it would silently accept a
 plaintext state forever, which is the failure it exists to end.
+
+**Encryption is per ROOT, not per shell** — and that was learned by breaking something. The first
+version exported `TF_ENCRYPTION` from every `tofu-state-env.sh` source, so the moment the passphrase
+landed in the wallet, `devbox run tf-plan` died on the main root with *"encountered unencrypted
+payload without unencrypted method configured"*: its state is still plaintext. Seeding a secret is
+not supposed to break an unrelated root.
+
+So callers name their root (`TOFU_STATE_ROOT_DIR`) and the default `auto` mode turns encryption on
+only when that root has a `backend.tf` — migrated means encrypted, by construction. `on` forces it
+(the migration needs the passphrase *before* it writes the file). Sourcing with no root named yields
+no `TF_ENCRYPTION` at all, so a migrated root then fails loudly on read rather than being silently
+rewritten in plaintext — fail-closed in the direction that matters. Wired into `scripts/tf.sh` and
+`tofu/infisical/apply.sh`; **any future wrapper for a migrated root needs the same two lines.**
 
 ## The locking ruling — Garage does not enforce conditional writes
 
@@ -99,8 +120,8 @@ So the roots do not migrate as a set:
 | Root | In the cone? | Ruling |
 |---|---|---|
 | `cloudflare` | no — external zone, no cluster dependency | **MIGRATED 2026-08-04** — the safe canary, and it worked |
-| `provisioning` | no — Matchbox LXC on Proxmox | migrate |
-| `infisical` | partly | migrate, but it is slated to leave tofu anyway (`minimize-tofu` direction) |
+| `provisioning` | no — Matchbox LXC on Proxmox | **MIGRATED 2026-08-04** |
+| `infisical` | partly | **MIGRATED 2026-08-04** — its state holds the Infisical client secret, so getting it out of a plaintext file was the point; still slated to leave tofu (`minimize-tofu` direction) |
 | `github` | no | operator-only root, host wallet; migrate last if at all |
 | `main` | **yes, fully** | do NOT migrate on the strength of "the others worked". Needs an out-of-cone copy — the timestamped backups `tofu-state-migrate.sh` writes to `~/.claude/homelab-tofu-state-backups/` are that copy today, and something better (off-box, versioned) is what would settle it |
 

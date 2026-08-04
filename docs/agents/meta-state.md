@@ -50,11 +50,12 @@ meant to avoid.)
   construction). The other three are **blocked and now tracked as FU-136** — each injects a secret
   through Helm values and the destination repo is public, so each needs a preparatory
   value→Secret-reference apply first. Do NOT resume 3.1 by "just repeating" release 1; the shape
-  changed. (3.2) FU-012 — **`cloudflare` MIGRATED 2026-08-04** (encrypted, verified with the local
-  file deleted); wallet entries seeded. **Garage v2.3.0 does not enforce conditional writes
-  (measured 20/20)** → `use_lockfile = false`: fine at one writer, a hard block on any automated
-  applier. Next roots `provisioning` → `infisical`; ⚠ `main` is inside its own blast radius.
-  Ruling + cone table: `docs/tofu-state.md`. (3.3) FU-044's scoped revert — **DONE 2026-08-04**: homelab passes the
+  changed. (3.2) FU-012 — **3 of 5 roots MIGRATED 2026-08-04** (cloudflare/provisioning/infisical,
+  encrypted, each verified with the local file deleted against a pre-move baseline); wallet entries
+  seeded. **Garage v2.3.0 does not enforce conditional writes (measured 20/20)** →
+  `use_lockfile = false`: fine at one writer, a hard block on any automated applier. ⚠ `main` stays
+  local until it has an out-of-cone copy; `github` is host-only. **Unblocked next: the FU-097
+  read-only drift belt for the three migrated roots.** Ruling + cone table: `docs/tofu-state.md`. (3.3) FU-044's scoped revert — **DONE 2026-08-04**: homelab passes the
   source guard behind a pin-only predicate (IAC-G09), unit-exercised, never fired for real.
   **Phase 3 leaves three things waiting on a first real event**: the `subject:` key, `Touches:`,
   and now the homelab revert path. All three are cheaper to watch than to build on.

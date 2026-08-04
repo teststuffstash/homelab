@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the Infisical content-as-code root. Mirrors the app-owned-resources pattern:
 # port-forward the in-cluster Infisical, derive the provider auth from the live
-# instance, then run tofu. State is local + gitignored (holds the client secret).
+# instance, then run tofu. State lives in Garage, encrypted (FU-012, docs/tofu-state.md) — it holds
+# the client secret, which is precisely why it is not a plaintext file any more.
 #
 #   bash tofu/infisical/apply.sh plan
 #   bash tofu/infisical/apply.sh apply
@@ -37,6 +38,12 @@ export TF_VAR_infisical_host="http://127.0.0.1:$PORT"
 export TF_VAR_infisical_token="$TOKEN"
 export TF_VAR_infisical_org_id="$ORG_ID"
 export TF_VAR_kubeconfig="$KUBECONFIG_PATH"
+
+# FU-012: this root's state moved to Garage (2026-08-04), so `init` needs the S3 credential and the
+# decryption passphrase before it can read anything. TOFU_STATE_ROOT_DIR is what switches encryption
+# on — it keys off this root's backend.tf, so the same line is a no-op on a root that hasn't moved.
+export TOFU_STATE_ROOT_DIR="$PWD/tofu/infisical"
+. ./scripts/tofu-state-env.sh
 
 devbox run --quiet -- tofu -chdir=tofu/infisical init -input=false >/tmp/inf-init.log 2>&1 || { cat /tmp/inf-init.log; exit 1; }
 devbox run --quiet -- tofu -chdir=tofu/infisical "$@"

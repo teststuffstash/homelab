@@ -77,12 +77,13 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       `:v1.1.1` tag).
 - [ ] **FU-012** — **Remote/encrypted tofu state backend** (every root is local, gitignored state).
       Hard prerequisite for anything that plans/applies off the operator's machine — the FU-097
-      drift belt and the out-of-cluster applier. **`cloudflare` MIGRATED 2026-08-04** (14 resources,
-      encrypted, verified with the local file deleted); wallet entries seeded in `keepass-init.sh`.
-      **Garage v2.3.0 does not enforce `If-None-Match` (measured 20/20), so it runs
-      `use_lockfile = false`** — fine at one writer, and a hard block on any automated applier.
-      **Next:** `provisioning`, then `infisical`; ⚠ `main` is inside its own blast radius and needs
-      an out-of-cone copy first. Ruling, cone table, runbook:
+      drift belt and the out-of-cluster applier. **3 of 5 roots MIGRATED 2026-08-04** — `cloudflare`
+      (14), `provisioning` (2), `infisical` (13), each encrypted and verified with the local file
+      deleted against a pre-move baseline; wallet entries seeded in `keepass-init.sh`.
+      **Garage v2.3.0 does not enforce `If-None-Match` (measured 20/20), so all three run
+      `use_lockfile = false`** — fine at one writer, a hard block on any automated applier.
+      **Next:** the FU-097 read-only drift belt can now run for these three; ⚠ `main` stays local
+      until it has an out-of-cone state copy, `github` is host-only. Ruling, cone table, runbook:
       [`docs/tofu-state.md`](tofu-state.md). Relates FU-097, FU-136.
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it

@@ -66,6 +66,9 @@ echo
 #     state that exists today.
 # ---------------------------------------------------------------------------
 export TOFU_STATE_ENC_FALLBACK=1
+# ENC=on, not auto: the migration needs the passphrase BEFORE it writes this root's backend.tf,
+# which is exactly what `auto` keys off.
+export TOFU_STATE_ENC=on TOFU_STATE_ROOT_DIR="$ROOT_DIR/$DIR"
 # shellcheck source=/dev/null
 . "$ROOT_DIR/scripts/tofu-state-env.sh"
 [ -n "${TF_ENCRYPTION:-}" ] || {
