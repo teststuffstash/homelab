@@ -39,6 +39,19 @@ meant to avoid.)
   (`subject:` key); (3) extend the IAC-G04 sentinel to homelab so tier 1 (`argocd/resources/`) can
   drop back to unowned — the CODEOWNERS line says to delete itself. Tiers + rulings:
   `docs/agents/iac-lane.md` §The platform lane. ⚠ agent-runtime#29 (watchdog) is open + un-armed.
+- **Phases 0-2 of the alert→auto-fix plan are DONE and applied; Phase 3 is next and untouched.**
+  Live now: CODEOWNERS path tiers + `require_approval`/code-owner review, homelab as a fixer target
+  (claim + ns + worker RBAC + apiserver egress), `manifest-lint`/`pin-only-lint`, the responder's
+  self-referential gate, resolve leg (`send_resolved`), `Touches:` emission, `selfQueue`,
+  `subject:` correlation and the IAC-G10 window hand-off. An alert can now reach a merged-blocked
+  PR with no human; the merge itself still needs a code owner everywhere that matters.
+  **Phase 3, in order:** (3.1) the ArgoCD lever — runbook + migration order + the ONE unverified
+  fact (does ArgoCD adopt a tofu-created helm_release?) are written up in
+  `docs/dependency-upgrades.md` §"Executing the lever"; start with metrics-server as the canary,
+  garage LAST. (3.2) FU-012 — no machine yet, but write the backend + migration scripts anyway;
+  the operator merges/applies by hand. (3.3) FU-044's scoped revert for the reversible class
+  (first-party image pins only — the ruling is in `iac-lane.md`). ⚠ Do NOT start 3.1 without room
+  to verify between releases; a bad adoption on garage is unrecoverable.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),

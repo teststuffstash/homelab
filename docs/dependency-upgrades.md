@@ -137,6 +137,46 @@ Two consequences the table above glosses over:
   four charts above are things ArgoCD needs. Longhorn IS in ADR-005's substrate list, so moving it
   (even as a manual-sync app) would be an ADR-005 addendum, not a quiet migration.
 
+### Executing the lever — the migration order and the one unverified fact
+
+Written 2026-08-04 for a fresh session; the design above is already cleared (ADR-005: none of these
+four are things ArgoCD needs in order to run — Longhorn is, which is why it is not on the list).
+What remains is mechanical, and dangerous in a specific way: each release is a `tofu state rm` +
+an ArgoCD Application that must **adopt** the live Helm release. Get adoption wrong on garage and
+you do not get a failed apply, you get an empty bucket.
+
+**The unverified fact, and it gates everything else:** does ArgoCD adopt a Helm release created by
+tofu's `helm_release`, or does it fight the existing Helm metadata (release name/namespace ownership
+labels) and try to install alongside it? Establish this on **metrics-server** — the release whose
+loss costs least — before touching anything with data. If adoption is clean there, the rest is
+repetition; if it is not, the whole lever needs a different shape and nothing valuable was risked.
+
+**Order, least-valuable first:**
+
+| # | release | why here |
+|---|---|---|
+| 1 | `metrics-server` | the adoption canary — stateless, instantly rebuildable, nothing depends on its history |
+| 2 | `forgejo` (+ runner) | stateful but mirrored from GitHub; recoverable |
+| 3 | `kube-prometheus-stack` | losing it blinds every alert built this month, incl. the Longhorn metering |
+| 4 | `garage` | LAST. Holds transcripts, buckets, the ledger's own subject. A destroy here is unrecoverable |
+
+**Per release, the sequence is the labels-handoff shape** (`scripts/labels-handoff.sh` is the worked
+example — dry-run by default, refuses to report success when it cannot see state):
+
+1. `devbox run tf-plan` clean first — never migrate on top of unrelated drift.
+2. `tofu state list | grep '^helm_release\.<name>$'` — scoped exactly, never a bare name grep.
+3. `tofu state rm 'helm_release.<name>'` — tofu FORGETS; Helm and the workload are untouched.
+4. Add `argocd/platform/<name>.yaml` pinning the SAME chart version and values, `syncPolicy` with
+   `selfHeal` but **`prune: false` on the first sync** — a stray prune is the destructive path.
+5. Verify: `kubectl get helmrelease/secret -l owner=helm` still shows ONE release, the workload
+   never restarted, and the ArgoCD app reports Synced/Healthy without having recreated anything.
+6. Only then flip `prune: true`, and only then start the next release.
+7. Remove the `helm_release` block from `tofu/*.tf` in the same commit as step 4, so git never
+   claims two owners for one release.
+
+**Rollback at any step:** `tofu import 'helm_release.<name>' <ns>/<name>` puts it back under tofu.
+Establish that this works on metrics-server too, before it is needed under pressure.
+
 ---
 
 ## What a full platform dependency upgrade should look like
