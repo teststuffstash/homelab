@@ -249,7 +249,7 @@ spec:
               SELF_NOTE=""
               [ -n "$SELF_REF" ] && SELF_NOTE="
             ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate, so any fix needs the very thing that is broken — pod scheduling, image pull, PVC attach, the git-token broker, or the CI runners that gate every agent PR. Your outcome is CAPPED AT REPORT-ONLY: do not open a PR and do not propose one as the next step; describe the fix in prose for a human instead. End any issue body you file with the line 'self-referential: true' on its own line."
-              [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — outcome capped at report-only"
+              [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — may PR + be reviewed, must NOT auto-merge"
               echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
