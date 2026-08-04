@@ -1,8 +1,11 @@
 # Spike — context repos: mount more, let the ride grep
 
-_Opened 2026-08-04 (operator + jail session). Status: **pilot designed, not yet built** — blocked
-only on a free homelab workdir for the launcher edit. Sightings home: `docs/agents/roles.md`
-§Context delivery (FU-117); this spike is that item's first deliberate data-gathering leg._
+_Opened 2026-08-04 (operator + jail session). Status: **pilot BUILT 2026-08-04** —
+`agent-session.sh` grew a repeatable `--context-repo` flag, a circles-only default
+(circles-iac + homelab), a clone prelude on the launcher-owned RUN_CMD (agent-runtime
+untouched), and an env-card bullet; first test ride = a circles#6 proxy run. Sightings home:
+`docs/agents/roles.md` §Context delivery (FU-117); this spike is that item's first deliberate
+data-gathering leg._
 
 ## Question
 

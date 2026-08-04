@@ -29,7 +29,7 @@ KUBECTL="$(command -v kubectl || true)"
 
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)
-  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm]"
+  echo "usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model] [--task issue-<n>] [--round <r>] [--recipe <path>] [--docker] [--openrouter-secret <name>] [--work-branch <b>] [--no-attach] [--no-arm] [--context-repo <url>]…"
   exit 0
 ;; esac
 shift || true
@@ -38,7 +38,7 @@ shift || true
 # per-stack chain (primary + fallbacks) lives in agents/stacks.json; an infra failure here costs one
 # STRIKE (re-dispatch on the next chain model), so free/new entries are fair — see
 # docs/agents/model-routing.md. Still avoid CLOAKED models as primary (rotated out → 404s mid-run).
-RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""; NO_ARM=""
+RUN_CMD=""; BASE_REF="master"; REPO_URL=""; HARNESS="opencode"; MODEL="openrouter/deepseek/deepseek-v4-flash"; NO_ATTACH=""; OR_SECRET=""; TASK=""; ROUND="1"; WORK_BRANCH=""; DOCKER=""; RECIPE=""; NO_ARM=""; CONTEXT_REPOS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --run)       RUN_CMD="$2"; shift 2;;
@@ -54,6 +54,7 @@ while [ $# -gt 0 ]; do
     --recipe)    RECIPE="$2"; shift 2;;  # claude harness: launcher BUILDS the run command from this goose recipe path — never LLM-assembled (2026-07-21 #55 incident)
     --no-attach) NO_ATTACH=1; shift;;   # interactive: create + prep the pod, print the attach cmd, don't exec
     --no-arm)    NO_ARM=1; shift;;      # human-gated PR (FU-105 researcher): finalize skips arm-at-open (AGENT_ARM_PR=0); C9 skips research/* branches
+    --context-repo) CONTEXT_REPOS="${CONTEXT_REPOS:+$CONTEXT_REPOS }$2"; shift 2;;  # repeatable: read-only reference clone at /work/context/<name> (docs/spikes/context-repos.md pilot); public https URLs only — anonymous clone, no token
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -143,6 +144,14 @@ case "$MODEL" in claude/*)
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
 
+# Context-repos PILOT (docs/spikes/context-repos.md, 2026-08-04): circles rides get read-only
+# reference clones by default — measurement is whether transcripts ever show /work/context reads.
+# Circles-ONLY by design; promotion to other stacks = a claim knob (fixer.contextRepos) + XRD
+# field + an ADR, gated on that measurement. Explicit --context-repo always wins.
+if [ -z "$CONTEXT_REPOS" ] && [ "$PROJECT" = "circles" ]; then
+  CONTEXT_REPOS="https://github.com/teststuffstash/circles-iac.git https://github.com/teststuffstash/homelab.git"
+fi
+
 # ── --recipe: LAUNCHER-OWNED claude run command (ADR-094 constraints-as-code) ──
 # The coordinator brief used to instruct the item session to hand-assemble the base64-carry
 # claude invocation — an LLM memory test that failed live 2026-07-21 (#55 r1: the README's
@@ -231,9 +240,16 @@ render_env_card() {
   fi
   printf '%s\n' "- **Package proxies (${pkg_why}):** \`devbox install\` → \`\$NIX_CACHE_URL\` (${ncache}, automatic); \`devbox add\` resolves via \`\$DEVBOX_SEARCH_HOST\` (${dsearch}, automatic — no WAN needed); container images → docker.io=\`\$REGISTRY_MIRROR_DOCKER_IO\` (${mdio}), ghcr.io=\`\$REGISTRY_MIRROR_GHCR\` (${mghcr}), **HTTP-only**; python → pip/uv against pypi.org + files.pythonhosted.org (open on the python egress profile)."
 
-  # WHY: deliberately NOT a "grep SERVICES.md" rule — the ride clones ONLY /work/repo, never homelab,
-  # so it's unreachable; service facts (endpoints/buckets/secret refs) are the ISSUE AUTHOR's job to
-  # put in the issue. That responsibility split IS the FU-117 role×context question.
+  # WHY: docs/spikes/context-repos.md pilot (circles-only today). Read-only reference clones; the
+  # spike's measurement is whether transcripts ever show /work/context reads, so the card ADVERTISES
+  # and the recipes stay silent (capability truth lives here — the FU-126 folklore rule). Without
+  # the pilot the ride clones ONLY /work/repo and service facts are the ISSUE AUTHOR's job to put
+  # in the issue — that responsibility split IS the FU-117 role×context question, unresolved.
+  if [ -n "${CONTEXT_REPOS:-}" ]; then
+    local ctx_names="" _cu
+    for _cu in $CONTEXT_REPOS; do ctx_names="${ctx_names:+$ctx_names, }$(basename "$_cu" .git)"; done
+    printf '%s\n' "- **Context repos:** read-only reference clones at \`/work/context/\` (${ctx_names}) — grep them freely (SERVICES.md lives in homelab; deploy pins in circles-iac). REFERENCE only: never commit/push/build there, and your task's own facts still come from the issue. A \`WARN: context clone failed\` at the top of the run log means that repo is NOT mounted — work without it, don't fetch it yourself."
+  fi
   printf '%s\n' "- **Prior-art before creating anything named** (doc, script, tracker entry) IN THIS REPO: grep the repo's docs/trackers by keyword first — extend, don't duplicate."
 
   if [ -n "$DOCKER" ]; then
@@ -327,9 +343,22 @@ if [ -n "${RECIPE:-}" ]; then
     cp "$RECIPE" "$RECIPE_WITH_CARD"
   fi
   RECIPE_B64="$(base64 -w0 "$RECIPE_WITH_CARD")"; rm -f "$RECIPE_WITH_CARD"
+  # Context-repos pilot prelude (docs/spikes/context-repos.md): anonymous depth-1 clones into
+  # /work/context BEFORE the harness starts. Rides the launcher-owned RUN_CMD so agent-runtime's
+  # entrypoint (one REPO_URL) stays untouched; warn-don't-die — a failed clone degrades the ride
+  # to exactly the pre-pilot world, and the env card's bullet tells the model the WARN means
+  # "not mounted". All expansion is launcher-side (URLs are literals by the time the pod runs).
+  CTX_PRELUDE=""
+  if [ -n "$CONTEXT_REPOS" ]; then
+    CTX_PRELUDE="mkdir -p /work/context; "
+    for _CTXU in $CONTEXT_REPOS; do
+      _CTXN="$(basename "$_CTXU" .git)"
+      CTX_PRELUDE="${CTX_PRELUDE}git clone --depth 1 --quiet ${_CTXU} /work/context/${_CTXN} || echo \"WARN: context clone failed: ${_CTXU}\"; "
+    done
+  fi
   case "$HARNESS" in
-    claude) RUN_CMD="printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
-    goose)  RUN_CMD="printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
+    claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
+    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
   esac
 fi
 
