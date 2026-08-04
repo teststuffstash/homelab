@@ -38,7 +38,15 @@
 /tofu/cloudflare/   @RasmusSoot
 
 # ── Tier 1 — ArgoCD applies on merge, CI is the gate. Unowned by design:
-#   docs/**   SERVICES.md   README.md
+#   SERVICES.md   README.md
+#
+# docs/ is OWNED (2026-08-04). It applies nothing and breaks nothing, so it looks like the safest
+# thing to leave open — but it is the platform's MEMORY: the FU tracker (single-writer by
+# contract), the ADRs, the incident postmortems. An agent merging there rewrites the record the
+# next session reads as ground truth, and unlike a bad manifest nothing reconciles it back.
+# Operator risk model 2026-08-04: workers doing extra or bad WORK is fine; merges to master are
+# the only thing that matters. This is a merge an agent could otherwise make alone.
+/docs/              @RasmusSoot
 #
 # EXCEPT, for now, argocd/resources/ — see below.
 #
