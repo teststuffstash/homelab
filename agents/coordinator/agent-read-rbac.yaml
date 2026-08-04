@@ -103,8 +103,21 @@ subjects:
   - { kind: ServiceAccount, name: agentstack-loop, namespace: sleep-agents }
   - { kind: ServiceAccount, name: agentstack-loop, namespace: oracle-agents }
   - { kind: ServiceAccount, name: agentstack-loop, namespace: circles-agents }
+---
+# BINDING #3 — the homelab worker. homelab is the platform's own -iac, so it gets agent-read-infra
+# (fulfillment: PVs, Longhorn, ArgoCD apps, claims), not agent-read-app. Namespace-scoped: the
+# binding is a RoleBinding, so the ClusterRole's rules apply ONLY inside `homelab`, and the worker
+# still cannot read another stack's namespace. Lands with the fixer block that creates the ns.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agentstack-worker-read-infra
+  namespace: homelab
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: agent-read-infra }
+subjects:
+  - { kind: ServiceAccount, name: agentstack-worker, namespace: homelab }
 #
-# NOT BOUND HERE — the WORKERS. `agentstack-worker` lives in a per-repo namespace the AgentStack
+# NOT BOUND HERE — the OTHER stacks' WORKERS. `agentstack-worker` lives in a per-repo namespace the AgentStack
 # Composition renders, so its binding belongs there (a RoleBinding to agent-read-app for an app repo,
 # to agent-read-infra for an -iac repo) and lands with the fixer block that creates the namespace.
 # The roles above are the reusable half; wiring them per-stack is FU-068's remaining work.
