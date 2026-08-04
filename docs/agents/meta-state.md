@@ -45,20 +45,25 @@ meant to avoid.)
   self-referential gate, resolve leg (`send_resolved`), `Touches:` emission, `selfQueue`,
   `subject:` correlation and the IAC-G10 window hand-off. An alert can now reach a merged-blocked
   PR with no human; the merge itself still needs a code owner everywhere that matters.
-  **Phase 3:** (3.1) the ArgoCD lever — **release 1 of 4 DONE 2026-08-04**: metrics-server adopted
-  clean, ArgoCD-adopts-a-tofu-release settled (it templates, it never installs; names agree by
-  construction). The other three are **blocked and now tracked as FU-136** — each injects a secret
-  through Helm values and the destination repo is public, so each needs a preparatory
-  value→Secret-reference apply first. Do NOT resume 3.1 by "just repeating" release 1; the shape
-  changed. (3.2) FU-012 — **3 of 5 roots MIGRATED 2026-08-04** (cloudflare/provisioning/infisical,
-  encrypted, each verified with the local file deleted against a pre-move baseline); wallet entries
-  seeded. **Garage v2.3.0 does not enforce conditional writes (measured 20/20)** →
-  `use_lockfile = false`: fine at one writer, a hard block on any automated applier. ⚠ `main` stays
-  local until it has an out-of-cone copy; `github` is host-only. **Unblocked next: the FU-097
-  read-only drift belt for the three migrated roots.** Ruling + cone table: `docs/tofu-state.md`. (3.3) FU-044's scoped revert — **DONE 2026-08-04**: homelab passes the
-  source guard behind a pin-only predicate (IAC-G09), unit-exercised, never fired for real.
-  **Phase 3 leaves three things waiting on a first real event**: the `subject:` key, `Touches:`,
-  and now the homelab revert path. All three are cheaper to watch than to build on.
+  **Phase 3 — all three legs landed 2026-08-04.**
+  (3.1) **The ArgoCD lever is COMPLETE** (FU-136 archived): metrics-server, kube-prometheus-stack,
+  forgejo and garage are all ArgoCD Applications. tofu class 4 is down to cilium/longhorn/argo-cd
+  (≈ADR-005 substrate), and **alert rules are an ordinary GitOps PR** — that was the point.
+  (3.2) FU-012 — **3 of 5 roots migrated** (cloudflare/provisioning/infisical, encrypted, each
+  verified with the local file deleted against a pre-move baseline). **Garage v2.3.0 does not
+  enforce conditional writes (measured 20/20)** → `use_lockfile = false`: fine at one writer, a
+  hard block on any automated applier. ⚠ `main` stays local until it has an out-of-cone state copy;
+  `github` is host-only. Ruling + cone table: `docs/tofu-state.md`.
+  (3.3) FU-044's scoped revert — homelab passes the source guard behind a pin-only predicate
+  (IAC-G09), unit-exercised on 5 diffs, **never fired for real**.
+  **What Phase 3 did NOT buy, contra the original estimate:** the lever reaches #51
+  (`tofu/monitoring.tf`) but NOT #94 (`tofu/longhorn.tf`, ADR-005 substrate) or the OOM family
+  (`tofu/metal.tf`, node definitions) — those need the out-of-cluster applier, which is blocked on
+  real state locking. Re-count the tier arithmetic before relying on it.
+  **Three things now wait on a first real event**: the `subject:` key, `Touches:`, and the homelab
+  revert path. All three are cheaper to watch than to build on.
+  ⚠ **Garage has no offsite backup (FU-137)** — a local count-verified copy in `backups/garage/` is
+  the only restore path, and it is now load-bearing for tofu state too.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),

@@ -8,6 +8,20 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-136** *(archived 2026-08-04)* — **ArgoCD lever COMPLETE, 4 of 4.** metrics-server,
+  kube-prometheus-stack, forgejo and garage all off tofu `helm_release` and into
+  `argocd/platform/` — tofu class 4 shrank to cilium/longhorn/argo-cd (≈ADR-005's substrate), so
+  ArgoCD OutOfSync is the drift belt for the rest and **alert rules are an ordinary GitOps PR**.
+  Acceptance per release: `helm template` + `kubectl diff` empty BEFORE the `state rm`, then
+  adoption verified to have recreated nothing (pod ages, PVC ages, one Helm release), then
+  `prune: true`. Gotchas worth keeping: ArgoCD adopts because it templates and never installs, so
+  Application name MUST equal the release name; `helm list`-style `.items[-1:]` sorts release
+  secrets LEXICALLY (v9 > v25) and will diff you against an ancient revision; a chart that emits no
+  `metadata.namespace` needs `kubectl diff -n <ns>`; garage carried TWO secrets (`rpcSecret` via
+  `random_id`, invisible to a `random_password` grep) and its vendored chart had to move to
+  `argocd/charts/garage` first. Detail: [`docs/dependency-upgrades.md`](dependency-upgrades.md)
+  §"Executing the lever". Relates FU-097, FU-137.
+
 - **FU-086** *(archived 2026-08-03)* — **Item-scoped dispatch COMPLETE — all four knobs.** Core
   2026-07-17 (units + `--spawn` single-item); (2) cron `*/10→*/30` 2026-08-02; (3) **ADR-097
   footprint dispatch** 2026-08-03 (`Touches:` intersection supersedes lane labels; wipmap→

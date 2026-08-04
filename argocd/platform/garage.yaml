@@ -77,9 +77,12 @@ spec:
     server: https://kubernetes.default.svc
     namespace: garage
   syncPolicy:
-    # prune: false for the FIRST sync. On this Application a stray prune is not an inconvenience —
-    # it is the StatefulSet and its 63 GB of PVCs. Flipped only after the adoption is verified.
-    automated: { prune: false, selfHeal: true }
+    # prune was false for the first sync. On this Application a stray prune is not an
+    # inconvenience — it is the StatefulSet and its 63 GB of PVCs. Flipped 2026-08-04 after the
+    # adoption verified clean: Synced/Healthy, pod still the one from the pre-migration apply with
+    # 0 restarts, data PVC 22d / meta PVC 51d untouched, node id b4bea2fa753499fd unchanged, and
+    # the S3 + admin paths both answering.
+    automated: { prune: true, selfHeal: true }
     retry:
       limit: 5
       backoff: { duration: 15s, factor: 2, maxDuration: 5m }

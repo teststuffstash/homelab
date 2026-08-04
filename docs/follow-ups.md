@@ -120,15 +120,6 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 ## CI & dependency automation
 
-- [ ] **FU-136** — **Finish the ArgoCD lever** (tofu class 4 → GitOps class 1: ArgoCD OutOfSync
-      becomes the drift belt, no plan-cron, no tofu credential). **3 of 4 DONE 2026-08-04** —
-      metrics-server, kube-prometheus-stack (alert rules + Alertmanager routes are now ordinary
-      GitOps PRs) and forgejo, each empty-diff-verified and adopted with nothing recreated. The
-      secret gate is closed for all three (every credential is a Secret REFERENCE, still
-      tofu-created). **Remaining: `garage` — gated on a backup existing (FU-137), not just on the
-      secret gate**; secrets + chart relocation both DONE 2026-08-04, migration is the last step. Runbook + measured facts:
-      [`docs/dependency-upgrades.md`](dependency-upgrades.md) §"Executing the lever".
-      Relates FU-097, FU-137, ADR-005.
 - [ ] **FU-051** — **Prove a dep bump flows E2E for the operator-chart and pod-image shapes**
       (the app+chart shape is proven — sleep-tracking digest bump 2026-07-05 → sleep-iac deploy PR
       auto-merged). **snore-recorder leg BUILT 2026-08-02** (most of it had landed earlier via
