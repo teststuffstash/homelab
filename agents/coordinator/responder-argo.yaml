@@ -229,10 +229,15 @@ spec:
               # Of the 27 issues this lane has filed, the ones most likely to want a fixer are
               # exactly the ones that DISABLE it: the registry mirror, CNI/Longhorn, the ARC
               # runners that gate every agent PR, the token broker, the loop's own namespaces.
-              # A fix proposed there cannot be dispatched — the pod, the pull, the PVC attach, the
-              # git token or the CI runner it needs is the broken thing. So the outcome is capped
-              # at report-only and the issue carries a machine-readable marker, so the future
-              # selfQueue knob (FU-090) refuses it without re-deriving any of this.
+              # The cap is on MERGING, not on working — refined 2026-08-04 after the first live
+              # firing (#99, the ghcr mirror at 90%). "Report-only" was too coarse: it conflated
+              # "can the fixer run" with "can the fix land safely", and those differ. A fixer pod
+              # pulls agent-base DIRECT from ghcr (Talos containerd does not use the mirror,
+              # FU-073), so it starts fine and can absolutely author the one-line PVC bump. What
+              # is unsafe is the merge path — CI runners, image pulls, volumes it needs may be the
+              # broken thing, and a green check proves nothing while the substrate is sick.
+              # So: PR + review yes, auto-merge no. The marker stays machine-readable so the
+              # future selfQueue knob (FU-090) derives --no-arm without re-deriving any of this.
               # Widening this list is cheap; narrowing it after a loop has eaten its own outage is
               # not. Rationale + the corpus: docs/agents/roles.md §responder, FU-133.
               ANS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
