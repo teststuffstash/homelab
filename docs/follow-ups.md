@@ -57,6 +57,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 ## GitOps & platform
 
+- [ ] **FU-138** — **Claim `fixer.guardrail` is enforcement-dead for STANDING keys.** The proxy
+      enforces FU-024 from the key Secret's `GUARDRAIL` field; the standing `<repo>-openrouter`
+      Secret is operator-hand-written at bootstrap and nothing reconciles it against the claim.
+      Proven live 2026-08-04: circles-iac#1 merged `guardrail: none`, rides kept 403ing until the
+      operator patched the Secret by hand (the composition also OMITS `none` from the rendered
+      OpenRouterKey, so the CR cannot even carry the opened state). Ephemeral session keys are
+      unaffected (minted with their own Secret). **Next:** pick the wire — composition/ESO renders
+      `GUARDRAIL` into the standing Secret, or the proxy resolves guardrail from the CR instead of
+      the Secret; until then every standing-key guardrail change needs the manual Secret patch
+      (sleep-iac#61 will need one on `sleep-tracking`'s Secret when merged). Relates FU-024, ADR-085.
 - [ ] **FU-137** — **Garage has no offsite backup** — `replication_factor = 1` on one node, all
       redundancy borrowed from Longhorn's 2 replicas, and nothing copies the objects off the
       cluster. (FU-013 backs things *into* Garage; this is the other direction.) **Interim taken
