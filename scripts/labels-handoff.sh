@@ -8,11 +8,18 @@
 #   org-admin token + the homelab-merge App creds the jail deliberately does not have.
 #
 # WHY A STATE RM AND NOT AN APPLY. `tofu/github/labels.tf` was deleted in the same change that added
-# this script. If you just apply, tofu sees 14 managed resources vanish from the config and DESTROYS
-# them — deleting the labels on GitHub. `automerge` alone is on 17 homelab PRs and is load-bearing
-# (review-reflex.sh skips automerge-labelled PRs — it marks the mechanical Renovate path), so a
-# destroy is not cosmetic. `state rm` makes tofu FORGET them while GitHub keeps them, which is what
-# every earlier repo in this migration did (oracle/agent-*/sleep, 2026-07-16 → 07-25).
+# this script, so an apply would see its 16 resources vanish from config and DESTROY the labels on
+# GitHub. Measured 2026-08-04: none of the 16 are currently on any homelab issue or PR, so a destroy
+# would not strip anything today — but `state rm` is still the right move, and the reason is not
+# blast radius:
+#   • it is what the other eight repos did (oracle/agent-*/sleep, 2026-07-16 → 07-25) — one
+#     migration, one shape;
+#   • the claim's IssueLabels is AUTHORITATIVE and ADOPTS an existing taxonomy; destroying first
+#     means the labels are simply absent until the claim lands, which is blocked on a browser click;
+#   • the coordinator drives the whole loop by relabelling, so the taxonomy must exist BEFORE
+#     homelab ever carries agent work, not after.
+# (An earlier version of this header claimed `automerge` was at risk. It is not tofu-managed at all
+#  — it never appears in the addresses below — and the claim was wrong.)
 #
 # SCOPING. The address filter is `^github_issue_label\.` — NEVER a bare grep for "homelab", which
 # also matches the repository and ruleset resources (the FU-068 warning; removing those from state
