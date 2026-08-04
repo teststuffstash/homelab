@@ -342,11 +342,11 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`,
       no LLM); what's left is dispatching a worker against the APP repo, in-cluster off ArgoCD
       health events (never in the Actions deploy run). Deep acceptance stays the FU-102 prober;
-      operator prereq: harden app CI so breakages are rare. **⚖ Platform scope ruled 2026-08-04
-      (IAC-G09): extend to homelab only for the REVERSIBLE class** — first-party image pins, no
-      CRD/schema migration, no data-layer coupling — never stateful charts. Design + the ruling:
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the post-deploy gate"
-      + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
+      operator prereq: harden app CI so breakages are rare. **⚖ IAC-G09 platform half WIRED
+      2026-08-04** (homelab reversible class = first-party image pins only; pin-only predicate in
+      `deploy-revert-argo.yaml`, unit-exercised, **never fired by a real Degraded homelab app**).
+      Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
+      post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:

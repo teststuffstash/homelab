@@ -9,6 +9,12 @@
 # Roll-FORWARD (dispatch a worker against the app repo) stays the LLM half — the responder /
 # coordinator lanes own it; a revert PR here never blocks that (revert-then-fix composes).
 #
+# PLATFORM SCOPE (IAC-G09, operator 2026-08-04): homelab is wired in too, but NOT under the blanket
+# rule — only for the REVERSIBLE CLASS. A candidate merge qualifies only if every content line of
+# its diff is a first-party image pin; chart bumps, values edits and anything with CRD/schema or
+# data-layer coupling drop to report-only. Reverting garage or CNPG can be worse than the failure it
+# answers, and on the platform there is no second net if the revert fails too.
+#
 # Idempotency: branch name revert-<app>-<sha8> (deterministic; second attempt hits
 # already-exists), plus the responder-seen cm ledger keyed deploy-<app>-<revision>. Guards:
 # non--iac sources exit report-only; no recent bump = "degraded without a deploy" report-only
@@ -98,8 +104,14 @@ spec:
             APP_PATH="$(jq -r '.path // empty' /tmp/degraded.json)"
             [ -n "$APP" ] || { echo "no app in payload — nothing to do"; exit 0; }
             SLUG="$(printf '%s' "$REPO_URL" | sed -E 's#^https://github.com/##; s#\.git$##')"
+            # homelab is the platform's own -iac, but it does NOT get the blanket rule: IAC-G09
+            # (operator, 2026-08-04) scopes auto-revert here to the REVERSIBLE CLASS only. The
+            # predicate is enforced below, after a candidate exists.
+            REVERSIBLE_ONLY=0
+            BODY_EXTRA=""   # set -u: the PR body interpolates this unconditionally
             case "$SLUG" in
-              teststuffstash/*-iac) : ;;
+              teststuffstash/*-iac)   : ;;
+              teststuffstash/homelab) REVERSIBLE_ONLY=1 ;;
               *) echo "→ $APP degraded but source '$SLUG' is not a *-iac repo — not a rollback case (report-only)"; exit 0;;
             esac
 
@@ -128,6 +140,37 @@ spec:
               echo "→ bump PR #$PRNUM does not touch ${APP_PATH}/ — not this app's deploy (report-only)"; exit 0
             fi
 
+            # ── IAC-G09: the reversible-class predicate (homelab only) ────────────────────────
+            # The ruling is a PRECONDITION, not an app list, so it survives new apps: revert
+            # automatically only where the change is a PIN and the rollback is provably as safe as
+            # the roll-forward. Mechanically that means every content line of the candidate diff is
+            # a first-party image pin. A chart-version bump, a values edit, a CRD or anything with
+            # data-layer coupling fails this and drops to report-only — reverting garage or CNPG can
+            # be worse than the failure it answers, and here there is no second net.
+            # Same shape as scripts/pin-only-lint.sh, and deliberately so: a regex cannot be talked
+            # past. Empty/unreadable diff is fail-closed, never "no offending lines found".
+            if [ "$REVERSIBLE_ONLY" = 1 ]; then
+              DIFF="$(gh pr diff "$PRNUM" --repo "$SLUG" 2>/dev/null || true)"
+              if [ -z "$DIFF" ]; then
+                echo "→ cannot read the diff of $SLUG#$PRNUM — refusing to classify it (report-only)"; exit 0
+              fi
+              OFFENDING="$(printf '%s\n' "$DIFF" | grep -E '^[-+][^-+]' \
+                | grep -Ev '^[-+][[:space:]]*image:[[:space:]]*ghcr\.io/teststuffstash/[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$' || true)"
+              if [ -n "$OFFENDING" ]; then
+                echo "→ $SLUG#$PRNUM is NOT a first-party pin bump — outside the reversible class (IAC-G09), report-only:"
+                printf '%s\n' "$OFFENDING" | head -20
+                exit 0
+              fi
+              echo "→ IAC-G09: $SLUG#$PRNUM is pin-only — inside the reversible class"
+              # No special merge handling: homelab's CODEOWNERS still applies to the revert PR. On
+              # the un-owned pin paths (scripts/pin-only-lint.sh stands in for the owner there) it
+              # auto-merges; on an owned path it simply waits for a human. Both are correct — the
+              # thing we refuse to do is bypass the gate to make the rollback faster.
+              # printf, not a multi-line shell string: a literal newline at column 0 would close
+              # this YAML block scalar, and indenting it instead would emit a markdown code block.
+              BODY_EXTRA="$(printf '\n\n**Scope:** IAC-G09 reversible class — every changed line in #%s is a first-party image pin, so this rollback is provably as safe as the roll-forward. Chart bumps, values edits and anything with CRD/schema or data-layer coupling never reach this path.' "$PRNUM")"
+            fi
+
             echo "→ REVERTING $SLUG#$PRNUM ($TITLE) — $APP Degraded on revision ${REVISION:0:8} within ${REVERT_WINDOW_MIN}m of the merge"
             BR="revert-${APP}-$(printf '%s' "$SHA" | cut -c1-8)"
             rm -rf /work/iac
@@ -143,7 +186,7 @@ spec:
             git push origin "$BR"
             PR="$(gh pr create --repo "$SLUG" --base master --head "$BR" \
               --title "revert: ${TITLE} (auto-rollback — ${APP} Degraded post-deploy)" \
-              --body "FU-044 deterministic rollback: ArgoCD app **${APP}** went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN}m of #${PRNUM} merging. Reverting the bump restores the previous pin (ArgoCD re-syncs on merge). Roll-FORWARD (a worker fixing the app repo) composes on top — this only stops the bleeding. CI-only lane; no approval gate by design (ADR-084)." \
+              --body "FU-044 deterministic rollback: ArgoCD app **${APP}** went Degraded on revision \`${REVISION:0:8}\` within ${REVERT_WINDOW_MIN}m of #${PRNUM} merging. Reverting the bump restores the previous pin (ArgoCD re-syncs on merge). Roll-FORWARD (a worker fixing the app repo) composes on top — this only stops the bleeding. CI-only lane; no approval gate by design (ADR-084).${BODY_EXTRA}" \
               | grep -oE '[0-9]+$')"
             gh pr merge --auto --squash "$PR" --repo "$SLUG"
             echo "→ revert PR $SLUG#$PR armed (auto-merges on CI green)"

@@ -119,6 +119,18 @@ reaches the responder as an alert plus a report-only issue, and a human decides.
 precondition rather than an app list so it survives new apps: *revert automatically only where the
 change is a pin and the rollback is provably as safe as the roll-forward.*
 
+**IMPLEMENTED 2026-08-04** in `agents/coordinator/deploy-revert-argo.yaml`. The argocd-notifications
+subscription was already global, so homelab apps had been POSTing Degraded all along and the
+workflow was dropping them at the `*-iac` source guard; the change is that guard plus a predicate:
+for `teststuffstash/homelab`, **every content line of the candidate merge's diff must be a
+first-party image pin** (`ghcr.io/teststuffstash/…:<tag>`), or it exits report-only. Deliberately
+the same shape as `scripts/pin-only-lint.sh` — a regex cannot be talked past, and an unreadable
+diff is fail-closed rather than "no offending lines found". Exercised against five diffs before
+shipping: pin bumps pass, a `targetRevision` bump, a third-party image and a pin bump with one
+smuggled non-pin line all drop to report-only. The revert PR gets **no merge special-casing** —
+CODEOWNERS still applies, so it auto-merges on the un-owned pin paths and waits for a human
+anywhere else. Both outcomes are correct; bypassing the gate to make a rollback faster is not.
+
 ### Who owns a symptom — the alert lane vs the observation window
 
 Two entry points reach the same post-merge machinery: **change-triggered** (a merge opens a window,

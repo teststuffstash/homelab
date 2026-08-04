@@ -50,9 +50,14 @@ meant to avoid.)
   construction). The other three are **blocked and now tracked as FU-136** — each injects a secret
   through Helm values and the destination repo is public, so each needs a preparatory
   value→Secret-reference apply first. Do NOT resume 3.1 by "just repeating" release 1; the shape
-  changed. (3.2) FU-012 — no machine yet, write the backend + migration scripts anyway; the
-  operator merges/applies by hand. (3.3) FU-044's scoped revert for the reversible class
-  (first-party image pins only — ruling in `iac-lane.md`).
+  changed. (3.2) FU-012 — **built, nothing migrated**: Garage bucket LIVE, `tofu-state-migrate`
+  refuses by design because **Garage v2.3.0 does not enforce conditional writes** (measured), so
+  `use_lockfile` would be theatre — fine for the read-only drift belt, NOT for an automated
+  applier. Operator seeds the wallet entries, then `cloudflare` first; ruling + cone table in
+  `docs/tofu-state.md`. (3.3) FU-044's scoped revert — **DONE 2026-08-04**: homelab passes the
+  source guard behind a pin-only predicate (IAC-G09), unit-exercised, never fired for real.
+  **Phase 3 leaves three things waiting on a first real event**: the `subject:` key, `Touches:`,
+  and now the homelab revert path. All three are cheaper to watch than to build on.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
