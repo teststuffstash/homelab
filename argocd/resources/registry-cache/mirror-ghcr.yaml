@@ -13,7 +13,14 @@ spec:
   storageClassName: longhorn-bulk
   resources:
     requests:
-      storage: 20Gi # 10Gi filled 2026-07-27 (fresh agent-base builds + the FU-096 devbox-cache artifacts): a full disk TRUNCATES in-flight proxy writes → nodes see layer digest mismatches + 500s, and dead _uploads pile up uncleaned. Purge recipe: rm -rf .../repositories/*/*/_uploads/* in the pod.
+      # 20→40Gi 2026-08-04 (homelab#99), and this bump is EVIDENCE-BACKED where the last two were
+      # reflexes: the GC shipped this morning (639179b) ran and reported `181 blobs marked, 0 blobs
+      # and 0 manifests eligible` — so the 17.6G is entirely live, referenced content and there is
+      # nothing left to reclaim. The working set genuinely exceeds 20Gi. #93's closing comment
+      # pre-committed to exactly this: bump only after collection proves it cannot help.
+      # Capacity checked before asking: both replicas are co-located on wk-metal-01 (below), which
+      # has 191G physically free and sits at 50% committed — +40G of commitment lands inside it.
+      storage: 40Gi # 10Gi filled 2026-07-27 (fresh agent-base builds + the FU-096 devbox-cache artifacts): a full disk TRUNCATES in-flight proxy writes → nodes see layer digest mismatches + 500s, and dead _uploads pile up uncleaned. Purge recipe: rm -rf .../repositories/*/*/_uploads/* in the pod.
       # ⚠ Replica placement (2026-07-27): the bulk tier is only wk-02 + wk-metal-01, and wk-02's
       # allocation couldn't fit the expansion — the volume's replicas are CO-LOCATED on
       # wk-metal-01 by explicit choice (replicaSoftAntiAffinity=enabled on the volume). For a
