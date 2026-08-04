@@ -250,6 +250,50 @@ spec:
               [ -n "$SELF_REF" ] && SELF_NOTE="
             ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate, so any fix needs the very thing that is broken — pod scheduling, image pull, PVC attach, the git-token broker, or the CI runners that gate every agent PR. Your outcome is CAPPED AT REPORT-ONLY: do not open a PR and do not propose one as the next step; describe the fix in prose for a human instead. End any issue body you file with the line 'self-referential: true' on its own line."
               [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — may PR + be reviewed, must NOT auto-merge"
+
+              # ── selfQueue (FU-090) — the switch that makes an alert dispatch a fixer ──────────
+              # DETERMINISTIC, never the model's judgment: breaker #1 says the session must not
+              # label its own issue, so the session still files INERT and the shell decides after.
+              # Three gates, all fail-closed — anything unclear leaves the issue inert for a human:
+              #   1. not self-referential (a fixer would need the broken thing)
+              #   2. the issue declares a Touches: footprint at all (ADR-097 — undeclared is
+              #      treated as exclusive, and auto-dispatching an exclusive unit serialises the
+              #      whole lane)
+              #   3. that footprint touches no GOVERNANCE path, in any repo: agent machinery, CI
+              #      definitions, policy, scripts. sleep-iac#28 self-merged an edit to
+              #      .github/workflows/ in 38 seconds — that class must never auto-dispatch.
+              SQ_DENY='^(agents/|scripts/|policy/|\.github/|tofu/github/|tofu/cloudflare/)'
+              sq_decide() { # <repo> <issue-number>
+                local body touches p
+                body="$(gh issue view "$2" --repo "$1" --json body --jq .body 2>/dev/null || true)"
+                touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | head -1)"
+                [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive)"; return 1; }
+                for p in $(printf '%s' "$touches" | tr ',' ' '); do
+                  case "$p" in ''|' ') continue;; esac
+                  printf '%s' "$p" | grep -qE "$SQ_DENY" && { echo "footprint touches governance: $p"; return 1; }
+                done
+                return 0
+              }
+              if [ -n "$SELF_REF" ]; then
+                echo "→ selfQueue: REFUSED for $FP — self-referential substrate"
+              else
+                sq="$(gh search issues --owner "$ORG" "alert-fp:$FP" --state open --json repository,number --limit 3 2>/dev/null \
+                      | jq -r '.[] | "\(.repository.nameWithOwner) \(.number)"' | head -1)"
+                if [ -z "$sq" ]; then
+                  echo "→ selfQueue: no open issue for $FP (triage was report-only) — nothing to queue"
+                else
+                  sqrepo="${sq%% *}"; sqnum="${sq##* }"
+                  if gh issue view "$sqnum" --repo "$sqrepo" --json labels --jq '[.labels[].name]|index("agent-fix")' 2>/dev/null | grep -qv null; then
+                    echo "→ selfQueue: $sqrepo#$sqnum already adopted — leaving it alone"
+                  elif why="$(sq_decide "$sqrepo" "$sqnum")"; then
+                    gh issue edit "$sqnum" --repo "$sqrepo" --add-label agent-fix --add-label agent/queued >/dev/null 2>&1 \
+                      && echo "→ selfQueue: QUEUED $sqrepo#$sqnum for dispatch" \
+                      || echo "→ selfQueue: labelling $sqrepo#$sqnum failed (non-fatal) — stays inert"
+                  else
+                    echo "→ selfQueue: left $sqrepo#$sqnum inert — $why"
+                  fi
+                fi
+              fi
               echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
