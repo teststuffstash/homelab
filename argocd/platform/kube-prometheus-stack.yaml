@@ -1,0 +1,55 @@
+# kube-prometheus-stack — Prometheus + Grafana + Alertmanager + the operator.
+#
+# MIGRATED off tofu `helm_release.kube_prometheus_stack` on 2026-08-04 — release 3 of the ArgoCD
+# lever (FU-136, docs/dependency-upgrades.md §"Executing the lever"). This is the one that pays:
+# alert rules and Alertmanager routes lived in `tofu/monitoring.tf`, i.e. the human-gated tofu
+# class; on this side of the move a rule change is an ordinary GitOps PR that ArgoCD applies, and
+# ArgoCD OutOfSync becomes the drift belt (no plan-cron, no tofu credential anywhere).
+#
+# The Application name MUST stay `kube-prometheus-stack` — it equals the Helm release name, which
+# is what makes ArgoCD's label tracking (`app.kubernetes.io/instance`) agree with the labels the
+# chart already rendered. That equality is the whole adoption mechanism, not a coincidence.
+#
+# Verified before the move: `helm template` with these values and this chart version, diffed
+# against live with `kubectl diff` — 118 objects, zero differences.
+#
+# skipCrds mirrors what tofu did. Helm installs a chart's `crds/` directory OUTSIDE the release
+# manifest, so the Prometheus operator CRDs were never tofu-managed either (checked: 0 CRDs in the
+# release). Leaving them unmanaged keeps this migration to ONE change. Adopting them into ArgoCD is
+# a separate decision with a much worse failure mode — a pruned CRD takes every ServiceMonitor,
+# PrometheusRule and the Prometheus CR with it.
+#
+# The secrets these values reference (`grafana-admin`, `ha-token`, `sleep-db-reader`) are still
+# created by tofu. tofu keeps owning the secrets after it stops owning the release.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    # 1) the chart, pinned. Renovate targets this `targetRevision` (class 1 — plain YAML).
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 86.1.0
+      helm:
+        skipCrds: true
+        valueFiles:
+          - $values/argocd/platform/values/kube-prometheus-stack.yaml
+    # 2) THIS repo, referenced as $values — supplies the values file above.
+    - repoURL: https://github.com/teststuffstash/homelab.git
+      targetRevision: master
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    # prune: false for the FIRST sync — a stray prune here deletes the Prometheus CR and its TSDB.
+    # Flipped to true only after the adoption is verified to have recreated nothing.
+    automated: { prune: false, selfHeal: true }
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

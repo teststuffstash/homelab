@@ -91,19 +91,19 @@ resource "helm_release" "longhorn" {
   values = [yamlencode({
     defaultSettings = {
       # storage only on labelled nodes; everything else stays compute-only
-      createDefaultDiskLabeledNodes     = true
-      defaultDataPath                   = "/var/lib/longhorn"
-      defaultReplicaCount               = 2
+      createDefaultDiskLabeledNodes = true
+      defaultDataPath               = "/var/lib/longhorn"
+      defaultReplicaCount           = 2
       # least-effort, not best-effort (2026-08-04, homelab#94): rebalance only when a node is
       # genuinely under-used, rather than continuously chasing an even spread — every move is a
       # replica REBUILD, real IO across disks that are already tight (homelab#56 was
       # NodeDiskIOSaturation on wk-02's disk). Standing belt, not the fix: it balances replica
       # COUNT, and #94's imbalance is bytes-and-tiers — thinkcentre already carries 19 replicas to
       # wk-02's 15. Enabled only now that the metering exists (argocd/resources/longhorn-alerts).
-      replicaAutoBalance                = "least-effort"
-      replicaSoftAntiAffinity           = true
-      replicaZoneSoftAntiAffinity       = true # spread the 2 replicas across zones
-      defaultDataLocality               = "best-effort"
+      replicaAutoBalance          = "least-effort"
+      replicaSoftAntiAffinity     = true
+      replicaZoneSoftAntiAffinity = true # spread the 2 replicas across zones
+      defaultDataLocality         = "best-effort"
       # 100 → 200 (2026-08-04, homelab#94's SECOND firing). At 100 Longhorn may promise only
       # `max - reserved` per disk, and the std tier hit that wall with real free space sitting
       # unused: thinkcentre had 87.3G free but 0.7G of provisioning headroom, wk-02 99.8G free and

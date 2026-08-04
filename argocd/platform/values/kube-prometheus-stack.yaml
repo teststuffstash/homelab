@@ -1,0 +1,356 @@
+# kube-prometheus-stack values — the VALUES half of argocd/platform/kube-prometheus-stack.yaml.
+#
+# Provenance: extracted verbatim from the live Helm release (revision 25) when this release moved
+# off tofu `helm_release.kube_prometheus_stack` (FU-136, docs/dependency-upgrades.md §"Executing
+# the lever"). Nothing was re-authored — the empty-diff pre-flight is only meaningful if these are
+# the same values tofu was rendering.
+#
+# ⚠ NO SECRET MAY EVER APPEAR HERE — this repo is public. Every credential is a REFERENCE:
+# grafana.admin.existingSecret → the `grafana-admin` Secret, `secrets: [ha-token]` mounted for the
+# Home Assistant scrape, and secretKeyRefs in the sqlite-sync sidecar. Those Secrets are still
+# created by tofu (monitoring.tf) — tofu keeps owning the secrets after it stops owning the
+# release, which is the ESO/Infisical migration's next target, not this one's problem.
+additionalPrometheusRulesMap:
+  cilium:
+    groups:
+      - name: cilium
+        rules:
+          - alert: CiliumAgentScrapeDown
+            annotations:
+              description: Prometheus can't scrape the Cilium agent on {{ $labels.instance }} for 10m — the node's CNI may be down (the node will go NotReady).
+              summary: Cilium agent unreachable
+            expr: up{job="cilium-agent"} == 0
+            for: 10m
+            labels:
+              severity: warning
+          - alert: CiliumUnreachableNodes
+            annotations:
+              description: A Cilium agent ({{ $labels.instance }}) can't reach {{ $value }} other node(s) in the mesh for 10m — cross-node pod networking is degraded.
+              summary: Cilium reports unreachable nodes
+            expr: cilium_unreachable_nodes > 0
+            for: 10m
+            labels:
+              severity: warning
+  cilium-bgp:
+    groups:
+      - name: cilium-bgp
+        rules:
+          - alert: CiliumBGPAllSessionsDown
+            annotations:
+              description: 'Not one node is peering with OPNsense — all LoadBalancer VIPs (192.168.40.0/24: HA, Grafana, Prometheus, UniFi, Forgejo, ...) are no longer advertised and are unreachable from the LAN.'
+              summary: No Cilium BGP sessions established
+            expr: sum(cilium_bgp_control_plane_session_state == bool 1) == 0
+            for: 5m
+            labels:
+              severity: critical
+          - alert: CiliumBGPNodeSessionDown
+            annotations:
+              description: '{{ $labels.instance }} is not peering with {{ $labels.neighbor }} for 15m (state != established) — it advertises no VIPs (reduced redundancy/ECMP). A new node must be added to bgp_node_ips in ansible/group_vars/opnsense.yml + run opnsense-bgp.yml.'
+              summary: Cilium BGP session down on a node
+            expr: cilium_bgp_control_plane_session_state != 1
+            for: 15m
+            labels:
+              severity: warning
+  cnpg:
+    groups:
+      - name: cnpg
+        rules:
+          - alert: CNPGInstanceNotReady
+            annotations:
+              description: 'Postgres instance {{ $labels.pod }} ({{ $labels.namespace }}) has been NotReady for 10m — the CNPG cluster is degraded (often a replica that can''t rejoin and loops on pg_rewind; the primary may be serving alone). Recovery: delete the replica''s PVC+pod so CNPG re-clones from the primary.'
+              summary: CloudNativePG instance {{ $labels.pod }} not ready
+            expr: kube_pod_container_status_ready{namespace=~"forgejo|infisical",container="postgres"} == 0
+            for: 10m
+            labels:
+              severity: warning
+          - alert: CNPGInstanceCrashLooping
+            annotations:
+              description: '{{ $labels.pod }} ({{ $labels.namespace }}) restarted >3 times in 15m — likely a replica stuck on pg_rewind (no common timeline ancestor). Re-clone it: delete the replica''s PVC + pod.'
+              summary: CloudNativePG instance {{ $labels.pod }} crash-looping
+            expr: increase(kube_pod_container_status_restarts_total{namespace=~"forgejo|infisical",container="postgres"}[15m]) > 3
+            for: 0m
+            labels:
+              severity: warning
+          - alert: CNPGReplicationLagHigh
+            annotations:
+              description: Streaming lag on {{ $labels.pod }} is {{ $value | humanizeDuration }} (>5m) for 5m — the standby is falling behind the primary.
+              summary: CloudNativePG replication lag high
+            expr: cnpg_pg_replication_lag > 300
+            for: 5m
+            labels:
+              severity: warning
+          - alert: CNPGInstanceExporterDown
+            annotations:
+              description: The CNPG collector on {{ $labels.pod }} can't reach Postgres for 5m — the instance is unhealthy or the exporter is failing.
+              summary: CloudNativePG metrics collector down
+            expr: cnpg_collector_up == 0
+            for: 5m
+            labels:
+              severity: warning
+  longhorn:
+    groups:
+      - name: longhorn
+        rules:
+          - alert: LonghornVolumeFaulted
+            annotations:
+              description: Volume {{ $labels.volume }} is faulted (no healthy replica) for 5m — data unavailable / at risk.
+              summary: Longhorn volume faulted
+            expr: max by (volume) (longhorn_volume_robustness) == 3
+            for: 5m
+            labels:
+              severity: critical
+          - alert: LonghornVolumeDegraded
+            annotations:
+              description: Volume {{ $labels.volume }} has been degraded (a replica missing/rebuilding) for 20m — running below the desired replica count.
+              summary: Longhorn volume degraded
+            expr: max by (volume) (longhorn_volume_robustness) == 2
+            for: 20m
+            labels:
+              severity: warning
+          - alert: LonghornNodeStorageLow
+            annotations:
+              description: '{{ $labels.node }} Longhorn storage is over 85% used for 30m — volumes may fail to schedule or rebuild.'
+              summary: Longhorn node storage low
+            expr: (longhorn_node_storage_usage_bytes / longhorn_node_storage_capacity_bytes) > 0.85
+            for: 30m
+            labels:
+              severity: warning
+  node-health:
+    groups:
+      - name: node-health
+        rules:
+          - alert: NodeRebooted
+            annotations:
+              description: '{{ $labels.instance }} booted {{ $value | humanizeDuration }} ago. Metal-node flapping is under investigation (2026-06-19) — note which node + time.'
+              summary: Node {{ $labels.instance }} rebooted
+            expr: (time() - node_boot_time_seconds) < 600
+            for: 0m
+            labels:
+              severity: warning
+          - alert: PodSigkilled
+            annotations:
+              description: Container {{ $labels.container }} restarted after SIGKILL — likely the Talos OOMController (BestEffort victim under node memory pressure, FU-082) or a kernel OOM. Check `talosctl dmesg | grep 'OOM controller'` on the pod's node; recurring hits mean the node is over-committed or the pod needs resource requests.
+              summary: '{{ $labels.namespace }}/{{ $labels.pod }} killed (exit 137)'
+            expr: increase(kube_pod_container_status_restarts_total[30m]) > 0 and on (namespace, pod, container) kube_pod_container_status_last_terminated_exitcode == 137
+            for: 0m
+            labels:
+              severity: warning
+          - alert: ContainerMemoryNearLimit
+            annotations:
+              description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-driver), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node.
+              summary: '{{ $labels.namespace }}/{{ $labels.pod }} near its memory limit'
+            expr: container_memory_working_set_bytes{namespace=~"kube-system|longhorn-system", container!="", container!="POD"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace=~"kube-system|longhorn-system", resource="memory"} > 0.85
+            for: 15m
+            labels:
+              severity: warning
+  office-plants:
+    groups:
+      - name: office-plants
+        rules:
+          - alert: HomeAssistantScrapeDown
+            annotations:
+              description: No plant metrics for 10m — HA down or token invalid. Plants stop watering when HA is unreachable.
+              summary: Prometheus can't scrape Home Assistant
+            expr: up{job="home-assistant"} == 0
+            for: 10m
+            labels:
+              severity: critical
+          - alert: DropletOffline
+            annotations:
+              description: The Droplet ({{ $labels.entity }}) has been disconnected for 10m — no watering and no soil readings.
+              summary: Droplet irrigation controller offline
+            expr: homeassistant_binary_sensor_state{entity="binary_sensor.office_plants_irrigation_status"} == 0
+            for: 10m
+            labels:
+              severity: critical
+          - alert: SoilSensorSuspectZero
+            annotations:
+              description: '{{ $labels.friendly_name }} has read 0% for 2h — check the sensor wiring/calibration.'
+              summary: Soil sensor stuck at 0%
+            expr: homeassistant_sensor_voltage_percent{entity=~"sensor.office_plants_irrigation_soilm_sens_[1-4]"} == 0
+            for: 2h
+            labels:
+              severity: warning
+alertmanager:
+  config:
+    receivers:
+      - name: "null"
+      - name: agent-responder
+        webhook_configs:
+          - send_resolved: true
+            url: http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/alert
+      - name: ha-webhook
+        webhook_configs:
+          - send_resolved: true
+            url: http://192.168.40.10:8123/api/webhook/prometheus-alerts
+    route:
+      group_by:
+        - alertname
+      group_interval: 5m
+      group_wait: 30s
+      receiver: ha-webhook
+      repeat_interval: 3h
+      routes:
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: "null"
+        - matchers:
+            - alertname = "InfoInhibitor"
+          receiver: "null"
+        - continue: true
+          receiver: agent-responder
+        - receiver: ha-webhook
+  service:
+    annotations:
+      lbipam.cilium.io/ips: 192.168.40.14
+    labels:
+      bgp: advertise
+    type: LoadBalancer
+grafana:
+  additionalDataSources:
+    - access: proxy
+      editable: false
+      isDefault: false
+      jsonData:
+        path: /data/sleep.sqlite
+      name: sleep-notes
+      type: frser-sqlite-datasource
+      uid: sleep-notes
+  admin:
+    existingSecret: grafana-admin
+    passwordKey: admin-password
+    userKey: admin-user
+  extraContainers: |
+    - name: sleep-sqlite-sync
+      image: amazon/aws-cli:2.17.0
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          aws configure set default.s3.addressing_style path
+          while true; do
+            aws --endpoint-url "$S3_ENDPOINT" s3 cp "s3://sleep-db/sleep.sqlite" /data/sleep.sqlite || true
+            sleep 600
+          done
+      env:
+        - { name: S3_ENDPOINT, value: "https://s3.teststuff.net" }
+        - { name: AWS_DEFAULT_REGION, value: "garage" }
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_ACCESS_KEY_ID } }
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom: { secretKeyRef: { name: sleep-db-reader, key: STORE_S3_SECRET_KEY } }
+      volumeMounts:
+        - { name: sleep-data, mountPath: /data }
+      resources:
+        requests: { cpu: 10m, memory: 64Mi }
+  extraEmptyDirMounts:
+    - mountPath: /data
+      name: sleep-data
+  grafana.ini:
+    server:
+      root_url: https://grafana.teststuff.net
+  persistence:
+    enabled: false
+  plugins:
+    - frser-sqlite-datasource
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  service:
+    annotations:
+      lbipam.cilium.io/ips: 192.168.40.11
+    labels:
+      bgp: advertise
+    port: 80
+    type: LoadBalancer
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+kube-state-metrics:
+  resources:
+    limits:
+      memory: 192Mi
+    requests:
+      cpu: 20m
+      memory: 64Mi
+kubeControllerManager:
+  endpoints:
+    - 192.168.2.51
+kubeProxy:
+  enabled: false
+kubeScheduler:
+  endpoints:
+    - 192.168.2.51
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - authorization:
+          credentials_file: /etc/prometheus/secrets/ha-token/token
+          type: Bearer
+        job_name: home-assistant
+        metrics_path: /api/prometheus
+        scheme: http
+        scrape_interval: 60s
+        static_configs:
+          - targets:
+              - 192.168.40.10:8123
+    initContainers:
+      - command:
+          - sh
+          - -c
+          - chown -R 1000:2000 /prometheus
+        image: busybox:1.37
+        name: chown-data
+        securityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+        volumeMounts:
+          - mountPath: /prometheus
+            name: prometheus-kube-prometheus-stack-prometheus-db
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    replicas: 1
+    resources:
+      requests:
+        cpu: 300m
+        memory: 1200Mi
+    retention: 90d
+    retentionSize: 16GB
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 60s
+    secrets:
+      - ha-token
+    serviceMonitorSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+          storageClassName: longhorn
+  service:
+    annotations:
+      lbipam.cilium.io/ips: 192.168.40.13
+    labels:
+      bgp: advertise
+    type: LoadBalancer
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+prometheusOperator:
+  resources:
+    limits:
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
