@@ -373,6 +373,50 @@ if [ -n "${RECIPE:-}" ]; then
         echo "→ Goal context: child of #${GOAL_PARENT}, but no Goal/Acceptance heading found — dispatching without it"
       fi
     fi
+    # ── Σ(child caps) ≤ the goal's `Budget:` — leg (c)'s deterministic gate ────────────────────
+    # "Enforced in the LAUNCHER pre-flight — deterministic, beside WIP=1, NEVER LLM-honored"
+    # (docs/agents/issue-authoring.md §Leg (c)). A decomposition that overruns its goal's funding
+    # must not be discovered one ride at a time, after the money is gone.
+    # We sum `cap_usd`, not `estimate_usd`: the cap is what the minted key ALLOWS to be spent, so
+    # it is the only number that bounds the real exposure. Summing forecasts would authorise a
+    # decomposition whose caps add up to several times its goal.
+    # Counts open AND closed children — spend already incurred still spent the goal's budget.
+    # One `gh issue list` call, only for a ride that HAS a goal; ordinary rides pay nothing.
+    if [ -n "$GOAL_PARENT" ]; then
+      GOAL_BUDGET="$(gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
+        --jq '.body' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*\$\?//p' | head -1 \
+        | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
+      if [ -n "$GOAL_BUDGET" ]; then
+        # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag). Piping
+        # to a real jq is what lets the parent number in; the first cut used gh --argjson, which
+        # errors out and, behind `|| echo []`, would have made this gate pass everything silently.
+        _kids="$(gh issue list --repo "${ORG:-teststuffstash}/${PROJECT}" --state all --limit 200 \
+          --json number,body,labels,parent 2>/dev/null \
+          | jq -c --argjson p "$GOAL_PARENT" '[.[] | select((.parent.number // 0) == $p)
+                | {n: .number, chars: ((.body // "")|length),
+                   label: ([.labels[].name|select(startswith("agent-budget/"))]|first // "")}]' 2>/dev/null || echo '[]')"
+        # A parent that HAS children must not silently resolve to none — that is the gate failing open.
+        if [ "$(printf '%s' "$_kids" | jq -r 'length' 2>/dev/null || echo 0)" = "0" ]; then
+          echo "→ Goal budget: no children resolved for #${GOAL_PARENT} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
+        fi
+        _sum=0; _rows=""
+        for _row in $(printf '%s' "$_kids" | jq -r '.[] | "\(.n):\(.chars):\(.label)"' 2>/dev/null); do
+          _kn="${_row%%:*}"; _rest="${_row#*:}"; _kc="${_rest%%:*}"; _kl="${_rest#*:}"
+          _cap="$(python3 "$HERE/estimate_budget.py" --issue-chars "${_kc:-0}" --model "$MODEL" \
+                    ${_kl:+--label "$_kl"} 2>/dev/null | jq -r '.cap_usd // 0' 2>/dev/null || echo 0)"
+          _sum="$(python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[2]),4))" "$_sum" "${_cap:-0}")"
+          _rows="${_rows}    #${_kn} → \$${_cap}\n"
+        done
+        if [ "$(python3 -c "import sys;print(1 if float(sys.argv[1])>float(sys.argv[2]) else 0)" "$_sum" "$GOAL_BUDGET")" = "1" ]; then
+          printf 'PREFLIGHT REFUSED: the decomposition of goal #%s overruns its Budget.\n' "$GOAL_PARENT" >&2
+          printf '  Σ(child caps) = $%s  >  Budget: $%s\n' "$_sum" "$GOAL_BUDGET" >&2
+          printf '%b' "$_rows" >&2
+          printf '  This is deterministic and not the ride'"'"'s to argue with: re-scope the children or raise\n  the goal'"'"'s Budget: line — both are human edits. (leg (c), docs/agents/issue-authoring.md)\n' >&2
+          exit 1
+        fi
+        echo "→ Goal budget: Σ(child caps) \$${_sum} ≤ Budget \$${GOAL_BUDGET} on #${GOAL_PARENT} — within funding"
+      fi
+    fi
     TASK_CLASS="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json labels \
       --jq '[.labels[].name|select(startswith("task/"))|ltrimstr("task/")]|first // empty' 2>/dev/null || true)"
     if [ -n "$TASK_CLASS" ]; then

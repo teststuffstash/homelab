@@ -456,6 +456,39 @@ quiet. That backstop is the meta-coordinator's for now (operator, 2026-08-05: ob
 design the guard from evidence). If you see a goal whose children are all closed and whose
 acceptance is unmet, say so loudly in your report — that is the signal the guard will be built on.
 
+## The `goal-review` clause (FU-090 leg (c), built 2026-08-05)
+
+A child of a GOAL closed. You are here to ask the only question the loop otherwise never asks
+again: **is the goal actually met?** Children closing is not the same as a goal being achieved,
+and nothing else in the machinery will notice the difference.
+
+It fires on EVERY child closure, not only the last (operator ruling: waiting for the last child
+"will deadlock too much when only child traffic causes the goal to move"). The predicate is
+stateless — a child closed more recently than your newest comment on the goal — so your comment
+IS what retires it until the next closure. Comment even when the answer is "not yet"; silence
+re-fires the clause forever.
+
+Re-read the goal's acceptance criteria in full, then look at what actually shipped in the closed
+children — the merged diffs, not the issue titles. Rule exactly one of:
+
+- **Goal met** → close the goal with a comment naming which child satisfied which acceptance
+  criterion. Any child still open when the acceptance is already met is a scope question, not a
+  formality: say so rather than letting it run.
+- **Goal not met, and the remaining children cover the gap** → comment what is still outstanding
+  and which child owns it. Leave the goal in its tracking state. This is the ordinary case.
+- **Goal not met, and NOTHING open covers the gap** → author the missing child (same rules as
+  `goal-decompose`: native sub-issue, narrowed `Touches:`, inherited `Base:`, one deliverable)
+  and say why the original decomposition missed it. Watch the budget — the launcher enforces
+  Σ(child caps) ≤ the goal's `Budget:` and will REFUSE the dispatch, which is a re-scope
+  conversation for a human, not something to work around.
+- **The goal was wrong** → the sprout-index terminal (rung 3): a **retro checkpoint**, not a
+  revert. Say plainly that the goal itself needs rethinking, put it in front of the human, and
+  stop. "Unexpected complexity arose" is a legitimate finding, not a failure to hide.
+
+Two things this play must NOT do: dispatch a worker (you author and label; the queued clause
+dispatches), and silently widen the goal to fit what was built — the goal is the contract, and a
+child that drifted from it is the finding.
+
 ## The `arbitrate` clause (FU-086 / merge-path MP-G04, built 2026-07-27)
 
 The reflex labels a PR `agent/arbitrate` when its bot-verdict count hits ROUNDS_MAX — a

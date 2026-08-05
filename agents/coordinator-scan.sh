@@ -220,8 +220,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # but flagged stale (the dependent's premise may have died with it). A direct A↔B cycle →
     # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
     # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
-    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent \
-      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
+    # ONE fetch, two derivations (leg (c)): `queued` is the dispatchable set; `openall` keeps the
+    # unfiltered list so the goal-review clause can find goals that have LEFT agent/queued for the
+    # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
+    # what this loop actually runs out of (FU-084).
+    openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent 2>/dev/null)" || openall='[]'
+    jq -e . >/dev/null 2>&1 <<<"$openall" || openall='[]'
+    queued="$(printf '%s' "$openall" \
+      | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
     # predicate (declared `Touches:` body lines; no line = exclusive `*`) read it.
@@ -431,6 +437,36 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
              + [((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"])
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
+    # ── goal-review (FU-090 leg (c), 2026-08-05) ───────────────────────────────────────────────
+    # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
+    # children. Fires when a child CLOSES — not only when the last one does (operator, 2026-08-05:
+    # "there should be some kind of backstop on the goal also ... it will deadlock too much when
+    # only child traffic causes the goal to move").
+    # Predicate is stateless and level-triggered, the same shape as the reviewer's
+    # newest_commit_at test: a child closed MORE RECENTLY than the newest bot comment on the goal.
+    # Once the session comments, the goal falls out of the clause until the next child closes.
+    # Scoped to repos that actually have an open task/goal — no goal, no extra API calls at all.
+    goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
+    if [ -n "$goals" ]; then
+      # one call for the whole repo's issues incl. closed — reused for every goal below
+      kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,state,closedAt,parent 2>/dev/null || echo '[]')"
+      jq -e . >/dev/null 2>&1 <<<"$kidsall" || kidsall='[]'
+      for g in $goals; do
+        newest_close="$(printf '%s' "$kidsall" | jq -r --argjson p "$g" \
+          '[.[] | select((.parent.number // 0) == $p) | select(.state == "CLOSED") | .closedAt] | sort | last // ""')"
+        [ -z "$newest_close" ] || [ "$newest_close" = "null" ] && continue
+        # newest comment BY THE LOOP on the goal — a human comment must not silence the clause
+        last_bot="$(gh issue view "$g" --repo "$slug" --json comments \
+          --jq --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" \
+             '[.comments[] | select(.author.login == ($wa|ltrimstr("app/"))) | .createdAt] | sort | last // ""' 2>/dev/null || echo "")"
+        # ISO-8601 Z sorts lexically, but `[ a \> b ]` is a bashism that silently misbehaves under
+        # other shells — compare with sort so the predicate cannot quietly invert.
+        newer="$(printf '%s\n%s\n' "$newest_close" "$last_bot" | sort | tail -1)"
+        if [ -z "$last_bot" ] || { [ "$newer" = "$newest_close" ] && [ "$newest_close" != "$last_bot" ]; }; then
+          units="${units}goal-review|${repo}|issue-${g}\n"
+        fi
+      done
+    fi
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
     swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
@@ -750,7 +786,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # but it must win over it when a repo has both, because a goal left undecomposed is what makes
     # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
     # clause — an in-flight failure is always more urgent than planning the next thing.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-decompose queued-dispatch; do
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-review goal-decompose queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done
