@@ -16,6 +16,19 @@ meant to avoid.)
   is `BASE_EXPECT` in `agents/meta-watch-loop.sh` (scoped to `^agent/` heads so the human-gated
   `research/*` PRs stay quiet). The four issue-1 arms (#2–#5) and the six comparison PRs (#7–#13)
   are the operator's to read/merge, not the loop's.
+  **#17 is labelled + queued and the scan now calls it ACTIONABLE; the ONLY thing holding it is
+  `coordinator.enabled: false` on the claim — deliberate** (the seeding rule: merge-path proof +
+  first supervised rides before any loop dispatch). Order to start: (1) trivial PR E2E through
+  CI→review→auto-merge, (2) flip `enabled: true` in `circles-iac/circles/agent/agentstack.yaml`,
+  (3) label #18/#19 (they carry `Depends-on: #17`). ⚠ TENSION to resolve: the merge-path proof
+  merges to master, which the "nothing merges to master" rule forbids — a throwaway README PR
+  satisfies both, but it is the operator's call.
+  **Two silent walls behind that switch were removed 2026-08-05 (`84cc5f0`)** — do not
+  re-introduce either: TRACKS rule 1 counted ALL open PRs though its rationale is updater churn
+  and the updater only touches ARMED ones, so circles' 12 human-gated PRs held #17 out of dispatch
+  forever; and FU-124's nudge selected on `mergeStateStatus` that was never in the `--json` list
+  (gh omits unasked fields → jq null → never matched), so it had NEVER fired. Circles is smoking
+  out a whole class: rules written when "open PR" implied "armed ride PR".
 - **circles is the CHAINLESS pilot — do NOT "fix" a stuck ride by adding a chain.** The claim
   (`circles-iac/circles/agent/agentstack.yaml`) declares no `workerModel`/fallbacks on purpose and
   `routerMode: authoritative` makes the routed pick binding. If rounds get stuck on a flaky free
