@@ -43,12 +43,17 @@ meant to avoid.)
   (→ G01 flip, FU-106), router shadow decisions (→ P4, FU-095), native blockedBy edges in scan logs
   (→ FU-111 retirement), Monday 05:00 retro (= FU-058 run 3). ⚠ Garage still has no offsite backup
   (FU-137) and now carries tofu state.
-- **⏳ VERIFY AT THE NEXT TICK: the goal-review predicate fix (cadb3d1, pushed 17:02:36).** The 17:00
-  tick re-fired goal-review on #17 and the session correctly no-op'd — but that pod cloned master
-  BEFORE the fix commit, so it proves nothing either way. The 17:30+ tick is the first real test.
-  Predicate re-run by hand in the jail at 17:15 says **quiet** (newest_close 16:11:10 < last_bot
-  16:32:40). If it fires again anyway, suspect the pod-side `gh issue view` failing into
-  `|| echo ""` — an empty `last_bot` reads as "the loop never commented" and re-fires forever.
+- **✅ goal-review predicate fix VERIFIED (cadb3d1).** The 17:07 tick — the first to clone master
+  after the 17:02:36 fix — dispatched only `issue-23 (queued-dispatch, child of goal #17)` and did
+  NOT re-fire goal-review. The 17:00 re-fire was the last pre-fix tick, not a surviving bug.
+- **⏳ oracle-fleet PR#166 (operator lane, MINE — author RasmusSoot, so no clause will ever touch
+  it).** Sat `CHANGES_REQUESTED`+`BLOCKED` from 2026-08-02 to today because the coordinator
+  correctly declines human-authored PRs and nothing else watches them. The finding was real and
+  verified by hand: `.agents/research.yaml` shipped with no `extensions:` block while `build.yaml`
+  and `fix.yaml` both had one, so the recipe could not run `devbox run ci` / `scan-secrets` / git /
+  `gh` — every instruction it gives itself. Fixed in `3616fb2`; all three blocks now byte-identical.
+  **Next: the review cron re-reviews → then it needs an operator merge.** ⚠ LESSON: an operator-lane
+  PR has no machine owner at all — it is only ever found by a board sweep.
 - **homelab#103 — containment shipped (fc7e9fb), root cause still OPEN.** New alert
   `AgentCoordinateScanWedged` (>15m Running; measured 1-in-2474, fires on the incident's own history
   and nothing else in 7d; verified `health=ok` in live Prometheus). ⚠ Do NOT "tighten"
