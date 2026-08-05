@@ -52,13 +52,14 @@ for MODEL in "$@"; do
   # claude-session ref (needs fixer.claudeTier: true on the claim). NB the branch model-slug rule
   # keys on GOOSE_MODEL, which a claude pod lacks — its branch carries the topic slug instead
   # (collision-free vs the goose arms; one claude arm per fan-out).
-  case "$MODEL" in claude/*)
+  # FU-127: the rail comes from the ONE parser (agents/model_id.py), not a prefix match here.
+  if [ "$(python3 "${HERE}/model_id.py" "$MODEL" | jq -r .rail)" = "anthropic-subscription" ]; then
     AGENT_WIP_LIMIT="$N" bash "${HERE}/agent-session.sh" "$PROJECT" \
       --model "$MODEL" \
       --task "$TASK" --round 1 --recipe "$RECIPE" &
     sleep 5
-    continue;;
-  esac
+    continue
+  fi
 
   # Estimate + mint the per-ride ephemeral key (the coordinator's steps 3-4, deterministic).
   # ESCALATE for one model skips THAT model only — the others still ride. The estimator prints

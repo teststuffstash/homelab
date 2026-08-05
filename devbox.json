@@ -163,6 +163,9 @@
       "footprint-test": [
         "bash agents/footprint-test.sh"
       ],
+      "model-id-test": [
+        "bash agents/model-id-test.sh"
+      ],
       "github-apps-lint": [
         "python3 scripts/github-apps-lint.py"
       ],

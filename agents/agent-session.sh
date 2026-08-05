@@ -131,15 +131,16 @@ if [ -z "${MODEL_SET:-}" ] \
   fi
 fi
 
-# workerModel notation from the AgentStack claim (first used by oracle, oracle-iac#8):
-# "claude/<model>" = harness-prefixed — the XRD carries no harness field yet (FU-066's
-# fixer.claudeTier is the eventual shape), so the claim encodes the tier in the model string.
-# Make it self-executing: the dispatcher passes --model straight from stacks_json and gets the
-# claude harness + bare model id; an explicit --harness still wins.
-case "$MODEL" in claude/*)
-  [ -n "${HARNESS_SET:-}" ] || HARNESS="claude"
-  MODEL="${MODEL#claude/}"
-;; esac
+# workerModel notation from the AgentStack claim (first used by oracle, oracle-iac#8): the string
+# encodes the RAIL and sometimes the HARNESS by prefix, because the XRD carries no harness field
+# (FU-066's fixer.claudeTier is the eventual shape). FU-127: the rules live in ONE place —
+# agents/model_id.py — instead of being re-derived here, in research-fanout.sh, in
+# estimate_budget.py and in the proxy. This keeps the same self-executing behaviour: the dispatcher
+# passes --model straight from stacks.json and gets the right harness + a bare model id, and an
+# explicit --harness still wins.
+eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
+[ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
+MODEL="$MODEL_MODEL"
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -451,14 +452,10 @@ if [ -n "$RUN_CMD" ] && [ "${AGENT_PREFLIGHT:-1}" != "0" ]; then
     fi
   fi
 fi
-# goose's provider is GOOSE_PROVIDER, so drop the conventional openrouter/ prefix from the model id —
-# BUT OpenRouter's own *cloaked* models (e.g. a bare `openrouter/<codename>`) genuinely live UNDER
-# that namespace, so only strip when a vendor/model slug remains (still has a '/'); otherwise keep it.
-_stripped="${MODEL#openrouter/}"
-case "$_stripped" in
-  */*) GOOSE_MODEL="$_stripped" ;;   # openrouter/deepseek/deepseek-v4-flash → deepseek/deepseek-v4-flash
-  *)   GOOSE_MODEL="$MODEL" ;;       # openrouter/<cloaked-codename> → keep (it's in the openrouter/ ns)
-esac
+# goose's provider is GOOSE_PROVIDER, so it wants the model in the RAIL's own namespace — which is
+# exactly the parse above (FU-127): `openrouter/vendor/model` → `vendor/model`, while a CLOAKED
+# `openrouter/<codename>` keeps its prefix because that id really does live under that namespace.
+GOOSE_MODEL="$MODEL_MODEL"
 
 # ADR-081 v1 (FU-062 §M4, GOOSE ONLY): goose cannot carry OpenRouter `provider` prefs, so its
 # OpenRouter traffic rides the in-cluster egress proxy, which injects the per-model provider pin

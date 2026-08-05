@@ -43,6 +43,9 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import model_id  # noqa: E402 — the ONE model-id parser (FU-127), a sibling module
+
 # ── Tunable assumptions (documented so the numbers aren't magic) ─────────────────────────────────
 CHARS_PER_TOKEN = 4  # rough English/code average; we only need order-of-magnitude
 DEFAULT_CONTEXT_TOKENS = 20_000  # context re-sent each request (autopsy saw ~27K); the cache lever
@@ -212,10 +215,10 @@ def estimate(
 
 
 def normalize_model(model: str) -> str:
-    """Registry ids are bare vendor/model — drop the conventional openrouter/ prefix, but ONLY when
-    a vendor/model slug remains: OpenRouter's own cloaked models genuinely live under openrouter/."""
-    stripped = model.removeprefix("openrouter/")
-    return stripped if "/" in stripped else model
+    """Registry ids are bare vendor/model. FU-127: the rule lives in model_id.py — this is the
+    rail-namespace half of that parse (openrouter/vendor/model → vendor/model, while a cloaked
+    openrouter/<codename> keeps its prefix because the id really lives there)."""
+    return model_id.parse(model)["model"]
 
 
 def _blend(prompt: float, cache_read: float, h: float) -> float:
