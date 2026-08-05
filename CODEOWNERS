@@ -74,6 +74,15 @@
 /argocd/platform/arc-runners.yaml
 /agents/coordinator/reflexes-argo.yaml
 
+# The CHART-deploy lane (ADR-084), same ruling as the runner-image lane above and for the same
+# reason: `agents/images.env` was carved out so the agent-base half of the deploy lane keeps
+# flowing, but the chart half writes `argocd/platform/openrouter-operator.yaml` — a tier-2 path —
+# so #104 and #105 both sat BLOCKED on a human for a one-line targetRevision bump with CI green.
+# Ownership is REPLACED, not dropped: `devbox run pin-only-lint` (required `ci`) allows only a
+# CalVer `targetRevision:` line into this file via a PR. A real edit — prune, source, values —
+# takes the operator path straight to master, where this check does not run.
+/argocd/platform/openrouter-operator.yaml
+
 # The ownership file owns itself — otherwise the first thing an agent could propose is its own
 # ungating (oracle-fleet's CODEOWNERS carries the same line for the same reason).
 /CODEOWNERS         @RasmusSoot
