@@ -35,10 +35,13 @@ meant to avoid.)
   worthless gate anyway): 91/91 requirements carry the exact unverified evidence line, `AREAS` and
   `check_ambiguity_index` make the conventions fail CI rather than drift, and the ⚖ register names
   the three rulings that override the goal issue / fan-out majority. ⚠ NOT a signal to land it.
-- **⏳ The opus goal-clause split is SHIPPED but UNVERIFIED end-to-end** (`1b4bda5`): `goal-decompose`
-  and `goal-review` resolve to opus via a `case` in `coordinator-scan.sh` (`GOAL_MODEL` overrides).
-  Executed across 7 clauses locally, but with #17 closed and #18/#19 held there is NO goal work
-  pending — first real proof comes on the next goal-* dispatch. Watch the tick's `model opus` echo.
+- **⏳ `goal-decompose` → opus, SHIPPED but UNVERIFIED end-to-end** (`1b4bda5`, narrowed `5ad6c48`).
+  `goal-review` was in that list for ~90 min and came OUT: both its live runs were sonnet and both
+  were right, and it contradicted standing doctrine (reviewer-session.sh — sonnet sufficient, opus
+  a per-case `--model`). Axis is AUTHORING vs CHECKING, not goal vs routine. With #17 closed and
+  #18/#19 held there is NO goal work pending, so the first proof is the next `goal-decompose`
+  dispatch echoing `model opus`. ⚠ All the evidence is from #17, a goal small enough for one ride —
+  re-test on a real multi-deliverable goal; escalate a specific hard one with `GOAL_MODEL`.
 - **⚖ WHAT IS LEFT ON CIRCLES IS YOURS: the FAN-OUT vs ONE-SHOT comparison.** Both arms of the same
   goal now exist — the fan-out arm merged on `goal/17-p0-mvp` (#22+#23, $0.0571 for the page ride),
   and the frozen one-shot arm PR#21 (`CHANGES_REQUESTED`, DIRTY). Choosing/reconciling between them
