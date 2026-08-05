@@ -871,11 +871,20 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
-    # ── goal-* clauses run a REASONING tier (operator ruling, 2026-08-05) ──────────────────────
-    # Routine coordination IS dispatch work and sonnet handles it — 149 sessions over 7 days say so.
-    # The two goal clauses differ in KIND, not size: goal-decompose AUTHORS the child tasks, and
-    # goal-review answers "is it done yet" against the goal's own acceptance. Those are the two
-    # judgements the entire lane rests on — everything else is bookkeeping over work already framed.
+    # ── goal-decompose runs a REASONING tier (operator ruling, 2026-08-05) ─────────────────────
+    # The axis is AUTHORING vs CHECKING, not goal vs routine. `goal-decompose` CREATES the work —
+    # a mis-scoped child burns rides, mis-narrows `Touches:`, and is expensive to undo once its
+    # ride opens a PR. Everything else in the lane checks work that is already framed.
+    # ⚠ `goal-review` was in this list for ~90 minutes and was REMOVED (operator challenge, same
+    # day): it is mostly verification against an acceptance list the goal already carries, and both
+    # of its live runs on 2026-08-05 were SONNET and both were right — the 16:32 one ruled "not yet
+    # met", correctly told branch-2 (a child covers the gap) from branch-3 (author the missing
+    # child), authored no redundant child, and caught stale `Base:` prose the meta session missed;
+    # the 18:15 one verified against the goal branch + post-merge CI rather than labels and left
+    # the human-reserved PRs alone. It also contradicted standing doctrine — reviewer-session.sh:
+    # "Sonnet is sufficient here; opus is available for a genuinely high-stakes PR via --model, but
+    # it is not the default." A review is a review. Escalate a SPECIFIC hard goal with GOAL_MODEL,
+    # do not raise the floor for the whole clause.
     # ⚠ Launcher-side map ON PURPOSE (ADR-094: dispatch params are launcher-owned, never
     # LLM-assembled). The router's vocabulary already describes this better — it grades
     # `claude/opus: premium` in `model_tiers` and separates `reasoning: true` classes from
@@ -884,7 +893,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # route through yet. When the coordinator lane is wired to /route (post-P4, FU-095), this map
     # becomes a subscription-rail reasoning class and dies here. See docs/agents/model-routing.md §M10.
     case "$uclause" in
-      goal-decompose|goal-review) cmodel="${GOAL_MODEL:-opus}";;
+      goal-decompose) cmodel="${GOAL_MODEL:-opus}";;
     esac
     # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.

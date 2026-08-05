@@ -297,11 +297,24 @@ caller is `agent-session.sh`** (the worker launcher) — `coordinator-session.sh
 solely for `/loop-git-token?role=coordinator`. So a `dispatch` class floor set today changes
 nothing about a coordinator session. Written is not applied; check the caller, not the config.
 
-**Goal clauses run a reasoning tier (operator ruling, 2026-08-05).** `goal-decompose` and
-`goal-review` resolve to **opus**; every other clause keeps the claim's `coordinatorModel`
-(sonnet). The split is by KIND, not size: decompose AUTHORS the child tasks and review answers
-*"is it done yet"* against the goal's own acceptance — the two judgements the lane rests on, where
-everything else is bookkeeping over work already framed. Implemented as a launcher-side `case` in
+**`goal-decompose` runs a reasoning tier (operator ruling, 2026-08-05).** It resolves to **opus**;
+every other clause — `goal-review` included — keeps the claim's `coordinatorModel` (sonnet). The
+axis is **AUTHORING vs CHECKING**, not goal vs routine: decompose CREATES the work, and a
+mis-scoped child burns rides and is expensive to undo once its ride opens a PR.
+
+⚠ `goal-review` was in that list for ~90 minutes and was removed the same day, on evidence. Both of
+its live runs were sonnet and both were right: the 16:32 one ruled "not yet met", correctly told
+branch-2 (a remaining child covers the gap) from branch-3 (author the missing child), authored no
+redundant child, and caught stale `Base:` prose the meta session had missed; the 18:15 one verified
+against the goal branch and the post-merge CI run rather than the labels, and left the
+human-reserved PRs alone. It also contradicted standing doctrine —
+[`reviewer-session.sh`](../../agents/reviewer-session.sh): *"Sonnet is sufficient here; opus is
+available for a genuinely high-stakes PR via `--model`, but it is not the default"* (proven on
+sleep-tracking#9, where a sonnet reviewer caught the coordinator's own misjudgment). A review is a
+review. **Escalate a specific hard goal with `GOAL_MODEL`; do not raise the floor for a clause.**
+⚠ All of this evidence comes from circles#17, a goal small enough for one ride — so it bounds what
+a *small* goal needs, not what a real one does. Re-test on the first genuinely multi-deliverable
+goal. Implemented as a launcher-side `case` in
 `coordinator-scan.sh` (ADR-094: dispatch params are launcher-owned, never LLM-assembled), with a
 `GOAL_MODEL` env escape hatch. **When the coordinator lane is wired to `/route` (post-P4, FU-095)
 this map becomes a subscription-rail reasoning class and is deleted** — note that `audit` and
