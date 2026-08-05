@@ -74,6 +74,14 @@ meant to avoid.)
   same goal decomposed once leg (c)'s remaining legs land. **Do not push to it, dispatch a fix
   round on it, or merge it** — a repair cycle destroys the comparison. r1 (`tencent/hy3`)
   produced nothing at all, so #21 is r2's work standing alone.
+  ⚠ **The freeze has TWO doors and the label only guards one.** `major/awaiting-human` sits on the
+  PR and guards the `changes-requested` clause; **C4/C5 keys on the ISSUE**. At 12:00 it emitted
+  `c4c5-redispatch` for a round 3 because the scan links issue↔PR by matching `#<n>` in PR BODY
+  TEXT and #21's body never named #17 (`build.yaml` has no linking rule — `fix.yaml` does; the gap
+  is donor-inherited, circles AND sleep-tracking). Fixed truthfully: `Implements #17` prepended to
+  the body (no code touched) and #17 moved to `agent/review`. Mechanism fix filed as
+  agent-runtime#32 (finalize guarantees the link for every recipe). If #17 goes back to
+  `agent/in-progress`, C4/C5 can re-fire — check the body link first.
 - **⚠ GitHub caps label descriptions at 100 chars**, and `IssueLabels` is authoritative over a
   repo's whole label set — so one over-long description freezes the taxonomy for EVERY claim-owned
   repo (11/12 went ReconcileError on my 113-char `task/goal` text, 2026-08-05). Fixed to 85;
