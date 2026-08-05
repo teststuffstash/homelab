@@ -366,15 +366,12 @@ six OVERSIZE items pointer-ized into
       Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
       an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
-      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (M8 capability feed
-      BUILT 2026-08-03 — router-store delivery, class_floors shadow); decision record ADR-096
-      (P1–P3+P5 + cooldowns live).
-      **Next:** the P4 authoritative flip after the shadow soak — evidence comes from the
-      `circles` CHAINLESS pilot (ruled 2026-08-03: no workerModel, routerMode authoritative;
-      plan in the life repo's others-view-plan.md). **Open:** legs (b)+(c) unstarted; the
-      **coordinator lane is unrouted** — `/route`'s only caller is `agent-session.sh`, so the
-      goal-clause reasoning tier is a launcher-side `case` in `coordinator-scan.sh` that this
-      wiring retires (model-routing.md §M10, which also records the falsified `dispatch` tier).
+      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
+      2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
+      **Next:** the P4 authoritative flip after the shadow soak — evidence from the `circles`
+      CHAINLESS pilot (plan in the life repo's others-view-plan.md).
+      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10 — that
+      retires the launcher-side goal-clause model `case`).
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
