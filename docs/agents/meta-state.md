@@ -56,14 +56,13 @@ meant to avoid.)
 - **✅ goal-review predicate fix VERIFIED (cadb3d1).** The 17:07 tick — the first to clone master
   after the 17:02:36 fix — dispatched only `issue-23 (queued-dispatch, child of goal #17)` and did
   NOT re-fire goal-review. The 17:00 re-fire was the last pre-fix tick, not a surviving bug.
-- **⏳ oracle-fleet PR#166 (operator lane, MINE — author RasmusSoot, so no clause will ever touch
-  it).** Sat `CHANGES_REQUESTED`+`BLOCKED` from 2026-08-02 to today because the coordinator
-  correctly declines human-authored PRs and nothing else watches them. The finding was real and
-  verified by hand: `.agents/research.yaml` shipped with no `extensions:` block while `build.yaml`
-  and `fix.yaml` both had one, so the recipe could not run `devbox run ci` / `scan-secrets` / git /
-  `gh` — every instruction it gives itself. Fixed in `3616fb2`; all three blocks now byte-identical.
-  **Next: the review cron re-reviews → then it needs an operator merge.** ⚠ LESSON: an operator-lane
-  PR has no machine owner at all — it is only ever found by a board sweep.
+- **✅ oracle-fleet PR#166 DONE** — reviewer flipped to APPROVED after the `extensions:` fix
+  (`3616fb2`), operator merged 17:29:24 (`8157a55e`). Verified against master's own
+  `.agents/research.yaml`, not the diff. FU-114/FU-105 were already archived, so no tracker action.
+  ⚠ KEEP THE LESSON: an **operator-lane PR has no machine owner at all**. `changes-requested` is
+  scoped to `WORKER_AUTHOR`, so a human-authored PR is skipped by design and the coordinator says so
+  out loud to nobody. #166 sat blocked three days with a real, twice-repeated, correct finding. Only
+  a board sweep finds these — sweep open PRs on EVERY active repo, not just the stack in flight.
 - **homelab#103 — containment shipped (fc7e9fb), root cause still OPEN.** New alert
   `AgentCoordinateScanWedged` (>15m Running; measured 1-in-2474, fires on the incident's own history
   and nothing else in 7d; verified `health=ok` in live Prometheus). ⚠ Do NOT "tighten"
