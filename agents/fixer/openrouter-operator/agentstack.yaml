@@ -72,7 +72,13 @@ spec:
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly
-        guardrail: only-free
+        # `none` since 2026-08-05, matching every other fixer repo (operator direction — the sleep
+        # and circles guardrails came off the day before, oracle-fleet's via oracle-iac#271). It was
+        # only-free while the stack chain is PAID (deepseek-v4-flash-0731 + mimo/hy3), which after
+        # FU-138 made guardrails actually take effect would 403 every completion BEFORE spend, so no
+        # ride here could start. budgetUSD above is the bound that was doing the work all along;
+        # stack-lint KEY-02 fails on the only-free-with-a-paid-chain combination from now on.
+        guardrail: none
         # explicit (server defaults) — the API server stamps defaulted booleans into the stored
         # object, so omitting them leaves the ArgoCD app permanently OutOfSync (same rule as
         # extraFQDNs below; observed live 2026-07-16 when claudeTier's default landed).
