@@ -296,7 +296,14 @@ branch-protection conditions; with none, arming a PR merges it **on open** — n
 Verified before the flip: circles' three rulesets all targeted `~DEFAULT_BRANCH` only, so the
 stacked base had no rules at all. `tofu/github/repo_rulesets.tf` now includes
 `refs/heads/goal/**` in both `required-checks` and `required-approval`, so a child PR waits for
-`ci` + one approving review exactly as a master PR does.
+`ci` + one approving review exactly as a master PR does. **Applied and verified 2026-08-05**:
+`GET /repos/…/rules/branches/goal%2F17-p0-mvp` returns `pull_request` + `required_status_checks`.
+
+**Arming is keyed on the `goal/` PREFIX, not on "is this master".** Both the launcher
+(`agent-session.sh`) and the re-arm belt (`review-reflex.sh` C9) arm a PR whose base is the repo
+default **or** matches `goal/*`; every other non-default base still refuses. That is deliberate and
+should not be relaxed to "any stacked base": the prefix is the only thing that carries the ruleset,
+so widening the match without widening the protection re-creates merge-on-open.
 
 ⚠ **Renaming a base branch closes the PR whose HEAD it is.** Learned the hard way migrating
 `research/issue-1-weave` → `goal/17-p0-mvp`: GitHub retargets PRs where the branch is the BASE

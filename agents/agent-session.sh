@@ -340,8 +340,22 @@ if [ -n "${RECIPE:-}" ]; then
         echo "→ Base: ${ISSUE_BASE} declared on #${ISSUE_N} but --ref ${BASE_REF} was passed — the explicit flag wins"
       else
         BASE_REF="$ISSUE_BASE"
-        NO_ARM=1
-        echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed"
+        # ARMING IS TIED TO THE PROTECTED CONVENTION, not to "is this master" (operator ruling
+        # 2026-08-05: feature→goal is fine to automate; goal→master stays human).
+        # `goal/**` is a goal's INTEGRATION branch and carries the same ruleset as master
+        # (tofu/github/repo_rulesets.tf: required-checks + required-approval include
+        # refs/heads/goal/**), so an armed child waits for CI + an approving review exactly as a
+        # master PR does. ⚠ Any OTHER non-master base stays un-armed on purpose: GitHub's
+        # auto-merge waits on branch-protection conditions, so arming into an UNPROTECTED branch
+        # merges on open — no CI, no review. Verified live before this flip; do not widen the
+        # match to "any non-default base" without protecting that base first.
+        case "$BASE_REF" in
+          goal/*)
+            echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge ARMED (protected integration branch)" ;;
+          *)
+            NO_ARM=1
+            echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed (base is not a protected goal/** branch)" ;;
+        esac
       fi
     fi
     # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────

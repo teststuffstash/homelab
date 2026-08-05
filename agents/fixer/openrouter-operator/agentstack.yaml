@@ -84,7 +84,13 @@ spec:
           # that cannot run is worse than no gate, because the ride reports the wrong reason.
           # Pre-declared rather than harvested from a tripped ride: the dependency is known, and
           # "harvest first" is for the deps we cannot predict (FU-142 / homelab#97).
-          extraFQDNs: [raw.githubusercontent.com]
+          # ghcr.io added 2026-08-05, from a LIVE drop on the lane's first ride: the recipe tells
+          # an argocd/** change to run BOTH gates, and the second one — `devbox run
+          # argocd-validate-pins` — does `helm pull oci://ghcr.io/teststuffstash/charts/...` to
+          # prove a pinned chart still renders. I declared kubeconform's host and missed helm's,
+          # in the same file that names both lints. If a gate is named in the recipe, its egress
+          # belongs here: the ride cannot tell "my manifest is wrong" from "the network said no".
+          extraFQDNs: [raw.githubusercontent.com, ghcr.io]
           enforce: true # the -iac lane's ring-2 posture; harvest first if a ride trips it
     - name: openrouter-operator
       labels: { extra: [] } # claim-owned label set (FU-068; live diff 2026-07-16: strict taxonomy subset)
