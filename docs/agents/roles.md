@@ -259,6 +259,22 @@ belongs to the platform (an egress-allowlisted docs/search endpoint, or an MCP t
 wires) rather than to the harness. Nothing that decides whether a fixer can SEE something should be
 a property of the binary we happened to spawn. Tracked as FU-134.
 
+**DELIVERED 2026-08-05 — `POST /search` on the egress proxy.** An ordinary completion carrying
+OpenRouter's `openrouter:web_search` server tool (the `plugins:[{id:"web"}]` form is deprecated),
+returning `{answer, citations:[{url,title}]}` to any harness that can curl. What made this the
+shape rather than a self-hosted SearXNG or a per-stack egress allowlist: it rides **the caller's own
+key ref**, so budget, guardrail, cost ledger and per-session attribution all keep working, there is
+no new credential to leak and no new egress hole — the ride already reaches that VIP for its
+completions. Cost is the ride's (~$0.005/search + prompt tokens), which the env card states so the
+model can act on it ("ask few, real questions"). Two boundaries worth remembering: an
+anthropic-tier ref is refused (those rides have WebSearch in-harness, one hop less and no spend),
+and under `guardrail: only-free` the search model must be a `:free` id or it 403s like any other
+completion — that is the guardrail working, not a defect in the endpoint. The env card now states a
+GUARANTEE per harness and passes the address as `AGENT_SEARCH_URL`, never a literal: a kata guest
+cannot reach a ClusterIP (FU-072), so the card must print the address *this* pod can use.
+Acceptance: from a ride-shaped pod in ns `circles`, a question no model can answer from training
+data came back with 10 citations.
+
 **The refactor, when it has piled up enough:** a **role × context × source** map that separates
 *dynamic per-ride facts* (env card: docker/egress/proxy values, round, write-scope) from *universal
 ground rules* (authored once, delivered to goose via a launcher-injected static block — the env

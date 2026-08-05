@@ -46,9 +46,10 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-05 (closure sweep: FU-128 fixed, FU-120 + FU-068 verified done → archived;
-FU-068's sentinel residue folded into FU-106. Previous pass 2026-08-03: all six OVERSIZE items
-pointer-ized, 373 → 325 lines — detail into
+_Last updated: 2026-08-05 (bug sweep before the next stack launch — archived FU-068, FU-120,
+FU-128, FU-132, FU-138, FU-139; FU-127/130/131/134 part-shipped and re-scoped in place. New gates:
+`stack-lint` KEY-01/KEY-02/PVC-01/CACHE-01, `devbox run model-id-test`. Previous pass 2026-08-03:
+six OVERSIZE items pointer-ized into
 `docs/agents/{iac-lane,issue-authoring,observability-and-retro,model-routing}.md` +
 `docs/storage-ledger.md`)._
 
@@ -59,16 +60,6 @@ pointer-ized, 373 → 325 lines — detail into
 
 ## GitOps & platform
 
-- [ ] **FU-138** — **Claim `fixer.guardrail` is enforcement-dead for STANDING keys.** The proxy
-      enforces FU-024 from the key Secret's `GUARDRAIL` field; the standing `<repo>-openrouter`
-      Secret is operator-hand-written at bootstrap and nothing reconciles it against the claim.
-      Proven live 2026-08-04: circles-iac#1 merged `guardrail: none`, rides kept 403ing until the
-      operator patched the Secret by hand (the composition also OMITS `none` from the rendered
-      OpenRouterKey, so the CR cannot even carry the opened state). Ephemeral session keys are
-      unaffected (minted with their own Secret). **Next:** pick the wire — composition/ESO renders
-      `GUARDRAIL` into the standing Secret, or the proxy resolves guardrail from the CR instead of
-      the Secret; until then every standing-key guardrail change needs the manual Secret patch
-      (sleep-iac#61 will need one on `sleep-tracking`'s Secret when merged). Relates FU-024, ADR-085.
 - [ ] **FU-137** — **Garage has no offsite backup** — `replication_factor = 1` on one node, all
       redundancy borrowed from Longhorn's 2 replicas, and nothing copies the objects off the
       cluster. (FU-013 backs things *into* Garage; this is the other direction.) **Interim taken
@@ -196,34 +187,25 @@ pointer-ized, 373 → 325 lines — detail into
       `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
       that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
       `new-stack --from` must already have it. Relates FU-114.
-- [ ] **FU-130** — **The chart-stack CI gate curls 23 MB from GitHub releases EVERY run
-      (`helm plugin install helm-unittest` in test-chart.sh) + LAN nix-cache misses fall
-      through to cache.nixos.org** — both hang-prone the moment egress enforcement flips
-      (FU-020), and the plugin fetch is unauthenticated `--verify=false` WAN supply-chain
-      surface. Seen in the circles ride DNS harvest (8 release-asset + 26 raw.githubusercontent
-      + 28 cache.nixos.org lookups). Next: pre-seed helm-unittest (nixpkgs
-      `kubernetes-helmPlugins` or vendored tarball via the devbox-cache image) + warm the LAN
-      nix cache with new-stack toolchains at scaffold time. Relates FU-073, FU-096.
-- [ ] **FU-132** — **The five `coordinator-transcripts` PVCs still name `storageClassName:
-      longhorn` (2 replicas) while their live volumes run at 1.** homelab#94: two schedulable
-      `std` disks were never available, so the janitor hung 40min on a volume that could not
-      place; the volumes were patched to `numberOfReplicas: 1` and `longhorn-single` (repl=1,
-      diskSelector std) now exists in `tofu/longhorn.tf`. `storageClassName` is **immutable**, so
-      the manifests can't just be edited — every NEW transcripts PVC (a new stack, a recreated
-      one) still comes up at 2 replicas and can re-wedge. **Next:** delete+recreate the five PVCs
-      onto `longhorn-single` in a quiet window (data is already in Garage via `transcripts-sync`),
-      then switch `agents/coordinator/transcripts-pvc.yaml` + the agentstack Composition's
-      template. Relates ADR-089, homelab#94.
-- [ ] **FU-134** — **Web research is a harness accident, not a platform capability.** claude rides
-      get server-side WebSearch (unaffected by pod egress); goose rides have no web tool at all —
-      kimi's FU-126 spec arm could only disclaim "reasoned from training knowledge". So "is this a
-      known upstream bug in that version?" is answerable or not depending on which binary was
-      spawned, and opencode/hermes/next are unknowns. **Ruling 2026-08-04: if one harness has it,
-      all should** — deliver it as a platform capability (egress-allowlisted docs/search endpoint,
-      or an MCP tool the launcher wires) instead of a per-harness truth the env card merely
-      ADVERTISES. **Next:** pick the delivery shape, then let the card state a guarantee rather than
-      a coin flip. Detail: [`docs/agents/roles.md`](agents/roles.md) §Context delivery.
-      Relates FU-117, FU-095, FU-020.
+- [ ] **FU-130** — **CI-gate WAN fetches: FIXED, awaiting three merges.** helm-unittest now comes
+      from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
+      finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
+      `new-stack --from` donor) + sleep-tracking#115, both verified locally by running the suites off
+      the profile's plugin. agent-runtime#30 switches the ride's nix `extra-substituters` →
+      `substituters`, so a LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest;
+      a hang once egress enforces). homelab side landed: `stack-lint` CACHE-01 probes what the
+      LAUNCHER probes (anonymous ghcr pull of `<repo>/devbox-cache:latest` — four repos have none)
+      and `new-stack` step E2 publishes it. **Next:** merge the three PRs. Relates FU-073, FU-096.
+- [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
+      on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
+      server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
+      so budget/guardrail/ledger/attribution keep working with no new credential and no new egress
+      hole; ~$0.005 + tokens per call, refused for anthropic-tier refs (they have WebSearch
+      in-harness). The env card states a guarantee per harness and passes `AGENT_SEARCH_URL`.
+      Verified live 2026-08-05 from a ride-shaped pod in ns circles: 10 citations for a
+      today's-web question. **Next:** watch a real goose ride actually use it (recipes may still
+      carry "no web" folklore — FU-117 class), then archive. Detail:
+      [`docs/agents/roles.md`](agents/roles.md) §Context delivery. Relates FU-117, FU-095, FU-020.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
       across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e): `send_resolved = true` + a
@@ -233,17 +215,14 @@ pointer-ized, 373 → 325 lines — detail into
       apart. **Next:** a `subject:` key (pvc/node/workload) searched before filing, then the
       observation-window hand-off (IAC-G10). Class postmortem:
       [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
-- [ ] **FU-131** — **The ADR-096 cost ledger undercounts ~2× under fan-out concurrency — the
-      `/generation` harvest gives up after 7s** (`_generation_lookup` retries 2s, 5s, then logs
-      `never appeared — skipped`). Measured against OpenRouter's own activity export
-      (kimi-k3 arm, 2026-08-03): **29 of 56 generations stored, $2.196 of $4.328 — 49% of spend
-      missing**; the 29 it caught match the export to the cent, so the harvest is accurate, just
-      incomplete. Second hole: the round-2 session posted **no `/report`** (no cost, no outcome,
-      though it opened circles#4). Every economics signal built on the store — P4-flip evidence,
-      per-arm cost comparisons, FU-126-style experiments — therefore reads low and unevenly.
-      **Next:** back off harder (2/5/15/45s) **+** a T+1 sweep over `GET /activity?api_key_hash=`
-      (per-session keys make attribution exact; needs a management key). Relates ADR-096, FU-095.
-
+- [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
+      `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
+      ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
+      2/5/15/45s, and both outcomes are counters — `openrouter_generation_harvest_total{outcome=
+      "stored"|"missed"}` on the proxy's `/metrics` — so the blind spot is a series instead of a
+      hand-diffed export. **Next:** the T+1 sweep over `GET /activity?api_key_hash=` for whatever
+      still misses (per-session keys make attribution exact; needs a management key), and the
+      round-2 no-`/report` hole. Relates ADR-096, FU-095.
 - [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
       checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
       [`docs/agents/roles.md`](agents/roles.md) §prober. Origin: meta-11 — a manual agentic
@@ -289,15 +268,16 @@ pointer-ized, 373 → 325 lines — detail into
       bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
       specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
       output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
-- [ ] **FU-127** — **Model ids don't carry their rail/harness — overloaded-prefix hazard
-      (operator concern, 2026-08-03 circles bootstrap).** Today the string encodes it by magic
-      prefix: `claude/<alias>` = subscription claude harness (FU-066 shape; XRD has no harness
-      field), `openrouter/…` sometimes rail-prefix, sometimes OpenRouter's own cloaked-model
-      namespace (`openrouter/owl-alpha`), bare `vendor/model` = OpenRouter+goose implied. Bites
-      as: ambiguous parsing at every consumer (launcher, router, fanout, stacks.json mirror),
-      and a future rail (e.g. local vLLM) has no place to live. Next: pick the explicit shape —
-      structured `{rail, harness, model}` in claims/mirror with the string form kept as
-      display/shorthand — and migrate consumers behind one parser. Relates FU-095, ADR-096.
+- [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
+      `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
+      overloaded-prefix rules in one commented place (incl. the cloaked `openrouter/<codename>`
+      case, where the prefix is part of the id). Migrated: agent-session.sh (both sites),
+      research-fanout.sh, `estimate_budget.normalize_model`. The proxy keeps its own copy — another
+      deployment unit, cannot import — so `devbox run model-id-test` executes that function out of
+      the proxy file by AST and fails CI if the two ever disagree. **Next:** the structured
+      `{rail,harness,model}` form in claims + `stacks.json` (string stays canonical; the parser is
+      the compatibility layer), which is also where a future rail (local vLLM) lands.
+      Relates FU-095, ADR-096.
 - [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
       `agents/agent-session.sh`.
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
@@ -367,16 +347,6 @@ pointer-ized, 373 → 325 lines — detail into
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
-- [ ] **FU-139** — **The VM workers have NO kubelet reservation, so Talos's OOMController is the
-      only backstop there.** FU-112(b)'s `systemReserved`/`kubeReserved`/`evictionHard` hardening is
-      gated `each.value.kata ? … : []` in `tofu/metal.tf` — wk-metal only ("desktops/VMs use
-      different math and aren't urgent"). **Measured on wk-02, 2026-08-04 18:34:28** (`talosctl
-      dmesg`): the OOMController SIGKILLed 5 cgroups incl. a *burstable* one with 42 pids, which
-      killed Longhorn CSI → iSCSI `conn error 1020` → EXT4 superblock I/O errors → a 5-pod
-      SandboxChanged storm (homelab#101, #63, #65). ⚠ `node_memory_MemAvailable` was flat at
-      **5.73Gi** at 15s resolution through the kill — this fires on PSI stall, not exhaustion, so
-      "the VM has headroom" is not protection. **Next:** decide the VM-tier reservation math and
-      extend the patch past the `kata` gate. Relates FU-112 (archived), FU-082, ADR-044.
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
       wk-metal-02's one unexplained reboot. On recurrence: chase cable/switch-port
       (thinkcentre) resp. battery/power (wk-metal-02, plug `laptop4`).

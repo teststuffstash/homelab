@@ -8,6 +8,45 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-138** *(archived 2026-08-05)* — **The OpenRouterKey CR is the guardrail now, not the Secret.**
+  The Secret's `GUARDRAIL` is written only when the operator MINTS (create/rotate in
+  openrouter-operator's handler), so a guardrail change on an already-minted standing key never
+  reached it: enforcement died silently and every claim change needed a hand patch. Fixed by making
+  the proxy read the CR that owns the Secret (`_cr_guardrail`, matched on `secretName` or the
+  `<project>-openrouter` default) and by rendering `guardrail` ALWAYS in the Composition — `none`
+  included, which it previously could not express. Fail direction is deliberate: an unreadable or
+  absent CR keeps the Secret's field, so pre-CR keys still enforce and a 403 on the list cannot
+  disarm a guardrail. Acceptance on a throwaway key, both directions: Secret `only-free` + CR `none`
+  → open; Secret `none` + CR `only-free` → 403 pre-spend. Fallout worth keeping: making guardrails
+  real exposed two only-free claims on PAID chains (oracle-fleet, fixed in oracle-iac#271;
+  openrouter-operator left alone as a policy call) — `stack-lint` KEY-01/KEY-02 now fail on both
+  shapes. Relates FU-024, ADR-085.
+
+- **FU-132** *(archived 2026-08-05)* — **Transcripts PVCs moved to `longhorn-single` (repl=1).**
+  homelab#94 was a 2-replica transcripts volume that could not place (one schedulable `std` disk),
+  hanging a janitor tick 40 min on the attach; the five live volumes had been hand-patched to
+  `numberOfReplicas: 1` but nothing in git asked for it, so every new stack re-armed the wedge.
+  `agents/coordinator/transcripts-pvc.yaml` + the Composition template now name `longhorn-single`,
+  and all five PVCs were deleted and recreated on it (verified: 5/5 Bound, repl=1, `stack-lint`
+  PVC-01 green). Safe because the record is Garage, not the volume — checked rather than assumed:
+  all 267 session files across the four loop PVCs were already among the bucket's 908 objects.
+  Two gotchas: `storageClassName` is immutable so the class edit alone migrates nothing, and the
+  deletes stall on `kubernetes.io/pvc-protection` while TERMINATED pods still reference the PVC
+  (a Succeeded `coordinator-janitor-*` held it) — delete those pod objects and it completes.
+
+- **FU-139** *(archived 2026-08-05)* — **VM workers now carry kubelet reservations.** FU-112(b) had
+  gated the hardening on `kata`, so cp-01/wk-01/wk-02 ran with Talos defaults until the
+  OOMController SIGKILLed Longhorn's instance-manager on wk-02 (2026-08-04 18:34:28) → CSI → iSCSI
+  `conn error 1020` → EXT4 errors → a 5-pod SandboxChanged storm. The OOMAction record is the
+  evidence and set the numbers: it fired on **PSI** (`memory_full_avg10: 6.04`, ~9.3G of 12G in
+  use), not on exhaustion — so a flat `MemAvailable` proves nothing — and it scored the Longhorn
+  cgroup highest, the worst victim on a storage VM. Reservations don't tune PSI; they change who
+  acts first, and the kubelet evicts an ordinary Burstable pod while Longhorn/Cilium are
+  system-node-critical and exempt. 512Mi system + 512Mi kube + a 768Mi hard wall (more kubeReserved
+  than the kata math: these VMs host the Longhorn DATA plane, whose per-attach processes arrive in
+  chunks). Applied in `tofu/talos.tf`, verified in `configz`; wk-02 allocatable 11.73Gi → 10.39Gi,
+  no reboot, nothing evicted. Relates FU-112 (archived), FU-082, ADR-044.
+
 - **FU-128** *(archived 2026-08-05)* — **Dispatcher executing backticks from manifest comments —
   FIXED.** Root cause was not the env card: the pod-manifest heredoc in `agents/agent-session.sh`
   is unquoted (`cat <<EOF`, it must expand `${…}`), so the shell command-substitutes backticks

@@ -65,6 +65,19 @@ meant to avoid.)
   revert path. All three are cheaper to watch than to build on.
   ⚠ **Garage has no offsite backup (FU-137)** — a local count-verified copy in `backups/garage/` is
   the only restore path, and it is now load-bearing for tofu state too.
+- **Pre-launch bug sweep DONE 2026-08-05** (before the next stack gets workers + iac + a goal).
+  Archived: FU-068, FU-120, FU-128, FU-132, FU-138, FU-139. Part-shipped and re-scoped: FU-127
+  (parser landed, structured claim field left), FU-130 (three PRs open: circles#15,
+  sleep-tracking#115, agent-runtime#30), FU-131 (backoff+metric landed, T+1 activity sweep left),
+  FU-134 (`POST /search` live, watch a real goose ride use it).
+  **Two findings that outlived their fixes:** (1) making guardrails real (FU-138) exposed
+  `only-free` claims on PAID chains — oracle-fleet fixed via oracle-iac#271, **openrouter-operator
+  still declares only-free with a paid stack chain, which 403s every ride pre-spend: an operator
+  policy call, and `stack-lint` KEY-02 fails on it until decided**; (2) the four per-stack loop
+  transcripts PVCs are covered only by the session exit trap, NOT by a nightly crash-net —
+  `transcripts-sync` is agent-coordinator-only. Verified harmless this time (267/267 files were in
+  Garage) but a per-stack sync does not exist. **NEXT:** merge the three FU-130 PRs, decide
+  openrouter-operator's guardrail, then launch.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
