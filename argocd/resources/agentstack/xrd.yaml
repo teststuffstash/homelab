@@ -47,6 +47,32 @@ spec:
               # Requires routerMode: authoritative (the launcher refuses a chainless dispatch in
               # shadow/off — no static model exists to fall back to).
               required: [repos]
+              # FU-080 ownership invariant, ENFORCED 2026-08-05 after it was violated by hand.
+              # Exactly one scanner may dispatch a stack. Who dispatches:
+              #   global belt   = coordinator.enabled AND NOT loop.graduated
+              #   per-stack loop = coordinator.enabled AND loop.perStack
+              # so the two failure states are:
+              #   perStack + enabled + NOT graduated -> BOTH dispatch (the #134 label-race class;
+              #     happened live on circles#17, 2026-08-05: three coordinator sessions in four
+              #     minutes, saved from two concurrent rides only by the launcher's WIP pre-flight)
+              #   graduated + NOT perStack           -> NEITHER dispatches, silently
+              # Both collapse to one equality. The `graduated` description below has said this in
+              # prose since FU-080; prose is what got ignored, so it is a rule now — the
+              # iac-lane.md doctrine: replace the owner with a rule, never just remove the owner.
+              # Deliberately permits the bring-up state (perStack rendered, coordinator off,
+              # global belt driving) — that is graduated == (true && false) == false.
+              x-kubernetes-validations:
+                - rule: >-
+                    ((has(self.loop) && has(self.loop.graduated)) ? self.loop.graduated : false)
+                    ==
+                    (((has(self.loop) && has(self.loop.perStack)) ? self.loop.perStack : false)
+                     && ((has(self.coordinator) && has(self.coordinator.enabled)) ? self.coordinator.enabled : false))
+                  message: >-
+                    loop.graduated must equal (loop.perStack && coordinator.enabled) — FU-080
+                    single-owner rule. graduated=false with both others true makes the global
+                    belt AND the per-stack loop dispatch the same issue (double-run);
+                    graduated=true without them leaves nothing scanning the stack at all.
+                    Flip coordinator.enabled and loop.graduated together.
               properties:
                 mainRepo:
                   type: string
