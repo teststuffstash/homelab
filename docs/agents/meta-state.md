@@ -19,6 +19,16 @@ meant to avoid.)
   Arming is keyed on the `goal/` PREFIX in `agent-session.sh` + `review-reflex.sh` C9. ⚠ NEVER widen
   that to "any non-default base": the prefix is the only thing carrying the ruleset, and arming into
   an unprotected base merges ON OPEN.
+- **⏳ BOTH CHILDREN OF #17 ARE NOW DONE — expect `goal-review` at the next tick.** #23's PR#26 merged
+  into `goal/17-p0-mvp` 17:49:40 (reviewer-approved, ride-armed); I hand-closed #23 at 17:51:09 per
+  FU-143. That closure post-dates the newest bot comment on #17 (16:32:40), so the predicate fires:
+  the goal gets re-judged against its acceptance with the bake AND the page in hand. **If it rules
+  the goal met**, the remaining step is PR#25 (`goal/17-p0-mvp` → master) which is a DELIBERATE
+  DRAFT — un-drafting it is an operator act, and it is the only thing holding the goal branch back.
+- **⚠ `gh pr view` has NO `merged` field** (that is the REST API); use `state == "MERGED"` or
+  `mergedAt`. A watch script of mine used `--json state,merged,...` and would have failed on every
+  single poll — caught only because I ran the same query by hand first. Probes in script files,
+  executed once against the real thing before arming.
 - **⚠ FU-143 is the live gap: a child CANNOT close itself** (GitHub honours closing keywords only on
   a merge into the DEFAULT branch). Until it lands, **meta closes a merged child by hand**
   (`agent/done` + close) or C4/C5 re-dispatches onto merged work, `goal-review` never fires, and
