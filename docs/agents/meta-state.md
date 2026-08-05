@@ -110,6 +110,36 @@ meant to avoid.)
   applied). **Only homelab#97 stays open, `agent/blocked` on FU-142** — homelab is a dispatch
   target with no `.agents/fix.yaml`, so the launcher refuses before a pod exists. That recipe is
   the next structural win: it converts platform issues from meta hand-work into loop work.
+- **DOCTRINE 2026-08-05 — gate the MERGE, not the launch** (operator). An author==human check
+  partway through the process is near-worthless: the App holds `issues:write` anyway, and a rule
+  living in a repo the loop can PR against is one the loop can propose changing. CODEOWNERS at
+  merge is the boundary — GitHub decides, and it matches the risk model (bad WORK is fine, merges
+  are what matter). Breaker #1 and `selfQueue` are blast-radius controls, NOT security. The
+  Bot-queued-goal check in `coordinator-scan.sh` stays as defence-in-depth with a comment saying
+  so; retire it when it costs more than it buys. **Target: `alert → issue → coordinate → fix →
+  review → merge` fully automatic, gated by WHAT THE CHANGE TOUCHES.** Remaining work is on the
+  merge side (tier 1 → unowned once the IAC-G04 sentinel covers homelab), NOT more launch checks.
+  Written up: `docs/agents/issue-authoring.md` §Gate the merge, not the launch.
+- **The chart-deploy lane flows again** (`e508ac8`): homelab#104/#105 sat BLOCKED on a code owner
+  for a one-line `targetRevision:` bump because the CODEOWNERS flip carved out `agents/images.env`
+  but not `argocd/platform/openrouter-operator.yaml` — two halves of the SAME deploy lane. Owner
+  replaced by a rule (`pin-only-lint` now guards it, accepts only a CalVer pin, **refuses
+  `prune: false`**). #105 then merged itself. Scope is exact: `deploy_repos` shows the deploy App
+  can touch only those two homelab paths, so `argocd/platform/` stays owned otherwise.
+- **⚠ agent-runtime#33 — a resumed round that strikes reports "no resumable branch".** The check is
+  round-scoped; the coordinator's question is issue-scoped. circles#22 r2 said it while
+  `agent/20260805-130300` held **1051 lines / 6 files** of the P0 bake. Nothing was lost (the
+  coordinator reasoned it out and resumed), but a less careful one would have restarted from base.
+  Also **#31 CORRECTED + narrowed**: I claimed pre-commit deaths "bank nothing" — false, finalize
+  SALVAGES the working tree (`wip(salvage): uncommitted state at terminal`). #31 now covers only
+  the case finalize cannot reach: a hard pod kill / eviction / OOM.
+- **⚠ Four `goose -32602` truncations today** (mimo ×2, deepseek-flash ×2; openrouter-operator
+  #14/#15, circles#22 ×2). I called it provider-side; the circles coordinator read the log and
+  found the model confusing `/work/repo` with `/workspace/repo` — evidence is suggestive, not
+  conclusive. VERIFIED the platform is NOT priming it: nothing in `agent-session.sh`, the circles
+  recipes or CLAUDE.md mentions `/workspace`. Treat the cause as OPEN, not settled.
+- **NOT YET LOOKED AT (operator asked):** why mechanical dep bumps in `-iac` repos need a review —
+  the iac-lane question, still untouched.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
