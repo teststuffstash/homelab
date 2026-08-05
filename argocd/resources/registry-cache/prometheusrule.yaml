@@ -23,3 +23,45 @@ spec:
           annotations:
             summary: "Registry mirror PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
             description: "{{ $labels.persistentvolumeclaim }} has under 15% free. At 100% the mirror truncates in-flight pull-through writes and nodes see digest mismatches/500s instead of a loud failure. Check what's big: legit blobs (capacity/TTL decision — argocd/resources/registry-cache/) vs _uploads debris (should self-reap within ~1h via uploadpurging; if it isn't, that mechanism is broken)."
+        # Weekly GC: the gc-mirrors CronJob (Sunday 04:00 UTC) deletes the mirror pods
+        # so the garbage-collect initContainer runs with no writer (FU-136 / #93).
+        # This alert fires when it has not completed successfully in >8 days
+        # (one weekly cycle + 1 day slack). Two arms:
+        #   1. The metric exists but is stale (last success > 8 days ago).
+        #   2. The metric is absent — the job has never succeeded — but the CronJob
+        #      was created long enough ago that it should have run at least once.
+        #      (kube_cronjob_status_last_successful_time is only emitted AFTER the
+        #      first successful run; absent() + kube_cronjob_created fills that gap.)
+        # Note: absent() preserves its input selector's labels, so $labels.namespace
+        # and $labels.cronjob are safe to reference — but they are fixed, so we
+        # hardcode them for clarity.
+        - alert: RegistryGCMirrorsStale
+          expr: >
+            (
+              kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}
+                < (time() - 8 * 24 * 3600)
+            )
+            or
+            (
+              absent(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"})
+              and on()
+                (kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}
+                   < (time() - 8 * 24 * 3600))
+            )
+          for: 1h
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: "gc-mirrors CronJob in registry-cache has not completed in >8 days"
+            description: "The weekly mirror-GC CronJob (gc-mirrors, namespace registry-cache) has not reported a successful run in over 8 days. If this persists, mirror PVCs fill until pulls silently truncate. Check: (1) CronJob exists and is not suspended — kubectl -n registry-cache get cronjob gc-mirrors; (2) recent Jobs — kubectl -n registry-cache get jobs -l cronjob=gc-mirrors; (3) if RBAC or scheduling broke, the pods will show Backoff or RBAC errors in events."
+        - alert: RegistryGCMirrorsSuspended
+          expr: >
+            kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors"} == 1
+          for: 15m
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: "gc-mirrors CronJob in registry-cache is suspended"
+            description: "The gc-mirrors CronJob (namespace registry-cache) is currently suspended. Mirror PVC garbage collection will not run. Check who suspended it and why: kubectl -n registry-cache get cronjob gc-mirrors -o yaml | grep suspend."
