@@ -120,6 +120,23 @@ ISSUE=\$(gh pr view ${PR} --json closingIssuesReferences -q '.closingIssuesRefer
 if [ -n "\$ISSUE" ] && [ "\$ISSUE" != "null" ]; then TASK_KEY="issue-\$ISSUE"; else TASK_KEY="pr-${PR}"; ISSUE=""; fi
 export TASK_KEY ISSUE
 echo "→ transcript task key: \$TASK_KEY (fixes issue \${ISSUE:-none})"
+# ── SPROUT DEPTH (FU-090 rung 2, 2026-08-05) ───────────────────────────────────────────────────
+# How deep in the follow-up tree is the issue this PR closes? The harvest already flags depth ≥2
+# AFTER the fact — which is too late by construction: by then the PR has merged and "fix it in
+# this PR" is no longer an option. Rung 2's rule ("deep → fix-in-PR and collapse the tail") is a
+# REVIEWER decision, so the depth has to arrive here, before the Follow-ups: bullets are written.
+# Walks the native parent chain; 0 = not a sprout. Failure leaves it 0 (advisory, never blocking).
+SPROUT_DEPTH=0
+if [ -n "\$ISSUE" ]; then
+  _cur="\$ISSUE"
+  for _hop in 1 2 3 4 5 6; do
+    _par=\$(gh api "repos/${REPO_SLUG}/issues/\$_cur/parent" --jq '.number' 2>/dev/null || true)
+    case "\$_par" in ''|*[!0-9]*) break;; esac
+    SPROUT_DEPTH=\$_hop; _cur="\$_par"
+  done
+fi
+export SPROUT_DEPTH
+echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
 # FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
 # lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review
 # time (no image rebuild, always current-pinned) and appended to the system prompt AFTER the
@@ -165,6 +182,15 @@ Otherwise (a normal code PR): run /code-review to find correctness bugs and post
   A greenfield / pre-prod repo (the rubric says which) biases HARD toward approve-with-follow-ups: with no consumers there is no "good enough" judgment to fail — forward progress merges NOW, and each residual finding becomes its own issue with its own round budget (which is cheaper and converges faster than piling rounds onto one PR). This is what a human author would negotiate: "better than master, merge it, backlog the nits." Do NOT re-litigate follow-ups already filed from earlier reviews of this same PR.
 
 STEP FINAL — submit exactly ONE native GitHub review as your verdict: run gh pr review ${PR} --approve --body with the Follow-ups: section (when non-empty) if the diff moves master forward, otherwise gh pr review ${PR} --request-changes --body with a one-paragraph summary of the BLOCKING findings only (for a dependency bump, summarise the required adaptations). Do NOT merge and do NOT push.'
+# FU-090 rung 2: the depth-conditional half of the harvest bar. The bar above filters follow-ups by
+# QUALITY; this filters by POSITION. A finding on a sprout-of-a-sprout is not less true, it is less
+# worth another issue — the tail has to collapse somewhere, and the only actor who can collapse it
+# is the one deciding whether to defer or block. Appended as a MECHANISM so no recipe has to
+# remember it, and only when it applies: a depth-0 review is untouched.
+if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
+  PROMPT="\$PROMPT
+DEPTH RULE (this PR closes issue #\${ISSUE}, which sits at follow-up depth \${SPROUT_DEPTH} — a follow-up of a follow-up). You are near the end of a sprout chain, where each extra deferral costs another issue, another dispatch and another review for steadily smaller returns. So DO NOT emit a Follow-ups: section at all in this review. Each finding gets exactly one of two fates: if it genuinely must not ship, make it a BLOCKING finding and request changes so it is fixed in THIS PR; otherwise drop it, or leave it as a plain review comment that no one will file. Collapse the tail — that judgement is yours to make here and nobody else gets the chance."
+fi
 PREP
 )
 
