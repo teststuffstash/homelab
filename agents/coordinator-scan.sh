@@ -417,6 +417,25 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # and produced "analysed everything, built nothing" twice with no cap near binding.
       # Design + the forest/trees rule: docs/agents/issue-authoring.md §Leg (c).
       if [ "$qclass" = "goal" ]; then
+        # BREAKER #1, moved UP not away (issue-authoring.md §Leg (c)): a goal's children are queued
+        # by the coordinator, and the thing that authorises them is that a HUMAN queued the GOAL.
+        # That was prose until 2026-08-05 — nothing checked it, so a bot-queued goal would have
+        # self-authorised a whole subtree. Now checked, fail-CLOSED.
+        # What the actor test can and cannot see: the loop's own writes are `homelab-agents-1234[bot]`
+        # (type Bot) while both the operator AND the jail session are `RasmusSoot` (type User) — the
+        # jail holds the operator's PAT. So this does NOT distinguish operator from jail, and is not
+        # meant to: the jail is operator-delegated. It distinguishes THE LOOP from a person, which
+        # is the actual risk — the loop authorising its own goal.
+        qactor="$(gh api "repos/${slug}/issues/${qnum}/events" --paginate \
+          --jq '[.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""' 2>/dev/null || echo "")"
+        if [ "$qactor" = "Bot" ]; then
+          orphans="${orphans}[$repo] ⛔ goal #${qnum} was queued by a BOT — refusing to decompose (breaker #1: a human must authorise a goal; the loop may not authorise its own)\n"
+          continue
+        fi
+        if [ -z "$qactor" ]; then
+          orphans="${orphans}[$repo] ⛔ goal #${qnum}: could not read who applied agent/queued — refusing to decompose (fail-closed; an unreadable authorisation is not an authorisation)\n"
+          continue
+        fi
         if [ "$qpin" = "P" ]; then
           punits="${punits}goal-decompose|${repo}|issue-${qnum}\n"
         else
