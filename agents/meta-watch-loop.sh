@@ -98,7 +98,13 @@ while true; do
         last_armed="$armed"
       fi
     fi
-    if jq -e '.[] | select(.m=="BEHIND" and .rd=="APPROVED")' >/dev/null 2>&1 <<<"$pr"; then
+    # The backstop only owns PRs something is trying to MERGE: an armed one, or a ride head whose
+    # arm is still pending. An APPROVED-but-unarmed research/* PR sitting BEHIND is a human gate
+    # doing its job, not a missed update — circles' four issue-1 arms tripped this every 15 min
+    # on 2026-08-05 until the predicate was scoped (a repeating false alarm IS a broken probe).
+    if jq -e --arg hp "${BASE_HEADS:-^agent/}" \
+         '.[] | select(.m=="BEHIND" and .rd=="APPROVED" and (.am == true or (.h|test($hp))))' \
+         >/dev/null 2>&1 <<<"$pr"; then
       [ "$behind_since" -eq 0 ] && behind_since=$now
       if [ $((now - behind_since)) -gt 900 ]; then
         echo "FU-124: an APPROVED PR has sat BEHIND >15min — the updater backstop likely missed; dispatch it by hand"
