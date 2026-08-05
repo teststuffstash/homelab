@@ -319,9 +319,45 @@ Why a body line and not a label: the value is DATA (which branch), and labels ca
 the same argument as `Touches:`. First use: circles#17/#18/#19 against the woven spec tree in
 circles#16.
 
-The updater needed no change: `update-pr-branch.yml` passes `base: master` and
-`require_auto_merge_enabled: true`, so a stacked PR is excluded twice over — it is neither based on
-master nor armed. Verified before writing this, rather than assumed.
+### Who updates what when a branch moves — the two-hop cascade
+
+⚠ The original note here said *"the updater needed no change — a stacked PR is excluded twice over,
+neither based on master nor armed."* **Half of that is now false**: since 2026-08-05 a `goal/**`
+child IS armed. Corrected:
+
+```
+master
+ └── goal/<issue>-<slug>        PR: goal → master      draft, NEVER armed
+       ├── fix/<slug>           PR: fix  → goal        armed
+       └── fix/<slug>           PR: fix  → goal        armed
+```
+
+**A commit on master does not reach the children.** It makes only the *goal → master* PR BEHIND;
+the children's base has not moved. The children go BEHIND only when the GOAL BRANCH itself moves —
+which happens when a sibling merges into it, or when someone updates it from master.
+
+| hop | which PR | scheduled `update-pr-branch.yml` | the scan's FU-124 nudge |
+|---|---|---|---|
+| master → goal | `goal → master` | ✗ requires `require_auto_merge_enabled`; this PR is never armed | ✗ same armed requirement |
+| goal → fix | `fix → goal` | ✗ hardcoded `base: master` (the action takes a literal branch, not a pattern) | ✅ **no base filter — covers any armed BEHIND PR** |
+
+So **the top hop is manual and the bottom hop is automatic.** Updating the goal branch from master
+is a human act (`gh api -X PUT repos/…/pulls/<goal-pr>/update-branch`), which is defensible — master
+churn should not continuously rebase an integration branch under review — but it is a real step, and
+forgetting it is how a base-side fix fails to reach the children. It bit exactly once: the CI-trigger
+fix landed on master and the children could not see it until the goal branch was refreshed, because
+`pull_request` evaluates the workflow from the merge of head into BASE.
+
+⚠ The bottom hop only works because the FU-124 nudge was REPAIRED on 2026-08-05: it selected on
+`mergeStateStatus`, which was never in its `--json` field list, so jq read null and it had never
+fired since it was written. Do not remove it assuming the scheduled workflow covers this — the
+scheduled one cannot, and its cadence differs anyway (`*/15` for master vs `*/30` for the scan).
+
+**The coupling to remember:** a required check on a branch pattern is only real if the workflow
+producing it TRIGGERS on that pattern. Requiring `ci` on `goal/**` while the workflow said
+`branches: [master]` left an APPROVED, armed PR permanently BLOCKED on a check that could never
+report. The ruleset and the trigger have to move together — and the trigger has to reach the goal
+branch, not just master.
 
 ## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
 
