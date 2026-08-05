@@ -84,10 +84,12 @@ Existing containment carries over unchanged (lane WIP, capacity gates, pod-name 
 ### Keeping the goal in view — the forest/trees rule (operator, 2026-08-05)
 
 The failure this must not have: *decompose once, then wake only for sub-issues, and the goal is
-forgotten.* Today that is guaranteed rather than likely — the harvest **writes** sub-issue links
-(`POST …/sub_issues`) and **neither `coordinator-scan.sh` nor `agent-session.sh` reads them**. The
-lineage is write-only: it renders in the GitHub UI and no machinery consumes it. Three legs, at
-three altitudes:
+forgotten.* Until 2026-08-05 that was **guaranteed** rather than likely: the harvest had been
+**writing** sub-issue links (`POST …/sub_issues`) since 2026-08-02 and **neither
+`coordinator-scan.sh` nor `agent-session.sh` read them back** — the lineage was write-only,
+rendering in the GitHub UI and consumed by nothing. Rung 1 shipped the write, not the read. All
+three legs below are now built; keep them that way, because each one silently degrades to the old
+behaviour if its read is removed:
 
 1. **The coordinator holds the goal, on every child unit.** The scan carries the parent id in the
    unit (a 5th field — FU-114 L3 widened it to 4 for the task class, same move). Any child's unit
