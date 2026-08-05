@@ -16,13 +16,18 @@ meant to avoid.)
   is `BASE_EXPECT` in `agents/meta-watch-loop.sh` (scoped to `^agent/` heads so the human-gated
   `research/*` PRs stay quiet). The four issue-1 arms (#2–#5) and the six comparison PRs (#7–#13)
   are the operator's to read/merge, not the loop's.
-  **#17 is labelled + queued and the scan now calls it ACTIONABLE; the ONLY thing holding it is
-  `coordinator.enabled: false` on the claim — deliberate** (the seeding rule: merge-path proof +
-  first supervised rides before any loop dispatch). Order to start: (1) trivial PR E2E through
-  CI→review→auto-merge, (2) flip `enabled: true` in `circles-iac/circles/agent/agentstack.yaml`,
-  (3) label #18/#19 (they carry `Depends-on: #17`). ⚠ TENSION to resolve: the merge-path proof
-  merges to master, which the "nothing merges to master" rule forbids — a throwaway README PR
-  satisfies both, but it is the operator's call.
+  **The loop is LIVE on circles since 2026-08-05** (`coordinator.enabled` + `loop.graduated` both
+  true, `circles-iac af905ec`+`84e715a`). Rides verify correct: pod env carries
+  `BASE_REF=research/issue-1-weave`, so the launcher honours the declared `Base:`. ⚠ the merge
+  path stays UNEXERCISED until the weave lands on master (the seeding rule's proof was skipped
+  knowingly — these rides are human-gated by construction, so nothing auto-merges).
+  **#17 r1 FAILED with no deliverable** (`tencent/hy3`, $0.06, `blocked-deliberate`): burned its
+  whole turn budget reading the 15-page/91-requirement contract, force-finalized before writing
+  code, banked nothing. r2 running on `deepseek/deepseek-v4-flash`, again with NO `WORK_BRANCH`
+  — it re-reads the whole contract and pays the tax again (that is agent-runtime#31).
+  **OPERATOR CALL PENDING:** split #17 into bake/page/CI issues, or `modelDeny` the cheap tier on
+  circles (deny DOES bind here — `routerMode: authoritative`, unlike the platform stack), or keep
+  retrying at ~$0.06. #18/#19 are unlabelled and would hit the same wall.
   **Two silent walls behind that switch were removed 2026-08-05 (`84cc5f0`)** — do not
   re-introduce either: TRACKS rule 1 counted ALL open PRs though its rationale is updater churn
   and the updater only touches ARMED ones, so circles' 12 human-gated PRs held #17 out of dispatch
