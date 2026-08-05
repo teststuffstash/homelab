@@ -59,9 +59,19 @@ meant to avoid.)
   Monday 05:00 retro fire (= FU-058 run 3) + the first 05:47 janitor ticks. Three Phase-3 legs
   wait on a first real event: the `subject:` correlation key, `Touches:`, and the homelab revert
   path. ⚠ Garage still has no offsite backup (FU-137) and now carries tofu state too.
-- **Open, un-armed, not mine:** agent-runtime#29 (watchdog), the three FU-130 PRs (circles#15,
-  sleep-tracking#115, agent-runtime#30), and openrouter-operator's guardrail policy call
-  (`stack-lint` KEY-02 fails until decided).
+- **Cleared 2026-08-05:** agent-runtime#29 + #30 and all three FU-130 PRs (circles#15,
+  sleep-tracking#115) are MERGED; openrouter-operator's guardrail came off (f45801f). The old
+  "open, un-armed" bullet was stale — verify before chasing.
+- **Two agent-runtime findings from today's failed rides, operator-lane (no fixer there):**
+  **#31 (new)** — a ride that dies before its FIRST commit banks nothing, because the recipes'
+  incremental-push rule fires *after* that commit; hit twice today in two repos on two models
+  (circles#17 turn-budget stop, openrouter-operator#14 goose truncation — the latter had already
+  made the correct edit to `chart/templates/rbac.yaml` when it was cut off). Fix: entrypoint
+  pushes the work branch at session start. **#13 (evidence added)** — the repetition watchdog
+  from #29 IS in the deployed image and still missed a textbook loop (8 completions pinned at
+  the 16384 max_tokens floor, 38 min, zero output, stopped by hand); its detector keys on a
+  repeated LINE in run.log and this loop was silent. Suggested signal: N consecutive near-max
+  completions with no tool progress — proxy-side, so it survives a pod kill.
 
 ## Re-arm on a fresh session (watches die with `/clear`)
 
