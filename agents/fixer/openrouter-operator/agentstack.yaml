@@ -24,8 +24,21 @@ spec:
   # evidence (sleep #105) + top devops/frontend/repo-scan market share; qwen3-coder EVICTED
   # (weak on every AA axis); claude/haiku = cross-rail availability tail (agentic idx 16.4 —
   # never a quality pick, survives OpenRouter-wide outage on the paid subscription).
-  workerModel: deepseek/deepseek-v4-flash-0731
-  workerModelFallbacks: [xiaomi/mimo-v2.5, tencent/hy3, claude/haiku]
+  # HEAD SWAPPED 2026-08-05 (operator) — mimo leads, 0731 denied. Not a revision of the
+  # benchmark reasoning above: 0731's SCORES are not in dispute, its wall-clock behaviour here is.
+  # openrouter-operator#14 is a two-line YAML change; the 0731 ride produced eight consecutive
+  # ~max_tokens completions (~1.25 MB each, latency climbing 162s → 299s) in 30 minutes with no
+  # branch, no commit and no edit — the repetition-loop shape the circles fan-out audit already
+  # measured (53% of wall-clock lost to loops, 2026-08-03). Cost is trivial ($0.003/call); the
+  # ride is what is lost. mimo carries our own 7×-wall-clock evidence (sleep #105).
+  # ⚠ modelDeny alone would NOT have changed dispatch: this stack has no routerMode, so
+  # AGENT_ROUTER defaults to SHADOW and the router's decision is advisory — the static chain
+  # below is what dispatches. The deny is here so the exclusion still holds after the P4
+  # authoritative flip (FU-095); the head swap is what takes effect today.
+  # REVISIT when a 0731 ride completes cleanly elsewhere, or the router gains a latency lever.
+  modelDeny: [deepseek/deepseek-v4-flash-0731]
+  workerModel: xiaomi/mimo-v2.5
+  workerModelFallbacks: [tencent/hy3, claude/haiku]
   repos:
     # Platform-image repos, context-only (FU-052 "still to onboard", visibility half done
     # 2026-07-16): the review-reflex derives its scan set from the stack claims, so agent PRs
