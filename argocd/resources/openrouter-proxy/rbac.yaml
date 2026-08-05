@@ -70,6 +70,12 @@ rules:
   - apiGroups: [""]
     resources: [secrets]
     verbs: [get]
+  # FU-138: the CR that owns a session Secret is the authoritative guardrail (_cr_guardrail).
+  # Mirrors the per-stack grant the AgentStack Composition renders; without it every resolve in
+  # THIS namespace logs a 403 fallback line for the router-account ref (openrouterkey.yaml).
+  - apiGroups: [openrouter.teststuff.net]
+    resources: [openrouterkeys]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

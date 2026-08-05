@@ -813,10 +813,12 @@ spec:
               project: {{ $r.name }}
               budgetUSD: {{ default 5.0 (get $fx "budgetUSD") }}
               resetInterval: {{ default "weekly" (get $fx "resetInterval") }}
-              {{- $guardrail := default "only-free" (get $fx "guardrail") }}
-              {{- if ne $guardrail "none" }}
-              guardrail: {{ $guardrail }}
-              {{- end }}
+              # FU-138: render the guardrail ALWAYS, `none` included. Omitting it made the opened
+              # state inexpressible on the CR, so the only record of it was a hand-patched Secret
+              # field — and the proxy now reads the CR as authoritative (openrouter-proxy.py
+              # _cr_guardrail). `none` is inert on the OpenRouter side either way: the operator
+              # copies the string into the Secret and the proxy rejects only on `only-free`.
+              guardrail: {{ default "only-free" (get $fx "guardrail") }}
             ---
             # FU-020/ADR-081 worker egress. Selector hits ONLY agent pods; the app's own workloads are
             # untouched. enforce=false → monitor (allowlist evaluated + DNS visibility, nothing blocked).
@@ -951,6 +953,13 @@ spec:
               - apiGroups: [""]
                 resources: [secrets]
                 verbs: [get]
+              # FU-138: the proxy reads the OpenRouterKey CR that OWNS a session Secret, because
+              # the CR (rendered from this claim) is the authoritative guardrail — the Secret's
+              # GUARDRAIL is only written when the operator mints, so it goes stale silently.
+              # list-only, namespaced: a CR spec carries budget/guardrail, never the key itself.
+              - apiGroups: [openrouter.teststuff.net]
+                resources: [openrouterkeys]
+                verbs: [list]
             ---
             apiVersion: rbac.authorization.k8s.io/v1
             kind: RoleBinding

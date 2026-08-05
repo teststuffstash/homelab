@@ -216,6 +216,37 @@ _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch,
 _refs_lock = threading.Lock()
 
 
+def _cr_guardrail(ns: str, secret_name: str) -> str | None:
+    """FU-138: the AUTHORITATIVE guardrail is the OpenRouterKey CR, not the Secret.
+
+    The Secret's GUARDRAIL is written by the operator only when it MINTS (create/rotate), so a
+    guardrail change on an already-minted standing key never reaches it — enforcement went dead
+    silently, and every claim change needed a hand patch (circles-iac#1, 2026-08-04). The CR is
+    rendered from the AgentStack claim in git, so reading it here makes claim → composition → CR →
+    proxy the one path. Returns the CR's guardrail ("" = open), or None when no CR owns this Secret
+    (then the caller keeps the Secret's field — pre-CR keys still enforce)."""
+    try:
+        token = open(f"{_SA_DIR}/token").read().strip()
+        ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
+        req = urllib.request.Request(
+            "https://kubernetes.default.svc/apis/openrouter.teststuff.net/v1alpha1"
+            f"/namespaces/{ns}/openrouterkeys",
+            headers={"Authorization": "Bearer " + token},
+        )
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            items = (json.load(resp).get("items") or [])
+    except Exception as e:  # noqa: BLE001 — unreadable CRs must not disarm the Secret's guardrail
+        log(f"ref: openrouterkeys list failed in {ns}: {e} — falling back to the Secret's GUARDRAIL")
+        return None
+    for cr in items:
+        spec = cr.get("spec") or {}
+        # Mirror the CRD default: secretName, else <project>-openrouter (models.py target_secret_name).
+        target = spec.get("secretName") or f"{spec.get('project', '')}-openrouter"
+        if target == secret_name:
+            return spec.get("guardrail") or ""
+    return None
+
+
 def _resolve_ref(ref: str) -> dict | None:
     """`ns/name` -> {"key": OPENROUTER_API_KEY, "guardrail": ...}, or None
     (missing/unlabeled/unreadable). guardrail feeds the FU-024 only-free enforcement."""
@@ -241,9 +272,14 @@ def _resolve_ref(ref: str) -> dict | None:
             # claude-tier session secrets (FU-066 — the Anthropic subscription oauth token).
             b64 = data.get("OPENROUTER_API_KEY") or data.get("AUTH_TOKEN") or ""
             if b64:
+                secret_guardrail = base64.b64decode(data.get("GUARDRAIL", "")).decode()
+                cr_guardrail = _cr_guardrail(ns, name)  # FU-138: CR wins when one owns the Secret
+                if cr_guardrail is not None and cr_guardrail != secret_guardrail:
+                    log(f"ref: {ref} guardrail from CR: '{cr_guardrail or 'none'}' "
+                        f"(Secret says '{secret_guardrail or 'none'}' — stale, FU-138)")
                 resolved = {
                     "key": base64.b64decode(b64).decode(),
-                    "guardrail": base64.b64decode(data.get("GUARDRAIL", "")).decode(),
+                    "guardrail": secret_guardrail if cr_guardrail is None else cr_guardrail,
                     # ADR-096 P2: which rail this ref belongs to — OpenRouter keys enroll for
                     # the headroom poll; anthropic oauth refs must never hit /api/v1/auth/key.
                     "kind": "openrouter" if data.get("OPENROUTER_API_KEY") else "anthropic",
