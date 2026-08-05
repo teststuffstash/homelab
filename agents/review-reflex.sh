@@ -191,11 +191,13 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
                  and ((.headRefName // "") | startswith("research/") | not)
-                 # STACKED work (2026-08-05): a PR whose base is not the repo default was
-                 # dispatched from an issue carrying `Base: <branch>` and is un-armed BY DESIGN —
-                 # its base is itself unmerged and under human evaluation. Same rule as research/*,
-                 # keyed on the base rather than the branch prefix (these push fix/* like any fixer).
-                 and ((.baseRefName // $default) == $default))
+                 # STACKED work (2026-08-05, revised same day): a PR into a `goal/**` INTEGRATION
+                 # branch IS armable — that branch carries the same ruleset as master, so the arm
+                 # waits for CI + an approving review (operator: feature→goal automates,
+                 # goal→master stays human). Any OTHER non-default base still refuses: auto-merge
+                 # waits on branch protection, so arming into an unprotected base merges on open.
+                 and (((.baseRefName // $default) == $default)
+                      or ((.baseRefName // "") | startswith("goal/"))))
         | .number')
 EOF_C9
 
