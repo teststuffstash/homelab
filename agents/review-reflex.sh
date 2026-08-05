@@ -188,6 +188,12 @@ $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAU
     .[] | select(.autoMergeRequest == null and .isDraft == false
                  and .author.login == $author
                  and all(.labels[].name; . != "agent/error")
+                 # `major/awaiting-human` = a PR a human has deliberately parked (a major bump
+                 # awaiting a person, or a FROZEN comparison arm — circles#21). Before goal/**
+                 # became armable its non-default base was what kept it un-armed; that accident is
+                 # gone, so the intent has to be stated. Same label the coordinator's
+                 # changes-requested clause already honours.
+                 and all(.labels[].name; . != "major/awaiting-human")
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
                  and ((.headRefName // "") | startswith("research/") | not)
