@@ -39,6 +39,16 @@ meant to avoid.)
   self-fix #97 → PR#106 merged. Its recipe demands the ride NAME which lints ran and SAY when
   `manifest-lint` SKIPPED its kinds — that clause is what made the code-owner review possible.
   ⚠ homelab PRs target master so the recipe says `Fixes #N`; a `goal/**` child needs the opposite.
+- **⚖ OPERATOR CALL PENDING: circles #18 and #19 are still `task/build`.** All three of #17/#18/#19
+  were authored by the operator in one 66-second batch (08:08:20/53, 08:09:26), all titled `Goal:`,
+  all with a `## Goal` section. #17 was promoted to `task/goal` when the lane was built mid-session;
+  its two siblings were never swept. Both carry `Depends-on: #17` + `Base: goal/17-p0-mvp`, so they
+  become workable the moment #17 closes — and as `task/build` they would go straight to a BUILDER,
+  which is precisely the failure that motivated leg (c). **Not relabelled unilaterally**: whether
+  each is one build seam or a goal to decompose is the codeowner's call (#19 reads like a single
+  seam — "one command, like every other gate seam here"; #18 reads multi-deliverable). **No silent
+  dispatch risk** — neither carries `agent-fix`/`agent/queued`, so queueing is a deliberate act.
+  Decide the class at that moment.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow violations
   (→ G01 flip, FU-106), router shadow decisions (→ P4, FU-095), native blockedBy edges in scan logs
   (→ FU-111 retirement), Monday 05:00 retro (= FU-058 run 3). ⚠ Garage still has no offsite backup
