@@ -85,6 +85,14 @@ cosmetic: `require_approval` is repo-WIDE while only code-owner review is path-s
 joined a claim would have stalled every armed PR on an approval nothing could give (an
 App/Integration bypass cannot waive required-approval — only an OrganizationAdmin can, ADR-084).
 
+**The lane is gated but not yet dispatchable — Tracked by: FU-142.** homelab ships no
+`.agents/fix.yaml`, and `--recipe` is launcher-owned (ADR-094), so the launcher refuses before a pod
+exists: homelab#97 is `agent/blocked` on exactly this and every later platform issue will be. The
+recipe is the fixer's own governor, so it sits in the deny row's spirit — operator-authored, never
+agent-authored. Its open design question is the GATE: this repo has no `devbox run ci`, and
+`manifest-lint` shells to kubeconform, whose default schema location `raw.githubusercontent.com` is
+not in the fixer's baseline egress under `enforce: true`.
+
 **Automerge safety is a function of check coverage, not of the path.** `ci` was
 `argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a
 hand-written Deployment with a typo passed. `kubeconform -strict` over `argocd/resources/*` and
