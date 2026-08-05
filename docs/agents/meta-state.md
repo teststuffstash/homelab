@@ -54,19 +54,22 @@ meant to avoid.)
   operator triage. ⚠ LESSON: a chart-pin PR can be opened from a sha that PREDATES the fix it is
   supposed to carry — #104 was created at 10:01 from the GC-timer commit and only re-pushed to
   the RBAC chart at 11:14. Read the diff, never the title.
-- **LEG (c) — BUILT 2026-08-05 except the budget arithmetic** (operator un-deferred + ruled:
-  both discriminators, non-dispatchable parent initially). Shipped: `goal-decompose` clause in
-  `coordinator-scan.sh` (branches BEFORE recipe selection — a `goal` class would FATAL the
-  launcher on a missing `.agents/goal.yaml`, which deliberately does not exist); the play in
-  `agents/coordinator/README.md`; `task/goal` in the claim taxonomy; the launcher READS native
-  parentage and injects a BOUNDED Goal+Acceptance card (1845c of a 4799c body on circles#17 —
-  the whole parent is what killed r1); the scan carries the parent id as a 5th unit field, free
-  (`parent` rides the existing `gh issue list` call), and the item brief tells the session to
-  judge a child against the GOAL's acceptance. **REMAINING:** `Budget:` body line +
-  Σ(child estimates) ≤ parent in the launcher pre-flight; a `goal-review` clause firing when a
-  child closes. ⚠ Nothing wakes a goal on child traffic alone — that backstop is the
-  meta-coordinator's by operator ruling (observe, then design the guard from evidence).
-  Design: `docs/agents/issue-authoring.md` §Leg (c).
+- **LEG (c) — COMPLETE and PROVEN END-TO-END 2026-08-05** on circles#17, the first real goal.
+  Chain observed live: `goal-decompose` dispatched (no class, no worker pod — the coordinator IS
+  the decomposition) → children **#22** (bake) and **#23** (page) authored with narrowed
+  `Touches:`, inherited `Base:`, native sub-issue links and a `Depends-on:` so the page waits for
+  the artifact → parent parked `agent/blocked` (non-dispatchable, operator ruling) → #22 dispatched
+  carrying `child of goal #17`, with the bounded Goal+Acceptance card decoded out of its own ride
+  pod → budget Σ $0.50 ≤ $5. **Still unfired: `goal-review`** — it wakes when #22 CLOSES and asks
+  whether #17's *acceptance* is met, not merely whether its children are done. Watch that one.
+  ⚠ **The budget gate walks DESCENDANTS, not direct children** — a goal overruns by sprouting
+  DEEP (the harvest links each follow-up under the issue that produced it). Measured when the bug
+  was found: openrouter-operator#10 had direct children [14,15] but descendants [14,15,17,18,21] —
+  a gate counting 2 of 5 is not a cap. Do not "simplify" it back to a direct match.
+  ⚠ **`Budget:` is read as USD** whatever symbol is written (`€5` funds $5) — the estimator prices
+  in USD because OpenRouter does. A prose amount parses to empty and DISABLES the gate, loudly.
+  ⚠ #22 and #23 share `tests/**` + `scripts/ci.sh`, so the ADR-097 footprint hold SERIALISES them —
+  the fan-out arm is sequential, which matters when comparing its wall-clock to the one-shot.
 - **circles#21 is a FROZEN BENCHMARK** (`major/awaiting-human`, which excludes it from the
   `changes-requested` clause; the reviewer does NOT skip that label, so the one review still
   happens). It is the ONE-SHOT arm: what `deepseek/deepseek-v4-flash` produced against the whole
@@ -82,6 +85,20 @@ meant to avoid.)
   the body (no code touched) and #17 moved to `agent/review`. Mechanism fix filed as
   agent-runtime#32 (finalize guarantees the link for every recipe). If #17 goes back to
   `agent/in-progress`, C4/C5 can re-fire — check the body link first.
+- **homelab#103 REOPENED — the coordinator Sensor spin RECURS; a restart is palliative.** Second
+  occurrence 12:48 the same day, on the pod created that morning as the replacement. `AgentEventInfraSpinning`
+  (the guard added that morning) caught it in **15 min** vs ~50 by hand, and it was **silent this
+  time** — zero AckSync lines, so anything reading logs would have missed it; only the CPU signal
+  works. Restart → wk-01 71%→22%. ⚠ HYPOTHESIS, 2 for 2, untested: both onsets landed inside a
+  BURST of workflow submissions, not during quiet — so try reproducing with N concurrent doorbell
+  fires before writing any reaper. Argo Events is `v1.9.11`; check upstream first.
+- **circles#21 reviewed once and left frozen** — `CHANGES_REQUESTED` (sonnet), three findings where
+  the diff contradicts a requirement the PR's own body claims as delivered (green label contrast
+  4.09:1 vs the AA 4.5:1 floor; a11y link column not an `<a href>`). The reviewer read the freeze
+  note and said so. The verdict is RECORDED, not acted on — `major/awaiting-human` excludes it from
+  the `changes-requested` clause. ⚠ **Those findings will NOT be harvested**: the harvest fires only
+  on a MERGED PR closing an issue, and #21 will never merge — so they die in the review comment,
+  the exact hole leg (a) exists to close. Capturing them needs a deliberate act.
 - **⚠ GitHub caps label descriptions at 100 chars**, and `IssueLabels` is authoritative over a
   repo's whole label set — so one over-long description freezes the taxonomy for EVERY claim-owned
   repo (11/12 went ReconcileError on my 113-char `task/goal` text, 2026-08-05). Fixed to 85;
