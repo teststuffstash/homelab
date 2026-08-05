@@ -355,6 +355,13 @@ Codifiable scaffolding done. The remainder, in order (then loop the lint):
   E. Main-repo content ($MAIN): if you ran --from <donor>, the surfaces are copied and the
        LLM-ADAPTATION WORKLIST above is the remaining judgment half (homelab session).
        Without --from: copy by hand from the freshest graduated stack.
+
+  E2. WARM THE TOOLCHAIN (FU-096/FU-130) — run the devbox-cache workflow on $MAIN, then make the
+       ghcr package PUBLIC (Packages → devbox-cache → visibility). The launcher mounts it at
+       /stack-cache only if an ANONYMOUS pull works, and until then every ride pays cold nix
+       eval (55s vs 4s seeded). stack-lint CACHE-01 probes exactly what the launcher probes:
+         gh workflow run devbox-cache.yml -R $ORG/$MAIN
+         https://github.com/orgs/$ORG/packages/container/$MAIN%2Fdevbox-cache/settings
   F. Stack jail (operator machine, claude-jail repo): an overlay entry (UPLOAD_PORT/PRIMARY
        [+ private mounts]) in tools/stack-jail.sh — repos/ns derive from stacks.json since
        2026-08-03 — + mint the per-stack PAT into .env.$STACK (template in the script header).

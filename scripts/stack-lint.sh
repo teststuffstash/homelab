@@ -50,6 +50,11 @@ if timeout 10 kubectl get --raw /readyz >/dev/null 2>&1; then KUBE_OK=1; fi
 # ── gh reachability is probed per repo (visibility first) ─────────────────────
 HAVE_GH=0; command -v gh >/dev/null 2>&1 && HAVE_GH=1
 
+# ── ghcr reachability (once) — the CACHE-01 disambiguator. agent-base always exists, so a failure
+# here means "no ghcr from this box", never "the package is missing".
+GHCR_OK=0
+timeout 10 curl -fsS "https://ghcr.io/token?scope=repository:$ORG/agent-base:pull" >/dev/null 2>&1 && GHCR_OK=1
+
 # App-install matrix lookup: prints INSTALLED / MISSING / NO-ROW / NO-SOURCE for <repo> <app-base>.
 # Source is the SERVED live view (github-exporter /apps, FU-098 finale) — docs/github-apps.md is
 # no longer committed (the deep-verify report goes to /tmp). Fetched ONCE via the apiserver
@@ -182,7 +187,35 @@ lint_stack() { # <name>
       if [ "$found" = 1 ]; then say OK REPO-04 "$stack" "$repo has a ci workflow"
       else say FAIL REPO-04 "$stack" "$repo has no .github/workflows/ci.y(a)ml — required check can never report"; fi
 
+      # CACHE-01 — the FU-096 stack devbox-cache must be PUBLICLY pullable, because that is the
+      # condition the launcher actually tests (agent-session.sh: anonymous ghcr token + a manifest
+      # HEAD) before mounting it at /stack-cache. Without it every ride pays cold bring-up — 55s of
+      # nix EVAL vs 4s seeded (FU-015/FU-096 measurements) — and the only signal today is one line
+      # in a pod log. Two failure modes it catches, and they look identical from outside: the
+      # devbox-cache workflow never ran, or the package exists but is still private. FU-130.
       if is_fixer "$repo"; then
+        local sc_tok sc_code
+        sc_tok=$(timeout 10 curl -fsS "https://ghcr.io/token?scope=repository:$ORG/$repo/devbox-cache:pull" 2>/dev/null \
+                 | jq -r '.token // empty' 2>/dev/null)
+        if [ -z "$sc_tok" ]; then
+          # ghcr's token endpoint also fails for a package that does not exist, so a bare failure is
+          # ambiguous. GHCR_OK (probed once against a package that definitely exists) resolves it:
+          # ghcr reachable ⇒ the devbox-cache package was never published; unreachable ⇒ cannot see.
+          if [ "$GHCR_OK" = 1 ]; then
+            say WARN CACHE-01 "$stack" "$repo has no devbox-cache package at ghcr — every ride pays cold nix eval; add .github/workflows/devbox-cache.yml, run it, then make the package public (FU-096/FU-130)"
+          else
+            say PROBE-FAILED CACHE-01 "$stack" "$repo — ghcr unreachable from here; devbox-cache visibility unknown"
+          fi
+        else
+          sc_code=$(timeout 10 curl -o /dev/null -s -w '%{http_code}' -I -H "Authorization: Bearer $sc_tok" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/$ORG/$repo/devbox-cache/manifests/latest" 2>/dev/null)
+          case "$sc_code" in
+            200) say OK CACHE-01 "$stack" "$repo devbox-cache:latest is public at ghcr (rides mount it — warm bring-up)" ;;
+            403|404) say WARN CACHE-01 "$stack" "$repo has no PUBLIC devbox-cache:latest at ghcr (HTTP $sc_code) — every ride pays cold nix eval; run the devbox-cache workflow, then make the ghcr package public (FU-096/FU-130)" ;;
+            *) say PROBE-FAILED CACHE-01 "$stack" "$repo devbox-cache manifest probe returned HTTP $sc_code — visibility unknown" ;;
+          esac
+        fi
         local f
         for f in .agents/fix.yaml .agents/review.md; do
           if timeout 15 gh api "repos/$ORG/$repo/contents/$f" --jq .name >/dev/null 2>&1; then
