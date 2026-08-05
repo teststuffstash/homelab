@@ -71,8 +71,14 @@ instructions: |
     cause, and never a cause you have not verified in this diff.
   - Branch `fix/issue-{{ issue }}-<slug>`; push after the first meaningful commit and after each
     green step. A run that dies must leave a resumable branch.
-  - The PR body must reference the issue (`Implements #{{ issue }}`) — without it the coordinator
-    cannot see your PR and will re-dispatch this issue on top of your work.
+  - The PR body must CLOSE the issue: write `Fixes #{{ issue }}` — a GitHub closing keyword, not a
+    bare mention. Two different failures ride on this one line. Without any reference the scan
+    cannot see your PR and re-dispatches the issue on top of your work; with a non-closing
+    reference (`Implements #N`) the merge leaves the issue OPEN and `agent/in-progress`, which the
+    scan reads as abandoned and ALSO re-dispatches. Both happened live on 2026-08-05 — the second
+    one on this repo's very first ride. `Fixes` is right HERE because homelab PRs target master;
+    a PR on a non-default base wants a non-closing form instead, so it cannot close its issue by
+    merging into a branch that has not landed (agent-runtime#32).
 
   Anomaly circuit-breaker (FU-069): duplicate bot comments piling up, labels contradicting the
   dispatch, an open PR already covering this issue — do NOT work around it:
