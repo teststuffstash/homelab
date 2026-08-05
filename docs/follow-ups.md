@@ -312,6 +312,12 @@ six OVERSIZE items pointer-ized into
       Hit live circles#22, 2026-08-05; 100% recurrence, closed by hand.
       **Next:** widen C6's predicate to include an OPEN in-progress issue whose referencing PR
       MERGED into a non-default base, and point its play at the goal branch rather than master.
+      **Then (only after that):** a `pull_request: closed && merged` workflow POSTing `/coordinate`
+      — same pattern renovate.yaml/devbox-update.yaml already use, collapsing "a child landed" from
+      ≤30min to seconds. Deliberately ordered second: before C6 is widened a merge notification has
+      nothing to trigger, because the child cannot close. The other two edges shipped 2026-08-05
+      (`aa68c95`): the coordinator now rings on unit completion, and the ride's doorbell sends
+      `unit` explicitly.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
