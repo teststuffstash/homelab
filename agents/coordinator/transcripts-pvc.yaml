@@ -12,7 +12,14 @@ metadata:
   namespace: agent-coordinator
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: longhorn
+  # longhorn-single (repl=1, diskSelector std), NOT the default `longhorn` (repl=2) — FU-132.
+  # homelab#94: two schedulable `std` disks were never available, so a 2-replica transcripts volume
+  # could not place and the janitor tick hung 40 min on the attach. Replication buys nothing here:
+  # every session file is uploaded to s3://agent-transcripts by coordinator-session.sh's exit trap
+  # (verified 2026-08-05 — all 267 files across the four loop PVCs were already in the bucket), so
+  # the PVC is a working mirror, not the record. ⚠ storageClassName is IMMUTABLE: changing this
+  # line does NOT migrate an existing PVC — delete it and let ArgoCD/Crossplane recreate.
+  storageClassName: longhorn-single
   resources:
     requests:
       storage: 2Gi

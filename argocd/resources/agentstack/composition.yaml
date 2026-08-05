@@ -334,7 +334,12 @@ spec:
                 gotemplating.fn.crossplane.io/ready: "True"
             spec:
               accessModes: [ReadWriteMany]
-              storageClassName: longhorn
+              # FU-132: repl=1 by class, so a new stack cannot re-arm the homelab#94 wedge (a
+              # 2-replica volume with one schedulable `std` disk never places, and the tick hangs on
+              # the attach). Safe because the record is Garage, not this volume — the session exit
+              # trap uploads every file. storageClassName is IMMUTABLE: an existing PVC must be
+              # deleted to move, which is why this is worth getting right at scaffold time.
+              storageClassName: longhorn-single
               resources:
                 requests:
                   storage: 2Gi
