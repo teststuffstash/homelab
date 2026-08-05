@@ -239,9 +239,19 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | if . == "" then "*" else . end')"
     # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
     # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest 2>/dev/null)" || prsjson='[]'
+    # mergeStateStatus is REQUIRED here: the FU-124 nudge below selects on it, and gh returns a
+    # field it was not asked for as absent -> jq reads null -> the selector matched nothing, ever
+    # (found 2026-08-05; the nudge had been silently falling back to the GitHub cron it exists to
+    # stop depending on). Adding a selector field without adding it to --json is the failure mode.
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
-    open_prs="$(jq length <<<"$prsjson")"
+    # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
+    # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
+    # autoMergeRequest != null; un-armed PRs are "invisible to the merge path", FU-079). Counting
+    # un-armed PRs charged the budget for work the updater never does: circles' twelve human-gated
+    # research/comparison PRs held issue #17 out of dispatch indefinitely, silently, on 2026-08-05.
+    # A parked PR awaiting a human is not churn — it is the human gate doing its job.
+    open_prs="$(jq '[.[] | select(.autoMergeRequest != null)] | length' <<<"$prsjson")"
     # ADR-097 project-WIP predicate (was binary WIP=1; found live meta-8: two dispatchers raced
     # #52 inside one scan window; 2026-07-21 #55: two CRON ticks raced through the phase=Running
     # filter while a kata pod sat Pending — so the probe counts everything non-terminal): the
