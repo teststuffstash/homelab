@@ -408,6 +408,20 @@ if [ -n "${RECIPE:-}" ]; then
           _rows="${_rows}    #${_kn} → \$${_cap}\n"
         done
         if [ "$(python3 -c "import sys;print(1 if float(sys.argv[1])>float(sys.argv[2]) else 0)" "$_sum" "$GOAL_BUDGET")" = "1" ]; then
+          # SAY IT WHERE A HUMAN LOOKS. Exiting 1 puts the reason in a failed tool call, and whether
+          # it reaches the goal then depends on the coordinator session choosing to relay it — a
+          # prose dependency, which is the failure class this platform keeps paying for. Comment on
+          # the GOAL directly, deduped on the marker so a re-tick cannot spam it: the refusal is
+          # level-triggered and will recur every scan until a human re-scopes or refunds.
+          _mark="AGENT_BUDGET_REFUSED: Σ(child caps) \$${_sum} > Budget \$${GOAL_BUDGET}"
+          if ! gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json comments \
+                 --jq '[.comments[].body] | last // ""' 2>/dev/null | grep -qF "$_mark"; then
+            printf '%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nNote the sum is of CAPS, not forecasts — what the minted keys would ALLOW to be spent — and it counts closed children too, because that money is already gone.\n' \
+              "$_mark" "$_rows" \
+              | gh issue comment "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --body-file - >/dev/null 2>&1 \
+              && echo "→ Goal budget: refusal posted to #${GOAL_PARENT}" >&2 \
+              || echo "→ Goal budget: refusal comment FAILED to post (token scope?) — the refusal still stands" >&2
+          fi
           printf 'PREFLIGHT REFUSED: the decomposition of goal #%s overruns its Budget.\n' "$GOAL_PARENT" >&2
           printf '  Σ(child caps) = $%s  >  Budget: $%s\n' "$_sum" "$GOAL_BUDGET" >&2
           printf '%b' "$_rows" >&2
