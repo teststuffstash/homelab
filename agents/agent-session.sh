@@ -392,17 +392,41 @@ if [ -n "${RECIPE:-}" ]; then
         --jq '.body' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 \
         | sed 's/^[^0-9]*//' | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
       if [ -n "$GOAL_BUDGET" ]; then
-        # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag). Piping
-        # to a real jq is what lets the parent number in; the first cut used gh --argjson, which
-        # errors out and, behind `|| echo []`, would have made this gate pass everything silently.
-        _kids="$(gh issue list --repo "${ORG:-teststuffstash}/${PROJECT}" --state all --limit 200 \
+        # DESCENDANTS, not direct children (2026-08-05). A goal that overruns does it by sprouting
+        # DEEP: the harvest links each review follow-up under the issue that produced it, so a
+        # sprout of a child sits at depth 2 and a direct-children sum misses it entirely. Measured
+        # live on openrouter-operator#10 the moment this was written: direct children [14,15],
+        # actual descendants [14,15,17,18,21] — a gate counting 2 of 5 is not a cap.
+        # The walk is a fixpoint over ONE fetch, cycle-safe by construction (a seen-set), and it
+        # is what makes "an unrealistic goal keeps sprouting" a BOUNDED failure instead of a
+        # silent one: every sprout in the tree spends the goal's money.
+        # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag); the
+        # first cut used it, errored, and behind `|| echo []` made this gate pass everything.
+        _kids="$(gh issue list --repo "${ORG:-teststuffstash}/${PROJECT}" --state all --limit 300 \
           --json number,body,labels,parent 2>/dev/null \
-          | jq -c --argjson p "$GOAL_PARENT" '[.[] | select((.parent.number // 0) == $p)
-                | {n: .number, chars: ((.body // "")|length),
-                   label: ([.labels[].name|select(startswith("agent-budget/"))]|first // "")}]' 2>/dev/null || echo '[]')"
-        # A parent that HAS children must not silently resolve to none — that is the gate failing open.
+          | python3 -c '
+import json,sys
+try: items = json.load(sys.stdin)
+except Exception: print("[]"); sys.exit(0)
+root = int(sys.argv[1])
+par = {i["number"]: ((i.get("parent") or {}).get("number")) for i in items}
+seen, frontier = set(), [root]
+while frontier:
+    cur = frontier.pop()
+    for n, pn in par.items():
+        if pn == cur and n not in seen:
+            seen.add(n); frontier.append(n)
+by = {i["number"]: i for i in items}
+out = [{"n": n,
+        "chars": len(by[n].get("body") or ""),
+        "label": next((l["name"] for l in (by[n].get("labels") or [])
+                       if l["name"].startswith("agent-budget/")), "")}
+       for n in sorted(seen) if n in by]
+print(json.dumps(out))
+' "$GOAL_PARENT" 2>/dev/null || echo '[]')"
+        # A parent that HAS descendants must not silently resolve to none — that is the gate failing open.
         if [ "$(printf '%s' "$_kids" | jq -r 'length' 2>/dev/null || echo 0)" = "0" ]; then
-          echo "→ Goal budget: no children resolved for #${GOAL_PARENT} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
+          echo "→ Goal budget: no descendants resolved for #${GOAL_PARENT} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
         fi
         _sum=0; _rows=""
         for _row in $(printf '%s' "$_kids" | jq -r '.[] | "\(.n):\(.chars):\(.label)"' 2>/dev/null); do
