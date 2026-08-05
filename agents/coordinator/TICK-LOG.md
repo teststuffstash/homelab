@@ -1929,3 +1929,63 @@ mount probe was truthful. The 433 MB / 132-path pulls came from the LAN nixcache
 28 names spilling to cache.nixos.org; the 659 s queue waits were FIRST-batch agent-base image
 pulls on cold nodes, not the devbox cache. Whether the warm-store OCI should have eliminated
 the per-pod devbox install entirely = the FU-130 cache-warming probe.
+
+## 2026-08-05 — circles branch-base watch, the platform queue drains, and a sensor eats a node
+
+**Condition:** operator asked for a circles watch (implementation lands on the woven spec branch,
+not master) plus the /handoff watch, since the circles jail has no homelab access.
+
+**Watches.** `meta-watch-loop.sh` gained `BASE_EXPECT` — emits on any RIDE PR (scoped to
+`^agent/` heads via `BASE_HEADS`) not based on the declared branch, and on auto-merge armed while
+that base holds; the tick filter also matches `Base:` and `PREFLIGHT REFUSED`. New
+`meta-handoff-watch.sh` watches every stack's `inbox/` + a >45min `doing/` stall clause — the
+channel shipped this morning (bea13f6) with a procedure and no liveness. **Pre-flight on
+circles#17/18/19 before they are labelled:** all three carry a bare `Base: research/issue-1-weave`
+at column 0, which is what the launcher's sed needs (the bold header line alone would NOT match);
+#19's `.github/workflows/**` footprint is fine because **every** worker token mints
+`workflows: write` — the skill's claim that tokens forbid workflow edits was never true, corrected
+to name the real gate (homelab's `/.github/` tier 3 in CODEOWNERS).
+
+**FU-124 false positive, fixed same session.** circles' four APPROVED-but-unarmed research arms
+tripped "the updater backstop missed one" every 15 min. The backstop only owns PRs something is
+trying to MERGE, so the predicate is now armed-or-ride-head. A repeating false alarm is a broken
+probe: it trains the reader to skip the line that will one day be true.
+
+**Platform queue drained** — #63/65/78/94/98/99/100/101 closed against LIVE probes, not against
+their fix commits (optane0 at 0 replicas + both Optanes `fast`-only; wk-02 single-tier `bulk`;
+mirror-ghcr 33% after the 20→40Gi bump; wk-02 allocatable 1.75Gi under capacity = FU-139's
+reservation really on the node that OOMed). Left open: #97, blocked on **FU-142** — homelab joined
+the fixer claim but ships no `.agents/fix.yaml`, and `--recipe` is launcher-owned, so the launcher
+refuses before a pod exists. Its real open question is the GATE: no `devbox run ci` here, and
+`manifest-lint`'s kubeconform fetches schemas from a host the enforced egress does not allow.
+
+**FU-141 burned.** Filed for un-reaped ephemeral OpenRouterKey CRs; it was openrouter-operator#10
+since 2026-08-02. The prior-art grep covered the tracker and archive and stopped — the wrong search
+for a fixer-enabled repo's own defect. LESSON: the duplicate check must follow the ROUTING TABLE,
+so an agent-loop item is grepped on the owning repo's ISSUES, not only in `docs/`.
+
+**openrouter-operator's fixer lane ran for the first time** (#10 queued with two ⚖ pre-decided:
+there is no kopf timer, so a check inside `reconcile_key` fires only on pod restart; and the key
+Secret has no `ownerReferences`, so deleting the CR does not cascade — safe to delete explicitly,
+since the cluster has zero PushSecrets). Ride: 13 min, PR#13 merged clean, both pre-decisions
+honored. **Platform-side review caught what CI and the reviewer structurally cannot:** the chart
+grants no `delete` verb on `openrouterkeys` or `secrets`, so the merged timer 403s every 15 min and
+turns #10's 401-per-dead-key into a 403-per-dead-key while reading as fixed. `chart/` was correctly
+outside #10's `Touches:` — filed as #14, queued, `Depends-on: #10`. ⚠ #10 closed still wearing
+`agent/in-progress`; the C6 flip is machine-owned — verify it, don't hand-flip.
+
+**Incident — one pod ate 65% of wk-01 for ~50 min.** `NodeSystemSaturation` fired 09:21; the
+responder blamed "burst Job pods with no CPU requests" and proposed topology spread. The Jobs DO
+carry requests (25-100m, in the very files its `Touches:` named). Nobody ran `top`, where
+`coordinator-sensor` sat at **1974m** next to a 138m runner-up. Mechanism from its own log: a
+JetStream `AckSync() … nats: timeout` → the same event id redelivered → triggers re-fired in a loop
+(submitting spurious `coordinate-*` workflows that looked like real ticks) → and the CPU kept
+spinning at 3.8 cores AFTER the loop went silent, a leaked goroutine. Flat 0 for the prior 24h,
+sharp onset at 09:02. Deleted the pod; Deployment recreated it at 2-5m, node 77% → 26%, alert
+cleared. Guard added (`AgentEventInfraSpinning`, bc56cdb) with a MEASURED threshold: the five infra
+pods idle at 0-5m, the fault sat at 1887m, so 0.5 cores is 100× baseline — verified in Prometheus
+to fire on this incident's own history and on nothing healthy. Same sweep: `homelab` was missing
+from `AgentWorkerEgressDropped` though its fixer enforces egress (circles stays out until enforce
+flips — monitor mode emits no DROPPED verdict). **LESSON: this is the SECOND wrong diagnosis of a
+node symptom after #94's "image-pull race". Both times the correct probe was one cheap command.
+Requests tell you what the scheduler was promised; `top` tells you what is burning.**
