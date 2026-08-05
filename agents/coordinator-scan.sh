@@ -220,7 +220,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # but flagged stale (the dependent's premise may have died with it). A direct A↔B cycle →
     # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
     # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
-    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy \
+    queued="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
     jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
@@ -335,7 +335,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Depends-on landed in qtracks, qdeps read empty → the FU-087 gate silently never ran and
     # the dep-blocked issue dispatched twice). The jq emits "-" placeholders for the two
     # optional fields; normalize them back to empty here. Repro: printf 'a\tb\t\td\n' | read.
-    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass; do
+    while IFS="$(printf '\t')" read -r qnum qtitle qtouches qdeps qpin qclass qparent; do
       # FU-114 L3: the task class rides the unit (label task/* → .agents/<class>.yaml, default fix)
       [ -n "$qclass" ] || qclass="fix"
       [ -n "$qnum" ] || continue
@@ -418,14 +418,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         fi
         continue
       fi
+      # FU-090 leg (c) forest/trees: a child's unit carries its GOAL, so the item session re-reads
+      # the parent before acting instead of judging the child in isolation. Free — `parent` rides
+      # the issue-list call above, no extra request against the App's GraphQL pool. Empty for the
+      # ordinary case (no parent), which parses back to the 4-field shape unchanged.
       if [ "$qpin" = "P" ]; then
-        punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
+        punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       else
-        units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
+        units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ((([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten)
              + [((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"])
-            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")) ] | @tsv')
+            | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
@@ -763,6 +767,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       *"|"*) uitem="${rest2%%|*}"; uclass="${rest2#*|}";;
       *)     uitem="$rest2"; uclass="";;
     esac
+    # FU-090 leg (c): a 5th field is the GOAL this item is a child of. Split it back off the class
+    # so the coordinator's brief can name it — the whole point of the forest/trees rule is that a
+    # child unit never arrives without its goal attached.
+    case "$uclass" in
+      *"|"*) uparent="${uclass#*|}"; uclass="${uclass%%|*}";;
+      *)     uparent="";;
+    esac
     # FU-121: a c4c5 redispatch can race a closing issue (the #71 r9 spurious round — the scan's
     # list snapshot predated the close). Re-probe the ISSUE fresh immediately before spending a
     # session: closed → skip this unit (the next scan's list won't carry it). Probe failure
@@ -779,12 +790,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
-    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}, model ${cmodel}, wip ${uwip})…"
+    echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
       --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" \
-      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}"
+      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}"
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"
