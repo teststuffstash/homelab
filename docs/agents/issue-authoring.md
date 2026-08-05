@@ -17,6 +17,11 @@ Every surface below produces **bot-authored, therefore INERT** issues: no `agent
 `agent/queued`. A human labels, or nothing runs. That is loop-safety breaker #1 and none of these
 legs retire it — leg (c) moves the breaker *up* to the goal issue rather than away.
 
+⚠ **Read this together with §"Gate the merge, not the launch" below** (operator, 2026-08-05):
+breaker #1 is a blast-radius control, **not** the security boundary. The boundary is CODEOWNERS at
+merge time. Anything here that looks like an authorisation check is defence in depth and must not
+be relied on as more.
+
 The graduation knob for the HARVEST surfaces (**still not built**, verified 2026-08-05 — it exists
 in NO XRD or Composition field, only in this paragraph): claim `issueAuthoring.selfQueue`, default
 off, letting the coordinator self-label harvested issues, bounded by the existing breakers plus a
@@ -42,6 +47,48 @@ breaker #1 for that stack.
 session, when three deterministic fail-closed gates pass — not self-referential, a `Touches:`
 footprint is declared, and that footprint hits no governance path. No claim knob gates it. So
 "bot-authored ⇒ inert" is the rule for the surfaces below, **not** for the alert lane.
+
+## Gate the merge, not the launch — operator ruling, 2026-08-05
+
+The doctrine that supersedes how the rest of this page reads. Written after the operator was asked
+why circles queues issues with no `selfQueue` knob enabled:
+
+> *"instead of not launching the issues I would rather gate the merges. The selfQueue knob is a
+> good thing to have but it is pretty much worthless — if a GitHub App has `issues:write` for other
+> reasons already then doing author==human type checks in some places of the process makes no
+> sense; I'm sure the coordinator could tell an -iac worker to change the rule. CODEOWNERS is the
+> better defense in the end."*
+
+**Why launch-gating is weak.** Every author/labeller check sits *inside* the loop's own reach. The
+App holds `issues:write` because it needs it for ordinary work, so "who applied this label" is a
+question the loop can answer about itself, and any rule expressed as code in a repo the loop can
+open a PR against is a rule the loop can propose changing. Defence that lives on the same side of
+the boundary as the thing being defended is not defence; it is friction that reads like defence,
+which is worse than none because it invites reliance.
+
+**Why merge-gating is the real thing.** `CODEOWNERS` + branch protection decide **what lands**, and
+that decision is made by GitHub, not by anything the loop runs. It is also the honest unit of risk:
+the operator's stated risk model is that *"workers doing extra or bad WORK is fine; merges to master
+are the only thing that matters."* A wasted ride costs pennies. A bad merge costs the platform.
+
+**What follows for this page:**
+
+- Breaker #1 and the `selfQueue` knob are **convenience and blast-radius controls**, not security
+  boundaries. Keep them cheap. Do not add new author==human checks, and do not let existing ones
+  grow into things that get relied upon.
+- The one in `coordinator-scan.sh` (a Bot-queued goal may not decompose) **stays as defence in
+  depth** — one API call, fails closed — with a comment at the site saying exactly this, so nobody
+  mistakes it for the boundary. Retire it the day it costs more than it buys.
+- **The target is a fully automatic chain**: `alert → issue → coordinate → fix → review → merge`,
+  with no human in the middle, **and the merge gated by what the change actually touches**. Tier 1
+  paths land on CI + review alone; an owned path stops and waits for a person. The path decides,
+  not the provenance of the issue that started it.
+
+That target is already partly real: the alert lane self-queues from the responder's shell
+(§below), the fixer and reviewer are automatic, and the CODEOWNERS path tiers
+([iac-lane.md](iac-lane.md) §The platform lane) are what decide whether the last step needs a human.
+The remaining work is on the merge side — tier 1 dropping back to unowned once the IAC-G04 sentinel
+covers homelab — **not** on adding more checks before the launch.
 
 ## Leg (a) — follow-up harvest — BUILT 2026-07-27
 

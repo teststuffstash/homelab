@@ -426,6 +426,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         # jail holds the operator's PAT. So this does NOT distinguish operator from jail, and is not
         # meant to: the jail is operator-delegated. It distinguishes THE LOOP from a person, which
         # is the actual risk — the loop authorising its own goal.
+        #
+        # ⚠ THIS IS DEFENCE IN DEPTH, NOT THE BOUNDARY (operator ruling 2026-08-05). Do not build on
+        # it and do not let it grow. The App already holds issues:write for other reasons, so an
+        # author==human check partway through the process is defeatable in principle — a coordinator
+        # could have an -iac worker change the rule that constrains it. The REAL defence is
+        # CODEOWNERS gating the MERGE: what lands decides what was allowed, and that check cannot be
+        # routed around from inside the loop. Kept because it is one API call and fails closed;
+        # retire it without hesitation the day it costs more than it buys.
+        # Doctrine: docs/agents/issue-authoring.md §Gate the merge, not the launch.
         qactor="$(gh api "repos/${slug}/issues/${qnum}/events" --paginate \
           --jq '[.[] | select(.event=="labeled" and .label.name=="agent/queued")] | last | .actor.type // ""' 2>/dev/null || echo "")"
         if [ "$qactor" = "Bot" ]; then
