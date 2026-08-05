@@ -8,6 +8,20 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-142** *(archived 2026-08-05)* — **homelab had no fixer recipe, so the lane was gated but
+  undispatchable.** `.agents/fix.yaml` + `.agents/review.md` shipped (`c5db520`), ADAPTED from the
+  sleep-iac donor rather than designed — the same copy-paste that produced oracle-iac's pair. Three
+  homelab-specific changes: scope is a PATH tier ceiling over the issue's `Touches:` (argocd/resources
+  + docs authorable; argocd/platform, tofu, ansible, opnsense, machines human-merged; agents, scripts,
+  policy, .github, tofu/github, tofu/cloudflare refuse-and-report — a worker that can edit the
+  launcher/scan/reflex is ungated whatever the ruleset says); there is NO `devbox run ci`, so the
+  recipe names the lints per path and requires the PR to say which ran; and the PR must reference the
+  issue or the scan re-dispatches (agent-runtime#32). GATE settled: `raw.githubusercontent.com` added
+  to the fixer's `extraFQDNs` — kubeconform fetches schemas there, and under `enforce: true` the gate
+  would fail on a network drop rather than on the manifest. ⚠ `manifest-lint` SKIPS
+  PrometheusRule/Application/AgentStack/CNP (no schema): a diff of those kinds passes a validator that
+  checked nothing, which the recipe forces the ride to state. homelab#97 unblocked + queued.
+
 - **FU-138** *(archived 2026-08-05)* — **The OpenRouterKey CR is the guardrail now, not the Secret.**
   The Secret's `GUARDRAIL` is written only when the operator MINTS (create/rotate in
   openrouter-operator's handler), so a guardrail change on an already-minted standing key never

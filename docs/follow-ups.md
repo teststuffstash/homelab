@@ -303,16 +303,6 @@ six OVERSIZE items pointer-ized into
       WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
       upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
       Relates FU-132 (archived), FU-058, ADR-089.
-- [ ] **FU-142** — **homelab is a dispatch target with no fixer recipe, so nothing dispatches.**
-      The FU-068 fixer block, CODEOWNERS tiers and the ruleset landed, but `homelab/.agents/fix.yaml`
-      does not exist and `--recipe` is launcher-owned (ADR-094) — the launcher exits
-      `FATAL: --recipe … not found` before a pod is created, so homelab#97 sits `agent/blocked` and
-      every future platform issue will too. The recipe IS the fixer's governor → operator lane.
-      **Next:** author it (+ `.agents/review.md`) against the path tiers, and settle its GATE —
-      homelab has no `devbox run ci`, and `manifest-lint` shells to kubeconform, whose default
-      schema location `raw.githubusercontent.com` is NOT in the fixer's baseline egress under
-      `enforce: true`: vendor the schemas or harvest the FQDN.
-      Detail: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane; homelab#97.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
