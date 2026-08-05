@@ -50,7 +50,7 @@ shape of leg (c) is the FU-105 researcher's dispatch trigger.
 
 The ADR-094 janitor tick MAY draft issues from `specs/`/TRACKS gaps, under the same inert gate.
 
-## Leg (c) — goal-budget decomposition — DEFERRED by the operator
+## Leg (c) — goal-budget decomposition — UN-DEFERRED 2026-08-05, design agreed, NOT built
 
 A human-authored **and human-queued** `goal` issue carries `budgetUSD` + acceptance criteria. Its
 item session MAY author and queue child issues citing the parent, with **Σ(child estimator budgets)
@@ -63,6 +63,52 @@ Existing containment carries over unchanged (lane WIP, capacity gates, pod-name 
 > **Operator 2026-07-24: not yet.** Rollout continues the old-fashioned way — human goal
 > decomposition — until the current arc settles. Revisit when a real goal candidate appears.
 > A prototype ran 3 days live during meta-9.
+
+> **Operator 2026-08-05: un-deferred.** The revisit condition was met by circles#17 — a
+> human-authored, human-queued goal (P0 MVP: bake + page, against a 15-page/91-requirement
+> contract, with acceptance criteria and a suggested cap tier). Handed to a *builder*, because
+> nothing in the machinery distinguishes a goal from a task, it produced an honest "analysed
+> everything, built nothing" twice — and banked nothing between rounds. **No configured cap was
+> near binding** (25 turns of 200, $0.06, 41k tokens into a 262k window): the lane was wrong, not
+> the budget. That is the case for the clause below.
+
+### Where it lives
+
+| what | where | why there |
+|---|---|---|
+| trigger | `coordinator-scan.sh` — a new `goal-decompose` clause emitted **instead of** `queued-dispatch` | must branch BEFORE recipe selection, or the launcher FATALs on a missing `.agents/goal.yaml`. Priority slot in the clause list (~L729) |
+| instructions | `agents/coordinator/README.md` — a new `## The goal-decompose clause` section | the item session already reads that file per `clause=`; a new play costs a README section, **not** a new role, image or recipe |
+| discriminator | `task/goal` label **+** a `Budget: <USD>` body line | the platform's existing split: **labels route, body lines parameterise** (`Touches:`/`Depends-on:`/`Base:` grammar) |
+| enforcement | `Σ(child estimator budgets) ≤ parent` in the **launcher pre-flight** | deterministic, beside WIP=1, never LLM-honored |
+
+### Keeping the goal in view — the forest/trees rule (operator, 2026-08-05)
+
+The failure this must not have: *decompose once, then wake only for sub-issues, and the goal is
+forgotten.* Today that is guaranteed rather than likely — the harvest **writes** sub-issue links
+(`POST …/sub_issues`) and **neither `coordinator-scan.sh` nor `agent-session.sh` reads them**. The
+lineage is write-only: it renders in the GitHub UI and no machinery consumes it. Three legs, at
+three altitudes:
+
+1. **The coordinator holds the goal, on every child unit.** The scan carries the parent id in the
+   unit (a 5th field — FU-114 L3 widened it to 4 for the task class, same move). Any child's unit
+   arrives as *"child of goal #N"* and the item brief re-reads the goal before acting.
+2. **The worker gets a BOUNDED slice.** The launcher injects a `GOAL CONTEXT` block into the
+   environment card from the native parent — **Goal + Acceptance sections only**. ⚠ Injecting the
+   whole parent re-imports the context cost decomposition exists to remove; that is precisely how
+   circles#17 r1 died. Never the spec tree — children carry their own narrowed `Touches:` and cite
+   their own spec rows.
+3. **The goal is re-evaluated, not merely survived.** A `goal-review` clause fires when a child
+   closes (not only when the last one does): re-read the goal's acceptance against what actually
+   shipped, then close, author more children, or stop at the **retro checkpoint** (rung 3 — a
+   human retro, never a reflex revert).
+
+The division of labour follows the model-tiering rule: the **coordinator** holds the goal (strong
+subscription model, full re-read); the **worker** gets a slice (cheap, budget-capped, bounded
+context). Rung 4's sprout-RATE gauge is the health signal — *rate > 1 per run = diverging*.
+
+**Open rulings before build:** (a) `task/goal` label vs `Budget:` line as the primary
+discriminator — recommended both; (b) what the parent does while children run — recommended a
+non-dispatchable tracking state, since at-least-once dispatch would otherwise re-decompose it.
 
 ## The sprout index — the accounting substrate leg (c) was missing
 
