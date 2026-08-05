@@ -26,13 +26,14 @@ meant to avoid.)
   The circles jail has no homelab access, so it files tasks under `/workspace/.handoff/circles/
   inbox/`; `/handoff` is the mono-side procedure. One task processed so far (the base-branch
   launcher change, 4243bd9). Watch emits on new inbox files and on a `doing/` claim older than 45min.
-- **Two machine-owned things to VERIFY, not perform** (a miss is a clause bug, not a label to
-  hand-flip): (1) openrouter-operator#10 closed via PR#13 still wearing `agent/in-progress` —
-  the C6 `merged-closeout` flip to `agent/done` + review-`Follow-ups:` harvest should land on a
-  following tick; (2) #14 (chart RBAC `delete` verbs, queued, `Depends-on: #10`) must actually
-  dispatch — it is the fix that makes #10 real, since the merged GC timer 403s without it.
-  Acceptance for #14: `kubectl auth can-i delete openrouterkeys --all-namespaces
-  --as=system:serviceaccount:openrouter-operator:openrouter-operator` → `yes`.
+- **openrouter-operator chain, machine-owned — VERIFY the end, don't perform the middle.** #10
+  (GC timer) → PR#13 merged 09:59 → C6 verified working (flipped `agent/done`; harvest sprouted
+  **#15**, unlabeled behind the FU-090 gate, operator triage). **#14 (chart RBAC `delete` verbs)
+  dispatched 10:00 and is the fix that makes #10 REAL** — without it the merged timer 403s every
+  15 min per CR and #10 reads as fixed while the litter grows. **Only remaining check, after its
+  PR lands + the chart pin deploys:** `kubectl auth can-i delete openrouterkeys --all-namespaces
+  --as=system:serviceaccount:openrouter-operator:openrouter-operator` → `yes` (same for
+  `secrets`), then the expired CRs listed in #10 vanish with no 403 in the operator log.
 - **Platform work queue: DRAINED 2026-08-05.** homelab#63/65/78/94/98/99/100/101 + #103 closed with
   live-verified evidence (optane0 now 0 replicas / tags `fast`-only; wk-02 single-tier `bulk`;
   mirror-ghcr 33% after the 20→40Gi bump; wk-02 allocatable 9.9Gi of 11.66Gi = FU-139 reservation
