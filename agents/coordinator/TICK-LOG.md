@@ -1989,3 +1989,46 @@ from `AgentWorkerEgressDropped` though its fixer enforces egress (circles stays 
 flips — monitor mode emits no DROPPED verdict). **LESSON: this is the SECOND wrong diagnosis of a
 node symptom after #94's "image-pull race". Both times the correct probe was one cheap command.
 Requests tell you what the scheduler was promised; `top` tells you what is burning.**
+
+### 2026-08-05 (cont.) — leg (c) built, and five guards that were not guarding
+**Condition:** operator un-deferred FU-090 leg (c) and ruled: both discriminators, non-dispatchable
+parent, plus "there should be some kind of backstop on the goal also — it will deadlock too much
+when only child traffic causes the goal to move" (that backstop is meta's for now; design the guard
+from evidence). Trigger was circles#17: a real goal handed to a BUILDER because nothing in the
+machinery distinguished the two, producing "analysed everything, built nothing" twice with **no cap
+near binding** (25 turns of 200, $0.06, 41k into a 262k window) — the LANE was wrong, not the budget.
+
+**Built:** `goal-decompose` clause (branches BEFORE recipe selection — a `goal` class would send the
+launcher hunting a deliberately-absent `.agents/goal.yaml`); both plays in the coordinator README;
+`task/goal` in the claim taxonomy; launcher READS native parentage and injects a BOUNDED
+Goal+Acceptance card (1845c of a 4799c body — the whole parent is what killed r1); scan carries the
+parent id as a 5th unit field, free (`parent` rides the existing issue-list call); Σ(child caps) ≤
+`Budget:` in the launcher pre-flight; `goal-review` firing on EVERY child closure, stateless (a child
+closed after the loop's newest comment on the goal). **PROVEN LIVE** on sprout #15: scan emitted
+`child of goal #10`, and the injected card was decoded out of the ride pod's own recipe blob.
+
+**THE FINDING OF THE DAY — the lineage was WRITE-ONLY.** The harvest had been POSTing `sub_issues`
+links since 2026-08-02 and **neither the scan nor the launcher ever read them back**: the tree
+rendered in the GitHub UI and meant nothing to the machinery. Rung 1 shipped the write, not the
+read. Any decomposition built before today would have produced children orphaned at birth.
+
+**Five guards found not guarding, four of them silent:** FU-124's nudge selected on
+`mergeStateStatus` that was never in its `--json` list (never fired since written); `modelDeny` does
+not bind on a shadow-mode stack (the static chain dispatches regardless); the #29 repetition
+watchdog IS deployed and missed a textbook loop because it wants a repeated LINE and that loop was
+silent; my own BASE_HEADS was `^agent/` when every real ride branch is `fix/*`; and `build.yaml`
+never required the PR to name its issue → C4/C5 re-dispatched a finished goal (→ agent-runtime#32,
+finalize should guarantee the link; the recipes' version is advice, and advice is what failed).
+**Two of the five were mine, one with blast radius**: a 113-char `task/goal` description froze the
+label taxonomy for all 11 claim-owned repos (GitHub caps at 100, IssueLabels is authoritative) —
+caught only by checking whether the label had REACHED GitHub. Written is not applied.
+
+**Other ops:** platform queue drained (9 issues closed against live probes); wk-01 recovered 77%→26%
+by killing a coordinator Sensor spinning 1974m in a JetStream redelivery loop — the responder's
+triage had blamed "burst Jobs with no CPU requests" (they have requests; nobody ran `top`), the
+SECOND wrong node diagnosis after #94, guard added (`AgentEventInfraSpinning`, threshold measured at
+100× the 0-5m idle baseline). The FU-080 single-owner invariant is now CEL on the XRD after I
+violated it by hand (flipped `coordinator.enabled` without `graduated`; both scanners then raced
+circles#17 — three sessions in four minutes, saved from two concurrent rides only by the WIP
+pre-flight). circles#21 frozen `major/awaiting-human` as the ONE-SHOT benchmark arm; ⚠ that freeze
+guards the `changes-requested` clause but **C4/C5 keys on the ISSUE** — two doors.
