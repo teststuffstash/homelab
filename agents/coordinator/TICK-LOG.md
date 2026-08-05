@@ -2076,3 +2076,63 @@ tofu. The coordinator now RINGS THE DOORBELL on unit completion (chains were pay
 cron per child) and the ride's doorbell finally sends `unit`. ⚠ `agents/stacks.json` drifted from the
 claim for six hours: the SCAN reads the live cluster, the DOORBELLS read the file — a mirror only
 some readers use. Synced; the real repair is the doorbells reading the cluster too.
+
+### 2026-08-05 (cont. 3) — a distribution killed the obvious fix; the operator lane has no watcher
+**Condition:** fresh `/meta-coordinate` after a clean clear. Bootstrap found the world healthy — #23's
+ride dispatched, belts green, C6 flips present on every recently-closed issue across four repos
+(including openrouter-operator#10, which the previous entry flagged as still wearing
+`agent/in-progress`; the machine had since flipped it, so the duty really was verification, not repair).
+
+**Two orphan monitors had SURVIVED the `/clear`** — the loop watch still carrying the stale
+`BASE_EXPECT=research/issue-1-weave`, and a duplicate heartbeat that fired mid-session. A survivor runs
+the script as it was PARSED, so it can never pick up an edit; worse, the stale one was watching for a
+base no child uses any more. Stopped both by id before re-arming. The handoff note said watches die with
+`/clear`; they do not reliably, so the note now says stop-by-id first.
+
+**Fixed a guard before arming it.** The armed-PR clause warned on any armed ride PR — written when the
+woven-spec base was human-gated, but under the goal lane a child SHOULD arm into `goal/**`. Left alone
+it would have alarmed on every healthy ride. Rescoped to armed-AND-base-drifted: the real hazard is
+arming into an unprotected base, which merges on open.
+
+**THE FINDING OF THE DAY — the obvious containment was an outage.** homelab#103's responder proposed
+three remediations. Working the first (`activeDeadlineSeconds` "matched to the natural bound"), I
+sampled the live namespaces: 7 completed pods, 5s-168s, against a deadline of 1800s. Ten times the
+worst case; the tightening writes itself. Then I asked Prometheus for the 7-day distribution instead:
+**2474 runs, p50 29s, p95 45s, p99 302s — and a legitimate tail to 1458s.** A 600s deadline would have
+killed ~9 real scans a week. The wedge hides INSIDE that tail, which is exactly why nothing detected it
+and why no timeout can separate stuck from busy here. **My seven-sample snapshot was not a small
+version of the truth, it was a different shape**; the change it justified would have been an outage
+shipped with confident reasoning. Also: candidate #1 was already shipped (1800s, both paths), so the
+proposal was to re-do a thing that existed — and candidate #2 ("reject `unit=-` as malformed") would
+have broken every full scan, since `-` is the documented FU-085 default and every redelivered duplicate
+was well-formed. **Two of three candidates were wrong and one was already done.** A triage list is a
+hypothesis list; the responder never ran the queries, and neither did I until the second try.
+
+So the lever is the one the list ranked LAST: `AgentCoordinateScanWedged`, >15m Running, a threshold 1
+run in 2474 reaches. Validated both directions before commit — fires on the incident's own history
+(`coordinate-perstack-lvsmt`, 12:48-13:12) and on nothing else in the preceding 7 days — then verified
+`health=ok` in live Prometheus after the sync, not merely committed. It names the thing that fooled us:
+a wedged scan's Pending twins read as ordinary mutex serialization, so the description says to diff
+`kubectl logs` a minute apart rather than trust "it's just slow". No upstream argo-events fix exists at
+v1.9.11, so reproducing against the burst hypothesis is the only live route to a root cause; #103 stays
+open, because detection is not a fix.
+
+**oracle-fleet PR#166 sat blocked for three days and no machine was ever going to find it.** Author
+`RasmusSoot`, so `changes-requested` (scoped to WORKER_AUTHOR) correctly skips it, and the coordinator
+had said so explicitly on 2026-08-02: "outside the coordinator's dispatch mandate... leaving this for
+the human." Correct, and it addressed nobody — an operator-lane PR has no machine owner at all and is
+found only by a board sweep. The reviewer's finding was real, verified by hand rather than taken on
+faith: `.agents/research.yaml` shipped with no `extensions:` block while `build.yaml` and `fix.yaml`
+both had one, so the recipe could not read `specs/`, run the `devbox run ci` / `scan-secrets` its own
+rules make mandatory, push a branch, or open the PR that is its stated deliverable. The PR claimed
+parity between the ported recipes and shipped one working recipe and one that could not execute a
+single instruction. Fixed to exactly the review's ask; the missing `retry:` block was reviewed and
+explicitly accepted, so it stays out.
+
+**Also:** the goal-review predicate fix VERIFIED — the 17:07 tick, first to clone master after the
+17:02:36 commit, dispatched only `issue-23 (child of goal #17)` and did not re-fire. The 17:00 re-fire
+was the last pre-fix tick, which is worth stating because a fix that looks unverified for one more tick
+invites a second, wrong repair. And circles #18/#19 are still `task/build` though all three of
+#17/#18/#19 were authored in one 66-second batch, all titled `Goal:` — #17 was promoted when the lane
+was built and its siblings were never swept. Left for the codeowner: neither carries
+`agent-fix`/`agent/queued`, so queueing is deliberate and there is no silent-dispatch risk.
