@@ -2231,3 +2231,21 @@ so coordinator sessions defer LAST. Over 7d, n=**149**: p50 105s, p90 529s, p99 
 two children while the one-shot arm reached a comparable result — so the fan-out's advantage was
 never demonstrated and the reasoning tier had nothing hard to chew on. #18+#19 under one parent is
 the shape that would test it; held pending the arm comparison.
+
+**Closing the day.** The operator challenged the opus split ~90 minutes after it shipped —
+"goal-review is bookkeeping" — and was substantially right. The play has four rulings and its tail
+is not bookkeeping (branch 3 AUTHORS the missing child; branch 4 declares the goal itself wrong;
+and it must never silently widen a goal to fit what was built), but the common path is checking an
+acceptance list the goal already carries. Decisive: **both live goal-reviews that day ran on
+sonnet and both were right** — including the branch-2/branch-3 discrimination and a stale-`Base:`
+catch I had missed. I had praised that work an hour earlier and then argued it needed a bigger
+model; the change had not even run yet. It also contradicted doctrine already on the books
+(`reviewer-session.sh`: "Sonnet is sufficient here; opus is available for a genuinely high-stakes
+PR via --model, but it is not the default"). Narrowed to `goal-decompose` — the axis is AUTHORING
+vs CHECKING, not goal vs routine. **The honest limit on the whole question: every data point comes
+from #17, a goal small enough for one ride, so it bounds what a SMALL goal needs and nothing more.**
+
+Meta-coordination stopped for the day at the operator's word: all three watches stopped by id,
+meta-state consolidated 127 → ~100 lines (history dropped here, live state kept), tree clean and
+pushed. Nothing mid-flight. The circles arm comparison, PR#25's draft, and #18/#19's class are the
+three decisions waiting on a human — none of them on a clock.
