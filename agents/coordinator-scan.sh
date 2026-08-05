@@ -782,13 +782,27 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     continue
   fi
 
-  if [ -z "$items" ]; then
+  # ⚠ `units` is NOT derivable from `items`, and gating on `items` alone silently starves a whole
+  # clause. Every OTHER unit happens to feed both — its subject is a queued/in-progress issue or an
+  # open PR, which also lands in a report list — but `goal-review`'s subject is a goal parked in
+  # `agent/blocked`, deliberately in no report list at all. So the backstop was unreachable in
+  # EXACTLY the state it was built for: every child closed and nothing else going on, which is the
+  # deadlock the operator asked to be backstopped ("it will deadlock too much when only child
+  # traffic causes the goal to move"). It read as working for hours because it only ever ran while
+  # OTHER work kept `items` non-empty — 16:30 and 17:00 fired, 18:00 went quiet with the predicate
+  # TRUE (2026-08-05, circles#17 with both children closed). Gate on the union, not on the report.
+  if [ -z "$items" ] && [ -z "$units" ]; then
     echo "stack ${name}: nothing actionable"
     continue
   fi
   any_work=1
   echo "stack ${name}: ACTIONABLE —"
-  printf '%b' "$items"
+  if [ -n "$items" ]; then
+    printf '%b' "$items"
+  else
+    # Say it out loud: a dispatchable unit with no report line is the case that hid the bug.
+    echo "  (no report items — a units-only clause is dispatchable; see the unit line below)"
+  fi
 
   # FU-080 coordinator knob: default-off, opt in per stack via the claim's spec.coordinator.enabled.
   coord_enabled="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')"
