@@ -46,9 +46,11 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-03 (docs-cleanup pass: all six OVERSIZE items pointer-ized, 373 → 325
-lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-retro,model-routing}.md`
-+ `docs/storage-ledger.md`; previous pass 2026-08-02: 1033 → 433)._
+_Last updated: 2026-08-05 (closure sweep: FU-128 fixed, FU-120 + FU-068 verified done → archived;
+FU-068's sentinel residue folded into FU-106. Previous pass 2026-08-03: all six OVERSIZE items
+pointer-ized, 373 → 325 lines — detail into
+`docs/agents/{iac-lane,issue-authoring,observability-and-retro,model-routing}.md` +
+`docs/storage-ledger.md`)._
 
 ## Secrets (the "secret cleanup" track)
 
@@ -169,16 +171,12 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
 
 ## Agents
 
-
 - [ ] **FU-111** — **Native `blockedBy` migration: POINTER.** Doctrine, live-verified probe
       facts (create/cross-repo/union reader) and the 2026-08-03 authoring flip live in
       [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Dependencies.
       **Next:** observe native edges flowing under the APP token in scan logs (the jail cannot
       mint that token — FU-108's probe-that-looks lesson), then retire the body-line reader +
       lines. Relates FU-087/FU-110 (archived), FU-090.
-
-
-
 
 - [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
       DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —
@@ -188,14 +186,16 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
       purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
 
-- [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) in ride pods — a
-      silent-success trap the recipes' "STOP if it fails" can't catch.** Reproduced on ALL 5
-      circles FU-126 rides, both harnesses; wrote off mimo attempt 1 (11 min without ever
-      seeing the goal). `--json` paths work; suspicion: gh pager/TTY detection in agent-base
-      (probe `GH_PAGER`/`PAGER` in the image) or the App-token GraphQL render path (the known
-      [bot]-suffix REST-vs-GraphQL mismatch class). Interim shipped: circles recipes read via
-      `--json title,body,comments` (96fe003). Next: root-cause probe in agent-runtime image +
-      port the --json form to sleep-tracking/oracle-fleet recipes. Relates FU-114.
+- [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
+      2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
+      comments-ONLY view (the body is not printed), so an issue with zero comments — every fresh
+      goal issue — yields empty output and exit 0. Proven both ways in the jail: circles#1
+      (0 comments) prints nothing, homelab#101 (has comments) prints only comment blocks. Image
+      exonerated (agent-base `2026.8.4-g90b229060e57`: `PAGER`/`GH_PAGER` unset, `gh config pager=`
+      empty, gh 2.97.0 — and gh never pages a non-TTY). Interim: circles recipes read
+      `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
+      that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
+      `new-stack --from` must already have it. Relates FU-114.
 - [ ] **FU-130** — **The chart-stack CI gate curls 23 MB from GitHub releases EVERY run
       (`helm plugin install helm-unittest` in test-chart.sh) + LAN nix-cache misses fall
       through to cache.nixos.org** — both hang-prone the moment egress enforcement flips
@@ -243,25 +243,6 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       per-arm cost comparisons, FU-126-style experiments — therefore reads low and unevenly.
       **Next:** back off harder (2/5/15/45s) **+** a T+1 sweep over `GET /activity?api_key_hash=`
       (per-session keys make attribution exact; needs a management key). Relates ADR-096, FU-095.
-- [ ] **FU-128** — **Dispatcher executes backticks from env-card text (cosmetic, every jail
-      dispatch).** Symptom (circles fan-out, 2026-08-03): `Usage: devbox add`, `Try 'timeout
-      --help'`, `placeholder-*: command not found` printed between the devbox-cache mount line
-      and pod create — the card's backticked terms (`` `devbox add` ``, `` `timeout` ``…)
-      command-substitute in some launcher echo/expansion context. Verified HARMLESS to the ride:
-      the pod's decoded recipe carries the card intact. Next: find the unquoted expansion in
-      agent-session.sh (~pod-manifest region) and quote it. Relates FU-114.
-- [ ] **FU-120** — **`agent-finalize` PATH-loss root cause unconfirmed (belt shipped, now masking
-      it).** The launcher pins `PATH=/opt/agent/.devbox/nix/profile/default/bin` on the finalize call
-      (2026-07-31), so bookkeeping can't be lost to this class again; the #71-r2 crash itself is
-      unreproducible (no transcript → pod log gone). Postmortem + the wrong original diagnosis:
-      [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
-      **Action:** none unless a NON-finalize symptom of the same PATH/mount loss appears — then dig.
-      Relates ADR-096 (§Addendum 3), FU-062, FU-116, FU-123.
-
-
-
-
-
 
 - [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
       checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
@@ -270,14 +251,15 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       **Next:** build the activation machinery per the checklist (attended-session class).
       Composes with FU-044 as its deep post-deploy gate.
 
-
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, gap
       register IAC-G01..G07 with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
       Closed so far: G02/G03/G07 (2026-08-02), G05 rung-0 (sleep-tracking#113) + G04 sentinel
       v1 shadow (2026-08-03). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak
       (operator: reviewer-App statuses:write + tofu push ruleset + required check — plan in
-      §L0b), then G06 advisory lens. Relates FU-087/FU-093, ADR-084, ADR-076.
+      §L0b), then G06 advisory lens, then extend the G04 sentinel to **homelab** so tier 1
+      (`argocd/resources/**`) can drop back to unowned (ex-FU-068 residue; the CODEOWNERS line
+      says to delete itself). Relates FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
@@ -375,16 +357,6 @@ lines — detail into `docs/agents/{iac-lane,issue-authoring,observability-and-r
       manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
       Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
       an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
-- [ ] **FU-068** — **Decide homelab's fixer scope — the gate on platform alerts being
-      agent-fixable at all.** ~18 of 27 responder-filed issues land in homelab paths while
-      `is_fixer()` excludes it, and homelab holds its own governor (`agents/**`, `tofu/github/**`).
-      **Label half DONE + APPLIED 2026-08-04** (`labels.tf` retired, 16 resources state-rm'd via
-      `devbox run labels-handoff`; all 27 GitHub labels intact, `github-tofu plan` clean).
-      CODEOWNERS landed; the ruleset flip stays deferred until reviewer coverage exists.
-      **Blocked on a CLICK:** homelab-agents + homelab-reviewer are not installed on homelab, so
-      adding it to the token lists would 422 ESO and break the live token. **Next:** install both
-      → verify /apps → claim + stacks.json + token lists → flip `require_approval`. Tiers:
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane (IAC-G08).
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (M8 capability feed
       BUILT 2026-08-03 — router-store delivery, class_floors shadow); decision record ADR-096

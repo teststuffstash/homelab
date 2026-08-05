@@ -93,10 +93,12 @@ want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies, Pr
 `manifest-lint` prints that every run and fails if it ever validates nothing. Vendoring those
 schemas, and `tofu validate` (a provider download per PR, the FU-130 WAN class), are what remain.
 
-**What is still missing before a fixer authors here** is no longer the gate — it is the fixer
-block itself (which creates the per-repo namespace its worker RoleBinding needs, `agent-read-infra`
-since homelab is the platform's own `-iac`), and the IAC-G04 sentinel covering homelab so tier 1 can
-go back to being unowned. Until then tier 1 is owned as a scaffold and says so.
+**The fixer block landed the same day** (`agents/fixer/openrouter-operator/agentstack.yaml`:
+budget $5/week, `guardrail: none` — the stack chain is a paid model, `claudeTier: false` per the
+FU-134 ruling, egress `none`+enforced), which is what creates the per-repo namespace its worker
+RoleBinding needs (`agent-read-infra`, since homelab is the platform's own `-iac`). **The one thing
+still outstanding** is the IAC-G04 sentinel covering homelab so tier 1 can go back to being
+unowned — a FU-106 next-action. Until then tier 1 is owned as a scaffold and says so.
 
 ### ⚖ Auto-revert does NOT generalize to the platform (operator ruling, 2026-08-04)
 

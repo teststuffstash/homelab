@@ -8,6 +8,43 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-128** *(archived 2026-08-05)* — **Dispatcher executing backticks from manifest comments —
+  FIXED.** Root cause was not the env card: the pod-manifest heredoc in `agents/agent-session.sh`
+  is unquoted (`cat <<EOF`, it must expand `${…}`), so the shell command-substitutes backticks
+  **anywhere in its body — including `#` comment lines**. Three comments carried them and produced
+  the circles fan-out noise verbatim: `` `timeout` `` → "Try 'timeout --help'", `` `devbox add` ``
+  → "Usage: devbox add", `` `placeholder-*` `` → "command not found". Escaped (`` \` ``, the shape
+  line ~927 already used) + a maintainer note in the heredoc. Acceptance: isolated probe
+  reproduced all three symptoms from comment text alone, and the escaped form passes the comments
+  through literally with no execution. Gotcha for the next editor: a `#` comment is **not** inert
+  inside an unquoted heredoc, and multi-line substitution output would corrupt the YAML rather
+  than just print noise.
+
+- **FU-120** *(archived 2026-08-05)* — **`agent-finalize` PATH loss: belt shipped, root cause
+  deliberately unconfirmed.** The launcher pins
+  `PATH=/opt/agent/.devbox/nix/profile/default/bin` on the finalize call (2026-07-31), so
+  bookkeeping can no longer be lost to this class; the #71-r2 crash itself is unreproducible (the
+  crash meant no transcript, and the pod log is gone). No non-finalize symptom of the same
+  PATH/mount loss has appeared since. Postmortem — including the WRONG original diagnosis
+  ("python lives in the devbox env" — it is baked into agent-base) — survives archival:
+  [`docs/incidents/2026-07-29-agent-finalize-bookkeeping.md`](incidents/2026-07-29-agent-finalize-bookkeeping.md).
+  Reopen a dig only on a non-finalize symptom.
+
+- **FU-068** *(archived 2026-08-05)* — **homelab's fixer scope DECIDED and LIVE — the gate is
+  PATH-based, not repo-based.** Shipped 2026-08-04: repo-root `CODEOWNERS` tiers,
+  `require_approval`+`require_code_owner_review` on homelab (ruleset `required-approval` verified
+  live), homelab in the platform claim with a real `fixer:` block (guardrail `none`, egress
+  enforced, `claudeTier: false` per the FU-134 ruling), `labels.tf` retired via
+  `devbox run labels-handoff`, and the CLICK done — both Apps installed, verified 2026-08-05 by
+  `agent-git-homelab` + `loop-{git,reviewer-git}-platform` all SecretSynced (an uninstalled App
+  422s the generator, so a synced token IS the proof). Ordering gotcha worth keeping:
+  `require_approval` is repo-WIDE while code-owner review is path-scoped, and the review reflex
+  derives its scan set from the claims — flipping before homelab joined a claim would have stalled
+  every armed PR on an approval nothing could give. Residue moved, not dropped: extending the
+  IAC-G04 sentinel to homelab (so tier 1 `argocd/resources/**` can go back to unowned) is a
+  FU-106 next-action. Tiers + rulings:
+  [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.
+
 - **FU-136** *(archived 2026-08-04)* — **ArgoCD lever COMPLETE, 4 of 4.** metrics-server,
   kube-prometheus-stack, forgejo and garage all off tofu `helm_release` and into
   `argocd/platform/` — tofu class 4 shrank to cilium/longhorn/argo-cd (≈ADR-005's substrate), so

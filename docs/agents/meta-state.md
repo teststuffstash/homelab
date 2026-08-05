@@ -33,11 +33,12 @@ meant to avoid.)
   `labels.tf` retired, `agent-read-app`/`agent-read-infra` ClusterRoles (responder can finally read
   `events` — the #94 wrong-diagnosis cause), CI gained `manifest-lint` + `pin-only-lint`, and the
   responder gained a self-referential gate + the FU-133 resolve leg (`send_resolved` now true).
-  **NEXT, in order:** (1) homelab's `fixer:` block in the claim — it creates the per-repo ns the
-  worker's `agent-read-infra` RoleBinding needs; use the -iac model chain, NOT `claudeTier` (FU-134
-  ruling: web research must be platform-wide, not harness luck); (2) FU-133's correlation half
-  (`subject:` key); (3) extend the IAC-G04 sentinel to homelab so tier 1 (`argocd/resources/`) can
-  drop back to unowned — the CODEOWNERS line says to delete itself. Tiers + rulings:
+  **FU-068 is DONE + ARCHIVED 2026-08-05** — the fixer block landed (guardrail `none`, egress
+  enforced, `claudeTier: false` per the FU-134 ruling) and the App-install CLICK is verified live
+  (`agent-git-homelab` + `loop-{git,reviewer-git}-platform` SecretSynced; an uninstalled App 422s
+  the generator). **NEXT, in order:** (1) FU-133's correlation half (`subject:` key); (2) extend the
+  IAC-G04 sentinel to homelab so tier 1 (`argocd/resources/`) can drop back to unowned — the
+  CODEOWNERS line says to delete itself, now tracked as a FU-106 next-action. Tiers + rulings:
   `docs/agents/iac-lane.md` §The platform lane. ⚠ agent-runtime#29 (watchdog) is open + un-armed.
 - **Phases 0-2 of the alert→auto-fix plan are DONE and applied; Phase 3 is next and untouched.**
   Live now: CODEOWNERS path tiers + `require_approval`/code-owner review, homelab as a fixer target

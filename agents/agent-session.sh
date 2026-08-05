@@ -831,7 +831,9 @@ spec:
   # homelab#22: total-session wall clock. No bound existed (200 turns × ~5min slow-model turns
   # ≈ 16h theoretical); 4h matches the session key's TTL (estimate_budget.py --ttl-hours) — past
   # it the ride can only 401-storm anyway. K8s kills with reason DeadlineExceeded; the launcher
-  # classifier below maps that to a `timeout` strike, so the chain re-dispatches on the next model.
+  # classifier below maps that to a \`timeout\` strike, so the chain re-dispatches on the next model.
+  # (FU-128: backticks in THIS comment must stay escaped — it is inside the unquoted pod-manifest
+  # heredoc, so the shell command-substitutes them at expansion time, comment or not.)
   activeDeadlineSeconds: ${AGENT_POD_DEADLINE_S:-14400}
   # FU-089: the worker's PROVABLE identity — the proxy's /git-token TokenReviews this SA's
   # projected token (Composition renders the SA per fixer ns; no RBAC grants attached).
@@ -866,9 +868,10 @@ ${DIND_CONTAINER}
         # of TTL pins the launcher to the cached version without hardcoding it here.
         - name: VERSION_CACHE_TTL
           value: "31536000"
-        # FU-118(b): `devbox add` resolves through the in-cluster search proxy (VIP, kata-reachable
+        # FU-118(b): \`devbox add\` resolves through the in-cluster search proxy (VIP, kata-reachable
         # like the other package proxies) instead of the WAN — so a mid-ride add gets a REAL store
-        # path in devbox.lock, not the offline `placeholder-*` that boot-crashes the next round.
+        # path in devbox.lock, not the offline \`placeholder-*\` that boot-crashes the next round.
+        # (FU-128: escaped backticks — unquoted heredoc, see the activeDeadlineSeconds comment.)
         # argocd/resources/devbox-search/ + ip-plan.md; the egress CNP allows .40.27 (composition.yaml).
         - name: DEVBOX_SEARCH_HOST
           value: "http://192.168.40.27"
