@@ -11,6 +11,9 @@ tracker.
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
+  **FU-141 burned** — filed 2026-08-05 for un-reaped ephemeral OpenRouterKey CRs, retracted the
+  same day: already **openrouter-operator#10**, and a fixer-enabled repo's own issue is where that
+  belongs (routing table) — the prior-art grep covered this tracker but not the repo's issues.
 - **An archive entry may stamp the date after the id or at the end of the entry** — both
   `- **FU-NNN** *(archived YYYY-MM-DD)* — …` and `- **FU-NNN** — … *(archived YYYY-MM-DD)*` are
   read by the freshness check. Prefer the first; it sorts and scans better.
@@ -310,15 +313,6 @@ six OVERSIZE items pointer-ized into
       schema location `raw.githubusercontent.com` is NOT in the fixer's baseline egress under
       `enforce: true`: vendor the schemas or harvest the FQDN.
       Detail: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §The platform lane; homelab#97.
-- [ ] **FU-141** — **Expired ephemeral OpenRouterKey CRs are never reaped, and the headroom
-      refresher keeps polling them.** Five ephemeral keys that expired 2026-08-03 (`circles/
-      circles-research-1-*`, `circles-proxy-test-171829`) still exist as CRs on 2026-08-05; the
-      proxy's headroom pass logs `auth/key failed: HTTP Error 401` for each, every 15 min, forever
-      — an upstream call per dead key and a permanent noise floor that hides a REAL auth failure.
-      Harmless to spend, but the 401s are indistinguishable from a live key losing auth.
-      **Next:** reap on expiry in the openrouter-operator handler (the CR carries `LIVEEXPIRES`),
-      or skip `expires < now` in the refresher — the reap is the better half, since the CR is the
-      guardrail now (FU-138, archived). Relates FU-024, ADR-096.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
