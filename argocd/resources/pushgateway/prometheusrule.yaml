@@ -65,6 +65,10 @@ spec:
         # so the guard names the CULPRIT instead of the node. Separation is not a guess: the five
         # infra pods idle at 0-5m, the fault sat at 1887m — this threshold is 100x baseline and
         # 4x below the observed fault. Deleting the pod is the fix; the Deployment recreates it.
+        # ⚠ Expect a ~5-10 min tail naming the DELETED pod after you fix one: the 5m rate window
+        # still holds its samples. First recurrence (2026-08-05 12:48, homelab#103) showed it.
+        # Deliberately NOT suppressed with a join on kube_pod_status_phase — a join that fails
+        # would make this MISS a real spin, and a stale name for five minutes is the cheaper fault.
         - alert: AgentEventInfraSpinning
           expr: sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="agent-coordinator", pod=~".*-(sensor|eventsource)-.*", container!=""}[5m])) > 0.5
           for: 15m
