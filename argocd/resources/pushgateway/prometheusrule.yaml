@@ -47,10 +47,29 @@ spec:
         # worker namespaces via the AgentStack-claim convention ns==repo — extend the regex when a
         # new stack's fixer repo onboards (or it enforces before its alert exists).
         - alert: AgentWorkerEgressDropped
-          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator"}[5m])) > 0
+          # homelab added 2026-08-05: its fixer block (FU-068) enforces egress, and the regex had
+          # not followed — exactly the drift the line above warns about. circles stays OUT until
+          # its `enforce: false` flips; in monitor mode Cilium never emits a DROPPED verdict.
+          expr: sum by (source) (rate(hubble_drop_total{reason="POLICY_DENIED", source=~"oracle-fleet|sleep-tracking|openrouter-operator|homelab"}[5m])) > 0
           for: 2m
           labels:
             severity: warning
           annotations:
             summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
             description: "Sustained POLICY_DENIED drops from namespace {{ $labels.source }}. SYMPTOM ONLY — observed causes so far: tool phone-home noise (jetify update+telemetry, 2026-07-21/22 — rides ran fine throughout) and genuine allowlist misses; a drop does not imply a hung ride. Identify the flows: `devbox run hubble -- --namespace {{ $labels.source }} --verdict DROPPED` (+ `--protocol dns` for the FQDN). Legit destination → the claim's egress.extraFQDNs; phone-home → kill at the tool (agent-session.sh env), never widen policy."
+        # 2026-08-05: the coordinator Sensor hit a JetStream AckSync timeout, redelivered the same
+        # event in a loop, then kept spinning at ~2-4 cores AFTER the loop went silent — a leaked
+        # goroutine. It ate 65% of wk-01 for ~50 min and surfaced only as NodeSystemSaturation,
+        # whose triage blamed "burst Job pods with no CPU requests" (they have requests; nothing
+        # ran `top`). A wrong diagnosis on a node symptom is the second of its kind (homelab#94),
+        # so the guard names the CULPRIT instead of the node. Separation is not a guess: the five
+        # infra pods idle at 0-5m, the fault sat at 1887m — this threshold is 100x baseline and
+        # 4x below the observed fault. Deleting the pod is the fix; the Deployment recreates it.
+        - alert: AgentEventInfraSpinning
+          expr: sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="agent-coordinator", pod=~".*-(sensor|eventsource)-.*", container!=""}[5m])) > 0.5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)"
+            description: "{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. Read its log for `AckSync() on message: nats: timeout` and repeated `Triggering actions after receiving dependency` on ONE event id — that is a redelivery loop, and the CPU can outlive it. Check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`)."
