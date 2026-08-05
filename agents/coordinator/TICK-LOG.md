@@ -2136,3 +2136,45 @@ invites a second, wrong repair. And circles #18/#19 are still `task/build` thoug
 #17/#18/#19 were authored in one 66-second batch, all titled `Goal:` — #17 was promoted when the lane
 was built and its siblings were never swept. Left for the codeowner: neither carries
 `agent-fix`/`agent/queued`, so queueing is deliberate and there is no silent-dispatch risk.
+
+### 2026-08-05 (cont. 4) — the goal lane closes its first goal, and the backstop that could not reach
+**Condition:** #23's ride landed, and the operator asked the one question that broke the session's
+comfortable reading of the world: *"Did it fire?"*
+
+**The fan-out arm completed.** PR#26 (`fix/23-render-page` → `goal/17-p0-mvp`) merged 17:49:40
+reviewer-approved and ride-armed; I hand-closed #23 per FU-143; `goal-review` then ruled **goal met**
+at 18:15:58 and closed #17. It judged against the goal branch @88fe0d8 and the post-merge CI run,
+matched the bake's eight fixture lights verbatim, confirmed both children's tests cite `CIR-*` rows —
+and correctly refused to touch the two human-reserved things (PR#21 the frozen one-shot arm, PR#25 the
+deliberate draft to master), which I verified rather than believed. Goal → decompose → two children →
+two merges → re-judgement → closed, on $0.0571 for the page ride.
+
+**THE BUG THE QUESTION FOUND: `goal-review` was unreachable in exactly the state it exists for.** The
+scan decides `nothing actionable` on `$items` and only reads `$units` further down, PAST that
+`continue`. Every other clause survives this by accident — its subject is a queued issue or an open
+PR, so it lands in a report list too. `goal-review`'s subject is a goal parked in `agent/blocked`,
+deliberately in NO report list. So the unit was unreachable whenever it was the ONLY work: every child
+closed, nothing else going on, the goal needing re-judgement. That is verbatim the deadlock the
+operator asked to be backstopped ("it will deadlock too much when only child traffic causes the goal to
+move"). The backstop was built and then gated out by a line written before it existed.
+
+**Why it survived a day of scrutiny, including mine.** It only ever ran in the presence of UNRELATED
+work: 16:30 and 17:00 fired because #23 was still open and populating `items`. The two ticks after the
+predicate fix went quiet FOR THE RIGHT REASON. So the first genuinely-wrong quiet looked like more of
+the same, and I had already reported it as "correct, WIP occupied" — right for that tick, wrong
+forever after, which is the identical shape to the `gh --jq` bug logged this morning. **A clause that
+only works when other work is present is not working.** Fixed by gating on the union; the units-only
+case now PRINTS that it is units-only, because the silence is what hid it. Verified live by firing a
+manual tick: `ACTIONABLE — (no report items…)` → `dispatching … issue-17 (goal-review)`.
+
+**Two smaller ones.** `gh pr view` has no `merged` field (that is REST) — a watch script of mine used
+`--json state,merged,…` and would have failed on every poll, caught only because I ran the query by
+hand first. And oracle-fleet PR#166 merged while I was polling `mergeStateStatus`, which returns
+`UNKNOWN`/`null` for a CLOSED PR — I was three queries into diagnosing a phantom PAT permission
+problem before checking whether the branch still existed. Both are the same discipline: **probe the
+subject, not the symptom you expect.**
+
+**Model wiring, asked and answered:** `cmodel` comes from the LIVE `AgentStack` claim
+(`.spec.coordinatorModel // "sonnet"`), not from `agents/stacks.json` — the file is only a fallback for
+stacks absent from the cluster, and a failed cluster read PROBE-FAILs loudly. There is no per-clause
+override: goal-review, goal-decompose, queued-dispatch, arbitrate and merged-closeout all share it.

@@ -19,12 +19,17 @@ meant to avoid.)
   Arming is keyed on the `goal/` PREFIX in `agent-session.sh` + `review-reflex.sh` C9. ⚠ NEVER widen
   that to "any non-default base": the prefix is the only thing carrying the ruleset, and arming into
   an unprotected base merges ON OPEN.
-- **⏳ BOTH CHILDREN OF #17 ARE NOW DONE — expect `goal-review` at the next tick.** #23's PR#26 merged
-  into `goal/17-p0-mvp` 17:49:40 (reviewer-approved, ride-armed); I hand-closed #23 at 17:51:09 per
-  FU-143. That closure post-dates the newest bot comment on #17 (16:32:40), so the predicate fires:
-  the goal gets re-judged against its acceptance with the bake AND the page in hand. **If it rules
-  the goal met**, the remaining step is PR#25 (`goal/17-p0-mvp` → master) which is a DELIBERATE
-  DRAFT — un-drafting it is an operator act, and it is the only thing holding the goal branch back.
+- **✅ GOAL #17 IS DONE — the fan-out arm is complete and the lane ran end-to-end.** `goal-review`
+  ruled **goal met** at 18:15:58 and closed #17 (`agent/blocked` → `agent/done`). It judged against
+  the goal branch @88fe0d8 and the post-merge CI run, matched the bake's eight fixture lights
+  verbatim, and confirmed both children's tests cite `CIR-*` spec rows. Both children CLOSED
+  `agent/done`. **It correctly did NOT touch the two human-reserved things** (verified, not taken on
+  faith): PR#21 untouched since 14:51:16, still `major/awaiting-human`; PR#25 still draft + unarmed.
+- **⚖ WHAT IS LEFT ON CIRCLES IS YOURS: the FAN-OUT vs ONE-SHOT comparison.** Both arms of the same
+  goal now exist — the fan-out arm merged on `goal/17-p0-mvp` (#22+#23, $0.0571 for the page ride),
+  and the frozen one-shot arm PR#21 (`CHANGES_REQUESTED`, DIRTY). Choosing/reconciling between them
+  is the call the goal issue explicitly reserved. PR#25 (`goal/17-p0-mvp` → master) is a DELIBERATE
+  DRAFT and is the only thing holding the branch back; un-drafting it is an operator act.
 - **⚠ `gh pr view` has NO `merged` field** (that is the REST API); use `state == "MERGED"` or
   `mergedAt`. A watch script of mine used `--json state,merged,...` and would have failed on every
   single poll — caught only because I ran the same query by hand first. Probes in script files,
