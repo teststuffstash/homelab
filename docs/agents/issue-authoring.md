@@ -17,9 +17,16 @@ Every surface below produces **bot-authored, therefore INERT** issues: no `agent
 `agent/queued`. A human labels, or nothing runs. That is loop-safety breaker #1 and none of these
 legs retire it — leg (c) moves the breaker *up* to the goal issue rather than away.
 
-The graduation knob (**not built**): claim `issueAuthoring.selfQueue`, default off, letting the
-coordinator self-label harvested issues, bounded by the existing breakers plus a per-day rate cap.
-Flipping it is the operator's per-stack trust call, and it *does* retire breaker #1 for that stack.
+The graduation knob for the HARVEST surfaces (**not built**): claim `issueAuthoring.selfQueue`,
+default off, letting the coordinator self-label harvested issues, bounded by the existing breakers
+plus a per-day rate cap. Flipping it is the operator's per-stack trust call, and it *does* retire
+breaker #1 for that stack.
+
+⚠ **The ALERT lane already crossed this line** (2026-08-04, `agents/coordinator/responder-argo.yaml`
+§selfQueue): a responder-filed issue is labelled `agent-fix`+`agent/queued` by the *shell*, not the
+session, when three deterministic fail-closed gates pass — not self-referential, a `Touches:`
+footprint is declared, and that footprint hits no governance path. No claim knob gates it. So
+"bot-authored ⇒ inert" is the rule for the surfaces below, **not** for the alert lane.
 
 ## Leg (a) — follow-up harvest — BUILT 2026-07-27
 
