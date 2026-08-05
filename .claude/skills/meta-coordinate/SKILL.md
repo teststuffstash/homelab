@@ -23,8 +23,13 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   MP-T10): the scan dispatches a `merged-closeout` unit; the coordinator session verifies,
   flips `agent/done` and harvests review `Follow-ups:` bullets as inert issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
   their flip + harvest; a missed one is a clause bug to fix, not a label to hand-flip.
-- **Operator-lane work** the loop CANNOT do: `.github/workflows/*` changes (worker recipes +
-  tokens forbid them), platform/homelab changes, Composition/XRD work. Do these directly,
+- **Operator-lane work** the loop CANNOT do: `.github/workflows/*` changes on **homelab** (tier 3
+  in CODEOWNERS — never agent-authored), platform/homelab changes, Composition/XRD work. ⚠ do NOT
+  generalise the workflows rule to stack repos: **every worker token carries `workflows: write`**
+  (verified on circles/sleep-tracking/openrouter-operator/homelab, 2026-08-05), so what forbids a
+  workflow edit there is recipe PROSE, and the recipes allow it when the ISSUE authorizes it
+  (circles#19 does, via its `Touches:` line). Assuming otherwise means hand-doing loop work.
+  Do these directly,
   through PRs with auto-merge. **-iac repos are NOT this lane** (operator directive 2026-08-02):
   steady-state -iac work belongs to the STACK's fixer (sleep-iac has one since FU-106; a fixerless
   -iac repo means the fixer block is MISSING — enable it, FU-106, don't do its work by hand).
