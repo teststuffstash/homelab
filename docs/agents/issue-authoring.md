@@ -121,6 +121,36 @@ escaped-diff belt live THERE). Authoring-side semantics: **omitting the line is 
 exclusive** (classic WIP=1); a worker discovering mid-ride that it needs paths outside its
 declaration files a new issue for the owning concern (TRACKS rule 2).
 
+## Base: the declared base branch (2026-08-05)
+
+An issue whose work must be built on an **unmerged branch** carries a `Base:` body line, same
+unbulleted grammar as `Touches:` and `Depends-on:`:
+
+```
+Base: research/issue-1-weave
+```
+
+**Absent means master**, so every issue filed before this reads exactly as it did. Present, the
+LAUNCHER (not the dispatcher — dispatch params are launcher-owned, ADR-094) does three things from
+that one declaration: clones and forks from that branch, tells the agent in the env card to
+`gh pr create --base <branch>`, and **refuses to arm auto-merge**. The third is the point: work
+stacked on a branch that is itself unmerged and under human evaluation must not land itself. The
+re-arm belt (`review-reflex.sh` C9) skips PRs whose base is not the repo default for the same
+reason — keyed on the base, not on a branch prefix, because these rides push ordinary `fix/*`
+branches. `--ref` still overrides an explicit operator dispatch.
+
+Who writes the line: the issue author, at authoring time, like every other body line — and since
+authored issues are inert until a human labels them (breaker #1 above), a wrong `Base:` is caught
+in the same read that adopts the issue.
+
+Why a body line and not a label: the value is DATA (which branch), and labels cannot carry it —
+the same argument as `Touches:`. First use: circles#17/#18/#19 against the woven spec tree in
+circles#16.
+
+The updater needed no change: `update-pr-branch.yml` passes `base: master` and
+`require_auto_merge_enabled: true`, so a stacked PR is excluded twice over — it is neither based on
+master nor armed. Verified before writing this, rather than assumed.
+
 ## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
 
 Authoring a dependency = **create the native edge** (verified live: create, cross-repo, list-ride

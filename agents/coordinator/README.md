@@ -204,6 +204,11 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
+   **Do NOT pass a base branch.** An issue carrying a `Base: <branch>` body line is handled by the
+   LAUNCHER: it reads the line, clones/forks from that branch, tells the agent to open the PR
+   against it, and refuses to arm auto-merge (issue-authoring.md §Base). Absent ⇒ master, i.e. every
+   dispatch you have ever written stays correct. `--ref` exists for an operator override only.
+
    `--recipe` makes the LAUNCHER build the invocation from the recipe file — never hand-assemble a
    `--run` command (the old template shipped un-substituted `$B64` verbatim on #55, 2026-07-21, and
    burned a session until the FU-069 breaker caught it).

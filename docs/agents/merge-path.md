@@ -102,6 +102,10 @@ Four deterministic pieces around the existing gates:
    which is what we want — no history rewrite, no force-push, a stale worker clone can still
    `git pull`). Triggers: `push` to master, CI-workflow completion, and a cron sweeper
    (catches a PR that goes green while master is quiet).
+   **Stacked PRs are excluded twice over** (2026-08-05, the `Base:` line): the action is configured
+   `base: master`, so a PR based on an unmerged branch is never selected, and such a PR is never
+   armed anyway. Checked against the live workflow rather than assumed — no change was needed there,
+   and the conflict-labeler in the same workflow only labels ARMED PRs, so it stays quiet too.
 3. **Review reflex** — the *coordinator subsystem's* deterministic half, in ns `agent-coordinator`
    (it holds both reviewer secrets), pure bash + `gh`. **Now edge-triggered (ADR-093):** the
    github-exporter POSTs a reviewable PR to an Argo Events webhook EventSource → Sensor → `review`

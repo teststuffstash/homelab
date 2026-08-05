@@ -27,6 +27,9 @@ The most important distinction (a real run conflated them and shipped red CI):
 - **Gate B — post-PR iteration** (human review comments, or server-only CI). The worker does **not**
   block on this. It runs to a terminal state and dies. A review round is a *new invocation* of the
   same pure function: `(repo@base-sha, issue, PR + review thread + CI results) → updated branch`.
+  The `base` in that signature is **declarable** since 2026-08-05: an issue carrying a
+  `Base: <branch>` body line dispatches against that branch instead of master, and its PR is
+  never armed for auto-merge ([issue-authoring.md](issue-authoring.md) §Base). Absent ⇒ master.
 
 ## Worker = a pure function; default fresh, not hot
 

@@ -182,7 +182,9 @@ if [ -n "${RECIPE:-}" ]; then
   # A research recipe's PR is human-gated BY DESIGN (FU-105) — derive --no-arm from the recipe
   # name so the un-armed gate is launcher-owned, never a dispatcher memory test (ADR-094; the
   # first live ride was armed by finalize right past the recipe's "do not arm").
-  case "$(basename "$RECIPE")" in research*) NO_ARM=1; echo "→ --no-arm derived from research recipe (human-gated PR)";; esac
+  case "$(basename "$RECIPE")" in
+    research*) NO_ARM=1; RESEARCH_RECIPE=1; echo "→ --no-arm derived from research recipe (human-gated PR)";;
+  esac
 fi
 
 NS="$PROJECT"
@@ -285,11 +287,22 @@ render_env_card() {
   printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-3} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
   # WHY: the branch PREFIX is recipe-owned (fix/ fixer, research/ researcher) — the FU-126 audit
   # caught this card claiming fix/-only while a research ride legitimately pushed research/*
-  # (a compliance-minded model could deadlock on the contradiction).
-  if [ -n "${NO_ARM:-}" ]; then
+  # (a compliance-minded model could deadlock on the contradiction). Keyed on the RECIPE, not on
+  # NO_ARM: since 2026-08-05 a `Base:` declaration also sets NO_ARM on a fix/ ride, and keying the
+  # prefix off NO_ARM would have told that ride to push research/ — the same contradiction again.
+  if [ -n "${RESEARCH_RECIPE:-}" ]; then
     printf '%s\n' "- **Write scope:** you can only push a \`research/\`-prefixed branch (the recipe's branch rule) and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
   else
     printf '%s\n' "- **Write scope:** you can only push a \`fix/\`-prefixed branch and open a PR — master is unreachable (branch protection + token scope). A real boundary, not something to route around."
+  fi
+
+  # WHY: a declared `Base:` (issue body) means the work is STACKED on an unmerged branch. Both
+  # halves must be said or neither helps: the clone is already on that branch (launcher), but
+  # `gh pr create` defaults to the repo's DEFAULT branch, and a PR opened against master would
+  # show the entire base branch plus this change — a diff that cannot mean what it appears to
+  # mean, reviewed by a reflex that would then arm it.
+  if [ "$BASE_REF" != "master" ]; then
+    printf '%s\n' "- **Base branch: \`${BASE_REF}\`, NOT master.** Your clone is already on it and your branch forks from it. Open the PR against it explicitly — \`gh pr create --base ${BASE_REF} …\` — or the PR will target master and its diff will include everything in \`${BASE_REF}\` on top of your work. This PR is human-gated: it will NOT auto-merge, which is deliberate."
   fi
 }
 
@@ -303,6 +316,27 @@ if [ -n "${RECIPE:-}" ]; then
   # label and a sibling `.agents/<class>.yaml` exists, use THAT — launcher-owned, never LLM-picked
   # (ADR-094). Default is the passed recipe; an unknown class or missing sibling degrades to it loudly.
   if command -v gh >/dev/null 2>&1; then
+    # ── `Base:` — the declared base branch (2026-08-05, circles handoff) ────────────────────────
+    # Same unbulleted body-line grammar as `Touches:` (ADR-097) and `Depends-on:` (FU-111), read
+    # HERE rather than by the dispatcher: the launcher owns dispatch params (ADR-094), and a
+    # dispatcher-side flag would be a memory test the coordinator has already failed twice
+    # (#55's hand-assembled --run, the first research ride armed past its recipe).
+    # ABSENT ⇒ master ⇒ every issue filed to date dispatches exactly as before.
+    # Present ⇒ (1) fork + clone from that branch, (2) the card tells the agent to open its PR
+    # against it, (3) NEVER arm auto-merge: stacked work on an unmerged base is human-gated by
+    # construction — landing it automatically is precisely what the operator is holding back.
+    # `--ref` still wins (an explicit operator override beats a declaration).
+    ISSUE_BASE="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
+      --jq '.body' 2>/dev/null | sed -n 's/^[Bb]ase:[[:space:]]*//p' | head -1 | tr -d '[:space:]' || true)"
+    if [ -n "$ISSUE_BASE" ]; then
+      if [ "$BASE_REF" != "master" ]; then
+        echo "→ Base: ${ISSUE_BASE} declared on #${ISSUE_N} but --ref ${BASE_REF} was passed — the explicit flag wins"
+      else
+        BASE_REF="$ISSUE_BASE"
+        NO_ARM=1
+        echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed"
+      fi
+    fi
     TASK_CLASS="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json labels \
       --jq '[.labels[].name|select(startswith("task/"))|ltrimstr("task/")]|first // empty' 2>/dev/null || true)"
     if [ -n "$TASK_CLASS" ]; then

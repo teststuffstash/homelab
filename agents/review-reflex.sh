@@ -91,6 +91,10 @@ K="${REVIEW_CONCURRENCY:-2}"
 NS="${REVIEWER_NS:-${LOOP_NS_ARG:-agent-coordinator}}"
 REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot identity
 WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}" # the worker App's PR-author login (C9 re-arm scope)
+# The base every ordinary agent PR targets. A PR based on anything else is STACKED work (an issue
+# carrying `Base: <branch>`, 2026-08-05) and is un-armed on purpose — C9 must not "repair" that.
+# Every repo in the fleet uses master; overridable rather than hardcoded at the jq call site.
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-master}"
 ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per PR, ever
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
@@ -149,7 +153,7 @@ for repo in $REPOS; do
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -180,13 +184,18 @@ for repo in $REPOS; do
       log "[$repo] C9: arm of #$unarmed_pr FAILED (non-fatal — the scan's orphan clause reports it)"
     fi
   done <<EOF_C9
-$(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" '
+$(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAULT_BRANCH" '
     .[] | select(.autoMergeRequest == null and .isDraft == false
                  and .author.login == $author
                  and all(.labels[].name; . != "agent/error")
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
-                 and ((.headRefName // "") | startswith("research/") | not))
+                 and ((.headRefName // "") | startswith("research/") | not)
+                 # STACKED work (2026-08-05): a PR whose base is not the repo default was
+                 # dispatched from an issue carrying `Base: <branch>` and is un-armed BY DESIGN —
+                 # its base is itself unmerged and under human evaluation. Same rule as research/*,
+                 # keyed on the base rather than the branch prefix (these push fix/* like any fixer).
+                 and ((.baseRefName // $default) == $default))
         | .number')
 EOF_C9
 
