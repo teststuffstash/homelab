@@ -484,8 +484,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           '[.[] | select((.parent.number // 0) == $p) | select(.state == "CLOSED") | .closedAt] | sort | last // ""')"
         [ -z "$newest_close" ] || [ "$newest_close" = "null" ] && continue
         # newest comment BY THE LOOP on the goal — a human comment must not silence the clause
-        last_bot="$(gh issue view "$g" --repo "$slug" --json comments \
-          --jq --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" \
+        # ⚠ `gh --jq` takes ONLY an expression — it has no --arg/--argjson (those are jq flags).
+        # Passing them makes gh exit "accepts 1 arg(s)", and behind `|| echo ""` that yields an
+        # EMPTY last_bot, which this predicate reads as "the loop has never commented" — so the
+        # clause re-fires EVERY tick for any goal with a closed child, burning a coordinator
+        # session each time. Two were spent (16:30, 17:00) on 2026-08-05 before it was caught.
+        # This is the SAME trap already written up for the budget gate hours earlier in the same
+        # session; pipe to a real jq, always.
+        last_bot="$(gh issue view "$g" --repo "$slug" --json comments 2>/dev/null \
+          | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" \
              '[.comments[] | select(.author.login == ($wa|ltrimstr("app/"))) | .createdAt] | sort | last // ""' 2>/dev/null || echo "")"
         # ISO-8601 Z sorts lexically, but `[ a \> b ]` is a bashism that silently misbehaves under
         # other shells — compare with sort so the predicate cannot quietly invert.
