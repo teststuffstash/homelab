@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-143**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-144**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -303,6 +303,18 @@ six OVERSIZE items pointer-ized into
       WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
       upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
       Relates FU-132 (archived), FU-058, ADR-089.
+- [ ] **FU-143** — **A goal's child cannot close itself, so the fan-out arm stalls on every child.**
+      GitHub honours closing keywords ONLY when a PR merges into the DEFAULT branch. A child PR
+      merges into `goal/**`, so `Fixes #N` is inert: the issue stays OPEN + `agent/in-progress` with
+      no open PR, which C4/C5 reads as abandoned and re-dispatches onto already-merged work. It also
+      stalls everything downstream — `goal-review` fires on a child CLOSING, and siblings gated by
+      `Depends-on:` never unblock. `merged-closeout` (C6) cannot help: it starts from `--state
+      closed` issues. Hit live on circles#22/#24 (2026-08-05); 100% recurrence, closed by hand.
+      **Next:** widen C6's predicate to include an OPEN `agent/in-progress` issue whose referencing
+      PR is MERGED into a non-default base, and adjust its play (verify the outcome on the GOAL
+      branch, not master). ⚠ mirror-image of agent-runtime#32, where the hazard is closing too
+      EARLY — same GitHub rule, opposite handling, so do not "fix" one by reverting the other.
+      Design: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Leg (c).
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell

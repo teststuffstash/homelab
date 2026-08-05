@@ -319,6 +319,23 @@ Why a body line and not a label: the value is DATA (which branch), and labels ca
 the same argument as `Touches:`. First use: circles#17/#18/#19 against the woven spec tree in
 circles#16.
 
+### ⚠ A child cannot close itself — FU-143
+
+GitHub honours closing keywords (`Fixes #N`) **only when the PR merges into the DEFAULT branch**. A
+goal's child merges into `goal/**`, so the keyword is inert and the issue stays OPEN and
+`agent/in-progress` with no open PR. Three things break at once, and they are not obvious:
+
+1. **C4/C5 re-dispatches** a ride onto already-merged work (in-progress + no open PR = abandoned).
+2. **`goal-review` never fires** — it triggers on a child CLOSING.
+3. **Siblings gated by `Depends-on:` never unblock.**
+
+`merged-closeout` (C6) cannot rescue it: C6's own input is `gh issue list --state closed`, so an
+issue that never closes is invisible to it. Until FU-143 lands, **the meta-coordinator closes a
+merged child by hand** (`agent/done` + close), which is what unstalled circles#22 on 2026-08-05.
+
+⚠ This is the MIRROR IMAGE of agent-runtime#32, where the hazard is a stacked PR closing its issue
+too EARLY. Same GitHub rule, opposite handling — do not resolve one by reverting the other.
+
 ### Who updates what when a branch moves — the two-hop cascade
 
 ⚠ The original note here said *"the updater needed no change — a stacked PR is excluded twice over,
