@@ -183,21 +183,27 @@ for repo in $REPOS; do
     else
       log "[$repo] C9: arm of #$unarmed_pr FAILED (non-fatal — the scan's orphan clause reports it)"
     fi
+  # ⚠ NO APOSTROPHES OR BACKTICKS in the comments below. This jq program is a SINGLE-QUOTED
+  # argument inside $( ) in an unquoted heredoc: an apostrophe (coordinator's) CLOSES the quote and
+  # bash then parses the jq parens as shell syntax; a backtick becomes command substitution.
+  # bash -n cannot see either — the failure is at runtime and it kills the whole reflex (exit 2,
+  # review + arm dead FLEET-WIDE until fixed). Cost one outage on 2026-08-05, from the word
+  # "coordinator's". Test edits by RUNNING the block, not by parsing the file.
   done <<EOF_C9
 $(printf '%s' "$prs" | jq -r --arg author "$WORKER_AUTHOR" --arg default "$DEFAULT_BRANCH" '
     .[] | select(.autoMergeRequest == null and .isDraft == false
                  and .author.login == $author
                  and all(.labels[].name; . != "agent/error")
-                 # `major/awaiting-human` = a PR a human has deliberately parked (a major bump
+                 # major/awaiting-human = a PR a human has deliberately parked (a major bump
                  # awaiting a person, or a FROZEN comparison arm — circles#21). Before goal/**
                  # became armable its non-default base was what kept it un-armed; that accident is
-                 # gone, so the intent has to be stated. Same label the coordinator's
-                 # changes-requested clause already honours.
+                 # gone, so the intent has to be stated. Same label the changes-requested
+                 # clause in coordinator-scan.sh already honours.
                  and all(.labels[].name; . != "major/awaiting-human")
                  # research/* = the FU-105 researcher convention: DELIBERATELY un-armed — the
                  # human gate IS the un-armed state (roles.md §researcher); never re-arm.
                  and ((.headRefName // "") | startswith("research/") | not)
-                 # STACKED work (2026-08-05, revised same day): a PR into a `goal/**` INTEGRATION
+                 # STACKED work (2026-08-05, revised same day): a PR into a goal/** INTEGRATION
                  # branch IS armable — that branch carries the same ruleset as master, so the arm
                  # waits for CI + an approving review (operator: feature→goal automates,
                  # goal→master stays human). Any OTHER non-default base still refuses: auto-merge
