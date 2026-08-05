@@ -10,7 +10,7 @@ K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
 STACK_NS="${STACK_NS:-sleep-agents}"; RIDE_NS="${RIDE_NS:-sleep-tracking}"
 REPO="${REPO:-teststuffstash/sleep-tracking}"; SCAN_PREFIX="${SCAN_PREFIX:-coordinate-sleep-}"
 last_scan=""; last_pods=""; last_pr=""; last_emitted_sum=""; last_scan_seen=$(date +%s)
-probe_fails=0; last_keywarn=""; behind_since=0; last_am=""
+probe_fails=0; last_keywarn=""; behind_since=0; last_am=""; last_wrongbase=""; last_armed=""
 while true; do
   now=$(date +%s)
   # --- newest scan tick (pod name == workflow name) ---
@@ -24,7 +24,7 @@ while true; do
       last_scan="$wf"; last_scan_seen=$now
       sleep 45  # let the tick clone + finish writing
       sum=$($K logs -n "$STACK_NS" "$wf" -c main 2>/dev/null \
-            | grep -E "actionable|spawn|dispatch|REPORT-ONLY|agent/error|WIP busy|probe FAILED|reaping|blocked" \
+            | grep -E "actionable|spawn|dispatch|REPORT-ONLY|agent/error|WIP busy|probe FAILED|reaping|blocked|Base:|PREFLIGHT REFUSED" \
             | grep -vE "^time=" | head -8)
       # idle ticks are liveness-only; emit on CHANGE of the report block
       if [ "$sum" != "$last_emitted_sum" ]; then
@@ -74,12 +74,30 @@ while true; do
   [ -n "$circ" ] && echo "PROXY: $circ"
   # --- open-PR set (jail PAT pool, ~30 req/h) + FU-124 armed-BEHIND clause ---
   pr=$(gh pr list --repo "$REPO" --state open \
-        --json number,mergeStateStatus,reviewDecision,labels 2>/dev/null \
-        | jq -c '[.[] | {n:.number, m:.mergeStateStatus, rd:.reviewDecision, l:[.labels[].name]}]')
+        --json number,mergeStateStatus,reviewDecision,labels,baseRefName,headRefName,autoMergeRequest 2>/dev/null \
+        | jq -c '[.[] | {n:.number, m:.mergeStateStatus, rd:.reviewDecision, b:.baseRefName, h:.headRefName, am:(.autoMergeRequest!=null), l:[.labels[].name]}]')
   if [ -z "$pr" ]; then
     echo "PROBE-FAIL: gh pr list returned nothing"
   else
     [ "$pr" != "$last_pr" ] && { echo "open PRs: $pr"; last_pr="$pr"; }
+    # --- BASE_EXPECT: a stack whose RIDE work must land on a NON-default branch (circles' woven
+    #     spec contract, 2026-08-05). The launcher forks the clone from the declared base, but
+    #     "open the PR against it" is recipe PROSE — `gh pr create` with no --base silently
+    #     targets the repo default and drags the whole base branch into the diff. Scoped to ride
+    #     heads (BASE_HEADS, default ^agent/) so the human-gated research/* PRs stay quiet.
+    if [ -n "${BASE_EXPECT:-}" ]; then
+      wrong=$(jq -c --arg b "$BASE_EXPECT" --arg hp "${BASE_HEADS:-^agent/}" \
+                '[.[] | select((.h|test($hp)) and .b != $b)]' <<<"$pr")
+      if [ "$wrong" != "[]" ] && [ "$wrong" != "$last_wrongbase" ]; then
+        echo "BASE DRIFT: open PR(s) NOT based on '$BASE_EXPECT': $wrong — a ride ignored --base; close/retarget before it merges"
+        last_wrongbase="$wrong"
+      fi
+      armed=$(jq -c --arg hp "${BASE_HEADS:-^agent/}" '[.[] | select(.am == true and (.h|test($hp))) | .n]' <<<"$pr")
+      if [ "$armed" != "[]" ] && [ "$armed" != "$last_armed" ]; then
+        echo "AUTO-MERGE ARMED on $armed — expected NOT armed while the stack lands on '$BASE_EXPECT'"
+        last_armed="$armed"
+      fi
+    fi
     if jq -e '.[] | select(.m=="BEHIND" and .rd=="APPROVED")' >/dev/null 2>&1 <<<"$pr"; then
       [ "$behind_since" -eq 0 ] && behind_since=$now
       if [ $((now - behind_since)) -gt 900 ]; then
