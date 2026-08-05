@@ -78,7 +78,13 @@ spec:
         claudeTier: false
         egress:
           profile: none # baseline FQDNs only — homelab work is YAML/HCL, no pypi/npm pulls
-          extraFQDNs: []
+          # raw.githubusercontent.com is the fixer's OWN GATE, not a convenience: `devbox run
+          # manifest-lint` shells to kubeconform, whose default schema location is that host. Under
+          # enforce:true a ride would fail on a network drop rather than on its manifest — a gate
+          # that cannot run is worse than no gate, because the ride reports the wrong reason.
+          # Pre-declared rather than harvested from a tripped ride: the dependency is known, and
+          # "harvest first" is for the deps we cannot predict (FU-142 / homelab#97).
+          extraFQDNs: [raw.githubusercontent.com]
           enforce: true # the -iac lane's ring-2 posture; harvest first if a ride trips it
     - name: openrouter-operator
       labels: { extra: [] } # claim-owned label set (FU-068; live diff 2026-07-16: strict taxonomy subset)
