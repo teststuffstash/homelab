@@ -140,6 +140,31 @@ meant to avoid.)
   recipes or CLAUDE.md mentions `/workspace`. Treat the cause as OPEN, not settled.
 - **NOT YET LOOKED AT (operator asked):** why mechanical dep bumps in `-iac` repos need a review —
   the iac-lane question, still untouched.
+- **THE GOAL LANE IS LIVE AND AUTOMATIC feature→goal (2026-08-05).** `goal/<issue>-<slug>` is the
+  stacked-base convention; circles' is `goal/17-p0-mvp` (renamed from `research/issue-1-weave`).
+  Protected by tofu (`repo_rulesets.tf` includes `refs/heads/goal/**` in required-checks +
+  required-approval, APPLIED), so an armed child waits for `ci` + a review then merges itself.
+  Arming is keyed on the `goal/` PREFIX in BOTH `agent-session.sh` and `review-reflex.sh` C9 —
+  ⚠ do NOT widen to "any non-default base": the prefix is the only thing carrying the ruleset, and
+  arming into an unprotected base merges ON OPEN (no CI, no review).
+  **NEXT ACTION: #24 is CLEAN + APPROVED + UNARMED** — update-branch cleared its arm; C9 re-arms on
+  its next pass. If it is still un-armed after ~20 min, read C9's filter rather than arming by hand.
+  Then: merge → #22 closes → **`goal-review` fires for the FIRST time** → #23 dispatches.
+- **⚠ Three couplings the goal lane exposed — all cost a stuck PR before being found:**
+  (1) a required check on a branch pattern is only real if the WORKFLOW TRIGGERS on that pattern
+  (circles CI said `branches: [master]`; #24 sat APPROVED+armed and permanently BLOCKED). Fixed in
+  circles `b21433b`. (2) `pull_request` evaluates the workflow from the merge of head into BASE, so
+  a fix on master does NOT reach children until the GOAL BRANCH is refreshed from master. (3) the
+  update cascade is TWO HOPS and the top one is manual — nobody auto-updates `goal → master`
+  (both updaters require armed; that PR never is). Documented: `issue-authoring.md` §Who updates
+  what when a branch moves.
+- **GitHub HAS native stacked PRs** (checked the docs 2026-08-05 after asserting otherwise — I was
+  wrong). It enforces bottom-up merge ordering, auto-retargets, and — the part we hand-built —
+  propagates branch protection AND default-branch CI checks to every PR in the stack. **Not adopted
+  for the goal lane**: its "bottom" is the PR targeting master, so it would require merging
+  goal→master FIRST, inverted from what we want; and our shape is a FAN-IN (N children → one
+  integration branch), not the linear chain it models. It does NOT block a parent merging while
+  children are open, so drafting the goal→master PR stays the guard.
 - **Soak watches, not actions** (each gates a later operator flip): iac-sentinel shadow
   violations (→ G01 enforcement flip, FU-106), router shadow decisions + capability-floor skips
   (→ P4 flip, FU-095), native blockedBy edges in scan logs (→ FU-111 body-line retirement),
