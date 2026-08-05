@@ -84,15 +84,19 @@ while true; do
     #     spec contract, 2026-08-05). The launcher forks the clone from the declared base, but
     #     "open the PR against it" is recipe PROSE — `gh pr create` with no --base silently
     #     targets the repo default and drags the whole base branch into the diff. Scoped to ride
-    #     heads (BASE_HEADS, default ^agent/) so the human-gated research/* PRs stay quiet.
+    #     heads (BASE_HEADS, default ^(agent|fix)/) so the human-gated research/* PRs stay quiet.
+    #     ⚠ ^agent/ ALONE IS WRONG (my bug, 2026-08-05): the launcher only falls back to
+    #     agent/<ts>; the RECIPES name their branch fix/<slug>, so every real ride PR today —
+    #     circles fix/bake-and-page-p0-mvp, openrouter-operator fix/issue-14-rbac-delete — was
+    #     invisible to this clause. A guard scoped to the branch name the rides do not use.
     if [ -n "${BASE_EXPECT:-}" ]; then
-      wrong=$(jq -c --arg b "$BASE_EXPECT" --arg hp "${BASE_HEADS:-^agent/}" \
+      wrong=$(jq -c --arg b "$BASE_EXPECT" --arg hp "${BASE_HEADS:-^(agent|fix)/}" \
                 '[.[] | select((.h|test($hp)) and .b != $b)]' <<<"$pr")
       if [ "$wrong" != "[]" ] && [ "$wrong" != "$last_wrongbase" ]; then
         echo "BASE DRIFT: open PR(s) NOT based on '$BASE_EXPECT': $wrong — a ride ignored --base; close/retarget before it merges"
         last_wrongbase="$wrong"
       fi
-      armed=$(jq -c --arg hp "${BASE_HEADS:-^agent/}" '[.[] | select(.am == true and (.h|test($hp))) | .n]' <<<"$pr")
+      armed=$(jq -c --arg hp "${BASE_HEADS:-^(agent|fix)/}" '[.[] | select(.am == true and (.h|test($hp))) | .n]' <<<"$pr")
       if [ "$armed" != "[]" ] && [ "$armed" != "$last_armed" ]; then
         echo "AUTO-MERGE ARMED on $armed — expected NOT armed while the stack lands on '$BASE_EXPECT'"
         last_armed="$armed"
@@ -102,7 +106,7 @@ while true; do
     # arm is still pending. An APPROVED-but-unarmed research/* PR sitting BEHIND is a human gate
     # doing its job, not a missed update — circles' four issue-1 arms tripped this every 15 min
     # on 2026-08-05 until the predicate was scoped (a repeating false alarm IS a broken probe).
-    if jq -e --arg hp "${BASE_HEADS:-^agent/}" \
+    if jq -e --arg hp "${BASE_HEADS:-^(agent|fix)/}" \
          '.[] | select(.m=="BEHIND" and .rd=="APPROVED" and (.am == true or (.h|test($hp))))' \
          >/dev/null 2>&1 <<<"$pr"; then
       [ "$behind_since" -eq 0 ] && behind_since=$now
