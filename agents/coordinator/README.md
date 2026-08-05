@@ -411,6 +411,51 @@ the product:
 
 A finding that needs a human is stated loudly in the report, never acted on.
 
+## The `goal-decompose` clause (FU-090 leg (c), un-deferred 2026-08-05)
+
+A `task/goal` issue reaches you INSTEAD of a worker: the scan branches before recipe selection, so
+no `.agents/goal.yaml` exists and no worker pod was created. **You are the decomposition.** Design
++ rationale: [`docs/agents/issue-authoring.md`](../../docs/agents/issue-authoring.md) §Leg (c).
+
+Why this clause exists: a goal handed to a builder produces "analysed everything, built nothing".
+circles#17 did exactly that twice — and **no cap was near binding** (25 turns of 200, $0.06, 41k
+tokens into a 262k window). The lane was wrong, not the budget. Do not "fix" a goal by raising a
+cap.
+
+Read the goal in full — its acceptance criteria, its explicit non-goals, its `Budget:` line. Then
+author child issues, each of which a single ride can finish:
+
+- **Every child cites the parent as a NATIVE sub-issue** (`gh api -X POST
+  repos/<slug>/issues/<parent>/sub_issues -F sub_issue_id=<child-id>`) — the same call the
+  merged-closeout harvest makes. Prose provenance is not enough; the lineage is read by machinery.
+- **Each child carries its own `Touches:`**, narrowed from the parent's — never the parent's whole
+  footprint, or the children serialise behind one another on the footprint hold.
+- **`Base:` is inherited verbatim** when the parent declares one. A child that forgets it forks
+  from master and its diff swallows the base branch.
+- **Each child names ONE deliverable with its own acceptance.** "Implement the spec" is not a
+  child; "the bake produces the fixture artifact with these seven lights" is.
+- **Σ(child estimator budgets) ≤ the parent's `Budget:`** — enforced in the launcher pre-flight,
+  deterministic, never honored by you. If your decomposition does not fit, that IS the finding:
+  say so on the parent and stop. Do not shave scope silently to fit a number.
+
+Then put the parent in the **non-dispatchable tracking state** (operator ruling 2026-08-05) so
+at-least-once dispatch cannot re-decompose it: remove `agent/queued`, leave `agent-fix`, add
+`agent/blocked` with a comment listing the children. Queue the children (`agent-fix` +
+`agent/queued`) — they are ordinary units from here.
+
+**Keep the forest in view.** The failure this clause must not have is: decompose once, then only
+ever look at children again. Concretely, today the sub-issue lineage is WRITE-ONLY — the harvest
+creates the links and nothing reads them back — so nothing reconnects a child to its goal unless
+this play does it. Until the parentage read lands (scan carries the parent id; launcher injects a
+bounded Goal+Acceptance card), **you are the backstop**: when you touch any child of a goal,
+re-read the parent before acting, and judge the child against the GOAL's acceptance, not only its
+own.
+
+⚠ The parent will not move on child traffic alone — nothing wakes a goal whose children are all
+quiet. That backstop is the meta-coordinator's for now (operator, 2026-08-05: observe the loop,
+design the guard from evidence). If you see a goal whose children are all closed and whose
+acceptance is unmet, say so loudly in your report — that is the signal the guard will be built on.
+
 ## The `arbitrate` clause (FU-086 / merge-path MP-G04, built 2026-07-27)
 
 The reflex labels a PR `agent/arbitrate` when its bot-verdict count hits ROUNDS_MAX — a

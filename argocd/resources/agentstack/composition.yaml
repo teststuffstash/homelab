@@ -85,6 +85,7 @@ spec:
                   (dict "name" "agent-budget/lg" "color" "c5def5" "description" "Estimator cap-tier override: lg")
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
+                  (dict "name" "task/goal" "color" "5319e7" "description" "NOT a worker class: routes to the coordinator's goal-decompose play (no recipe, no worker pod) — FU-090 leg (c)")
                   (dict "name" "merge-conflict" "color" "e11d21" "description" "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase")
                   (dict "name" "major" "color" "b60205" "description" "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)")
                   (dict "name" "major/awaiting-human" "color" "d93f0b" "description" "Major bump: migration documented, CI green, reviewer-approved — a human merges")

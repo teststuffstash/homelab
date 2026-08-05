@@ -304,6 +304,13 @@ render_env_card() {
   if [ "$BASE_REF" != "master" ]; then
     printf '%s\n' "- **Base branch: \`${BASE_REF}\`, NOT master.** Your clone is already on it and your branch forks from it. Open the PR against it explicitly — \`gh pr create --base ${BASE_REF} …\` — or the PR will target master and its diff will include everything in \`${BASE_REF}\` on top of your work. This PR is human-gated: it will NOT auto-merge, which is deliberate."
   fi
+  # FU-090 leg (c): the goal this issue serves. BOUNDED — Goal + Acceptance only (see the parse
+  # site). Your issue is the contract; this is the reason it exists, and what "done" is measured
+  # against when the parent is finally judged.
+  if [ -n "${GOAL_CARD:-}" ]; then
+    printf '%s\n' "- **This issue is one child of a GOAL.** It was split out so a single ride could finish it — deliver YOUR issue, not the goal. But the goal is what your work is finally judged against, so if finishing your slice would leave the goal's acceptance unreachable, say so in the PR body rather than quietly widening scope (a scope change belongs in a new issue for the owning concern — TRACKS rule 2). The parent, Goal + Acceptance only:"
+    printf '%s\n' "$GOAL_CARD" | sed 's/^/  > /'
+  fi
 }
 
 # Build the launcher-owned RUN_CMD from --recipe now that the environment is known (FU-114): render
@@ -335,6 +342,35 @@ if [ -n "${RECIPE:-}" ]; then
         BASE_REF="$ISSUE_BASE"
         NO_ARM=1
         echo "→ Base: ${BASE_REF} (declared on #${ISSUE_N}) — forking from it, PR opens against it, auto-merge NOT armed"
+      fi
+    fi
+    # ── GOAL CONTEXT — a child must know the goal it serves (FU-090 leg (c), 2026-08-05) ────────
+    # The harvest/decompose plays link children as NATIVE sub-issues, and until now NOTHING read
+    # those links back: the lineage rendered in the GitHub UI and meant nothing to the machinery,
+    # so a child ride saw only its own slice and the goal was structurally forgotten.
+    # BOUNDED ON PURPOSE — the parent's Goal + Acceptance sections ONLY, never its whole body and
+    # never the spec tree. Handing a child the entire parent re-imports the context cost that
+    # decomposition exists to remove, which is exactly how circles#17 r1 died (read 91
+    # requirements, wrote nothing). The child's own Touches:/spec rows carry the detail.
+    # Failure is SILENT-SAFE: no parent, or an API that does not answer, dispatches as before.
+    GOAL_PARENT="$(gh api "repos/${ORG:-teststuffstash}/${PROJECT}/issues/${ISSUE_N}/parent" \
+      --jq '.number' 2>/dev/null || true)"
+    case "$GOAL_PARENT" in ''|*[!0-9]*) GOAL_PARENT="";; esac
+    if [ -n "$GOAL_PARENT" ]; then
+      GOAL_CARD="$(gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" \
+        --json number,title,body --jq '"#\(.number) — \(.title)\n" +
+          ( ((.body // "") | split("\n")) as $l
+            | [ range(0; ($l|length)) | select($l[.] | test("^#+ *(Goal|Acceptance)"; "i")) ] as $starts
+            | if ($starts|length) == 0 then ""
+              else [ $starts[] as $s
+                     | ( [ range($s+1; ($l|length)) | select($l[.] | test("^#+ ")) ] | first ) as $end
+                     | $l[$s : (if $end == null then ($l|length) else $end end)] | join("\n") ]
+                   | join("\n\n")
+              end )' 2>/dev/null || true)"
+      if [ -n "$GOAL_CARD" ]; then
+        echo "→ Goal context: child of #${GOAL_PARENT} — injecting its Goal + Acceptance (bounded) into the env card"
+      else
+        echo "→ Goal context: child of #${GOAL_PARENT}, but no Goal/Acceptance heading found — dispatching without it"
       fi
     fi
     TASK_CLASS="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json labels \

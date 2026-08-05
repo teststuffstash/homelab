@@ -402,6 +402,22 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # surface. A taxonomy label was REJECTED: the claim's IssueLabels set is authoritative
       # ("anything else gets deleted"), so an ad-hoc label self-destructs. All other predicates
       # (deps, lane, WIP) still apply — a pinned blocked issue stays blocked.
+      # LEG (c), 2026-08-05 — a GOAL is not a task. `task/goal` routes to the coordinator's
+      # DECOMPOSE play instead of a worker recipe, and this branch MUST come before the recipe
+      # choice below: `--recipe` is launcher-owned (ADR-094), so a `goal` class would send the
+      # launcher looking for `.agents/goal.yaml` and exit FATAL. There is deliberately no such
+      # recipe — the item session authors child issues and NO worker pod is created.
+      # Why it exists: circles#17 was a goal handed to a builder (nothing distinguished the two),
+      # and produced "analysed everything, built nothing" twice with no cap near binding.
+      # Design + the forest/trees rule: docs/agents/issue-authoring.md §Leg (c).
+      if [ "$qclass" = "goal" ]; then
+        if [ "$qpin" = "P" ]; then
+          punits="${punits}goal-decompose|${repo}|issue-${qnum}\n"
+        else
+          units="${units}goal-decompose|${repo}|issue-${qnum}\n"
+        fi
+        continue
+      fi
       if [ "$qpin" = "P" ]; then
         punits="${punits}queued-dispatch|${repo}|issue-${qnum}|${qclass}\n"
       else
@@ -726,7 +742,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     units="${punits}${units}"
     # Priority: in-flight recovery first, then merge-path exceptions, then CLOSE loops on merged
     # work (C6 — cheap bookkeeping that keeps state honest), and only then open NEW work.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout queued-dispatch; do
+    # goal-decompose sits just BEFORE queued-dispatch: it opens new work like a queued issue does,
+    # but it must win over it when a repo has both, because a goal left undecomposed is what makes
+    # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
+    # clause — an in-flight failure is always more urgent than planning the next thing.
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-decompose queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done
