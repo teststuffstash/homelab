@@ -11,7 +11,16 @@ resource "github_repository_ruleset" "required_checks" {
 
   conditions {
     ref_name {
-      include = ["~DEFAULT_BRANCH"]
+      # `goal/**` = a GOAL'S INTEGRATION BRANCH (FU-090 leg (c), 2026-08-05): a stacked base that a
+      # goal's child PRs merge INTO, named for the goal that owns it (goal/<issue>-<slug>). It is
+      # protected for the same reason master is — children AUTO-MERGE into it once CI is green and
+      # the reviewer approves, and GitHub's auto-merge waits on branch-protection conditions, so an
+      # UNPROTECTED base means auto-merge fires on open: no CI, no review. Protecting it is what
+      # makes feature→goal automatic and safe; goal→master stays a human decision (operator).
+      # NOT `research/**`: the researcher arms PUSH DIRECTLY to those branches, and a ruleset there
+      # would gate their own pushes. Disjoint prefixes on purpose — `fix/**` heads, `research/**`
+      # researcher outputs, `goal/**` integration bases.
+      include = ["~DEFAULT_BRANCH", "refs/heads/goal/**"]
       exclude = []
     }
   }
@@ -68,7 +77,16 @@ resource "github_repository_ruleset" "required_approval" {
 
   conditions {
     ref_name {
-      include = ["~DEFAULT_BRANCH"]
+      # `goal/**` = a GOAL'S INTEGRATION BRANCH (FU-090 leg (c), 2026-08-05): a stacked base that a
+      # goal's child PRs merge INTO, named for the goal that owns it (goal/<issue>-<slug>). It is
+      # protected for the same reason master is — children AUTO-MERGE into it once CI is green and
+      # the reviewer approves, and GitHub's auto-merge waits on branch-protection conditions, so an
+      # UNPROTECTED base means auto-merge fires on open: no CI, no review. Protecting it is what
+      # makes feature→goal automatic and safe; goal→master stays a human decision (operator).
+      # NOT `research/**`: the researcher arms PUSH DIRECTLY to those branches, and a ruleset there
+      # would gate their own pushes. Disjoint prefixes on purpose — `fix/**` heads, `research/**`
+      # researcher outputs, `goal/**` integration bases.
+      include = ["~DEFAULT_BRANCH", "refs/heads/goal/**"]
       exclude = []
     }
   }

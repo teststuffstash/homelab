@@ -270,13 +270,39 @@ Base: research/issue-1-weave
 ```
 
 **Absent means master**, so every issue filed before this reads exactly as it did. Present, the
-LAUNCHER (not the dispatcher — dispatch params are launcher-owned, ADR-094) does three things from
-that one declaration: clones and forks from that branch, tells the agent in the env card to
-`gh pr create --base <branch>`, and **refuses to arm auto-merge**. The third is the point: work
-stacked on a branch that is itself unmerged and under human evaluation must not land itself. The
-re-arm belt (`review-reflex.sh` C9) skips PRs whose base is not the repo default for the same
-reason — keyed on the base, not on a branch prefix, because these rides push ordinary `fix/*`
-branches. `--ref` still overrides an explicit operator dispatch.
+LAUNCHER (not the dispatcher — dispatch params are launcher-owned, ADR-094) clones and forks from
+that branch and tells the agent in the env card to `gh pr create --base <branch>`. `--ref` still
+overrides an explicit operator dispatch.
+
+### The `goal/**` convention (operator ruling, 2026-08-05)
+
+A stacked base is named **`goal/<issue>-<slug>`** — it is the integration branch of the GOAL whose
+children merge into it (`goal/17-p0-mvp`). Three prefixes, deliberately disjoint:
+
+| prefix | what it is | protected? |
+|---|---|---|
+| `fix/**` | an ordinary ride's head branch | no |
+| `research/**` | researcher arm outputs, pushed to DIRECTLY, human-gated by being un-armed | **no — a ruleset here would gate the arms' own pushes** |
+| `goal/**` | a goal's integration base; children merge INTO it | **yes** |
+
+**`goal/**` is protected, and that is what makes feature→goal automatic.** The original rule was
+"a declared `Base:` never arms auto-merge", which coupled two different things: *don't let stacked
+work reach master by itself* (right) and *don't let a child merge into its own goal branch* (over-broad
+— it also cost the reviewer's verdict, since `review-reflex.sh` only reviews ARMED PRs). Operator
+ruling: **feature → goal is fine to automate; goal → master stays human.**
+
+⚠ **The protection is a PRECONDITION, not a nicety.** GitHub's auto-merge waits on
+branch-protection conditions; with none, arming a PR merges it **on open** — no CI, no review.
+Verified before the flip: circles' three rulesets all targeted `~DEFAULT_BRANCH` only, so the
+stacked base had no rules at all. `tofu/github/repo_rulesets.tf` now includes
+`refs/heads/goal/**` in both `required-checks` and `required-approval`, so a child PR waits for
+`ci` + one approving review exactly as a master PR does.
+
+⚠ **Renaming a base branch closes the PR whose HEAD it is.** Learned the hard way migrating
+`research/issue-1-weave` → `goal/17-p0-mvp`: GitHub retargets PRs where the branch is the BASE
+(#21, #24 moved cleanly) but CLOSES the one where it is the HEAD — circles#16, the weave PR itself,
+reopened as #25 with identical content. `Base:` body lines are text and do not follow a rename
+either; they need editing (#17/#18/#19/#22/#23).
 
 Who writes the line: the issue author, at authoring time, like every other body line — and since
 authored issues are inert until a human labels them (breaker #1 above), a wrong `Base:` is caught
