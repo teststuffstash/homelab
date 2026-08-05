@@ -3,6 +3,12 @@
 #
 #   devbox run pin-only-lint [<base-ref>]      (default: origin/master)
 #
+# 2026-08-05: `argocd/platform/openrouter-operator.yaml` joins them. The CODEOWNERS flip made the
+# CHART-deploy lane (ADR-084) wait on a human for a one-line targetRevision bump, exactly as it had
+# for the runner-image lane — homelab#104 and #105 both sat BLOCKED with CI green. `agents/images.env`
+# was already carved out, so the agent-base half of the same lane flowed while the chart half did
+# not. Same ruling, same mechanism: ownership REPLACED by a rule, not dropped.
+#
 # WHY. `argocd/platform/arc-runners.yaml` and `agents/coordinator/reflexes-argo.yaml` are owned
 # paths (tier 2 and tier 3), and the arc-runner auto-bump commits BOTH — so the CODEOWNERS flip
 # would have made a mechanical tag bump wait for a human on every runner-image build. Operator
@@ -21,8 +27,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BASE="${1:-origin/master}"
-GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml'
-PIN_LINE='^[-+][[:space:]]*image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+$'
+GUARDED='argocd/platform/arc-runners\.yaml|agents/coordinator/reflexes-argo\.yaml|argocd/platform/openrouter-operator\.yaml'
+# Two pin shapes, one rule. The arc-runner bump writes an `image:` line; the chart-deploy lane
+# writes a `targetRevision:` line (CalVer + -g<sha>, ADR-084). Anything else in a guarded file is
+# still refused, so widening the FILE set does not widen what may be written to it.
+PIN_LINE='^[-+][[:space:]]*(image:[[:space:]]*ghcr\.io/teststuffstash/homelab/arc-runner:[A-Za-z0-9._-]+|targetRevision:[[:space:]]*[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}-g[0-9a-f]+)$'
 
 # Refuse to pass when the diff cannot be computed. A check that green-lights because it could not
 # see is the failure class this repo keeps paying for (FU-125/FU-108/FU-131) — and one I shipped
@@ -49,7 +58,7 @@ for f in $changed; do
     | grep -E '^[-+][^-+]' \
     | grep -Ev "$PIN_LINE" || true)"
   if [ -n "$offending" ]; then
-    echo "pin-only-lint: FAIL — $f may only receive arc-runner image-pin lines via a PR:" >&2
+    echo "pin-only-lint: FAIL — $f may only receive PIN lines via a PR (arc-runner image: / chart targetRevision:):" >&2
     printf '  %s\n' "$offending" >&2
     rc=1
   fi
