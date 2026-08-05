@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-140**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-141**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -290,6 +290,16 @@ six OVERSIZE items pointer-ized into
       DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
+- [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
+      `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
+      coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
+      coordinator-session.sh's exit trap, so a tick that dies before it (OOM kill, node reboot,
+      DeadlineExceeded) loses its transcript, which IS the log for an exec-run session. Found while
+      checking FU-132's premise; harmless that time (267/267 files were already in Garage) by luck.
+      **Next:** render a per-loop-ns crash-net from the Composition. ⚠ the loop-ns S3 secret is
+      WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
+      upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
+      Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
