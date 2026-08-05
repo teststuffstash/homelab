@@ -211,6 +211,14 @@ MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 # get-secret RBAC from becoming a generic secret oracle. Short cache = revocation latency.
 SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
 REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
+# FU-131: how long the ground-truth cost harvest waits for OpenRouter to index a generation.
+# Was (2, 5) — ~7s, which lost 49% of a fan-out arm's spend (measured against the activity export).
+GENERATION_BACKOFF_S = tuple(
+    float(x) for x in os.environ.get("GENERATION_BACKOFF_S", "2,5,15,45").split(",") if x.strip())
+# Harvest outcome counters, exported on /metrics so the undercount is VISIBLE rather than inferred
+# from a log line after the fact (that is how FU-131 stayed invisible until an export was diffed).
+_gen_stats = {"stored": 0, "missed": 0}
+_gen_stats_lock = threading.Lock()
 _SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 _refs: dict[str, tuple[float, dict | None]] = {}  # "ns/name" -> (expires_epoch, {key,guardrail}|None)
 _refs_lock = threading.Lock()
@@ -692,10 +700,18 @@ def _generation_lookup(gen_id: str, auth_value: str, requested_model: str) -> No
     the request (probed 2026-07-27: a session key reads its own generations — total_cost is the
     billed figure, provider_name/model are what actually served, native_tokens_cached is the
     real cache hit). Runs on a daemon thread AFTER the response closed; the record needs a
-    beat to exist upstream, so one delayed retry. Best-effort: a miss only leaves the ledger's
-    launcher-reported figures as the fallback. The auth value is used and dropped — never
-    logged, never stored."""
-    for delay in (2.0, 5.0):
+    beat to exist upstream, so it retries on a widening backoff. Best-effort: a miss only leaves
+    the ledger's launcher-reported figures as the fallback. The auth value is used and dropped —
+    never logged, never stored.
+
+    FU-131: the backoff used to be (2s, 5s) and gave up at ~7s, which is FAR too early under
+    fan-out. Measured against OpenRouter's own activity export (kimi-k3 arm, 2026-08-03):
+    29 of 56 generations stored, $2.196 of $4.328 — the 29 it caught matched the export to the
+    cent, so the harvest was accurate but half-blind, and every economics signal built on the
+    store (P4-flip evidence, per-arm comparisons, FU-126 experiments) read low and UNEVENLY.
+    ~67s of patience costs one sleeping daemon thread per request and nothing else; indexing
+    latency is what it is. The thread is a daemon, so a proxy restart mid-wait just drops it."""
+    for delay in GENERATION_BACKOFF_S:
         time.sleep(delay)
         try:
             req = urllib.request.Request(
@@ -706,6 +722,8 @@ def _generation_lookup(gen_id: str, auth_value: str, requested_model: str) -> No
                 data = (json.load(resp).get("data") or {})
             if data:
                 router.record_generation(gen_id, requested_model, data)
+                with _gen_stats_lock:
+                    _gen_stats["stored"] += 1
                 log(f"generation {gen_id}: ${data.get('total_cost') or 0:.6f} "
                     f"via {data.get('provider_name') or '?'} "
                     f"cached={data.get('native_tokens_cached') or 0}/"
@@ -718,7 +736,11 @@ def _generation_lookup(gen_id: str, auth_value: str, requested_model: str) -> No
         except OSError as e:
             log(f"generation {gen_id}: lookup failed: {e} — skipped")
             return
-    log(f"generation {gen_id}: never appeared — skipped")
+    with _gen_stats_lock:
+        _gen_stats["missed"] += 1
+    log(f"generation {gen_id}: never appeared after {sum(GENERATION_BACKOFF_S):.0f}s — skipped "
+        f"(FU-131: this line IS the ledger undercount — openrouter_generation_harvest_total"
+        f"{{outcome=\"missed\"}} counts it)")
 
 
 # ADR-096 rotation feed: OpenRouter's DOCUMENTED MCP server (docs/guides/overview/mcp-server)
@@ -1174,6 +1196,14 @@ class Proxy(BaseHTTPRequestHandler):
                           "# HELP anthropic_requests_total Subscription-leg requests per ref-derived consumer (in-memory; resets on roll)."]
                 lines += [f'anthropic_requests_total{{consumer="{c}"}} {n}'
                           for c, n in consumers]
+            # FU-131: cost-harvest completeness. `missed` is the ledger's blind spot made
+            # measurable — a rising ratio means every cost comparison built on the store reads low.
+            with _gen_stats_lock:
+                gen_stored, gen_missed = _gen_stats["stored"], _gen_stats["missed"]
+            lines += ["# TYPE openrouter_generation_harvest_total counter",
+                      "# HELP openrouter_generation_harvest_total Ground-truth /generation lookups by outcome (in-memory; resets on roll).",
+                      f'openrouter_generation_harvest_total{{outcome="stored"}} {gen_stored}',
+                      f'openrouter_generation_harvest_total{{outcome="missed"}} {gen_missed}']
             # ADR-096 P2: per-key OpenRouter headroom (auth/key snapshots; label = the ref).
             with _headroom_lock:
                 headroom = {k: dict(v) for k, v in _headroom.items()}

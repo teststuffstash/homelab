@@ -238,7 +238,77 @@ lint_stack() { # <name>
         say PROBE-FAILED K8S-01 "$stack" "cluster unreachable — namespace $repo unknown"
       fi
     fi
+
+    # KEY-01 — the standing funding key: Secret present AND the guardrail the proxy will enforce
+    # equals the one the claim asks for. Both halves are bootstrap traps that cost live rides:
+    # a missing Secret 401s every completion, and a guardrail mismatch 403s them pre-spend
+    # (circles-iac#1, FU-138). The proxy resolves the guardrail from the OpenRouterKey CR, so the
+    # CR is what gets compared; a stale Secret field is a WARN, not a FAIL, since it no longer
+    # decides anything. Claim (cluster) is the source for "asked for" — the mirror carries no fixer.
+    if is_fixer "$repo"; then
+      if [ "$KUBE_OK" = 1 ]; then
+        local want_gr have_gr sec_gr
+        want_gr=$(timeout 10 kubectl get agentstack "$stack" -o json 2>/dev/null \
+          | jq -r --arg r "$repo" '[.spec.repos[]|select(.name==$r)|select(.fixer)|.fixer.guardrail // "only-free"][0] // "NO-FIXER"')
+        if [ "$want_gr" = "NO-FIXER" ]; then
+          : # context-only repo in a claim: no standing key is expected
+        elif ! timeout 10 kubectl -n "$repo" get secret "$repo-openrouter" >/dev/null 2>&1; then
+          say FAIL KEY-01 "$stack" "no Secret $repo-openrouter in ns $repo — the fixer block asks for a standing key; every ride would 401 (operator mints it: the OpenRouterKey CR is composed, so check the openrouter-operator logs)"
+        else
+          have_gr=$(timeout 10 kubectl -n "$repo" get openrouterkeys -o json 2>/dev/null \
+            | jq -r --arg s "$repo-openrouter" '[.items[]|select((.spec.secretName // (.spec.project + "-openrouter"))==$s)|.spec.guardrail // "none"][0] // "NO-CR"')
+          sec_gr=$(timeout 10 kubectl -n "$repo" get secret "$repo-openrouter" -o jsonpath='{.data.GUARDRAIL}' 2>/dev/null | base64 -d 2>/dev/null)
+          if [ "$have_gr" = "NO-CR" ]; then
+            say FAIL KEY-01 "$stack" "Secret $repo-openrouter exists but no OpenRouterKey CR owns it — nothing renders the guardrail the claim asks for ($want_gr); the key is unmanaged (FU-138)"
+          elif [ "$have_gr" = "$want_gr" ]; then
+            say OK KEY-01 "$stack" "standing key $repo-openrouter, guardrail $have_gr matches the claim"
+            [ "${sec_gr:-none}" = "$want_gr" ] || say WARN KEY-01 "$stack" "$repo-openrouter Secret still says GUARDRAIL='${sec_gr:-<absent>}' — inert since FU-138 (the proxy reads the CR), left from a pre-fix hand patch"
+            # KEY-02 — only-free × a PAID chain is a guaranteed-dead lane: the guardrail 403s every
+            # completion before spend, so the ride cannot start and burns a round on each retry.
+            # This became visible only once FU-138 made guardrails actually take effect; the
+            # homelab fixer block already records the reasoning ("only-free would 403 every
+            # completion before spend"), which applies to any stack whose chain is paid.
+            if [ "$have_gr" = "only-free" ]; then
+              local paid
+              paid=$(jq -r --arg s "$stack" '[.stacks[]|select(.name==$s)|(.workerModel // empty),(.workerModelFallbacks // [])[]]|map(select(endswith(":free")|not))|join(", ")' agents/stacks.json)
+              if [ -n "$paid" ]; then
+                say FAIL KEY-02 "$stack" "$repo is guardrailed only-free but the stack chain is PAID ($paid) — every ride 403s pre-spend (FU-024/FU-138); either open the guardrail (budgetUSD is the real bound, as homelab's fixer block argues) or give the repo a :free chain"
+              else
+                say OK KEY-02 "$stack" "$repo only-free and the chain is all :free"
+              fi
+            fi
+          else
+            say FAIL KEY-01 "$stack" "guardrail MISMATCH on $repo: claim asks '$want_gr', OpenRouterKey CR says '$have_gr' — the proxy enforces the CR, so rides get the wrong answer (FU-138)"
+          fi
+        fi
+      else
+        say PROBE-FAILED KEY-01 "$stack" "cluster unreachable — standing key/guardrail unknown"
+      fi
+    fi
   done
+
+  # PVC-01 — the loop's transcripts PVC must sit on a SINGLE-replica StorageClass. Predicate is the
+  # class's numberOfReplicas, not its name: homelab#94 wedged because a 2-replica volume could not
+  # place (only one schedulable `std` disk), the janitor hung 40 min on the attach, and
+  # `storageClassName` is IMMUTABLE — so a wrong class here is only fixable by delete+recreate.
+  # Transcripts are mirrored to Garage by transcripts-sync, so replication buys nothing (FU-132).
+  if [ "$KUBE_OK" = 1 ]; then
+    local tsc trepl
+    tsc=$(timeout 10 kubectl -n "$stack-agents" get pvc coordinator-transcripts \
+      -o jsonpath='{.spec.storageClassName}' 2>/dev/null)
+    if [ -z "$tsc" ]; then
+      say PROBE-FAILED PVC-01 "$stack" "no coordinator-transcripts PVC in ns $stack-agents (per-stack loop not rendered?) — storage class unknown"
+    else
+      trepl=$(timeout 10 kubectl get sc "$tsc" -o jsonpath='{.parameters.numberOfReplicas}' 2>/dev/null)
+      case "$trepl" in
+        1)  say OK PVC-01 "$stack" "transcripts PVC on $tsc (numberOfReplicas=1)" ;;
+        "") say PROBE-FAILED PVC-01 "$stack" "storage class $tsc declares no numberOfReplicas — replica count unknown" ;;  # NB: a bare `?` here would MATCH "2" (single-char glob)
+        *)  say FAIL PVC-01 "$stack" "transcripts PVC is on $tsc (numberOfReplicas=$trepl) — a replicated class can leave the volume unplaceable and hang every tick (homelab#94); storageClassName is immutable, so fix = delete+recreate onto longhorn-single (FU-132)" ;;
+      esac
+    fi
+  else
+    say PROBE-FAILED PVC-01 "$stack" "cluster unreachable — transcripts storage class unknown"
+  fi
 
   # K8S-02 — workbench SA (the stack-jail kubectl identity; new pattern, WARN until platform-wide).
   # mainRepo=homelab means the stack is driven from the mono jail — no per-stack workbench applies.

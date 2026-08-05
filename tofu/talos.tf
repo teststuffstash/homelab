@@ -45,6 +45,48 @@ data "talos_machine_configuration" "node" {
       }
     })],
     [local.registry_mirrors_patch],
+    # FU-139: the VM tier gets kubelet reservations too. FU-112(b) fixed only the kata metal nodes
+    # ("desktops/VMs use different math and aren't urgent"); wk-02 then proved the VMs need them —
+    # 2026-08-04 18:34:28 Talos's OOMController SIGKILLed the Longhorn instance-manager cgroup,
+    # which killed CSI → iSCSI `conn error 1020` → EXT4 I/O errors → a 5-pod SandboxChanged storm
+    # (homelab#101, #63, #65). The OOMAction record is the evidence and it shapes these numbers:
+    #   * it fired on PSI, not exhaustion — `memory_full_avg10: 6.04` with ~9.3G of 12G in use.
+    #     So `node_memory_MemAvailable` looking flat at 5.73Gi proves nothing; pressure ≠ free RAM.
+    #   * the VICTIM was Longhorn's instance-manager (Burstable, 42 pids, the biggest cgroup).
+    #     That is the worst possible victim on a storage VM: every volume on the node goes with it.
+    # A kubelet reservation does not tune PSI, but it changes WHO acts first: with allocatable cut
+    # and a HARD eviction threshold, the kubelet evicts an ordinary Burstable pod before the
+    # OOMController starts scoring cgroups — and Longhorn/Cilium are system-node-critical, hence
+    # eviction-exempt. VM math vs the kata nodes' (50m/512Mi + 256Mi + 512Mi): the same shape with
+    # more kubeReserved and a higher wall, because these VMs host the Longhorn DATA plane, whose
+    # per-attach engine/replica processes arrive in chunks rather than smoothly.
+    # Maps are written in FULL: Talos kubelet.extraConfig can REPLACE a nested map, so the cpu/pid/
+    # ephemeral + disk-pressure defaults are restated or they are lost (verify via .../proxy/configz).
+    # Applied in-place — kubelet restart, no reboot; it does not evict what is already running.
+    [yamlencode({
+      machine = {
+        kubelet = {
+          extraConfig = {
+            systemReserved = {
+              cpu                 = "100m"
+              memory              = "512Mi"
+              "ephemeral-storage" = "512Mi"
+              pid                 = "100"
+            }
+            kubeReserved = {
+              memory = "512Mi"
+            }
+            evictionHard = {
+              "memory.available"   = "768Mi"
+              "imagefs.available"  = "15%"
+              "imagefs.inodesFree" = "5%"
+              "nodefs.available"   = "10%"
+              "nodefs.inodesFree"  = "5%"
+            }
+          }
+        }
+      }
+    })],
     # AVX2 node label (boot-from-git, replaces the imperative `kubectl label`). Talos applies
     # machine.nodeLabels to the kubelet registration live — safe on a running node, no reboot.
     contains(local.avx2_nodes, each.key) ? [yamlencode({
