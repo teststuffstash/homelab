@@ -383,9 +383,14 @@ if [ -n "${RECIPE:-}" ]; then
     # Counts open AND closed children — spend already incurred still spent the goal's budget.
     # One `gh issue list` call, only for a ride that HAS a goal; ordinary rides pay nothing.
     if [ -n "$GOAL_PARENT" ]; then
+      # Currency symbols are stripped, and the NUMBER IS READ AS USD — the estimator prices in USD
+      # (cap_usd) because OpenRouter does. A `Budget: €5` therefore funds $5, not €5. That is a
+      # deliberate, stated approximation rather than a silent one: the alternative is an FX rate
+      # this platform has no business carrying. Write the number you mean in dollars.
+      # (Before this, a € sign parsed to empty and DISABLED the gate — fail-open, found 2026-08-05.)
       GOAL_BUDGET="$(gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
-        --jq '.body' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*\$\?//p' | head -1 \
-        | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
+        --jq '.body' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 \
+        | sed 's/^[^0-9]*//' | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
       if [ -n "$GOAL_BUDGET" ]; then
         # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag). Piping
         # to a real jq is what lets the parent number in; the first cut used gh --argjson, which
