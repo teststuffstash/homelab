@@ -17,10 +17,25 @@ Every surface below produces **bot-authored, therefore INERT** issues: no `agent
 `agent/queued`. A human labels, or nothing runs. That is loop-safety breaker #1 and none of these
 legs retire it — leg (c) moves the breaker *up* to the goal issue rather than away.
 
-The graduation knob for the HARVEST surfaces (**not built**): claim `issueAuthoring.selfQueue`,
-default off, letting the coordinator self-label harvested issues, bounded by the existing breakers
-plus a per-day rate cap. Flipping it is the operator's per-stack trust call, and it *does* retire
+The graduation knob for the HARVEST surfaces (**still not built**, verified 2026-08-05 — it exists
+in NO XRD or Composition field, only in this paragraph): claim `issueAuthoring.selfQueue`, default
+off, letting the coordinator self-label harvested issues, bounded by the existing breakers plus a
+per-day rate cap. Flipping it is the operator's per-stack trust call, and it *does* retire
 breaker #1 for that stack.
+
+**Two surfaces queue without that knob, and both are deliberate — know which is which:**
+
+- The **alert lane** (below): the responder's shell labels, gated by three fail-closed checks.
+- **Leg (c)**: a goal's children are queued by the coordinator, authorised by the fact that a
+  HUMAN queued the GOAL — breaker #1 moved UP, not away. That was PROSE until 2026-08-05 (the
+  operator asked why circles queues issues with no knob enabled); the scan now **checks it,
+  fail-closed**, refusing to emit `goal-decompose` when the goal's `agent/queued` was applied by a
+  Bot, or when the actor cannot be read at all.
+  ⚠ What the actor test can see: the loop writes as `homelab-agents-1234[bot]` (type `Bot`); the
+  operator AND the jail session both write as the operator (type `User`), because the jail holds
+  the operator's PAT. **That is correct, not a limitation — jail == human for this process**
+  (operator, 2026-08-05). The test blocks THE LOOP from authorising its own goal, which is the
+  risk worth blocking.
 
 ⚠ **The ALERT lane already crossed this line** (2026-08-04, `agents/coordinator/responder-argo.yaml`
 §selfQueue): a responder-filed issue is labelled `agent-fix`+`agent/queued` by the *shell*, not the
@@ -157,6 +172,15 @@ Both failures are the same missing signal.
 2. **The harvest/reviewer gate reads depth + remaining budget.** Shallow + budget available →
    harvest a real deferral. Deep, or budget low → **fix-in-PR** and collapse the tail.
    Budget blown, or N levels without converging → the **terminal**.
+   **The depth half SHIPPED 2026-08-05, in the REVIEWER** (`reviewer-session.sh`): it walks the
+   native parent chain of the issue its PR closes and, at depth ≥2, is instructed to emit **no
+   `Follow-ups:` section at all** — every finding either blocks (fixed in THIS PR) or is dropped.
+   ⚠ It had to move there: the flag was previously applied at HARVEST time, which is too late by
+   construction — the PR has merged, so "fix-in-PR" no longer exists and deferral is the only
+   option left. The existing HARVEST BAR filters by QUALITY; this filters by POSITION, and they are
+   independent. Validated on the chain that prompted it: openrouter-operator #21→#17→#14→#10 walks
+   to 3/2/1/0, and #17 (depth 2) is the review that sprouted #21 — under this rule it emits nothing
+   to harvest. The BUDGET half is separate and lives in the launcher (Σ child caps ≤ `Budget:`).
 3. **The terminal is a RETRO CHECKPOINT, not a reflex revert** (operator ruling). It means "a good
    place to STOP and rethink": the goal was probably sound but unexpected complexity arose, so a
    **human retro** decides how to proceed — re-scope, collapse-in-PR, or, only in the extreme, a
