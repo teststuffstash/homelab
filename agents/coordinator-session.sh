@@ -346,6 +346,32 @@ fi
 if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
   echo "→ pass finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+  # ── Doorbell on unit completion (2026-08-05) ────────────────────────────────────────────────
+  # A finishing RIDE has rung /coordinate since FU-085; a finishing COORDINATOR never did, so every
+  # hop of a multi-step chain waited for the next */30 cron. The goal lane (FU-090 leg (c)) is the
+  # worst case because its chain is long and each step is seconds of work:
+  #   child PR merges -> close the child -> goal-review -> sibling dispatches
+  # Three cron waits = up to 90 minutes of dead time. Measured live: circles#24 merged 16:09,
+  # goal-review fired 16:30.
+  # ITEM MODE ONLY. A janitor tick is report-only and must not chain; an interactive session has a
+  # human driving it. `unit: "-"` = "something moved, re-scan" rather than naming the next unit —
+  # the scan owns scheduling (ADR-094), and it is the thing that knows what became actionable.
+  # Termination: the scan emits "nothing actionable" and stops when the board drains, and the
+  # coordinator-scan MUTEX serialises ticks, so this speeds the loop up rather than multiplying it.
+  # ⚠ If a scan bug ever made work look permanently actionable this would spin — that is the FU-069
+  # anomaly-breaker's job, not this doorbell's. Fail-open: a doorbell that cannot be rung must never
+  # fail the pass that already succeeded.
+  if [ -n "${ITEM:-}" ]; then
+    _cgrad="$(jq -r --arg s "$STACK" '.stacks[]|select(.name==$s)|select((.graduated // false)==true)|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+    if [ -n "$_cgrad" ] && [ "$_cgrad" != "null" ]; then
+      _cdoor="{\"stack\":\"${_cgrad}\",\"loop_ns\":\"${_cgrad}-agents\",\"unit\":\"-\"}"
+    else
+      _cdoor="{\"repo\":\"${MAIN_REPO}\",\"unit\":\"-\"}"
+    fi
+    curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_cdoor" \
+      "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+      >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_cdoor})" || true
+  fi
 else
   # `wait --for=condition=Ready` fires the instant the container process starts — it does NOT gate on
   # the in-container `git clone` (headless sequences clone→claude in one command, but the interactive

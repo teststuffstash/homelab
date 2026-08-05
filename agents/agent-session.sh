@@ -1345,10 +1345,15 @@ if [ -n "$RUN_CMD" ]; then
     # only costs edge latency — the stack's */10 cron still ticks. loop_ns is <stack>-agents by convention.
     _grad="$(jq -r --arg r "$PROJECT" '.stacks[]|select((.graduated // false)==true)|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
     if [ -n "$_grad" ] && [ "$_grad" != "null" ]; then
-      _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\"}"
+      _door="{\"repo\":\"${PROJECT}\",\"stack\":\"${_grad}\",\"loop_ns\":\"${_grad}-agents\",\"unit\":\"-\"}"
     else
-      _door="{\"repo\":\"${PROJECT}\"}"
+      _door="{\"repo\":\"${PROJECT}\",\"unit\":\"-\"}"
     fi
+    # `unit` is sent EXPLICITLY as "-" (= no specific unit, let the scan decide). The Sensor's
+    # triggers map body.unit into the Workflow, and a missing key made every ride's doorbell log
+    # `failed to get value by key: key body.unit does not exist to in the event payload` — harmless
+    # to the dispatch (the scan runs anyway) but a permanent error line in the Sensor log, which is
+    # exactly the noise floor that hid a spinning Sensor for ~50 minutes on 2026-08-05 (homelab#103).
     # Content-Type: application/json so the eventsource PARSES body.repo/stack/loop_ns as fields —
     # without it curl sends form-urlencoded and the whole JSON becomes one body KEY (the Sensor's
     # data filters then can't see body.loop_ns, so the per-stack routing never fires).
