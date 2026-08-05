@@ -44,14 +44,30 @@ meant to avoid.)
   The circles jail has no homelab access, so it files tasks under `/workspace/.handoff/circles/
   inbox/`; `/handoff` is the mono-side procedure. One task processed so far (the base-branch
   launcher change, 4243bd9). Watch emits on new inbox files and on a `doing/` claim older than 45min.
-- **openrouter-operator chain, machine-owned — VERIFY the end, don't perform the middle.** #10
-  (GC timer) → PR#13 merged 09:59 → C6 verified working (flipped `agent/done`; harvest sprouted
-  **#15**, unlabeled behind the FU-090 gate, operator triage). **#14 (chart RBAC `delete` verbs)
-  dispatched 10:00 and is the fix that makes #10 REAL** — without it the merged timer 403s every
-  15 min per CR and #10 reads as fixed while the litter grows. **Only remaining check, after its
-  PR lands + the chart pin deploys:** `kubectl auth can-i delete openrouterkeys --all-namespaces
-  --as=system:serviceaccount:openrouter-operator:openrouter-operator` → `yes` (same for
-  `secrets`), then the expired CRs listed in #10 vanish with no 403 in the operator log.
+- **openrouter-operator chain: COMPLETE + VERIFIED 2026-08-05.** #10 (GC timer, PR#13) + #14
+  (chart RBAC `delete` verbs, PR#16) both merged, C6-closed `agent/done`, chart deployed via
+  homelab#104 (`2026.8.5-g5c54eade1197` — ⚠ that PR's TITLE still named the older chart; the
+  DIFF is what to read). End-state probed: `can-i delete openrouterkeys|secrets` → **yes**, the
+  timer logs `gc_expired_keys succeeded` with no 403, ephemeral CRs **13 → 3** (the 3 are
+  correctly retained: one inside its 24h grace, two unexpired). The 401 headroom floor is gone.
+  Sprout **#15** (factor the incluster/kubeconfig fallback) is unlabeled behind the FU-090 gate —
+  operator triage. ⚠ LESSON: a chart-pin PR can be opened from a sha that PREDATES the fix it is
+  supposed to carry — #104 was created at 10:01 from the GC-timer commit and only re-pushed to
+  the RBAC chart at 11:14. Read the diff, never the title.
+- **LEG (c) — goal decomposition — operator UN-DEFERRED it 2026-08-05; design agreed, NOT built.**
+  Trigger: `coordinator-scan.sh` emits a new `goal-decompose` clause INSTEAD of `queued-dispatch`
+  (must branch BEFORE recipe selection, or the launcher FATALs on a missing `.agents/goal.yaml`);
+  clause priority list is at ~line 729. Instructions: a new `## The goal-decompose clause` section
+  in `agents/coordinator/README.md`, beside merged-closeout/arbitrate/ci-red/infra-enrich — the
+  item session already reads that file, so this is a new PLAY, not a new role/image/recipe.
+  Discriminator (labels route, body lines parameterise — the platform's existing split):
+  `task/goal` label + a `Budget: <USD>` body line in `Touches:`/`Base:` grammar, with
+  Σ(child estimator budgets) ≤ parent enforced in the LAUNCHER pre-flight, never LLM-honored.
+  Output = child issues as native sub-issues (rung 1 SHIPPED 2026-08-02 — the substrate the
+  deferral was waiting for). **PENDING OPERATOR RULINGS:** (1) label vs body-line as primary
+  discriminator (recommended: both); (2) what the parent does while children run (recommended:
+  a non-dispatchable tracking state, else at-least-once dispatch re-decomposes it).
+  Source: `docs/agents/issue-authoring.md` §Leg (c), `roles.md` §dispatch-on-goal.
 - **Platform work queue: DRAINED 2026-08-05.** homelab#63/65/78/94/98/99/100/101 + #103 closed with
   live-verified evidence (optane0 now 0 replicas / tags `fast`-only; wk-02 single-tier `bulk`;
   mirror-ghcr 33% after the 20→40Gi bump; wk-02 allocatable 9.9Gi of 11.66Gi = FU-139 reservation
