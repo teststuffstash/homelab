@@ -25,6 +25,20 @@ meant to avoid.)
   verbatim, and confirmed both children's tests cite `CIR-*` spec rows. Both children CLOSED
   `agent/done`. **It correctly did NOT touch the two human-reserved things** (verified, not taken on
   faith): PR#21 untouched since 14:51:16, still `major/awaiting-human`; PR#25 still draft + unarmed.
+- **✅ PR#25 REVIEWED (19:01) — it had never had a single review.** Not a miss: `review-reflex.sh`
+  filters `isDraft == false` (L194, L261), so a draft is structurally invisible to the review loop.
+  Fired the reviewer directly (`reviewer-session.sh circles 25 --loop-ns circles-agents`, default
+  sonnet = same treatment #21 got) rather than un-drafting, since the draft is the only thing
+  holding the goal branch off master. `homelab-reviewer` **APPROVED** — but its findings are ALL
+  code (`bake/`, tests, `lint_specs.py`); it does not judge the 13 spec files it names. **Codeowner
+  gate done as a COMMENT** (I authored #25, so GitHub blocks self-approval and it would be a
+  worthless gate anyway): 91/91 requirements carry the exact unverified evidence line, `AREAS` and
+  `check_ambiguity_index` make the conventions fail CI rather than drift, and the ⚖ register names
+  the three rulings that override the goal issue / fan-out majority. ⚠ NOT a signal to land it.
+- **⏳ The opus goal-clause split is SHIPPED but UNVERIFIED end-to-end** (`1b4bda5`): `goal-decompose`
+  and `goal-review` resolve to opus via a `case` in `coordinator-scan.sh` (`GOAL_MODEL` overrides).
+  Executed across 7 clauses locally, but with #17 closed and #18/#19 held there is NO goal work
+  pending — first real proof comes on the next goal-* dispatch. Watch the tick's `model opus` echo.
 - **⚖ WHAT IS LEFT ON CIRCLES IS YOURS: the FAN-OUT vs ONE-SHOT comparison.** Both arms of the same
   goal now exist — the fan-out arm merged on `goal/17-p0-mvp` (#22+#23, $0.0571 for the page ride),
   and the frozen one-shot arm PR#21 (`CHANGES_REQUESTED`, DIRTY). Choosing/reconciling between them

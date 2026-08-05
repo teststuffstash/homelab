@@ -2178,3 +2178,56 @@ subject, not the symptom you expect.**
 (`.spec.coordinatorModel // "sonnet"`), not from `agents/stacks.json` — the file is only a fallback for
 stacks absent from the cluster, and a failed cluster read PROBE-FAILs loudly. There is no per-clause
 override: goal-review, goal-decompose, queued-dispatch, arbitrate and merged-closeout all share it.
+
+### 2026-08-05 (cont. 5) — the draft that no gate could see, and a model split by KIND
+**Condition:** operator asked why PR#25 "only got goal-review", then reframed the goal-model
+question: goals are where reasoning models belong, routine coordination is sonnet's job.
+
+**PR#25 had ZERO reviews, and it was the draft doing its job.** `review-reflex.sh` filters
+`isDraft == false` in two places, so a draft is structurally invisible to the review loop —
+correct behaviour, but it means the goal branch reached "goal met" with its **spec weave never
+reviewed by anyone**. The children WERE reviewed (#24 and #26 both APPROVED), so the gap was
+narrower than "unreviewed" and sharper than it looked: nobody had ever seen the branch **as one
+artifact**, and the spec weave predates the code that later merged into it. Fired the reviewer
+directly rather than un-drafting (the draft is the only thing holding the branch off master;
+un-drafting is the operator's act), default sonnet so the verdict stays comparable to #21's.
+
+**The bot approved — on the code.** Its own verdict names "specs weave + bake + tests + render",
+but every finding is Python. The 13 spec files (+~2100 lines) went unjudged, which is exactly the
+delegated codeowner gate's reason to exist. Judged them: 91/91 requirements carry the literal
+unverified evidence line with `EVIDENCE_LINE` a constant in the gate; `AREAS` is a literal set so
+⚖-R22's closed vocabulary FAILS CI rather than drifting; `check_ambiguity_index` binds register to
+pages. **Written IS applied here** — the inverse of the day's other three findings. And the ⚖
+register argues against itself where it should, naming ⚖-R3 as "an explicit override of issue #1",
+⚖-R6 as a 1-of-4 minority, and ⚖-R28 as a fixture that contradicts the ruled sweep direction which
+"nobody in the fan-out noticed". Could not approve — I authored it, and self-approval is no gate.
+
+**A finding checked and WITHDRAWN, logged deliberately.** I had ⚖-R6's "cheap to flip, but only
+before tests exist" pegged as stale inside its own PR, since the cumulative diff now carries
+`test_validate.py`. Wrong: the tests import `resolve_adapter_p0`/`resolve_manual` and never
+`resolve_freshness`, and ⚖-R2 makes P0 `manual:`-only, so the boundary really is unpinned. A tidy
+cross-cutting story that dissolved on the second probe — the same shape as the "nothing
+actionable" reading the operator's one question demolished an hour earlier. Log the withdrawals;
+they are the ones that come back.
+
+**The goal-model ruling, and why routing could not deliver it.** Operator: decompose and review are
+where reasoning models belong — they AUTHOR the tasks and answer "is it done yet" — while routine
+coordination stays sonnet. Tried to express it through the router and could not: `/route`'s ONLY
+caller is `agent-session.sh`, the WORKER launcher. `coordinator-session.sh` touches the proxy just
+for `/loop-git-token`. Yet the policy already describes the lane completely — `role_defaults
+.coordinator → dispatch → rails [subscription]`, `model_tiers` grading `claude/opus: premium`, the
+subscription branch implemented with its own capacity gate. **A `dispatch` class floor set today
+would change nothing about a coordinator session.** Fourth instance of written-is-not-applied in
+one day; the tell each time was checking the CALLER, not the config. Shipped a launcher-side `case`
+instead (ADR-094 keeps dispatch params launcher-owned), documented as §M10, and FU-095 extended
+rather than a parallel FU filed — the wiring retires the map.
+
+**Measured, and deliberately not acted on:** `tier_thresholds` claims "dispatch = ~30s dispatch
+units (coordinator/responder)" and rewards that premise with a 0.9 threshold against heavy's 0.8,
+so coordinator sessions defer LAST. Over 7d, n=**149**: p50 105s, p90 529s, p99 1342s, max 3072s —
+**149 of 149 exceeded 30s**. Not one run matched. Whole-lane question, not a goal-lane one.
+
+**Operator calibration worth keeping:** *a goal small enough for one ride is not a goal.* #17 made
+two children while the one-shot arm reached a comparable result — so the fan-out's advantage was
+never demonstrated and the reasoning tier had nothing hard to chew on. #18+#19 under one parent is
+the shape that would test it; held pending the arm comparison.
