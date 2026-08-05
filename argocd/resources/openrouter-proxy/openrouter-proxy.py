@@ -211,6 +211,11 @@ MAX_TOKENS_FLOOR = int(os.environ.get("MAX_TOKENS_FLOOR", "16384"))
 # get-secret RBAC from becoming a generic secret oracle. Short cache = revocation latency.
 SESSION_KEY_LABEL = "openrouter.teststuff.net/session-key"
 REF_CACHE_TTL_S = int(os.environ.get("REF_CACHE_TTL_S", "60"))
+# FU-134: the /search capability. A cheap, widely-available model is enough — the SEARCH does the
+# work, the model only summarizes and cites. Overridable per request; keep the default reachable on
+# every rail so no stack has to know about it.
+SEARCH_MODEL = os.environ.get("SEARCH_MODEL", "deepseek/deepseek-v4-flash-0731")
+SEARCH_TIMEOUT_S = int(os.environ.get("SEARCH_TIMEOUT_S", "120"))
 # FU-131: how long the ground-truth cost harvest waits for OpenRouter to index a generation.
 # Was (2, 5) — ~7s, which lost 49% of a fan-out arm's spend (measured against the activity export).
 GENERATION_BACKOFF_S = tuple(
@@ -1393,6 +1398,82 @@ class Proxy(BaseHTTPRequestHandler):
                 f"error_class={report.get('error_class') or 'clean'} → "
                 f"stored={stored} strike={striked}")
             self._reply_json(200 if stored else 503, {"stored": stored, "strike": striked})
+            return
+        if self.path == "/search":
+            # FU-134: web research as a PLATFORM capability, not a property of whichever harness got
+            # spawned. claude rides have server-side WebSearch; goose rides had no web tool at all,
+            # so "is this a known upstream bug?" was answerable or not by coin flip (the kimi arm of
+            # the FU-126 fan-out could only disclaim "reasoned from training knowledge"). One
+            # endpoint every harness can curl fixes that for opencode/hermes/next too.
+            #
+            # Mechanism: an ordinary completion carrying OpenRouter's `openrouter:web_search` SERVER
+            # tool (the `plugins:[{id:"web"}]` form is deprecated). It rides the caller's own key
+            # ref, so budget, guardrail, cost ledger and attribution all keep working with no new
+            # credential and no new egress hole — the ride already reaches this VIP for its
+            # completions. Cost is the ride's: ~$0.005/search (Exa, ≤10 results) + prompt tokens.
+            # ⚠ under `guardrail: only-free` the model must be a :free id or this 403s like any
+            # other completion — that is the guardrail working, not a bug here.
+            try:
+                q = json.loads(body)
+                query = (q.get("q") or q.get("query") or "").strip()
+                assert query
+            except (ValueError, AssertionError, AttributeError):
+                self._reply_json(400, {"error": 'body must be JSON: {"q": "<question>", '
+                                                '"model": "<optional>", "max_results": <optional>}'})
+                return
+            auth_hdr = self.headers.get("Authorization", "")
+            resolved = _resolve_ref(auth_hdr[len("Bearer ref:"):].strip()) \
+                if auth_hdr.startswith("Bearer ref:") else None
+            if not resolved or resolved.get("kind") != "openrouter":
+                # Deliberately narrow: a ref this proxy can resolve to an OpenRouter key. An
+                # anthropic-tier ref has WebSearch in-harness and must never hit this path.
+                self._reply_json(403, {"error": "requires an OpenRouter `Bearer ref:<ns>/<secret>` "
+                                                "(claude-tier rides use their own WebSearch)"})
+                return
+            model = str(q.get("model") or SEARCH_MODEL)
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content":
+                        "Answer from web search results only. Cite every claim with its URL. "
+                        "If the search finds nothing relevant, say so plainly — never fill the gap "
+                        "from memory."},
+                    {"role": "user", "content": query},
+                ],
+                "tools": [{"type": "openrouter:web_search",
+                           "parameters": {"max_results": int(q.get("max_results") or 5)}}],
+            }
+            try:
+                req = urllib.request.Request(
+                    f"{UPSTREAM}/api/v1/chat/completions",
+                    data=json.dumps(payload).encode(),
+                    headers={"Authorization": "Bearer " + resolved["key"],
+                             "Content-Type": "application/json",
+                             "User-Agent": "homelab-openrouter-proxy/search"},
+                )
+                with urllib.request.urlopen(req, timeout=SEARCH_TIMEOUT_S) as resp:
+                    data = json.load(resp)
+            except urllib.error.HTTPError as e:
+                detail = e.read()[:400].decode(errors="replace")
+                log(f"POST /search model={model} → upstream {e.code}")
+                self._reply_json(e.code, {"error": f"upstream {e.code}", "detail": detail})
+                return
+            except OSError as e:
+                log(f"POST /search model={model} → failed: {e}")
+                self._reply_json(504, {"error": f"search failed: {e}"})
+                return
+            msg = ((data.get("choices") or [{}])[0].get("message") or {})
+            cites = [a.get("url_citation", {}) for a in (msg.get("annotations") or [])
+                     if a.get("type") == "url_citation"]
+            log(f"POST /search model={model} q={query[:60]!r} → {len(cites)} citation(s)")
+            self._reply_json(200, {
+                "answer": msg.get("content") or "",
+                # url+title only: the ride wants somewhere to GO and something to quote in a
+                # provenance note, not 30k characters of highlight per result.
+                "citations": [{"url": c.get("url"), "title": c.get("title")} for c in cites],
+                "model": data.get("model") or model,
+                "usage": data.get("usage") or {},
+            })
             return
         if self.path == "/route":
             # ADR-096 P3: the launcher-called decision API (never the LLM — ADR-094). The

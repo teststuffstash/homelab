@@ -268,13 +268,17 @@ render_env_card() {
   fi
 
   # WHY: the circles FU-126 A/B surfaced that recipes carried egress FOLKLORE ("WebFetch will
-  # mostly be blocked") while the actual truth is per-HARNESS: claude has server-side WebSearch,
+  # mostly be blocked") while the actual truth was per-HARNESS: claude has server-side WebSearch,
   # goose has no web tool at all. Capability truth belongs HERE, not in recipe text (operator,
   # 2026-08-03). FU-117 sighting noted in roles.md §Context delivery.
+  # FU-134 ruling (2026-08-04): ADVERTISING the difference was not enough — "is this a known
+  # upstream bug?" must not be answerable-or-not by which binary got spawned. The proxy's /search
+  # endpoint is the platform floor (openrouter-proxy.py), so the card now states a GUARANTEE for
+  # every harness. The in-harness tool is still named first where it exists: fewer hops, no spend.
   if [ "$HARNESS" = "claude" ]; then
     printf '%s\n' "- **Web research: WebSearch available** (server-side — runs OUTSIDE this pod, unaffected by the egress posture). WebFetch fetches FROM this pod and rides the egress posture above; if it fails, use WebSearch and mark snippet-level provenance."
   else
-    printf '%s\n' "- **Web research: NONE.** This harness has no WebSearch/WebFetch tool. Reason from training knowledge, mark externally-unverified claims as such (⚖/provenance notes), and leave verification to a follow-up — never present an unverified claim as checked."
+    printf '%s\n' "- **Web research: YES, via the platform endpoint** (this harness has no built-in web tool): \`curl -sS -X POST \${AGENT_SEARCH_URL}\` with \`-H \"Authorization: Bearer \$OPENROUTER_API_KEY\" -H 'Content-Type: application/json' -d '{\"q\":\"<your question>\"}'\` → JSON \`{answer, citations:[{url,title}]}\`. The search runs server-side, so it works under the egress posture above; it spends a few cents of THIS ride's budget per call, so ask few, real questions. Cite the URLs it returns, and if it returns no citations say the claim is unverified rather than filling the gap from memory."
   fi
 
   printf '%s\n' "- **Round ${ROUND}** of ${ROUNDS_MAX:-3} (a CHANGES_REQUESTED review or CI-red-on-your-change costs a round; infra failures don't). Land one tight, correct change."
@@ -892,6 +896,11 @@ ${DIND_CONTAINER}
           value: "${REPORT_STACK}"
         - name: AGENT_REPORT_URL
           value: "${PROXY_URL:+${PROXY_URL}/report}"
+        # FU-134: the platform web-research endpoint, named in the env card. An env var rather than a
+        # literal in the card text because the VIP/DNS form differs per ride (kata guests cannot
+        # reach ClusterIPs — FU-072), and the card must never print an address this pod cannot use.
+        - name: AGENT_SEARCH_URL
+          value: "${PROXY_URL:+${PROXY_URL}/search}"
         - name: NODE_NAME
           valueFrom:
             fieldRef: { fieldPath: spec.nodeName }
