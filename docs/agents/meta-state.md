@@ -43,6 +43,21 @@ meant to avoid.)
   (→ G01 flip, FU-106), router shadow decisions (→ P4, FU-095), native blockedBy edges in scan logs
   (→ FU-111 retirement), Monday 05:00 retro (= FU-058 run 3). ⚠ Garage still has no offsite backup
   (FU-137) and now carries tofu state.
+- **⏳ VERIFY AT THE NEXT TICK: the goal-review predicate fix (cadb3d1, pushed 17:02:36).** The 17:00
+  tick re-fired goal-review on #17 and the session correctly no-op'd — but that pod cloned master
+  BEFORE the fix commit, so it proves nothing either way. The 17:30+ tick is the first real test.
+  Predicate re-run by hand in the jail at 17:15 says **quiet** (newest_close 16:11:10 < last_bot
+  16:32:40). If it fires again anyway, suspect the pod-side `gh issue view` failing into
+  `|| echo ""` — an empty `last_bot` reads as "the loop never commented" and re-fires forever.
+- **homelab#103 — containment shipped (fc7e9fb), root cause still OPEN.** New alert
+  `AgentCoordinateScanWedged` (>15m Running; measured 1-in-2474, fires on the incident's own history
+  and nothing else in 7d; verified `health=ok` in live Prometheus). ⚠ Do NOT "tighten"
+  `activeDeadlineSeconds` — it is already 1800 and the legitimate duration tail reaches 1458s
+  (p50 29s / p99 302s over 2474 runs), so 600s would kill ~9 real scans/week; my own 7-pod snapshot
+  said 5s-168s and would have justified exactly that outage. ⚠ Do NOT implement the issue's
+  "reject `unit=-`" candidate — `-` is the legitimate full-scan default, and every redelivered
+  duplicate was well-formed. No upstream argo-events fix exists at v1.9.11; the only live route to a
+  root cause is reproducing against the burst hypothesis.
 - **Open, not mine:** agent-runtime #13 (watchdog misses silent loops), #31 (bank-on-first-commit,
   narrowed), #32 (finalize should guarantee the issue link), #33 (resumed round reports "no
   resumable branch"); openrouter-operator sprouts triaged; homelab#103 REOPENED (sensor spin
@@ -51,7 +66,13 @@ meant to avoid.)
 ## Re-arm on a fresh session (watches die with `/clear`)
 
 - Loop watch: `STACK_NS=circles-agents RIDE_NS=circles REPO=teststuffstash/circles
-  SCAN_PREFIX=coordinate-circles- BASE_EXPECT=research/issue-1-weave bash agents/meta-watch-loop.sh`
+  SCAN_PREFIX=coordinate-circles- BASE_EXPECT=goal/17-p0-mvp bash agents/meta-watch-loop.sh`
+  (⚠ `BASE_EXPECT` is the GOAL branch now, not `research/issue-1-weave` — children land there. The
+  armed-PR clause was rescoped to armed-AND-base-drifted in the same pass: arming into `goal/**` is
+  the happy path under the goal lane, so the old clause would have alarmed on every healthy ride.)
+  ⚠ Monitors can SURVIVE a `/clear` — two orphans (a stale-BASE_EXPECT loop watch and a duplicate
+  heartbeat) were still running this session. Stop them by task id before re-arming; a survivor runs
+  the script as it was PARSED, so it never picks up your edits.
   (persistent) + `bash agents/meta-handoff-watch.sh` (persistent) + the 2h backstop heartbeat, each
   sweep running `agents/meta-alert-crosscheck.sh`. Re-arm fresh; don't trust old monitor ids.
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; never a bare
