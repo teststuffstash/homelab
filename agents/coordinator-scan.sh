@@ -871,6 +871,21 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    # ── goal-* clauses run a REASONING tier (operator ruling, 2026-08-05) ──────────────────────
+    # Routine coordination IS dispatch work and sonnet handles it — 149 sessions over 7 days say so.
+    # The two goal clauses differ in KIND, not size: goal-decompose AUTHORS the child tasks, and
+    # goal-review answers "is it done yet" against the goal's own acceptance. Those are the two
+    # judgements the entire lane rests on — everything else is bookkeeping over work already framed.
+    # ⚠ Launcher-side map ON PURPOSE (ADR-094: dispatch params are launcher-owned, never
+    # LLM-assembled). The router's vocabulary already describes this better — it grades
+    # `claude/opus: premium` in `model_tiers` and separates `reasoning: true` classes from
+    # `dispatch` — but /route's ONLY caller is agent-session.sh (the worker launcher);
+    # coordinator-session.sh consults the proxy solely for /loop-git-token, so there is nothing to
+    # route through yet. When the coordinator lane is wired to /route (post-P4, FU-095), this map
+    # becomes a subscription-rail reasoning class and dies here. See docs/agents/model-routing.md §M10.
+    case "$uclause" in
+      goal-decompose|goal-review) cmodel="${GOAL_MODEL:-opus}";;
+    esac
     # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"

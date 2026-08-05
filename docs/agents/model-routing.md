@@ -280,6 +280,48 @@ labels, not new machinery: `label_map` already maps `track/iac`→class and
 difficulty ever matters, it enters as a coordinator-scan **labeling** step (auditable, one
 label) — never request-time inference in the proxy.
 
+### M10. The coordinator lane is UNROUTED — and the goal clauses are its reasoning tier
+
+Everything above governs the **OpenRouter rail**. The coordinator does not ride it: it runs
+`claude -p` against the Claude subscription (`coordinator-claude`, `CLAUDE_CODE_OAUTH_TOKEN`) with
+`--model sonnet|opus|haiku|fable`, and its model comes from `cmodel` —
+`.spec.coordinatorModel // "sonnet"` on the live `AgentStack` claim, read by `coordinator-scan.sh`.
+Not from `agents/stacks.json` (that is a fallback for stacks absent from the cluster, and a failed
+cluster read PROBE-FAILs loudly rather than silently downgrading).
+
+**The policy already describes this lane; only the call is missing.** `role_defaults.coordinator`
+→ class `dispatch` → `rails: ["subscription"]`, `tier: "dispatch"`; `model_tiers` grades
+`claude/haiku: cheap`, `claude/sonnet: large`, `claude/opus: premium`; and `/route`'s subscription
+branch is implemented, with its own `subscription_ok(tier)` capacity gate. But `/route`'s **only
+caller is `agent-session.sh`** (the worker launcher) — `coordinator-session.sh` consults the proxy
+solely for `/loop-git-token?role=coordinator`. So a `dispatch` class floor set today changes
+nothing about a coordinator session. Written is not applied; check the caller, not the config.
+
+**Goal clauses run a reasoning tier (operator ruling, 2026-08-05).** `goal-decompose` and
+`goal-review` resolve to **opus**; every other clause keeps the claim's `coordinatorModel`
+(sonnet). The split is by KIND, not size: decompose AUTHORS the child tasks and review answers
+*"is it done yet"* against the goal's own acceptance — the two judgements the lane rests on, where
+everything else is bookkeeping over work already framed. Implemented as a launcher-side `case` in
+`coordinator-scan.sh` (ADR-094: dispatch params are launcher-owned, never LLM-assembled), with a
+`GOAL_MODEL` env escape hatch. **When the coordinator lane is wired to `/route` (post-P4, FU-095)
+this map becomes a subscription-rail reasoning class and is deleted** — note that `audit` and
+`research` are the wrong shape to reuse as-is: both pin `rails: ["openrouter"]` with an
+`openrouter/fusion` head, and coordination must stay on the subscription safety net.
+
+⚠ **A goal small enough for one ride is not a goal** (same ruling). circles#17 decomposed to two
+children while the one-shot arm reached a comparable bake+page and drew only `CHANGES_REQUESTED` —
+so the fan-out arm's advantage was never demonstrated, and the reasoning tier had nothing hard to
+chew on. Calibrate goals so decomposition and the acceptance judgement are actually load-bearing.
+
+⚠ **The `dispatch` tier's premise is measured FALSE, and is deliberately left alone for now.**
+`tier_thresholds` reads *"dispatch = ~30s dispatch units (coordinator/responder)"* and grants
+`dispatch` a **0.9** utilization threshold against `heavy`'s 0.8 — so coordinator sessions defer
+LAST, i.e. they are the most willing to consume scarce subscription headroom. Over 7 days,
+n=**149** coordinator sessions: p50 **105s**, p90 529s, p99 1342s, max 3072s, and **149 of 149
+exceeded 30s**. Not one run matched the premise. Raising goal-* to `heavy` was considered and NOT
+taken (2026-08-05) — it is a whole-lane question, not a goal-lane one, and belongs with evidence
+about what the latch is actually protecting.
+
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
 Direction 2026-07-25. The downstream consumer is the IdP project's **reasoning** agents (auditing,

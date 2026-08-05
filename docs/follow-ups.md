@@ -371,7 +371,10 @@ six OVERSIZE items pointer-ized into
       (P1–P3+P5 + cooldowns live).
       **Next:** the P4 authoritative flip after the shadow soak — evidence comes from the
       `circles` CHAINLESS pilot (ruled 2026-08-03: no workerModel, routerMode authoritative;
-      plan in the life repo's others-view-plan.md). **Open:** legs (b)+(c) unstarted.
+      plan in the life repo's others-view-plan.md). **Open:** legs (b)+(c) unstarted; the
+      **coordinator lane is unrouted** — `/route`'s only caller is `agent-session.sh`, so the
+      goal-clause reasoning tier is a launcher-side `case` in `coordinator-scan.sh` that this
+      wiring retires (model-routing.md §M10, which also records the falsified `dispatch` tier).
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
