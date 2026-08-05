@@ -77,3 +77,27 @@ spec:
           annotations:
             summary: "Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)"
             description: "{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative."
+
+        # The SECOND half of homelab#103, and the worse half: a wedged coordinate workflow holds
+        # the `coordinator-scan` mutex, and every later tick queues behind it Pending. The loop
+        # stops dispatching and NOTHING says so — `get wf` shows activity, and the Pending reason
+        # ("Waiting for .../Mutex/coordinator-scan") reads as normal serialization. On 2026-08-05
+        # a spin artifact wedged mid-`git clone` (zero log bytes in 75s) and held the lock ~24 min
+        # across three queued twins plus the 13:00 cron tick; it surfaced only because a watch was
+        # explicitly looking for a missing tick.
+        # ⚠ THE DEADLINE IS NOT THE LEVER, and the obvious tightening is a trap. `activeDeadlineSeconds`
+        # is already 1800 on both coordinate paths, and it cannot go much lower: over 7d/2474 runs the
+        # duration distribution is p50 29s, p95 45s, p99 302s — but the tail reaches 1458s, so a "matched
+        # to the natural bound" 600s would kill ~9 legitimate scans a week. The wedge hides IN that tail,
+        # which is exactly why no timeout distinguishes stuck from busy. So: alert at 900s (measured —
+        # 1 legitimate run in 2474 exceeds it) and let the 1800s deadline stay the containment behind it.
+        # Verified against the incident's own history (fires on coordinate-perstack-lvsmt, 12:48-13:12)
+        # and against the preceding 7 days (fires on NOTHING else — zero false positives).
+        - alert: AgentCoordinateScanWedged
+          expr: (time() - kube_pod_start_time{pod=~"coordinate-.*"}) > 900 and on(namespace,pod) kube_pod_status_phase{phase="Running"} == 1
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "coordinate scan {{ $labels.pod }} has run >15m in {{ $labels.namespace }} (p99 is 5m)"
+            description: "{{ $labels.pod }} has been Running over 15 minutes; 99.96% of coordinate scans finish inside it. While it runs it holds the `coordinator-scan` mutex, so every queued tick is Pending and the loop is NOT dispatching — check `kubectl -n {{ $labels.namespace }} get wf` for twins waiting on the mutex. A wedged one produces no new log output: compare `kubectl logs` twice a minute apart before deciding it is merely slow. Fix: delete the workflow and any queued twins, which lets the next cron tick take the lock. If it carries `unit=-` alongside duplicate submissions, look upstream at the Sensor (AgentEventInfraSpinning, homelab#103)."

@@ -96,9 +96,15 @@ while true; do
         echo "BASE DRIFT: open PR(s) NOT based on '$BASE_EXPECT': $wrong — a ride ignored --base; close/retarget before it merges"
         last_wrongbase="$wrong"
       fi
-      armed=$(jq -c --arg hp "${BASE_HEADS:-^(agent|fix)/}" '[.[] | select(.am == true and (.h|test($hp))) | .n]' <<<"$pr")
+      # ⚠ Armed-per-se is NOT the hazard any more (2026-08-05, the goal lane): a child ride
+      # SHOULD arm into `goal/**` — that prefix is what carries the tofu ruleset, and C9 arms on
+      # it deliberately. Warning on every armed ride would fire on the happy path all day, and a
+      # repeating false alarm IS a broken probe. The hazard is arming into the WRONG base: an
+      # unprotected branch merges ON OPEN. So: armed AND base-drifted.
+      armed=$(jq -c --arg b "$BASE_EXPECT" --arg hp "${BASE_HEADS:-^(agent|fix)/}" \
+                '[.[] | select(.am == true and (.h|test($hp)) and .b != $b) | {n:.n, b:.b}]' <<<"$pr")
       if [ "$armed" != "[]" ] && [ "$armed" != "$last_armed" ]; then
-        echo "AUTO-MERGE ARMED on $armed — expected NOT armed while the stack lands on '$BASE_EXPECT'"
+        echo "AUTO-MERGE ARMED on a PR NOT based on '$BASE_EXPECT': $armed — it will merge into that base; disarm/retarget NOW"
         last_armed="$armed"
       fi
     fi
