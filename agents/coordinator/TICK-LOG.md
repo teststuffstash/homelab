@@ -2032,3 +2032,47 @@ violated it by hand (flipped `coordinator.enabled` without `graduated`; both sca
 circles#17 — three sessions in four minutes, saved from two concurrent rides only by the WIP
 pre-flight). circles#21 frozen `major/awaiting-human` as the ONE-SHOT benchmark arm; ⚠ that freeze
 guards the `changes-requested` clause but **C4/C5 keys on the ISSUE** — two doors.
+
+### 2026-08-05 (cont. 2) — the goal lane runs end-to-end; six of my own bugs found by using it
+**Condition:** operator un-deferred FU-090 leg (c) mid-session, then drove it to a live fan-out on
+circles#17 (goal, `Budget: €5`) against the frozen one-shot arm (#21).
+
+**Every clause fired on a real goal:** `goal-decompose` → children #22 (bake) + #23 (page) with
+narrowed `Touches:`, inherited `Base:`, native sub-issue links and a `Depends-on:`; parent parked
+`agent/blocked`; bounded Goal+Acceptance card decoded out of the ride pod; Σ(child caps) $0.50 ≤ $5
+**transitive over descendants**; #24 merged into the goal branch reviewer-approved; `goal-review`
+re-read the goal's acceptance, ruled **"goal not yet met"**, confirmed #23 covers the gap, authored
+no redundant child — and caught stale `Base:` prose I had missed. #23 dispatched `child of goal #17`.
+
+**THE PATTERN OF THE DAY: every coupling was invisible in code and appeared only when a real PR
+moved.** Four for four. (1) A required check on a branch pattern is real only if the WORKFLOW
+TRIGGERS on that pattern — `ci` required on `goal/**` + `branches: [master]` left an APPROVED, armed
+PR permanently BLOCKED. (2) `pull_request` evaluates the workflow from the merge of head into BASE,
+so a fix on master does not reach children until the GOAL BRANCH is refreshed. (3) The update
+cascade is TWO HOPS and the top one is manual — nobody auto-updates an un-armed PR. (4) GitHub
+honours closing keywords ONLY on a merge into the DEFAULT branch, so a child merging into `goal/**`
+cannot close itself → C4/C5 re-dispatches onto merged work, `goal-review` never fires,
+`Depends-on:` siblings never unblock, and C6 cannot help (its input is `--state closed`) → FU-143.
+
+**Six bugs of mine, each hiding the next.** `gh --jq` takes NO `--arg/--argjson` — it broke the
+budget gate (documented that morning) and then **the goal-review predicate hours later in the same
+file**, making it re-fire EVERY tick and eat the WIP slot its sibling needed; that presented as
+"#23 hasn't dispatched", a scheduling puzzle, and my first explanation of it was right for run 1 and
+would have been wrong forever after. One **apostrophe** (`coordinator's`) inside the C9 jq program
+closed its single quote and killed review-reflex fleet-wide (exit 2) — `bash -n` reports clean
+because it is a runtime substitution; EXECUTE the block. A 113-char label description froze the
+label taxonomy for all 11 claim-owned repos (GitHub caps at 100). Widening arming to `goal/**`
+removed the ACCIDENT that kept the frozen benchmark un-armed → C9 now honours `major/awaiting-human`
+explicitly. A branch rename CLOSES the PR whose HEAD it is (#16 → reopened as #25, identical
+content). And `Base:` migration: I verified what the LAUNCHER parses and missed the bold prose
+header — nine stale refs, caught by goal-review.
+
+**Also shipped:** homelab's fixer recipe (FU-142 archived) → the platform's FIRST self-fix ride,
+#97 → PR#106, code-owner approved after validating its PromQL against live Prometheus (the recipe's
+honesty clause — "manifest-lint SKIPPED PrometheusRules" — is what made the review possible).
+`ghcr.io` egress miss found by the responder INDEPENDENTLY, 6 min after my own fix, with two
+ruling-outs I never ran. The chart-deploy carve-out (#105 merges itself now). `goal/**` protected in
+tofu. The coordinator now RINGS THE DOORBELL on unit completion (chains were paying up to 90 min of
+cron per child) and the ride's doorbell finally sends `unit`. ⚠ `agents/stacks.json` drifted from the
+claim for six hours: the SCAN reads the live cluster, the DOORBELLS read the file — a mirror only
+some readers use. Synced; the real repair is the doorbells reading the cluster too.
