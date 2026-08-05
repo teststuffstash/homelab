@@ -50,7 +50,7 @@ shape of leg (c) is the FU-105 researcher's dispatch trigger.
 
 The ADR-094 janitor tick MAY draft issues from `specs/`/TRACKS gaps, under the same inert gate.
 
-## Leg (c) — goal-budget decomposition — UN-DEFERRED 2026-08-05, design agreed, NOT built
+## Leg (c) — goal-budget decomposition — BUILT 2026-08-05
 
 A human-authored **and human-queued** `goal` issue carries `budgetUSD` + acceptance criteria. Its
 item session MAY author and queue child issues citing the parent, with **Σ(child estimator budgets)
@@ -106,9 +106,29 @@ The division of labour follows the model-tiering rule: the **coordinator** holds
 subscription model, full re-read); the **worker** gets a slice (cheap, budget-capped, bounded
 context). Rung 4's sprout-RATE gauge is the health signal — *rate > 1 per run = diverging*.
 
-**Open rulings before build:** (a) `task/goal` label vs `Budget:` line as the primary
-discriminator — recommended both; (b) what the parent does while children run — recommended a
-non-dispatchable tracking state, since at-least-once dispatch would otherwise re-decompose it.
+**Operator rulings 2026-08-05:** (a) **both** discriminators — the `task/goal` label routes,
+the `Budget:` line funds; (b) the parent goes to a **non-dispatchable tracking state** initially,
+revisit later. Plus: *"there should be some kind of backstop on the goal also"* — nothing wakes a
+goal on child traffic alone, so `goal-review` fires on EVERY child closure, and the residual
+backstop (a goal whose children are all quiet) is the **meta-coordinator's** for now; the guard
+gets designed from observed behaviour rather than guessed at.
+
+### As built
+
+| leg | where |
+|---|---|
+| `goal-decompose` trigger | `coordinator-scan.sh` — emitted instead of `queued-dispatch`, before recipe selection |
+| both plays | `agents/coordinator/README.md` §`goal-decompose`, §`goal-review` |
+| `task/goal` label | the claim taxonomy (Composition). ⚠ GitHub caps label descriptions at **100 chars** and `IssueLabels` is authoritative — one over-long description freezes the taxonomy for every claim-owned repo |
+| bounded goal context | `agent-session.sh` reads the native parent, injects **Goal + Acceptance only** |
+| parent on child units | `coordinator-scan.sh` 5th unit field → `parent=<n>` in the item brief |
+| Σ(child caps) ≤ `Budget:` | `agent-session.sh` pre-flight, over open AND closed children, summing `cap_usd` (what the key ALLOWS, not what it forecasts) |
+| `goal-review` | `coordinator-scan.sh`, stateless: a child closed after the loop's newest comment on the goal |
+
+Two traps found while building, both of the fail-open kind: `gh issue list` has **no `--argjson`**
+(a jq flag) — behind a `|| echo '[]'` that made the budget gate pass everything; and `[ a \> b ]`
+is a bashism that can invert the goal-review predicate under another shell. Both are now
+sort-based / piped-to-real-jq, and a zero-children result says so aloud instead of failing open.
 
 ## The sprout index — the accounting substrate leg (c) was missing
 
