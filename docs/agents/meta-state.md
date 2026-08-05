@@ -54,20 +54,31 @@ meant to avoid.)
   operator triage. ⚠ LESSON: a chart-pin PR can be opened from a sha that PREDATES the fix it is
   supposed to carry — #104 was created at 10:01 from the GC-timer commit and only re-pushed to
   the RBAC chart at 11:14. Read the diff, never the title.
-- **LEG (c) — goal decomposition — operator UN-DEFERRED it 2026-08-05; design agreed, NOT built.**
-  Trigger: `coordinator-scan.sh` emits a new `goal-decompose` clause INSTEAD of `queued-dispatch`
-  (must branch BEFORE recipe selection, or the launcher FATALs on a missing `.agents/goal.yaml`);
-  clause priority list is at ~line 729. Instructions: a new `## The goal-decompose clause` section
-  in `agents/coordinator/README.md`, beside merged-closeout/arbitrate/ci-red/infra-enrich — the
-  item session already reads that file, so this is a new PLAY, not a new role/image/recipe.
-  Discriminator (labels route, body lines parameterise — the platform's existing split):
-  `task/goal` label + a `Budget: <USD>` body line in `Touches:`/`Base:` grammar, with
-  Σ(child estimator budgets) ≤ parent enforced in the LAUNCHER pre-flight, never LLM-honored.
-  Output = child issues as native sub-issues (rung 1 SHIPPED 2026-08-02 — the substrate the
-  deferral was waiting for). **PENDING OPERATOR RULINGS:** (1) label vs body-line as primary
-  discriminator (recommended: both); (2) what the parent does while children run (recommended:
-  a non-dispatchable tracking state, else at-least-once dispatch re-decomposes it).
-  Source: `docs/agents/issue-authoring.md` §Leg (c), `roles.md` §dispatch-on-goal.
+- **LEG (c) — BUILT 2026-08-05 except the budget arithmetic** (operator un-deferred + ruled:
+  both discriminators, non-dispatchable parent initially). Shipped: `goal-decompose` clause in
+  `coordinator-scan.sh` (branches BEFORE recipe selection — a `goal` class would FATAL the
+  launcher on a missing `.agents/goal.yaml`, which deliberately does not exist); the play in
+  `agents/coordinator/README.md`; `task/goal` in the claim taxonomy; the launcher READS native
+  parentage and injects a BOUNDED Goal+Acceptance card (1845c of a 4799c body on circles#17 —
+  the whole parent is what killed r1); the scan carries the parent id as a 5th unit field, free
+  (`parent` rides the existing `gh issue list` call), and the item brief tells the session to
+  judge a child against the GOAL's acceptance. **REMAINING:** `Budget:` body line +
+  Σ(child estimates) ≤ parent in the launcher pre-flight; a `goal-review` clause firing when a
+  child closes. ⚠ Nothing wakes a goal on child traffic alone — that backstop is the
+  meta-coordinator's by operator ruling (observe, then design the guard from evidence).
+  Design: `docs/agents/issue-authoring.md` §Leg (c).
+- **circles#21 is a FROZEN BENCHMARK** (`major/awaiting-human`, which excludes it from the
+  `changes-requested` clause; the reviewer does NOT skip that label, so the one review still
+  happens). It is the ONE-SHOT arm: what `deepseek/deepseek-v4-flash` produced against the whole
+  of goal #17 in a single ride, base `research/issue-1-weave`, un-armed. The fan-out arm is the
+  same goal decomposed once leg (c)'s remaining legs land. **Do not push to it, dispatch a fix
+  round on it, or merge it** — a repair cycle destroys the comparison. r1 (`tencent/hy3`)
+  produced nothing at all, so #21 is r2's work standing alone.
+- **⚠ GitHub caps label descriptions at 100 chars**, and `IssueLabels` is authoritative over a
+  repo's whole label set — so one over-long description freezes the taxonomy for EVERY claim-owned
+  repo (11/12 went ReconcileError on my 113-char `task/goal` text, 2026-08-05). Fixed to 85;
+  `openrouter-operator-labels` was still retrying on backoff at hand-off — verify it reached
+  `Synced=True`, and that `task/goal` exists on that repo.
 - **Platform work queue: DRAINED 2026-08-05.** homelab#63/65/78/94/98/99/100/101 + #103 closed with
   live-verified evidence (optane0 now 0 replicas / tags `fast`-only; wk-02 single-tier `bulk`;
   mirror-ghcr 33% after the 20→40Gi bump; wk-02 allocatable 9.9Gi of 11.66Gi = FU-139 reservation
