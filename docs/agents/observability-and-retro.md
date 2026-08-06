@@ -185,6 +185,31 @@ Through the first child, **⏳ 8m35s against ~68m of ⚙** — and only the very
 edge-triggered hops (session→scan 20s, verdict→scan 5s) are effectively free; `ci` on the goal
 branch passed in 1m42s.
 
+**Second child (#31), and a third wait class the ledger did not have: CAPACITY.**
+
+| span (UTC) | what | dur | class |
+|---|---|---|---|
+| 09:39 → 09:47 | deferred item session re-rings `/coordinate` → scan re-dispatches #31 → defers again, ×3 | ~8m | 🔥 SPIN — the ring-while-latched defect, guard `8740767` |
+| 09:47 → 10:43:03 | #31 PARKED (`agent/queued` removed); 5h subscription window draining 0.82 → reset | **56m** | 🧊 CAPACITY — not a missing edge |
+| 10:43:03 → 10:43:20 | `agent/queued` re-added → stack doorbell rung → scan | ~17s | ✅ doorbell (`scripts/reflex-now.sh coordinate-circles circles-agents`) |
+| 10:43:20 → 10:44 | scan → `issue-31 (queued-dispatch, class build, child of goal #29, sonnet, wip 1)` | ~40s | ⚙ |
+
+⚠ **🧊 CAPACITY is a THIRD class and must not be logged as ⏳.** ⏳ means the platform knew and
+nothing ran — a defect with an FU id. Here the platform knew, correctly refused, and the only
+honest fix is more capacity or less demand. Filing an FU against it would be filing one against
+arithmetic. What IS a defect is the 🔥 row above it: the loop spent the very capacity it was
+waiting for, because a deferred session still rang the doorbell. Guard shipped; the park was belt.
+
+⚠ **The park had no owner but a human.** Removing `agent/queued` stops the spin and also removes
+the only thing that would ever re-queue the issue — so the containment silently became a
+human-blocking step, and the whole lane sat behind it (#32 waits #31; #18/#19 wait #32). It was
+restored from `meta-state.md`'s explicit RESTORE STEP, which is the only reason it did not sit
+overnight. **A park is not complete until its un-park is written down with a trigger**, and a
+latch-clear waiter that probes the real endpoint beats an estimated wall-clock deadline: the
+estimate said ~10:40Z, the probe said 10:43:03, and the alert (`SubscriptionDispatchLimited`
+clearing) fired before the utilization header caught up — the header was 57m stale and still read
+0.82 after release. Trust the reset epoch, not the utilization number.
+
 ⚠ **A measured gap is not a missing edge — check what filled it.** The probe flagged 6m33s between
 PR-open and scan-wake as a candidate ⏳ and the hypothesis under test was that
 `agent-session.sh`'s end-of-run doorbell had been orphaned (its launcher runs inside the item-session

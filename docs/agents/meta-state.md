@@ -28,17 +28,19 @@ which skips graduated stacks — use `bash scripts/reflex-now.sh coordinate-circ
 and **FU-145** (`AgentCoordinateScanWedged` keys on scan-pod lifetime, so it fires on any ride
 >15m on every stack — expect it as noise until re-keyed).
 
-### ⏰ RESTORE STEP — circles#31 is PARKED (09:47Z), un-park when the 5h window clears
+### ✅ RESTORED — circles#31 un-parked 10:43Z, lane running again
 
-`agent/queued` REMOVED from #31 to stop a dispatch spin. **#31 is not blocked on anything else —
-#30 is closed and merged. Re-add `agent/queued` (it keeps `agent-fix`) once the 5h subscription
-window clears and the lane continues.** Do not leave this parked: nothing else will re-queue it.
+Latch released 10:43:03Z (probed, not assumed: `limited=false`; ⚠ the 5h utilization HEADER still
+read 0.82 with `headers_age_s=3441` — the **reset epoch** is what releases, never the number).
+`agent/queued` re-added → stack doorbell rung → scan dispatched
+`issue-31 (queued-dispatch, class build, child of goal #29, sonnet, wip 1)`.
+Ledger rows + the CAPACITY-vs-WAIT class distinction are in
+[`observability-and-retro.md`](observability-and-retro.md) §Part A″.
 
-Latch re-probed live 10:12Z: `limited=true`, `reason=utilization-5h`, 5h util **0.82**, `reset`
-epoch **1786012800 = 10:40Z** (7d 0.80 vs its own 0.95 threshold — NOT binding, see the ⚠ below).
-The whole lane is stalled behind this one park: #32 → waits #31, and #18/#19 → wait #32, all three
-correctly held by native `blockedBy` in the 10:00Z scan. agent-runtime#34 is behind the SAME latch
-(its reviewer is subscription-backed), so both chains self-clear at the same moment.
+**Expected chain from here, each hop with its deadline:** #31's ride → PR into `goal/29-p0-complete`
+armed at creation (~30m, #30's took 31m16s) → reviewer (~7m) → `ci` (~2m) → merge → **⚠ FU-143
+soak: expect to HAND-CLOSE #31** (the fix is not deployed yet, see the chain below) → that unblocks
+#32, then #18/#19. Past ~11:45Z with no PR, read the ride pod.
 
 Why: a deferred item session still rang `/coordinate`, waking a scan that re-dispatched the same
 issue, which deferred again — three laps in eight minutes, and coordinator sessions are themselves
@@ -70,7 +72,13 @@ cross-reference event), so nothing can recover it after the fact.
    abandoned) and reports them under ⛔ in the scan's orphan block. Ordinary issues unaffected.
 2. ✅ `agent-runtime#34` OPEN, ARMED, **`ci` GREEN** (implements `agent-runtime#32`): finalize
    prepends `Implements #<n>` when the PR body does not already match. Waiting only on the
-   reviewer — which is subscription-backed, so it is behind the SAME 5h latch as #31. Self-clears.
+   reviewer — which is subscription-backed, so it was behind the SAME 5h latch as #31.
+   **VERIFIED reviewable rather than assumed** (2026-08-06): #34 is authored by `RasmusSoot`, the
+   shape that stranded oracle-fleet#166 for three days — but the review-reflex PICK block has **no
+   author filter**; `WORKER_AUTHOR` scopes only the C9 re-arm and `changes-requested` legs. Armed +
+   green + not-APPROVED is sufficient, and `review-platform` (in ns `platform-agents`, `*/15`)
+   covers agent-runtime via the graduated `platform` stack. So it self-clears. Deadline: a verdict
+   by ~11:00Z; past that, `review-platform` is not picking it up — read its newest pod log.
    ⚠ agent-runtime has NO `.agents/` BY DESIGN — operator ruling 2026-08-06: its fixes come from
    meta-coordination incidents, so drive it with the JAIL credentials, never look for an agent lane.
 3. ⏳ **NEXT: #34 merges → `build-image.yaml` fires on `agent-base/**` → new `agent-base` tag →
