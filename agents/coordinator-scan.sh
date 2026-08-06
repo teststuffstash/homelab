@@ -37,6 +37,24 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+# NO-OP ROUND PREDICATE — shared by the ci-red clause (FU-115b) and changes-requested (FU-147).
+# Input: `gh pr view N --json comments,commits`. Prints "1" when the LAST completed round pushed
+# nothing. Defined once because two copies WILL drift, and this one was already wrong twice:
+#   (1) it read `.commits[]?.commit.committedDate` — but that field is TOP-LEVEL in gh output, so
+#       every commit was null, $head was "", and the `$head == ""` branch fired "no-op" on every
+#       PR it ever saw. Never observed only because no ci-red PR reached a completed round since
+#       2026-08-02 (zero agent/arbitrate labels fleet-wide, zero of its comments in search).
+#   (2) COUNTING is the fix, not comparison: a SUCCESSFUL round pushes its commit and only THEN
+#       posts stats, so `newest_stats > newest_commit` is true for good rounds too. The round that
+#       produced the newest commit posts exactly ONE stats comment after it — so a SECOND one
+#       means a later round finished without pushing. Hence `>= 2`.
+# Verified against circles PR#39 real history: final state (r6 pushed) -> no; state after r3 (the
+# real truncation no-op) -> YES; state after r4 (real push) -> no. Merge commits excluded (the
+# updater BEHIND merges are not round output — the nine-review-loop lesson).
+NOOP_ROUND_JQ='([.comments[]|select(.body|test("Agent run stats"))|.createdAt] | max // "") as $newest_stats
+  | ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
+  | ([.comments[]|select(.body|test("Agent run stats"))|.createdAt | select($head == "" or . > $head)] | length) as $after
+  | if $after >= 2 then "1" else "" end'
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
 # kubectl for the v2 (C4/C5) predicate — same resolution as agent-session.sh: jail → tofu/kubeconfig;
@@ -666,6 +684,24 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         orphans="${orphans}[$repo] ⏳ changes-requested trigger held (project WIP at ${REPO_MAX_WIP} in ${repo}):\n  PR #${u}\n"
         continue
       fi
+      # FU-147: the SAME no-op detection FU-115b gives the ci-red path. A fix round that completes
+      # without pushing is otherwise invisible here, and the clause simply re-dispatches an
+      # identical round forever. Live case that motivated it: circles#32 r3 died on a
+      # goose-32602 truncation, reported `exit_status: clean`, banked nothing, and only a human
+      # asking "where is the commit?" caught it. Reached only with NO live worker (both holds
+      # above ran first), so a running round is never mistaken for a finished one.
+      cr_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits 2>/dev/null)" || cr_probe=''
+      cr_noop=""
+      if [ -n "$cr_probe" ]; then
+        cr_noop="$(printf '%s' "$cr_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || cr_noop=""
+      fi
+      if [ -n "$cr_noop" ]; then
+        gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
+          && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (changes-requested no-op round, FU-147): the last completed fix round posted its run stats without pushing a commit, so the reviewer findings are untouched and another identical round cannot converge. The coordinator arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
+          && orphans="${orphans}[$repo] ⚠ changes-requested NO-OP round → agent/arbitrate: PR #${u} (a completed round pushed nothing)\n" \
+          || orphans="${orphans}[$repo] ⚠ changes-requested no-op arbitrate FAILED to label PR #${u} — human check\n"
+        continue
+      fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
     done
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and ($L|index("merge-conflict")) and (.reviewDecision!="CHANGES_REQUESTED"))|.number'); do
@@ -800,10 +836,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         # nine-review-loop lesson). ISO-8601 strings compare correctly as strings.
         noop_round=""
         if [ "$attempts" -ge 1 ]; then
-          noop_round="$(printf '%s' "$round_probe" | jq -r '
-            ([.comments[]|select(.body|test("Agent run stats"))|.createdAt] | max // "") as $stats
-            | ([.commits[]?.commit | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
-            | if $stats != "" and ($head == "" or $stats > $head) then "1" else "" end' 2>/dev/null)" || noop_round=""
+          noop_round="$(printf '%s' "$round_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || noop_round=""
         fi
         RED_MAX="${RED_ROUNDS_MAX:-3}"
         if [ -n "$noop_round" ]; then
