@@ -137,7 +137,18 @@ cross-reference event), so nothing can recover it after the fact.
    ⚠ **The lesson:** two agents reasoned correctly inside `render/colors.md` and reached a remedy
    `data/status-resolution.md` forbids. A reviewer that verifies CODE against ONE spec page is not
    verifying it against the CONTRACT.
-   ✅ **HALF TWO PASSED 15:08:53Z — FU-143's SOAK IS COMPLETE, fully machine-driven.** PR#39 merged
+   ⚠ **CORRECTED 15:55Z — the soak proved the ATYPICAL path only.** #32 auto-closed because SIX fix
+   rounds had left it `agent/in-progress`; C6's goal-child leg keyed off `$inprog`, which selects
+   that label ONLY. A child landing cleanly in ONE round ends in **`agent/review`** (launcher flips
+   on PR-open, MP-T10) and was invisible — live proof: **#40** merged into the goal base and sat
+   open with nothing to claim it. #30/#31 were hand-closed, so #32 was the only sample and it was
+   the unrepresentative one. Fixed `9201a9a` (separate `goalcand` query accepting both states;
+   `$inprog` left alone because it also feeds ADR-097 footprint holds). Predicate verified live:
+   #40 ghit=1 gref=0 → CLOSEOUT. ⏳ **VERIFY #40 actually auto-closes on the next scan.**
+   ⚠ Also `df3159f`: C6 now accepts a line-anchored `Issue: #<n>` TRAILER, because `finalize`
+   treats it as a link ("issue link already present — left alone") while C6 demanded a verb —
+   two predicates for one contract, stranding #40. Prose sibling mentions still rejected.
+   ✅ **HALF TWO (partial) 15:08:53Z — the machine-driven path works where it can see the issue.** PR#39 merged
    into the goal branch carrying `Implements #32` (the model omitted it; `finalize` added it), the
    `e704c36` strong-link guard MATCHED on the first merge where guard and finalize actually met,
    and C6 flipped `agent/done` + CLOSED #32 + harvested — **no meta hand-close**. The guard is now
