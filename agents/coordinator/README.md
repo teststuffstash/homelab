@@ -341,6 +341,13 @@ job, in order (re-read live state first, exit clean if someone already closed it
    the merge commit is green (`gh run list --commit <sha>`). If the outcome looks WRONG (merged
    but the fix demonstrably didn't take), comment the evidence on the issue and reopen it with
    `agent/queued` removed — a human or the next triage decides; do NOT dispatch anything.
+   **GOAL-CHILD leg (FU-143): the issue arrives OPEN**, because its PR merged into the
+   `goal/**` base its `Base:` line declares and the closing keyword only fires on
+   default-branch merges. Verify against the GOAL BRANCH, not master: the referencing PR's
+   `baseRefName` equals the declared base, and `ci` on the goal branch head is green
+   (`gh run list --branch <goal-branch>`). The master/-iac checks below do NOT apply — this
+   code is not on master yet; the assembly PR is where that gets judged. Do not reopen
+   anything here; a wrong-looking outcome is a comment on the GOAL for the next goal-review.
    **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
    definition of done is *reconciled-and-healthy*, so before flipping the label also check —
    the owning ArgoCD Application is Synced **at (or past) the merge revision** AND Healthy
@@ -352,7 +359,10 @@ job, in order (re-read live state first, exit clean if someone already closed it
 2. **Flip the label**: add `agent/done`, then remove whichever non-terminal state label the issue
    still carries — `agent/in-progress` OR `agent/review` (a PR merged from the happy-path review
    state closes still at `agent/review`; add-before-remove; compare-then-write per the label
-   discipline above).
+   discipline above). **GOAL-CHILD leg: also CLOSE the issue** (`gh issue close <n> --comment
+   "merged into <goal-branch> by PR #<N> — closed by the FU-143 closeout (keyword inert off
+   master)"`) — this close is what re-fires `goal-review` and unblocks `Depends-on:` siblings;
+   it is the entire point of the widened clause.
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
@@ -392,7 +402,13 @@ job, in order (re-read live state first, exit clean if someone already closed it
    fallback lineage. Depth guardrail until the gauge exists: if the originating issue ITSELF
    has a `parent` (check `gh api graphql` `issue.parent`), you are harvesting at depth ≥2 —
    flag `⚠ deep sprout` in the closing comment so a human sees divergence early.
-4. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
+4. **GOAL closeout only (the issue you are closing out IS a `task/goal`)**: the assembly PR
+   merged and branch auto-delete killed the goal branch — sweep open DESCENDANTS (walk the
+   sub-issue tree) whose `Base:` still names it and retarget them to master (edit the body:
+   remove the `Base:` line; their code landed with the assembly merge). They STAY queued: the
+   assembly PR's coverage map named them as deferrals, so the human's merge is the sanction
+   for them continuing on the master lane. List each retarget in the closing comment.
+5. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
    harvested (links), anything skipped.
 
 ## The janitor tick (FU-086(4) / ADR-094 (4), built 2026-08-03)

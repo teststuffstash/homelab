@@ -243,13 +243,53 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
       | ([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(","))
       | if . == "" then "*" else . end')"
+    # ── FU-143 (contract points 1+2): a goal child cannot self-close ──────────────────────────
+    # An OPEN in-progress issue whose body declares `Base: goal/**` and whose referencing PR
+    # MERGED into exactly that base is FINISHED work the closing keyword could not close
+    # (keywords fire on default-branch merges only). Detected HERE, before C4/C5, because BOTH
+    # clauses need the set: C6 emits its closeout unit, and C4/C5 must EXCLUDE it in the same
+    # tick — the abandoned-probe reads OPEN PRs only, so merged-into-goal looks abandoned, and
+    # c4c5-redispatch OUTRANKS merged-closeout (without the exclusion the closeout unit starves
+    # while merged work gets re-ridden). Base:-keyed ON PURPOSE — goal/** only, never "any
+    # non-default base": the mirror hazard is agent-runtime#32 (an ordinary stacked PR closing
+    # too EARLY), and the goal/ prefix is the same key arming already trusts to carry the
+    # ruleset. Design: issue-authoring.md FU-143 section. Probe failures skip LOUDLY (rule #6).
+    c6g=""; c6g_nums=""
+    goalbased="$(printf '%s' "$inprog" | jq -r '.[]
+      | select(((.labels|map(.name))|index("agent/error"))|not)
+      | .number as $n
+      | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
+      | select($b != "") | "\($n)|\($b)"')" || goalbased=""
+    if [ -n "$goalbased" ]; then
+      gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
+      gopen="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
+      if jq -e . >/dev/null 2>&1 <<<"$gmerged" && jq -e . >/dev/null 2>&1 <<<"$gopen"; then
+        for gb in $goalbased; do
+          gn="${gb%%|*}"; gbase="${gb#*|}"
+          ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
+            '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || ghit=0
+          gref="$(jq -r --argjson n "$gn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$gopen")" || gref=0
+          # merged PR into the declared base cites the issue AND no OPEN PR still references it
+          # (an open follow-up round means live work — not closeable yet)
+          if [ "${ghit:-0}" -gt 0 ] && [ "${gref:-0}" -eq 0 ]; then
+            c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
+          fi
+        done
+      else
+        echo "  [$repo] PROBE_FAILED reading merged/open PRs — FU-143 goal closeout skipped this tick (rule #6)" >&2
+      fi
+    fi
     # TRACKS rule 1 (open-PR bound) needs the count BEFORE the queued loop; the merge-path
     # clauses below reuse this same fetch (moved up 2026-08-03, ADR-097 — do not re-fetch).
     # mergeStateStatus is REQUIRED here: the FU-124 nudge below selects on it, and gh returns a
     # field it was not asked for as absent -> jq reads null -> the selector matched nothing, ever
     # (found 2026-08-05; the nudge had been silently falling back to the GitHub cron it exists to
     # stop depending on). Adding a selector field without adding it to --json is the failure mode.
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus 2>/dev/null)" || prsjson='[]'
+    # ⚠ It happened AGAIN the very next commit to touch a selector: 671a053 (2026-08-02) scoped
+    # the changes-requested clause on .author.login WITHOUT adding author here — the clause
+    # matched NOTHING for four days (fixed 2026-08-06, with headRefName added for the FU-143
+    # goal exclusions in the same breath). When you touch a jq selector, read this fetch first.
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -480,8 +520,27 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,state,closedAt,parent 2>/dev/null || echo '[]')"
       jq -e . >/dev/null 2>&1 <<<"$kidsall" || kidsall='[]'
       for g in $goals; do
-        newest_close="$(printf '%s' "$kidsall" | jq -r --argjson p "$g" \
-          '[.[] | select((.parent.number // 0) == $p) | select(.state == "CLOSED") | .closedAt] | sort | last // ""')"
+        # FU-143 point 6: DESCENDANTS, not direct children — a sprout harvested from a child sits
+        # at depth 2 (sub-issue of the CHILD), so a direct-children read neither re-fires this
+        # clause when a sprout closes nor lets "goal met" see open sprouts. Same bug-shape the
+        # budget gate already fixed in agent-session.sh (direct children [14,15] vs actual
+        # descendants [14,15,17,18,21]). Fixpoint over the ONE kidsall fetch; the seen-set makes
+        # it cycle-safe; depth is bounded (~3) by the reviewer emitting no Follow-ups at ≥2.
+        gdesc=""; gfront="$g"
+        while [ -n "$gfront" ]; do
+          gnext="$(printf '%s' "$kidsall" | jq -r --arg f "$gfront" \
+            '(($f | split(" ") | map(select(. != "") | tonumber))) as $F
+             | [.[] | select(((.parent.number // 0)) as $p | $F | index($p)) | .number] | .[]' 2>/dev/null | tr '\n' ' ')" || gnext=""
+          gnew=""
+          for x in $gnext; do
+            case " ${gdesc# } $g " in *" $x "*) ;; *) gnew="$gnew $x";; esac
+          done
+          gfront="${gnew# }"; gdesc="$gdesc$gnew"
+        done
+        [ -z "${gdesc# }" ] && continue
+        newest_close="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED") | .closedAt] | sort | last // ""')"
         [ -z "$newest_close" ] || [ "$newest_close" = "null" ] && continue
         # newest comment BY THE LOOP on the goal — a human comment must not silence the clause
         # ⚠ `gh --jq` takes ONLY an expression — it has no --arg/--argjson (those are jq flags).
@@ -537,7 +596,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # with CHANGES_REQUESTED stays on the report surface above — before this filter, every tick
     # dispatched a session that re-concluded "human PR, no mandate" (a per-tick sonnet leak, the
     # same absorbing-belt class as the WIP-hold jq-null bug).
-    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa))|.number'); do
+    # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
+    # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
+    # would be refused; the mandate is a NEW child on the goal — coordinator README goal-review
+    # play). Report-only line below so it never rots silently.
+    for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
+      orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
+    done
+    for u in $(printf '%s' "$prsjson" | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" '.[]|(.labels|map(.name)) as $L|select((($L|index("major/awaiting-human"))|not) and (($L|index("agent/error"))|not) and (($L|index("agent/arbitrate"))|not) and (.reviewDecision=="CHANGES_REQUESTED") and (.author.login==$wa) and (((.headRefName // "")|startswith("goal/"))|not))|.number'); do
       # ADR-094 project-WIP hold, same rationale as the queued gate above (meta-9, 2026-07-21:
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
       # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
@@ -578,14 +644,20 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null || echo '[]')"
-          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
+          # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and in the
+          # unit emission below) or c4c5-redispatch, which outranks merged-closeout, re-rides
+          # merged work every tick while the closeout unit starves. Detection block above.
+          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" \
             '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+             | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
           if [ -n "$dispatchable" ]; then
-            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
+            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" \
                 '.[] | select(((.labels|map(.name))|index("agent/error"))|not)
-                 | .number as $n | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+                 | .number as $n
+                 | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+                 | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                  | "\(.number)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
               units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
             done
@@ -721,6 +793,20 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
              | select(($L|index("agent/in-progress")) or ($L|index("agent/review")))
              | select(.updatedAt >= $cutoff) | .number] | .[]')"
     c6_n=0
+    # FU-143 point 1: the goal children detected above (OPEN, merged into their declared goal/**
+    # base, keyword inert) — same unit, same play, same cap; emitted FIRST because C4/C5 was told
+    # to stand aside for exactly these, and the closeout unblocks goal-review + Depends-on
+    # siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
+    for gb in $(printf '%b' "${c6g:-}"); do
+      gn="${gb%%|*}"; gbase="${gb#*|}"
+      if [ "$c6_n" -lt 3 ]; then
+        units="${units}merged-closeout|${repo}|issue-${gn}\n"
+        items="${items}[$repo] issue #${gn} — merged-closeout (FU-143: goal child merged into ${gbase}, keyword inert)\n"
+        c6_n=$((c6_n+1))
+      else
+        orphans="${orphans}[$repo] ⏳ merged-closeout backlog (cap 3/scan): issue #${gn} (goal child) waits for the next pass\n"
+      fi
+    done
     for u in $c6_all; do
       if [ "$c6_n" -lt 3 ]; then
         units="${units}merged-closeout|${repo}|issue-${u}\n"

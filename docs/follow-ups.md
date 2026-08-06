@@ -312,7 +312,10 @@ six OVERSIZE items pointer-ized into
       goal branch, harvest `Base:` copy, goal-lane sprouts queued at harvest — no selfQueue,
       `goal-review` over descendants, merge doorbell LAST):
       [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §A child cannot close itself.
-      **Next:** implement points 1–6 as one unit, before circles#29's first child merges.
+      Points 1–6 SHIPPED 2026-08-06 (scan + play; fixture-proven, live-scan clean — the same
+      commit also revived the changes-requested clause, dead since 671a053 dropped `author` from
+      the fetch). **Next:** point 7, the `pull_request: closed && merged` → `/coordinate`
+      doorbell workflow on circles; then watch the first live closeout on #29's first child.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
