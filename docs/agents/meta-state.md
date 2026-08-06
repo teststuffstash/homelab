@@ -120,12 +120,24 @@ cross-reference event), so nothing can recover it after the fact.
    (sha matches #34's merge commit `4d58cf42`, so it is not a stale tag). Verified the one-line
    diff IS the full sweep: `grep -rn 'agent-base:2026'` finds NO literal outside `images.env` —
    every mirrored literal is `agent-coordinator`, a different image on its own deploy-pin.
-6. ⏳ **RE-SOAK FU-143 — and mind WHICH child proves it.** ⚠ **#32's ride started 11:28:58Z, BEFORE
-   the pin, so it carries the OLD image: expect its PR to again omit `Implements #<n>` and expect
-   to HAND-CLOSE #32.** The first genuine soak subject is the next child dispatched AFTER the pin
-   (#18 or #19). Success = that child's PR body carries `Implements #<n>`, C6 auto-flips
-   `agent/done` + closes + harvests, with no meta hand-close. Then archive the `12e7fcf`
-   containment and the `e704c36` strong-link guard STAYS (it is the correct predicate regardless).
+6. ⏳ **RE-SOAK FU-143 — the subject is #32 ROUND 2**, dispatched 12:04Z, i.e. AFTER the 11:52Z pin,
+   so it is the first ride carrying the fixed image. (Round 1 pre-dated the pin and died anyway.)
+   **Success = its PR body carries `Implements #32`, and C6 auto-flips `agent/done` + closes +
+   harvests with NO meta hand-close.** Then archive the `12e7fcf` containment; the `e704c36`
+   strong-link guard **STAYS** either way — requiring an implementing keyword is the correct
+   predicate whether or not `finalize` guarantees the line.
+
+   ⚠ **#32 round 1 DIED and read as a success.** `exit_status=harness-death`,
+   `error_class=goose-32602-truncation` on `deepseek/deepseek-v4-flash`, 1757s, $0.0353, nothing
+   committed, no branch — **yet the pod phase was `Succeeded`** (the wrapper handles the death and
+   exits 0). Only `AGENT_RUN_STATS` in the ride's last log lines shows it. Re-queued by hand with
+   an audit comment: a goal child is held out of C4/C5 by the containment, so **nothing
+   re-dispatches it automatically** — that is the containment's stated price, one meta nudge.
+   Underlying defects already tracked, not re-filed: `agent-runtime#31` (a ride dying before its
+   first commit banks nothing) and `#33`.
+   `meta-watch-loop.sh` now shouts on a terminal ride whose `exit_status` is not clean (`3f9d226`)
+   — ⚠ best-effort only: ride pods are GC'd within minutes, so **that clause's silence proves
+   nothing**; the durable signal is the `AGENT_STRIKE:` comment on the issue.
 
 ⚠ **Hand-close recipe for a #29 child until then:** verify the merge against the goal branch, post
 an audit comment, `--add-label agent/done --remove-label agent/in-progress`, close. That fires
