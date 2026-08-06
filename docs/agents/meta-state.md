@@ -28,6 +28,26 @@ which skips graduated stacks — use `bash scripts/reflex-now.sh coordinate-circ
 and **FU-145** (`AgentCoordinateScanWedged` keys on scan-pod lifetime, so it fires on any ride
 >15m on every stack — expect it as noise until re-keyed).
 
+### ⏰ RESTORE STEP — circles#31 is PARKED (09:47Z), un-park when the 5h window clears
+
+`agent/queued` REMOVED from #31 to stop a dispatch spin. **#31 is not blocked on anything else —
+#30 is closed and merged. Re-add `agent/queued` (it keeps `agent-fix`) once the 5h subscription
+window clears (~10:40Z) and the lane continues.** Do not leave this parked: nothing else will
+re-queue it.
+
+Why: a deferred item session still rang `/coordinate`, waking a scan that re-dispatched the same
+issue, which deferred again — three laps in eight minutes, and coordinator sessions are themselves
+`subscription-session: claude`, so the loop spent the capacity it waited for. Guard shipped
+(`8740767`): no ring while latched; `coordinator-session.sh` runs from each pod's fresh master
+clone, so it is live already — the park is belt, the guard is the fix.
+
+⚠ **Thresholds are CORRECT, do not "fix" them** (operator, 2026-08-06): `ANTHROPIC_UTIL_THRESHOLD_7D
+= 0.95`, base `0.80` governs 5h (`argocd/resources/openrouter-proxy/deployment.yaml`). Both windows
+happening to read 0.80 is coincidence; only 5h binds. A meta session that reads 7d=0.80 as binding
+will wrongly project a multi-day stall — that error was made here.
+⚠ **This meta session draws on the SAME subscription** as the loop's coordinator/reviewer sessions.
+Heavy meta activity directly competes with dispatch capacity.
+
 ### ⛔ LIVE CHAIN — FU-143 soak FAILED, fix riding (09:40Z)
 
 **Every remaining #29 child reproduces this until the image rolls out. Expect to hand-close each.**
