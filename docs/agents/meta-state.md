@@ -32,8 +32,13 @@ and **FU-145** (`AgentCoordinateScanWedged` keys on scan-pod lifetime, so it fir
 
 `agent/queued` REMOVED from #31 to stop a dispatch spin. **#31 is not blocked on anything else —
 #30 is closed and merged. Re-add `agent/queued` (it keeps `agent-fix`) once the 5h subscription
-window clears (~10:40Z) and the lane continues.** Do not leave this parked: nothing else will
-re-queue it.
+window clears and the lane continues.** Do not leave this parked: nothing else will re-queue it.
+
+Latch re-probed live 10:12Z: `limited=true`, `reason=utilization-5h`, 5h util **0.82**, `reset`
+epoch **1786012800 = 10:40Z** (7d 0.80 vs its own 0.95 threshold — NOT binding, see the ⚠ below).
+The whole lane is stalled behind this one park: #32 → waits #31, and #18/#19 → wait #32, all three
+correctly held by native `blockedBy` in the 10:00Z scan. agent-runtime#34 is behind the SAME latch
+(its reviewer is subscription-backed), so both chains self-clear at the same moment.
 
 Why: a deferred item session still rang `/coordinate`, waking a scan that re-dispatched the same
 issue, which deferred again — three laps in eight minutes, and coordinator sessions are themselves
