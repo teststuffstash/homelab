@@ -222,10 +222,42 @@ mention on purpose (it fails toward *hold*). Detail:
 ships.** Every #29 child must be hand-closed with the recipe above — now by design, not by
 accident. The ⛔ line in each scan names exactly which children are waiting.
 
-### ⏸ AWAITING AN OPERATOR CALL — an agent lane for agent-runtime (2026-08-06)
+### ⛔ GITHUB ACTIONS OUTAGE — ALL CI STOPPED FLEET-WIDE (from ~15:36Z, still live at 17:35Z)
 
-Operator is revisiting today's earlier ruling that agent-runtime has NO `.agents/` by design.
-**Agreed plan, not yet started — do not begin without the go-ahead:** write `.agents/` recipes +
+**Nothing can merge, in any repo, and it is not ours.** ARC is HEALTHY — listener scaling normally,
+runner pods Running — but the runners cannot ACQUIRE jobs:
+`POST .../acquirejob failed (HTTP Status: ServiceUnavailable)`, 4 attempts, then the job sits
+`queued` forever. **The tell is ZERO runs `in_progress` while runners idle** — a saturated pool has
+jobs RUNNING, a broken one has runners WAITING. ⚠ I first misread this as `maxRunners: 4` capacity
+(6 jobs assigned vs 4 runners was real but not the cause) and separately called the outage
+"resolved" while it was still live. Read `in_progress` before blaming capacity.
+Do NOT re-trigger anything — re-runs just deepen the dead queue. `GithubWorkflowRunFailed` ×5
+(oracle-fleet, circles, homelab, oracle-iac, circles-iac) is outage fallout; each auto-resolves 1h
+after its run. Blocked on it: agent-runtime **PR#37**, circles **#44/#45**, the deploy lane.
+✅ The loop behaved correctly through it: the ci-red session on circles#44 diagnosed the infra
+hiccup, dispatched NO worker, and re-armed auto-merge after its own workaround disarmed it.
+
+### ✅ DONE 2026-08-06 — agent-runtime gets a test surface + a fixer lane (PR#37, CI-blocked)
+
+Operator green-lit the plan. `devbox run ci` verified green IN THE JAIL (18 passed, 1 xfailed) —
+CI itself has never run (outage). Contents: `tests/` (pytest over `classify`/`parse_outcome`, loaded
+BY PATH since the harness ships extensionless; hermetic), `devbox run ci|test` mirroring circles,
+a `unit` job in `ci.yaml`, `.agents/fix.yaml` (test-first, no fixture tables, `Fixes #n` genuinely
+closes since PRs target master), and a `CODEOWNERS` owning the GOVERNOR (`.github/`, Dockerfile,
+lockfiles, `.agents/`, itself) while leaving the fixer's lane unowned.
+**Also in PR#37 — the #109 fix:** deploy-pin PRs land UNLABELLED (#75/#79/#84/#95/#102/#104/#105/
+#109), so they miss the mechanical lane twice: no `automerge` → the review reflex does not skip
+them, and `renovate-approve.reusable.yml` needs `Bot`+`automerge`+`dependencies` to approve. Now
+labelled on the REUSED-PR path too (`deploy/agent-base` is long-lived, so `gh pr create` rarely
+runs). ⚠ **openrouter-operator's deploy-pin job has the identical gap and is NOT fixed.**
+**#36's real mechanism found while writing the tests** (issue corrected): `succeeded =
+bool(stats.get("pr_url"))` returns `clean` BEFORE any failure signature is consulted — so on a fix
+round, which always has a PR, **no signature can ever fire**. Only round 1 can strike a model.
+Pinned by a STRICT xfail; fixing #36 makes the suite fail on XPASS(strict) = delete the marker.
+
+### ✅ SUPERSEDED — the agent-runtime lane decision (green-lit and BUILT, see above)
+
+Kept only for the governance findings it produced. The plan itself is DONE: write `.agents/` recipes +
 **pytest over the existing `agent-finalize` logic** + `devbox run ci` + orientation docs, THEN let a
 fixer take a Python issue (a proven shape), rather than #35 (workflow YAML, verification deferred to
 a post-merge `workflow_dispatch` — the worst first case, which I had wrongly proposed as the best).
