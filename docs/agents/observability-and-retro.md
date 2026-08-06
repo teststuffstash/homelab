@@ -221,6 +221,16 @@ worker or a reviewer is ⚙ no matter how quiet the logs are — the ⏳ column 
   from the pod's lifetime before the blocking `logs -f` was found, and it is wrong: the cause is
   lane-independent. ⚠ The p99=302s / 1-in-2474 calibration behind `fc7e9fb` measured lifetimes
   from before the alert existed; it is not evidence that long scans are rare.
+  **Second symptom of the SAME cause, and the more consequential one (2026-08-06):** the
+  `coordinate-<stack>` CronWorkflow is `concurrencyPolicy: Forbid`, so a long-lived scan pod
+  SUPPRESSES the cron tick. Measured: `lastScheduled=09:00:00Z` produced no pod, because
+  `coordinate-perstack-9sltw` had been Running since 08:59:37. **The level-triggered backstop is
+  therefore disabled exactly while a ride is in flight** — i.e. whenever a doorbell failing would
+  actually cost something. Edges have been reliable so far, so nothing is broken today; but this is
+  what would turn ONE missed doorbell into an indefinite stall instead of a ≤30-minute one, and it
+  is the same silent-in-three-directions shape as FU-143. Fixing the alert's key (scan phase, not
+  pod lifetime) does NOT fix this half — the pod really is alive; the dispatch would have to stop
+  holding the scan pod open, or the cron stop being `Forbid`.
 - ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.

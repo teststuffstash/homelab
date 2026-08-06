@@ -14,7 +14,17 @@ probe_fails=0; last_keywarn=""; behind_since=0; last_am=""; last_wrongbase=""; l
 while true; do
   now=$(date +%s)
   # --- newest scan tick (pod name == workflow name) ---
-  wf=$($K get pods -n "$STACK_NS" -o name 2>/dev/null | grep -o "${SCAN_PREFIX}[0-9]*" | sort | tail -1)
+  # ⚠ BOTH naming schemes, keyed on START TIME (2026-08-06). The cron emits
+  # `coordinate-<stack>-<epoch>`; a DOORBELL emits `coordinate-perstack-<rand>`, which carries no
+  # digits and so was invisible to the old `${SCAN_PREFIX}[0-9]*` grep. Two consequences, both bad:
+  # a doorbell-driven tick never got summarised, and the stall clause below counted only CRON ticks
+  # — which `concurrencyPolicy: Forbid` SUPPRESSES whenever a scan pod is already running. So the
+  # watch cried STALL precisely when the loop was busiest and healthiest (first false fire 09:18,
+  # while a dispatch was mid-flight). A repeating false alarm IS a broken probe.
+  wf=$($K get pods -n "$STACK_NS" -o json 2>/dev/null \
+       | jq -r '[.items[] | select(.metadata.name | startswith("coordinate"))
+                | select(.metadata.name | test("-janitor-") | not)]
+                | sort_by(.status.startTime // "") | last | .metadata.name // empty' 2>/dev/null)
   if [ -z "$wf" ]; then
     probe_fails=$((probe_fails+1))
     [ "$probe_fails" -eq 3 ] && echo "PROBE-FAIL x3: cannot list $STACK_NS pods (kubectl/devbox dead — NOT 'no work')"
@@ -34,6 +44,11 @@ while true; do
     fi
   fi
   # FU-086(2): cron is */30 since 2026-08-02 (edge-primary) — stall = a missed cron + slack.
+  # Now that `wf` tracks doorbell ticks too, a genuine 40-min silence means NEITHER edge nor cron
+  # produced a scan. A scan pod that is still RUNNING is not silence, so do not alarm on it.
+  if [ -n "$wf" ] && [ "$($K get pod -n "$STACK_NS" "$wf" -o jsonpath='{.status.phase}' 2>/dev/null)" = "Running" ]; then
+    last_scan_seen=$now
+  fi
   if [ $((now - last_scan_seen)) -gt 2400 ]; then
     echo "STALL: no new ${SCAN_PREFIX}* tick observed in 40 min (last: $last_scan; cron is */30 + edges)"
     last_scan_seen=$now
