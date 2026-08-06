@@ -119,14 +119,18 @@ cross-seam prover (the id that went unowned through four #17 reviews). Σ caps 5
    ⚠ Check the C6 hazard above BEFORE the merge (sibling `#<n>` refs in PR bodies).
 5. `goal-review` re-judges on every child closure; on "goal met" IT opens + arms the assembly PR.
 
-⚠ **Hazard found reading C6, not yet observed — check before the first child merges.** The
-goal-child leg requires *no OPEN PR referencing the child*, matched as a bare `#<n>` on every open
-PR body (intent: "an open fix round means live work"). But #29's decomposition rules REQUIRE seams
-pinned naming the producing/consuming sibling. If a worker carries that seam text into its **PR**
-body, the sibling's closeout is starved until that PR merges — the exact three-way stall FU-143
-removes. Deliberately NOT patched mid-soak (changing the code under test misattributes the
-regression). Instead: once children have PRs, grep their bodies for sibling `#<n>` refs BEFORE the
-first merge, and only then decide whether to narrow the probe to closing keywords.
+✅ **That hazard FIRED — in the direction nobody priced — and is fixed (`e704c36`, verified live).**
+It was logged here as a `gref`/open-PR risk (cost: a *starved* closeout). It actually hit the
+`ghit`/merged-PR side: #36's *"that's the sibling issue (#31)"* made C6 dispatch `merged-closeout`
+for **#31 while #31's ride was Running** — a false completion that would have closed the issue and
+unblocked #32/#18/#19 on nonexistent work. C6 now requires a **strong link**
+(`implements|closes|fixes|resolves` + `#<n>`); held children print under ⛔. `gref` stays a bare
+mention on purpose (it fails toward *hold*). Detail:
+[`issue-authoring.md`](issue-authoring.md) §"The SAME citation then fired C6 the other way".
+
+⚠ **Consequence for the rest of this goal: NOTHING auto-closes until `agent-runtime#34`'s image
+ships.** Every #29 child must be hand-closed with the recipe above — now by design, not by
+accident. The ⛔ line in each scan names exactly which children are waiting.
 
 ### Frozen — from goal #17, do not touch (the comparison is the operator's)
 
