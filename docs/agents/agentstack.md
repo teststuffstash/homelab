@@ -189,14 +189,14 @@ and they belong on different sides of the cluster boundary:
 `Workspace`s — those need a state backend, drift at workspace granularity, and can't be composed
 per-repo from the claim.
 
-⚠ **The authoritative-labels gotcha.** The provider generates `IssueLabels` (=
-`github_issue_labels`, plural) — it **owns the repo's entire label set and deletes unmanaged
-labels**. `labels.tf` deliberately uses the singular, non-authoritative `github_issue_label`
-("other labels are left alone"). So this is not "add a second manager": label ownership moves
-**wholesale per repo** — add labels to the claim → verify the composed `IssueLabels` synced →
-remove the repo from `label_repos` in `tofu/github` (claim first, tofu second, same discipline as
-the proxy-RBAC hand-list migration). Two managers on one repo will fight, and the authoritative
-one wins by deleting.
+⚠ **The authoritative-labels gotcha** (the migration is finished — kept because the property is
+permanent). The provider generates `IssueLabels` (= `github_issue_labels`, plural) — it **owns the
+repo's entire label set and deletes unmanaged labels**. The retired `labels.tf` deliberately used
+the singular, non-authoritative `github_issue_label` ("other labels are left alone"). So the handoff
+was never "add a second manager": label ownership moves **wholesale per repo** — add labels to the
+claim → verify the composed `IssueLabels` synced → remove the repo from `label_repos` in
+`tofu/github` (claim first, tofu second, same discipline as the proxy-RBAC hand-list migration).
+Two managers on one repo will fight, and the authoritative one wins by deleting.
 
 **Credential:** a dedicated **labels GitHub App** — `Issues:R/W` only, installed org-wide on *All
 repositories* (new repos covered without a click; the install itself is the one click ever, per
@@ -212,10 +212,11 @@ per-purpose.
 (`argocd/resources/crossplane/github-provider{,config}.yaml`, the XRD's `repos[].labels` + the
 Composition's `IssueLabels` block with the platform taxonomy inline,
 `scripts/github-app-bootstrap.sh homelab-labels`; homelab-labels App installed org-wide same day). The
-taxonomy = GitHub defaults + the agent state machine (mirror of `tofu/github/labels.tf` — keep
-the two in sync until every repo is claim-owned and labels.tf dies) + the Renovate/merge-path
-lanes (`dependencies`/`automerge`/`deps-review`). Eight repos across all three stacks are
-claim-owned; homelab is the only holdout (FU-068 — then labels.tf dies). Migration gotchas, found live: QUOTE label colors (`5319e7` parses as scientific
+taxonomy = GitHub defaults + the agent state machine + the Renovate/merge-path
+lanes (`dependencies`/`automerge`/`deps-review`). **COMPLETE 2026-08-04** (FU-068): homelab was the
+last holdout, joined the platform claim via `devbox run labels-handoff` (16 resources forgotten, 27
+labels intact), and `tofu/github/labels.tf` was deleted — the claim is now the only label source, so
+there is nothing left to keep in sync. Migration gotchas, found live: QUOTE label colors (`5319e7` parses as scientific
 notation), write `labels: { extra: [] }` not `labels: {}` (server-default stamping → ArgoCD
 drift), and the tofu handoff is **`tofu state rm`** — a destroy apply deletes the labels on
 GitHub and the authoritative claim fights it back.

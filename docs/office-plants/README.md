@@ -365,8 +365,9 @@ sensor, (reservoir-low once R2's sensor exists).
 
 **Tie-in — retire the Droplet OLED.** ✅ The OLED `display:` + font + its wake-button action have
 been **removed from `esphome/config/office-plants-irrigation.yaml`** (the display needed a button press to wake
-and was never used; takes effect on the next flash). Still TODO on the hardware side: **3D-print a
-new Droplet case without the OLED cutout**. The e-paper wall display becomes the always-on,
+and was never used; takes effect on the next flash). One hardware residue, deliberately untracked as
+an FU because nothing in this repo can act on it: **3D-print a new Droplet case without the OLED
+cutout** — a bench task for whenever the case is next opened. The e-paper wall display becomes the always-on,
 glanceable status surface instead.
 
 ### Feature request: NDVI / SI-NDVI plant-health camera (experimental)

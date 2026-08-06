@@ -752,5 +752,5 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
 - **FU-060** *(archived 2026-07-12)* — `coordinator-git` token covers all stack repos
   (`agents/coordinator/git-token.yaml`); the remaining check passed (token resolved the oracle
   repos on the next tick, TICK-LOG). Lesson kept in the TICK-LOG: the pod's 403 meant "can't
-  verify from here", not "not installed" — check in-repo sources of truth (`docs/github-apps.md`)
+  verify from here", not "not installed" — check in-repo sources of truth (`docs/github-apps.yaml`)
   before declaring external blockers.
