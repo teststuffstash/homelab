@@ -222,6 +222,33 @@ mention on purpose (it fails toward *hold*). Detail:
 ships.** Every #29 child must be hand-closed with the recipe above — now by design, not by
 accident. The ⛔ line in each scan names exactly which children are waiting.
 
+### ⏸ AWAITING AN OPERATOR CALL — an agent lane for agent-runtime (2026-08-06)
+
+Operator is revisiting today's earlier ruling that agent-runtime has NO `.agents/` by design.
+**Agreed plan, not yet started — do not begin without the go-ahead:** write `.agents/` recipes +
+**pytest over the existing `agent-finalize` logic** + `devbox run ci` + orientation docs, THEN let a
+fixer take a Python issue (a proven shape), rather than #35 (workflow YAML, verification deferred to
+a post-merge `workflow_dispatch` — the worst first case, which I had wrongly proposed as the best).
+Tests are worth having regardless of whether the lane works out: 823 lines of `agent-finalize` with
+ZERO tests produced two live bugs today, both caught only by executing against real `gh` output.
+⚠ Pin the tests to REAL `gh` output shapes — FU-115b died precisely because its synthetic fixture
+matched the buggy code instead of reality.
+
+**Governance findings that came out of the same question** (evidence, not opinion):
+- **No stack repo owns `.github/`** — only homelab does (circles/oracle-fleet own `specs/` +
+  `.agents/` + `CODEOWNERS`; sleep-tracking/openrouter-operator/agent-runtime have NO CODEOWNERS).
+  A worker edited a stack workflow TODAY (circles#40 `Touches: .github/workflows/deploy.yaml`,
+  PR#43 merged). The rule that generalises is **own what GOVERNS the agent, not what it operates
+  on** — `.github/` is governor-class in homelab, product-class in a stack repo. For agent-runtime
+  it is governor-class again (it builds the fleet's harness image), so that repo wants a CODEOWNERS
+  owning `/.github/` + `/agent-base/`, not no gate.
+- **`reviewer.enabled=true` for the platform stack looks safe**: `ARMING IS THE BOUNDARY` — the
+  pick predicate requires `autoMergeRequest != null` and C9 re-arm is `WORKER_AUTHOR`-scoped, so a
+  human PR is never armed and never reviewed. What changes: homelab's armed MECHANICAL PRs
+  (deploy-pin) get bot-approved instead of waiting on the operator — CODEOWNERS records #104/#105
+  sitting BLOCKED on a human for one-line bumps. Owned paths are unaffected (`require_code_owner_
+  review` means a bot approval never satisfies them). Cost: one sonnet session per mechanical bump.
+
 ### Frozen — from goal #17, do not touch (the comparison is the operator's)
 
 - **circles FAN-OUT vs ONE-SHOT on goal #17.** The fan-out arm is merged on `goal/17-p0-mvp`
