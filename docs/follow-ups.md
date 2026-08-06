@@ -303,21 +303,16 @@ six OVERSIZE items pointer-ized into
       WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
       upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
       Relates FU-132 (archived), FU-058, ADR-089.
-- [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** GitHub honours closing keywords
-      only on a merge into the DEFAULT branch, so a child merging into `goal/**` leaves its issue
-      open + `agent/in-progress` — C4/C5 re-dispatches onto merged work, `goal-review` never fires,
-      and `Depends-on:` siblings never unblock. Mechanism, the three breakages, why C6 cannot help,
-      and the mirror-image warning (agent-runtime#32 = closing too EARLY):
+- [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Closing keywords fire only on
+      default-branch merges, so a `goal/**` child's issue stays open + in-progress after its PR
+      merges — C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock
+      (hit live circles#22, 2026-08-05; hand-closed since, which also silently skips the harvest).
+      Mechanism, the mirror-image warning (agent-runtime#32 = closing too EARLY), and the FULL
+      7-point implementation contract (`Base:`-keyed C6 widening, C4/C5 exclusion, play on the
+      goal branch, harvest `Base:` copy, goal-lane sprouts queued at harvest — no selfQueue,
+      `goal-review` over descendants, merge doorbell LAST):
       [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §A child cannot close itself.
-      Hit live circles#22, 2026-08-05; 100% recurrence, closed by hand.
-      **Next:** widen C6's predicate to include an OPEN in-progress issue whose referencing PR
-      MERGED into a non-default base, and point its play at the goal branch rather than master.
-      **Then (only after that):** a `pull_request: closed && merged` workflow POSTing `/coordinate`
-      — same pattern renovate.yaml/devbox-update.yaml already use, collapsing "a child landed" from
-      ≤30min to seconds. Deliberately ordered second: before C6 is widened a merge notification has
-      nothing to trigger, because the child cannot close. The other two edges shipped 2026-08-05
-      (`aa68c95`): the coordinator now rings on unit completion, and the ride's doorbell sends
-      `unit` explicitly.
+      **Next:** implement points 1–6 as one unit, before circles#29's first child merges.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell

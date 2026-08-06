@@ -334,7 +334,56 @@ issue that never closes is invisible to it. Until FU-143 lands, **the meta-coord
 merged child by hand** (`agent/done` + close), which is what unstalled circles#22 on 2026-08-05.
 
 ⚠ This is the MIRROR IMAGE of agent-runtime#32, where the hazard is a stacked PR closing its issue
-too EARLY. Same GitHub rule, opposite handling — do not resolve one by reverting the other.
+too EARLY. Same GitHub rule, opposite handling — do not resolve one by reverting the other. The
+reconciling invariant: **an issue closes when its work lands on the branch its `Base:` line
+declares as its definition of done** — master for an ordinary stack (#32: don't close early),
+`goal/**` for a goal child (here: close on the goal-branch merge). One rule, two instantiations.
+
+**The implementation contract** (the tracker points here; assembled 2026-08-06, walked against the
+live clauses — ship 1–6 as ONE unit, before circles#29's first child merges):
+
+1. **C6 widened AND `Base:`-keyed**: also match an OPEN issue with a non-terminal `agent/*` label
+   whose referencing PR MERGED into the base its own `Base:` line declares — `goal/**` only,
+   NEVER "any non-default base" (that recreates #32's early close on ordinary stacked PRs, and it
+   is the same doctrine as arming: the `goal/` prefix is what carries the ruleset).
+2. **C4/C5 excludes the same set in the same commit.** Its abandoned-probe reads OPEN PRs only, so
+   a merged-into-goal PR looks abandoned; `c4c5-redispatch` OUTRANKS `merged-closeout` in the
+   dispatch priority, so without the exclusion the widened C6 unit is starved every scan while
+   merged work gets re-ridden.
+3. **The play verifies against the GOAL branch** (not master CI, not ArgoCD) and runs the FULL
+   closeout: flip, close, harvest. The interim hand-close (`agent/done` + close) suppresses C6
+   entirely (`agent/done` is excluded from its predicate) — #22/#23's review `Follow-ups:` were
+   never harvested; that silent loss is part of what the fix removes.
+4. **Harvest copies `Base:` from the originating child** — a goal-lane sprout's code exists only
+   on the goal branch. On the goal's close/merge, retarget surviving sprouts to master (branch
+   auto-delete kills their base).
+5. **Goal-lane sprouts are QUEUED at harvest**, not inert — next section.
+6. **`goal-review` reads DESCENDANTS, not direct children** — the same bug-shape the budget gate
+   already fixed in `agent-session.sh` (direct children [14,15] vs actual descendants
+   [14,15,17,18,21]): a sprout at depth 2 closing must re-fire the predicate, and "goal met" must
+   see open sprouts in the subtree.
+7. **Only after 1–6**: the `pull_request: closed && merged` workflow POSTing `/coordinate`
+   (`383f5bb`) — before C6 is widened, a merge notification has nothing to trigger.
+
+### The goal lane owns its sprouts — no selfQueue (operator ruling 2026-08-06)
+
+The 🌱 inert-until-human-triage gate (loop-safety breaker #1) protects the **master lane**, where
+a queued issue becomes a bot-approved auto-merge landing straight on master — per-issue triage is
+the only human gate that lane has. The goal lane's human gates sit at the **boundary** instead: a
+human queues the goal (fail-closed actor check at decompose) and a human merges the assembly PR
+(codeowner gate on `/specs/` + OrgAdmin merge — the operator: *"I don't want to be involved in a
+goal's development until the final PR is ready"*). Inside that boundary the subtree is autonomous
+and BOUNDED: Σ descendant caps ≤ `Budget:` (launcher pre-flight, over descendants), the reviewer
+emits no `Follow-ups:` at depth ≥2, and nothing reaches master except through the assembly PR.
+
+So a sprout harvested from a goal child's review is **queued at harvest** (`agent-fix` +
+`agent/queued`, `Base:` inherited, sub-issue lineage as before) — ordinary subtree work.
+Per-issue triage inside a goal would put the operator back in the loop the lane exists to remove.
+The claim's `selfQueue` knob is NOT the mechanism and gains no reader here — it exists only in the
+responder lane (alert→fixer, `responder-argo.yaml`); for goal sprouts there is nothing for it to
+protect, since the decomposer already queues children under the same authorization.
+⚠ Master-lane harvests STAY inert — do not generalize this ruling; the two lanes differ exactly
+at the merge boundary.
 
 ### Who updates what when a branch moves — the two-hop cascade
 

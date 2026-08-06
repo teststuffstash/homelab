@@ -372,7 +372,12 @@ job, in order (re-read live state first, exit clean if someone already closed it
      note it in the closing comment so the FU-111 retirement soak sees it.
    **INERT by loop-safety
    breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
-   for human triage (the claim's `issueAuthoring.selfQueue` knob is the graduation, not yours).
+   for human triage. **EXCEPTION — the goal lane (operator ruling 2026-08-06):** when the
+   ORIGINATING issue carries `Base: goal/**`, queue the harvested issue immediately
+   (`agent-fix` + `agent/queued`) and copy the `Base:` line into it — the goal subtree is
+   bounded by its `Budget:` + the depth gate, and the human gates at the assembly PR instead
+   (issue-authoring.md §The goal lane owns its sprouts). Master-lane harvests stay inert; the
+   responder-lane `selfQueue` knob is unrelated and has no reader here.
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
    spec ID or key phrase); say which you skipped and why in the closing comment.
    **Then LINK each harvested issue as a native sub-issue of the ORIGINATING issue** (FU-090
