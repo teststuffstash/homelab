@@ -64,6 +64,16 @@ anomalous day. Triage resumes at 00:00Z on its own; alerts still reach Home Assi
 dedup shipped (the budget has blocked every one), so zero `subj-` keys exist — that is an absence
 of samples, not evidence the dedup does nothing. FU-149's read needs ordinary days.
 
+⏳ **Cheap check after 00:00Z: is the alert's own `triage: none` guard real?** The alert is
+`severity: warning` now, so the route genuinely delivers it to `agent-responder` — and the ONLY
+thing stopping a session being spent to report that sessions are not being spent is that label.
+It has NOT been exercised: every delivery so far was stopped by the budget gate, which runs first
+(9 `budget-` markers, 0 for this fingerprint via the `none-` path). The mechanism works generally
+(`none-` markers exist for other alerts), so this is a spot-check, not a suspicion. **After the
+budget resets, confirm the fingerprint gets a `none-<date>` marker and no respond pod spawns a
+session.** If it instead spawns one, the label is not being read and that is a recursion to fix
+before the next busy day.
+
 ## LIVE CHAIN — circles#29, the P0-complete goal
 
 **Terminus:** an assembly PR `goal/29-p0-complete` → master, ARMED, blocked by the CODEOWNERS gate
