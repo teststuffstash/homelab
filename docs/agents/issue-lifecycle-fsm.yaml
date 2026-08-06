@@ -1,0 +1,264 @@
+# issue-lifecycle-fsm.yaml — THE machine-readable model of the ISSUE lifecycle, goal lane included.
+#
+# WHY (2026-08-06, after the FU-143 arc): merge-path-fsm.yaml models the PR; nobody modeled the
+# ISSUE — and the goal lane's bugs were all issue-state cells (a child that cannot close, a
+# re-dispatch onto merged work, a goal-review that reads only direct children). Same treatment,
+# same lint: every guard carries a code ANCHOR that must still grep (`devbox run merge-path-lint`),
+# every gap carries an fu:/accepted: disposition, and issue-lifecycle-fsm.md is GENERATED from
+# here — never hand-edited. The lane doctrine in one line: the MASTER lane human-gates per issue
+# (breaker #1 triage) because auto-merge lands its code with no human; the GOAL lane human-gates
+# at the BOUNDARY (queue the goal in, merge the assembly out) and is autonomous inside it.
+#
+# Statuses: guarded (mechanical guard + anchor) | report-only (surfaced, human acts) |
+#           github-native (GitHub's own gate) | gap (known missing guard — needs fu/accepted).
+
+title: "Issue lifecycle & goal lane"
+narrative: issue-authoring.md   # the design-narrative doc this machine models
+# THE ISSUE machine. The PR it spawns runs merge-path-fsm.yaml; the -iac wrappers run
+# iac-lane-fsm.yaml. Where the machines touch: a PR merging is THIS machine's close event.
+diagram: |
+  stateDiagram-v2
+      [*] --> Inert: authored — harvest / janitor / responder (IL-T01)
+      Inert --> Queued: human triage (IL-T02) | responder selfQueue (IL-T03)
+      Queued --> Queued: held — deps / footprint / WIP / PR-cap (IL-T04)
+      Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
+      InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
+      InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
+      InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
+      MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
+      ClosedByMerge --> Done: merged-closeout — verify, flip, harvest (IL-T09)
+      Done --> [*]
+      state GoalLane {
+          [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
+          GoalQueued --> GoalTracking: goal-decompose authors+queues children (IL-T11)
+          GoalTracking --> GoalTracking: goal-review on any DESCENDANT close (IL-T12)
+          GoalTracking --> AssemblyOpen: goal met → assembly PR armed (IL-T13)
+          AssemblyOpen --> [*]: codeowner + human merge → keyword closes goal (IL-T14)
+      }
+      note right of Inert
+          harvest from a GOAL child skips Inert —
+          queued at harvest, Base: inherited (IL-T15)
+      end note
+
+axes:
+  labels: [inert, queued, in_progress, review, done, error, blocked_tracking]  # agent/* + agent-fix
+  lane: [master, goal_child, goal_parent, responder]        # decided by Base:/task-goal, not provenance
+  base: [master, goal_branch]                                # the Base: body line — the close key
+  lineage_depth: [0, 1, 2]                                   # native sub-issue chain; reviewer stops Follow-ups at ≥2
+  budget: [within, exhausted]                                # Σ descendant caps vs the goal Budget:
+
+events:
+  authored: "a play files an issue (harvest bullet / janitor draft / responder alert / goal decompose)"
+  human_triage: "a human applies agent-fix + agent/queued (or closes as noise)"
+  dispatched: "the scan emits a unit; the launcher opens a ride (WIP=1, pod-name key)"
+  pr_merged_master: "the ride's PR merges into master — GitHub closing keyword fires"
+  pr_merged_goal: "the ride's PR merges into its declared goal/** base — keyword INERT"
+  worker_terminal: "the ride died with no open PR referencing the issue"
+  descendant_closed: "any issue in the goal's sub-issue closure closes"
+  goal_met: "goal-review rules the acceptance satisfied"
+  assembly_merged: "the goal→master PR merges (human codeowner act)"
+
+transitions:
+  - id: IL-T01
+    name: authored inert (master lane)
+    owner: merged-closeout play (harvest) / janitor tick (spec-gap drafts)
+    when: "authored on the MASTER lane → no agent-fix, no agent/queued; 🌱-reported until a human triages"
+    status: guarded
+    guards:
+      - desc: "the play forbids self-labeling (loop-safety breaker #1)"
+        anchor: { file: agents/coordinator/README.md, pattern: "never add .agent-fix. or .agent/queued." }
+      - desc: "the scan surfaces untriaged bot-authored issues every pass"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "bot-authored, awaiting human triage" }
+    incidents: ["2026-07-31 sleep harvest: 3 of 5 sprouts were noise — the triage gate is where they died"]
+
+  - id: IL-T02
+    name: human adoption
+    owner: the operator
+    when: "human labels agent-fix + agent/queued, or closes as noise — the master lane's ONLY human gate"
+    status: report-only
+
+  - id: IL-T03
+    name: responder selfQueue (alert lane)
+    owner: responder-argo shell (not the session)
+    when: "alert-filed issue + three fail-closed gates: not self-referential, Touches: declared, no governance path"
+    status: guarded
+    guards:
+      - desc: "the three deterministic gates label from the SHELL"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "selfQueue" }
+
+  - id: IL-T04
+    name: queued but held
+    owner: coordinator-scan queued clause
+    when: "open Depends-on (native ∪ body line) / footprint intersection / repo WIP ceiling / open-PR cap"
+    status: guarded
+    guards:
+      - desc: "dependency gate (FU-087) — blocked issues report, never dispatch"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "queued-blocked" }
+      - desc: "ADR-097 footprint hold — declared Touches: intersect ⇒ held"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "busy_fps" }
+      - desc: "repo WIP ceiling (ADR-097 hard max)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "REPO_MAX_WIP" }
+
+  - id: IL-T05
+    name: queued-dispatch
+    owner: scan (schedules ONE unit) → coordinator item session (judges) → launcher (opens the ride)
+    when: "agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error ∧ nothing held"
+    status: guarded
+    guards:
+      - desc: "the queued-dispatch unit rides the priority list (in-flight recovery first)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'queued-dispatch\|' }
+      - desc: "launcher dispatch idempotency — the pod name IS the (task, round) key"
+        anchor: { file: agents/agent-session.sh, pattern: "the key IS the pod name" }
+      - desc: "a task/goal issue routes to goal-decompose, NEVER to a worker recipe"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "BREAKER #1, moved UP" }
+
+  - id: IL-T06
+    name: abandoned in-progress → c4c5 re-dispatch
+    owner: scan C4/C5 clause
+    when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143)"
+    status: guarded
+    guards:
+      - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
+      - desc: "agent/error invisible to the clause (FU-069 breaker)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/error"\)' }
+    incidents: ["2026-08-05 circles#22: pre-FU-143, C4/C5 re-rode a merged child — breakage #1 of three"]
+
+  - id: IL-T07
+    name: close by master merge
+    owner: GitHub (closing keyword)
+    when: "pr_merged_master ∧ the PR body carries Fixes #N"
+    status: github-native
+    guards:
+      - desc: "the goal-review play writes Fixes #<goal> into the assembly PR body"
+        anchor: { file: agents/coordinator/README.md, pattern: 'Fixes #<goal>' }
+
+  - id: IL-T08
+    name: close by goal merge — FU-143 widened C6
+    owner: scan detection (Base:-keyed) → merged-closeout play closes the issue
+    when: "OPEN ∧ in-progress ∧ Base: goal/** ∧ referencing PR MERGED into exactly that base ∧ no open referencing PR"
+    status: guarded
+    guards:
+      - desc: "Base:-keyed detection — goal/** only, never any non-default base (the #32 mirror)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "a goal child cannot self-close" }
+      - desc: "the play CLOSES the still-open issue (re-fires goal-review, unblocks siblings)"
+        anchor: { file: agents/coordinator/README.md, pattern: "GOAL-CHILD leg: also CLOSE the issue" }
+      - desc: "merge doorbell: a merged circles PR rings /coordinate (was: wait for the */10 cron)"
+        anchor: { repo: circles, file: .github/workflows/coordinate-doorbell.yaml, pattern: "coordinate-doorbell" }
+    incidents: ["2026-08-05 circles#22/#23: closed BY HAND (agent/done+close) — which also silently skipped the harvest (C6 excludes agent/done)"]
+
+  - id: IL-T09
+    name: merged-closeout — verify, flip, harvest
+    owner: scan merged-closeout clause → coordinator item session
+    when: "closed (or IL-T08 open-merged) ∧ still non-terminal agent/* — verify on the branch Base: declares, flip agent/done, harvest Follow-ups"
+    status: guarded
+    guards:
+      - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
+      - desc: "goal children verify against the GOAL branch, not master/ArgoCD"
+        anchor: { file: agents/coordinator/README.md, pattern: "Verify against the GOAL BRANCH" }
+      - desc: "goal closeout retargets surviving sprouts to master (their base dies with the branch)"
+        anchor: { file: agents/coordinator/README.md, pattern: "GOAL closeout only" }
+
+  - id: IL-T10
+    name: goal queued by a human
+    owner: the operator (breaker #1 moved UP, not away)
+    when: "task/goal + Budget: authored AND agent/queued applied by a USER — the goal lane's entry gate"
+    status: guarded
+    guards:
+      - desc: "the scan refuses a Bot-queued goal, fail-closed (defence in depth; the boundary is CODEOWNERS)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "BREAKER #1, moved UP" }
+
+  - id: IL-T11
+    name: goal-decompose
+    owner: coordinator item session (reasoning tier — GOAL_MODEL, default opus)
+    when: "queued goal → children authored as native sub-issues (Base: inherited, Touches: narrowed, coverage map) and QUEUED; parent → agent/blocked tracking"
+    status: guarded
+    guards:
+      - desc: "the play (coverage map, seams pinned, Σ budgets fit)"
+        anchor: { file: agents/coordinator/README.md, pattern: "goal-decompose" }
+      - desc: "launcher enforces Σ(DESCENDANT caps) ≤ Budget: — sprouts spend the goal's money"
+        anchor: { file: agents/agent-session.sh, pattern: "DESCENDANTS, not direct children" }
+      - desc: "the worker's slice is BOUNDED — Goal+Acceptance card only, never the spec tree"
+        anchor: { file: agents/agent-session.sh, pattern: "GOAL CONTEXT" }
+      - desc: "the reasoning-tier model map (launcher-owned, ADR-094)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'goal-decompose\) cmodel' }
+
+  - id: IL-T12
+    name: goal-review on every descendant close
+    owner: scan goal-review clause → coordinator item session
+    when: "a DESCENDANT (not just direct child — sprouts sit at depth 2) closed after the loop's newest comment on the goal"
+    status: guarded
+    guards:
+      - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 6: DESCENDANTS" }
+      - desc: "the play: met / children cover / author the missing child / retro checkpoint"
+        anchor: { file: agents/coordinator/README.md, pattern: "goal-review. clause" }
+
+  - id: IL-T13
+    name: goal met → assembly PR opened ARMED
+    owner: goal-review session (App-authored, at goal-met time — never at decompose)
+    when: "goal_met → gh pr create goal→master non-draft + Fixes #<goal> + coverage map body, then armed"
+    status: guarded
+    guards:
+      - desc: "the play opens+arms at goal-met; human changes-requested routes as a NEW child"
+        anchor: { file: agents/coordinator/README.md, pattern: "open the ASSEMBLY PR" }
+      - desc: "the reflex reviews it on the assembly rubric, model = claim reviewer.goalModel"
+        anchor: { file: agents/review-reflex.sh, pattern: "REVIEW_GOAL_MODEL" }
+      - desc: "the scan never dispatches a fix round at a goal/** HEAD (protected base — push would be refused)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY PR #" }
+
+  - id: IL-T14
+    name: assembly merge — the goal lane's exit gate
+    owner: GitHub (codeowner rule) + the operator (OrgAdmin merge)
+    when: "bot approval satisfies required-approval; /specs/ in the diff trips CODEOWNERS; the human merges; keyword closes the goal"
+    status: github-native
+    guards:
+      - desc: "master ruleset carries the codeowner flag; goal/** twin deliberately does not"
+        anchor: { file: tofu/github/repo_rulesets.tf, pattern: "required_approval_goal" }
+      - desc: "CODEOWNERS: /specs/ + /.agents/ on the operator"
+        anchor: { repo: circles, file: CODEOWNERS, pattern: "/specs/" }
+
+  - id: IL-T15
+    name: goal-lane sprouts queue at harvest
+    owner: merged-closeout play (harvest step, goal-lane exception)
+    when: "originating issue carries Base: goal/** → sprout gets agent-fix+agent/queued + the Base: line, sub-issue lineage as always"
+    status: guarded
+    guards:
+      - desc: "the goal-lane exception in the harvest play (master-lane harvests stay inert)"
+        anchor: { file: agents/coordinator/README.md, pattern: "EXCEPTION — the goal lane" }
+      - desc: "the reviewer emits NO Follow-ups at depth ≥2 — the tree is capped at sprouts-of-children"
+        anchor: { file: agents/reviewer-session.sh, pattern: "depth-conditional half of the harvest bar" }
+
+gaps:
+  - id: IL-G01
+    name: "first live closeout unproven"
+    detail: "FU-143 points 1–7 are fixture-proven and live-scan clean, but no goal child has merged
+      through the widened C6 yet — the first child of circles#29 is the proof."
+    fu: FU-143
+
+  - id: IL-G02
+    name: "goal branch creation is manual"
+    detail: "Nothing creates goal/<n>-<slug> from master; circles#29's ⛔ section assigns it to the
+      operator as a precondition. The decompose play could create it (one API call) if this
+      recurs as friction."
+    accepted: "deliberate operator step per #29 (2026-08-06); revisit on the second goal that trips on it"
+
+  - id: IL-G03
+    name: "assembly-only extra checks (audit, perf) unbuilt"
+    detail: "Operator wish 2026-08-06: the assembly PR could carry checks a normal PR does not.
+      Constraint: a REQUIRED check must report on every PR or it blocks them all — needs a
+      workflow that runs on all PRs and trivially greens itself unless the head is goal/**."
+    accepted: "design when a goal actually demands one; the codeowner review is the gate meanwhile"
+
+  - id: IL-G04
+    name: "sprout-RATE gauge + depth-aware harvest gate"
+    detail: "The exporter does not yet walk the sub-issue lineage into a convergence metric
+      (rate > 1/run = diverging), and the harvest gate does not read remaining budget."
+    fu: FU-090
+
+  - id: IL-G05
+    name: "master-lane harvest graduation knob unbuilt"
+    detail: "issueAuthoring.selfQueue exists in prose only (no XRD field, no reader). Per the
+      gate-the-merge doctrine it may never need building — CODEOWNERS is the boundary."
+    accepted: "gate-the-merge ruling 2026-08-05; build only if per-issue triage becomes the bottleneck"

@@ -37,6 +37,9 @@ ROOT = Path(__file__).resolve().parent.parent
 MODELS = [
     (ROOT / "docs/agents/merge-path-fsm.yaml", ROOT / "docs/agents/merge-path-fsm.md"),
     (ROOT / "docs/agents/iac-lane-fsm.yaml", ROOT / "docs/agents/iac-lane-fsm.md"),
+    # The ISSUE machine (goal lane included) — merge-path models the PR, this models the issue
+    # whose close the PR's merge is (FU-143 arc, 2026-08-06).
+    (ROOT / "docs/agents/issue-lifecycle-fsm.yaml", ROOT / "docs/agents/issue-lifecycle-fsm.md"),
 ]
 
 
