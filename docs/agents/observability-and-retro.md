@@ -175,6 +175,7 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
 | 08:00:00 → 08:18:03 | scan + `goal-decompose` (opus; session 17m32s) | 18m03s | ⚙ |
 | 08:18:03 → 08:18:14 | decompose done → next scan | **11s** | ✅ doorbell (session rings on completion) |
 | 08:18:14 → 08:18:41 | scan → first child dispatched | 27s | ⚙ |
+| 08:18:41 → 08:21:32 | item session → ride pod `issue-30-r1` up | 2m51s | ⚙ |
 
 **Findings from the first two hops:**
 
@@ -190,6 +191,18 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
 - ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.
+
+**Open prediction — a planned `∥` that the footprint hold will serialize.** #29's decomposition
+orders its children *bake → page → (evidence ∥ kind gate)*, and #18/#19 correctly depend on #32
+and not on each other. But both declare `tests/**`, `scripts/**`, `devbox.json`, `devbox.lock`,
+and the ADR-097 hold is prefix-overlap on `Touches:` — so they intersect and will run **one at a
+time**. The declarations are honest (both really do touch tests and tooling); what is missing is
+that the decomposer asserted parallelism without checking whether the footprints it authored
+permit it. **Verify when #32 closes**: if #18 and #19 serialize, the `goal-decompose` play wants a
+rule — *two children planned in parallel must have disjoint `Touches:`, or the plan says why
+serialization is acceptable* — and a planned-vs-realized parallelism number belongs in this
+ledger. One observation from one decomposition is not yet a contract; do not codify it before the
+second instance.
 
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
