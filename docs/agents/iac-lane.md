@@ -102,8 +102,19 @@ makes the PR state which ran; and the PR must reference its issue or the scan re
 hand-written Deployment with a typo passed. `kubeconform -strict` over `argocd/resources/*` and
 `tofu fmt` landed with the tiers; the honest residue is that **87 of 154 resources are SKIPPED** for
 want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies, PrometheusRules) —
-`manifest-lint` prints that every run and fails if it ever validates nothing. Vendoring those
-schemas, and `tofu validate` (a provider download per PR, the FU-130 WAN class), are what remain.
+`manifest-lint` prints that every run and fails if it ever validates nothing.
+
+**Operator ruling 2026-08-06: that skipped majority is the SENTINEL's problem, not a schema-vendoring
+errand** — it gets no id of its own and belongs to IAC-G04/FU-106. The reasoning is the same one that
+made the sentinel exist: the kinds kubeconform cannot see are exactly the kinds that carry the
+platform contract (an `Application` pointing anywhere, an `AgentStack` claiming any budget or egress,
+a `CiliumNetworkPolicy` widening the deny row, a `PrometheusRule` silencing a belt). A vendored
+OpenAPI schema would only prove those documents are well-*formed*; the sentinel's Kyverno policies
+are what judge whether they are *permitted*, and they run cluster-side off master where the PR
+cannot rewrite them. So extending the G04 sentinel to homelab (already FU-106's next-action, for the
+tier-1 CODEOWNERS residue) is also what closes this gap — vendor a schema only where a kind turns
+out to need form-checking the policies don't give. `tofu validate` stays separately out (a provider
+download per PR, the FU-130 WAN class).
 
 **The fixer block landed the same day** (`agents/fixer/openrouter-operator/agentstack.yaml`:
 budget $5/week, `guardrail: none` — the stack chain is a paid model, `claudeTier: false` per the

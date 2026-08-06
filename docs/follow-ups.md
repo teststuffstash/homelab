@@ -235,15 +235,16 @@ six OVERSIZE items pointer-ized into
       **Next:** build the activation machinery per the checklist (attended-session class).
       Composes with FU-044 as its deep post-deploy gate.
 
-- [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, gap
-      register IAC-G01..G07 with per-gap status, assurance layers and the sentinel:
+- [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
+      IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
-      Closed so far: G02/G03/G07 (2026-08-02), G05 rung-0 (sleep-tracking#113) + G04 sentinel
-      v1 shadow (2026-08-03). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak
-      (operator: reviewer-App statuses:write + tofu push ruleset + required check — plan in
-      §L0b), then G06 advisory lens, then extend the G04 sentinel to **homelab** so tier 1
-      (`argocd/resources/**`) can drop back to unowned (ex-FU-068 residue; the CODEOWNERS line
-      says to delete itself). Relates FU-087/FU-093, ADR-084, ADR-076.
+      Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
+      (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
+      reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
+      advisory lens, then extend the G04 sentinel to **homelab** — one step owning two residues:
+      tier 1 (`argocd/resources/**`) back to unowned, and the 87-of-154 kinds `manifest-lint`
+      can't schema-check (operator 2026-08-06: the sentinel's, no separate id — doc §The platform
+      lane). Relates FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
       `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
