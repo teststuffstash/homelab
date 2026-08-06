@@ -37,10 +37,16 @@ read 0.82 with `headers_age_s=3441` — the **reset epoch** is what releases, ne
 Ledger rows + the CAPACITY-vs-WAIT class distinction are in
 [`observability-and-retro.md`](observability-and-retro.md) §Part A″.
 
-**Expected chain from here, each hop with its deadline:** #31's ride → PR into `goal/29-p0-complete`
-armed at creation (~30m, #30's took 31m16s) → reviewer (~7m) → `ci` (~2m) → merge → **⚠ FU-143
-soak: expect to HAND-CLOSE #31** (the fix is not deployed yet, see the chain below) → that unblocks
-#32, then #18/#19. Past ~11:45Z with no PR, read the ride pod.
+✅ **#31 IS DONE and the whole goal-lane cycle is now PROVEN end to end** (11:22Z): ride → PR#37
+into `goal/29-p0-complete` → **C9 re-armed it** (it arrived un-armed, unlike #36 which armed at
+creation — worth watching whether that recurs) → reviewer APPROVED with `ci` green → auto-merged 2s
+later → hand-closed with `agent/done` (verified against the goal branch HEAD `1cc6b76`, not the PR
+page) → **`goal-review` fired** → **#32's `blockedBy` cleared and #32 is riding**.
+
+Harvest done by hand (the hand-close suppresses C6's): PR#37's one `Follow-ups:` bullet → **#38**,
+filed **INERT** rather than queued — test hygiene outside #29's P0 scope, and a sixth lg child
+would eat the `Budget: €12` headroom (Σ caps already 5 × lg $2 = $10). Judgment call, stated in the
+issue; flip the labels to disagree.
 
 Why: a deferred item session still rang `/coordinate`, waking a scan that re-dispatched the same
 issue, which deferred again — three laps in eight minutes, and coordinator sessions are themselves
@@ -90,10 +96,18 @@ cross-reference event), so nothing can recover it after the fact.
    **A deadline is what turns a plausible reading into a checked one.**
    ⚠ agent-runtime has NO `.agents/` BY DESIGN — operator ruling 2026-08-06: its fixes come from
    meta-coordination incidents, so drive it with the JAIL credentials, never look for an agent lane.
-3. ⏳ **NEXT: #34 merges → `build-image.yaml` fires on `agent-base/**` → new `agent-base` tag →
-   deploy-pin PR into homelab bumping `AGENT_BASE_IMAGE` in `agents/images.env` (currently
-   `2026.8.5-gbbf8da511cb4`) → merge.** Only THEN do new worker pods carry the fix.
-4. ⏳ Then re-soak FU-143 on a #29 child and archive the containment if it holds.
+3. ✅ **#34 MERGED 11:17:25Z** — by the JAIL, via the OrgAdmin bypass. **⚠ THE REUSABLE FACT: the
+   jail credentials ARE an OrganizationAdmin, so a `required-approval` ruleset whose only bypass is
+   `OrganizationAdmin: always` is NOT a human gate — merge it yourself** (`gh pr merge --admin`).
+   This session read that bypass list, saw `OrganizationAdmin`, and still escalated to the operator;
+   the operator merged it and corrected the reading. Applies to every platform-lane repo
+   (agent-runtime, agent-coordinator, homelab, openrouter-operator) where `reviewer.enabled=false`
+   means no bot will ever approve. Self-approval stays blocked — the bypass is the path, not a review.
+4. ⏳ **NEXT: `build-image.yaml` (run `31096665105`) → new `agent-base` tag → deploy-pin PR into
+   homelab bumping `AGENT_BASE_IMAGE` in `agents/images.env` (currently
+   `2026.8.5-gbbf8da511cb4`) → merge.** Only THEN do new worker pods carry the fix. ~20m from
+   11:17Z; past ~11:50Z, read `gh run view 31096665105 --repo teststuffstash/agent-runtime`.
+5. ⏳ Then re-soak FU-143 on a #29 child and archive the containment if it holds.
 
 ⚠ **Hand-close recipe for a #29 child until then:** verify the merge against the goal branch, post
 an audit comment, `--add-label agent/done --remove-label agent/in-progress`, close. That fires
