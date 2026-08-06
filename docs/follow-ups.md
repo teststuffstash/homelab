@@ -341,14 +341,13 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1; ADR-097 made it a
       no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
       (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
-      true only at WIP=1. So while a fix round rides, every cron tick **and every doorbell** re-emits
-      the same `changes-requested|repo|pr-N`; the session exits clean on its live-state re-read, but
-      each burns a sonnet coordinator session — the "absorbing belt" class the comment names. Live:
-      circles PR#39 2026-08-06 — rate RISES with round count: 5/18min early, ~1/2min by round 5.
-      ⚠ Waste, not yet risk, but the margin is not static: 5h utilization 0.24 → **0.40** over that
-      hour (latch is 0.80; the window reset first). **Next:** hold per-ITEM, matching the live
-      ride to the PR's linked issue (reliable since agent-runtime#34 guarantees `Implements #<n>`).
-      ⚠ NOT `live >= 1` — that reverts ADR-097. Relates FU-088, ADR-094, ADR-097.
+      true only at WIP=1. So while a fix round rides, every cron tick **and doorbell** re-emits the
+      same `changes-requested|repo|pr-N`; each session exits clean on its live-state re-read but
+      burns a sonnet coordinator run — the "absorbing belt" class the comment names. Live: circles
+      PR#39 2026-08-06, rate rising with round count (5/18min → ~1/2min by r5); 5h utilization
+      0.24 → 0.40 across that hour (latch 0.80, window reset first). Waste, not yet risk — but the
+      margin is not static. **Next:** hold per-ITEM, matching the live ride to the PR's linked
+      issue. ⚠ NOT `live >= 1` — that reverts ADR-097. Relates FU-088, ADR-094/097.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
