@@ -2357,3 +2357,65 @@ monitors run — orphans are undiscoverable until they fire). And **homelab#103 
 reproduced by this rollout**: the goal lane SERIALIZES on `Depends-on:`, wip never exceeded 1, and
 wk-01 sat at 16% CPU mid-rollout. Max this decomposition reaches is 2 concurrent (#18+#19 after
 #32). Recorded on the issue so nobody waits for a burst this shape cannot produce.
+
+### 2026-08-06 (cont. 3) — fixing the loop while it runs, and three of my own bugs on the way
+**Condition:** operator ruling — *"Fixing issues while the loop is running is better than guessing
+the exact conditions later."* Acted on it for FU-146 and FU-147, then built agent-runtime a lane.
+
+**Both were deployable mid-flight for a checkable reason, not optimism**: at deploy time there were
+ZERO `CHANGES_REQUESTED` and ZERO ci-red PRs fleet-wide, so both clauses were IDLE; the live burst
+ran through `queued-dispatch`, a different path. Scan pods `git clone --depth 1 master` per run, so
+push IS deploy. **FU-146** (`fc606e2`) holds `changes-requested` per-ITEM on the PR's
+`Implements #<n>` link — measured waste first: **~59 of 71 coordinator sessions did nothing**, 13 of
+PR#39's 22 comments were bot noise, rate rising with round count, 5h util 0.24 → 0.40 in an hour.
+Fail-safe by construction: no link → old behaviour, so it can only ADD holds, and every hold needs a
+LIVE pod so it self-releases. Also reset `WIPPODS_JSON` per repo — it leaked the previous repo's
+pods, and nothing read it across repos until this hold did.
+
+**FU-147 found the thing it was reusing was BROKEN.** FU-115b's no-op detector read
+`.commits[]?.commit.committedDate` where `gh` puts it TOP-LEVEL, so `$head` was always "" and its
+own `($head == "")` branch returned "no-op" for EVERY PR — it would have mislabelled `agent/arbitrate`
+on the first ci-red PR to reach a completed round. Never fired (0 arbitrate labels fleet-wide) only
+because none had. **Archived as "synthetic-tested both verdicts": the fixture had been built to match
+the buggy jq, not gh's output.** And comparison was the wrong operation anyway — a SUCCESSFUL round
+posts stats AFTER its push, so `stats > head` holds for good rounds too. **Counting** is the fix
+(`>= 2` after the newest non-merge commit), verified at four points of PR#39's real history.
+
+**Two more seam bugs, both "one contract, two predicates":** C6 demanded a verb keyword while
+`finalize` accepts a line-anchored `Issue: #<n>` TRAILER and logs "issue link already present —
+left alone", stranding #40 (`df3159f`). And C6's goal-child leg keyed off `$inprog` =
+`agent/in-progress` ONLY, while a child landing cleanly in ONE round ends in **`agent/review`** —
+so **FU-143's soak had proved the ATYPICAL path**: #32 auto-closed only because six fix rounds
+dragged it back to in-progress (`9201a9a`). #40 then closed machine-only, which is the real proof.
+
+**agent-runtime got a test surface + fixer lane (PR#37)** on the operator's better plan — tests
+first, because they are worth having whether or not the lane works out. Writing them found #36's
+REAL mechanism: `succeeded = bool(stats.get("pr_url"))` returns `clean` BEFORE any failure signature
+is consulted, so on a fix round — which always has a PR — **no signature can ever fire**. Only round
+1 can strike a model. Pinned by a STRICT xfail so the fix un-pins itself. Also in that PR: the #109
+lane fix — deploy-pin PRs land UNLABELLED, missing the mechanical lane twice (no `automerge` → the
+reviewer does not skip; no `automerge`+`dependencies` → renovate-approve does not approve), applied
+on the reused-PR path because `deploy/agent-base` is long-lived and `gh pr create` rarely runs.
+
+**A GitHub Actions outage stopped all CI fleet-wide** and I misread it TWICE: called it "resolved"
+while live, then diagnosed "capacity, not outage" from `maxRunners: 4` vs 6 assigned jobs. The tell
+I had and read past: **ZERO runs `in_progress` while runners idled** — a saturated pool has jobs
+RUNNING, a broken one has runners WAITING. Ground truth was in the runner's own log:
+`POST .../acquirejob → ServiceUnavailable`. ✅ The loop handled it better than I did: the ci-red
+session on circles#44 diagnosed the infra hiccup, dispatched NO worker, and re-armed auto-merge
+after its own workaround disarmed it — which surfaced **FU-148**: the coordinator lacks
+`actions:write`, so it close/reopens PRs to re-trigger CI, and that disarms auto-merge.
+
+**Our own alert misdirected me too** (`fdbb2dd`): `PodSigkilled` asserted "likely the Talos
+OOMController (BestEffort victim under node memory pressure)". Live: `bucket-sync` OOMKilled against
+its OWN 256Mi limit, **Burstable**, on a node at 48% memory — every clause of the guess wrong. Exit
+137 is a symptom two causes share; the description now says so and names the probe that separates
+them. **Alert descriptions carry symptoms, never guessed causes** — restated because our own rule
+broke it.
+
+**My own three:** an `A | B or C` jq binding bug in the trailer fix (the second `.body` ran against
+the piped string) — caught by testing, not review; a lint gate that grepped only
+`OVERSIZE|DANGLING|STALE|ERROR` and let a `DONE-MARKER` through, now a whitelist; and a waiter that
+`eval`'d an unquoted summary containing `approve / approve:SKIPPED` and tried to run `approve`.
+Same family as the documented backtick trap: **shell/jq quoting fails at RUNTIME and `bash -n`
+cannot see it — execute the block.**
