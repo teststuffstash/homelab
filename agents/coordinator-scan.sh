@@ -307,9 +307,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # The keyword set is exactly what agent-runtime#32/#34 makes `finalize` guarantee, so
           # this predicate meets that fix rather than racing it. Until #34's image rolls out
           # nothing matches here — that is INTENDED (hand-close per meta-state), not a regression.
+          # ⚠ MUST match what `finalize` accepts, or PRs strand. Found live 2026-08-06 on
+          # circles#43: finalize logged "issue link already present (#40) — left alone" because the
+          # recipe body carries a line-anchored `Issue: #40` TRAILER, while this guard demanded a
+          # verb keyword — so finalize considered the PR linked and C6 refused to close it. A
+          # trailer is a strong, structured ownership claim, unlike the prose sibling citation this
+          # guard exists to reject ("that is the sibling issue (#31)"); anchoring to line start is
+          # what keeps the two apart. Widen HERE rather than narrowing finalize: the authoring side
+          # is already deployed fleet-wide and its trailer is the recipes own convention.
           ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
             '[.[] | select(.baseRefName == $b)
-                  | select((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))] | length' <<<"$gmerged")" || ghit=0
+                  | select((((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i")))
+                        or (((.body // "") | test("(?m)^[ \\t]*issue:[ \\t]*#\($n)\\b"; "i"))))] | length' <<<"$gmerged")" || ghit=0
           # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
           gmention="$(jq -r --arg b "$gbase" --argjson n "$gn" \
             '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || gmention=0
