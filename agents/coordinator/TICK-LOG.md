@@ -2565,3 +2565,34 @@ prior-art rule itself. Also two probe faults caught only because they failed lou
 executes from the repo root, so a `cd`-then-extract produced an EMPTY script (the substring error
 was the tell), and a test harness variable that was not exported sent the latch down its fail-closed
 path — which at least proved that path under a real subprocess.
+
+### 2026-08-06 (cont. 7) — the alert that fired and told nobody
+**Condition:** minutes after ADR-099 shipped, the loop watch dropped `ResponderTriageBudgetExhausted`
+from the firing set while **Prometheus still reported `state=firing` with 24s-fresh gauges**. Two
+views disagreeing was the whole signal.
+
+**Alertmanager had it `state: suppressed, inhibitedBy: [...]`.** kube-prometheus-stack ships a stock
+`inhibit_rule` (`alertname=InfoInhibitor` → `severity=info`, equal `namespace`) and our values file
+overrides `receivers`/`route` but never `inhibit_rules`. **A suppressed alert is not dispatched at
+all** — it reached neither the responder nor the Home Assistant webhook. The operator had asked for
+an alert saying LLM triage had stopped; what shipped was structurally incapable of saying anything,
+and it looked healthy from every layer I had been checking.
+
+**The tell was in the repo before I wrote it: 27 alerts on warning/critical, exactly one on `info`
+— mine.** I had that count on screen when I chose `info` and read it as a style question rather
+than a routing one. `severity: warning` now, which also makes `triage: none` load-bearing for the
+first time (the route really does deliver to `agent-responder` via `continue: true`).
+
+**Verified through every hop, because three of them lie individually.** git → ArgoCD (`Synced` at my
+rev) → the k8s object (`severity: warning`, generation 2) → Prometheus reload (30s, and it served
+the OLD severity for those 30s despite a successful sync) → Alertmanager. A label change ends the
+old alert series and starts a new one, so the `warning` instance re-served its `for: 5m` while the
+stale `info` copy aged out — a real gap where the firing set showed nothing. Predicted the fire time
+as activeAt 20:16:11Z + 5m and it landed **20:21:14Z, `warning/active/FREE`**, 3s off. ⚠ I nearly
+opened an investigation into "still pending" at 20:20:47 — 24 seconds before it was due. **Compute
+the deadline before diagnosing the wait.**
+
+**The reusable line: `firing` in Prometheus is NOT evidence anyone was told.** The only view that
+answers that is Alertmanager's `state` + `inhibitedBy`
+(`curl -s 'http://192.168.40.14:9093/api/v2/alerts?inhibited=true'`). An unroutable alert is worse
+than no alert, because it reads as cover. Recorded in meta-state's durable warnings and ADR-099.
