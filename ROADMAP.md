@@ -193,7 +193,7 @@ shapes use the same readable **`2026.<m>.<d>-g<sha>`** version and a first-party
 | operator / controller | Helm chart to **ghcr OCI** (ADR-084); `deploy.yaml` opens a bump PR in homelab/argocd; the app is multi-source (OCI chart + homelab `$values`), gated by `argocd-validate-pins` | ✅ live |
 | image consumed by pods | version-pinned in `agents/images.env` + `agents/coordinator/*-argo.yaml`, off `:latest` — cacheable, traceable; each build's deploy-pin bumps it | ✅ live |
 | snore-recorder | ArgoCD **PostSync hook Job** in sleep-iac (in-cluster `ansible-playbook`; failed playbook = failed sync = red app; `syncPolicy.retry` = backoff; nightly CronJob for the offline-Pi gap) | 🟡 platform half done — DHCP reservation + `SNORE_DEPLOY_SSH_KEY` in Infisical; sleep-iac side pending |
-| homelab | a CI-gated deploy TARGET (`require_approval=false`, `ci=argocd-validate-pins`) | ✅ |
+| homelab | a deploy TARGET whose gate is now PATH-based, not CI-only: `require_approval = true` + `require_code_owner_review = true` with a repo-root `CODEOWNERS` (FU-068, 2026-08-04), and `ci` grew past `argocd-validate-pins` to `manifest-lint` (kubeconform) + `tofu fmt` + the model/router/FSM lints. `docs/agents/iac-lane.md` §The platform lane | ✅ |
 
 **The other half (FU-097): the surfaces ArgoCD and tofu do NOT reconcile.** A merged change to
 these deploys *nothing* today. Each needs either an automated apply or an explicit human-applied
@@ -207,7 +207,9 @@ ruling plus a drift belt:
 - **Matchbox** — `ansible/matchbox*.yml`, same manual-apply gap as OPNsense.
 - **`tofu/` roots** — plan/apply from the jail is the **deliberate human gate** (keep), but nothing
   detects live-vs-state drift between applies. A `tofu plan` cron → alert is the candidate —
-  prerequisite FU-012 (state is local in the jail today). The roots differ in owner/credential/blast
+  prerequisite FU-012, now **3 of 5 roots done** (cloudflare, provisioning, infisical moved to
+  encrypted Garage state 2026-08-04, so the belt can run for those; `main` stays local until it has
+  an out-of-cone copy, `github` is host-only — `docs/tofu-state.md`). The roots differ in owner/credential/blast
   radius and need per-root rulings: `docs/dependency-upgrades.md` §"'Tofu' is not one class".
 
 First deliverable is a per-surface ruling table (automate / human-applied + belt), then implement
