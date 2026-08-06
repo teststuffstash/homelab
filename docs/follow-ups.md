@@ -309,8 +309,9 @@ six OVERSIZE items pointer-ized into
       circles#22, 2026-08-05). Mechanism, the agent-runtime#32 mirror warning, and the 7-point
       implementation contract: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
       §A child cannot close itself. Points 1–6 shipped 2026-08-06 (`e66b421`, also reviving the
-      changes-requested clause dead since `671a053`). **Next:** point 7 — the merged-PR
-      `/coordinate` doorbell workflow on circles; then watch the first live closeout on #29.
+      changes-requested clause dead since `671a053`); point 7 (the merged-PR doorbell,
+      circles `36993f4`) same day. **Next:** SOAK — watch the first live closeout + doorbell
+      ring on circles#29's first child, then archive.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
