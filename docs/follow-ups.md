@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-144**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-145**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -49,9 +49,11 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-05 (bug sweep before the next stack launch — archived FU-068, FU-120,
-FU-128, FU-132, FU-138, FU-139; FU-127/130/131/134 part-shipped and re-scoped in place. New gates:
-`stack-lint` KEY-01/KEY-02/PVC-01/CACHE-01, `devbox run model-id-test`. Previous pass 2026-08-03:
+_Last updated: 2026-08-06 (docs-cleanup comb: FU-130 re-scoped after its three merges, FU-106
+widened to own the schema-blind kinds, FU-046/FU-102 pointers corrected, **FU-144 filed**.
+Previous pass 2026-08-05 (bug sweep before the next stack launch): archived FU-068, FU-120,
+FU-128, FU-132, FU-138, FU-139; FU-127/130/131/134 part-shipped and re-scoped in place; new gates
+`stack-lint` KEY-01/KEY-02/PVC-01/CACHE-01 + `devbox run model-id-test`. Pass 2026-08-03:
 six OVERSIZE items pointer-ized into
 `docs/agents/{iac-lane,issue-authoring,observability-and-retro,model-routing}.md` +
 `docs/storage-ledger.md`)._
@@ -315,6 +317,16 @@ six OVERSIZE items pointer-ized into
       changes-requested clause dead since `671a053`); point 7 (the merged-PR doorbell,
       circles `36993f4`) same day. **Next:** SOAK — watch the first live closeout + doorbell
       ring on circles#29's first child, then archive.
+- [ ] **FU-144** — **The `{repo}` doorbells are dead edges now that every stack is graduated.**
+      `.github/workflows/renovate.yaml` posts `{"repo":"all"}` and `devbox-update.yaml`
+      `{"repo":"<matrix.repo>"}` — no `loop_ns`, so they satisfy only the GLOBAL Sensor dep
+      (`agents/coordinator/coordinate-argo.yaml` §deps), and the global scan skips all four
+      graduated stacks. Measured 2026-08-06 on a real merge: the ring wakes a scan that prints
+      `skipped ×4` and nothing else, so Renovate/devbox-update PRs wait for the `*/10` cron.
+      **Next:** teach both emitters the `{stack, loop_ns}` payload (⚠ they read
+      `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
+      global trigger out over graduated namespaces; then decide if global has a reader left.
+      Relates FU-085 (archived — built these emitters pre-graduation), FU-143, ADR-094.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
