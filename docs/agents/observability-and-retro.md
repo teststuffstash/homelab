@@ -185,9 +185,11 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
 - **`devbox run coordinate-now` does not wake a graduated stack** (FU-144, third dead edge). The
   documented mono-jail remedy for exactly this transition was stale. Use
   `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
-- **`AgentCoordinateScanWedged` fires on every goal-decompose** (FU-145): the scan pod's lifetime
-  includes its dispatched session, so a healthy 18m decompose trips a 15m threshold calibrated on
-  p99=302s of pre-goal-lane ticks — then self-resolves, so it reads as noise.
+- **`AgentCoordinateScanWedged` fires on any ride >15m** (FU-145) — first read as a goal-decompose
+  quirk, then found structural: the item session runs `kubectl logs -f` against the ride, so a
+  scan pod stays Running for the whole ride on every stack. **A pod-lifetime probe cannot measure
+  a phase that blocks on downstream work** — the same class as Part A′ finding #1, an alert whose
+  subject is not the thing it names.
 - ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.
