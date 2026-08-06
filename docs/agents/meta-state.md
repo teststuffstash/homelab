@@ -137,12 +137,20 @@ cross-reference event), so nothing can recover it after the fact.
    ⚠ **The lesson:** two agents reasoned correctly inside `render/colors.md` and reached a remedy
    `data/status-resolution.md` forbids. A reviewer that verifies CODE against ONE spec page is not
    verifying it against the CONTRACT.
-   ⏳ **HALF TWO — the real verdict — is the MERGE**: C6 must auto-flip `agent/done`, CLOSE #32 and
-   harvest, with NO meta hand-close. Only then archive the `12e7fcf` containment. The `e704c36`
-   strong-link guard **STAYS** either way — requiring an implementing keyword is the correct
-   predicate whether or not `finalize` guarantees the line. ⚠ Watch that C6 matches: the guard
-   wants `implements|closes|fixes|resolves` + `#32`, and finalize writes `Implements #32` — these
-   were built to meet, but this merge is the FIRST time they actually do.
+   ✅ **HALF TWO PASSED 15:08:53Z — FU-143's SOAK IS COMPLETE, fully machine-driven.** PR#39 merged
+   into the goal branch carrying `Implements #32` (the model omitted it; `finalize` added it), the
+   `e704c36` strong-link guard MATCHED on the first merge where guard and finalize actually met,
+   and C6 flipped `agent/done` + CLOSED #32 + harvested — **no meta hand-close**. The guard is now
+   proven in BOTH directions: it refused #31's sibling citation and accepted #32's real link.
+   Harvest is well-formed: #40/#41/#42, each inheriting `Base: goal/29-p0-complete` + narrowed
+   `Touches:`, queued per the goal-lane rule.
+   ⏳ **NEXT (bookkeeping, not urgent):** archive FU-143 + decide whether the `12e7fcf` C4/C5
+   containment can be RELAXED — it exists because "no open PR" could not distinguish
+   merged-but-unlinked from abandoned, and finalize's guarantee now removes that ambiguity. The
+   `e704c36` guard STAYS regardless.
+   ⚠ **The queue GREW as the goal converged**: #32's closure unblocked #18/#19 *and* added three
+   queued sprouts → 5 dispatchable, capped 3 by `REPO_MAX_WIP`. A goal lane's concurrency is NOT
+   bounded by its decomposition width (corrected on homelab#103, where I had said max 2).
 
    ⚠ **#32 round 1 DIED and read as a success.** `exit_status=harness-death`,
    `error_class=goose-32602-truncation` on `deepseek/deepseek-v4-flash`, 1757s, $0.0353, nothing
