@@ -32,7 +32,14 @@ metadata:
   name: review-reflex
   namespace: agent-coordinator
 spec:
-  suspend: false # RESUMED 2026-07-28 (meta-15, operator "enable the world" after Phase 4) — global review backstop on
+  # RETIRED 2026-08-06 (operator): every stack is graduated (sleep, platform, oracle, circles), so
+  # the FU-080 cutover filters this reflex's repo set to EMPTY every tick — it reviewed nothing and
+  # cost a pod per 15 min. The per-stack review-<stack> CronWorkflows (AgentStack Composition) own
+  # all reviews now. ⚠ RESURRECTION CONDITION: a NEW stack lands UNGRADUATED with no per-stack
+  # reflex → its PRs sit green+armed+unapproved FOREVER unless this is unsuspended (or the stack
+  # graduates). Nothing checks that automatically — flip suspend back when onboarding an
+  # ungraduated stack. (Was: RESUMED 2026-07-28, meta-15 "enable the world".)
+  suspend: true
   schedules:
     - "*/15 * * * *"
   concurrencyPolicy: Forbid
