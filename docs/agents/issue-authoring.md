@@ -368,6 +368,34 @@ Point 7, the merge doorbell, remains):
 7. **Only after 1–6**: the `pull_request: closed && merged` workflow POSTing `/coordinate`
    (`383f5bb`) — before C6 is widened, a merge notification has nothing to trigger.
 
+#### ⛔ The soak FAILED on its first child (2026-08-06) — the input, not the logic
+
+circles#36 merged into `goal/29-p0-complete` at 09:27:44 **citing only its sibling `#31`, never its
+own issue `#30`**. Point 1 matches a merged PR into the declared base **whose body cites the
+issue**, so `ghit=0`, #30 never entered `c6g`, and point 2's exclusion — which keys on that same set
+— had nothing to exclude. C4/C5 then read `agent/in-progress` + no open PR as abandoned and
+dispatched a ride onto already-merged work. The point-7 doorbell fired correctly throughout.
+
+**Points 1–7 are implemented correctly. The assumption they rest on is that a PR names its issue,
+and nothing enforced it.** On a `goal/**` base the closing keyword is inert, so nothing even
+motivates the model to write one. That is `agent-runtime#32`, open since before this run and
+correctly predicting the cost — *"duplicate dispatch on a goal issue costs a whole ride"*. FU-143's
+goal lane had an **undeclared dependency** on it.
+
+⚠ **Nothing can recover the link after the fact.** GitHub holds no relation between #30 and #36 —
+no closing keyword, no bare mention, therefore no cross-reference event either. Do not try to
+reconstruct it from branch names (`fix/p0-bake-config-model` carries no number) or from timing
+(two children can merge in one window).
+
+**So the scan stopped guessing** (`12e7fcf`): a goal-based `agent/in-progress` issue with no open PR
+and no citing merged PR is **held out of C4/C5 and reported** under ⛔, never re-dispatched. The
+asymmetry is what decides it — holding costs one manual close; guessing costs a duplicate ARMED PR
+onto a protected goal branch that auto-merges. Ordinary issues are untouched.
+
+**That is containment, not the fix.** The fix is `agent-runtime#34` (finalize prepends
+`Implements #<n>` when the body does not already match) and it only takes effect once the
+`agent-base` image is rebuilt and `AGENT_BASE_IMAGE` re-pinned in homelab. Re-soak after that.
+
 ### The goal lane owns its sprouts — no selfQueue (operator ruling 2026-08-06)
 
 The 🌱 inert-until-human-triage gate (loop-safety breaker #1) protects the **master lane**, where
