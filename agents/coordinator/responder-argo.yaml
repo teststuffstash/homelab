@@ -14,8 +14,11 @@
 #   predicate  = Alertmanager firing (fan-out route in tofu/monitoring.tf)
 #   edge       = /alert webhook (review-argo.yaml EventSource) → this Sensor
 #   backstop   = NONE by design — alerts are level-triggered (repeat_interval refires ≤3h)
-#   key        = alert fingerprint: responder-seen ConfigMap ledger (24h window) + an
-#                `alert-fp:<fp>` open-issue search belt in the brief
+#   key        = TWO ledger keys in the responder-seen ConfigMap (24h window): the alert
+#                fingerprint AND the FU-133 subject (the RESOURCE), because a fingerprint is
+#                per-instance — one failing workflow mints a new one per run. Both are checked
+#                before a session is spawned; the `alert-fp:<fp>` + `subject:<subj>` open-issue
+#                searches in the brief are the belts BEHIND them, not the guard.
 #   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore + the FU-088 latch
 #                + a mechanical 12-triages/day cap (unique-fp storms, e.g. label churn)
 #   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
@@ -188,43 +191,6 @@ spec:
                 echo "→ $NAME ($FP): triage:none (self-describing by rule author) — marker written, skip"; continue
               fi
 
-              # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
-              # marker values — deferred-/cap-/none- prefixed — deliberately do NOT match).
-              SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
-              case "$SEEN" in "$TODAY"|"$TODAY|"*) echo "→ $NAME ($FP): triaged today — skip"; continue;; esac
-              # FU-113(c): the daily cap counts INCIDENTS (alertname/namespace), not raw
-              # fingerprints — a label-churn storm collapses to one incident instead of eating
-              # the cap. 12 distinct incidents/day.
-              INCIDENT="$NAME/$(printf '%s' "$a" | jq -r '.labels.namespace // "-"')"
-              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value | startswith($t)) | (.value | split("|") | .[1] // "-")] | unique | length')"
-              INC_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg v "$TODAY|$INCIDENT" '[.data // {} | to_entries[] | select(.value == $v)] | length')"
-              if [ "${N_TODAY:-0}" -ge 12 ] && [ "${INC_SEEN:-0}" -eq 0 ]; then
-                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"cap-$TODAY\"}}" >/dev/null 2>&1 || true
-                echo "⚠ responder daily incident cap (12) reached — $NAME ($FP) NOT triaged (marker written; raise the cap or fix the storm)"; continue
-              fi
-              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
-                || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
-
-              printf '%s' "$a" > /tmp/alert-one.json
-
-              # OWNERSHIP IS A LOOKUP, NOT A JUDGMENT (decision-free → script, never the brief).
-              # Precedence: explicit stack/owner alert label → namespace ∈ AgentStack claims
-              # (repos[].name = fixer/app namespaces; '<stack>-agents' = the loop ns) → PLATFORM.
-              # ⚠ node/system alerts carry the EXPORTER's namespace (e.g. monitoring) — such
-              # namespaces are in no claim, so they fall through to platform correctly.
-              ALERT_NS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
-              OWNER_LABEL="$(printf '%s' "$a" | jq -r '.labels.stack // .labels.owner // empty')"
-              CLAIMS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null                 || jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
-              ROUTE_STACK="$(printf '%s' "$CLAIMS" | jq -r --arg ns "$ALERT_NS" --arg ol "$OWNER_LABEL" '
-                (if $ol != "" then [.items[] | select(.metadata.name == $ol)] else [] end) as $byl
-                | (if ($byl | length) > 0 then $byl
-                   else [.items[] | select($ns != "" and (([.spec.repos[].name] | index($ns)) or ($ns == .metadata.name + "-agents")))] end)
-                | (first | .metadata.name) // "platform"')"
-              if [ "$ROUTE_STACK" = "platform" ]; then
-                ROUTE_REPO="teststuffstash/homelab"
-              else
-                ROUTE_REPO="teststuffstash/$(printf '%s' "$CLAIMS" | jq -r --arg s "$ROUTE_STACK"                   '[.items[] | select(.metadata.name == $s) | .spec.repos[].name | select(endswith("-iac"))] | first // ($s + "-iac")')"
-              fi
               # ── subject: key (FU-133) — the resource this alert is ABOUT ────────────────────
               # The lane deduped on FINGERPRINT, which is per-alert-instance: homelab#94 and #98
               # were the same PVC failing the same way 25 minutes apart, but different pod names
@@ -247,6 +213,65 @@ spec:
               elif [ -n "$_ns" ];                     then SUBJ="ns:${_ns}"
               else                                         SUBJ="alert:${NAME}"; fi
               echo "→ $NAME ($FP): subject=$SUBJ"
+
+              # ── subject dedup (FU-133) — the GUARD the subject key never got ───────────────
+              # The subject was computed 50 lines below this point and used only inside the LLM
+              # brief, so it could stop a duplicate ISSUE but never a duplicate SESSION. During
+              # the 2026-08-06 Actions outage GithubWorkflowRunFailed minted a fresh fingerprint
+              # per failed run, so homelab#111 took THREE sonnet triages in 33 minutes — each one
+              # correctly found the issue by subject, appended a ~3k-char comment, and burned a
+              # session off the SAME subscription the loop dispatches from. One issue, N sessions.
+              # The fingerprint ledger could not collapse them (different fp) and the daily cap
+              # could not either (it only blocks a NEW incident once 12 are spent, so a repeat of
+              # an already-seen incident is unbounded by construction).
+              # Marker value is 'triaged-' prefixed so it starts with neither TODAY nor a bare
+              # date — the cap's N_TODAY/INC_SEEN arithmetic cannot see it (FU-113a convention).
+              SUBJ_KEY="subj-$(printf '%s' "$SUBJ" | sha256sum | cut -c1-16)"
+              SUBJ_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.$SUBJ_KEY}" 2>/dev/null || true)"
+              if [ "$SUBJ_SEEN" = "triaged-$TODAY" ]; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"subjdup-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "→ $NAME ($FP): subject $SUBJ already triaged today — skip (the open issue is the record; a second session would only re-comment)"; continue
+              fi
+
+              # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
+              # marker values — deferred-/cap-/none- prefixed — deliberately do NOT match).
+              SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
+              case "$SEEN" in "$TODAY"|"$TODAY|"*) echo "→ $NAME ($FP): triaged today — skip"; continue;; esac
+              # FU-113(c): the daily cap counts INCIDENTS (alertname/namespace), not raw
+              # fingerprints — a label-churn storm collapses to one incident instead of eating
+              # the cap. 12 distinct incidents/day.
+              INCIDENT="$NAME/$(printf '%s' "$a" | jq -r '.labels.namespace // "-"')"
+              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value | startswith($t)) | (.value | split("|") | .[1] // "-")] | unique | length')"
+              INC_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg v "$TODAY|$INCIDENT" '[.data // {} | to_entries[] | select(.value == $v)] | length')"
+              if [ "${N_TODAY:-0}" -ge 12 ] && [ "${INC_SEEN:-0}" -eq 0 ]; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"cap-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "⚠ responder daily incident cap (12) reached — $NAME ($FP) NOT triaged (marker written; raise the cap or fix the storm)"; continue
+              fi
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
+                || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
+              kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"$SUBJ_KEY\":\"triaged-$TODAY\"}}" >/dev/null 2>&1 \
+                || echo "WARN: subject ledger patch failed — a repeat of $SUBJ may re-triage today"
+
+              printf '%s' "$a" > /tmp/alert-one.json
+
+              # OWNERSHIP IS A LOOKUP, NOT A JUDGMENT (decision-free → script, never the brief).
+              # Precedence: explicit stack/owner alert label → namespace ∈ AgentStack claims
+              # (repos[].name = fixer/app namespaces; '<stack>-agents' = the loop ns) → PLATFORM.
+              # ⚠ node/system alerts carry the EXPORTER's namespace (e.g. monitoring) — such
+              # namespaces are in no claim, so they fall through to platform correctly.
+              ALERT_NS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              OWNER_LABEL="$(printf '%s' "$a" | jq -r '.labels.stack // .labels.owner // empty')"
+              CLAIMS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null                 || jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
+              ROUTE_STACK="$(printf '%s' "$CLAIMS" | jq -r --arg ns "$ALERT_NS" --arg ol "$OWNER_LABEL" '
+                (if $ol != "" then [.items[] | select(.metadata.name == $ol)] else [] end) as $byl
+                | (if ($byl | length) > 0 then $byl
+                   else [.items[] | select($ns != "" and (([.spec.repos[].name] | index($ns)) or ($ns == .metadata.name + "-agents")))] end)
+                | (first | .metadata.name) // "platform"')"
+              if [ "$ROUTE_STACK" = "platform" ]; then
+                ROUTE_REPO="teststuffstash/homelab"
+              else
+                ROUTE_REPO="teststuffstash/$(printf '%s' "$CLAIMS" | jq -r --arg s "$ROUTE_STACK"                   '[.items[] | select(.metadata.name == $s) | .spec.repos[].name | select(endswith("-iac"))] | first // ($s + "-iac")')"
+              fi
 
               # ── observation-window hand-off (IAC-G10) ───────────────────────────────────────
               # Two entry points reach the same post-merge machinery: change-triggered (a merge
