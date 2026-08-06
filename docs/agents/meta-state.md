@@ -73,12 +73,21 @@ cross-reference event), so nothing can recover it after the fact.
 2. ✅ `agent-runtime#34` OPEN, ARMED, **`ci` GREEN** (implements `agent-runtime#32`): finalize
    prepends `Implements #<n>` when the PR body does not already match. Waiting only on the
    reviewer — which is subscription-backed, so it was behind the SAME 5h latch as #31.
-   **VERIFIED reviewable rather than assumed** (2026-08-06): #34 is authored by `RasmusSoot`, the
-   shape that stranded oracle-fleet#166 for three days — but the review-reflex PICK block has **no
-   author filter**; `WORKER_AUTHOR` scopes only the C9 re-arm and `changes-requested` legs. Armed +
-   green + not-APPROVED is sufficient, and `review-platform` (in ns `platform-agents`, `*/15`)
-   covers agent-runtime via the graduated `platform` stack. So it self-clears. Deadline: a verdict
-   by ~11:00Z; past that, `review-platform` is not picking it up — read its newest pod log.
+   ⛔ **IT DOES NOT SELF-CLEAR — #34 NEEDS THE OPERATOR. This is the FU-143 chain's real blocker.**
+   Corrected 2026-08-06 11:15Z after it blew its deadline. The `platform` AgentStack claim sets
+   **`reviewer.enabled=false`**, so `review-platform` skips all four of its repos every tick:
+   `[agent-runtime] skipped — stack reviewer.enabled=false`. No bot will ever review it.
+   `required-approval` on agent-runtime demands `required_approving_review_count: 1` with
+   **OrganizationAdmin as the only bypass**, and #34 is authored by `RasmusSoot` — the jail
+   identity — so self-approval is blocked. **ACTION: the operator approves + merges #34.**
+   ⚠ Do NOT "fix" this by flipping `reviewer.enabled=true` for `platform`: that stack is
+   deliberately operator-lane and the flip would also point the bot at **homelab** and
+   `agent-coordinator`, which are tier-3 CODEOWNERS / never-agent-authored.
+   ⚠ **How the wrong reading survived a check:** the pick predicate was verified (no author
+   filter — true) and `review-platform`'s existence confirmed (true), but not whether the stack
+   ENABLES it. Same "written is not applied" shape as the four logged on 2026-08-05, one layer up:
+   the reflex ran, matched nothing, and said so — in a log nobody read until the deadline fired.
+   **A deadline is what turns a plausible reading into a checked one.**
    ⚠ agent-runtime has NO `.agents/` BY DESIGN — operator ruling 2026-08-06: its fixes come from
    meta-coordination incidents, so drive it with the JAIL credentials, never look for an agent lane.
 3. ⏳ **NEXT: #34 merges → `build-image.yaml` fires on `agent-base/**` → new `agent-base` tag →
