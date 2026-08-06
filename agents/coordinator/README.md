@@ -471,8 +471,21 @@ re-fires the clause forever.
 Re-read the goal's acceptance criteria in full, then look at what actually shipped in the closed
 children — the merged diffs, not the issue titles. Rule exactly one of:
 
-- **Goal met** → close the goal with a comment naming which child satisfied which acceptance
-  criterion. Any child still open when the acceptance is already met is a scope question, not a
+- **Goal met** → open the ASSEMBLY PR and hand the merge to the human (2026-08-06, the #29
+  shape — replaces the #17-era draft dance). Concretely: `gh pr create --base master --head
+  goal/<n>-<slug>` **non-draft**, body = the coverage-map outcome (every id owned /
+  deferred-to-named-issue / evidenced) + `Fixes #<goal>`, then ARM it (`gh pr merge --auto
+  --squash`). Comment on the goal naming which child satisfied which criterion. Do NOT close
+  the goal issue by hand — the assembly PR's merge into master closes it (default-branch
+  keyword), and the closeout + harvest ride on that. The armed PR is SAFE by construction:
+  the reviewer bot's approval satisfies the approval rule (rubric `.agents/review-goal.md`,
+  model `reviewer.goalModel` on the claim), but master's codeowner gate (/specs/ is always in
+  the assembly diff) blocks auto-merge on a human — the operator merges via OrgAdmin override
+  (their ruling: codeowners block agents). NEVER open this PR at decompose time: a half-built
+  assembly draws a review of nothing, and a CHANGES_REQUESTED on it summons fix rounds at the
+  integration branch. If the HUMAN requests changes on the assembly PR, route the work as a
+  NEW child on the goal — never a fix round pushed at `goal/**` (protected base).
+  Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
 - **Goal not met, and the remaining children cover the gap** → comment what is still outstanding
   and which child owns it. Leave the goal in its tracking state. This is the ordinary case.
