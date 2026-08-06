@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-148**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-149**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
+      instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
+      (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
+      session diagnosed it correctly and dispatched NO worker — good — but `gh run rerun --failed`
+      was refused (`actions:write` absent from the coordinator App), so it closed/reopened the PR to
+      fire a fresh `pull_request` run. **That disarms auto-merge**; the session noticed and re-armed,
+      but nothing guarantees the next one will, and a silently disarmed PR is invisible to the merge
+      path (FU-079 class). **Next:** decide whether the coordinator App gets `actions: write`
+      (`tofu/github/`) — a privilege call, not a mechanical one — or whether re-running CI should be
+      a launcher-owned verb. Relates ADR-094 (launcher-owned dispatch), FU-079.
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
