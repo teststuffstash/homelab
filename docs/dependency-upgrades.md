@@ -212,13 +212,17 @@ Two consequences:
   after it stops owning the *release*. That is fine, and it's the ESO/Infisical migration's
   natural next target (`minimize-tofu` direction), not something the lever has to solve first.
 
-Chart support to confirm per release before designing the conversion (each is claimed by the
-chart's docs, none verified here): forgejo `gitea.admin.existingSecret` + `gitea.additionalConfigFromEnvs`
-for `FORGEJO__database__PASSWD`; kube-prometheus-stack `grafana.admin.existingSecret`; garage's
-`environment` list needs a `valueFrom`/`envFrom` path or an ESO-managed Secret mounted another way
-— **garage is the one where the mechanism is least certain, and it is also the unrecoverable one**.
+**All three conversions landed 2026-08-04** (FU-136 archived) — the mechanism each chart actually
+supported, verified rather than trusted from its docs:
 
-Tracked as **FU-136**.
+| release | how the secret left the values |
+|---|---|
+| `forgejo` | `gitea.admin.existingSecret: forgejo-admin-creds` (`-creds` because the CHART owns the name `forgejo-admin`) + `gitea.additionalConfigFromEnvs` carrying `FORGEJO__DATABASE__PASSWD` out of the CNPG `forgejo-pg-app` Secret into init-app-ini |
+| `kube-prometheus-stack` | `grafana.admin.existingSecret: grafana-admin` |
+| `garage` | the `environment` list took a `valueFrom.secretKeyRef` (`garage-admin-token`) — the mechanism that was least certain, on the one release that is unrecoverable |
+
+The `random_password` resources stayed in tofu state as predicted: tofu still owns the *secrets* for
+forgejo and garage after it stopped owning the *releases*.
 
 **Per release, the sequence is the labels-handoff shape** (`scripts/labels-handoff.sh` is the worked
 example — dry-run by default, refuses to report success when it cannot see state):
@@ -369,14 +373,19 @@ and then nothing is watching.
    highest-value security item on this page.
 2. **Add a Renovate-liveness signal** so the next silent stall is loud: a dashboard-issue-exists
    check, or a `renovate_last_pr_timestamp` gauge on the github-exporter beside the FU-108 fix.
-3. **Close the CI gaps** — `tofu validate`/`fmt`, `kubeconform` over `argocd/resources/*`
-   (`follow-ups-lint` joined `ci` with this doc).
+3. ✅ **CI gaps closed 2026-08-04** — `manifest-lint` (kubeconform `-strict`) over
+   `argocd/resources/*` and `tofu fmt -check -recursive` are both required checks. Two residues by
+   decision, not omission: `tofu validate` stays the local `devbox run tf-validate` gate (a provider
+   download per PR, the FU-130 WAN class), and **87 of 154 resources are SKIPPED** for want of a
+   local CRD schema — `manifest-lint` prints that count every run and fails if it ever validates
+   nothing ([`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane).
 4. **Extend the FU-044 deterministic revert** to homelab's own ArgoCD apps **for the reversible
    class only** (first-party image pins — no CRD/schema migration, no data-layer coupling); the
-   rest stay responder + report-only, per the ruling in §4 above.
-4b. **Land the platform lane's path gate** — CODEOWNERS + `require_approval`, and the checks that
-   make an auto tier honest (`kubeconform`/dry-run, `tofu validate`) — before homelab is a fixer
-   target at all: [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane, FU-068.
+   rest stay responder + report-only, per the ruling in §4 above. Half wired 2026-08-04 (pin-only
+   predicate in `deploy-revert-argo.yaml`, unit-exercised, never fired by a real Degraded app).
+4b. ✅ **Platform lane's path gate landed 2026-08-04/05** — repo-root `CODEOWNERS` + homelab
+   flipped to `require_approval` + `require_code_owner_review` (FU-068), then `.agents/fix.yaml`
+   made the lane dispatchable (FU-142): [`agents/iac-lane.md`](agents/iac-lane.md) §The platform lane.
 5. **FU-097's ruling table**, with ansible/OPNsense first — it is the only class where a merged
    change reaches a *live network device* by hand or not at all.
 6. **The prober (FU-102)** is what turns "it synced" into "it works".

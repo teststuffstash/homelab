@@ -106,8 +106,9 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
   [`tofu/github/repos.tf`](../tofu/github/repos.tf) (`github_repository`, every writable attribute
   declared, adopted via `import` blocks). Auto-merge completes the PR once the ruleset's requirements
   (approval + CI) are met; auto-delete cleans up the worker's branch. The agent state labels are code
-  too, in [`tofu/github/labels.tf`](../tofu/github/labels.tf). The admin PAT needs **Issues: R/W** for
-  the labels (they're under Issues, not Administration) and **Organization → Secrets: R/W** for the
+  too, but **not tofu's** — `labels.tf` was retired 2026-08-04 (FU-068); they are claim-owned
+  (AgentStack `labels:` → IssueLabels, [`docs/agents/agentstack.md`](agents/agentstack.md)). The admin
+  PAT still needs **Issues: R/W** for other repo state and **Organization → Secrets: R/W** for the
   `MERGE_GH_APP_*` org Actions secrets (`actions_secrets.tf`) — see the scope list in
   [`tofu/github/README.md`](../tofu/github/README.md).
 - **Default runner** — repos using homelab CI set `runs-on: homelab-ephemeral`; the rest use

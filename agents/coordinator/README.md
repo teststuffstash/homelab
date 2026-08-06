@@ -66,8 +66,9 @@ sessions from specs — the dependency graph is known exactly at authoring time,
 lines then* (a reader without coverage leaves the graph in prose; the scan can only enforce what
 the body encodes). Native sub-issues/Projects may mirror this for UI, never replace it.
 
-> **Labels are provisioned as code** — the stack repos' labels are claim-owned (AgentStack `labels:`
-> → IssueLabels, FU-068); [`tofu/github/labels.tf`](../../tofu/github/labels.tf) covers homelab only.
+> **Labels are provisioned as code** — every repo's labels are claim-owned (AgentStack `labels:`
+> → IssueLabels). `tofu/github/labels.tf` was retired 2026-08-04 (FU-068) when homelab joined the
+> platform claim, so the claim is now the only source.
 > Add any new state label to the owning source, or it won't exist on the repos.
 > **Never leave a relabel half-applied.** `gh issue edit --add-label X --remove-label Y` is *not* atomic:
 > if `X` doesn't exist the add fails but the remove still lands, corrupting state (learned live on #18).

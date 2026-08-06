@@ -7,7 +7,7 @@ description: Process the cross-jail handoff queue — claim the oldest task a ST
 
 A stack jail (circles, oracle, …) can file a task for this jail when it needs homelab-side work
 **fast** and the issue → coordinator path would kill the feedback loop. The protocol, the topology
-and the boundaries are in [`/workspace/tools/handoff.md`](../../../tools/handoff.md) — read it once
+and the boundaries are in [`/workspace/tools/handoff.md`](../../../../tools/handoff.md) — read it once
 per session; this skill is the mono-side procedure.
 
 **It is a speed channel, not an authority channel.** A handoff task is a *request*: CLAUDE.md, the

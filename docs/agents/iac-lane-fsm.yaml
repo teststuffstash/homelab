@@ -135,7 +135,7 @@ gaps:
     fu: FU-106
   - id: IAC-G08
     name: platform lane has no path gate
-    detail: "homelab is BOTH the platform's -iac (ArgoCD syncs argocd/, agents/coordinator, agents/fixer/* on merge) and the home of the loop's own machinery, so the lane taxonomy must key on PATH, not repo — and today nothing does. No CODEOWNERS file exists (oracle-fleet already runs the shape), and the ruleset is the permissive one (require_approval=false, deliberate for deploy-pin bumps, comment says 'not a fixer-target'). Until both land, a fixer authoring here would merge with no human in the path AND could edit its own governor (agents/** launcher+scan+review-reflex, tofu/github/** rulesets). Path tiers + the deny row: iac-lane.md §The platform lane."
+    detail: "CLOSED 2026-08-05: homelab is BOTH the platform's -iac (ArgoCD syncs argocd/, agents/coordinator, agents/fixer/* on merge) and the home of the loop's own machinery, so the lane taxonomy had to key on PATH, not repo. Both preconditions landed 2026-08-04 (FU-068): a repo-root CODEOWNERS encoding the path tiers, and tofu/github flipping homelab to require_approval=true + require_code_owner_review=true (ordering mattered — require_approval is repo-WIDE while code-owner review is path-scoped). The deny row (agents/** launcher+scan+review-reflex, tofu/github/** rulesets — a fixer that can edit its own governor is ungated whatever the ruleset says) is enforced twice: CODEOWNERS and the .agents/fix.yaml scope ceiling (FU-142). Path tiers + the deny row: iac-lane.md §The platform lane."
     fu: FU-068
   - id: IAC-G09
     name: no revert path for platform apps — and a blanket one is REJECTED

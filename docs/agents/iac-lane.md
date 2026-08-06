@@ -85,13 +85,17 @@ cosmetic: `require_approval` is repo-WIDE while only code-owner review is path-s
 joined a claim would have stalled every armed PR on an approval nothing could give (an
 App/Integration bypass cannot waive required-approval — only an OrganizationAdmin can, ADR-084).
 
-**The lane is gated but not yet dispatchable — Tracked by: FU-142.** homelab ships no
-`.agents/fix.yaml`, and `--recipe` is launcher-owned (ADR-094), so the launcher refuses before a pod
-exists: homelab#97 is `agent/blocked` on exactly this and every later platform issue will be. The
-recipe is the fixer's own governor, so it sits in the deny row's spirit — operator-authored, never
-agent-authored. Its open design question is the GATE: this repo has no `devbox run ci`, and
-`manifest-lint` shells to kubeconform, whose default schema location `raw.githubusercontent.com` is
-not in the fixer's baseline egress under `enforce: true`.
+**The lane became dispatchable 2026-08-05** (`c5db520`, FU-142 archived): `.agents/fix.yaml` +
+`.agents/review.md` ship the recipe `--recipe` needs (launcher-owned, ADR-094 — without it the
+launcher refuses before a pod exists, which is what held homelab#97 at `agent/blocked`). The recipe
+is the fixer's own governor, so it sits in the deny row's spirit — operator-authored, never
+agent-authored. Three homelab-specific departures from the sleep-iac donor it was adapted from:
+scope is a **PATH tier ceiling over the issue's `Touches:`** (a `Touches:` line may narrow the
+tiers, never widen them); with no `devbox run ci` here the recipe names the lints **per path** and
+makes the PR state which ran; and the PR must reference its issue or the scan re-dispatches
+(agent-runtime#32). The GATE question settled by adding `raw.githubusercontent.com` to the fixer's
+`extraFQDNs` — `manifest-lint` shells to kubeconform, which fetches schemas there, and under
+`enforce: true` the gate would otherwise fail on a network drop rather than on the manifest.
 
 **Automerge safety is a function of check coverage, not of the path.** `ci` was
 `argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a

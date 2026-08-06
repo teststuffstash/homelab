@@ -54,8 +54,9 @@ spec:
     # (ArgoCD syncs argocd/, agents/coordinator, agents/fixer/*) AND the home of the loop's own
     # machinery, so it joins the claim for REVIEWER COVERAGE + claim-owned labels WITHOUT becoming
     # a dispatch target: dispatchability is a fixer-block predicate, never implicit (IAC-T03), and
-    # stack-lint's is_fixer() excludes it. Whether a fixer may ever author here — and on which
-    # paths — is the open half of FU-068 (CODEOWNERS tiers, iac-lane.md §The platform lane).
+    # stack-lint's is_fixer() excludes it. Whether a fixer may author here — and on which paths —
+    # was SETTLED 2026-08-04/05 (FU-068 + FU-142, archived): CODEOWNERS tiers + the .agents/fix.yaml
+    # scope ceiling, both described in iac-lane.md §The platform lane.
     # The labels below ADOPT the 27 that tofu forgot in the same change (labels.tf retired).
     - name: homelab
       labels: { extra: [] }
