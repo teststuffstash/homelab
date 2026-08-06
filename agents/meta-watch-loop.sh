@@ -11,6 +11,7 @@ STACK_NS="${STACK_NS:-sleep-agents}"; RIDE_NS="${RIDE_NS:-sleep-tracking}"
 REPO="${REPO:-teststuffstash/sleep-tracking}"; SCAN_PREFIX="${SCAN_PREFIX:-coordinate-sleep-}"
 last_scan=""; last_pods=""; last_pr=""; last_emitted_sum=""; last_scan_seen=$(date +%s)
 probe_fails=0; last_keywarn=""; behind_since=0; last_am=""; last_wrongbase=""; last_armed=""
+seen_deaths=""   # pod@startTime@phase keys already judged by the harness-death clause
 while true; do
   now=$(date +%s)
   # --- newest scan tick (pod name == workflow name) ---
@@ -63,6 +64,37 @@ while true; do
     echo "pods: ${pods:-<none>} (was: ${last_pods:-<none>})"
     last_pods="$pods"
   fi
+  # --- a ride pod that SUCCEEDED but whose harness DIED (2026-08-06, circles#32 round 1) ---
+  # The wrapper handles a harness death gracefully and exits 0, so the pod phase reads `Succeeded`
+  # and the lifecycle line above is indistinguishable from a real success. The death is only
+  # visible in the AGENT_RUN_STATS json the ride emits as its last words. circles#32 died with
+  # goose-32602-truncation after 1757s, banked NOTHING, and read as calm — and because a goal
+  # child is held out of C4/C5 by the FU-143 containment, nothing would have re-dispatched it.
+  # Emit once per pod+startTime, same key discipline as the lifecycle clause.
+  # ⚠ BEST-EFFORT, with a known race: ride pods are garbage-collected minutes after they finish,
+  # and this reads the pod's own log. If GC wins, the clause never fires and prints nothing — so
+  # its SILENCE is not evidence of a healthy ride. It could not be tested against circles#32's
+  # round 1 for exactly this reason (pod already reaped when the clause was written). The DURABLE
+  # signal is the `AGENT_STRIKE:` comment the ride posts to its issue, which survives GC; treat
+  # this clause as an early warning on top of that, never as the only detector.
+  for rp in $($K get pods -n "$RIDE_NS" -l app=agent-session \
+      -o jsonpath='{range .items[*]}{.metadata.name}@{.status.startTime}@{.status.phase}{"\n"}{end}' 2>/dev/null); do
+    case "$rp" in *@Succeeded|*@Failed) : ;; *) continue ;; esac
+    rpod="${rp%%@*}"
+    case " $seen_deaths " in *" $rp "*) continue ;; esac
+    stats=$($K logs -n "$RIDE_NS" "$rpod" -c agent --tail=40 2>/dev/null | grep -o 'AGENT_RUN_STATS .*' | tail -1)
+    if [ -z "$stats" ]; then
+      echo "RIDE-PROBE-FAIL: $rpod is terminal but emitted no AGENT_RUN_STATS — read its log by hand, do NOT read this as success"
+      seen_deaths="$seen_deaths $rp"
+      continue
+    fi
+    ex=$(printf '%s' "$stats" | sed -n 's/.*"exit_status":"\([^"]*\)".*/\1/p')
+    ec=$(printf '%s' "$stats" | sed -n 's/.*"error_class":"\([^"]*\)".*/\1/p')
+    if [ -n "$ex" ] && [ "$ex" != "ok" ] && [ "$ex" != "success" ]; then
+      echo "RIDE DIED (pod phase says ${rp##*@}): $rpod exit_status=$ex error_class=${ec:-none} — nothing may have been banked; a goal child will NOT self-redispatch (FU-143 containment), re-queue it by hand"
+    fi
+    seen_deaths="$seen_deaths $rp"
+  done
   # --- ride age vs the 2h session-key window: >100min without a PR = expiry-death risk ---
   ride_start=$($K get pods -n "$RIDE_NS" -l app=agent-session \
       -o jsonpath='{.items[0].status.startTime}' 2>/dev/null)
