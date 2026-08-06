@@ -65,6 +65,14 @@ resource "github_repository_ruleset" "required_checks" {
 # wins over the org's 0. Effect: an agent PR (homelab-agents[bot]) needs a native approving review from
 # a DISTINCT identity — homelab-reviewer[bot] (self-approval is blocked) — before GitHub auto-merge fires.
 # Kept a separate ruleset from required-checks so approvals and checks enforce/toggle independently.
+#
+# SPLIT master vs goal/** (2026-08-06, the FU-143/#29 goal lane): require_code_owner_review is a
+# pull_request-rule flag, so with ONE ruleset covering both refs a codeowner gate meant for the
+# goal→master ASSEMBLY PR would also bind every CHILD PR into goal/** that touches an owned path
+# (circles: the evidence-chain child writes into /specs/) — serialising the fan-out on a human.
+# Two rulesets, same approval rule; the codeowner flag exists ONLY on the master-targeted one.
+# Consequence for oracle-fleet (the flag's first user): its /specs/ + /.agents/ codeowner gate now
+# binds only where work lands on MASTER — a future goal lane there gets bot-approved children too.
 resource "github_repository_ruleset" "required_approval" {
   # Only repos that opt into a review gate. sleep-iac opts OUT (require_approval=false): its PRs are
   # mechanical deploy bumps gated by CI, and GitHub's App bypass can't waive the approval on a merge.
@@ -77,16 +85,7 @@ resource "github_repository_ruleset" "required_approval" {
 
   conditions {
     ref_name {
-      # `goal/**` = a GOAL'S INTEGRATION BRANCH (FU-090 leg (c), 2026-08-05): a stacked base that a
-      # goal's child PRs merge INTO, named for the goal that owns it (goal/<issue>-<slug>). It is
-      # protected for the same reason master is — children AUTO-MERGE into it once CI is green and
-      # the reviewer approves, and GitHub's auto-merge waits on branch-protection conditions, so an
-      # UNPROTECTED base means auto-merge fires on open: no CI, no review. Protecting it is what
-      # makes feature→goal automatic and safe; goal→master stays a human decision (operator).
-      # NOT `research/**`: the researcher arms PUSH DIRECTLY to those branches, and a ruleset there
-      # would gate their own pushes. Disjoint prefixes on purpose — `fix/**` heads, `research/**`
-      # researcher outputs, `goal/**` integration bases.
-      include = ["~DEFAULT_BRANCH", "refs/heads/goal/**"]
+      include = ["~DEFAULT_BRANCH"]
       exclude = []
     }
   }
@@ -113,9 +112,65 @@ resource "github_repository_ruleset" "required_approval" {
       dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
       require_last_push_approval        = false
       required_review_thread_resolution = false
-      # Per-repo opt-in (oracle-fleet): PRs touching CODEOWNERS paths (/specs/, /.agents/) block on a
-      # code-owner (human) review — the bot's approval doesn't satisfy it. No-owned-path PRs unaffected.
+      # Per-repo opt-in (oracle-fleet /specs/ + /.agents/; circles same shape for the goal lane):
+      # PRs touching CODEOWNERS paths block on a code-owner (human) review — the bot's approval
+      # doesn't satisfy it. No-owned-path PRs unaffected. MASTER-targeted only (see the split
+      # note above): the goal→master assembly PR is the intended catch (its diff always touches
+      # /specs/ — the provenance requirement), and the operator merges it via OrgAdmin override.
       require_code_owner_review = each.value.require_code_owner_review
+    }
+  }
+  lifecycle {
+    # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
+    # without this, every plan re-diffs whichever cohort disagrees with the literal.
+    ignore_changes = [bypass_actors]
+  }
+
+}
+
+# The goal/** twin of required-approval — same approval rule, NEVER the codeowner flag (the split
+# note above). `goal/**` = a GOAL'S INTEGRATION BRANCH (FU-090 leg (c), 2026-08-05): a stacked base
+# that a goal's child PRs merge INTO, named for the goal that owns it (goal/<issue>-<slug>). It is
+# protected for the same reason master is — children AUTO-MERGE into it once CI is green and the
+# reviewer approves, and GitHub's auto-merge waits on branch-protection conditions, so an
+# UNPROTECTED base means auto-merge fires on open: no CI, no review. Protecting it is what makes
+# feature→goal automatic and safe; goal→master stays a human decision (operator).
+# NOT `research/**`: the researcher arms PUSH DIRECTLY to those branches, and a ruleset there
+# would gate their own pushes. Disjoint prefixes on purpose — `fix/**` heads, `research/**`
+# researcher outputs, `goal/**` integration bases.
+resource "github_repository_ruleset" "required_approval_goal" {
+  for_each = { for k, v in var.protected_repos : k => v if v.require_approval }
+
+  name        = "required-approval-goal"
+  repository  = each.key
+  target      = "branch"
+  enforcement = var.enforcement
+
+  conditions {
+    ref_name {
+      include = ["refs/heads/goal/**"]
+      exclude = []
+    }
+  }
+
+  bypass_actors {
+    # actor_id noise: for OrganizationAdmin the API's read-back is INCONSISTENT — measured
+    # 2026-07-25, four rulesets read 0 while ten read 1 for the identical write. No literal
+    # converges the fleet, so the lifecycle block below ignores bypass_actors drift entirely;
+    # 1 stays as the create value (every existing ruleset was created with it successfully).
+    actor_id    = 1
+    actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
+  rules {
+    pull_request {
+      required_approving_review_count   = 1    # the reviewer bot's approval
+      dismiss_stale_reviews_on_push     = true # new commits after approval re-open the gate
+      require_last_push_approval        = false
+      required_review_thread_resolution = false
+      # DELIBERATELY no require_code_owner_review here — a codeowner gate on goal/** would
+      # serialise the children's fan-out on a human (the reason this ruleset exists apart).
     }
   }
   lifecycle {

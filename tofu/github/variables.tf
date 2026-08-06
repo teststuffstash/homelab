@@ -44,7 +44,11 @@ variable "protected_repos" {
   }))
   default = {
     circles-iac = { required_checks = ["ci"], require_approval = false } # CI-gated deploy target (sleep-iac shape)
-    circles     = { required_checks = ["ci"] }
+    # circles: codeowner gate ON (2026-08-06, the #29 goal lane) — /specs/ + /.agents/ on Rasmus
+    # (CODEOWNERS at the repo root). Master-targeted only after the required-approval split, so
+    # child PRs into goal/** stay bot-approved; the goal→master assembly PR (always touches
+    # /specs/ via the provenance requirement) blocks on the human, who merges via OrgAdmin.
+    circles = { required_checks = ["ci"], require_code_owner_review = true }
     # homelab — the platform lane's gate (docs/agents/iac-lane.md §The platform lane).
     # FLIPPED 2026-08-04, once its three preconditions held: homelab joined the platform claim as a
     # context-only repo (so review-reflex.sh, which derives its scan set from the claims, finally
