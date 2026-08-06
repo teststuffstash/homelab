@@ -129,7 +129,7 @@ additionalPrometheusRulesMap:
               severity: warning
           - alert: PodSigkilled
             annotations:
-              description: Container {{ $labels.container }} restarted after SIGKILL — likely the Talos OOMController (BestEffort victim under node memory pressure, FU-082) or a kernel OOM. Check `talosctl dmesg | grep 'OOM controller'` on the pod's node; recurring hits mean the node is over-committed or the pod needs resource requests.
+              description: Container {{ $labels.container }} restarted with exit 137 (SIGKILL). SYMPTOM ONLY — two unrelated causes share this exit code, so read the pod before assuming either. `kubectl -n {{ $labels.namespace }} get pod {{ $labels.pod }} -o json` → `.status.containerStatuses[].lastState.terminated.reason`, plus its QoS class and that container's own memory limit. `OOMKilled` on a Burstable/Guaranteed pod = it hit ITS OWN limit (raise the limit) — this is the common case and node memory can be perfectly healthy. Node-pressure eviction of a BestEffort victim (the Talos OOMController, FU-082) is the OTHER case; confirm it with `talosctl dmesg | grep 'OOM controller'` on that node rather than inferring it.
               summary: '{{ $labels.namespace }}/{{ $labels.pod }} killed (exit 137)'
             expr: increase(kube_pod_container_status_restarts_total[30m]) > 0 and on (namespace, pod, container) kube_pod_container_status_last_terminated_exitcode == 137
             for: 0m
