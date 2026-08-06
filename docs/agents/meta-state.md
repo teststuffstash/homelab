@@ -198,11 +198,13 @@ accident. The ⛔ line in each scan names exactly which children are waiting.
   per-case `--model`). Axis is **AUTHORING vs CHECKING**, not goal vs routine. ⚠ All the evidence
   is from #17, a goal small enough for one ride — escalate a specific hard goal with `GOAL_MODEL`,
   don't move the floor.
-- **homelab#103 is OPEN and this goal is its first real test** (the platform queue is swept
-  first for exactly this reason). The coordinator Job templates carry no CPU requests/limits and no
-  topology spread, so a burst piles onto one 4-core node; #29 funds up to six rides. Cluster was
-  idle at bootstrap (wk-01 15%, only Watchdog firing). **A stalled ride is a scheduling question
-  before it is a code one.**
+- **homelab#103 is OPEN, and this goal is NOT its test** — corrected 2026-08-06 on the evidence,
+  comment on the issue. The goal lane **serializes** on `Depends-on:` (#30 → #31 → #32 → {#18,
+  #19}), so `wip` never exceeded 1 and wk-01 sat at **16% CPU** mid-rollout with a ride active. Max
+  this decomposition can reach is **2** concurrent (#18 + #19 after #32). The burst's real shape is
+  concurrent COORDINATOR Jobs across stacks/items — reproduce with many stacks/queued items, not
+  one deep goal chain. Still true: the Job templates carry no CPU requests/limits and no topology
+  spread, and **a stalled ride is a scheduling question before it is a code one.**
 - **homelab#103 containment** (`fc7e9fb`): alert `AgentCoordinateScanWedged` (>15m Running,
   measured 1-in-2474, verified `health=ok` live). Root cause still OPEN — the only live route is
   reproducing the Sensor spin against the burst hypothesis. ⚠ Do NOT "tighten"
