@@ -116,7 +116,16 @@ cross-reference event), so nothing can recover it after the fact.
    Filed **agent-runtime#35**: `:latest` is non-load-bearing (its only consumer is the
    `${AGENT_BASE_IMAGE:-…:latest}` fallback in `agent-session.sh:542`, always overridden by
    images.env) yet its failure gates `deploy-pin`. Three candidate fixes, the call is a design one.
-5. ⏳ Then re-soak FU-143 on a #29 child and archive the containment if it holds.
+5. ✅ **PIN LANDED — homelab#109 merged ~11:52Z**, `AGENT_BASE_IMAGE` → `2026.8.6-g4d58cf421a62`
+   (sha matches #34's merge commit `4d58cf42`, so it is not a stale tag). Verified the one-line
+   diff IS the full sweep: `grep -rn 'agent-base:2026'` finds NO literal outside `images.env` —
+   every mirrored literal is `agent-coordinator`, a different image on its own deploy-pin.
+6. ⏳ **RE-SOAK FU-143 — and mind WHICH child proves it.** ⚠ **#32's ride started 11:28:58Z, BEFORE
+   the pin, so it carries the OLD image: expect its PR to again omit `Implements #<n>` and expect
+   to HAND-CLOSE #32.** The first genuine soak subject is the next child dispatched AFTER the pin
+   (#18 or #19). Success = that child's PR body carries `Implements #<n>`, C6 auto-flips
+   `agent/done` + closes + harvests, with no meta hand-close. Then archive the `12e7fcf`
+   containment and the `e704c36` strong-link guard STAYS (it is the correct predicate regardless).
 
 ⚠ **Hand-close recipe for a #29 child until then:** verify the merge against the goal branch, post
 an audit comment, `--add-label agent/done --remove-label agent/in-progress`, close. That fires
