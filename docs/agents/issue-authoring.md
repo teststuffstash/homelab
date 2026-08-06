@@ -340,7 +340,10 @@ declares as its definition of done** — master for an ordinary stack (#32: don'
 `goal/**` for a goal child (here: close on the goal-branch merge). One rule, two instantiations.
 
 **The implementation contract** (the tracker points here; assembled 2026-08-06, walked against the
-live clauses — ship 1–6 as ONE unit, before circles#29's first child merges):
+live clauses — ship 1–6 as ONE unit, before circles#29's first child merges. **Points 1–6 shipped
+2026-08-06, `e66b421`** — scan + play, fixture-proven, live-scan clean; the same commit revived
+the changes-requested clause, dead since `671a053` scoped it on an unfetched `author` field.
+Point 7, the merge doorbell, remains):
 
 1. **C6 widened AND `Base:`-keyed**: also match an OPEN issue with a non-terminal `agent/*` label
    whose referencing PR MERGED into the base its own `Base:` line declares — `goal/**` only,

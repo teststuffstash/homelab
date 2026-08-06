@@ -304,18 +304,13 @@ six OVERSIZE items pointer-ized into
       upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
       Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Closing keywords fire only on
-      default-branch merges, so a `goal/**` child's issue stays open + in-progress after its PR
-      merges — C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock
-      (hit live circles#22, 2026-08-05; hand-closed since, which also silently skips the harvest).
-      Mechanism, the mirror-image warning (agent-runtime#32 = closing too EARLY), and the FULL
-      7-point implementation contract (`Base:`-keyed C6 widening, C4/C5 exclusion, play on the
-      goal branch, harvest `Base:` copy, goal-lane sprouts queued at harvest — no selfQueue,
-      `goal-review` over descendants, merge doorbell LAST):
-      [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §A child cannot close itself.
-      Points 1–6 SHIPPED 2026-08-06 (scan + play; fixture-proven, live-scan clean — the same
-      commit also revived the changes-requested clause, dead since 671a053 dropped `author` from
-      the fetch). **Next:** point 7, the `pull_request: closed && merged` → `/coordinate`
-      doorbell workflow on circles; then watch the first live closeout on #29's first child.
+      default-branch merges, so a `goal/**` child's issue stays open after its PR merges —
+      C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock (live
+      circles#22, 2026-08-05). Mechanism, the agent-runtime#32 mirror warning, and the 7-point
+      implementation contract: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
+      §A child cannot close itself. Points 1–6 shipped 2026-08-06 (`e66b421`, also reviving the
+      changes-requested clause dead since `671a053`). **Next:** point 7 — the merged-PR
+      `/coordinate` doorbell workflow on circles; then watch the first live closeout on #29.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
