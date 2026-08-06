@@ -55,6 +55,11 @@ Bare-metal nodes are defined in `tofu/metal.tf` (`metal_nodes` map). Steps:
 
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
 - `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE.
+- `wk-metal-03` — laptop i5-6200U, .184, `/dev/sda`, ephemeral tier, **kata node** (`kata = true`
+  → the `metal_kata` install image + `homelab.io/kata` label).
+- `wk-metal-04` — desktop i5-3570K/16GB, .186, `/dev/sda`, ephemeral tier, **kata node**. The roomy
+  one; deliberately OUT of `local.avx2_nodes` (Ivy Bridge has no AVX2, so goose rides schedule here
+  but opencode SIGILLs) — see the comment block in `metal.tf`.
 - `hp-01` — .54, `/dev/sda`, Longhorn, WoL-capable.
 - `thinkcentre` — .53, `/dev/sdb` (120GB Kingston), Longhorn + 2×Optane fast tier. Originally
   onboarded via **USB ISO** (`devbox run talos-usb`) when PXE appeared broken — the culprit was a

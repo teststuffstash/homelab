@@ -53,15 +53,21 @@ Provider hashes are pinned in `.terraform.lock.hcl` (committed, on purpose).
   node-local tier on the ThinkCentre's Optane.
 - `metal.tf` — bare-metal Talos workers (PXE/USB-installed, not Proxmox VMs), incl. the
   `HostnameConfig` hostname pinning; see `../docs/provisioning.md`.
-- `monitoring.tf` — Prometheus + Grafana + Alertmanager (BGP VIPs `.13`/`.11`/`.14`);
-  `dashboards/` holds the provisioned Grafana dashboard JSON.
-- `metrics-server.tf` — `kubectl top` / HPA.
+- `monitoring.tf` — the namespace, the HA scrape token and the `grafana-admin` Secret the chart
+  references; `dashboards/` holds the provisioned Grafana dashboard JSON. **The
+  kube-prometheus-stack release itself moved to ArgoCD 2026-08-04** (FU-136,
+  `../argocd/platform/kube-prometheus-stack.yaml`) — BGP VIPs `.13`/`.11`/`.14` unchanged.
+- *(`metrics-server.tf` is gone — release 1 of the same lever, now
+  `../argocd/platform/metrics-server.yaml`.)*
 - `argocd.tf` — ArgoCD install + bootstrap secret seeds + the three app-of-apps roots
   (platform, sleep, oracle)
   (`../argocd/README.md`); `infisical/` (sub-root) declares the Infisical project + ESO identity.
-- `garage.tf` — Garage S3 object store (vendored chart `../argocd/charts/garage/` — outside tofu/ so ArgoCD can read it, FU-136; `../docs/garage.md`).
-- `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo (CNPG-backed) + the Tier-B
-  `act_runner` (`../docs/ci.md`).
+- `garage.tf` — Garage's namespace, its two secrets and the S3 VIP Service. **The release moved to
+  ArgoCD 2026-08-04** (FU-136), vendored chart at `../argocd/charts/garage/` — outside `tofu/` so
+  ArgoCD can read it (`../docs/garage.md`).
+- `forgejo.tf` / `forgejo-pg.tf` / `forgejo-runner.tf` — Forgejo's namespace/secrets, the CNPG
+  cluster and the Tier-B `act_runner` (`../docs/ci.md`). **The Forgejo release itself moved to
+  ArgoCD 2026-08-04** (FU-136, `../argocd/platform/forgejo.yaml`).
 - `ci-runner.tf` — the Proxmox VM GitHub Actions runner `ci-runner-01` @ `.2.55` (ADR-082).
 - `outputs.tf` — `talosconfig`, `kubeconfig`, `cluster_endpoint`, service URLs, admin credentials.
 

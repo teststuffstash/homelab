@@ -1,9 +1,10 @@
 # Forgejo — self-hosted Git (Gitea-based). DB is **CNPG Postgres** (tofu/forgejo-pg.tf) — the
 # built-in SQLite 500'd under Forgejo Actions' write load. In-memory sessions + cache, single
 # replica, one small Longhorn PVC for /data (git repos + attachments; relational data is in PG).
-# Exposed on a BGP-advertised LoadBalancer VIP, HTTP only (no HAProxy/HTTPS name yet — add that
-# when we invest more: github mirrors, Forgejo Actions runner, HTTPS). See ROADMAP "self-hosted git".
-# Try it:  http://192.168.40.15:3000   (admin creds via `tofu output -raw forgejo_admin_password`)
+# Exposed on a BGP-advertised LoadBalancer VIP, and since then on HAProxy as
+# https://forgejo.teststuff.net (VIP 192.168.3.15) with SSH clone on :22 through the same VIP
+# (ansible/group_vars/opnsense.yml). See ROADMAP "self-hosted git", SERVICES.md.
+# Try it:  https://forgejo.teststuff.net   (admin creds via `tofu output -raw forgejo_admin_password`)
 
 variable "forgejo_version" {
   description = "Forgejo helm chart version (oci://code.forgejo.org/forgejo-helm/forgejo)."
