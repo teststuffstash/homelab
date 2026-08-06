@@ -99,6 +99,13 @@ first merge, and only then decide whether to narrow the probe to closing keyword
   the config.** A label description >100 chars that never reached GitHub; a required check on a
   branch pattern no workflow triggered on; a `units` entry no gate could reach (`items`-only
   gating starved `goal-review`); a router class whose only caller is the worker launcher.
+- **⚠ The jail's Bash tool runs ZSH, which does NOT word-split unquoted variables** (2026-08-06).
+  The repo's own `K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"` … `$K get pod` idiom is a
+  BASH idiom: pasted into an ad-hoc Bash-tool probe it becomes ONE command word, fails, and behind
+  `2>/dev/null` yields an empty capture that a `-z` test reads as "the object is gone". The scripts
+  in `agents/` are safe only because they are invoked as `bash <script>`. Wrap ad-hoc probes in
+  `bash -c '…'`, or call the binary directly. Caught on the first iteration because the probe said
+  PROBE-FAIL instead of assuming absence — write them that way.
 - **⚠ Shell/API traps that each cost real time:** `gh --jq` takes NO `--arg/--argjson`; an
   APOSTROPHE inside a jq program kills review-reflex FLEET-WIDE and `bash -n` cannot see it (EXECUTE
   the block); `gh pr view` has no `merged` field (use `state == "MERGED"`); GitHub caps label
