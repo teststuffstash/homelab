@@ -48,9 +48,11 @@ that history is in TICK-LOG 2026-08-05 cont. 2–5.
 ### Durable warnings — re-read before touching these files
 
 - **⚠ FU-143: a child of a goal CANNOT close itself** (GitHub honours closing keywords only on a
-  merge into the DEFAULT branch). Until it lands, meta closes each merged child BY HAND
-  (`agent/done` + close) — done for #22 and #23. Skip it and C4/C5 re-dispatches onto merged work,
-  `goal-review` never fires, and `Depends-on:` siblings never unblock.
+  merge into the DEFAULT branch) — so the SCAN closes it, not GitHub and no longer meta by hand.
+  Points 1–7 shipped 2026-08-06 (`e66b421` + circles `36993f4`); FU-143 is in SOAK, waiting on the
+  first live closeout + doorbell ring on circles#29's first child. Until that is observed, check
+  the child actually flipped `agent/done` and closed: if the clause regresses, C4/C5 re-dispatches
+  onto merged work, `goal-review` never fires, and `Depends-on:` siblings never unblock.
 - **⚠ Arming is keyed on the `goal/` PREFIX** (`agent-session.sh` + `review-reflex.sh` C9). NEVER
   widen to "any non-default base": the prefix is the only thing carrying the ruleset, and arming
   into an unprotected base merges ON OPEN.
@@ -81,8 +83,8 @@ blockedBy edges in scan logs (→ FU-111 retirement); Monday 05:00 retro (= FU-0
 
 agent-runtime #13 (watchdog misses silent loops), #31 (bank-on-first-commit), #32 (finalize should
 guarantee the issue link), #33 (resumed round reports "no resumable branch"); openrouter-operator
-sprouts triaged. **`devbox run follow-ups-lint` is RED on FU-143 (15 lines > 10)** — pre-existing,
-needs its detail moved to a doc with a pointer left behind.
+sprouts triaged. (`follow-ups-lint` was RED on FU-143's line count — fixed `ce29c74`, the detail
+lives in `issue-authoring.md`.)
 
 ## Re-arm on a fresh session (watches were STOPPED at end of day, not lost)
 

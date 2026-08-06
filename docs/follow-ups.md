@@ -190,7 +190,7 @@ six OVERSIZE items pointer-ized into
       `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
       that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
       `new-stack --from` must already have it. Relates FU-114.
-- [ ] **FU-130** — **CI-gate WAN fetches: FIXED, awaiting three merges.** helm-unittest now comes
+- [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
       from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
       finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
       `new-stack --from` donor) + sleep-tracking#115, both verified locally by running the suites off
@@ -198,7 +198,9 @@ six OVERSIZE items pointer-ized into
       `substituters`, so a LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest;
       a hang once egress enforces). homelab side landed: `stack-lint` CACHE-01 probes what the
       LAUNCHER probes (anonymous ghcr pull of `<repo>/devbox-cache:latest` — four repos have none)
-      and `new-stack` step E2 publishes it. **Next:** merge the three PRs. Relates FU-073, FU-096.
+      and `new-stack` step E2 publishes it. **Next:** confirm on a post-merge ride that no WAN fetch
+      remains in the gate (the residue is `tofu validate`'s provider download, deliberately kept out
+      of `ci` — `docs/dependency-upgrades.md` §Next steps 3), then archive. Relates FU-073, FU-096.
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
@@ -228,7 +230,8 @@ six OVERSIZE items pointer-ized into
       round-2 no-`/report` hole. Relates ADR-096, FU-095.
 - [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
       checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
-      [`docs/agents/roles.md`](agents/roles.md) §prober. Origin: meta-11 — a manual agentic
+      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober.
+      Origin: meta-11 — a manual agentic
       probe was the ONLY detector of a 13h Ready-but-dead prod outage.
       **Next:** build the activation machinery per the checklist (attended-session class).
       Composes with FU-044 as its deep post-deploy gate.
@@ -351,8 +354,9 @@ six OVERSIZE items pointer-ized into
 
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
-      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions + §"Coordinator ×
-      Renovate PRs"); reflex skips `automerge`, `rebaseWhen: conflicted` set (updater owns freshness).
+      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
+      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"); reflex skips `automerge`,
+      `rebaseWhen: conflicted` set (updater owns freshness).
       **Unproven and awaiting a real reviewable bump:** an armed `deps-review` PR flowing through
       the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
       **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
