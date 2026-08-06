@@ -284,7 +284,13 @@ each exiting clean; waste not risk, 5h util measured 0.24) and **FU-147** (FU-11
 covers ci-red rounds ONLY, so a `changes-requested` round that banks nothing is invisible).
 ⚠ **`deepseek-v4-flash` struck TWICE today on `goose-32602-truncation`** (circles#32 r1 and r3) and
 is the same model in `fixer-context.md` §"zero commits and a false-green". Worth watching whether
-the router actually routes away from it — r2 and r3 both ran on it again after r1's strike.
+the router actually routes away from it — r2..r5 all ran on it again after r1's strike.
+⚠ **Its TESTS assert presence, not the property — 3 instances in ONE PR** (#39): `assert True`
+(`test_palette_label_contrast`), then `test_grey_reason_distinguishable` +
+`test_three_greys_distinguishable` asserting the strings appear *somewhere* on the page while every
+grey cell renders an identical fill. The reviewer caught all three by reading the RENDERER, not the
+test. One PR is not a fleet pattern (contracts emerge from ≥2 projects) — but if it recurs on
+another stack, it is a model-selection fact, not a prompt-tuning one.
 **#32 MERGED** (finalize guarantees the issue link — via #34). **#31 CLOSED 2026-08-06** as
 solved-and-not-worth-it: `salvage_push()` (FU-064a, `agent-finalize:347`) already commits + pushes
 uncommitted state at terminal and predates the issue by a month, and #31's own deliverable — a
