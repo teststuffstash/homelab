@@ -2475,3 +2475,42 @@ than assumed. Stopped by PID, re-armed all three here.
 **Consolidated `meta-state.md` from 408 lines to ~150.** A file whose own header says "tiny,
 transient" had accumulated the entire FU-143 chain as narrative. History belongs here; that file
 carries only what a fresh session must pick up. The durable warnings were kept and two added.
+
+### 2026-08-06 (cont. 5) — "how many times is this going to get an LLM comment?"
+**Condition:** operator pointed at homelab#111 and asked exactly that. The honest answer was
+**unbounded**, and finding out took counting rather than reasoning: **three bot triage comments in
+33 minutes** (18:41, 18:45, 19:06), ~3k chars each, each one a separate sonnet session that
+correctly identified the same resource and appended the same conclusion.
+
+**Why none of the three belts caught it.** The fingerprint ledger could not: `GithubWorkflowRunFailed`
+mints a fresh fingerprint per failed RUN, so every retry was a new key. The daily incident cap could
+not either, and this is the interesting half — it fires only when `N_TODAY >= 12` **AND**
+`INC_SEEN == 0`, so it bounds a *new* incident when twelve are already spent and leaves repeats of
+an *already-seen* incident unbounded **by construction**. And the `subject:` search could not,
+because it lives in the LLM brief: it runs INSIDE a session that has already been spawned and paid
+for. It can stop a duplicate ISSUE. It can never stop a duplicate SESSION.
+
+**FU-133 had built exactly the right key and wired it to the wrong layer.** `SUBJ` was computed 50
+lines BELOW the ledger check. Its own comment states the intent — *"the subject is what makes a
+recurrence findable"* — and the block depends only on `$a` and `$NAME` (it recomputes `_ns`
+itself), so it moved above the ledger with no untangling at all. That is **a belt is not a guard**,
+in the one place where the guard was already written and merely mis-ordered.
+
+**The cost is not cosmetic.** Every one of those sessions spends the SAME subscription the loop
+dispatches coordinator and reviewer sessions from. A vendor outage was quietly converting our
+dispatch capacity into repeat commentary on an issue whose diagnosis was already settled — during
+the exact window when the loop needed that capacity to drain the queue on recovery.
+
+**Verified by executing the real extracted loop** against five alert shapes with `kubectl` stubbed
+by a file-backed ledger — because the risk of a dedup is over-suppression, which is silent:
+same workflow/new fingerprint → one session then skip; `circles/ci` → still triages; and
+`ride-abc12` + `ride-xy9z8` → collapse to one, which is FU-133's own #94/#98 PVC case finally
+guarded instead of merely searched. Stated tradeoff: a genuinely different failure on the same
+resource on the same day is now silenced until tomorrow; the alert still routes to Home Assistant
+and the open issue is the record.
+
+**Two of my own, both caught by the lint rather than by me:** I wrote commit hash `b5ae1a5` into the
+FU entry *before making the commit*, so it referenced nothing — a fabricated citation in the exact
+tracker whose value is that its references resolve. And I committed the trimmed entry without
+re-running `follow-ups-lint`, so it went from 13 lines to 11 against a cap of 10 and needed a third
+pass. **Run the gate before the commit, not after the push.**
