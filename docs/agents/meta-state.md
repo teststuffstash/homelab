@@ -19,6 +19,26 @@ split, so children merge bot-approved; armed-PR count 0 (the TRACKS cap counts A
 un-armed research PRs do not charge it); WIP 0; `Budget: €12` parses; no blockedBy.
 `agent/queued` actor = `RasmusSoot` type **User** → the fail-closed decompose check passes.
 
+**The work-vs-wait LEDGER is [`observability-and-retro.md`](observability-and-retro.md) §Part A″**
+(operator direction 2026-08-06 — waiting burns meta context, so log it and ring what the platform
+misses). Keep appending there, not here. Through child #30: **⏳ 8m35s vs ~68m ⚙**, and the only
+wait was the very first hop. Two doorbell gaps filed: **FU-144** (a third dead edge — queueing an
+issue rings nothing for a graduated stack; `devbox run coordinate-now` fires the GLOBAL reflex,
+which skips graduated stacks — use `bash scripts/reflex-now.sh coordinate-circles circles-agents`)
+and **FU-145** (`AgentCoordinateScanWedged` keys on scan-pod lifetime, so it fires on any ride
+>15m on every stack — expect it as noise until re-keyed).
+
+**Progress (09:02Z):** #36 (`fix/p0-bake-config-model` → the goal branch) is in **fix round r2**
+after a CHANGES_REQUESTED. Proven live in this run, all first-time: a child PR **arms into a
+`goal/**` base**; `ci` **triggers on `goal/**`** (1m42s pass); the reviewer reviews an armed goal
+child; and the **`changes-requested` clause fires** — it had been dead since `671a053` (4 days),
+revived this morning in `e66b421`.
+
+⚠ **Observation, one instance, do NOT codify yet:** the #36 reviewer wrote *"I could not execute
+`devbox run ci` … someone with a working devbox should confirm the 64 tests actually pass"* — while
+`ci` had already passed. A reviewer blind to its own CI result may hedge or block on what the gate
+already answers. Watch whether it recurs before treating it as a defect.
+
 **Progress (08:37Z):** steps 1–2 DONE and good. Decompose ran on opus (18m03s), authored
 **#30 → #31 → #32 → {#18, #19}** (all `Base:` inherited, narrowed `Touches:`, native sub-issues +
 `blocked_by`), filed **#33/#34/#35** as named inert deferrals, put #29 in `agent/blocked` tracking
