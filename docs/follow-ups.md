@@ -338,16 +338,15 @@ six OVERSIZE items pointer-ized into
       agent-runtime#36; FU-147 is the DETECTOR that would have caught it whatever the cause.
       **Next:** reuse FU-115's exact predicate in the changes-requested clause. Distinct from
       FU-146 (that one is the WIP hold).
-- [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1; ADR-097 made it a
-      no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
-      (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
-      true only at WIP=1. So while a fix round rides, every cron tick **and doorbell** re-emits the
-      same `changes-requested|repo|pr-N` — the "absorbing belt" class the comment names. THREE
-      costs, all measured on circles PR#39 2026-08-06: a sonnet coordinator run each time; a rate
-      that rises with round count (5/18min → ~1/2min by r5, 5h util 0.24 → 0.40 in that hour, latch
-      0.80, window reset first); and **6 of the PR's 12 comments are near-identical "already in
-      flight" notices** a human must read past. A coordinator session flagged the cadence itself.
-      **Next:** hold per-ITEM on the PR's linked issue. ⚠ NOT `live >= 1` — reverts ADR-097.
+- [ ] **FU-146** — **FIX SHIPPED `fc606e2`, awaiting live proof.** The `changes-requested` hold was
+      written for WIP=1; ADR-097's raise to 3 silently retired it, so every tick **and doorbell**
+      re-emitted the same unit while its own fix round rode. Measured on circles PR#39 2026-08-06:
+      **~59 of 71 coordinator sessions did nothing**, 13 of that PR's 22 comments were bot noise,
+      rate rising with round count. Now holds per-ITEM on the PR's `Implements #<n>` link
+      (agent-runtime#34) vs live ride-pod names; also resets `WIPPODS_JSON` per repo (it leaked the
+      previous repo's pods). Fail-safe: no link → old behaviour; the hold needs a LIVE pod, so it
+      self-releases. **Next:** VERIFY on the next real `CHANGES_REQUESTED` round — it shipped into
+      an IDLE clause, so it is tested against real shapes, not live traffic. Then archive.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
