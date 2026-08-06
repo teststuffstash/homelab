@@ -320,10 +320,9 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
       emitter satisfies only the GLOBAL Sensor dep, and the global scan skips graduated stacks —
       so renovate, devbox-update AND a human/jail applying `agent/queued` all ring nothing.
-      Measured cost + the accounting: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
-      §Part A″; the corrected emitter row: [`workflow.md`](agents/workflow.md) §Triggers.
-      Workaround shipped 2026-08-06 — `scripts/reflex-now.sh` takes a namespace
-      (`reflex-now.sh coordinate-circles circles-agents`).
+      Measured cost: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″;
+      corrected emitter row: [`workflow.md`](agents/workflow.md) §Triggers. Workaround shipped
+      2026-08-06 — `scripts/reflex-now.sh` takes a namespace.
       **Next:** teach the emitters the `{stack, loop_ns}` payload (⚠ they read
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
