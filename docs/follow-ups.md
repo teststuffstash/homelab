@@ -344,8 +344,9 @@ six OVERSIZE items pointer-ized into
       true only at WIP=1. So while a fix round rides, every cron tick **and every doorbell** re-emits
       the same `changes-requested|repo|pr-N`; the session exits clean on its live-state re-read, but
       each burns a sonnet coordinator session — the "absorbing belt" class the comment names. Live:
-      circles PR#39 2026-08-06, **5 dispatches in 18min** while `issue-32-r3` rode. ⚠ Waste, not
-      yet risk — 5h utilization measured 0.24 mid-burst. **Next:** hold per-ITEM, matching the live
+      circles PR#39 2026-08-06 — rate RISES with round count: 5/18min early, ~1/2min by round 5.
+      ⚠ Waste, not yet risk, but the margin is not static: 5h utilization 0.24 → **0.40** over that
+      hour (latch is 0.80; the window reset first). **Next:** hold per-ITEM, matching the live
       ride to the PR's linked issue (reliable since agent-runtime#34 guarantees `Implements #<n>`).
       ⚠ NOT `live >= 1` — that reverts ADR-097. Relates FU-088, ADR-094, ADR-097.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
