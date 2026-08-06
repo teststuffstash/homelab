@@ -2297,3 +2297,63 @@ wrong pod set. Stop monitors by id on sight. And my own verification script watc
 carried the proof — the same "watch the failure signal explicitly" class it was written to check.
 Also: those coordinator pods' container is `coordinator`, not `main`; the probe said so loudly
 instead of returning empty.
+
+### 2026-08-06 (cont. 2) — the FU-143 fix ships, and two failures that both wore success as a disguise
+**Condition:** same session, after the C6 guard. The goal lane ran three children and the fix chain
+completed; the interesting part is that BOTH failures in this stretch presented as green.
+
+**The goal-lane cycle is proven end to end.** #31: ride → PR#37 into `goal/29-p0-complete` → C9
+re-armed it (it arrived UN-armed, where #36 armed at creation — watch whether that recurs) →
+reviewer APPROVED with `ci` green → auto-merged 2s later → hand-closed → `goal-review` fired →
+#32's `blockedBy` cleared and #32 dispatched. Verified against the goal branch HEAD `1cc6b76`, not
+the PR page. Harvested PR#37's one `Follow-ups:` bullet by hand (the hand-close suppresses C6's)
+into **#38, filed INERT** — goal-lane sprouts normally queue, but this is test hygiene outside P0
+scope and a sixth lg child would eat the `Budget: €12` headroom. Stated the reasoning in the issue.
+
+**FAILURE 1 — the build failed on a tag nothing consumes.** `build-image` pushed
+`agent-base:2026.8.6-g4d58cf421a62` fine, then failed pushing `:latest` on a ghcr SECONDARY RATE
+LIMIT 403. Because the `image` job failed, **`deploy-pin` was `skipped`** — no pin PR, rollout
+stalled. `agent-base:latest`'s only consumer is the `${AGENT_BASE_IMAGE:-…:latest}` fallback in
+`agent-session.sh:542`, always overridden by images.env. **A decorative tag gated the deliverable.**
+Prior-art grep nearly misled: the archive's "ImageVolume-mounts `:latest` on EVERY ride" is
+`devbox-cache:latest`, a DIFFERENT package — check the package name, not the tag. Re-ran the job
+(versioned tag already present), filed `agent-runtime#35` with three candidate fixes.
+
+**The pin landed** (homelab#109, ~11:52Z) and was approved as a REAL review, not an admin bypass —
+the author is `app/homelab-deploy-1234`, a distinct identity. Checked three things first: the tag
+derives from #34's actual merge commit `4d58cf42` (this chain once pinned a stale tag); the
+one-line diff IS the full sweep (`grep -rn 'agent-base:2026'` finds NO literal outside images.env —
+every mirror is `agent-coordinator`, its own deploy-pin); and the image really reached the registry.
+
+**FAILURE 2 — a ride pod exited `Succeeded` with its harness dead.** circles#32 round 1:
+`exit_status=harness-death`, `error_class=goose-32602-truncation` on `deepseek/deepseek-v4-flash`,
+1757s, $0.0353, **nothing committed, no branch** — and the wrapper exits 0, so the pod phase reads
+`Succeeded` and the watch's lifecycle line is indistinguishable from a real success. It was found
+by asking "where is the PR?", not by any alarm. Compounding it: **a goal child is held out of C4/C5
+by the FU-143 containment, so nothing would EVER have re-dispatched it** — the first time that
+containment's stated price ("holding costs a meta nudge") actually came due. Re-queued by hand
+after verifying no `fix/32-*` branch and no open PR existed. Underlying defects already tracked
+(`agent-runtime#31`, `#33`) — not re-filed.
+
+**The doctrine both failures share: a green surface is not a green outcome.** A workflow "failure"
+that had already shipped its artifact; a pod "success" that had shipped nothing. In both cases the
+status field answered a different question than the one being asked. Patched
+`meta-watch-loop.sh` (`3f9d226`) to read `AGENT_RUN_STATS` and shout on an unclean `exit_status` —
+and wrote INTO the code that **the clause's silence proves nothing**, because ride pods are GC'd
+within minutes and it could not even be tested against #32 r1 (already reaped). The durable signal
+is the `AGENT_STRIKE:` comment on the issue. Restarted the monitor, since a running one uses the
+script as PARSED and never picks up edits.
+
+**Corrected on operator challenge:** I ruled agent-runtime#34 an operator gate because the
+`platform` stack sets `reviewer.enabled=false` (true — no bot will ever review it) and
+self-approval is blocked (also true). But the `required-approval` ruleset's only bypass is
+`OrganizationAdmin: always` and **the jail account IS that admin** — `gh pr merge --admin` was mine
+to run. I read the bypass list, saw the actor, and escalated anyway. **Check the bypass ACTORS
+before calling anything a human gate.** Recorded in the `jail-github-pat-scopes` memory.
+
+**Swept on the heartbeat:** board clean fleet-wide (no stuck PRs, no `agent/error`); belts healthy;
+another ORPHAN monitor from a dead session stopped (`TaskList` reports "No tasks found" while four
+monitors run — orphans are undiscoverable until they fire). And **homelab#103 will NOT be
+reproduced by this rollout**: the goal lane SERIALIZES on `Depends-on:`, wip never exceeded 1, and
+wk-01 sat at 16% CPU mid-rollout. Max this decomposition reaches is 2 concurrent (#18+#19 after
+#32). Recorded on the issue so nobody waits for a burst this shape cannot produce.
