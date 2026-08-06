@@ -208,9 +208,13 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
   orphan reconciliation ran after the old PIDs were killed and marked all three just-armed monitors
   "stopped — from the previous session", quoting THIS session's task ids. They were genuinely dead
   (`ps` count 0), not a bookkeeping artifact. **`Monitor` returning "started" is not evidence a
-  watch is running** — after arming, confirm with `ps aux | grep -E 'meta-watch-loop\.sh|
-  meta-handoff-watch\.sh|sleep 7200' | wc -l`, and re-check once more if you killed orphans in the
+  watch is running** — confirm by process after arming, and re-check if you killed orphans in the
   same turn. A watch that was reaped is indistinguishable from a quiet one.
+  ⚠ **Check PER-WATCH presence, never a total count** — the total is not fixed. `meta-watch-loop.sh`
+  spawns a transient subshell during its poll cycle, so the total legitimately flaps 6↔7 and a
+  `wc -l`-against-an-expected-number check raises a false alarm (it did, 23:05Z the same day).
+  Use: `for w in 'meta-watch-loop.sh' 'meta-handoff-watch.sh' 'sleep 7200'; do echo "$w ->
+  $(ps aux | grep -F "$w" | grep -v grep | wc -l)"; done` — each should be ≥1, wrapper + child.
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; never a bare
   `devbox run -- kubectl` with no subcommand (prints help into the captured var); watch the FAILURE
   signature explicitly; make probes print `PROBE-FAIL` rather than fall through to empty state.
