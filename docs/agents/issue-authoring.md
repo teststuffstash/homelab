@@ -396,6 +396,37 @@ onto a protected goal branch that auto-merges. Ordinary issues are untouched.
 `Implements #<n>` when the body does not already match) and it only takes effect once the
 `agent-base` image is rebuilt and `AGENT_BASE_IMAGE` re-pinned in homelab. Re-soak after that.
 
+#### ⛔ The SAME citation then fired C6 the other way (2026-08-06, ~10:57Z) — `e704c36`
+
+One bad citation did **both halves of the damage**, and the second half is the dangerous one.
+Because #36's body says *"that's the sibling issue (#31)"*, the moment **#31** was un-parked and
+re-queued, C6's goal-child leg evaluated `ghit>0` (a merged PR into `goal/29-p0-complete` "citing"
+#31) and `gref=0` (its ride had not opened a PR yet) — and dispatched **`merged-closeout` for #31
+while #31's own ride was Running**. Had it completed, it would have flipped `agent/done`, CLOSED
+the issue, fired `goal-review`, and unblocked `#32` → `#18`/`#19` on **work that does not exist**,
+while the live ride's PR arrived orphaned against a closed issue.
+
+**Root cause: a bare `#<n>` cannot distinguish "the PR that IMPLEMENTS this issue" from "a PR that
+NAMES it as a sibling seam" — and #29's decomposition RULES REQUIRE seams pinned naming the
+producing/consuming sibling.** So this is systematic for every goal child, not a fluke of one
+model's phrasing. The hazard was predicted in `meta-state.md` for the `gref` (open-PR) side, where
+the cost is a starved closeout; nobody looked at the `ghit` (merged-PR) side, where the cost is a
+false completion. **When a probe can err in two directions, price both — the asymmetry decides the
+predicate.**
+
+Fixed by requiring a **strong link** — `implements|closes|fixes|resolves` + `#<n>` — exactly the
+line `agent-runtime#34` makes `finalize` guarantee, so the predicate MEETS that fix rather than
+racing it. Until that image ships nothing matches here and children are hand-closed (unchanged from
+the containment above), and every held child is now REPORTED under ⛔ rather than silently dropped.
+
+⚠ **The `gref` side is deliberately still a bare mention.** Its failure direction is *hold*, which
+is the safe one. Narrowing both at once during a live soak would change two variables under test.
+
+⚠ **The item session's own live-state re-read caught the stale dispatch** (*"Exiting clean, no
+writes made"* — the FU-121 belt), on both the 10:57Z and 11:00Z ticks. That belt is an LLM
+judgement, not a guarantee, and it burns a session per firing. **A belt is not a guard**: it is
+evidence the guard was missing, never a reason to skip building it.
+
 ### The goal lane owns its sprouts — no selfQueue (operator ruling 2026-08-06)
 
 The 🌱 inert-until-human-triage gate (loop-safety breaker #1) protects the **master lane**, where
