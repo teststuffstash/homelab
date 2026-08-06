@@ -328,18 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1 and ADR-097 made it a
-      no-op.** `coordinator-scan.sh:640` holds the clause only when `wip_busy`, which is set only at
-      `live >= REPO_MAX_WIP` (**default 3**). Its own comment claims "the Running worker IS this
-      unit's in-flight work" — true only at WIP=1. So while a fix round rides, every tick re-emits
-      the SAME `changes-requested|repo|pr-N` unit; the item session's live-state re-read catches it
-      and exits clean, so nothing is corrupted, but each tick burns a sonnet coordinator session on
-      the subscription — the "absorbing belt" class the comment itself names. Seen live on
-      circles PR#39 (2026-08-06) with `agent-circles-issue-32-r3` Running: `wip 2`, dispatched.
-      **Next:** hold per-ITEM, not per-project — match the live ride to the PR's linked issue (now
-      reliable: `finalize` guarantees `Implements #<n>` since agent-runtime#34). ⚠ Do NOT just
-      lower the threshold to `live >= 1`: that reverts ADR-097's deliberate parallelism.
-      Relates FU-088 (capacity), ADR-094, ADR-097.
+- [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1; ADR-097 made it a
+      no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
+      (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
+      true only at WIP=1. So while a fix round rides, every tick re-emits the same
+      `changes-requested|repo|pr-N`; the session's live-state re-read exits clean (nothing is
+      corrupted) but each tick burns a sonnet coordinator session — the "absorbing belt" class the
+      comment itself names. Live: circles PR#39, 2026-08-06, `issue-32-r3` Running → `wip 2`.
+      **Next:** hold per-ITEM — match the live ride to the PR's linked issue (reliable since
+      agent-runtime#34 guarantees `Implements #<n>`). ⚠ NOT `live >= 1`: that reverts ADR-097.
+      Relates FU-088, ADR-094, ADR-097.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
