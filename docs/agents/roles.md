@@ -152,7 +152,8 @@ tier allowed, dual-model worth it) are FU-095's.
   the alert lane carries load the prober was designed to take.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
-  predicate = Alertmanager firing (fan-out route `continue: true` in `tofu/monitoring.tf`);
+  predicate = Alertmanager firing (fan-out route `continue: true` in
+  `argocd/platform/values/kube-prometheus-stack.yaml` — was `tofu/monitoring.tf` before FU-136);
   edge = Sensor `/alert` → `respond` WorkflowTemplate (`agents/coordinator/responder-argo.yaml`)
   — per NEW fingerprint one INLINE sonnet triage session whose cheapest-sufficient outcome is
   report-only → GitOps quick fix on the stack's -iac (revert/pin PR, CI-only lane auto-merges)

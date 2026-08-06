@@ -123,7 +123,8 @@ flowchart LR
 
 _Fig. 4: Observability Plane — small agents collect, one central brain visualizes and alerts._
 
-- ✅ Prometheus + Grafana + Alertmanager in-cluster (`tofu/monitoring.tf`), exposed at
+- ✅ Prometheus + Grafana + Alertmanager in-cluster (`argocd/platform/kube-prometheus-stack.yaml`
+  since FU-136; `tofu/monitoring.tf` keeps the namespace + secrets), exposed at
   `grafana`/`prometheus`/`alertmanager.teststuff.net`; Alertmanager notifies via the Home
   Assistant webhook (ADR-042).
 - ✅ Log aggregation: Loki + Alloy, 7-day retention, queried in Grafana (ADR-083).
@@ -158,7 +159,11 @@ _Fig. 5: Security Plane — secrets live in git but encrypted; the edge stays lo
   on-device). **SOPS+age is not used.**
 - ✅ Cilium NetworkPolicy for agent workloads (per-stack egress CNPs via the AgentStack composition, enforcing since 2026-07-16).
 - 🔜 AMT hardening, OPNsense firewall as code.
-- ⬜ Policy engine (Kyverno/Gatekeeper) and a real identity layer — deferred.
+- 🔜 Policy engine: **Kyverno arrived 2026-08-03 as the IAC-G04 sentinel** — five platform-contract
+  policies in `policy/iac/` run cluster-side by `scripts/iac-sentinel.sh` (a CronWorkflow the PR
+  cannot rewrite), deliberately in **shadow** (logs/metrics only) until the enforcement flip.
+  Design + the flip's preconditions: `docs/agents/iac-lane.md` §L0b, FU-106.
+- ⬜ A real identity layer — deferred (ADR-055, the PLANNED IDP in `SERVICES.md`).
 
 ---
 

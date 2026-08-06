@@ -67,8 +67,8 @@ sleep-iac/
     snore-recorder.yaml      #            $values ref → THIS repo (not homelab!)
   values/sleep-ingester.yaml # image tag + chart config (the version pins live here)
   sleep-tracking/            # the CRs formerly in sleep-tracking/infra/
-    dashboard-sleep-overview.yaml  #   grafana_dashboard-labelled CM (was tofu/monitoring.tf)
-    sleep-overview.json            #   the dashboard body (was tofu/dashboards/)
+    # (the dashboard CM + body lived here 2026-07 — removed 2026-07-28, the
+    #  sleep-ingester chart renders it now; see §Grafana dashboard migration)
   snore-recorder/            # the CRs formerly in snore-recorder/infra/
   devbox.json                # ci seam: yamllint + kubeconform + helm-template-with-pinned-values
   .github/workflows/ci.yaml  # thin: devbox run ci; runs-on homelab-ephemeral
@@ -77,23 +77,33 @@ sleep-iac/
 
 ## Grafana dashboard migration
 
-Today the Sleep Overview dashboard is a homelab-owned `kubernetes_config_map "sleep_dashboard"`
-(`tofu/monitoring.tf`) in the **monitoring** namespace, body from `tofu/dashboards/sleep-overview.json`.
-It is *not* part of the ArgoCD sleep stack, so a fix means a `tofu apply` against the platform — which
-is exactly why an old, buggy dashboard lingers instead of shipping like app code.
+> **DONE, and then one hop further than this section plans.** The dashboard left tofu as designed
+> below, and on **2026-07-28** it left `sleep-iac` too: it now ships inside the **sleep-ingester
+> chart** (sleep-tracking#48, operator ruling on SLP-SRV-DRIFT), rendered as the
+> `sleep-ingester-dashboard` ConfigMap in `sleep-tracking` — one dashboard ConfigMap, versioned with
+> the app that owns the queries. The reasoning below is why it could move at all, and the datasource
+> contract at the end is still live.
+
+It began as a homelab-owned `kubernetes_config_map "sleep_dashboard"` (`tofu/monitoring.tf`) in the
+**monitoring** namespace, body from `tofu/dashboards/sleep-overview.json`. It was *not* part of the
+ArgoCD sleep stack, so a fix meant a `tofu apply` against the platform — which is exactly why an old,
+buggy dashboard lingered instead of shipping like app code.
 
 **The move works because the Grafana dashboard sidecar discovers dashboards by label across ALL
-namespaces** (`monitoring.tf`: `sidecar.dashboards.searchNamespace = "ALL"`, `label = grafana_dashboard`).
+namespaces** (`argocd/platform/values/kube-prometheus-stack.yaml`: `sidecar.dashboards.searchNamespace: ALL`,
+`label: grafana_dashboard`).
 So the dashboard ConfigMap does **not** have to live next to Grafana:
 
 - **Moves to GitOps:** the dashboard CM (labelled `grafana_dashboard: "1"`) + its JSON body → the
-  **`sleep-tracking` namespace**, deployed by ArgoCD from `sleep-iac/sleep-tracking/`. The sidecar
-  auto-discovers it. A dashboard fix becomes a PR ArgoCD syncs — no `tofu apply`.
+  **`sleep-tracking` namespace**, deployed by ArgoCD. The sidecar auto-discovers it. A dashboard fix
+  becomes a PR ArgoCD syncs — no `tofu apply`. *(Landed in `sleep-iac/sleep-tracking/` first; since
+  2026-07-28 the chart renders it — see the note above.)*
 - **Stays in homelab (platform-owned):** the frser SQLite **datasource** (`sleep-notes`), the
   **`sleep-sqlite-sync` sidecar** (pulls `sleep-db/sleep.sqlite` from Garage), and the
   **`sleep-db-reader` ExternalSecret** are baked into the Grafana Helm release + the `monitoring`
-  namespace. They're Grafana-deployment infra — rarely change, not per-fix — so they stay in
-  `tofu/monitoring.tf`.
+  namespace. They're Grafana-deployment infra — rarely change, not per-fix — so they stay
+  platform-owned: the first two in `argocd/platform/values/kube-prometheus-stack.yaml` (the Helm
+  values moved there with the release, FU-136), the ExternalSecret still in `tofu/monitoring.tf`.
 
 Only the **dashboard body** (the part that actually gets edited) leaves tofu; the plumbing stays.
 **Contract between the two layers:** the dashboard's panels must keep targeting datasource **uid
@@ -245,7 +255,7 @@ broken sync) is **FU-044** — deferred; harden app CI first so it's the safety 
 - Coordinator step 7a flips from "flag and stop" to: worker/Renovate opens the version-bump PR in
   sleep-iac → gates → auto-merge → ArgoCD syncs (`agents/coordinator/README.md`).
 - **Dashboard body moves to GitOps** (`sleep-iac/sleep-tracking/`) while the datasource + sqlite-sync
-  sidecar + reader secret stay platform-owned in `tofu/monitoring.tf`; datasource **uid `sleep-notes`**
+  sidecar + reader secret stay platform-owned (§"Grafana dashboard migration"); datasource **uid `sleep-notes`**
   is the platform contract the GitOps dashboard binds to. Namespaces are **platform-precreated**, the
   `sleep` AppProject only allowlists them (`CreateNamespace=false`, no `Namespace` in the cluster
   whitelist).
@@ -265,6 +275,7 @@ broken sync) is **FU-044** — deferred; harden app CI first so it's the safety 
 - The `$values` multi-source ref must move off homelab in the same step as the child app —
   otherwise sleep-ingester still reads values from homelab and the extraction is cosmetic.
 - **Dashboard datasource uid must not drift:** the GitOps dashboard binds to uid `sleep-notes`,
-  provisioned by the Grafana Helm values in `tofu/monitoring.tf`. If that uid ever changes on the
+  provisioned by the Grafana Helm values in `argocd/platform/values/kube-prometheus-stack.yaml`
+  (they moved off `tofu/monitoring.tf` with the release, FU-136). If that uid ever changes on the
   platform side, the dashboard's panels break — keep the two in lockstep. Add the GitOps CM before
   removing the tofu one (brief same-uid overlap is cosmetic; the reverse leaves a gap).

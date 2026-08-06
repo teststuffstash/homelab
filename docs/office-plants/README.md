@@ -421,7 +421,8 @@ daylight / an NIR lamp is mandatory. Cheap to prototype (camera + a blue gel).
 Same pattern as Home Assistant: OPNsense HAProxy terminates TLS (per-service LAN IP-alias
 VIP) and proxies to the in-cluster BGP LoadBalancer VIP; certs via os-acme-client (DNS-01 via
 **Cloudflare**, since `teststuff.net` moved off Route 53); local DNS via Unbound host overrides. Managed in `ansible/opnsense-acme.yml` +
-`ansible/opnsense-haproxy.yml`; the LoadBalancer VIPs are in `tofu/monitoring.tf`. The raw
+`ansible/opnsense-haproxy.yml`; the LoadBalancer VIPs are in
+`argocd/platform/values/kube-prometheus-stack.yaml` (moved off `tofu/monitoring.tf` by FU-136). The raw
 `192.168.40.x` VIPs remain reachable directly (no TLS) for in-cluster/debug use.
 
 ### Topology — one scrape source, zero added WiFi
