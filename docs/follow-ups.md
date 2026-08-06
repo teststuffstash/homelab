@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-149**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-150**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,15 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
+      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked, so the
+      effective limit was higher than 12); the latch counts *spawned sessions* and is exact. A day
+      with 12 genuinely distinct alerts now stops automated triage where the old cap would have let
+      it run. **Deferred because the right value is an evidence question, not a guess** — the same
+      reason ADR-097's parallelism was measured rather than picked. **Next:** after ~2 weeks, read
+      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — if the p95 day
+      sits well under 12, leave it; if `ResponderTriageBudgetExhausted` fires on days that were not
+      storms, raise `RESPONDER_DAILY_MAX` on the respond WorkflowTemplate. Mechanism: ADR-099.
 - [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
       instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
       (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The

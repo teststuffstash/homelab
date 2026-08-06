@@ -1205,3 +1205,27 @@ donor copy and agent pods committing from containers); teaching goose to fail ea
 instead of a dead ride per arm. The residual risk is scanner false-positives where no real parser
 exists; it flags only `key:<nonspace>` outside block scalars, and all 12 live recipes pass both
 paths. Triggered by the sleep-tracking→circles inheritance (sleep-tracking#114, FU-126 fan-out).
+
+### ADR-099 — The responder's daily LLM budget is binding and fails closed
+
+**Accepted 2026-08-06.** **Decision:** the responder lane gets a hard ceiling on **spawned triage
+sessions per UTC day** (`agents/responder-budget.sh`, `RESPONDER_DAILY_MAX=12`), checked before any
+per-alert work and again before each spawn, with **no exemption for any alert**. It replaces
+FU-113(c)'s cap, which gated on `N_TODAY >= 12 AND INC_SEEN == 0` and so blocked only a *new*
+incident once twelve were spent — repeats of an already-seen incident were unbounded **by
+construction**. The count is DERIVED from date-keyed ledger entries (a spawned triage writes
+`fp-<fp> = "<date>|<incident>"`), so there is no counter to reset at midnight and no state to race.
+The latch **fails CLOSED**: an unreadable ledger blocks triage. **Considered:** failing open, as
+`subscription-latch.sh` does (rejected — that latch guards a limit the proxy enforces anyway, so
+failing open costs one doomed spawn; nothing else enforces THIS budget, so failing open restores
+the unbounded burn it exists to stop); keeping the per-incident cap and merely raising it (rejected
+— the escape hatch, not the number, was the defect); rate-limiting at the Sensor (rejected — it
+bounds arrival, not spend, and a slow storm still drains the day).
+**Consequences:** alerts can now go **deliberately untriaged**, which is a state the platform must
+be able to see — hence the pushed gauges and the `ResponderTriageBudgetExhausted` info alert
+(labelled `triage: none`, or it would spend a session reporting that sessions are not being spent).
+Blocked alerts still fire and still route to Home Assistant; only automated investigation stops,
+and each blocked alert is recorded with a `budget-<date>` marker so a deliberate stop stays
+distinguishable from a dropped event in `meta-alert-crosscheck.sh`. The ceiling's VALUE is now
+measured in sessions rather than incidents and is unvalidated at that meaning — FU-149 soaks it.
+Triggered by homelab#111 taking three sessions in 33 minutes during the GitHub Actions outage.

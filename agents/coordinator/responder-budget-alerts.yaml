@@ -1,0 +1,51 @@
+# FU-149 — the responder's daily LLM-triage budget, made visible.
+#
+# The budget latch (agents/responder-budget.sh) can stop LLM triage for the rest of the UTC day.
+# That is a deliberate state, but a SILENT one: alerts keep firing and keep reaching Home
+# Assistant, so from the outside nothing looks different while automated investigation is off.
+# This rule is the operator-facing signal for exactly that.
+#
+# ⚠ `triage: none` is load-bearing, not decoration. Without it the responder would triage its own
+# budget alert — spending a session to report that sessions are no longer being spent, and on the
+# first alert of the next day it would spend one of the new budget doing so. The label is the
+# rule-author convention the responder honours before any ledger lookup (responder-argo.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: responder-budget
+  namespace: monitoring
+  labels:
+    app: agent-coordinator
+spec:
+  groups:
+    - name: responder-budget
+      rules:
+        # Freshness gate, same pattern as AgentRunInfraDeathBurst: the pushgateway serves every
+        # pushed group FOREVER, so without it yesterday's "exhausted" would still be firing this
+        # morning. The responder pushes on EVERY invocation, and Alertmanager's repeat_interval is
+        # ≤3h, so a fresh push is guaranteed for as long as anything is actually firing. When
+        # nothing fires, the series goes stale and this correctly stops — "triage is off" is only
+        # interesting while there is something to triage.
+        - alert: ResponderTriageBudgetExhausted
+          expr: |
+            responder_triage_blocked == 1
+              and on (job) (time() - push_time_seconds{job="responder_budget"}) < 10800
+          for: 5m
+          labels:
+            severity: info
+            triage: none
+          annotations:
+            summary: "Responder is no longer launching LLM triage sessions today ({{ $value }})"
+            description: >-
+              responder_triage_blocked=1: the responder will spawn NO further investigation
+              sessions until 00:00 UTC. SYMPTOM ONLY — two different states produce it and the
+              gauges separate them: responder_triage_probe_ok=0 means the ledger could not be read
+              and the latch blocked fail-closed (an infra fault, check RBAC on the responder-seen
+              ConfigMap in agent-coordinator); responder_triage_probe_ok=1 means the budget was
+              genuinely spent, so compare responder_triage_sessions_today against
+              responder_triage_budget_max. Alerts continue to fire and continue to route to Home
+              Assistant throughout — what stops is automated investigation, so anything arriving
+              now needs a human. Blocked alerts are recorded with a `budget-<date>` marker in the
+              ledger, which is how a deliberate stop stays distinguishable from a dropped event.
+              Raise RESPONDER_DAILY_MAX on the respond WorkflowTemplate, or find the storm that
+              spent it (dashboard "Responder triage budget").

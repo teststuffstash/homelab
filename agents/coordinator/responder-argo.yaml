@@ -20,7 +20,11 @@
 #                before a session is spawned; the `alert-fp:<fp>` + `subject:<subj>` open-issue
 #                searches in the brief are the belts BEHIND them, not the guard.
 #   capacity   = Sensor rateLimit 6/min + subscription-capacity semaphore + the FU-088 latch
-#                + a mechanical 12-triages/day cap (unique-fp storms, e.g. label churn)
+#                + the FU-149 DAILY BUDGET LATCH (agents/responder-budget.sh): a binding
+#                RESPONDER_DAILY_MAX=12 sessions/day, checked before any per-alert work and again
+#                before each spawn, fail-CLOSED, with a gauge on the pushgateway and an INFO alert
+#                (ResponderTriageBudgetExhausted) when triage stops. It replaces the FU-113(c)
+#                incident cap, which had an `INC_SEEN == 0` escape hatch and so was never binding.
 #   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
 #                issues (inert, breaker #1); loop-smell → report-only stop
 ---
@@ -171,6 +175,25 @@ spec:
               echo "triage DEFERRED — subscription limited (FU-088); markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1
             fi
 
+            # ── FU-149: THE DAILY BUDGET, CHECKED FIRST AND BINDING ─────────────────────────
+            # This runs BEFORE any per-alert work because it is the only gate that bounds the DAY.
+            # Its predecessor (FU-113c) was subordinate: `N_TODAY >= 12 AND INC_SEEN == 0` blocks a
+            # NEW incident once twelve are spent while leaving repeats of an already-seen incident
+            # unbounded — so the ceiling could be passed without ever being hit. There is no escape
+            # clause here: over budget means no session, whatever the alert is.
+            # Exits 0, not 1: a day-long budget is not something Argo's 15m→2h retry can outwait,
+            # and alerts are level-triggered (repeat_interval ≤3h) so nothing is lost by dropping.
+            # Markers are written per FU-113(a) so a deliberate stop is distinguishable from a drop
+            # — WITHOUT them meta-alert-crosscheck.sh would read this as stuck machinery.
+            # The operator-facing signal is the ResponderTriageBudgetExhausted info alert, which
+            # carries `triage: none` so it can never consume the budget it is reporting on.
+            if ! RESPONDER_DAILY_MAX="${RESPONDER_DAILY_MAX:-12}" bash /work/homelab/agents/responder-budget.sh; then
+              jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
+                | while read -r bfp; do [ -n "$bfp" ] && kubectl -n agent-coordinator patch cm responder-seen \
+                    --type merge -p "{\"data\":{\"fp-$bfp\":\"budget-$TODAY\"}}" >/dev/null 2>&1 || true; done
+              echo "triage BLOCKED — daily LLM budget exhausted (FU-149); markers written, no session spawned"; exit 0
+            fi
+
             kubectl -n agent-coordinator get cm responder-seen >/dev/null 2>&1 \
               || kubectl -n agent-coordinator create cm responder-seen >/dev/null 2>&1 || true
 
@@ -234,18 +257,22 @@ spec:
               fi
 
               # Ledger dedup: one TRIAGE per fingerprint per 24h (value = date or date|incident;
-              # marker values — deferred-/cap-/none- prefixed — deliberately do NOT match).
+              # marker values — deferred-/cap-/none-/subjdup-/budget- prefixed — deliberately do
+              # NOT match, which is also what keeps them out of the FU-149 session count).
               SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o jsonpath="{.data.fp-$FP}" 2>/dev/null || true)"
               case "$SEEN" in "$TODAY"|"$TODAY|"*) echo "→ $NAME ($FP): triaged today — skip"; continue;; esac
-              # FU-113(c): the daily cap counts INCIDENTS (alertname/namespace), not raw
-              # fingerprints — a label-churn storm collapses to one incident instead of eating
-              # the cap. 12 distinct incidents/day.
+              # The INCIDENT still names the ledger value (alertname/namespace) — it is what makes
+              # a spawned session identifiable after the fact. It no longer GATES anything: the
+              # `INC_SEEN == 0` clause it used to carry was the escape hatch that made the cap
+              # non-binding (FU-149).
               INCIDENT="$NAME/$(printf '%s' "$a" | jq -r '.labels.namespace // "-"')"
-              N_TODAY="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg t "$TODAY" '[.data // {} | to_entries[] | select(.value | startswith($t)) | (.value | split("|") | .[1] // "-")] | unique | length')"
-              INC_SEEN="$(kubectl -n agent-coordinator get cm responder-seen -o json 2>/dev/null | jq -r --arg v "$TODAY|$INCIDENT" '[.data // {} | to_entries[] | select(.value == $v)] | length')"
-              if [ "${N_TODAY:-0}" -ge 12 ] && [ "${INC_SEEN:-0}" -eq 0 ]; then
-                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"cap-$TODAY\"}}" >/dev/null 2>&1 || true
-                echo "⚠ responder daily incident cap (12) reached — $NAME ($FP) NOT triaged (marker written; raise the cap or fix the storm)"; continue
+              # Re-checked per alert, not just once per workflow: a single Alertmanager group can
+              # carry many firing alerts, and the pre-loop gate cannot see the budget being spent
+              # BY THIS LOOP. The script re-reads the ledger, which already contains the entries
+              # written by earlier iterations, so N alerts in one payload cannot overshoot.
+              if ! RESPONDER_DAILY_MAX="${RESPONDER_DAILY_MAX:-12}" bash /work/homelab/agents/responder-budget.sh; then
+                kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"budget-$TODAY\"}}" >/dev/null 2>&1 || true
+                echo "⚠ daily LLM triage budget exhausted (FU-149) — $NAME ($FP) NOT triaged (marker written; raise RESPONDER_DAILY_MAX or fix the storm)"; continue
               fi
               kubectl -n agent-coordinator patch cm responder-seen --type merge -p "{\"data\":{\"fp-$FP\":\"$TODAY|$INCIDENT\"}}" >/dev/null 2>&1 \
                 || echo "WARN: ledger patch failed — fp-issue search is the remaining dedup belt"
