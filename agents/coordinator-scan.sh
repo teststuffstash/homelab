@@ -260,6 +260,16 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | .number as $n
       | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
       | select($b != "") | "\($n)|\($b)"')" || goalbased=""
+    # FU-143 SOAK FAILURE, 2026-08-06 — every goal-based in-progress issue, matched or not.
+    # C6 below can only claim an issue whose merged PR CITES it; circles#36 merged into
+    # goal/29-p0-complete citing only its sibling #31, so #30 fell out of c6g, C4/C5 read
+    # "in-progress + no open PR" as abandoned, and re-rode already-merged work. On a goal base the
+    # closing keyword is INERT, so nothing motivates the worker to write the reference and nothing
+    # checks that it did (agent-runtime#32 — finalize should guarantee the issue link). Until that
+    # lands, "no open PR" cannot distinguish MERGED-BUT-UNLINKED from ABANDONED for these issues.
+    # So C4/C5 must not guess: holding costs a meta nudge, guessing costs a duplicate ARMED PR onto
+    # a protected goal branch that auto-merges. Asymmetric — hold.
+    goalbased_nums="$(printf '%s' "$goalbased" | sed 's/|.*//' | tr '\n' ' ')"
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
       gopen="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
@@ -647,16 +657,27 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and in the
           # unit emission below) or c4c5-redispatch, which outranks merged-closeout, re-rides
           # merged work every tick while the closeout unit starves. Detection block above.
-          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" \
+          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
             '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
              | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+             | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
+          # The held goal children get their OWN report line — silence here is what let the first
+          # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
+          ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+            '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+             | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+             | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
+             | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+             | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
+          [ -n "$ambig" ] && orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
           if [ -n "$dispatchable" ]; then
-            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" \
+            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
                 '.[] | select(((.labels|map(.name))|index("agent/error"))|not)
                  | .number as $n
                  | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+                 | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
                  | "\(.number)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
               units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
