@@ -273,7 +273,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # too EARLY), and the goal/ prefix is the same key arming already trusts to carry the
     # ruleset. Design: issue-authoring.md FU-143 section. Probe failures skip LOUDLY (rule #6).
     c6g=""; c6g_nums=""
-    goalbased="$(printf '%s' "$inprog" | jq -r '.[]
+    # ⚠ Candidate set is DELIBERATELY wider than $inprog: a goal child that lands cleanly in ONE
+    # round ends in `agent/review`, not `agent/in-progress` (the launcher flips on PR-open —
+    # MP-T10). Keying the goal-child leg off $inprog alone made the COMMON case invisible: only a
+    # child dragged back to in-progress by a fix round could ever close. circles#32 auto-closed
+    # (6 rounds, in-progress) while #40 — one clean round, `agent/review`, PR merged into the goal
+    # base — sat open with nothing to claim it. C6's own CLOSED-issue leg has always accepted both
+    # states; this leg was the odd one out. $inprog is left ALONE on purpose: it also feeds the
+    # ADR-097 footprint holds, and widening those is a different decision.
+    goalcand="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+      --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
+    jq -e . >/dev/null 2>&1 <<<"$goalcand" || goalcand='[]'
+    goalbased="$(printf '%s' "$goalcand" | jq -r '.[]
       | select(((.labels|map(.name))|index("agent/error"))|not)
       | .number as $n
       | ((((.body // "") | capture("(?m)^[ \\t]*[Bb]ase:[ \\t]*(?<b>goal/[^ \\t\\r\\n]+)") | .b)? // "")) as $b
