@@ -133,8 +133,9 @@ cross-reference event), so nothing can recover it after the fact.
    exits 0). Only `AGENT_RUN_STATS` in the ride's last log lines shows it. Re-queued by hand with
    an audit comment: a goal child is held out of C4/C5 by the containment, so **nothing
    re-dispatches it automatically** — that is the containment's stated price, one meta nudge.
-   Underlying defects already tracked, not re-filed: `agent-runtime#31` (a ride dying before its
-   first commit banks nothing) and `#33`.
+   ⚠ Correction to the audit comment posted on circles#32: it cites `agent-runtime#31` as covering
+   this, and **#31 is now CLOSED** — salvage was not broken here, it was correctly EMPTY (nothing
+   had reached disk). See the "Open, not mine" block below. `#33` still stands.
    `meta-watch-loop.sh` now shouts on a terminal ride whose `exit_status` is not clean (`3f9d226`)
    — ⚠ best-effort only: ride pods are GC'd within minutes, so **that clause's silence proves
    nothing**; the durable signal is the `AGENT_STRIKE:` comment on the issue.
@@ -267,9 +268,15 @@ blockedBy edges in scan logs (→ FU-111 retirement); Monday 05:00 retro (= FU-0
 
 ### Open, not mine
 
-agent-runtime #13 (watchdog misses silent loops), #31 (bank-on-first-commit), #32 (finalize should
-guarantee the issue link), #33 (resumed round reports "no resumable branch"); openrouter-operator
-sprouts triaged. (`follow-ups-lint` was RED on FU-143's line count — fixed `ce29c74`, the detail
+agent-runtime #13 (watchdog misses silent loops), #33 (resumed round reports "no resumable branch"),
+**#35** (a failed `:latest` push skips `deploy-pin`); openrouter-operator sprouts triaged.
+**#32 MERGED** (finalize guarantees the issue link — via #34). **#31 CLOSED 2026-08-06** as
+solved-and-not-worth-it: `salvage_push()` (FU-064a, `agent-finalize:347`) already commits + pushes
+uncommitted state at terminal and predates the issue by a month, and #31's own deliverable — a
+zero-diff branch pointer at session start — banks NO work in the only window where it fires. All
+three cited rides (circles#17 r1, openrouter-operator#14 r1, circles#32 r1) died before anything
+reached disk, so salvage was correctly EMPTY, not broken. ⚠ The one case where salvage is *skipped*
+rather than empty is FU-120's `agent-finalize`-never-ran anomaly, already belted. (`follow-ups-lint` was RED on FU-143's line count — fixed `ce29c74`, the detail
 lives in `issue-authoring.md`.)
 
 ## Re-arm on a fresh session
