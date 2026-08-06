@@ -326,6 +326,17 @@ children while the one-shot arm reached a comparable bake+page and drew only `CH
 so the fan-out arm's advantage was never demonstrated, and the reasoning tier had nothing hard to
 chew on. Calibrate goals so decomposition and the acceptance judgement are actually load-bearing.
 
+**The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
+routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
+whole goal rests on — to `--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md`
+(the rubric falls back to the generic prompt in repos that do not ship the file). Same shape as
+`GOAL_MODEL`: launcher-side `case`, env escape hatch, default **stays sonnet** per the doctrine two
+paragraphs up (a review is a review — escalate a specific hard assembly, do not raise the floor),
+and it dies the same death when the lane routes through `/route`. ⚠ The assembly reviewer must
+DIFFER from the decomposing model (issue-authoring leg (c)): with `goal-decompose` on opus, setting
+`REVIEW_GOAL_MODEL=opus` collides — escalate `GOAL_MODEL` or `REVIEW_GOAL_MODEL`, never both.
+Child PRs (`fix/*` heads *into* `goal/**`) stay on the default rubric+model path.
+
 ⚠ **The `dispatch` tier's premise is measured FALSE, and is deliberately left alone for now.**
 `tier_thresholds` reads *"dispatch = ~30s dispatch units (coordinator/responder)"* and grants
 `dispatch` a **0.9** utilization threshold against `heavy`'s 0.8 — so coordinator sessions defer

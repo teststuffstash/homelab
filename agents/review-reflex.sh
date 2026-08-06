@@ -280,11 +280,11 @@ EOF_C9
          | select((.author.login // "") | startswith($bot))
          | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts
     | ($verdicts | map(select(.submittedAt > $head))) as $at_head
-    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length)"
+    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-")"
   ')"
 
   [ -n "$pick" ] || { log "[$repo] nothing to review"; continue; }
-  read -r pick v_total v_head v_head_approved <<<"$pick"
+  read -r pick v_total v_head v_head_approved pick_head <<<"$pick"
 
   # Breaker: a legit pick has ZERO bot approvals at head (the predicate filters those), <2 bot
   # verdicts at head, and fewer than ROUNDS_MAX verdicts ever (beyond that it's a worker↔reviewer
@@ -327,7 +327,7 @@ EOF_C9
     continue
   fi
 
-  dispatch+=("$repo $pick")
+  dispatch+=("$repo $pick $pick_head")
 done
 
 [ "${#dispatch[@]}" -gt 0 ] || { log "no PRs to dispatch this tick"; exit 0; }
@@ -337,9 +337,24 @@ done
 running=0
 for pair in "${dispatch[@]}"; do
   # shellcheck disable=SC2086
-  set -- $pair; repo="$1"; pr="$2"
+  set -- $pair; repo="$1"; pr="$2"; phead="${3:-}"
+  # A pick whose HEAD is goal/** is the ASSEMBLY PR (goal -> master, the review-goal.md shape) —
+  # the one review the whole goal rests on, cumulative over several separately-reviewed slices.
+  # Model is configurable via REVIEW_GOAL_MODEL (default sonnet; mirrors GOAL_MODEL in
+  # coordinator-scan.sh and dies the same M10 death when this lane is wired to /route). NB the
+  # assembly reviewer must DIFFER from the decomposing model (issue-authoring leg (c)) — with
+  # goal-decompose on opus, setting REVIEW_GOAL_MODEL=opus would collide; escalate GOAL_MODEL
+  # or this, not both. Rubric routes to .agents/review-goal.md; reviewer-session falls back to
+  # the generic prompt when a repo does not ship that file (per-repo opt-in by shipping it).
+  # Child PRs (fix/* heads INTO goal/**) deliberately stay on the default rubric+model path.
+  extra=""
+  case "$phead" in
+    goal/*) extra="--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md"
+            log "→ assembly PR (head ${phead}): model ${REVIEW_GOAL_MODEL:-sonnet}, rubric review-goal.md";;
+  esac
   log "→ dispatch reviewer: ${repo} #${pr}${LOOP_NS_ARG:+ (loop-ns ${LOOP_NS_ARG})}"
-  bash "$HERE/reviewer-session.sh" "$repo" "$pr" ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
+  # shellcheck disable=SC2086
+  bash "$HERE/reviewer-session.sh" "$repo" "$pr" $extra ${LOOP_NS_ARG:+--loop-ns "$LOOP_NS_ARG"} &
   running=$((running + 1))
   if [ "$running" -ge "$K" ]; then wait -n || true; running=$((running - 1)); fi
 done
