@@ -328,16 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-147** — **SHIPPED `15ef9cb`, awaiting live proof — and it found FU-115b BROKEN.** A
+- [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
+      broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
       `-32602` truncation, classified `clean`, banked nothing — cause is agent-runtime#36).
       Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
-      where `gh` puts `committedDate` TOP-LEVEL, so `$head` was always "" and it returned "no-op"
-      for **every** PR; and comparison was wrong anyway — a successful round posts stats AFTER its
-      push, so `stats > head` holds for good rounds too. **Counting** is the fix (`>= 2` stats
-      after the newest non-merge commit). Never fired: 0 `agent/arbitrate` fleet-wide. Now one
-      shared `NOOP_ROUND_JQ` for both clauses. **Next:** VERIFY on the next real no-op round;
-      both clauses were IDLE at deploy, so it is tested against real history, not live traffic.
+      where `gh` puts it TOP-LEVEL, so `$head` was always "" and it returned "no-op" for **every**
+      PR; and comparison was wrong anyway — a good round posts stats AFTER its push. **Counting**
+      is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
+      fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
+      clauses were IDLE at deploy, so it is tested against real history, not live traffic.
 - [ ] **FU-146** — **FIX SHIPPED `fc606e2`, awaiting live proof.** The `changes-requested` hold was
       written for WIP=1; ADR-097's raise to 3 silently retired it, so every tick **and doorbell**
       re-emitted the same unit while its own fix round rode. Measured on circles PR#39 2026-08-06:
