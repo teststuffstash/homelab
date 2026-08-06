@@ -103,10 +103,19 @@ cross-reference event), so nothing can recover it after the fact.
    the operator merged it and corrected the reading. Applies to every platform-lane repo
    (agent-runtime, agent-coordinator, homelab, openrouter-operator) where `reviewer.enabled=false`
    means no bot will ever approve. Self-approval stays blocked — the bypass is the path, not a review.
-4. ⏳ **NEXT: `build-image.yaml` (run `31096665105`) → new `agent-base` tag → deploy-pin PR into
-   homelab bumping `AGENT_BASE_IMAGE` in `agents/images.env` (currently
-   `2026.8.5-gbbf8da511cb4`) → merge.** Only THEN do new worker pods carry the fix. ~20m from
-   11:17Z; past ~11:50Z, read `gh run view 31096665105 --repo teststuffstash/agent-runtime`.
+4. ⏳ **IN FLIGHT — the build FAILED once and is re-running.** Run `31096665105` pushed the
+   versioned tag fine (`agent-base:2026.8.6-g4d58cf421a62`, manifest 2.3s done) then **failed on
+   the `:latest` push** with a ghcr *secondary rate limit* 403 — transient, not #34's doing (five
+   prior builds green). Because `image` failed, **`deploy-pin` was `skipped`**, so no pin PR opened.
+   Re-ran the failed job (the versioned tag already exists, so it only redoes `:latest` + lets
+   `deploy-pin` run). **NEXT: deploy-pin PR into homelab bumping `AGENT_BASE_IMAGE` in
+   `agents/images.env` (currently `2026.8.5-gbbf8da511cb4` → `2026.8.6-g4d58cf421a62`) → merge.**
+   Only THEN do new worker pods carry the fix. ⚠ If the re-run fails AGAIN it is NOT a rate limit —
+   read `--log-failed`. ⚠ The pin also sweeps the mirrored literals in `agents/coordinator/*-argo.yaml`
+   + `transcripts-*.yaml` (images.env header) — a hand-pin must do that sweep too.
+   Filed **agent-runtime#35**: `:latest` is non-load-bearing (its only consumer is the
+   `${AGENT_BASE_IMAGE:-…:latest}` fallback in `agent-session.sh:542`, always overridden by
+   images.env) yet its failure gates `deploy-pin`. Three candidate fixes, the call is a design one.
 5. ⏳ Then re-soak FU-143 on a #29 child and archive the containment if it holds.
 
 ⚠ **Hand-close recipe for a #29 child until then:** verify the merge against the goal branch, post
