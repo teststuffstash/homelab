@@ -329,14 +329,14 @@ six OVERSIZE items pointer-ized into
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
 - [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
-      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked, so the
-      effective limit was higher than 12); the latch counts *spawned sessions* and is exact. A day
-      with 12 genuinely distinct alerts now stops automated triage where the old cap would have let
-      it run. **Deferred because the right value is an evidence question, not a guess** — the same
-      reason ADR-097's parallelism was measured rather than picked. **Next:** after ~2 weeks, read
-      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — if the p95 day
-      sits well under 12, leave it; if `ResponderTriageBudgetExhausted` fires on days that were not
-      storms, raise `RESPONDER_DAILY_MAX` on the respond WorkflowTemplate. Mechanism: ADR-099.
+      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked); the
+      latch counts *spawned sessions* and is exact, so a day with 12 genuinely distinct alerts now
+      stops triage where the old cap let it run. **First datum 2026-08-06: 30 sessions, 26 of them
+      ONE incident** (the Actions outage) — that sizes the old hole, not the new steady state, and
+      it exhausted the budget the day it shipped. **Deferred because the value is an evidence
+      question** (as ADR-097's parallelism was). **Next:** after ~2 weeks of ORDINARY days, read
+      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — p95 well under
+      12, leave it; `ResponderTriageBudgetExhausted` on non-storm days, raise `RESPONDER_DAILY_MAX`.
 - [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
       instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
       (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
