@@ -2419,3 +2419,59 @@ the piped string) — caught by testing, not review; a lint gate that grepped on
 `eval`'d an unquoted summary containing `approve / approve:SKIPPED` and tried to run `approve`.
 Same family as the documented backtick trap: **shell/jq quoting fails at RUNTIME and `bash -n`
 cannot see it — execute the block.**
+
+### 2026-08-06 (cont. 4) — a fresh session, an outage that had not lifted, and a counter that lies
+**Condition:** `/meta-coordinate` bootstrap after a clear. The operator opened with the
+githubstatus update; the board confirmed it. **Nothing merged this stretch and nothing should
+have** — the work was making sure the right things were waiting, and fixing the one thing that
+was wrong about how we read the outage.
+
+**The outage is still live** (~15:36Z → past 19:00Z), and the evidence is worth writing down
+because it is the second time today it was misread. `Actions: major_outage` on githubstatus;
+`in_progress=0` in EVERY repo against 8 queued jobs; **4 ARC runner pods `2/2 Running`, aged
+42m–98m**. Ephemeral runners exit after one job, so a 98-minute-old runner has acquired nothing.
+
+**The responder filed homelab#111 and diagnosed capacity contention against `maxRunners: 4`** —
+independently reproducing the exact misreading logged in cont. 3. Its evidence-gathering was good
+(deploy correctly ruled out via the observation window, exporter cleared on restart count, routing
+correct); the diagnosis was the failure. It cited `running: 4, pending: 0, failed: 0` holding
+steady — read correctly, and unable to answer the question. **A steady-state COUNTER cannot
+separate "at capacity" from "cannot work": both produce the identical level reading. Only a
+throughput signal separates them — a saturated pool has jobs RUNNING, a broken one has workers
+WAITING.** Corrected on the issue with a stated closure condition (one green `update-pr-branch`
+after recovery), and the responder prompt now names the distinction plus its three cheap checks —
+`in_progress`, ephemeral pod AGE, and githubstatus, **all reachable without the RBAC its triage was
+blocked on** (`ecb74bb`). Filed as a prompt gap, not a one-off, because two independent sessions
+made it in one day. ⚠ `maxRunners: 4` is neither exonerated nor indicted — nothing in that incident
+is evidence either way, and saying so is part of the correction.
+
+**Verified the fix the way the doctrine demands, and the first two probes were wrong.** `python3`
+in the jail has no `yaml` module — the probe said `PROBE-FAIL` instead of falling through, which is
+the only reason it was caught. Then `yq`'s `.. | select(has("source"))` extracted a 12-line block
+that was not the triage script and `bash -n` cheerfully passed it: **a syntax check on the wrong
+block is indistinguishable from a syntax check that passed.** The real block is
+`container.args[0]`, 253 lines. Final proof was executing the `claude -p` invocation with `claude`
+stubbed — prompt assembles to 4938 chars, clause present — because `bash -n` cannot see runtime
+quoting, which is how the apostrophe-in-jq trap took review-reflex down fleet-wide.
+
+**FU-143 is now proven on the path that matters.** The earlier soak had only #32, which reached
+`agent/in-progress` after six fix rounds — the atypical shape. **#40 is the representative one**: one
+clean round, ending in `agent/review`, and it closed machine-only — `agent/queued → in-progress →
+review → done → closed`, every transition by `homelab-agents-1234[bot]`. That is the `9201a9a`
+`goalcand` fix confirmed live, and it retires the standing "verify #40 auto-closes" item.
+
+**Closed `agent-runtime#32` — the fix shipped, the bookkeeping didn't.** PR#34 implemented it and
+merged at 11:17Z, but its body said *"implements"*, which is not a GitHub closing keyword. Not a
+class bug: the repo's own `.agents/fix.yaml` instructs `Fixes #n`, which does close, since these
+PRs target master — #34 was jail-authored, not loop-authored. The distinction matters because
+`finalize` deliberately prepends `Implements #<n>` for goal children, where closing keywords never
+fire anyway.
+
+**Three orphan monitors from the dead session were still running** (two from 10:13, one from
+12:43). They are invisible to `TaskList` and their events go to the DEAD session — the kill
+receipts came back stamped with the old session id, which is how the orphaning was confirmed rather
+than assumed. Stopped by PID, re-armed all three here.
+
+**Consolidated `meta-state.md` from 408 lines to ~150.** A file whose own header says "tiny,
+transient" had accumulated the entire FU-143 chain as narrative. History belongs here; that file
+carries only what a fresh session must pick up. The durable warnings were kept and two added.
