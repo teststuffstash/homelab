@@ -192,17 +192,19 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.
 
-**Open prediction — a planned `∥` that the footprint hold will serialize.** #29's decomposition
-orders its children *bake → page → (evidence ∥ kind gate)*, and #18/#19 correctly depend on #32
-and not on each other. But both declare `tests/**`, `scripts/**`, `devbox.json`, `devbox.lock`,
-and the ADR-097 hold is prefix-overlap on `Touches:` — so they intersect and will run **one at a
-time**. The declarations are honest (both really do touch tests and tooling); what is missing is
-that the decomposer asserted parallelism without checking whether the footprints it authored
-permit it. **Verify when #32 closes**: if #18 and #19 serialize, the `goal-decompose` play wants a
-rule — *two children planned in parallel must have disjoint `Touches:`, or the plan says why
-serialization is acceptable* — and a planned-vs-realized parallelism number belongs in this
-ledger. One observation from one decomposition is not yet a contract; do not codify it before the
-second instance.
+**Note — planned `∥`, actual serial, and why that is FINE here** (operator, 2026-08-06: *"I don't
+expect the first issues on the project to be parallel — not enough exists to work in parallel
+yet"*). #29 plans *bake → page → (evidence ∥ kind gate)*; #18/#19 both declare `tests/**`,
+`scripts/**`, `devbox.*`, so the ADR-097 prefix-overlap hold serializes them. **This is not a
+decomposition defect and wants no fix.** A greenfield repo has one small surface, so nearly any
+two children intersect — the honest declaration and the serialization are both correct, and the
+`∥` in the plan costs nothing when it does not materialise.
+
+The measurement only becomes interesting **once the surface is large enough that disjoint
+footprints are achievable**. Until then, do not read serialization as lost parallelism, and do not
+add a rule forcing decomposers to declare disjoint `Touches:` — on a young repo that pressures
+them into declaring footprints narrower than the truth, which is far worse than running one child
+at a time. Revisit if a LATER goal, on a populated tree, plans `∥` and still serializes.
 
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
