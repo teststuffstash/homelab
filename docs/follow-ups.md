@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-147**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-148**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-147** — **FU-115's no-op detector covers ci-red rounds only; `changes-requested` rounds
+      can no-op forever.** FU-115 (archived) compares the newest `Agent run stats` comment vs the
+      newest NON-merge commit — stats newer ⇒ the round pushed nothing ⇒ `agent/arbitrate` NOW. It
+      is wired into the **ci-red** clause only. A `changes-requested` round that pushes nothing is
+      invisible: live on circles PR#39 (2026-08-06) — r3 ran 1255s / $0.0462, reported
+      `exit_status:clean`, armed the PR, and left the branch head at r2's commit with all three
+      reviewer findings unaddressed; the clause then dispatched r4 at the same work. Known model
+      pathology, same one: `docs/agents/fixer-context.md` §"zero commits and a false-green"
+      (`deepseek-v4-flash`, sleep-tracking#48, three rounds). **Next:** reuse FU-115's exact
+      predicate in the changes-requested clause. Distinct from FU-146 (that one is the WIP hold).
 - [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1; ADR-097 made it a
       no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
       (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
