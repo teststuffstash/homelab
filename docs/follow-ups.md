@@ -327,19 +327,13 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: it fires on any ride
-      >15m, on every stack.** The alert keys on scan-pod LIFETIME, but a scan pod blocks on the
-      item session it dispatches, and that session blocks on the ride — verified live 2026-08-06:
-      inside `coordinator-081840`, PID 512 is `kubectl -n circles logs -f
-      agent-circles-issue-30-r1`. So a healthy dispatch holds the scan pod open for the whole
-      ride. Seen twice in one hour (18m03s goal-decompose; then the #30 ride), both healthy, both
-      self-resolving — which is why it reads as noise rather than as miscalibration.
-      **Next:** key it on the deterministic SCAN phase, not total pod lifetime. ⚠ Do NOT raise the
-      threshold (blinds it for ordinary ticks) and do NOT special-case `goal-decompose` — that was
-      this item's first, wrong diagnosis, made before the blocking `logs -f` was found; the cause
-      is structural and lane-independent. ⚠ The 1-in-2474 p99=302s calibration behind
-      `fc7e9fb` measured pod lifetimes from BEFORE the alert existed — do not reuse it as evidence
-      that long scans are rare. Relates homelab#103 (containment `fc7e9fb`), FU-090.
+- [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
+      scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
+      fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
+      self-resolving). Evidence, the two remedies ruled OUT, and why the `fc7e9fb` calibration
+      cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
+      **Next:** key the alert on the deterministic scan phase.
+      Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell

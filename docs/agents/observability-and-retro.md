@@ -185,11 +185,18 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
 - **`devbox run coordinate-now` does not wake a graduated stack** (FU-144, third dead edge). The
   documented mono-jail remedy for exactly this transition was stale. Use
   `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
-- **`AgentCoordinateScanWedged` fires on any ride >15m** (FU-145) — first read as a goal-decompose
-  quirk, then found structural: the item session runs `kubectl logs -f` against the ride, so a
-  scan pod stays Running for the whole ride on every stack. **A pod-lifetime probe cannot measure
-  a phase that blocks on downstream work** — the same class as Part A′ finding #1, an alert whose
-  subject is not the thing it names.
+- **`AgentCoordinateScanWedged` measures the wrong thing** (FU-145 points here). It keys on scan-pod
+  LIFETIME, but the pod blocks on the item session it dispatched, which blocks on the ride:
+  verified live inside `coordinator-081840`, **PID 512 = `kubectl -n circles logs -f
+  agent-circles-issue-30-r1`**. So it fires on any ride >15m, on every stack — seen twice in one
+  hour (the 18m03s decompose, then #30's ride), both healthy, both self-resolving.
+  **A pod-lifetime probe cannot measure a phase that blocks on downstream work** — Part A′ finding
+  #1's class again: an alert whose subject is not the thing it names.
+  **Fix:** key it on the deterministic scan phase. ⚠ Not by raising the threshold (blinds ordinary
+  ticks) and ⚠ not by special-casing `goal-decompose` — that was the first diagnosis here, made
+  from the pod's lifetime before the blocking `logs -f` was found, and it is wrong: the cause is
+  lane-independent. ⚠ The p99=302s / 1-in-2474 calibration behind `fc7e9fb` measured lifetimes
+  from before the alert existed; it is not evidence that long scans are rare.
 - ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
   requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
   The measurable waste is in the ⏳ rows.
