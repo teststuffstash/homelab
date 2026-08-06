@@ -176,6 +176,22 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
 | 08:18:03 → 08:18:14 | decompose done → next scan | **11s** | ✅ doorbell (session rings on completion) |
 | 08:18:14 → 08:18:41 | scan → first child dispatched | 27s | ⚙ |
 | 08:18:41 → 08:21:32 | item session → ride pod `issue-30-r1` up | 2m51s | ⚙ |
+| 08:21:32 → 08:52:48 | #30's ride → PR #36 open, **armed into `goal/**`** | 31m16s | ⚙ |
+| 08:36:44 → 08:37 | session completes → its doorbell → scan | ~20s | ✅ doorbell |
+| 08:52:48 → 08:59:37 | reviewer reads #36, posts CHANGES_REQUESTED, rings | 6m49s | ⚙ |
+| 08:59:37 → 08:59:42 | scan → `changes-requested` fix round dispatched | 5s | ✅ |
+
+Through the first child, **⏳ 8m35s against ~68m of ⚙** — and only the very first row is wait. The
+edge-triggered hops (session→scan 20s, verdict→scan 5s) are effectively free; `ci` on the goal
+branch passed in 1m42s.
+
+⚠ **A measured gap is not a missing edge — check what filled it.** The probe flagged 6m33s between
+PR-open and scan-wake as a candidate ⏳ and the hypothesis under test was that
+`agent-session.sh`'s end-of-run doorbell had been orphaned (its launcher runs inside the item-session
+pod, which exited at 08:36:44 with the ride still Running). **Both halves were wrong**: the session
+DOES ring on completion (`→ coordinator doorbell rung (/coordinate …)` is the last line of
+`coordinator-081840`), and the 6m33s was the REVIEWER working, then ringing. Time attributable to a
+worker or a reviewer is ⚙ no matter how quiet the logs are — the ⏳ column is for *nothing running*.
 
 **Findings from the first two hops:**
 
@@ -193,9 +209,11 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
   So it fires on any dispatch whose ride runs >15m, on every stack — seen twice in one hour (the
   decompose, then #30's ride), both healthy, both self-resolving.
   ⚠ Say "streams the ride", not "waits for the whole ride": `coordinator-081840` EXITED at 08:36:44
-  with `agent-circles-issue-30-r1` still Running. Why the stream ends early is a separate,
-  unresolved question — and a consequential one, since `agent-session.sh`'s end-of-run `/coordinate`
-  doorbell runs in the LAUNCHER, i.e. inside the session pod that just exited (see the ⏳ row below).
+  with `agent-circles-issue-30-r1` still Running (~16m of ride left). The session rings its doorbell
+  on ITS OWN completion, so nothing is orphaned — but it means the alert's duration tracks the
+  session's stream, not the ride, and the two are not the same. Why the stream ends early is still
+  open; it did no harm here because the ride finished, the PR opened, and the reviewer's own
+  doorbell carried the chain forward.
   **A pod-lifetime probe cannot measure a phase that blocks on downstream work** — Part A′ finding
   #1's class again: an alert whose subject is not the thing it names.
   **Fix:** key it on the deterministic scan phase. ⚠ Not by raising the threshold (blinds ordinary
