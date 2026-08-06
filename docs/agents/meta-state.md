@@ -5,14 +5,42 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## Fresh-session pickup (2026-08-05, end of day — meta-coordination STOPPED by the operator)
+## LIVE CHAIN — circles#29, the P0-complete goal (queued 2026-08-06 07:51Z)
 
-**Session closed deliberately: all watches stopped, nothing mid-flight, no chain awaiting a next
-step from meta.** Everything below is either an operator decision or a durable warning. The goal
-lane ran end-to-end today (#17 → #22+#23 → both merged+closed → `goal-review` ruled goal met);
-that history is in TICK-LOG 2026-08-05 cont. 2–5.
+**The one thing in flight.** Operator ask: queue it and watch for FU-143 + issue-authoring
+problems. **Expected terminus: an assembly PR `goal/29-p0-complete` → master, ARMED, blocked by
+the CODEOWNERS gate on `/specs/`, waiting for an OrgAdmin merge. If it stops anywhere short of
+that, treat it as a platform/homelab bug, not a model failure.**
 
-### The one live experiment — both arms exist, the comparison is YOURS
+Pre-flight verified before labelling (each of these stalls a goal silently): goal branch ==
+master (`d3de3c3`); `goal/**` ruleset live (`pull_request` + `required_status_checks`); `ci.yaml`
+triggers on `goal/**`; CODEOWNERS `require_code_owner_review` is master-ONLY since the 2026-08-06
+split, so children merge bot-approved; armed-PR count 0 (the TRACKS cap counts ARMED only — the 12
+un-armed research PRs do not charge it); WIP 0; `Budget: €12` parses; no blockedBy.
+`agent/queued` actor = `RasmusSoot` type **User** → the fail-closed decompose check passes.
+
+**Next expected events, with deadlines** (anti-stall: every wait has one):
+
+1. `goal-decompose` dispatch on the next `*/30` tick, log line echoing **`model opus`** (its first
+   live proof — `1b4bda5`). If a tick passes with `nothing actionable`, read WHY in the scan log.
+2. Child issues authored + queued, each: native sub-issue, narrowed `Touches:`, `Base:
+   goal/29-p0-complete` inherited, ONE deliverable, **a coverage map naming an owner for every
+   requirement id** (`CIR-BAKE-SELF-CONTAINED` went unowned through four reviews on #17).
+3. Rides → PRs into `goal/**`, armed, bot-approved, `ci` green → merge.
+4. **FU-143's first live closeout** (the soak): C6 flips `agent/done`, CLOSES the child, harvests
+   the review `Follow-ups:` — and goal-lane sprouts are QUEUED at harvest, not inert.
+5. `goal-review` re-judges on every child closure; on "goal met" IT opens + arms the assembly PR.
+
+⚠ **Hazard found reading C6, not yet observed — check before the first child merges.** The
+goal-child leg requires *no OPEN PR referencing the child*, matched as a bare `#<n>` on every open
+PR body (intent: "an open fix round means live work"). But #29's decomposition rules REQUIRE seams
+pinned naming the producing/consuming sibling. If a worker carries that seam text into its **PR**
+body, the sibling's closeout is starved until that PR merges — the exact three-way stall FU-143
+removes. Deliberately NOT patched mid-soak (changing the code under test misattributes the
+regression). Instead: once children have PRs, grep their bodies for sibling `#<n>` refs BEFORE the
+first merge, and only then decide whether to narrow the probe to closing keywords.
+
+### Frozen — from goal #17, do not touch (the comparison is the operator's)
 
 - **circles FAN-OUT vs ONE-SHOT on goal #17.** The fan-out arm is merged on `goal/17-p0-mvp`
   (#22 bake + #23 page; the page ride cost $0.0571). The one-shot arm is **PR#21, FROZEN**
@@ -29,15 +57,19 @@ that history is in TICK-LOG 2026-08-05 cont. 2–5.
   children while the one-shot arm reached a comparable result, so the fan-out's advantage was never
   demonstrated. #18+#19 under one parent is the shape that would actually test the lane.
 
-### Shipped today, NOT yet verified end-to-end
+### Unverified, and #29 is what verifies them
 
 - **`goal-decompose` → opus** (`1b4bda5`, narrowed `5ad6c48`); `goal-review` stays sonnet — it was
   in the list for ~90 min and came out on evidence (both its live runs were sonnet and both were
   right; it contradicted standing doctrine — `reviewer-session.sh`: sonnet sufficient, opus a
-  per-case `--model`). Axis is **AUTHORING vs CHECKING**, not goal vs routine. With #17 closed and
-  #18/#19 held there is NO goal work pending, so the first proof is the next `goal-decompose`
-  dispatch echoing `model opus`. ⚠ All the evidence is from #17 — re-test on a real
-  multi-deliverable goal; escalate a specific hard one with `GOAL_MODEL`, don't move the floor.
+  per-case `--model`). Axis is **AUTHORING vs CHECKING**, not goal vs routine. ⚠ All the evidence
+  is from #17, a goal small enough for one ride — escalate a specific hard goal with `GOAL_MODEL`,
+  don't move the floor.
+- **homelab#103 is OPEN and this goal is its first real test** (the platform queue is swept
+  first for exactly this reason). The coordinator Job templates carry no CPU requests/limits and no
+  topology spread, so a burst piles onto one 4-core node; #29 funds up to six rides. Cluster was
+  idle at bootstrap (wk-01 15%, only Watchdog firing). **A stalled ride is a scheduling question
+  before it is a code one.**
 - **homelab#103 containment** (`fc7e9fb`): alert `AgentCoordinateScanWedged` (>15m Running,
   measured 1-in-2474, verified `health=ok` live). Root cause still OPEN — the only live route is
   reproducing the Sensor spin against the burst hypothesis. ⚠ Do NOT "tighten"
@@ -86,15 +118,18 @@ guarantee the issue link), #33 (resumed round reports "no resumable branch"); op
 sprouts triaged. (`follow-ups-lint` was RED on FU-143's line count — fixed `ce29c74`, the detail
 lives in `issue-authoring.md`.)
 
-## Re-arm on a fresh session (watches were STOPPED at end of day, not lost)
+## Re-arm on a fresh session
 
 - Loop watch: `STACK_NS=circles-agents RIDE_NS=circles REPO=teststuffstash/circles
-  SCAN_PREFIX=coordinate-circles- BASE_EXPECT=goal/17-p0-mvp bash agents/meta-watch-loop.sh`
+  SCAN_PREFIX=coordinate-circles- BASE_EXPECT=goal/29-p0-complete bash agents/meta-watch-loop.sh`
   (persistent) + `bash agents/meta-handoff-watch.sh` (persistent) + a 2h backstop heartbeat, each
   sweep running `agents/meta-alert-crosscheck.sh`.
-  ⚠ `BASE_EXPECT` is the GOAL branch, not `research/issue-1-weave`. The armed-PR clause is scoped
-  to armed-AND-base-drifted — arming into `goal/**` is the happy path, so the old clause would have
-  alarmed on every healthy ride.
+  ⚠ `BASE_EXPECT` is the GOAL branch currently in flight — **update it when the goal changes**, or
+  the drift clause alarms on every healthy ride of the new goal. The armed-PR clause is scoped to
+  armed-AND-base-drifted, because arming into `goal/**` IS the happy path.
+  ⚠ `major/awaiting-human` PRs are excluded from the drift set (`6b29a08`): circles#21, the frozen
+  #17 benchmark arm, matched `^fix/` against every later `BASE_EXPECT` permanently, which would
+  have delivered each real drift bundled with a member that is never actionable.
   ⚠ Monitors can SURVIVE a `/clear` — two orphans were still running mid-session. Stop them by task
   id before re-arming; a survivor runs the script as it was PARSED and never picks up your edits.
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; never a bare
