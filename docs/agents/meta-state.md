@@ -31,11 +31,15 @@ run, then **close homelab#111**.
 
 ## Platform queue (homelab has no fixer loop — the meta-coordinator IS its fixer)
 
-- **#111** — outage fallout. ✅ Corrected 2026-08-06: the responder diagnosed `maxRunners: 4`
-  capacity contention; the cause is the outage. Closure condition stated on the issue. The class fix
-  shipped (`ecb74bb`): the responder prompt now names the saturated-vs-broken distinction and its
-  three cheap checks. ⚠ `maxRunners: 4` is neither exonerated nor indicted — nothing here is
-  evidence either way.
+- **#111** — ✅ **CLOSED 2026-08-06** as not-ours (outage, not `maxRunners: 4` capacity — the
+  responder's diagnosis was corrected). Two class fixes came out of it: `ecb74bb` (the prompt now
+  names the saturated-vs-broken distinction) and `6affc63` (subject dedup — it had taken THREE
+  sonnet triages in 33 min). ⚠ `maxRunners: 4` is neither exonerated nor indicted.
+  ⏳ **Post-recovery check, tracked HERE not there:** one green `oracle-fleet/update-pr-branch`
+  scheduled run. If it fails again after Actions recovers **with `in_progress > 0` elsewhere**,
+  that is a real capacity question → file a FRESH issue, do not reopen #111.
+  ⚠ **A human comment on a responder issue disables its auto-close** (the resolve leg closes only
+  when no human engaged) — so every issue you comment on becomes yours to close by hand.
 - **#103** — `NodeSystemSaturation` on wk-01. OPEN, containment shipped (`fc7e9fb`). **This goal is
   NOT its test** (the goal lane serializes on `Depends-on:`; wk-01 sat at 16% CPU mid-rollout). The
   real shape is concurrent COORDINATOR Jobs across stacks/items. ⚠ Do NOT tighten
