@@ -332,12 +332,12 @@ six OVERSIZE items pointer-ized into
       can no-op forever.** FU-115 (archived) compares the newest `Agent run stats` comment vs the
       newest NON-merge commit — stats newer ⇒ the round pushed nothing ⇒ `agent/arbitrate` NOW. It
       is wired into the **ci-red** clause only. A `changes-requested` round that pushes nothing is
-      invisible: live on circles PR#39 (2026-08-06) — r3 ran 1255s / $0.0462, reported
-      `exit_status:clean`, armed the PR, and left the branch head at r2's commit with all three
-      reviewer findings unaddressed; the clause then dispatched r4 at the same work. Known model
-      pathology, same one: `docs/agents/fixer-context.md` §"zero commits and a false-green"
-      (`deepseek-v4-flash`, sleep-tracking#48, three rounds). **Next:** reuse FU-115's exact
-      predicate in the changes-requested clause. Distinct from FU-146 (that one is the WIP hold).
+      invisible: live on circles PR#39 (2026-08-06) — r3 ran 1255s / $0.0462, **died on a `-32602`
+      truncation but was classified `clean`** (transcript-confirmed), banked nothing, and left the
+      branch at r2's commit with all three reviewer findings unaddressed. The cause is
+      agent-runtime#36; FU-147 is the DETECTOR that would have caught it whatever the cause.
+      **Next:** reuse FU-115's exact predicate in the changes-requested clause. Distinct from
+      FU-146 (that one is the WIP hold).
 - [ ] **FU-146** — **The `changes-requested` WIP hold was written for WIP=1; ADR-097 made it a
       no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
       (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
