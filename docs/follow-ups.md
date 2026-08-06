@@ -216,14 +216,12 @@ six OVERSIZE items pointer-ized into
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
       across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e): `send_resolved = true` + a
       deterministic resolve leg (comment the clear, close only when no human engaged) + a firing
-      path that REOPENS a closed fingerprint instead of duplicating it. The `subject:` key + the
-      observation-window hand-off (IAC-G10) shipped after it. **Subject dedup SHIPPED 2026-08-06**
-      (`b5ae1a5`): the subject was computed 50 lines below the ledger check and used only in the
-      LLM brief, so it stopped a duplicate ISSUE but never a duplicate SESSION — homelab#111 took
-      3 sonnet triages in 33 min during the Actions outage (new fingerprint per failed run; the
-      daily cap only bounds a NEW incident, so repeats were unbounded). Now checked BEFORE spawning.
-      **Remaining — correlation:** `group_by = ["alertname"]` still keeps related alerts apart, so
-      distinct subjects of one root cause are still separate triages. Class postmortem:
+      path that REOPENS a closed fingerprint instead of duplicating it. The `subject:` key and the
+      IAC-G10 hand-off shipped after it; **subject DEDUP shipped 2026-08-06** (`6affc63`) — the key
+      had guarded duplicate issues but not duplicate SESSIONS (homelab#111: 3 sonnet triages in
+      33 min), and is now checked before one is spawned. **Remaining — correlation:**
+      `group_by = ["alertname"]` still keeps related alerts apart, so distinct subjects of one root
+      cause remain separate triages. Class postmortem:
       [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
       `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
