@@ -2249,3 +2249,51 @@ Meta-coordination stopped for the day at the operator's word: all three watches 
 meta-state consolidated 127 → ~100 lines (history dropped here, live state kept), tree clean and
 pushed. Nothing mid-flight. The circles arm comparison, PR#25's draft, and #18/#19's class are the
 three decisions waiting on a human — none of them on a clock.
+
+### 2026-08-06 (cont.) — one citation, two opposite failures, and the belt that made it look survivable
+**Condition:** fresh meta session. Two chains parked behind one 5h subscription latch; the restore
+step was written down, which is the only reason the lane did not sit overnight.
+
+**The latch released at 10:43:03Z and the probe disagreed with every proxy for it.** The
+`SubscriptionDispatchLimited` alert cleared BEFORE the utilization header did: `limited=false` while
+the 5h utilization still read **0.82** with `headers_age_s=3441`. Trust the reset EPOCH, never the
+utilization number. #31 un-parked, stack doorbell rung (`scripts/reflex-now.sh coordinate-circles
+circles-agents` — the global `coordinate-now` skips graduated stacks, FU-144), ride up in 4m30s.
+
+**Then the scan tried to close #31 as done while #31's own ride was Running.** C6's goal-child leg
+matched a bare `#<n>` in any merged PR into the goal base. circles#36 says *"that's the sibling
+issue (#31)"* → `ghit=1`; the ride had not opened its PR yet → `gref=0`; predicate satisfied. A
+completed closeout would have flipped `agent/done`, CLOSED #31, fired `goal-review`, and unblocked
+#32 → #18/#19 **on work that does not exist**, with the live ride's PR arriving orphaned against a
+closed issue.
+
+**The finding: ONE citation caused BOTH failures, in opposite directions.** This morning's logged
+soak failure was #36 never citing its OWN issue #30 → starved closeout. The same sentence citing
+#31 → false completion. And it is systematic, not a phrasing fluke: #29's decomposition RULES
+REQUIRE seams pinned naming the producing/consuming sibling, so every child cites its siblings by
+design. `meta-state.md` had predicted this hazard on the `gref` side, where the cost is a starved
+closeout — nobody priced the `ghit` side, where the cost is a false completion. **When a probe can
+err in two directions, price BOTH; the asymmetry is what picks the predicate.** Fixed (`e704c36`)
+by requiring a strong link (`implements|closes|fixes|resolves` + `#<n>`) — exactly the line
+`agent-runtime#34` makes `finalize` guarantee, so the predicate MEETS that fix instead of racing
+it. Held children are REPORTED under ⛔, never silently dropped. `gref` stays a bare mention
+deliberately: its failure direction is *hold*, and narrowing both mid-soak moves two variables.
+
+**A belt fired twice and that is the uncomfortable part.** Both stale dispatches were caught by the
+item session's own live-state re-read (*"Exiting clean, no writes made"* — FU-121). It worked, and
+it is an LLM judgement rather than a guarantee, and it burns a session per firing. The tempting
+reading was "the belt handles it". **A belt firing is evidence the guard was missing, not a reason
+to skip building it.** Killed both sessions and built the guard.
+
+**Verified live, not by re-reading the diff:** predicates first executed against the real merged-PR
+set (#31 → strong=0 / bare=1; `Implements #31`, `Closes #31`, `resolved  #31` match; `see sibling
+(#31)` and `Fixes #310` do not), then the first post-push tick judged on its OWN log — ⛔ held line
+printed, no closeout dispatched, #31 still `OPEN`/`agent/in-progress`.
+
+**Two smaller ones.** An ORPHAN monitor from a dead session was still running and invisible to
+`TaskList` until it fired — and it was a STALE VARIANT (missing `SCAN_PREFIX`), so it watched the
+wrong pod set. Stop monitors by id on sight. And my own verification script watched only
+`coordinate-circles-*`, blind to the doorbell-fired `coordinate-perstack-*` pods that actually
+carried the proof — the same "watch the failure signal explicitly" class it was written to check.
+Also: those coordinator pods' container is `coordinator`, not `main`; the probe said so loudly
+instead of returning empty.
