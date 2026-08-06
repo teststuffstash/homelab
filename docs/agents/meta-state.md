@@ -63,10 +63,11 @@ cross-reference event), so nothing can recover it after the fact.
 
 1. ✅ Containment `12e7fcf` — C4/C5 HOLDS goal children (cannot tell merged-but-unlinked from
    abandoned) and reports them under ⛔ in the scan's orphan block. Ordinary issues unaffected.
-2. ✅ `agent-runtime#34` OPEN + ARMED (implements `agent-runtime#32`): finalize prepends
-   `Implements #<n>` when the PR body does not already match. ⚠ agent-runtime has NO `.agents/` BY
-   DESIGN — operator ruling 2026-08-06: its fixes come from meta-coordination incidents, so drive
-   it with the JAIL credentials, never look for an agent lane.
+2. ✅ `agent-runtime#34` OPEN, ARMED, **`ci` GREEN** (implements `agent-runtime#32`): finalize
+   prepends `Implements #<n>` when the PR body does not already match. Waiting only on the
+   reviewer — which is subscription-backed, so it is behind the SAME 5h latch as #31. Self-clears.
+   ⚠ agent-runtime has NO `.agents/` BY DESIGN — operator ruling 2026-08-06: its fixes come from
+   meta-coordination incidents, so drive it with the JAIL credentials, never look for an agent lane.
 3. ⏳ **NEXT: #34 merges → `build-image.yaml` fires on `agent-base/**` → new `agent-base` tag →
    deploy-pin PR into homelab bumping `AGENT_BASE_IMAGE` in `agents/images.env` (currently
    `2026.8.5-gbbf8da511cb4`) → merge.** Only THEN do new worker pods carry the fix.
