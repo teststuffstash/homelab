@@ -193,14 +193,13 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
       from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
       finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
-      `new-stack --from` donor) + sleep-tracking#115, both verified locally by running the suites off
-      the profile's plugin. agent-runtime#30 switches the ride's nix `extra-substituters` →
-      `substituters`, so a LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest;
-      a hang once egress enforces). homelab side landed: `stack-lint` CACHE-01 probes what the
-      LAUNCHER probes (anonymous ghcr pull of `<repo>/devbox-cache:latest` — four repos have none)
-      and `new-stack` step E2 publishes it. **Next:** confirm on a post-merge ride that no WAN fetch
-      remains in the gate (the residue is `tofu validate`'s provider download, deliberately kept out
-      of `ci` — `docs/dependency-upgrades.md` §Next steps 3), then archive. Relates FU-073, FU-096.
+      `new-stack --from` donor) + sleep-tracking#115, both verified locally against the profile's
+      plugin. agent-runtime#30 switches the ride's nix `extra-substituters` → `substituters`, so a
+      LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest; a hang once egress
+      enforces). homelab side landed: `stack-lint` CACHE-01 probes what the LAUNCHER probes
+      (anonymous ghcr pull of `<repo>/devbox-cache:latest`) + `new-stack` step E2. **Next:** confirm
+      on a post-merge ride that no WAN fetch remains, then archive. (The one known residue is
+      `tofu validate`'s provider download, deliberately outside `ci` — `dependency-upgrades.md`.)
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
@@ -356,8 +355,7 @@ six OVERSIZE items pointer-ized into
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
       review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
       [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"); reflex skips `automerge`,
-      `rebaseWhen: conflicted` set (updater owns freshness).
-      **Unproven and awaiting a real reviewable bump:** an armed `deps-review` PR flowing through
+      `rebaseWhen: conflicted` set. **Unproven, awaiting a real reviewable bump:** an armed `deps-review` PR through
       the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
       **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
       manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
