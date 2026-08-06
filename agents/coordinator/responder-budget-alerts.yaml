@@ -32,7 +32,20 @@ spec:
               and on (job) (time() - push_time_seconds{job="responder_budget"}) < 10800
           for: 5m
           labels:
-            severity: info
+            # ⚠ severity is `warning`, NOT `info`, and that is not a judgement about urgency.
+            # `info` is SILENTLY SUPPRESSED in this cluster: kube-prometheus-stack ships a stock
+            # inhibit_rule (`source alertname=InfoInhibitor → target severity=info`, equal
+            # namespace) and the values file does not override inhibit_rules. Shipped as `info`
+            # on 2026-08-06 this alert reached Prometheus, fired correctly, and then sat
+            # `state: suppressed / inhibitedBy: [...]` in Alertmanager — dispatched to NEITHER
+            # the responder NOR the Home Assistant webhook, because a suppressed alert is not
+            # dispatched at all. It was live for ~10 minutes as pure decoration. Tell: this repo's
+            # other 27 alerts are all warning/critical; the one `info` was this one.
+            severity: warning
+            # Keeps the responder from triaging its own budget alert. Load-bearing at `warning`
+            # in a way it was not at `info`: the route now really does deliver this to the
+            # responder (`continue: true` → agent-responder), so this label is the only thing
+            # stopping a session being spent to report that sessions are not being spent.
             triage: none
           annotations:
             summary: "Responder is no longer launching LLM triage sessions today ({{ $value }})"

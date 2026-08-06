@@ -1222,8 +1222,11 @@ the unbounded burn it exists to stop); keeping the per-incident cap and merely r
 — the escape hatch, not the number, was the defect); rate-limiting at the Sensor (rejected — it
 bounds arrival, not spend, and a slow storm still drains the day).
 **Consequences:** alerts can now go **deliberately untriaged**, which is a state the platform must
-be able to see — hence the pushed gauges and the `ResponderTriageBudgetExhausted` info alert
-(labelled `triage: none`, or it would spend a session reporting that sessions are not being spent).
+be able to see — hence the pushed gauges and the `ResponderTriageBudgetExhausted` alert (labelled
+`triage: none`, or it would spend a session reporting that sessions are not being spent). ⚠ That
+alert is **`severity: warning`, not `info`**: `info` is silently suppressed cluster-wide by
+kube-prometheus-stack's stock `InfoInhibitor` inhibit_rule, so the first cut fired in Prometheus
+and was dispatched to nothing. An unroutable alert is worse than no alert — it looks like cover.
 Blocked alerts still fire and still route to Home Assistant; only automated investigation stops,
 and each blocked alert is recorded with a `budget-<date>` marker so a deliberate stop stays
 distinguishable from a dropped event in `meta-alert-crosscheck.sh`. The ceiling's VALUE is now

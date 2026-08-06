@@ -123,6 +123,15 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
 
 ## Durable warnings — re-read before touching these files
 
+- **⚠ `severity: info` alerts are SILENTLY SUPPRESSED in this cluster.** kube-prometheus-stack
+  ships a stock inhibit_rule (`alertname=InfoInhibitor` → `severity=info`, equal `namespace`) and
+  `values/kube-prometheus-stack.yaml` does not override `inhibit_rules`. An info alert reaches
+  Prometheus and fires correctly, then sits `state: suppressed` in Alertmanager and is dispatched
+  to NOTHING — not the responder, not the Home Assistant webhook. Shipped one on 2026-08-06; it was
+  live for ~10 minutes as pure decoration. **Use `warning`.** Tell: all 27 other alerts here are
+  warning/critical. Check with
+  `curl -s 'http://192.168.40.14:9093/api/v2/alerts?inhibited=true' | jq '.[].status'` — Prometheus
+  saying `firing` is NOT evidence anyone was told.
 - **⚠ A steady-state COUNTER cannot separate "at capacity" from "cannot work."** `running: 4,
   pending: 0` reads identically either way. Capacity claims need a THROUGHPUT signal: a saturated
   pool has jobs RUNNING, a broken one has workers WAITING. Made twice on 2026-08-06 — by me and,
