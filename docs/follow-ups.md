@@ -214,9 +214,7 @@ six OVERSIZE items pointer-ized into
       [`docs/agents/roles.md`](agents/roles.md) §Context delivery. Relates FU-117, FU-095, FU-020.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
-      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e): `send_resolved = true` + a
-      deterministic resolve leg (comment the clear, close only when no human engaged) + a firing
-      path that REOPENS a closed fingerprint instead of duplicating it. The `subject:` key and the
+      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e); the `subject:` key and the
       IAC-G10 hand-off shipped after it; **subject DEDUP shipped 2026-08-06** (`6affc63`) — the key
       had guarded duplicate issues but not duplicate SESSIONS (homelab#111: 3 sonnet triages in
       33 min), and is now checked before one is spawned. **Remaining — correlation:**
