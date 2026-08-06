@@ -368,9 +368,24 @@ if [ -n "$RUN_CMD" ]; then
     else
       _cdoor="{\"repo\":\"${MAIN_REPO}\",\"unit\":\"-\"}"
     fi
-    curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_cdoor" \
-      "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
-      >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_cdoor})" || true
+    # ⚠ DO NOT ring while the subscription is latched — the doorbell feeds the constraint it is
+    # waiting on (2026-08-06, circles#31). Observed spin, three cycles in eight minutes:
+    #   scan → item session → FU-088 defers the dispatch → session ends → RINGS → scan → …
+    # The deferral is correct; the retry shape is not. Coordinator sessions are themselves
+    # labelled `subscription-session: claude`, so each lap of that loop SPENDS the very capacity
+    # it is spinning for, and nothing bounds it but session duration (~2-3 min). With the 7d
+    # window binding (0.80 vs the heavy tier's 0.8) that is days of self-sustaining burn.
+    # A woken scan can only dispatch work that will defer for the same reason, so the ring buys
+    # nothing here. The `*/30` cron backstop still covers any non-subscription work — this trades
+    # ≤30 min of edge latency, while limited, against an unbounded loop. Level-triggered wins.
+    # Fail-open exactly like the tick gate above: an unreachable proxy rings as before.
+    if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" 2>/dev/null; then
+      echo "→ coordinator doorbell SKIPPED — subscription latched; ringing would re-dispatch work that defers again (cron backstop owns it)"
+    else
+      curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$_cdoor" \
+        "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+        >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_cdoor})" || true
+    fi
   fi
 else
   # `wait --for=condition=Ready` fires the instant the container process starts — it does NOT gate on
