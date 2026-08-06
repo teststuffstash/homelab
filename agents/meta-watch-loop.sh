@@ -89,9 +89,16 @@ while true; do
     #     agent/<ts>; the RECIPES name their branch fix/<slug>, so every real ride PR today —
     #     circles fix/bake-and-page-p0-mvp, openrouter-operator fix/issue-14-rbac-delete — was
     #     invisible to this clause. A guard scoped to the branch name the rides do not use.
+    #     ⚠ `major/awaiting-human` is EXCLUDED (2026-08-06, goal #29's bootstrap): a PR the loop is
+    #     forbidden to touch cannot be a ride that drifted. circles#21 — the FROZEN one-shot
+    #     benchmark arm of goal #17, based on `goal/17-p0-mvp` — matched `^fix/` and a stale
+    #     BASE_EXPECT forever, so every future drift would have arrived bundled with a permanent
+    #     false member. That is the noise-floor shape, not a widened guard: the label is the marker
+    #     for "human-reserved, out of the loop's reach", and a drift on such a PR is not actionable
+    #     by this session anyway. A REAL ride never carries it (only `unarmed-major` applies it).
     if [ -n "${BASE_EXPECT:-}" ]; then
       wrong=$(jq -c --arg b "$BASE_EXPECT" --arg hp "${BASE_HEADS:-^(agent|fix)/}" \
-                '[.[] | select((.h|test($hp)) and .b != $b)]' <<<"$pr")
+                '[.[] | select((.h|test($hp)) and .b != $b and ((.l|index("major/awaiting-human"))|not))]' <<<"$pr")
       if [ "$wrong" != "[]" ] && [ "$wrong" != "$last_wrongbase" ]; then
         echo "BASE DRIFT: open PR(s) NOT based on '$BASE_EXPECT': $wrong — a ride ignored --base; close/retarget before it merges"
         last_wrongbase="$wrong"
