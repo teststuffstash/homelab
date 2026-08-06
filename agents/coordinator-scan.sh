@@ -318,7 +318,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # the changes-requested clause on .author.login WITHOUT adding author here — the clause
     # matched NOTHING for four days (fixed 2026-08-06, with headRefName added for the FU-143
     # goal exclusions in the same breath). When you touch a jq selector, read this fetch first.
-    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName 2>/dev/null)" || prsjson='[]'
+    # `body` is fetched for the FU-146 per-item hold: it carries the `Implements #<n>` line that
+    # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
+    # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
+    prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body 2>/dev/null)" || prsjson='[]'
     jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
@@ -337,7 +340,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # parallel raise NEVER rides a dead probe; rule #6).
     # Fixerless (context-only) repos never run workers and have no ns RBAC — probing them is a
     # guaranteed per-tick FAILED warning (snore-recorder, 2026-08-02), so skip, don't probe.
-    wip_busy=""; wip_allow=1
+    # WIPPODS_JSON MUST reset with them (FU-146, 2026-08-06): it is only assigned inside the elif
+    # below, so a repo with no dispatchable work leaves the PREVIOUS repo pods in scope. Nothing
+    # read it across repos before the per-item hold did; resetting closes that hole at the source.
+    wip_busy=""; wip_allow=1; WIPPODS_JSON=""
     if [ -z "$dispatchable" ]; then
       :
     elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
@@ -637,8 +643,27 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # while #60's fix round ran, every tick woke a redundant judge whose dispatch the launcher's
       # WIP=1 pre-flight would refuse — the Running worker IS this unit's in-flight work; C4/C5
       # re-emits if it dies, and the next bot verdict retires the clause).
+      # FU-146 PER-ITEM hold (2026-08-06). The project-wide hold below was written when
+      # REPO_MAX_WIP was 1, where "a worker is Running here" and "a worker is Running on THIS PR"
+      # were the same sentence. ADR-097 raised the cap to 3 and silently made it a no-op for its
+      # stated purpose: measured on circles PR#39, every tick AND doorbell re-emitted this unit
+      # while its own fix round rode — ~59 of 71 coordinator sessions did nothing, and 13 of that
+      # PR 22 comments were bot noise a human has to read past.
+      # Key on the PR own linked issue vs the live ride pod names (agent-<stack>-issue-<n>-r<k>).
+      # FAIL-SAFE BY CONSTRUCTION: no link found, or no pod probe this tick, falls through to the
+      # project-wide behaviour unchanged — so this can only ADD holds, never remove one. And the
+      # hold is conditioned on a LIVE pod, so it self-releases when that pod exits; it cannot wedge.
+      pr_issue="$(printf '%s' "$prsjson" | jq -r --argjson n "$u" '.[] | select(.number == $n)
+          | (.body // "")
+          | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || pr_issue=""
+      if [ -n "$pr_issue" ] && [ -n "$WIPPODS_JSON" ] \
+         && printf '%s' "$WIPPODS_JSON" | jq -e --arg pat "issue-${pr_issue}-" \
+              '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ changes-requested held — a worker is already riding issue #${pr_issue} (FU-146 per-item):\n  PR #${u}\n"
+        continue
+      fi
       if [ -n "$wip_busy" ]; then
-        orphans="${orphans}[$repo] ⏳ changes-requested trigger held (worker Running in ${repo} — launcher WIP=1):\n  PR #${u}\n"
+        orphans="${orphans}[$repo] ⏳ changes-requested trigger held (project WIP at ${REPO_MAX_WIP} in ${repo}):\n  PR #${u}\n"
         continue
       fi
       units="${units}changes-requested|${repo}|pr-${u}\n"
