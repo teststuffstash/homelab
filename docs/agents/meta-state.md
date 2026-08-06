@@ -275,7 +275,16 @@ blockedBy edges in scan logs (→ FU-111 retirement); Monday 05:00 retro (= FU-0
 ### Open, not mine
 
 agent-runtime #13 (watchdog misses silent loops), #33 (resumed round reports "no resumable branch"),
-**#35** (a failed `:latest` push skips `deploy-pin`); openrouter-operator sprouts triaged.
+**#35** (a failed `:latest` push skips `deploy-pin`), **#36** (a fix round that dies mid-session
+reports `exit_status=clean` AND `salvage_push` is disabled once a PR exists — transcript-confirmed
+on circles#32 r3, 2026-08-06); openrouter-operator sprouts triaged.
+⚠ **Two new homelab FUs from the same incident:** **FU-146** (the `changes-requested` WIP hold was
+written for WIP=1; ADR-097's raise to 3 made it a no-op — 5+ duplicate dispatches per fix round,
+each exiting clean; waste not risk, 5h util measured 0.24) and **FU-147** (FU-115's no-op detector
+covers ci-red rounds ONLY, so a `changes-requested` round that banks nothing is invisible).
+⚠ **`deepseek-v4-flash` struck TWICE today on `goose-32602-truncation`** (circles#32 r1 and r3) and
+is the same model in `fixer-context.md` §"zero commits and a false-green". Worth watching whether
+the router actually routes away from it — r2 and r3 both ran on it again after r1's strike.
 **#32 MERGED** (finalize guarantees the issue link — via #34). **#31 CLOSED 2026-08-06** as
 solved-and-not-worth-it: `salvage_push()` (FU-064a, `agent-finalize:347`) already commits + pushes
 uncommitted state at terminal and predates the issue by a month, and #31's own deliverable — a
