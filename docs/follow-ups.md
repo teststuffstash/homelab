@@ -328,16 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-147** — **FU-115's no-op detector covers ci-red rounds only; `changes-requested` rounds
-      can no-op forever.** FU-115 (archived) compares the newest `Agent run stats` comment vs the
-      newest NON-merge commit — stats newer ⇒ the round pushed nothing ⇒ `agent/arbitrate` NOW. It
-      is wired into the **ci-red** clause only. A `changes-requested` round that pushes nothing is
-      invisible: live on circles PR#39 (2026-08-06) — r3 ran 1255s / $0.0462, **died on a `-32602`
-      truncation but was classified `clean`** (transcript-confirmed), banked nothing, and left the
-      branch at r2's commit with all three reviewer findings unaddressed. The cause is
-      agent-runtime#36; FU-147 is the DETECTOR that would have caught it whatever the cause.
-      **Next:** reuse FU-115's exact predicate in the changes-requested clause. Distinct from
-      FU-146 (that one is the WIP hold).
+- [ ] **FU-147** — **SHIPPED `15ef9cb`, awaiting live proof — and it found FU-115b BROKEN.** A
+      `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
+      `-32602` truncation, classified `clean`, banked nothing — cause is agent-runtime#36).
+      Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
+      where `gh` puts `committedDate` TOP-LEVEL, so `$head` was always "" and it returned "no-op"
+      for **every** PR; and comparison was wrong anyway — a successful round posts stats AFTER its
+      push, so `stats > head` holds for good rounds too. **Counting** is the fix (`>= 2` stats
+      after the newest non-merge commit). Never fired: 0 `agent/arbitrate` fleet-wide. Now one
+      shared `NOOP_ROUND_JQ` for both clauses. **Next:** VERIFY on the next real no-op round;
+      both clauses were IDLE at deploy, so it is tested against real history, not live traffic.
 - [ ] **FU-146** — **FIX SHIPPED `fc606e2`, awaiting live proof.** The `changes-requested` hold was
       written for WIP=1; ADR-097's raise to 3 silently retired it, so every tick **and doorbell**
       re-emitted the same unit while its own fix round rode. Measured on circles PR#39 2026-08-06:
