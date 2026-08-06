@@ -164,6 +164,13 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
   while several run). Find them with `ps aux | grep -E 'meta-watch-loop|meta-handoff-watch'` and
   kill by PID before re-arming; a survivor runs the script as it was PARSED and never picks up
   edits, and its events go to the DEAD session, not yours.
+  ⚠ **Killing those PIDs can get YOUR OWN fresh monitors reaped.** On 2026-08-06 the harness's
+  orphan reconciliation ran after the old PIDs were killed and marked all three just-armed monitors
+  "stopped — from the previous session", quoting THIS session's task ids. They were genuinely dead
+  (`ps` count 0), not a bookkeeping artifact. **`Monitor` returning "started" is not evidence a
+  watch is running** — after arming, confirm with `ps aux | grep -E 'meta-watch-loop\.sh|
+  meta-handoff-watch\.sh|sleep 7200' | wc -l`, and re-check once more if you killed orphans in the
+  same turn. A watch that was reaped is indistinguishable from a quiet one.
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; never a bare
   `devbox run -- kubectl` with no subcommand (prints help into the captured var); watch the FAILURE
   signature explicitly; make probes print `PROBE-FAIL` rather than fall through to empty state.
