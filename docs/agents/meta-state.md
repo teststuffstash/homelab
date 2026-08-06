@@ -122,10 +122,16 @@ cross-reference event), so nothing can recover it after the fact.
    every mirrored literal is `agent-coordinator`, a different image on its own deploy-pin.
 6. ⏳ **RE-SOAK FU-143 — the subject is #32 ROUND 2**, dispatched 12:04Z, i.e. AFTER the 11:52Z pin,
    so it is the first ride carrying the fixed image. (Round 1 pre-dated the pin and died anyway.)
-   **Success = its PR body carries `Implements #32`, and C6 auto-flips `agent/done` + closes +
-   harvests with NO meta hand-close.** Then archive the `12e7fcf` containment; the `e704c36`
+   ✅ **HALF ONE PASSED (12:41Z): the fix fires.** r2's own bookkeeping: `issue link ADDED
+   (Implements #32) — the PR body did not name its issue`. The MODEL still omitted it; `finalize`
+   now guarantees it, which is exactly agent-runtime#32/#34's contract. **PR#39** open, armed,
+   `ci` green (188/188), `exit_status=clean`, $0.125.
+   ⏳ **HALF TWO — the real verdict — is the MERGE**: C6 must auto-flip `agent/done`, CLOSE #32 and
+   harvest, with NO meta hand-close. Only then archive the `12e7fcf` containment. The `e704c36`
    strong-link guard **STAYS** either way — requiring an implementing keyword is the correct
-   predicate whether or not `finalize` guarantees the line.
+   predicate whether or not `finalize` guarantees the line. ⚠ Watch that C6 matches: the guard
+   wants `implements|closes|fixes|resolves` + `#32`, and finalize writes `Implements #32` — these
+   were built to meet, but this merge is the FIRST time they actually do.
 
    ⚠ **#32 round 1 DIED and read as a success.** `exit_status=harness-death`,
    `error_class=goose-32602-truncation` on `deepseek/deepseek-v4-flash`, 1757s, $0.0353, nothing
