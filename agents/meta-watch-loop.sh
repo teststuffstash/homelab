@@ -90,7 +90,17 @@ while true; do
     fi
     ex=$(printf '%s' "$stats" | sed -n 's/.*"exit_status":"\([^"]*\)".*/\1/p')
     ec=$(printf '%s' "$stats" | sed -n 's/.*"error_class":"\([^"]*\)".*/\1/p')
-    if [ -n "$ex" ] && [ "$ex" != "ok" ] && [ "$ex" != "success" ]; then
+    # ⚠ The clean value is literally `clean` (agent-finalize). Guarding against "ok"/"success"
+    # — neither of which the harness ever emits — made this fire on the FIRST healthy ride it saw
+    # (circles#32 r2, exit_status=clean). Match the real vocabulary, and keep the aliases only as
+    # tolerance. A watch that cries wolf on every good ride is worse than no watch: it trains the
+    # reader to skip exactly the line that will one day be true.
+    if [ -z "$ex" ]; then
+      echo "RIDE-PROBE-FAIL: $rpod emitted AGENT_RUN_STATS with no exit_status — parser or schema drift, judge the ride by hand"
+      seen_deaths="$seen_deaths $rp"; continue
+    fi
+    case "$ex" in clean|ok|success) ok_exit=1 ;; *) ok_exit=0 ;; esac
+    if [ "$ok_exit" = "0" ]; then
       echo "RIDE DIED (pod phase says ${rp##*@}): $rpod exit_status=$ex error_class=${ec:-none} — nothing may have been banked; a goal child will NOT self-redispatch (FU-143 containment), re-queue it by hand"
     fi
     seen_deaths="$seen_deaths $rp"
