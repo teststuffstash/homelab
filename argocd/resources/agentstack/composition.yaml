@@ -531,6 +531,10 @@ spec:
                       env:
                         - { name: HOME, value: "/home/node" }
                         - { name: ORG, value: "teststuffstash" }
+                        # reviewer.goalModel → the ASSEMBLY review's model (head goal/**, the
+                        # goal→master shape) — review-reflex.sh routes on it; all other PRs
+                        # keep the reviewer default. Claim-owned; see model-routing.md §M10.
+                        - { name: REVIEW_GOAL_MODEL, value: {{ default "sonnet" (get (default dict (get $xr.spec "reviewer")) "goalModel") | quote }} }
                       volumeMounts:
                         - { name: work, mountPath: /work }
                       resources:

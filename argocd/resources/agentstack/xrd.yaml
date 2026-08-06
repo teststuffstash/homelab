@@ -116,6 +116,16 @@ spec:
                       type: boolean
                       default: true
                       description: Auto-review this stack's PRs. Default on.
+                    goalModel:
+                      type: string
+                      default: sonnet
+                      description: >-
+                        Claude model alias for the ASSEMBLY review only — a PR whose head is
+                        goal/** (the goal→master shape, review-goal.md). Rendered into the
+                        per-stack review reflex as REVIEW_GOAL_MODEL; every other PR keeps
+                        the reviewer default (sonnet). NB must DIFFER from the model that
+                        decomposed the goal (goal-decompose runs GOAL_MODEL, default opus) —
+                        model-routing.md §M10.
                 slo:
                   type: object
                   description: >-
