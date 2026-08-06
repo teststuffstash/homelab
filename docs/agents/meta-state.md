@@ -126,6 +126,17 @@ cross-reference event), so nothing can recover it after the fact.
    (Implements #32) — the PR body did not name its issue`. The MODEL still omitted it; `finalize`
    now guarantees it, which is exactly agent-runtime#32/#34's contract. **PR#39** open, armed,
    `ci` green (188/188), `exit_status=clean`, $0.125.
+   ⚠ **#32 went to `agent/blocked` at round-bound (3 CHANGES_REQUESTED) and I RULED on it 14:40Z**
+   — the escalation was right, **the proposed remedy was spec-violating**. Reviewer + arbitration
+   both wanted "a distinct fill/pattern per `grey_reason`"; `CIR-DATA-GREY-REASON` says *"the light
+   is the same (the glossary fixes four statuses, not five)"*. The hover-free per-cell channel is
+   the **text alternative** (`CIR-RENDER-STATUS-ENCODING`: *"lists every cell with it — and
+   prints"*), already implemented in `_render_a11y_table()`'s Detail column. Ruling + narrowed
+   scope (fix the 2 fake tests, add the reason to grey cells' `aria-label`, change NO fill) +
+   a ⚑ spec-wording gap: circles#32 comment 5206216525. Unblocked → `agent/queued`.
+   ⚠ **The lesson:** two agents reasoned correctly inside `render/colors.md` and reached a remedy
+   `data/status-resolution.md` forbids. A reviewer that verifies CODE against ONE spec page is not
+   verifying it against the CONTRACT.
    ⏳ **HALF TWO — the real verdict — is the MERGE**: C6 must auto-flip `agent/done`, CLOSE #32 and
    harvest, with NO meta hand-close. Only then archive the `12e7fcf` containment. The `e704c36`
    strong-link guard **STAYS** either way — requiring an implementing keyword is the correct
