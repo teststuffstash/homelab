@@ -19,16 +19,21 @@ split, so children merge bot-approved; armed-PR count 0 (the TRACKS cap counts A
 un-armed research PRs do not charge it); WIP 0; `Budget: €12` parses; no blockedBy.
 `agent/queued` actor = `RasmusSoot` type **User** → the fail-closed decompose check passes.
 
+**Progress (08:37Z):** steps 1–2 DONE and good. Decompose ran on opus (18m03s), authored
+**#30 → #31 → #32 → {#18, #19}** (all `Base:` inherited, narrowed `Touches:`, native sub-issues +
+`blocked_by`), filed **#33/#34/#35** as named inert deferrals, put #29 in `agent/blocked` tracking
+state, and posted a **91-id coverage map** — `CIR-BAKE-SELF-CONTAINED` owned by #32 with #19 as
+cross-seam prover (the id that went unowned through four #17 reviews). Σ caps 5 × lg $2 = $10 ≤ $12.
+#30's ride is running; the rest are correctly held on `Depends-on:`.
+
 **Next expected events, with deadlines** (anti-stall: every wait has one):
 
-1. `goal-decompose` dispatch on the next `*/30` tick, log line echoing **`model opus`** (its first
-   live proof — `1b4bda5`). If a tick passes with `nothing actionable`, read WHY in the scan log.
-2. Child issues authored + queued, each: native sub-issue, narrowed `Touches:`, `Base:
-   goal/29-p0-complete` inherited, ONE deliverable, **a coverage map naming an owner for every
-   requirement id** (`CIR-BAKE-SELF-CONTAINED` went unowned through four reviews on #17).
-3. Rides → PRs into `goal/**`, armed, bot-approved, `ci` green → merge.
+3. #30's ride → PR into `goal/29-p0-complete`, **armed at creation** (launcher arms on the `goal/`
+   prefix) → reviewer (only reviews ARMED PRs) → `ci` → merge. ⚠ First live proof that a child PR
+   arms into a goal base and that the ruleset lets a bot approval satisfy it without a codeowner.
 4. **FU-143's first live closeout** (the soak): C6 flips `agent/done`, CLOSES the child, harvests
    the review `Follow-ups:` — and goal-lane sprouts are QUEUED at harvest, not inert.
+   ⚠ Check the C6 hazard above BEFORE the merge (sibling `#<n>` refs in PR bodies).
 5. `goal-review` re-judges on every child closure; on "goal met" IT opens + arms the assembly PR.
 
 ⚠ **Hazard found reading C6, not yet observed — check before the first child merges.** The

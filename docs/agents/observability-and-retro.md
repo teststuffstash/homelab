@@ -186,10 +186,16 @@ that a doorbell could have collapsed is a **defect with an FU id**, not a fact o
   documented mono-jail remedy for exactly this transition was stale. Use
   `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
 - **`AgentCoordinateScanWedged` measures the wrong thing** (FU-145 points here). It keys on scan-pod
-  LIFETIME, but the pod blocks on the item session it dispatched, which blocks on the ride:
-  verified live inside `coordinator-081840`, **PID 512 = `kubectl -n circles logs -f
-  agent-circles-issue-30-r1`**. So it fires on any ride >15m, on every stack — seen twice in one
-  hour (the 18m03s decompose, then #30's ride), both healthy, both self-resolving.
+  LIFETIME, but the pod blocks on the item session it dispatched, which STREAMS THE RIDE
+  SYNCHRONOUSLY: verified live inside `coordinator-081840`, **PID 512 = `kubectl -n circles logs -f
+  agent-circles-issue-30-r1`** (the session's own log: *"the dispatch call itself streams the full
+  worker run synchronously"*). Measured: scan pod 18m32s, session 18m03s, alert at 15m.
+  So it fires on any dispatch whose ride runs >15m, on every stack — seen twice in one hour (the
+  decompose, then #30's ride), both healthy, both self-resolving.
+  ⚠ Say "streams the ride", not "waits for the whole ride": `coordinator-081840` EXITED at 08:36:44
+  with `agent-circles-issue-30-r1` still Running. Why the stream ends early is a separate,
+  unresolved question — and a consequential one, since `agent-session.sh`'s end-of-run `/coordinate`
+  doorbell runs in the LAUNCHER, i.e. inside the session pod that just exited (see the ⏳ row below).
   **A pod-lifetime probe cannot measure a phase that blocks on downstream work** — Part A′ finding
   #1's class again: an alert whose subject is not the thing it names.
   **Fix:** key it on the deterministic scan phase. ⚠ Not by raising the threshold (blinds ordinary
