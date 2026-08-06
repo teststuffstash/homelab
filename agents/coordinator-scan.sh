@@ -276,13 +276,32 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       if jq -e . >/dev/null 2>&1 <<<"$gmerged" && jq -e . >/dev/null 2>&1 <<<"$gopen"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
+          # ⚠ STRONG LINK REQUIRED, not a bare mention (incident 2026-08-06, the mirror of the
+          # soak failure two paragraphs up). A bare `#<n>` cannot tell "the PR that IMPLEMENTS the
+          # issue" from "a PR that NAMES it as a sibling seam" — and #29's decomposition RULES
+          # REQUIRE seams pinned naming the producing/consuming sibling, so every child cites its
+          # siblings by design. circles#36 said "that's the sibling issue (#31)" and one citation
+          # did both halves of the damage: #30's closeout starved (ghit=0) AND #31 matched as
+          # merged-and-done (ghit=1) while its ride was still RUNNING — a false close would have
+          # flipped agent/done, closed the issue, fired goal-review and unblocked #32/#18/#19 on
+          # work that does not exist. Asymmetry is the whole argument: a MISSED closeout costs a
+          # meta nudge (and is reported below), a FALSE one corrupts the goal's completion state.
+          # The keyword set is exactly what agent-runtime#32/#34 makes `finalize` guarantee, so
+          # this predicate meets that fix rather than racing it. Until #34's image rolls out
+          # nothing matches here — that is INTENDED (hand-close per meta-state), not a regression.
           ghit="$(jq -r --arg b "$gbase" --argjson n "$gn" \
-            '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || ghit=0
+            '[.[] | select(.baseRefName == $b)
+                  | select((.body // "") | test("(implements|closes|close[ds]?|fixe[ds]?|fix|resolve[ds]?)[ \\t]+#\($n)\\b"; "i"))] | length' <<<"$gmerged")" || ghit=0
+          # Reported, never silent: a merged PR MENTIONS it but no strong link ⇒ ambiguous, held.
+          gmention="$(jq -r --arg b "$gbase" --argjson n "$gn" \
+            '[.[] | select(.baseRefName == $b) | select((.body // "") | test("#\($n)\\b"))] | length' <<<"$gmerged")" || gmention=0
           gref="$(jq -r --argjson n "$gn" '[.[] | select(test("#\($n)\\b"))] | length' <<<"$gopen")" || gref=0
           # merged PR into the declared base cites the issue AND no OPEN PR still references it
           # (an open follow-up round means live work — not closeable yet)
           if [ "${ghit:-0}" -gt 0 ] && [ "${gref:-0}" -eq 0 ]; then
             c6g="${c6g}${gn}|${gbase}\n"; c6g_nums="${c6g_nums}${gn} "
+          elif [ "${gmention:-0}" -gt 0 ] && [ "${ghit:-0}" -eq 0 ]; then
+            orphans="${orphans}[$repo] ⛔ issue #${gn} — a merged PR into ${gbase} MENTIONS it but does not IMPLEMENT/CLOSE it (sibling-seam citation, not a closeout). Held: verify by hand, then hand-close. Auto-closeout resumes once agent-runtime#34's finalize ships the \`Implements #${gn}\` line.\n"
           fi
         done
       else
