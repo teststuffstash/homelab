@@ -332,13 +332,12 @@ six OVERSIZE items pointer-ized into
       no-op.** `coordinator-scan.sh:640` holds only when `wip_busy`, set at `live >= REPO_MAX_WIP`
       (**default 3**) — but its comment claims "the Running worker IS this unit's in-flight work",
       true only at WIP=1. So while a fix round rides, every cron tick **and every doorbell** re-emits
-      the same `changes-requested|repo|pr-N`; the session's live-state re-read exits clean (nothing
-      is corrupted) but each burns a sonnet coordinator session — the "absorbing belt" class the
-      comment names. Live: circles PR#39, 2026-08-06 — **5 dispatches in 18min** while
-      `issue-32-r3` rode. ⚠ Waste, not yet a risk: 5h utilization measured 0.24 mid-burst.
-      **Next:** hold per-ITEM — match the live ride to the PR's linked issue (reliable since
-      agent-runtime#34 guarantees `Implements #<n>`). ⚠ NOT `live >= 1`: that reverts ADR-097.
-      Relates FU-088, ADR-094, ADR-097.
+      the same `changes-requested|repo|pr-N`; the session exits clean on its live-state re-read, but
+      each burns a sonnet coordinator session — the "absorbing belt" class the comment names. Live:
+      circles PR#39 2026-08-06, **5 dispatches in 18min** while `issue-32-r3` rode. ⚠ Waste, not
+      yet risk — 5h utilization measured 0.24 mid-burst. **Next:** hold per-ITEM, matching the live
+      ride to the PR's linked issue (reliable since agent-runtime#34 guarantees `Implements #<n>`).
+      ⚠ NOT `live >= 1` — that reverts ADR-097. Relates FU-088, ADR-094, ADR-097.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
