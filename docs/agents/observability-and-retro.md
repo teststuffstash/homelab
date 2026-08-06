@@ -153,6 +153,44 @@ first. Ranked reality:
 *invisible* (stalls) and *dispatched to a weak model*. Both are monitoring/model problems, not
 caching problems.
 
+## Part A″ — the goal-lane ledger: WORK vs PLATFORM WAIT (circles#29, 2026-08-06)
+
+Operator direction, 2026-08-06: *"keep a log of work vs platform wait time … ring doorbells if the
+platform is missing one, don't let the process wait 30 minutes — meta-coordination context is also
+a cost that the waiting burns."* Part A′ measured a WORKER's issue; this measures the **goal
+lane**, where the hops multiply (decompose → child → merge → closeout → re-judge → next child) and
+each missing edge costs a full `*/30` cron.
+
+Two costs, not one. Wall-clock is the obvious one; the second is that a meta session **holds
+context while it waits**, and that context is billed against a 1-hour cache TTL. A 30-minute
+platform wait is not free even when nothing is being ridden.
+
+**Accounting rule:** ⚙ WORK = a pod is executing (scan, session, ride, CI). ⏳ WAIT = the platform
+knows something happened and nothing is running. Every ⏳ row names the missing edge, and a ⏳ row
+that a doorbell could have collapsed is a **defect with an FU id**, not a fact of life.
+
+| span (UTC) | what | dur | class |
+|---|---|---|---|
+| 07:51:25 → 08:00:00 | `agent/queued` applied → first scan sees it | **8m35s** | ⏳ no emitter on the label transition — FU-144 |
+| 08:00:00 → 08:18:03 | scan + `goal-decompose` (opus; session 17m32s) | 18m03s | ⚙ |
+| 08:18:03 → 08:18:14 | decompose done → next scan | **11s** | ✅ doorbell (session rings on completion) |
+| 08:18:14 → 08:18:41 | scan → first child dispatched | 27s | ⚙ |
+
+**Findings from the first two hops:**
+
+- **The edges that exist are excellent (11s); the edges that are missing cost ~8–30 min each.**
+  This is the same shape as Part A′ finding #1 — the sink is never compute, it is a transition
+  nobody emits on. The goal lane just has more transitions.
+- **`devbox run coordinate-now` does not wake a graduated stack** (FU-144, third dead edge). The
+  documented mono-jail remedy for exactly this transition was stale. Use
+  `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`.
+- **`AgentCoordinateScanWedged` fires on every goal-decompose** (FU-145): the scan pod's lifetime
+  includes its dispatched session, so a healthy 18m decompose trips a 15m threshold calibrated on
+  p99=302s of pre-goal-lane ticks — then self-resolves, so it reads as noise.
+- ⚠ **Do not "optimise" the 18m decompose.** It read 15 spec pages, a 52-entry ⚖ register and 91
+  requirement ids, and produced a coverage map with three explicit deferrals. That is the work.
+  The measurable waste is in the ⏳ rows.
+
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
 ### B1. retro-facts reflex (deterministic, per terminal task — P2)

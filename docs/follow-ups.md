@@ -317,16 +317,27 @@ six OVERSIZE items pointer-ized into
       changes-requested clause dead since `671a053`); point 7 (the merged-PR doorbell,
       circles `36993f4`) same day. **Next:** SOAK — watch the first live closeout + doorbell
       ring on circles#29's first child, then archive.
-- [ ] **FU-144** — **The `{repo}` doorbells are dead edges now that every stack is graduated.**
-      `.github/workflows/renovate.yaml` posts `{"repo":"all"}` and `devbox-update.yaml`
-      `{"repo":"<matrix.repo>"}` — no `loop_ns`, so they satisfy only the GLOBAL Sensor dep
-      (`agents/coordinator/coordinate-argo.yaml` §deps), and the global scan skips all four
-      graduated stacks. Measured 2026-08-06 on a real merge: the ring wakes a scan that prints
-      `skipped ×4` and nothing else, so Renovate/devbox-update PRs wait for the `*/10` cron.
-      **Next:** teach both emitters the `{stack, loop_ns}` payload (⚠ they read
+- [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
+      emitter satisfies only the GLOBAL Sensor dep, and the global scan skips graduated stacks —
+      so renovate, devbox-update AND a human/jail applying `agent/queued` all ring nothing.
+      Measured cost + the accounting: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
+      §Part A″; the corrected emitter row: [`workflow.md`](agents/workflow.md) §Triggers.
+      Workaround shipped 2026-08-06 — `scripts/reflex-now.sh` takes a namespace
+      (`reflex-now.sh coordinate-circles circles-agents`).
+      **Next:** teach the emitters the `{stack, loop_ns}` payload (⚠ they read
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
-      Relates FU-085 (archived — built these emitters pre-graduation), FU-143, ADR-094.
+      Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-145** — **`AgentCoordinateScanWedged` fires on every goal-decompose.** The scan pod's
+      lifetime INCLUDES the item session it dispatches, so `coordinate-circles-1786003200` ran
+      **18m03s** (opus decompose of circles#29, healthy, `Succeeded`) and tripped the >15m
+      threshold, then self-resolved. The threshold was calibrated at p50 29s / p99 302s over 2474
+      runs — all pre-goal-lane. A repeating false alarm desensitises the ONLY probe for a
+      genuinely wedged scan, and this one clears itself, so nobody investigates.
+      **Next:** exclude ticks whose dispatched unit is `goal-decompose`, or key the alert on the
+      SCAN phase rather than total pod lifetime. ⚠ Do NOT just raise the threshold — that blinds
+      it for ordinary ticks, which is the failure it exists to catch. Relates homelab#103
+      (containment `fc7e9fb`), FU-090.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell

@@ -171,7 +171,16 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
   | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback: labels are already in its 120 s poll; conflict-resolution latency is non-critical | ≤2 min |
   | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs; exporter piggyback as belt | instant |
-  | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `devbox run coordinate-now` (`scripts/reflex-now.sh`, live); stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
+  | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
+
+⚠ **That last row said `devbox run coordinate-now` until 2026-08-06 and was WRONG for every
+graduated stack** — `coordinate-now` fires the GLOBAL reflex, which skips graduated stacks
+entirely (FU-144), so the promised edge woke a run that printed `skipped ×4`. Nothing else
+watches this transition, so a queued issue simply waited for the `*/30` per-stack cron: **8m35s**,
+measured on circles#29. The whole point of the table is that *every* transition has an emitter —
+a row naming a mechanism that cannot reach the stack is worse than an empty row, because it stops
+anyone looking. Ring the stack's OWN CronWorkflow (the namespace argument, above) until FU-144
+fixes the payload properly.
 
 - **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
   the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the
