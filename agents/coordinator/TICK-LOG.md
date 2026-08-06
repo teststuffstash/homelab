@@ -2514,3 +2514,54 @@ FU entry *before making the commit*, so it referenced nothing — a fabricated c
 tracker whose value is that its references resolve. And I committed the trimmed entry without
 re-running `follow-ups-lint`, so it went from 13 lines to 11 against a cap of 10 and needed a third
 pass. **Run the gate before the commit, not after the push.**
+
+### 2026-08-06 (cont. 6) — the cap that counted the wrong noun
+**Condition:** operator, after the #111 correction — *"What about a max cap per day, another latch
+of sorts + grafana dashboard + info alert that LLMs are no longer launched for issue investigation.
+So that N_TODAY is the first check and definitely binding."* Correct on every count, and the reason
+is sharper than "the cap was too loose": **the cap counted the wrong noun.**
+
+`N_TODAY` counted distinct INCIDENTS and gated on `N_TODAY >= 12 AND INC_SEEN == 0` — so it blocked
+a *new* incident once twelve were spent and left repeats of an already-seen one unbounded **by
+construction**. Demonstrated: four alerts sharing one incident spawn four sessions while the counter
+reads 1. The ceiling could be walked past without ever being reached. My subject dedup earlier the
+same session bounded repeats per RESOURCE; nothing bounded the DAY.
+
+**The fix counts SESSIONS, and the counter was already in the ledger.** Every spawned triage writes
+`fp-<fp> = "<date>|<incident>"`, so entries prefixed with today's date ARE today's sessions — no new
+state, no counter to reset at midnight, nothing to race, and the skip-markers
+(`deferred-/cap-/none-/subjdup-/budget-`) are excluded for free because they were already designed
+not to match. Checked before any per-alert work AND again before each spawn, so one Alertmanager
+group carrying twenty alerts cannot overshoot.
+
+**It fails CLOSED, and that is a deliberate split from `subscription-latch.sh`,** which fails open
+by design. That latch is a burn-saver in front of a limit the proxy enforces anyway — failing open
+costs one doomed spawn. **Nothing else enforces this budget**, so failing open restores exactly the
+burn the latch exists to stop. An unreadable ledger now blocks and says so; the blocked alerts still
+get markers, so `meta-alert-crosscheck.sh` sees handled rather than stuck.
+
+**`triage: none` on the alert is load-bearing, not decoration** — without it the responder triages
+its own budget alert, spending a session to report that sessions are not being spent, and on the
+first alert of the next day it spends one of the NEW budget doing so.
+
+**Executed, not eyeballed** — a wrong dedup over-suppresses, which is silent. The latch across five
+paths (cold start / under / exhausted / yesterday-only / unreadable-fails-closed), then the real
+extracted loop with the latch wired, `RESPONDER_DAILY_MAX=2`, four alerts: two spawns then two
+`budget-` markers, the counter stepping 0/2 → 1/2 → exhausted **mid-payload**. The old cap passes
+all four. Verified live afterwards that Prometheus LOADED the rule (`inactive`, `triage=none`) and
+the Grafana sidecar wrote the dashboard — a PrometheusRule object existing is not a rule Prometheus
+has loaded, which is the same "written is not applied" shape as the four logged on 2026-08-05.
+
+⚠ **The one thing NOT proven, and it is the observability half:** the gauges do not exist until the
+responder next runs, and the jail cannot reach the pushgateway ClusterIP (BGP boundary — the same
+reason `subscription-latch.sh` fails open when run by hand). So if the push path is broken, the
+dashboard stays empty and the alert never fires — the BLOCKING still works, but its visibility does
+not, and an empty dashboard reads identically to a quiet day. Named in meta-state with the concrete
+first-fire check rather than assumed good.
+
+**My own:** wrote `FU-149` into code comments before checking the id was free. It happened to be the
+declared next-free id, so it was correct — but it was asserted before it was verified, which is the
+prior-art rule itself. Also two probe faults caught only because they failed loudly: `devbox run`
+executes from the repo root, so a `cd`-then-extract produced an EMPTY script (the substring error
+was the tell), and a test harness variable that was not exported sent the latch down its fail-closed
+path — which at least proved that path under a real subprocess.

@@ -47,6 +47,19 @@ run, then **close homelab#111**.
   scans/week). ⚠ Do NOT implement the issue's "reject `unit=-`" candidate — `-` is the legitimate
   full-scan default.
 
+## ⏳ ONE PENDING VERIFICATION — the responder budget's OBSERVABILITY half (ADR-099, FU-149)
+
+The blocking half is proven and live (Prometheus loaded `ResponderTriageBudgetExhausted`; the
+Grafana sidecar wrote "Responder triage budget"). **The gauges are not proven**: they do not exist
+until the responder next runs, and the jail cannot reach the pushgateway ClusterIP (BGP boundary —
+the same reason `subscription-latch.sh` fails open when run by hand). If the push path is broken,
+blocking still works but is INVISIBLE, and an empty dashboard reads exactly like a quiet day.
+
+**Check on the responder's next run** (any new alert fingerprint):
+`curl -s 'http://192.168.40.13:9090/api/v1/query?query=responder_triage_sessions_today'` — a result
+means the rail works end to end. Empty after a confirmed responder run = the push is broken; read
+the respond workflow's logs for the `pushgateway unreachable` line the script prints on failure.
+
 ## LIVE CHAIN — circles#29, the P0-complete goal
 
 **Terminus:** an assembly PR `goal/29-p0-complete` → master, ARMED, blocked by the CODEOWNERS gate
