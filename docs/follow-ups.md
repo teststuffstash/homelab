@@ -313,10 +313,14 @@ six OVERSIZE items pointer-ized into
       C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock (live
       circles#22, 2026-08-05). Mechanism, the agent-runtime#32 mirror warning, and the 7-point
       implementation contract: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
-      §A child cannot close itself. Points 1–6 shipped 2026-08-06 (`e66b421`, also reviving the
-      changes-requested clause dead since `671a053`); point 7 (the merged-PR doorbell,
-      circles `36993f4`) same day. **Next:** SOAK — watch the first live closeout + doorbell
-      ring on circles#29's first child, then archive.
+      §A child cannot close itself. Points 1–7 shipped 2026-08-06 (`e66b421`, circles `36993f4`).
+      ⛔ **SOAK FAILED on the first child, same day** — circles#36 merged into `goal/**` citing
+      only its sibling, so C6 (which matches a merged PR whose body CITES the issue) never saw
+      #30, and C4/C5 re-rode merged work. The doorbell (point 7) fired fine. Points 1–2 are
+      correct; the INPUT is not. **Blocked on `agent-runtime#32`** (finalize must guarantee the
+      issue link) — undeclared dependency, now declared. C4/C5 holds + reports goal children
+      instead of guessing (`12e7fcf`); that is containment, NOT the fix. **Next:** land
+      agent-runtime#32, then re-soak on a #29 child.
 - [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
       emitter satisfies only the GLOBAL Sensor dep, and the global scan skips graduated stacks —
       so renovate, devbox-update AND a human/jail applying `agent/queued` all ring nothing.

@@ -28,6 +28,35 @@ which skips graduated stacks — use `bash scripts/reflex-now.sh coordinate-circ
 and **FU-145** (`AgentCoordinateScanWedged` keys on scan-pod lifetime, so it fires on any ride
 >15m on every stack — expect it as noise until re-keyed).
 
+### ⛔ LIVE CHAIN — FU-143 soak FAILED, fix riding (09:40Z)
+
+**Every remaining #29 child reproduces this until the image rolls out. Expect to hand-close each.**
+
+circles#36 merged into the goal branch citing only its sibling #31, never its own issue #30. C6's
+goal-child leg matches a merged PR whose body CITES the issue → `ghit=0` → no closeout unit → the
+C4/C5 exclusion had nothing to key on → C4/C5 re-rode merged work. Killed pre-worker; a second
+redispatch raced the hand-close and its session self-caught ("exiting clean, no writes made" — the
+FU-121 belt). GitHub holds NO link between #30 and #36 (no keyword, no mention, so no
+cross-reference event), so nothing can recover it after the fact.
+
+**Chain, with the next step at each hop:**
+
+1. ✅ Containment `12e7fcf` — C4/C5 HOLDS goal children (cannot tell merged-but-unlinked from
+   abandoned) and reports them under ⛔ in the scan's orphan block. Ordinary issues unaffected.
+2. ✅ `agent-runtime#34` OPEN + ARMED (implements `agent-runtime#32`): finalize prepends
+   `Implements #<n>` when the PR body does not already match. ⚠ agent-runtime has NO `.agents/` BY
+   DESIGN — operator ruling 2026-08-06: its fixes come from meta-coordination incidents, so drive
+   it with the JAIL credentials, never look for an agent lane.
+3. ⏳ **NEXT: #34 merges → `build-image.yaml` fires on `agent-base/**` → new `agent-base` tag →
+   deploy-pin PR into homelab bumping `AGENT_BASE_IMAGE` in `agents/images.env` (currently
+   `2026.8.5-gbbf8da511cb4`) → merge.** Only THEN do new worker pods carry the fix.
+4. ⏳ Then re-soak FU-143 on a #29 child and archive the containment if it holds.
+
+⚠ **Hand-close recipe for a #29 child until then:** verify the merge against the goal branch, post
+an audit comment, `--add-label agent/done --remove-label agent/in-progress`, close. That fires
+`goal-review` and unblocks `Depends-on:` siblings. It DOES suppress C6's harvest — read the review's
+`Follow-ups:` yourself and file/judge them by the harvest bar.
+
 **Progress (09:02Z):** #36 (`fix/p0-bake-config-model` → the goal branch) is in **fix round r2**
 after a CHANGES_REQUESTED. Proven live in this run, all first-time: a child PR **arms into a
 `goal/**` base**; `ci` **triggers on `goal/**`** (1m42s pass); the reviewer reviews an armed goal
