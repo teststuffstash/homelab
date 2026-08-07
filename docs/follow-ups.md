@@ -328,19 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-151** — **First-party `-iac` deploy bumps escape LLM review by TIMING, not by design.**
-      `review-reflex.sh:262` skips `automerge`-labelled PRs (the mechanical lane,
-      [`dependency-upgrades.md`](dependency-upgrades.md) §2), but the app repos open their
-      `deploy: <app> <ver>` / `specs-pr:` PRs UNLABELLED. They survive only because `-iac` repos are
-      `require_approval=false`, so auto-merge fires on CI-green before the 15-min tick (measured:
-      sleep-iac#62, circles-iac#31 both `reviews=0`). A slow CI run or a fast tick reverses that —
-      and where the window IS long the same gap cost real money: homelab#102/#104/#105 drew **5
-      reviewer sessions on 4 one-line pins**. Deferred because the two lanes that actually burned
-      sessions are fixed (openrouter-operator#23, agent-coordinator#10). ✅ `automerge`+`dependencies`
-      already exist on all three `-iac` repos — no tofu/github change. **Next:** port the
-      `gh pr edit --add-label automerge --add-label dependencies` one-liner (OUTSIDE the
-      create-if-absent branch — the branches are long-lived) into sleep-tracking, circles,
-      oracle-fleet, snore-recorder. Reference: agent-runtime PR#37.
+- [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
+      `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
+      [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
+      `specs-pr:` PRs UNLABELLED. They survive only because `-iac` is `require_approval=false`,
+      so auto-merge beats the 15-min tick (sleep-iac#62, circles-iac#31: `reviews=0`) — a slow
+      CI run reverses it. Where the window IS long the same gap cost **5 reviewer sessions on 4
+      one-line pins** (homelab#102/#104/#105). Deferred: the lanes that actually burned sessions
+      are fixed (openrouter-operator#23, agent-coordinator#10), labels already exist on all three
+      `-iac` repos. **Next:** port `gh pr edit --add-label automerge --add-label dependencies`
+      (OUTSIDE create-if-absent) into sleep-tracking, circles, oracle-fleet, snore-recorder.
 - [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
       gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
       fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
