@@ -82,7 +82,7 @@ metadata:
   name: fix-debounce-backstop
   namespace: agent-coordinator
 spec:
-  schedule: "17 */2 * * *"
+  schedules: ["17 */2 * * *"] # plural — this Argo's CronWorkflow schema (like every rendered cron here)
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   workflowSpec:
