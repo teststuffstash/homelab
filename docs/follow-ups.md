@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-153**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-154**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-153** — **A worker cannot run the gate it authors, so a red CI escalates to a human.**
+      circles#19 authors a kind system-testing gate; its ride pod has ONE container (`agent`, no
+      dind — `fixer.docker` unset), so in-pod `devbox run ci` **cannot run kind** — it skipped the
+      gate and still reported `ci_passed: true` while Actions failed it twice (`HTTP 000000`).
+      Running `ci` in-pod is a suggestion by design and CI is the real gate — but on a red the
+      coordinator has **no lever to find the truth**: it cannot re-run the job (FU-148, no
+      `actions:write`) nor reproduce in-pod (no docker), so it parks at `agent/blocked`.
+      **Operator direction 2026-08-07:** give each stack coordinator levers — re-run CI, and/or
+      invoke an in-pod CI run — so a red is retried, not escalated. ⚠ in-pod vs in-CI CAN
+      legitimately differ under kind; the lever must reveal which. Relates FU-148, ADR-097.
 - [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
       The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
       silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
