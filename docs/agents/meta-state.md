@@ -52,6 +52,14 @@ arbitration records the `homelab-reviewer` verdict confirming the coverage map (
 owned/deferred, CI exercises the kind gate) — specs included, NOT the PR#25 code-only failure
 mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the related open item.
 
+## ⏳ OPERATOR GATE (22:40Z): goal #29's child budget is overrun — #57 r2 REFUSED
+
+The launcher's deterministic pre-flight refused #57's ci-red fix round: Σ child caps **$26 >
+`Budget: $12`** on goal #29 (`AGENT_BUDGET_REFUSED` posted on PR#58 + the goal; #57 is
+`agent/blocked`). The assembly PR#54 cannot complete until #57 lands, and #57 cannot ride until
+you either **raise the goal's `Budget:` line or re-scope its children**. Money lever = yours by
+design (operating model); nothing else is blocked by it — #42/PR#56 continue.
+
 ## Where goal #29 stands (2026-08-07 ~21:00Z)
 
 - **Assembly PR#54 open, CHANGES_REQUESTED**: the review found ONE blocking gap, routed as child
