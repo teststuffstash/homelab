@@ -180,7 +180,12 @@ watches this transition, so a queued issue simply waited for the `*/30` per-stac
 measured on circles#29. The whole point of the table is that *every* transition has an emitter —
 a row naming a mechanism that cannot reach the stack is worse than an empty row, because it stops
 anyone looking. Ring the stack's OWN CronWorkflow (the namespace argument, above) until FU-144
-fixes the payload properly.
+fixes the payload properly. The fix's shape: teach the remaining emitters the `{stack, loop_ns}`
+payload (the new fix-debounce emitter sends it from birth, `83907ea` — it never joins this gap),
+or fan the global trigger out over graduated namespaces; then decide whether the global reflex
+has a reader left. ⚠ Two-readers trap for whoever implements it: the emitters read
+`agents/stacks.json` while the scan reads the LIVE claim — a stack graduated in the claim but
+stale in the mirror would get a payload the scan ignores.
 
 - **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
   the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the
@@ -213,7 +218,7 @@ Supersedes per-lane label counting as the write-conflict guard. The scan's dispa
 predicate gains footprint intersection in place of `lane-free`:
 
 - **Declared footprint** = the issue's machine-readable `Touches:` body line (paths/globs,
-  comma-separated; same body-line grammar as `Depends-on:`), authored once at issue creation
+  comma-separated, unbulleted), authored once at issue creation
   ([issue-authoring.md](issue-authoring.md) §Touches). **No line = exclusive**: an undeclared
   issue conflicts with everything in its repo — legacy issues keep WIP=1 semantics, and the
   migration needs no backfill.

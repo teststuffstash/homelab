@@ -2771,3 +2771,28 @@ build, all applied + verified live before commit:
 respond + fix-debounce workflow logs when it happens; the ≥2 set-pass has ONE dry-run datapoint.
 The subscription now carries coordinator+reviewer+responder+platform-workers: FU-088 tier
 thresholds may need the heavy/dispatch split revisited if the latch starts binding earlier.
+
+## 2026-08-07 (jail fu-sweep — Dispatch + Merge-path subsections; evidence day)
+
+- **FU-133 watch → VERIFIED**: the monitor on the first LIVE ≥2-pending `fix-debounce` set-pass
+  fired mid-sweep — homelab#68 (longhorn BestEffort OOM) vs #118 (goal/** ruleset blocks the
+  updater) judged INDEPENDENT, both queued, "why" cites #68's own body. Correct. Only filing-side
+  correlation (leg a) remains.
+- **FU-111 RETIRED + archived**: native blockedBy edges proven flowing under the App token
+  (circles #30→#31→#32 full lifecycle, author `app/homelab-agents-1234`); migrated the ONE open
+  body-line holdout (oracle-fleet#84 → native edge on closed #83), then removed the body-line
+  reader — union jq → native-only, cycle detector reads the dep's native `blockedBy`. Both
+  executed against real repo data before commit. Authoring play now native-only: failed
+  edge-create = retry once, then escalate (no body line backs it up anymore).
+- **FU-146: 2 of 3 clauses PROVEN LIVE** (Loki, circles-agents: `changes-requested held` #18 ×8,
+  `ci-red held` #19 ×3). Doorbell fast-path ran but fell through pre-hold — no eligible traffic;
+  that one clause is the residual.
+- **FU-143 UNBLOCKED**: agent-runtime#34 merged 08-06, pinned `agent-base:2026.8.7-gf77880d417da`
+  IS agent-runtime master (compare: 0/0). Re-soak next goal child; ⚠ gated on homelab#118 —
+  circles' goal lane is wedged on the ruleset until that fixer lands.
+- **Tracker hygiene**: FU-144 + FU-150 pointer-ized (two-readers trap moved to workflow.md
+  §Triggers), lint green at 56 open / 533 lines.
+
+⚠ **Watch items:** homelab#118 + #68 are now BOTH queued for the homelab fixer lane —
+`repo_rulesets.tf` and `longhorn.tf` are tofu surfaces, so the fixer PRs still need an operator
+`apply` (github root is host-only). #118 is load-bearing for the FU-143 re-soak.

@@ -487,15 +487,17 @@ producing it TRIGGERS on that pattern. Requiring `ci` on `goal/**` while the wor
 report. The ruleset and the trigger have to move together — and the trigger has to reach the goal
 branch, not just master.
 
-## Dependencies: native `blockedBy` is primary (FU-111, 2026-08-02)
+## Dependencies: native `blockedBy` is the only reader (FU-111 — retired the body line 2026-08-07)
 
 Authoring a dependency = **create the native edge** (verified live: create, cross-repo, list-ride
 all work — `gh api -X POST repos/<owner>/<repo>/issues/<n>/dependencies/blocked_by -F
-issue_id=<the BLOCKER's numeric id>`) **and keep the `Depends-on:` body line** during the
-transition (the merged-closeout play instructs both since 2026-08-03 — the FU-111 authoring flip) (unbulleted — a markdown bullet slips the scan regex). The scan reads the UNION of
-both (same probe path), so either alone gates correctly; the body-line reader retires once
-native edges are observed flowing under the App token in scan logs (the one leg a jail probe
-cannot verify — FU-108's lesson applied).
+issue_id=<the BLOCKER's numeric id>`). **The `Depends-on:` body-line reader is RETIRED
+(2026-08-07)** — the migration completed once native edges were observed flowing under the App
+token in real scans (circles #30→#31→#32: App-authored edges, full blocked→unblocked→closed
+lifecycle in dependency order; the FU-108 probe-that-looks bar). The one open body-line holdout,
+oracle-fleet#84, was migrated to a native edge before the reader was removed. Only the native
+edge gates now; a body line is inert prose. Cycle detection also reads native `blockedBy`
+(the dep's nodes pointing back), no longer the dep's body.
 
 ## Why sub-issues here and not elsewhere
 

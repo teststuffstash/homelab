@@ -81,7 +81,7 @@ A claim-authoritative **`task/*` issue label** (default `task/fix`; #48 = `task/
 `coordinator-scan.sh`, emitted in the dispatch unit, passed as `--recipe .agents/<class>.yaml`.
 The LLM never picks (ADR-094 launcher-owned recipe, the #55 lesson). The class is known at issue
 authoring time — the same "known exactly at authoring time" property FU-087 relies on for
-Depends-on. **Shared with FU-095**: one `task/*` classifier can drive both this recipe selection
+dependencies (native blocked-by edges since FU-111). **Shared with FU-095**: one `task/*` classifier can drive both this recipe selection
 AND FU-095's task-class model routing — one label, two deterministic consumers.
 
 ## Division of labor (platform vs stack)

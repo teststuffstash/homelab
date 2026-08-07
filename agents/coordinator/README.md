@@ -54,9 +54,11 @@ verdicts; infra failures are **strikes** that swap the model instead of consumin
 MODEL note in the runbook); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
-**Dependencies are body lines, not labels (FU-087).** An issue that must wait for another carries
-`Depends-on: [<org>/<repo>]#N[, …]` in its **body** (bare `#N` = same repo) — mirroring the
-`Fixes #N` idiom; *closed* is the satisfaction proxy because `Fixes` closes on merge. The scan
+**Dependencies are native GitHub `blockedBy` edges, not labels or body lines (FU-087 → FU-111).**
+An issue that must wait for another carries a native blocked-by edge (`gh api -X POST
+repos/<slug>/issues/<N>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric .id>`);
+*closed* is the satisfaction proxy because `Fixes` closes on merge. (The `Depends-on:` body-line
+reader retired 2026-08-07 — a body line no longer gates anything.) The scan
 enforces it level-triggered: `agent/queued` ∧ any referenced issue still open → reported as
 `⏳ queued-blocked (waiting #N)`, never dispatched (closure is simply seen next pass — no label to
 un-rot). A dependency **closed as not-planned** flags the dependent `premise may be dead` (still
@@ -376,11 +378,11 @@ job, in order (re-read live state first, exit clean if someone already closed it
      issue's own `Touches:` narrowed to what this follow-up actually needs. Judge it from the
      merged diff + the bullet; when honestly unsure, OMIT the line — omitted means exclusive
      (safe, just serial), a wrong narrow line risks two workers in one file.
-   - **`Depends-on:`** only if the bullet states one — AND create the native edge in the same
-     breath (FU-111: `gh api -X POST repos/<slug>/issues/<harvested-N>/dependencies/blocked_by
-     -F issue_id=<the BLOCKER's numeric .id>`); the body line stays during the transition, the
-     scan reads the union. A failed edge-create is non-fatal (the body line still gates) —
-     note it in the closing comment so the FU-111 retirement soak sees it.
+   - **A dependency** only if the bullet states one — create the native edge (FU-111:
+     `gh api -X POST repos/<slug>/issues/<harvested-N>/dependencies/blocked_by
+     -F issue_id=<the BLOCKER's numeric .id>`). No `Depends-on:` body line — the reader retired
+     2026-08-07, only the native edge gates. A failed edge-create now means the dependency does
+     NOT gate: retry once, and on second failure say so in the closing comment so a human wires it.
    **INERT by loop-safety
    breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
    for human triage. **EXCEPTION — the goal lane (operator ruling 2026-08-06):** when the

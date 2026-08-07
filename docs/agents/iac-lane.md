@@ -125,6 +125,12 @@ set-judged debouncer:
   plus the FU-088 latch and the shared claude semaphore.
 - **Re-entry**: if a linked issue's alert refires after the cause-fix merged, the responder's
   fp/subject belts reopen the SAME issue; removing `agent/linked` re-enters it in the pending set.
+- **First live ≥2-pending set-pass: CORRECT (2026-08-07).** The set was homelab#68
+  (longhorn-manager BestEffort OOM — `tofu/longhorn.tf`) + #118 (circles updater blocked by the
+  `goal/**` ruleset — `tofu/github/repo_rulesets.tf`). Verdict: independent root causes, both
+  queued, and the stated "why" correctly noted #68's body already names its own cause and that
+  its OOM family (#63/#65) was NOT in the set. The FU-133 watch clause on trusting its
+  judgement is satisfied; filing-side correlation (leg a) remains the open half.
 
 **The line is "does it take effect before a human approves?" — not "is it governance"** (operator
 correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent

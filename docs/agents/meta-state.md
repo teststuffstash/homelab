@@ -191,7 +191,8 @@ strong-link guard STAYS regardless.
   CHECKING**, not goal vs routine. ⚠ Escalate a specific hard goal with `GOAL_MODEL`; don't move
   the floor.
 - iac-sentinel shadow violations (→ G01 flip, FU-106); router shadow decisions (→ P4, FU-095);
-  native blockedBy edges in scan logs (→ FU-111 retirement); Monday 05:00 retro (= FU-058 run 3).
+  Monday 05:00 retro (= FU-058 run 3). (FU-111 retirement DONE 2026-08-07 — edges proven, reader
+  removed.)
 - ⚠ Garage still has no offsite backup (FU-137) and now carries tofu state.
 
 ## Open, not mine

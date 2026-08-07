@@ -324,7 +324,7 @@ if [ -n "${RECIPE:-}" ]; then
   # (ADR-094). Default is the passed recipe; an unknown class or missing sibling degrades to it loudly.
   if command -v gh >/dev/null 2>&1; then
     # ── `Base:` — the declared base branch (2026-08-05, circles handoff) ────────────────────────
-    # Same unbulleted body-line grammar as `Touches:` (ADR-097) and `Depends-on:` (FU-111), read
+    # Same unbulleted body-line grammar as `Touches:` (ADR-097), read
     # HERE rather than by the dispatcher: the launcher owns dispatch params (ADR-094), and a
     # dispatcher-side flag would be a memory test the coordinator has already failed twice
     # (#55's hand-assembled --run, the first research ride armed past its recipe).

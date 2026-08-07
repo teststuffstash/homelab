@@ -8,6 +8,19 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-111** *(archived 2026-08-07)* — **Native `blockedBy` is the ONLY dependency reader; the
+  `Depends-on:` body-line reader is retired.** The soak's bar was met: App-authored native edges
+  observed flowing through full lifecycles in real scans (circles #30→#31→#32 closed in dependency
+  order, author `app/homelab-agents-1234`). The one open body-line holdout, oracle-fleet#84, was
+  migrated to a native edge (blocker #83, closed ⇒ gates nothing) BEFORE the reader was removed —
+  fleet-wide grep found no other open body-line dep. Shipped: union jq → native-only + cycle
+  detector reads the dep's native `blockedBy` (both executed against real circles/oracle-fleet
+  data — the FU-146 verify-by-execution bar); authoring play (coordinator README) now native-only,
+  a failed edge-create is retry-once-then-escalate since no body line backs it up.
+  **Gotcha kept:** `blockedBy` nodes INCLUDE closed blockers (state field present), so the
+  downstream open-state check still decides. Doctrine:
+  [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Dependencies.
+
 - **FU-038** *(archived 2026-08-07)* — **Tuya plugs → local polling, and the cloud fenced off.**
   Shipped: `tuya_local` 2026.7.2 (pinned, `scripts/ha-tuya-local{,-devices}.sh`) polls all 7 devices
   over the LAN and feeds the `sensor.plug_<box>_*` templates. The `/10` deci-watt correction was

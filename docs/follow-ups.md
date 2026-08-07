@@ -68,7 +68,12 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-06 (docs-cleanup comb: FU-130 re-scoped after its three merges, FU-106
+_Last updated: 2026-08-07 (fu-sweep over the Dispatch + Merge-path subsections: **FU-111
+archived** — body-line dep reader retired after native edges proven flowing, oracle-fleet#84
+migrated first; FU-133's set-pass watch VERIFIED on the first live ≥2 set (#68 vs #118, correct);
+FU-143 UNBLOCKED (#34 in the pinned image) — re-soak gated on homelab#118; FU-146 2-of-3 clauses
+proven live via Loki; FU-144/FU-150 pointer-ized. Previous 2026-08-06 (docs-cleanup comb:
+FU-130 re-scoped after its three merges, FU-106
 widened to own the schema-blind kinds, FU-046/FU-102 pointers corrected, **FU-144 filed**.
 Previous pass 2026-08-05 (bug sweep before the next stack launch): archived FU-068, FU-120,
 FU-128, FU-132, FU-138, FU-139; FU-127/130/131/134 part-shipped and re-scoped in place; new gates
@@ -193,43 +198,30 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
-- [ ] **FU-111** — **Native `blockedBy` migration: POINTER.** Doctrine, live-verified probe
-      facts (create/cross-repo/union reader) and the 2026-08-03 authoring flip live in
-      [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Dependencies.
-      **Next:** observe native edges flowing under the APP token in scan logs (the jail cannot
-      mint that token — FU-108's probe-that-looks lesson), then retire the body-line reader +
-      lines. Relates FU-087/FU-110 (archived), FU-090.
-
-- [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Closing keywords fire only on
-      default-branch merges, so a `goal/**` child's issue stays open after its PR merges —
-      C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock (live
-      circles#22, 2026-08-05). Mechanism, the agent-runtime#32 mirror warning, and the 7-point
-      implementation contract: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
-      §A child cannot close itself + §The soak FAILED. Points 1–7 shipped 2026-08-06; ⛔ the soak
-      **failed on the first child** the same day — the logic is right, the input was not (a PR that
-      never cites its issue). **Blocked on `agent-runtime#32`** (fix riding as `agent-runtime#34`);
-      C4/C5 holds goal children instead of guessing (`12e7fcf`) — containment, NOT the fix.
-      **Next:** land #34 → rebuild `agent-base` → re-pin `AGENT_BASE_IMAGE` → re-soak.
+- [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Mechanism, the 7-point
+      contract (shipped 2026-08-06), the failed first soak (a PR that never cites its issue —
+      agent-runtime#32): [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
+      §A child cannot close itself + §The soak FAILED. **UNBLOCKED 2026-08-07:** the #32 fix
+      (agent-runtime#34) merged and the pinned `agent-base:2026.8.7-gf77880d417da` carries it
+      (= agent-runtime master, verified); C4/C5 still holds goal children (`12e7fcf`).
+      **Next:** re-soak on the next goal child, then lift the C4/C5 hold. ⚠ prerequisite:
+      homelab#118 — circles' goal lane is wedged on the goal/** ruleset until that fix lands.
 - [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
-      emitter satisfies only the GLOBAL Sensor dep, and the global scan skips graduated stacks —
-      so renovate, devbox-update AND a human/jail applying `agent/queued` all ring nothing.
-      Measured cost: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″;
-      corrected emitter row: [`workflow.md`](agents/workflow.md) §Triggers. Workaround shipped
-      2026-08-06 — `scripts/reflex-now.sh` takes a namespace. The NEW fix-debounce emitter sends
-      the graduated payload from birth (`83907ea`) — it never joins this gap.
-      **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (⚠ they read
-      `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
-      global trigger out over graduated namespaces; then decide if global has a reader left.
-      Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-146** — **The per-item dispatch hold, now on all three clauses — awaiting live proof.**
-      Written for WIP=1; ADR-097's raise to 3 retired it silently, so ticks and doorbells re-emitted
-      the same unit while its own fix round rode (~59 of 71 coordinator sessions did nothing,
-      circles PR#39). Shipped to the main scan path (`fc606e2`), then — after I wrongly marked it
-      VERIFIED — to the doorbell fast path (`277a73f`) and to `ci-red` (`f0169f1`, which also had to
-      add `body` to its probe or the hold could never fire). Each port's predicate was executed
-      against real data, not inspected. **Next:** verify on a real round that all three hold, and
-      audit any clause added later for the same omission — the pattern is that a new clause copies
-      the project-wide `wip_busy` check and not the per-item one.
+      emitter rings only the GLOBAL Sensor, and the global scan skips graduated stacks. Gap,
+      measured cost, workaround (`scripts/reflex-now.sh <ns>`), fix shape and the two-readers
+      trap: [`workflow.md`](agents/workflow.md) §Triggers.
+      **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (or fan the global
+      trigger out over graduated namespaces); then decide if global has a reader left.
+      Relates FU-143, FU-145, ADR-094.
+- [ ] **FU-146** — **The per-item dispatch hold on all three clauses — 2 of 3 PROVEN LIVE.**
+      Written for WIP=1; ADR-097's raise to 3 retired it silently (~59 of 71 coordinator sessions
+      did nothing, circles PR#39). Shipped: main scan `fc606e2`, doorbell fast path `277a73f`,
+      `ci-red` `f0169f1` (which had to add `body` to its probe); each predicate executed against
+      real data. Loki 2026-08-07 (ns circles-agents): `changes-requested held` on #18 ×8 +
+      `ci-red held` on #19 ×3 — real rounds, dispatch suppressed. The doorbell fast-path clause
+      ran same day but fell through pre-hold — no eligible traffic yet. **Next:** one live
+      doorbell-path hold; audit any later clause for the same omission (new clauses copy the
+      project-wide `wip_busy` check, not the per-item one).
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
@@ -315,18 +307,13 @@ the block needs pruning, not more headings.
       waits for a human — for a class of red that should be retried. **Operator direction
       2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
       environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
-- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
-      gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
-      fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
-      queues forever never does. ArgoCD read `Synced/Healthy` throughout (correct: the manifest was
-      fine, the CR *status* was not). Found only by a heartbeat comparing throughput against status.
-      **Vendor half SHIPPED 2026-08-07** (`72c3a42`): the github-exporter polls githubstatus.com →
-      `github_vendor_component_status{component}` + `GithubVendorOutage` (warning, `triage: none`)
-      — a GitHub-side outage now reaches Home Assistant instead of requiring a manual check.
-      **Next (the OURS-side half, still open):** an alert on the throughput signal — prefer zero
+- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch": POINTER.** 5h of `queued`-forever
+      runs with every belt green — full analysis:
+      [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
+      Vendor half SHIPPED 2026-08-07 (`72c3a42`: githubstatus.com poll → `GithubVendorOutage`).
+      **Next (the OURS-side half):** an alert on the throughput signal — prefer zero
       `AutoscalingListener` while an AutoscalingRunnerSet exists (cluster-local, no new poller);
       alternatives: listener crashloop, queued-age.
-      Incident: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
       review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
@@ -412,11 +399,11 @@ the block needs pruning, not more headings.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
-      **DISPATCH half BUILT 2026-08-07**: verdict/queue split + bell-driven `fix-debounce` set-pass
-      (`agent-fix` = diagnosis; `agent/queued` only from the set-judged debouncer) — mechanism +
-      bounds: [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
+      **DISPATCH half BUILT 2026-08-07**, and its first live ≥2-pending set-pass judged CORRECTLY
+      the same day (homelab#68 vs #118: independent, both queued) — mechanism + bounds:
+      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
       **Remaining:** (a) FILING-side correlation (`group_by = ["alertname"]` keeps related alerts
-      apart); (b) watch the first live ≥2-pending set-pass before trusting its judgement.
+      apart).
       Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/

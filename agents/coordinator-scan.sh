@@ -249,8 +249,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # item needs a human SWEEP (re-scope the issue / close the PR + delete its branch) BEFORE any
     # dispatch, or the tick works a dead assumption (live 2026-07-09: the TS→Python flip left a
     # CHANGES_REQUESTED PR the scan would happily have burned a round on). Excluded + reported.
-    # FU-087: `Depends-on: [<org>/<repo>]#N[, …]` issue-body lines gate the queue — the
-    # machine-readable dependency graph, mirroring the `Fixes #N` idiom (bare #N = same repo).
+    # FU-087/FU-111: native GitHub `blockedBy` edges gate the queue — the machine-readable
+    # dependency graph. (The `Depends-on:` body-line reader retired 2026-08-07 after native
+    # edges were observed flowing under the App token — circles #30→#31→#32 full lifecycle;
+    # the one open body-line holdout, oracle-fleet#84, was migrated to a native edge first.)
     # Level-triggered each scan: any referenced issue still OPEN → the issue is ⏳ queued-blocked
     # (reported, never dispatched; closure is seen next pass — *closed* is the right satisfaction
     # proxy because `Fixes #N` closes on merge). A dep closed as NOT-PLANNED → still actionable
@@ -486,14 +488,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         dnum="${dep##*#}"; dslug="$slug"
         case "$dep" in *"/"*"#"*) dslug="${dep%#*}";; esac
         case "$dnum" in ''|*[!0-9]*) continue;; esac  # not a #N token — ignore, don't guess
-        if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,body 2>/dev/null </dev/null)"; then
+        if depjson="$(gh issue view "$dnum" --repo "$dslug" --json state,stateReason,blockedBy 2>/dev/null </dev/null)"; then
           if [ "$(jq -r .state <<<"$depjson")" = "OPEN" ]; then
             blocked="${blocked} ${dslug}#${dnum}"
-            # direct 2-cycle: the dependency's own Depends-on lines point back at this issue.
-            # A bare #N in the dep's body refers to the DEP's repo — only equal-repo bare refs count.
-            if [ "$dslug" = "$slug" ]; then revpat="(${slug})?#${qnum}"; else revpat="${slug}#${qnum}"; fi
-            if jq -r '.body // ""' <<<"$depjson" | grep -iE '^[[:space:]]*depends-on:' | grep -qE "(^|[ ,:])${revpat}([ ,]|\$)"; then
-              qcycles="${qcycles}  issue #${qnum} ↔ ${dslug}#${dnum} — mutual Depends-on\n"
+            # direct 2-cycle: the dependency's own native blockedBy points back at this issue.
+            # GitHub may refuse creating such a pair; kept because that refusal is undocumented,
+            # and rule #6 says never fail INTO a dispatch.
+            if jq -e --arg u "https://github.com/${slug}/issues/${qnum}" \
+                 '[((.blockedBy // {}).nodes // [])[] | .url] | index($u) != null' >/dev/null 2>&1 <<<"$depjson"; then
+              qcycles="${qcycles}  issue #${qnum} ↔ ${dslug}#${dnum} — mutual blocked-by\n"
             fi
           elif [ "$(jq -r '.stateReason // ""' <<<"$depjson")" = "NOT_PLANNED" ]; then
             stale="${stale} ${dslug}#${dnum}"
@@ -593,8 +596,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       else
         units="${units}queued-dispatch|${repo}|issue-${qnum}|${qclass}${qparent:+|${qparent}}\n"
       fi
-    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ((([(.body // "") | scan("(?mi)^[ \\t]*depends-on:[ \\t]*(.+)$")] | flatten)
-             + [((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"])
+    done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
     # ── goal-review (FU-090 leg (c), 2026-08-05) ───────────────────────────────────────────────
@@ -653,8 +655,8 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         fi
       done
     fi
-    [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 Depends-on; closure is seen next scan):\n${qblocked}"
-    [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ Depends-on CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
+    [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 native blocked-by; closure is seen next scan):\n${qblocked}"
+    [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ blocked-by CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
     swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
       --jq '[.[]|(.labels|map(.name)) as $L|select($L|index("direction-change"))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$swept" ] && orphans="${orphans}[$repo] ⚠ direction-change — human sweep needed BEFORE dispatch:\n${swept}\n"
@@ -951,7 +953,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     c6_n=0
     # FU-143 point 1: the goal children detected above (OPEN, merged into their declared goal/**
     # base, keyword inert) — same unit, same play, same cap; emitted FIRST because C4/C5 was told
-    # to stand aside for exactly these, and the closeout unblocks goal-review + Depends-on
+    # to stand aside for exactly these, and the closeout unblocks goal-review + blocked-by
     # siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
     for gb in $(printf '%b' "${c6g:-}"); do
       gn="${gb%%|*}"; gbase="${gb#*|}"
