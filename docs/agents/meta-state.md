@@ -141,9 +141,10 @@ strong-link guard STAYS regardless.
 
 agent-runtime **#13** (watchdog misses silent loops), **#33** (resumed round reports "no resumable
 branch"), **#35** (a failed `:latest` push skips `deploy-pin`), **#36** (a fix round that dies
-mid-session reports `exit_status=clean`; `salvage_push` is disabled once a PR exists — the real
-mechanism is `succeeded = bool(stats.get("pr_url"))` returning clean BEFORE any failure signature
-is consulted, so only round 1 can strike a model; pinned by a STRICT xfail in PR#37).
+mid-session reports `exit_status=clean`; the mechanism is `succeeded = bool(stats.get("pr_url"))`
+returning clean BEFORE any failure signature is consulted, so only round 1 can strike a model).
+**#36 is now PINNED BY A STRICT XFAIL** in the merged suite — fixing it makes the suite fail on
+`XPASS(strict)`, so the marker deletion is the fix's own acceptance test.
 ⚠ **openrouter-operator's deploy-pin job has the identical #109 label gap and is NOT fixed.**
 ⚠ **`deepseek-v4-flash` struck TWICE today on `goose-32602-truncation`** (circles#32 r1 and r3) yet
 r2..r5 all ran on it again — watch whether the router actually routes away from it.
@@ -176,9 +177,13 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
   (agent-runtime, agent-coordinator, homelab, openrouter-operator) where `reviewer.enabled=false`
   means no bot will ever approve. ⚠ Do NOT "fix" that by flipping `reviewer.enabled=true` for the
   `platform` stack — it would also point the bot at homelab and `agent-coordinator`, both tier-3.
-- **⚠ agent-runtime has NO `.agents/` BY DESIGN** (operator ruling 2026-08-06) — its fixes come from
-  meta-coordination incidents, so drive it with the JAIL credentials; never look for an agent lane.
-  (PR#37 adds a fixer lane; until it merges, the ruling stands.)
+- **⚠ agent-runtime now HAS a fixer lane** — PR#37 merged 2026-08-07 03:48Z, superseding the
+  2026-08-06 "no `.agents/` by design" ruling. It ships `.agents/fix.yaml`, `tests/` + a `unit` CI
+  job over `agent-finalize`, and a CODEOWNERS owning the governor paths (`.github/`, Dockerfile,
+  lockfiles, `.agents/`) while leaving the fixer's lane unowned. Its recipe uses `Fixes #n`, which
+  genuinely closes since these PRs target master. ⚠ Still no bot reviewer (`reviewer.enabled=false`
+  for the `platform` stack), so a PR there merges via the OrgAdmin bypass — `gh pr merge --admin` —
+  never by waiting. ⚠ First `unit` run took **16m** on a cold nix cache; that is not a hang.
 - **⚠ Arming is keyed on the `goal/` PREFIX** (`agent-session.sh` + `review-reflex.sh` C9). NEVER
   widen to "any non-default base": the prefix is the only thing carrying the ruleset, and arming
   into an unprotected base merges ON OPEN.
