@@ -122,12 +122,28 @@ strike table, so it re-picks a model that just died. Observed: `deepseek-v4-flas
 circles#19 r2 immediately after r1's harness death. ⚠ Retry works (r2 succeeded), so this is waste,
 not a stall — 3 deaths vs 3 clean runs on lg work.
 
-**Fix, in preference order.** (1) Producer-side: the launcher already decides this (it posts
-`AGENT_STRIKE:`), so send its verdict as an explicit `strike: true` and delete the router's
-re-derivation — one contract, one predicate. (2) Minimal: test BOTH fields
-(`err in STRIKE_CLASSES or outcome in STRIKE_CLASSES`). ⚠ Either way this makes strikes start
-landing for the first time: strikes are scoped per `(task, model)` so the blast radius is bounded,
-but watch for `chain-exhausted` defers on the first busy day after it ships.
+**SHIPPED 2026-08-07 — recording fixed, enforcement deliberately OFF** (operator ruling). The
+predicate now matches EITHER field, and `route()` consumes strikes only when `STRIKE_ENFORCE`
+(env `ROUTER_STRIKE_ENFORCE`, default `0`). Proven both ways before deploy: off → the struck model
+stays eligible (`skipped-for-strike: []`), on → it is filtered. Routing is exactly the behaviour
+the loop already had — the difference is that it is now a **decision** rather than an accident.
+
+⚠ **Why enforcement is NOT on, and this is the interesting part.** The bug was *lucky*. Under the
+design, circles#19 r1's harness death would have struck `deepseek-v4-flash` for that task — and r2
+on **the same model completed the same task**. Running tally on `lg` work: **3 deaths vs 3 clean
+runs**, so "N strikes and you're out" is not supported by the evidence; a strike would have bought
+a pricier chain entry for a failure a ~$0.04 retry fixes.
+
+**Open question, not decided (operator, 2026-08-07):** for a model this cheap and this flaky,
+**fan out N parallel workers and keep the first survivor** may beat both retry-serially and falling
+through the chain — N × $0.04 against one attempt on a costlier model, with wall-clock the real
+win. That is a policy question the strike DATA now exists to answer; it is why we record before we
+act. Do not flip `ROUTER_STRIKE_ENFORCE` without deciding blacklist / retry / fan-out first.
+
+⚠ **The self-test could never have caught this** — its fixture put `harness-death` in
+`error_class`, the taxonomy's own vocabulary, a shape the launcher never sends (same trap as
+FU-115b: a fixture built to match the code instead of the caller). A row carrying the REAL producer
+shape is now in `self_test()`, and it fails without the fix.
 
 ### M2. Fallback chains, owned by the stack
 

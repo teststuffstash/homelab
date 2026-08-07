@@ -33,6 +33,17 @@ import time
 # the (task, model) pair without consuming a round. Kept in step with agent-session.sh's
 # classifier and agent-finalize (the authoritative signature copy).
 STRIKE_CLASSES = {"harness-death", "auth-storm", "timeout", "provider-5xx", "no-pr", "unknown"}
+
+# ⚑ ENFORCEMENT IS OFF BY DEFAULT — operator ruling 2026-08-07, and it makes an ACCIDENT explicit.
+# Strikes were never being recorded (the drift below), so `route()` has always filtered against an
+# empty table. That accident turned out to be *better* than the design: circles#19 died on
+# deepseek-v4-flash at r1 and the SAME model completed the SAME task at r2 — a strike would have
+# pushed it to a pricier chain entry for nothing. Tally so far is 3 deaths vs 3 clean runs on lg
+# work, i.e. "N strikes and you're out" is not supported by the evidence; "retry, or fan out N
+# parallel and keep the survivor" may well be cheaper than the next model in the chain.
+# So: RECORD the strikes (we need the data to decide), do NOT act on them yet. Flip this on only
+# with a policy decision behind it — see docs/agents/model-routing.md §M1a.
+STRIKE_ENFORCE = os.environ.get("ROUTER_STRIKE_ENFORCE", "0").strip().lower() not in ("", "0", "false", "no", "off")
 # Retention (days): the FU-057 ledger (pushgateway + transcripts) is the long-horizon store;
 # this DB answers "recent enough to route on".
 RETAIN_EVENTS_D = 30   # provider_events, decisions
@@ -197,8 +208,18 @@ def record_report(d: dict) -> tuple[bool, bool]:
          float(d.get("cache_hit") or 0.0), float(d.get("cost_usd") or 0.0),
          str(d.get("error_class") or ""), str(d.get("outcome") or "")))
     err = str(d.get("error_class") or "")
+    outcome = str(d.get("outcome") or "")
+    # ⚠ MATCH EITHER FIELD. The launcher (agent-session.sh /report body) sends the COARSE class in
+    # `outcome` (= stats.exit_status when no PR: "harness-death") and a FINER sub-type in
+    # `error_class` ("goose-32602-truncation"). Testing only `error_class` meant the commonest
+    # infra death never struck: router_strikes_total sat at 1 while three harness deaths landed on
+    # 2026-08-06/07. Two of this set's own members (`harness-death`, `no-pr`) are `outcome`
+    # vocabulary, so it was never coherent with the single field it was compared against.
+    # model-routing.md §M1 settles that this is a bug, not a policy: its taxonomy table names
+    # "harness-death (goose -32602)" as ONE thing.
     striked = False
-    if stored and err in STRIKE_CLASSES and not str(d.get("outcome") or "").startswith("pr"):
+    if stored and (err in STRIKE_CLASSES or outcome in STRIKE_CLASSES) \
+            and not outcome.startswith("pr"):
         # Dedup per (task, model, session): a re-POST must not double-strike.
         _write("DELETE FROM strikes WHERE task=? AND model=? AND session=?",
                (str(d.get("task") or ""), str(d.get("model") or ""), str(d.get("session") or "")))
@@ -494,7 +515,10 @@ def route(payload: dict, ctx: dict) -> dict:
         chain = _rotation_candidates(cinfo)
         source = "rotation"
     deny = {str(m) for m in (payload.get("deny") or [])}
-    struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or "")))
+    # Recorded always, ACTED ON only when STRIKE_ENFORCE (see the constant's note): today this is
+    # an empty set, which is exactly the behaviour the loop has had all along — now on purpose.
+    struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
+        if STRIKE_ENFORCE else set()
     cool = active_cooldowns(now)
     skipped: list[dict] = []
     eligible: list[tuple[str, str]] = []
@@ -734,6 +758,20 @@ def self_test() -> int:
         "session": "t-2", "task": "issue-9", "stack": "sleep",
         "model": "qwen/qwen3-coder", "cost_usd": 0.31, "error_class": "", "outcome": "pr"})
     assert clean and not striked3, "clean run must not strike"
+    # THE REAL PRODUCER SHAPE (agent-session.sh's /report body), added 2026-08-07. The fixtures
+    # above put "harness-death" in `error_class` — the taxonomy's own vocabulary, a shape the
+    # launcher never sends — so they passed while router_strikes_total sat at 1 through three real
+    # harness deaths. This row is what actually arrives: the coarse class in `outcome`, a finer
+    # sub-type in `error_class`. Same trap as FU-115b, where the fixture matched the buggy code
+    # instead of the caller's output.
+    stored4, striked4 = record_report({
+        "session": "t-3", "task": "issue-19", "stack": "circles", "role": "worker", "round": 1,
+        "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.0368,
+        "error_class": "goose-32602-truncation", "outcome": "harness-death"})
+    assert stored4 and striked4, "the REAL launcher shape must strike (sub-type in error_class, class in outcome)"
+    assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
+    # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
+    assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
     assert strikes_for("issue-9", "sleep") == ["deepseek/deepseek-v4-flash"]
     record_provider_event("qwen/qwen3-coder", "deepinfra", 500)
     record_provider_event("qwen/qwen3-coder", "deepinfra", 200)
@@ -851,7 +889,9 @@ def self_test() -> int:
     assert summary_gen and summary_gen[0]["observed_cache_hit"] == 0.8, \
         "first full record wins; measured cache hit = 80/100"
     summary = status_summary()
-    assert summary["rows"]["run_reports"] == 2 and summary["rows"]["strikes"] == 1
+    # 3 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape) and
+    # 2 strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one).
+    assert summary["rows"]["run_reports"] == 3 and summary["rows"]["strikes"] == 2
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
