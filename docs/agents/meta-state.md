@@ -5,7 +5,26 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## ⛔ BLOCKING EVERYTHING — the GitHub Actions outage is STILL LIVE (from ~15:36Z; confirmed 18:5xZ)
+## ✅ CI RECOVERED 2026-08-07 ~03:25Z — the outage cleared at ~01:00Z, OUR breakage did not
+
+**The GitHub outage ended; our CI stayed down five more hours and that part was ours.** At
+22:11:49Z the ARC controller tore down its own listener + ephemeral runner set + the GitHub-side
+scale set and never rebuilt them; the rebuilt listener then chased a deleted `EphemeralRunnerSet`
+(`67zqb` vs the live `dk77x`) and crashlooped every ~6s. Fixed by rebuilding the
+`AutoscalingRunnerSet` (ArgoCD `selfHeal` recreated it) and then the stale `AutoscalingListener`.
+Verified: listener 1/1, 4 runners `2/2 Running`, `in_progress=2`, queues draining.
+Full timeline + root cause: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](../incidents/2026-08-07-arc-listener-wedge.md).
+⚠ **Nothing alerted for those 5h** — `GithubWorkflowRunFailed` needs a run to FAIL and a queued run
+never does; ArgoCD read `Synced/Healthy` the whole time (correct — manifest fine, CR *status* not).
+That gap is **FU-150**. Until it ships, a heartbeat that compares `in_progress` against
+`githubstatus` is the only detector.
+
+⏳ **NOW EXPECTED, verify on the next sweep:** the ~10 queued jobs drain; circles PR#44/#45 and
+circles-iac #30/#31 go green and auto-merge; **agent-runtime PR#37 needs `gh pr merge --admin`**
+once green (no bot will ever approve it — `reviewer.enabled=false` for the platform stack).
+✅ homelab#111's closure condition already met: `update-pr-branch` green at 01:07Z and 01:11Z.
+
+## ⛔ SUPERSEDED — the outage section below is kept only for the pre-recovery reasoning
 
 `githubstatus.com/api/v2/components.json` → **`Actions: major_outage`**. GitHub's 18:11Z update:
 *"Workflow runs are still failing or delayed in starting, and some queued jobs may time out.

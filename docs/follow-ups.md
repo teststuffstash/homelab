@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-150**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-151**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
+      gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
+      fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
+      queues forever never does. ArgoCD read `Synced/Healthy` throughout (correct: the manifest was
+      fine, the CR *status* was not). Found only by a heartbeat comparing throughput against status.
+      **Next:** an alert on the throughput signal, not the manifest — candidates: zero
+      `AutoscalingListener` while an AutoscalingRunnerSet exists; a listener pod restarting on a
+      tight loop; or queued-age (needs a GitHub-side gauge the exporter does not yet emit). Prefer
+      the listener-count one — it is cluster-local and needs no new poller.
+      Incident: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
 - [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
       ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked); the
       latch counts *spawned sessions* and is exact, so a day with 12 genuinely distinct alerts now
