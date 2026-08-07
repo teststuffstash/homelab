@@ -142,15 +142,22 @@ kubectl run powertest --restart=Never --image=colinianking/stress-ng \
 Poll the node's plug power for ~3 min (`homeassistant_sensor_power_w{entity="sensor.plug_<box>_power"}`
 or the HA `/api/states`), record the peak, then `delete pod` + `uncordon`.
 
-> ⚠ **The plugs do not stream continuously — open the Tuya app on the device first.** Learned the
-> hard way 2026-08-07: 18 consecutive "samples" of a GPU A/B were one frozen value, because the
-> plug had last reported 12 minutes earlier. The history shows the mechanism plainly — updates
-> arrive every **5 seconds** while the phone app is open on that device, then stop dead when it is
-> closed, with gaps of 15–30 minutes. A stress test still measures fine unattended (a ~30 W jump
-> crosses the device's own report-on-change threshold), but any **small** delta — a few watts —
-> is invisible unless the app is held open for the whole run. Verify you are seeing DISTINCT
-> values before trusting a mean. This is a further argument for FU-038: local polling would sample
-> on our schedule, not the vendor's.
+> ⚠ **Reporting cadence is per-MODEL, and the newer plugs barely report at all when idle.**
+> Learned the hard way 2026-08-07: 18 consecutive "samples" of a GPU A/B were one frozen value,
+> because the plug had last reported 12 minutes earlier. Measured cadence with every device open
+> in the app:
+>
+> | model | devices | cadence |
+> |---|---|---|
+> | `Smart Socket A1` (old) | aquarium, konditsioneer | **3–9 s, continuous** |
+> | `Smart plug` (new) | pve, opnsense, laptop3, laptop4 | **~3–5 min**, deadbanded on change |
+>
+> The new plugs burst to **5-second** updates only while *that device's detail page* is open in
+> the phone app — opening the app's device LIST is not enough. A stress test still measures fine
+> unattended (a ~30 W jump crosses the report-on-change threshold), but any **small** delta — a
+> few watts — is invisible unless that device's page is held open for the whole run. **Verify you
+> are seeing DISTINCT values before trusting a mean.** A further argument for FU-038: local
+> polling samples on our schedule, not the vendor's.
 
 ## Results — 2026-06-05 (stress-ng `matrixprod`)
 
