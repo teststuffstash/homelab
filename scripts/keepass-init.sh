@@ -145,6 +145,8 @@ add_attachment matchbox-grpc       ca.crt         "$HOME/.claude/homelab-matchbo
 add_attachment matchbox-grpc       client.crt     "$HOME/.claude/homelab-matchbox/client.crt"
 add_attachment matchbox-grpc       client.key     "$HOME/.claude/homelab-matchbox/client.key"
 add_attachment cloudflare-ha-client ha-client.p12 "$HOME/.claude/cloudflare/ha-client.p12"
+# FU-038: tuya-local device material (see wallet-files.sh for the consumer side).
+add_attachment tuya-local devices.json "$HOME/.claude/tuya/devices.json"
 add_attachment cloudflare-ha-client ha-client.cert.pem "$HOME/.claude/cloudflare/ha-client.cert.pem"
 add_attachment forgejo-keys        id_ed25519     "$HOME/.claude/homelab-forgejo/id_ed25519"
 add_attachment forgejo-keys        id_ed25519.pub "$HOME/.claude/homelab-forgejo/id_ed25519.pub"

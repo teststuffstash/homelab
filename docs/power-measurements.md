@@ -56,6 +56,26 @@ evidence better. Re-run key extraction sparingly anyway.
 ⚠ Which app: the operator re-authenticated via the **Tuya** app (not Nous Smart), which settles the
 open question — the account backing all seven devices is the Tuya-app account.
 
+**Extraction done 2026-08-07.** All 7 devices' `device_id` + `local_key` + LAN IP + protocol
+version live in the KeePass wallet as `tuya-local` / attachment `devices.json`, materialized to
+`~/.claude/tuya/devices.json` by `scripts/wallet-files.sh`. That file is everything local control
+needs — **no Tuya account and no IoT project at runtime**.
+
+Two things the cloud could NOT tell us, both resolved locally:
+
+- **LAN IPs.** The cloud reports every device at the site's WAN address. The two NOUS A1 sockets
+  and the temp sensor answer UDP discovery (6666/6667); the four `9y0qx7npuny0pnwt` plugs **never
+  broadcast**, even over 150 s. They were found by scanning TCP **6668** and then identified by
+  handshaking each candidate IP with each key — each match cross-checked against that device's HA
+  power reading (e.g. `.215` returned 124.6 W, exactly `sensor.plug_pve_power`). Pin all seven as
+  DHCP reservations; there is no reliable rediscovery path for the quiet four.
+- **Protocol versions**, which tuya-local needs: the four plugs are **3.5**, the NOUS A1 pair
+  **3.3**, the temp sensor **3.4**.
+
+⚠ `local_key` **rotates on re-pair or factory reset**. A device that suddenly stops responding
+locally needs re-extraction via the IoT project — not debugging. That, plus the trial project's
+expiry, is the standing fragility of this path.
+
 ## The pve GPU: −6 °C on the NVMe for nothing (2026-08-07)
 
 pve carries a **GeForce 9600 GT** (G94, 2008) that cannot be removed — the X99-P4 board refuses to

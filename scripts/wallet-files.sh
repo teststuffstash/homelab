@@ -65,6 +65,11 @@ val github-reviewer-slug                "$CRED/homelab-github-reviewer/slug"
 att cloudflare-ha-client ha-client.p12       "$CRED/cloudflare/ha-client.p12"
 att cloudflare-ha-client ha-client.cert.pem  "$CRED/cloudflare/ha-client.cert.pem"
 val cloudflare-ha-client-p12-password        "$CRED/cloudflare/ha-client.p12.password"
+# FU-038 tuya-local: device_id+local_key+lan_ip+version for the 7 Tuya devices. This is ALL that
+# local control needs — no Tuya cloud account or IoT project at runtime. ⚠ local_key ROTATES on
+# re-pair/factory-reset, so a device that stops responding locally needs re-extraction via the
+# IoT project, not debugging. Provenance + limits: docs/power-measurements.md.
+att tuya-local          devices.json    "$CRED/tuya/devices.json"
 att forgejo-keys        id_ed25519      "$CRED/homelab-forgejo/id_ed25519"
 att forgejo-keys        id_ed25519.pub  "$CRED/homelab-forgejo/id_ed25519.pub"   # snore-recorder rpi-usb.sh reads this
 att forgejo-keys        gpg-private.asc "$CRED/homelab-forgejo/gpg-private.asc"

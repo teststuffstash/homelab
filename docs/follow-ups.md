@@ -531,17 +531,13 @@ the block needs pruning, not more headings.
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
-- [ ] **FU-038** — **Tuya plugs → local polling: POINTER. NOT OPTIONAL — the cloud already failed.**
-      All plugs frozen since 2026-07-29 (`API_QPS_LIMIT_OR_DEGRADE`), incl.
-      `switch.konditsioneer_socket` = ADR-013 remote power for the ThinkCentre, so this is a
-      recovery-path outage, not just telemetry. Outage, ruled-out alternatives, account facts and
-      the freshness alert now guarding it: [`power-measurements.md`](power-measurements.md).
-      **`tuya-local` is the ONLY eligible path** (2026-08-07) — reflashing is excluded by design,
-      not effort; reason in the doc. Same for the 2 new metal nodes, NOT FU-034 Zigbee.
-      **Next:** needs a full RE-AUTH (operator app re-login + entry reload both failed to restore
-      the push channel), then one-time `local_key` per device → LAN polling + block cloud egress
-      at OPNsense; then drop the `/10` correction in `homeassistant/ha-config/packages/power.yaml`.
----
+- [ ] **FU-038** — **Tuya plugs → local polling: POINTER.** The cloud already failed once (all
+      plugs frozen 2026-07-29→08-07, `API_QPS_LIMIT_OR_DEGRADE`), taking `switch.konditsioneer_socket`
+      = ADR-013 remote power with it; restored only by a full re-auth. Outage, ruled-out
+      alternatives, cadence data, the freshness alert and the extracted device material:
+      [`power-measurements.md`](power-measurements.md).
+      **`tuya-local` ONLY** — reflashing excluded by design, reason in the doc. Keys, LAN IPs and
+      protocol versions for all 7 devices now live in the wallet (`tuya-local/devices.json`).
+      **Next:** tuya-local into HA (custom_components, codified), pin the 7 DHCP reservations,
+      block cloud egress at OPNsense, drop the `/10` correction in `packages/power.yaml`.
 
-See also `ROADMAP.md` → "Backlog / parked features" (self-hosted SLSA L3 build-out, bare-metal node
-suspend/resume, the caching-tier image mirror ADR-070, the edge tier).
