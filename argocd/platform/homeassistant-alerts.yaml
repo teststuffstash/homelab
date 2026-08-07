@@ -1,0 +1,25 @@
+# Home Assistant sensor-freshness alerts. A tiny app for the same reason longhorn-alerts is one:
+# the rules must live somewhere ArgoCD syncs, while Home Assistant itself is tofu-managed. The
+# alerts watch whether HA's sensors are still MOVING — a stalled integration keeps its entities
+# `available` and serves the last value forever, so "no data" never happens and only staleness
+# reveals it (nine days of frozen plug readings, 2026-08-07).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homeassistant-alerts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/homeassistant-alerts
+    directory: { recurse: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false]

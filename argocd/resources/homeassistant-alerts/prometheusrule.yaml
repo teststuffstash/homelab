@@ -1,0 +1,52 @@
+# Home Assistant sensor freshness.
+#
+# WHY THIS EXISTS. On 2026-08-07, an attempt to measure a power change on pve found
+# `sensor.plug_pve_power` pinned at exactly 128.7 W for an hour — through a VM reboot, a node
+# drain and a 253 GB fstrim. It had been frozen for NINE DAYS. Every Tuya plug was dead (three
+# groups, 5.9/6.7/9.3 days), root cause `API_QPS_LIMIT_OR_DEGRADE`: Tuya's cloud rate-limits the
+# account, so the tuya_sharing MQTT push channel cannot fetch its config and no state ever
+# arrives.
+#
+# ⚠ THE TRAP, and the only reason this went unnoticed: a stalled HA integration does NOT mark its
+# entities unavailable. `homeassistant_entity_available` stayed **1** for all of them, the
+# entities kept their last value, and Prometheus dutifully served that constant forever. The power
+# dashboard looked perfectly healthy while showing nine-day-old data. A frozen plausible number is
+# worse than a gap — a gap is visible.
+#
+# So the check cannot be "is it available" or "is there data". It has to be "is the data MOVING",
+# which is what last_updated gives us. Same lesson as the storage ledger's "a ledger that isn't
+# measured is a spreadsheet" (docs/storage-ledger.md).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homeassistant-freshness
+  labels:
+    app: homeassistant-alerts
+spec:
+  groups:
+    - name: homeassistant-freshness
+      rules:
+        # Power plugs report continuously (they are the perf/W evidence base — machines/README.md,
+        # docs/power-measurements.md — and switch.konditsioneer_socket is the ThinkCentre's remote
+        # power path in the runbook's power-loss recovery). An hour without an update is broken,
+        # not quiet. 6h before firing so a brief cloud/wifi blip stays quiet.
+        - alert: HomeAssistantPowerSensorStale
+          expr: |
+            time() - homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"} > 21600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
+            description: "A Home Assistant power sensor has stopped receiving updates while still reporting available=1 — its last value is being served as if live. Known cause (2026-08-07): the Tuya cloud returns API_QPS_LIMIT_OR_DEGRADE, the tuya_sharing MQTT channel never connects, and every plug freezes. Check `/api/error_log` on Home Assistant for `tuya_sharing`; reloading the config entry republishes the cached state ONCE (last_updated jumps, the value does not) which is NOT a fix. Consequences while stale: perf/W numbers are fiction and the ThinkCentre's smart-plug power control does not work."
+        # Wider net, deliberately looser: any HA sensor Prometheus scrapes that has gone a full day
+        # without moving. Catches the next integration to rot silently without naming it up front.
+        - alert: HomeAssistantSensorStale
+          expr: |
+            time() - homeassistant_last_updated_time_seconds{entity=~"sensor\\..*"} > 86400
+          for: 2h
+          labels:
+            severity: info
+          annotations:
+            summary: "{{ $labels.entity }} has not updated in {{ $value | humanizeDuration }}"
+            description: "Informational: this HA sensor has not changed in over a day. Some sensors legitimately sit still (daily totals, config-ish selects) — the point of this rule is that a whole GROUP going quiet at once is an integration dying, which is invisible otherwise because HA keeps entities `available` and serves the stale value."
