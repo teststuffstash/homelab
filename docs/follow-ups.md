@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-152**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-153**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
+      The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
+      silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
+      failure modes at once: structurally red (it bumps `reflexes-argo.yaml`, carved out only for
+      arc-runner pins, so `pin-only-lint` rejects the tag) AND unmergeable (7 swept files are owned).
+      **Operator design, better than extending the lint:** hold the tag in ONE file the manifests
+      take it from — mechanically a kustomize `images:` transformer, converting `agents/coordinator`
+      from a plain directory app (no precedent here yet). One file bumped, one carve-out, no regex.
+      ⚠ `argocd/resources/agentstack/composition.yaml` holds the literal too, different app.
+      **Next:** convert the app + move the pin, then drop the extra carve-outs.
 - [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
       `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
       [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
@@ -444,14 +454,12 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
       2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
-      ⛔ **BLOCKER found 2026-08-07: strikes are recorded almost never** (`router_strikes_total=1`
-      vs 3 harness-deaths) — `record_report` tests `error_class` against a set holding `outcome`
-      vocabulary, so `goose-32602-truncation` never matches the `harness-death` §M1 says it IS.
-      The P4 soak has therefore been measuring a router with an empty strike table. Fix + blast
-      radius: [`model-routing.md`](agents/model-routing.md) §M1a. **Next:** land that, THEN judge
-      the P4 flip on evidence from the `circles` CHAINLESS pilot.
-      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10 — that
-      retires the launcher-side goal-clause model `case`).
+      ⛔ **The P4 soak has been measuring a router with an EMPTY strike table** — strikes were never
+      recorded (found + fixed 2026-08-07, `32b0fb3`), and enforcement stays OFF by operator ruling
+      because the evidence contradicts "N strikes and you're out" (3 deaths vs 3 clean on lg).
+      Mechanism + the open blacklist/retry/fan-out question: §M1a. **Next:** gather strike data with
+      enforcement off, decide the policy, THEN judge the P4 flip.
+      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
