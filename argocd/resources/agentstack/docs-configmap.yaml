@@ -74,7 +74,11 @@ data:
     `fixer.docker: true`. Worker rides then run as kata microVM pods (the kata-labeled laptops)
     with a dind sidecar; the ride sees `DOCKER_HOST` wired — bring the docker/kind CLI via the
     repo's own devbox.json. The counterpart of a CI workflow picking the Docker-capable VM
-    runner over an ephemeral in-cluster one. Costs: ~5Gi microVM per ride (one per node),
+    runner over an ephemeral in-cluster one. Costs: ~5Gi microVM per ride — 2560Mi dind +
+    2048Mi agent + 512Mi kata overhead, requests == limits (Guaranteed; overcommit here
+    global-OOMed a node in 2026-07). That is sized to fit the 8G kata laptops with ~1.3Gi spare,
+    so those hold ONE ride; wk-metal-04 (16G) is the only node that fits two. Concurrency is
+    therefore memory-bound and asymmetric — `REPO_MAX_WIP` counts pods, not the memory they need,
     registry FQDNs added to the egress allowlist until the pull-through mirrors land (FU-073),
     in-cluster services reached via endpoint IPs until FU-072.
 

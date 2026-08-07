@@ -886,8 +886,17 @@ fi
 # the full kind gate OOMed on image builds). --group=1000 lets the
 # non-root agent use the socket; dockerd-entrypoint.sh (not raw dockerd) keeps the dind cgroup-v2
 # nesting that gives inner containers the memory controller. Memory envelope: agent 2Gi + dind
-# 2560Mi, layer store on disk ≈ the acceptance-proven ~5Gi VM with tmpfs headroom back — the
-# ceiling on the 8G laptops (one docker ride per node; kata.tf).
+# 2560Mi, layer store on disk ≈ the acceptance-proven ~5Gi VM with tmpfs headroom back — sized to
+# FIT THE 8G LAPTOPS: 2560 + 2048 + 512 (RuntimeClass overhead) = 5120Mi against ~6.3Gi
+# allocatable, Guaranteed QoS (kata.tf).
+# ⚠ "one docker ride per node" was true of an all-8G kata fleet and is NO LONGER a fleet-wide
+# fact: the pool is wk-metal-01..04 and wk-metal-04 has 16G (~14.2Gi allocatable), so it fits TWO
+# and is the only node that does. The per-node count is a CONSEQUENCE of the request against that
+# node's memory, not a policy — which is why concurrency here is memory-bound and asymmetric while
+# REPO_MAX_WIP merely counts pods. Observed live 2026-08-07: two kata rides co-scheduled on -04
+# with -01..-03 free, which is the scheduler placing on capacity, exactly as intended.
+# ⚠ Do NOT "fix" that with a topologySpreadConstraint — spreading moves a ride off the only node
+# with real headroom onto a 6.3Gi one.
 KATA_BLOCK=""; DOCKER_ENV=""; DOCKER_MOUNT=""; DOCKER_VOLUMES=""; DIND_CONTAINER=""
 AGENT_LIMITS='{ cpu: "6",    memory: "4Gi" }'   # install is partly CPU-bound; allow burst past 2
 # ⚠ MEMORY requests MUST EQUAL limits (no overcommit) for agent workloads — 2026-07-27
