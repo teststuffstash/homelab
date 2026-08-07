@@ -444,8 +444,12 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
       2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
-      **Next:** the P4 authoritative flip after the shadow soak — evidence from the `circles`
-      CHAINLESS pilot (plan in the life repo's others-view-plan.md).
+      ⛔ **BLOCKER found 2026-08-07: strikes are recorded almost never** (`router_strikes_total=1`
+      vs 3 harness-deaths) — `record_report` tests `error_class` against a set holding `outcome`
+      vocabulary, so `goose-32602-truncation` never matches the `harness-death` §M1 says it IS.
+      The P4 soak has therefore been measuring a router with an empty strike table. Fix + blast
+      radius: [`model-routing.md`](agents/model-routing.md) §M1a. **Next:** land that, THEN judge
+      the P4 flip on evidence from the `circles` CHAINLESS pilot.
       **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10 — that
       retires the launcher-side goal-clause model `case`).
       Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.

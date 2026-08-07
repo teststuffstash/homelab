@@ -93,6 +93,42 @@ Maps 1:1 onto the `error_class` shipped with FU-057 (live in `agent-session.sh` 
 Chain exhausted (all models struck for this task) → `agent/blocked` with the strike list in the
 comment — that IS worth a human.
 
+### M1a. ⛔ THE TAXONOMY DRIFTED — strikes are recorded almost never (found 2026-08-07)
+
+**`router_strikes_total = 1` across the whole store**, against three `harness-death` rides on
+2026-08-06/07 alone (circles#32 r1+r3, circles#19 r1). The routing built on top of strikes is fine;
+it is starved of input.
+
+`router.py:record_report()` does `err = d.get("error_class")` and tests it against
+`STRIKE_CLASSES = {harness-death, auth-storm, timeout, provider-5xx, no-pr, unknown}`. But the
+launcher (`agent-session.sh`, the `/report` body) sends **two** fields:
+
+| field | value on a goose death | in STRIKE_CLASSES? |
+|---|---|---|
+| `error_class` | `goose-32602-truncation` | ❌ no — the tested field |
+| `outcome` | `harness-death` (= `stats.exit_status` when no PR) | ✅ yes — the untested one |
+
+So the coarse class the set was built for arrives in `outcome`, and the field actually tested
+carries a finer sub-type the set never learned. `striked = False`, silently. Note two of the set's
+own members (`harness-death`, `no-pr`) are `outcome` vocabulary, so it was never coherent with the
+field it is compared against.
+
+**The table above is the proof of intent**: it names *"`harness-death` (goose `-32602`)"* as one
+thing. The sub-type was always meant to strike.
+
+**Consequence:** a chainless stack (`circles`: `workerModel: null` → `routerMode: authoritative`)
+draws candidates from the rotation pool and filters them on strikes/cooldowns — with an empty
+strike table, so it re-picks a model that just died. Observed: `deepseek-v4-flash` re-picked for
+circles#19 r2 immediately after r1's harness death. ⚠ Retry works (r2 succeeded), so this is waste,
+not a stall — 3 deaths vs 3 clean runs on lg work.
+
+**Fix, in preference order.** (1) Producer-side: the launcher already decides this (it posts
+`AGENT_STRIKE:`), so send its verdict as an explicit `strike: true` and delete the router's
+re-derivation — one contract, one predicate. (2) Minimal: test BOTH fields
+(`err in STRIKE_CLASSES or outcome in STRIKE_CLASSES`). ⚠ Either way this makes strikes start
+landing for the first time: strikes are scoped per `(task, model)` so the blast radius is bounded,
+but watch for `chain-exhausted` defers on the first busy day after it ships.
+
 ### M2. Fallback chains, owned by the stack
 
 `agents/stacks.json` gains an additive `workerModelFallbacks: [...]` next to `workerModel` (=
