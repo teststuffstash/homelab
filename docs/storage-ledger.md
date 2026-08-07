@@ -110,11 +110,17 @@ treated as the reliable half of the bulk tier precisely because it is a VM that 
 to spare. The two laptops/desktops it was trusted over are independent physical disks in
 independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum).
 
-Done: pool extended by 15G from VG free (→ 94.92%) and `thin_pool_autoextend_threshold` set to 80
-(LVM warned it was disabled; it is a belt that can only consume free VG extents, not capacity).
-`discard=on` + `ssd=1` are set on wk-02's scsi0 but are **pending a VM stop/start** — that reclaim
-(~115G) needs a maintenance window because wk-02 carries ArgoCD repo-server, Crossplane, ESO, a
-CoreDNS replica, cloudflared and three CNPG Postgres instances (two of them forgejo's).
+**RESOLVED 2026-08-07.** Pool extended by 15G from VG free, `thin_pool_autoextend_threshold` set
+to 80 (LVM warned it was disabled; it is a belt that can only consume free VG extents, not
+capacity), then `discard=on` + `ssd=1` on wk-02's scsi0 and a trim:
+
+| | before | after |
+|---|---|---|
+| pve thin pool `data` | **99.14%** → 94.92% (post-extend) | **47.69%** |
+| `vm-8112-disk-0` (wk-02) | 96.95% | **27.51%** |
+
+253 GB returned. Recipe — including the two ways that do NOT work — in
+[`runbook.md`](runbook.md) §"Reclaiming thin-pool space from a Talos VM".
 
 ⚠ **pve cannot take a SATA SSD.** Checked 2026-08-07: of 90 PCI devices the NVMe is the *only*
 mass-storage controller — no AHCI enumerated, `ahci` not loaded, `/sys/class/ata_port/` empty. The

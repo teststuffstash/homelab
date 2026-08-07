@@ -202,6 +202,43 @@ reboot — that's why the explicit `reboot` follows (switches to B). Verify with
 extensions` + node `Ready`. The current metal image is `image.tf` `talos_image_factory_schematic.metal`
 (iscsi-tools + util-linux-tools, no qemu-guest-agent — the latter hung the boot on bare metal).
 
+### Reclaiming thin-pool space from a Talos VM (pve `local-lvm`)
+Deleting data inside a Talos VM does **not** return blocks to pve's LVM thin pool. Nothing in the
+guest issues TRIM, so the pool only ever grows — wk-02's guest held 118G while its thin volume was
+96.95% allocated, and the pool reached **99.14%** (at 100% every VM on it goes read-only together).
+
+Two prerequisites, then the trim:
+
+1. **`discard=on` on the disk** (`ssd=1` too, it makes the guest advertise TRIM support). This is a
+   PENDING change — it needs a VM stop/start, not just a config write. `qm reboot` applies it.
+   ```
+   qm set 8112 --scsi0 local-lvm:vm-8112-disk-0,...,discard=on,ssd=1
+   qm pending 8112 | grep scsi0     # cur == new once applied
+   ```
+2. **Run `fstrim` from a privileged pod on the node.** This is the part that surprises:
+   ```
+   kubectl run wk02-fstrim -n kata-spike --image=alpine:3.20 --restart=Never \
+     --overrides='{"spec":{"nodeName":"wk-02","tolerations":[{"operator":"Exists"}],
+       "containers":[{"name":"fstrim","image":"alpine:3.20","command":["fstrim","-v","/hostvar"],
+       "securityContext":{"privileged":true},
+       "volumeMounts":[{"name":"hostvar","mountPath":"/hostvar"}]}],
+       "volumes":[{"name":"hostvar","hostPath":{"path":"/var","type":"Directory"}}]}}'
+   ```
+   Use a namespace with `pod-security.kubernetes.io/enforce: privileged` (`kata-spike`,
+   `longhorn-system`, `monitoring`). Verify on pve with `lvs -o lv_name,data_percent`.
+
+⚠ **Two approaches that look right and do NOT work** (both tried 2026-08-07, keep them dead):
+- **`qm guest cmd <vmid> fstrim`** returns `{"paths": []}` and trims nothing. Talos' qemu-guest-agent
+  does not enumerate the guest's filesystems — `qm agent <vmid> get-fsinfo` returns `[]`.
+- **Mounting the guest partition on the pve host** (`losetup -P` + `mount /dev/loopNp5`) fails:
+  `XFS: Superblock has unknown incompatible features (0xc0)` — Talos formats EPHEMERAL with XFS
+  feature bits newer than the Proxmox kernel can mount. It refuses safely, but note the trap: if
+  the mount fails and you run `fstrim` against the intended mountpoint anyway, you silently trim
+  the **pve host root** instead. Check `mount` succeeded before trimming.
+
+There is no `talosctl fstrim`, and Talos' `VolumeConfig` for EPHEMERAL exposes no `discard` mount
+option, so this pod is the mechanism. Applies equally to cp-01, wk-01 and ci-runner-01.
+
 ## CloudNativePG (Postgres)
 
 CNPG `Cluster`s (`infisical-pg`, `forgejo-pg`) run with `enablePodMonitor` + the `cnpg`
