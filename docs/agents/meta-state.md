@@ -204,6 +204,19 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
 
 ## Durable warnings — re-read before touching these files
 
+- **⚠ ABSENCE IS THE EASIEST THING TO FAKE — three self-inflicted probe errors in one night, all
+  the same shape: query a NARROWER view than the question, then read the empty result as fact.**
+  (1) `ls ~/.claude/homelab-github-reviewer/ | head -5` hid `private-key.pem` → I reported the
+  reviewer credential missing and nearly sent the operator hunting a non-existent blocker.
+  (2) `spec.fixer` on an AgentStack returned `null` → I reported "circles has no fixer block"; it
+  is **per-repo**, `spec.repos[].fixer`, and carried `docker: true` all along.
+  (3) `.spec.containers` on a ride pod showed only `agent` → I reported "no dind"; a **native
+  sidecar is an initContainer with `restartPolicy: Always`**, and it was there with kata +
+  `DOCKER_HOST`. Each time the operator supplied the counter-evidence.
+  **Rule: when a probe returns empty/absent and that absence would CHANGE a conclusion, re-query
+  the whole object before believing it** — `-o json` and read the structure, never `get X -o
+  jsonpath=…` for a field whose path you are inferring, and never `| head` a listing you are about
+  to call complete. An empty result is a claim about your query, not about the world.
 - **⚠ A DEPLOY CAN SILENCE AN ALERT FOR ITS WHOLE `for:` WINDOW.** `SubscriptionWeeklyPoolLow`
   dropped out of the firing set at 06:41Z on 2026-08-07 — not because utilization fell (it was
   **0.92**, fresh, single series) but because deploying `router.py` restarted the proxy
