@@ -151,8 +151,16 @@ returning clean BEFORE any failure signature is consulted, so only round 1 can s
 **#36 is now PINNED BY A STRICT XFAIL** in the merged suite — fixing it makes the suite fail on
 `XPASS(strict)`, so the marker deletion is the fix's own acceptance test.
 ⚠ **openrouter-operator's deploy-pin job has the identical #109 label gap and is NOT fixed.**
-⚠ **`deepseek-v4-flash` struck TWICE today on `goose-32602-truncation`** (circles#32 r1 and r3) yet
-r2..r5 all ran on it again — watch whether the router actually routes away from it.
+⛔ **ANSWERED 2026-08-07: the router does NOT route away from a struck model.** `deepseek-v4-flash`
+has now died THREE times on `goose-32602-truncation` (circles#32 r1+r3 on 08-06, circles#19 r1 on
+08-07 05:31Z) — and #19's round 2 was dispatched **onto the same model**, `GOOSE_MODEL=
+deepseek/deepseek-v4-flash`, read off the live pod spec. `AGENT_STRIKE:` comments are posted
+correctly, so the signal exists and nothing consumes it. ⚠ **It is task-SIZE correlated, not a
+broken model:** the same model completed circles#18 r2 (1543s) and r3 (874s) cleanly the same
+night; all three deaths were `agent-budget/lg`-scale work, and `goose-32602-truncation` is
+consistent with an output/context overflow. So the remedy is a size-aware pick or an override on
+lg items, NOT a blanket deny. **Next:** if #19 r2 dies the same way, override the model for that
+issue before a third attempt, and take the routing gap to ADR-096/FU-095 with these four samples.
 ⚠ **Its TESTS assert presence, not the property — 3 instances in ONE PR** (#39). One PR is not a
 fleet pattern; if it recurs on another stack it is a model-selection fact, not prompt tuning.
 
