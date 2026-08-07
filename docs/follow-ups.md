@@ -310,10 +310,12 @@ the block needs pruning, not more headings.
       fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
       queues forever never does. ArgoCD read `Synced/Healthy` throughout (correct: the manifest was
       fine, the CR *status* was not). Found only by a heartbeat comparing throughput against status.
-      **Next:** an alert on the throughput signal, not the manifest — candidates: zero
-      `AutoscalingListener` while an AutoscalingRunnerSet exists; a listener pod restarting on a
-      tight loop; or queued-age (needs a GitHub-side gauge the exporter does not yet emit). Prefer
-      the listener-count one — it is cluster-local and needs no new poller.
+      **Vendor half SHIPPED 2026-08-07** (`72c3a42`): the github-exporter polls githubstatus.com →
+      `github_vendor_component_status{component}` + `GithubVendorOutage` (warning, `triage: none`)
+      — a GitHub-side outage now reaches Home Assistant instead of requiring a manual check.
+      **Next (the OURS-side half, still open):** an alert on the throughput signal — prefer zero
+      `AutoscalingListener` while an AutoscalingRunnerSet exists (cluster-local, no new poller);
+      alternatives: listener crashloop, queued-age.
       Incident: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
@@ -433,13 +435,15 @@ the block needs pruning, not more headings.
       DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
       OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
       no supported native OTel emitter. Relates FU-020.
-- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
-      checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
-      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober.
-      Origin: meta-11 — a manual agentic
-      probe was the ONLY detector of a 13h Ready-but-dead prod outage.
-      **Next:** build the activation machinery per the checklist (attended-session class).
-      Composes with FU-044 as its deep post-deploy gate.
+- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + machinery checklist:
+      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober. Origin:
+      meta-11 — a manual agentic probe was the ONLY detector of a 13h Ready-but-dead outage.
+      **Scheduled leg BUILT 2026-08-07, disabled everywhere:** claim knob `spec.prober` (no
+      object default — the stamping lesson) renders `probe-<stack>` in the loop ns, subscription
+      claude/haiku, report-only by construction (no git/gh creds); brief = `<mainRepo>/
+      .agents/probe.md`, LOCATION-only contract (content waits for a 2nd stack's probe).
+      **Next:** write oracle's probe.md from the proven UC-1 brief + flip `prober.enabled` on
+      the oracle claim; then the sync-succeeded edge + 🌱 issue filing. Composes with FU-044.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 

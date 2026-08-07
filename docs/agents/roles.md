@@ -143,13 +143,15 @@ tier allowed, dual-model worth it) are FU-095's.
 ## Role machinery checklists (built + planned)
 
 - **prober** (FU-102) — the agentic canary. Product-contract probes (oracle UC-1 probe-e2e is
-  the proven brief); prod-read + report-only, $1 ephemeral keys. predicate = post-deploy +
-  schedule; edge = deploy doorbell; backstop = cron; key = (endpoint, artifact digest);
-  breaker = inert 🌱 issues + rate cap. Detection belts stack: FU-099 blackbox (seconds, dumb)
-  → prober (minutes, contract-deep) → responder. **The middle rung is the one that doesn't
-  exist**, so today the stack is blackbox → *nothing* → responder: contract breakage is
-  discovered as an alert (or by a consumer failing) rather than as a failed probe, which is why
-  the alert lane carries load the prober was designed to take.
+  the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07, disabled
+  everywhere**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
+  (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION
+  (claude/haiku — operator direction 2026-08-07, platform roles ride the subscription;
+  latch-gated). Report-only BY CONSTRUCTION: the pod holds no git/gh credential. Still
+  missing: the post-deploy sync-succeeded edge, 🌱 issue filing, (endpoint, digest) keying —
+  and every brief. Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
+  contract-deep) → responder; until a claim flips `enabled`, the stack remains
+  blackbox → *nothing* → responder and the alert lane carries the prober's load.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
@@ -162,9 +164,15 @@ tier allowed, dual-model worth it) are FU-095's.
   ≤3h); key = 24h fp ledger (`responder-seen` cm, namespaced RBAC) + fp-issue search belt;
   capacity = Sensor rateLimit 6/min + subscription semaphore + FU-088 latch + a 12-triages/day
   cap (unique-fp storms); breakers = one-issue-max, no kubectl mutations, no agent labels
-  (inert, breaker #1), loop-smell → report-only stop. Graduation dials (NOT built): imperative
-  remediation whitelist (needs a scoped Role per stack ns), self-queueing filed issues into
-  the fixer loop (the FU-090 `selfQueue` knob).
+  (inert, breaker #1), loop-smell → report-only stop.
+  **Dispatch SPLIT from triage 2026-08-07 (FU-133 dispatch half):** the session's issue carries
+  `fix-verdict: fix|report-only` (a diagnosis); the shell applies `agent-fix` (inert — the scan
+  needs `agent-fix ∧ agent/queued`) and rings `/fix-verdict`; the `fix-debounce` machinery
+  (`fix-debounce-argo.yaml`) judges the whole pending SET before any `agent/queued` lands —
+  mechanism in [`iac-lane.md`](iac-lane.md) §"one root cause, N alert issues". This replaced
+  the per-issue `selfQueue` knob (cb4ae5a, which dispatched same-cause issues in parallel).
+  Graduation dial still NOT built: imperative remediation whitelist (needs a scoped Role per
+  stack ns).
   **Three lane gaps, all evidenced by the 27-issue corpus (2026-08-04 audit, FU-133):** the lane
   files one issue per *fingerprint* and correlates nothing (~19 of 27 issues were 5 root causes;
   one PVC produced 8 across 8 days); it has no state after "issue filed" (`send_resolved = false`
