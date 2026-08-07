@@ -531,13 +531,14 @@ the block needs pruning, not more headings.
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
-- [ ] **FU-038** — **Tuya plugs → local polling: POINTER.** The cloud already failed once (all
+- [ ] **FU-038** — **Tuya plugs → local polling: POINTER.** The cloud failed once already (all
       plugs frozen 2026-07-29→08-07, `API_QPS_LIMIT_OR_DEGRADE`), taking `switch.konditsioneer_socket`
-      = ADR-013 remote power with it; restored only by a full re-auth. Outage, ruled-out
-      alternatives, cadence data, the freshness alert and the extracted device material:
-      [`power-measurements.md`](power-measurements.md).
-      **`tuya-local` ONLY** — reflashing excluded by design, reason in the doc. Keys, LAN IPs and
-      protocol versions for all 7 devices now live in the wallet (`tuya-local/devices.json`).
-      **Next:** tuya-local into HA (custom_components, codified), pin the 7 DHCP reservations,
-      block cloud egress at OPNsense, drop the `/10` correction in `packages/power.yaml`.
+      = ADR-013 remote power with it. LAN polling via `tuya_local` is now the source for all 7
+      devices and for the `sensor.plug_<box>_*` templates; the `/10` correction is gone (the device
+      profile applies it). Provenance, limits, cadence data and the alert:
+      [`power-measurements.md`](power-measurements.md); install/config via
+      `scripts/ha-tuya-local{,-devices}.sh`.
+      **Next:** block the plugs' cloud egress at OPNsense (the point of the exercise — they are
+      still free to phone home), then decide whether the Tuya CLOUD integration stays as the
+      re-extraction path or is removed. ⚠ `local_key` rotates on re-pair; re-extraction needs it.
 

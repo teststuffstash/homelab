@@ -76,6 +76,24 @@ Two things the cloud could NOT tell us, both resolved locally:
 locally needs re-extraction via the IoT project — not debugging. That, plus the trial project's
 expiry, is the standing fragility of this path.
 
+**Cut over to LAN polling 2026-08-07.** `tuya_local` 2026.7.2 (pinned, installed by
+`scripts/ha-tuya-local.sh`) with one config entry per device from the wallet material
+(`scripts/ha-tuya-local-devices.sh`, idempotent). Auto-detected profiles: `smartplugv2_energy`
+for the four plugs, `smartplugv1` for the NOUS A1 pair, and a thermostat profile for Gaas —
+⚠ that last one is a guess by the integration and worth eyeballing against the real device.
+
+Verified against the cloud entities before switching the templates over — every device matched
+exactly (pve 124.6, opnsense 56.4, laptop3 11.9, laptop4 8.0, aquarium 35.8, konditsioneer 32.9),
+**including the scaling**: raw cloud 358.0 → tuya_local 35.8, so the old `/10` correction is
+applied by the device profile and was deleted rather than ported. Re-adding it would make those
+two readings ten times too small.
+
+`sensor.tuyalocal_*` is excluded from the Prometheus scrape alongside the old cloud raws — it
+pushes every few **seconds** where the cloud reported ~25×/day, so leaving it in would multiply
+both cardinality and churn for series that duplicate `plug_*` exactly. The public
+`sensor.plug_<box>_*` names did not change; only what feeds them did, which is the whole reason
+that indirection exists.
+
 ## The pve GPU: −6 °C on the NVMe for nothing (2026-08-07)
 
 pve carries a **GeForce 9600 GT** (G94, 2008) that cannot be removed — the X99-P4 board refuses to

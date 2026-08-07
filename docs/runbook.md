@@ -288,8 +288,13 @@ applied imperatively (`kubectl cp` + restart). Token in the wallet (`ha-access-t
 token; `ha-prometheus-token` is the separate tofu-side one).
 
 - HAProxy frontend must have **HTTP/2 disabled** or the HA WebSocket fails to upgrade.
-- Integrations are scriptable via the config-flow REST API; **Tuya (plugs/power) is NOT** — needs
-  the user's Smart Life QR login in the UI.
+- Integrations are scriptable via the config-flow REST API. **The Tuya CLOUD integration is not**
+  — it needs the user's Smart Life/Tuya QR login in the UI (and a full delete+re-add when its
+  session dies; a config-entry *reload* republishes cached values ONCE and looks like a fix).
+  **`tuya_local` IS scriptable** and is the power source since 2026-08-07 (FU-038):
+  `bash scripts/ha-tuya-local.sh` installs the pinned custom component onto the /config PV and
+  restarts HA; `bash scripts/ha-tuya-local-devices.sh` then creates one config entry per device
+  from the wallet material (`tuya-local`/devices.json), idempotently. Both re-runnable.
 - Token: `ha-access-token` in the wallet is a **long-lived access token** (~10y, no refresh dance —
   use it directly as `Authorization: Bearer`). The old `refresh_token` OAuth flow was retired
   (FU-003: the refresh token had died with `invalid_grant`).

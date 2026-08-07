@@ -20,11 +20,16 @@ prometheus:
       - sensor
       - switch
       - binary_sensor
-    # The smart plugs' RAW Tuya sensors are replaced by uniform, query-friendly
-    # sensor.plug_<box>_power / _voltage templates (see power.yaml; old plugs are /10-corrected
-    # there). Exclude the raws so only the clean, consistently-named series are scraped — avoids
-    # both the deci-watt 10x values and duplicate/inconsistent names. (switch.* are kept.)
+    # The smart plugs' RAW sensors are replaced by uniform, query-friendly
+    # sensor.plug_<box>_power / _voltage templates (see power.yaml). Exclude the raws so only the
+    # clean, consistently-named series are scraped — avoids duplicate/inconsistent names.
+    # (switch.* are kept: switch.tuyalocal_* is the ADR-013 remote-power path, now LAN-local.)
+    # ⚠ sensor.tuyalocal_* joined this list on the 2026-08-07 cutover to LAN polling (FU-038).
+    # It matters more than the cloud raws did: tuya_local pushes every few SECONDS where the cloud
+    # reported on-change (~25x/day), so leaving these unfiltered would multiply this scrape's
+    # cardinality AND its churn for series that duplicate the plug_* templates exactly.
     exclude_entity_globs:
       - sensor.smart_plug*
       - sensor.aquarium_*
       - sensor.konditsioneer_*
+      - sensor.tuyalocal_*
