@@ -58,8 +58,40 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
-      - name: Approve (distinct identity → satisfies required-approval)
+      # IDEMPOTENCY (2026-08-07). This job fires on opened/reopened/synchronize/labeled, and GitHub
+      # emits one `labeled` event PER LABEL — so a producer adding `automerge` + `dependencies` in
+      # one `gh pr edit` triggers it three times inside a second. homelab#113 collected FOUR
+      # Auto-approved reviews in ~4 min, tripping the review-reflex circuit breaker and latching
+      # agent/error on a PR whose only sin was being labelled correctly. Duplicate approvals are
+      # harmless to GitHub but not to the loop's loop-detector, so this reflex must be idempotent.
+      # Keyed on the HEAD SHA rather than mere existence: dismiss_stale_reviews_on_push drops
+      # approvals on a new push, so "APPROVED at the CURRENT head" is exactly "already satisfied",
+      # and after a force-push there is none — the re-approve still happens.
+      # ⚠ python3 stays a ONE-LINER: a multi-line `python3 -c "` puts code at column 0, which ends
+      # the YAML block scalar and makes the whole file unparseable (caught by yq before shipping).
+      # jq is deliberately not used — the slim ARC runner image does not guarantee it.
+      - name: Already approved at this head?
+        id: dup
         if: steps.gate.outputs.ok == 'true'
+        env:
+          TOKEN: ${{ steps.rev.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          body=$(curl -sS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null) || body=''
+          n=$(printf '%s' "$body" | python3 -c "import json,sys,os;rs=json.load(sys.stdin);print(sum(1 for r in rs if isinstance(r,dict) and r.get('state')=='APPROVED' and r.get('commit_id')==os.environ.get('SHA','')))" 2>/dev/null) || n=0
+          case "${n:-0}" in ''|*[!0-9]*) n=0;; esac
+          if [ "$n" -gt 0 ]; then
+            echo "already APPROVED at $SHA ($n review(s)) — skipping; another adds nothing but loop-detector noise"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no approval at $SHA — approving"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Approve (distinct identity → satisfies required-approval)
+        if: steps.gate.outputs.ok == 'true' && steps.dup.outputs.skip != 'true'
         env:
           TOKEN: ${{ steps.rev.outputs.token }}
           REPO: ${{ github.repository }}
