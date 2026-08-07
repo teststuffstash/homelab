@@ -44,8 +44,8 @@ A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense
 | `wk-01` / `wk-02` (VMs) | .61 / .62 | workers (wk-02 in Longhorn) |
 | `thinkcentre` (metal, PXE) | 192.168.2.53 | worker + Longhorn (+ 2×Optane fast tier) |
 | `hp-01` (metal, PXE) | 192.168.2.54 | worker + Longhorn (WoL-capable) |
-| `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted) |
-| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted) |
+| `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted; kata node, 8GB) |
+| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted; kata node, 8GB) |
 | `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | worker, ephemeral/compute tier (tainted; kata node) |
 | `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | worker, ephemeral/compute tier (tainted; kata node, no AVX2) |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
