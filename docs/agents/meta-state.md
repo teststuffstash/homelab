@@ -48,21 +48,6 @@ this and needs no action until Actions recovers:
 **First action on recovery:** confirm `oracle-fleet/update-pr-branch` completes one green scheduled
 run, then **close homelab#111**.
 
-## ⚠ SUBSCRIPTION WEEKLY POOL AT 91% (2026-08-07 05:50Z) — 4 points from a dispatch stall
-
-`anthropic_subscription_utilization{7d} = 0.91`, 5h = 0.31 (only the WEEKLY window binds).
-**`ANTHROPIC_UTIL_THRESHOLD_7D = 0.95` is where the FU-088 latch starts DEFERRING every
-subscription dispatch** — coordinator sessions, reviewer runs, the retro. More than a day until the
-weekly reset, so this does not self-heal in time.
-⚠ **Worker rides are NOT affected** (they draw OpenRouter keys, not the subscription) — so a goal
-child can still ride while the loop's own judgement layer starves. The failure mode is the loop
-going quiet while looking healthy.
-⚠ **A meta session draws on the SAME pool.** Long narrated meta sessions are a direct competitor to
-dispatch capacity; at 91% the cheapest lever available is to CLEAR and stop consuming.
-**If it reaches 0.95:** expect `triage DEFERRED`/`capacity limited` lines in scan + responder logs;
-that is the latch working, not a bug — do NOT "fix" the thresholds (operator ruling 2026-08-06).
-Suspending non-critical reflexes (retro, model-scout) is the operator's lever, not mine.
-
 ## ⏳ OPERATOR ACTION PENDING — first-party deploy pins still need one `tofu apply`
 
 **Committed, NOT applied.** `tofu/github/actions_secrets.tf` now adds homelab to
@@ -84,18 +69,17 @@ untouched — a bot approval cannot satisfy an OWNED path, so only the CODEOWNER
 bypass). #112 was merged that way 05:59Z — verified first that `f77880d417da` is agent-runtime's
 master HEAD and that `build-image` succeeded on that sha, so it was not a stale tag.
 
-## 🔴 SUBSCRIPTION LATCH ACTIVE 2026-08-07 09:15Z — the loop is NOT dispatching
+## ✅ SUBSCRIPTION LATCH CLEARED 2026-08-07 — plan upgraded, windows refreshed by hand
 
-`7d = 0.95` reached the `ANTHROPIC_UTIL_THRESHOLD_7D` and the FU-088 latch is deferring every
-subscription dispatch: `subscription limited (FU-088, utilization-7d, tier=dispatch): 5h=0.1
-7d=0.95`. Scans still run and report; no coordinator/reviewer session spawns. **Level-triggered —
-it resumes on its own as the 7d window rolls; nothing needs re-arming.**
-⚠ **Do NOT "fix" the thresholds** (operator ruling 2026-08-06). ⚠ Worker rides are unaffected
-(OpenRouter), so the loop can look busy while its judgement layer is stopped — that asymmetry is
-the thing to remember when reading a quiet board.
-⚠ **A long meta session is a direct competitor for this pool.** This one ran ~14h and contributed;
-clearing is the cheapest lever available. The operator's other lever is suspending non-critical
-reflexes (retro, model-scout).
+The 2026-08-07 09:15Z `utilization-7d = 0.95` deferral is over: the operator upgraded the
+subscription plan, and one manual request through the proxy's `/anthropic` leg harvested fresh
+headers — `7d = 0.01`, `5h = 0.06`, `limited: false`. Dispatch resumes on its own (level-triggered).
+⚠ **Lesson: the window harvest is PASSIVE and the latch defers the only traffic that refreshes
+it.** After an out-of-band capacity change (plan upgrade), the stale ≥-threshold reading persists
+until the reset epoch unless someone pushes one 2xx through: port-forward
+`agent-egress/openrouter-proxy`, then a 1-token haiku POST to `/anthropic/v1/messages` with
+`Authorization: Bearer ref:agent-coordinator/coordinator-claude` (proxy injects token + oauth
+beta). Verify via `GET /anthropic-limit`.
 
 ## Where the goal stands (2026-08-07 09:15Z)
 
