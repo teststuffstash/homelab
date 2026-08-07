@@ -204,6 +204,17 @@ fleet pattern; if it recurs on another stack it is a model-selection fact, not p
 
 ## Durable warnings — re-read before touching these files
 
+- **⚠ A DEPLOY CAN SILENCE AN ALERT FOR ITS WHOLE `for:` WINDOW.** `SubscriptionWeeklyPoolLow`
+  dropped out of the firing set at 06:41Z on 2026-08-07 — not because utilization fell (it was
+  **0.92**, fresh, single series) but because deploying `router.py` restarted the proxy
+  (`8574bd8d9-r42tx` → `cdc58fc45-wm8kr`). The old per-pod series ended, a new one began, and the
+  **`for: 1800s`** timer restarted from zero. Any ArgoCD sync touching the proxy buys 30 minutes of
+  silence on a real capacity problem. ⚠ **I read the firing-set change as "cleared" and reported it
+  as such without re-querying the gauge** — the operator caught it. A firing-set transition is an
+  event, not a measurement: re-read the metric before claiming a condition ended.
+  Candidate fix (unshipped, needs a decision): `max_over_time(...[10m])` so a restart gap cannot
+  reset the window — aggregating away `pod` alone does NOT help at one replica, where the gap is
+  real. Same class as the day-gate bug: the alert's identity was tied to something that churns.
 - **⚠ `severity: info` alerts are SILENTLY SUPPRESSED in this cluster.** kube-prometheus-stack
   ships a stock inhibit_rule (`alertname=InfoInhibitor` → `severity=info`, equal `namespace`) and
   `values/kube-prometheus-stack.yaml` does not override `inhibit_rules`. An info alert reaches
