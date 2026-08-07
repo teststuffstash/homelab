@@ -397,16 +397,16 @@ six OVERSIZE items pointer-ized into
       is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
       fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
       clauses were IDLE at deploy, so it is tested against real history, not live traffic.
-- [ ] **FU-146** — **The `changes-requested` hold, now on BOTH dispatch paths — awaiting live proof.**
-      Written for WIP=1; ADR-097's raise to 3 retired it silently, so every tick **and doorbell**
-      re-emitted the same unit while its own fix round rode (~59 of 71 coordinator sessions did
-      nothing, circles PR#39). `fc606e2` holds per-ITEM on the PR's issue link vs live ride-pod
-      names — but on the MAIN scan path only. ⛔ I marked that VERIFIED 2026-08-07 and the same
-      night disproved it: the doorbell takes `fast_unit_dispatch()`, whose WIP check is a COUNT vs
-      `REPO_MAX_WIP`, so one live pod still dispatched (tick `t967f` vs a 13-min-old ride) while
-      the next full scan on identical state held. Ported `277a73f`, executed through three cases.
-      **Next:** verify BOTH paths on a real round — the earlier "one round each" I mistook for
-      proof was the WIP cap and timing, not the hold.
+- [ ] **FU-146** — **The per-item dispatch hold exists on ONE clause of THREE.** Written for WIP=1;
+      ADR-097's raise to 3 retired it silently, so ticks and doorbells re-emitted the same unit while
+      its own fix round rode (~59 of 71 coordinator sessions did nothing, circles PR#39). `fc606e2`
+      added a per-ITEM hold (PR's issue link vs live ride-pod names) to the MAIN scan path only.
+      ⛔ I marked that VERIFIED 2026-08-07 and disproved it the same night: the doorbell takes
+      `fast_unit_dispatch()`, whose WIP check is a COUNT vs `REPO_MAX_WIP` — ported `277a73f`,
+      executed through three cases. ⛔ **Then the `ci-red` clause showed the SAME gap**: tick `q66s7`
+      dispatched `pr-50` at wip 3 while `agent-circles-issue-19-r3` had ridden 6 min. **Next:** port
+      the hold to `ci-red` (and audit every remaining clause for it), then verify all paths — the
+      "one round each" I mistook for proof was the WIP cap and timing, not the hold.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
