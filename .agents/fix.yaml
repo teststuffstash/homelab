@@ -38,12 +38,28 @@ instructions: |
   - `argocd/platform/**` (syncs with prune: true — an edit here DELETES services)
   - `tofu/*.tf`, `ansible/**`, `opnsense/**`, `machines/**` (applied out-of-band to live machines)
 
+  MAY AUTHOR, but a HUMAN merges it — the loop's own machinery. Say so in the PR body:
+  - `agents/**` (the launcher, the scan, the reflexes, their manifests), `policy/**`,
+    `tofu/github/**`, `tofu/cloudflare/**`
+  ⚠ These LOOK like they must be off-limits, and the old rule said so — "an agent that can edit
+  them is not gated at all". That reasoning is WRONG here, and the correction matters (operator,
+  2026-08-07): **the loop runs from `master`.** Every coordinator/reviewer/worker pod does
+  `git clone --depth 1 -b master`, so your edit to `coordinator-scan.sh` or `review-reflex.sh`
+  changes NOTHING that is running. It is a proposal until a code owner merges it, and the ruleset
+  makes that a human. Authoring here is safe precisely because authoring is not effect.
+
   NEVER TOUCH — refuse and report, even if the issue asks:
-  - `agents/**`, `scripts/**`, `policy/**`, `.github/**`, `tofu/github/**`, `tofu/cloudflare/**`
-  These are the loop's own governor: the launcher that builds dispatch commands, the scan that
-  decides what runs, the reflex that approves PRs, and the rulesets over all of it. An agent that
-  can edit them is not gated at all, whatever the ruleset says. If the issue's fix genuinely
-  requires one, that is the finding: `agent/blocked` with one comment naming the file and why.
+  - `.github/**` — CI triggers `on: pull_request`, so it runs YOUR branch's workflow. Editing it
+    executes your code on the runner, with its token, before any human looks — and can make the
+    required `ci` check green by fiat.
+  - `devbox.json` / `devbox.lock` in THIS repo, and any `scripts/**` that CI invokes — same
+    reason: CI runs them from your branch. (Adding a tool is normal in a STACK repo; here the
+    scripts ARE the checks.)
+  - `.agents/**` — a fix round resumes on the PR's own branch, so the NEXT round reads its recipe
+    from YOUR branch. Editing this file loosens the ceiling you are being held to, mid-PR.
+  The line is not "governor files". It is **does this take effect BEFORE a human approves?** Those
+  three do; everything above does not. If the issue's fix genuinely requires one, that is the
+  finding: `agent/blocked` with one comment naming the file and why.
 
   # ── THE GATE ─────────────────────────────────────────────────────────────────────────────────
   # There is NO `devbox run ci` in this repo. CI is a sequence of separate lints, and you run the

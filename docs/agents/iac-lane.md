@@ -62,7 +62,28 @@ cannot key on the repo. It keys on the **path**.
 | `argocd/platform/**` | ArgoCD app-of-apps, `prune: true` | ✅ | **codeowner** — an edit here *deletes* services |
 | `tofu/*.tf` (root) | `tofu apply` | ✅ | **codeowner**; apply stays out-of-band (cone rule) |
 | `ansible/**` | `opnsense-playbook.sh` → the router | ✅ | **codeowner** + windowed apply |
-| `agents/**`, `scripts/**`, `policy/**`, `.github/workflows/**`, `tofu/github/**`, `tofu/cloudflare/**` | governance & supply chain | ❌ **never** | operator only |
+| `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below |
+| `.github/**`, `devbox.json`, CI-invoked `scripts/**`, `.agents/**` | executes BEFORE review | ❌ **never** | operator only |
+
+**The line is "does it take effect before a human approves?" — not "is it governance"** (operator
+correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent
+that can edit them is not gated at all, whatever the ruleset says."* That is false for most of
+them: **the loop runs from `master`** — every coordinator/reviewer/worker pod does
+`git clone --depth 1 -b master` — so a PR-branch edit to `coordinator-scan.sh`, `review-reflex.sh`
+or `agent-session.sh` changes nothing that is running. It is a proposal, and the codeowner gate is
+a human. Authoring is not effect.
+
+Three things genuinely do take effect first, and they are the whole ❌ list:
+
+| path | why it beats the gate |
+|---|---|
+| `.github/**` | `on: pull_request` runs the PR's OWN workflow — arbitrary code on the runner with its token, and a green `ci` by fiat, before anyone looks |
+| `devbox.json` + CI-invoked `scripts/**` | CI executes them from the branch; here the scripts ARE the checks (adding a tool is normal in a STACK repo, not in this one) |
+| `.agents/**` | a fix round resumes with `--work-branch` on the PR's branch, so the NEXT round reads its recipe from there — it can loosen its own ceiling mid-PR |
+
+⚠ Consequence worth stating: a faked green does NOT merge anything here, because every remaining
+path is codeowner-gated. The reason `.github/**` stays ❌ is **code execution on the runner**, not
+the check — conflating those two is what made the old rule too broad.
 
 Two files are carved back OUT of that table because the arc-runner auto-bump commits both
 (`argocd/platform/arc-runners.yaml`, `agents/coordinator/reflexes-argo.yaml`) and a mechanical tag
