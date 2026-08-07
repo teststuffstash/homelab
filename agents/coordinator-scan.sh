@@ -161,7 +161,8 @@ fast_unit_dispatch() {
     || { echo "unit fast-path: coordinator.enabled=false for ${fstack}"; return 1; }
   # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
   # no breaker label. Probe failure → full scan decides (conservative).
-  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels 2>/dev/null)" \
+  # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
+  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body 2>/dev/null)" \
     || { echo "unit fast-path: PR probe FAILED"; return 1; }
   [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
   [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
@@ -181,6 +182,24 @@ fast_unit_dispatch() {
     case "${flive:-}" in ''|*[!0-9]*) flive=0;; esac
     if [ "$flive" -ge "$REPO_MAX_WIP" ]; then
       echo "unit fast-path: ${frepo} at WIP ceiling (${flive}) — cron sweep re-checks"; return 0
+    fi
+    # FU-146 PER-ITEM hold, ported here 2026-08-07. `fc606e2` put it in the MAIN scan path only,
+    # and the doorbell takes THIS path — so the hold was bypassed on exactly the high-volume edge
+    # it was written for. The WIP check above cannot substitute: it is a COUNT against
+    # REPO_MAX_WIP, so one live pod (flive=1 < 3) still dispatches. Proven live in a single
+    # window: tick `t967f` dispatched pr-45 while `agent-circles-issue-18-r3` had been Running 13
+    # minutes, while the next FULL scan on the same state correctly reported nothing dispatchable.
+    # This function's contract is "only ever cheaper, never weaker" (rule #6) — it was weaker.
+    # Same predicate and same fail-safes as the main path: no link or no pod probe → fall through
+    # unchanged, and the hold needs a LIVE pod so it self-releases and cannot wedge.
+    fpr_issue="$(jq -r '(.body // "")
+        | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' \
+        <<<"$fprjson" 2>/dev/null)" || fpr_issue=""
+    if [ -n "$fpr_issue" ] \
+       && jq -e --arg pat "issue-${fpr_issue}-" \
+            '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1 <<<"$FPODS"; then
+      echo "unit fast-path: held — a worker is already riding issue #${fpr_issue} (FU-146 per-item); PR ${fitem#pr-}"
+      return 0
     fi
     fwip=$((flive + 1))
   fi
