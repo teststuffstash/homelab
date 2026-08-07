@@ -2737,3 +2737,37 @@ bound.** `RED_ROUNDS_MAX=3` counts `Agent run stats` comments **per PR**. #19 ha
 rounds; #50 carried 2 and the fresh #51 carries 1. Same shape as FU-148 — **PR identity is the unit
 of state, and re-creating the PR silently resets it** — but a different actor and a different reset,
 so it is noted rather than merged into that item.
+
+### 2026-08-07 (18:30–20:45Z) — jail meta-session: FU-133 dispatch half built, platform on subscription, prober knob, vendor gauge
+
+**Condition:** subscription latch stale-high after the plan upgrade (7d read 0.95, real 1% —
+passive harvest starved by the deferral it caused) → **command:** one 1-token ride through the
+proxy's /anthropic leg re-harvested headers, latch clear (`9f99ee7`). Then the operator-directed
+build, all applied + verified live before commit:
+
+- **fix-debounce (FU-133 dispatch half)** `d7fd664`+`dbab028`+`fc817f2`+`bdf2062`: responder
+  verdict/queue split (`fix-verdict:` marker → shell-applied `agent-fix`, inert by the scan's own
+  ∧-predicate) + `/fix-verdict` bell + suspend-debounced, mutex-serialized, set-judged queueing;
+  2h backstop cron. SQ_DENY shrunk to the ❌ table (ADR-100); SELF_NOTE drift (50b8418) fixed.
+- **Dry run against the live board** (wf `fix-debounce-dryrun-hwlvp`, labels removed after):
+  set-pass judged 10 issues — #68 CAUSE / #63 linked (identical-second kills), #65 + circles#29
+  correctly `unsure`, deterministic gates held #116/#68 (no Touches) and circles#49/#46/#19
+  (scripts/ ❌). **One real finding: the unscoped pending set swept stack-lane holds (circles#42
+  "would queue" past its ADR-097 hold) → scoped to `alert-fp:` bodies (`bdf2062`).** First LIVE
+  ≥2-set-pass still unobserved (FU-133 remaining).
+- **Platform stack → subscription** `6e89f83` (operator direction): workerModel `claude/haiku`,
+  no OpenRouter fallback (outage = latch-defer, never rail-switch), claudeTier on both fixer
+  repos; claude-session SecretSynced in `homelab` + `openrouter-operator` ns, mirror synced.
+- **Prober (FU-102) scheduled leg** `c3932c0`: `spec.prober` claim knob (no object default —
+  stamping lesson), renders probe-<stack> on subscription claude/haiku, report-only by
+  construction (no creds). DISABLED everywhere; oracle's `.agents/probe.md` is the flip gate.
+- **FU-150 vendor half** `72c3a42`: exporter polls githubstatus.com →
+  `github_vendor_component_status` (verified in Prometheus, 11 components) + `GithubVendorOutage`
+  (warning, `triage: none`, rule loaded inactive).
+- **Docs:** ADR-100 backfill (merge-is-the-gate + authoring-is-not-effect), iac-lane BUILT block,
+  FU-102/FU-133/FU-150 re-scoped, roles.md prober/responder synced (`b3dc4c7`, `c9375ee`).
+
+⚠ **Watch items:** first real alert now exercises verdict→bell→debounce end to end — read the
+respond + fix-debounce workflow logs when it happens; the ≥2 set-pass has ONE dry-run datapoint.
+The subscription now carries coordinator+reviewer+responder+platform-workers: FU-088 tier
+thresholds may need the heavy/dispatch split revisited if the latch starts binding earlier.
