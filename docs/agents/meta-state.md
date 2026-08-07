@@ -66,12 +66,13 @@ mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the rela
 
 ## Platform queue (homelab issues — the platform fixer lane owns queued ones; meta owns the rest)
 
-- **#118** — QUEUED; the resolve leg closed it 21:25Z (alert cleared because the updater stops
-  attempting CHANGES_REQUESTED PRs — defect LATENT, not gone) → **meta reopened 21:40Z**, now
-  human-engaged so it stays open. Expect fixer dispatch on the 22:00Z platform tick. ⚠ The fix
-  (`tofu/github/repo_rulesets.tf`) needs a **HOST-side `github-tofu apply`** — flag the operator
-  when the PR merges; it re-bites at PR#54's merge moment otherwise. Datum for FU-133 leg (c):
-  resolve-state ≠ defect-state, in both directions.
+- **#118** — fixer PR#119 **MERGED 22:20Z** (haiku fixer off the opus item-session's trap notes;
+  meta-reviewed: bypasses `homelab-merge` on the two 422-producing rulesets only, master gate
+  untouched, `ignore_changes` no-op trap disarmed on all three; `tofu validate` clean in-jail).
+  **⏳ OPERATOR: one HOST-side `devbox run github-tofu apply`** — covers this AND the pending
+  `actions_secrets.tf` reviewer_repos change below. Acceptance: one green `update-pr-branch`
+  run against a `goal/**`-headed PR; watch the first plan for bypass_actors ordering noise.
+  History (resolve-leg close on a latent defect, 21:25Z → reopen): the issue + TICK-LOG.
 - **#117** — ✅ diagnosed 2026-08-07 (meta comment): NIC link-flap storm on wk-metal-02
   (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre bad-cable class.
   **Operator, physical:** reseat/replace cable / switch port. FU-032 updated.

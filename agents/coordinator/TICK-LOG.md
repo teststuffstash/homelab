@@ -2855,3 +2855,16 @@ exec parent `coordinate-perstack-76shj` finished/died mid-session, no arbitratio
 from that window) — the kill was coincidentally right, the reasoning was not. **Rule: judge an
 item session by the SCAN pod's log and by its on-record output (comments/dispatches), never by
 the substrate pod's log; a lingering substrate is design, the 3600s deadline reaps it.**
+
+### 2026-08-07 (~22:00–22:25Z) — #118 fixer chain E2E: the platform lane's cleanest run yet
+
+Queued (set-pass) → opus item session triaged and WROTE THE TRAP into the issue
+(`lifecycle ignore_changes = [bypass_actors]` would have made the naive fix a silent no-op on
+apply) → haiku fixer's PR#119 implemented exactly that: bypass on the two 422-producing rulesets
+only, master approval gate deliberately untouched, the wholesale ignore narrowed to
+`bypass_actors[0].actor_id` on all three → meta review: diff read + `tofu validate` on the branch
+in-jail (valid) + `ci` green → OrgAdmin squash-merge 22:20Z. Model tiering worked as designed:
+opus judged, haiku typed, the expensive context went into the ISSUE not the ride.
+⏳ Defect closes only at the operator's host-side `github-tofu apply` (#118 stays open; one apply
+now covers reviewer_repos too). Meanwhile oracle's first goal child ran the FULL fixed lifecycle:
+#177 → PR#181 → changes-requested round r2 → APPROVED → auto-merged → merged-closeout dispatched.
