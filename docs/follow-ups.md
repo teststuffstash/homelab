@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-151**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-152**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -328,6 +328,19 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
+- [ ] **FU-151** — **First-party `-iac` deploy bumps escape LLM review by TIMING, not by design.**
+      `review-reflex.sh:262` skips `automerge`-labelled PRs (the mechanical lane,
+      [`dependency-upgrades.md`](dependency-upgrades.md) §2), but the app repos open their
+      `deploy: <app> <ver>` / `specs-pr:` PRs UNLABELLED. They survive only because `-iac` repos are
+      `require_approval=false`, so auto-merge fires on CI-green before the 15-min tick (measured:
+      sleep-iac#62, circles-iac#31 both `reviews=0`). A slow CI run or a fast tick reverses that —
+      and where the window IS long the same gap cost real money: homelab#102/#104/#105 drew **5
+      reviewer sessions on 4 one-line pins**. Deferred because the two lanes that actually burned
+      sessions are fixed (openrouter-operator#23, agent-coordinator#10). ✅ `automerge`+`dependencies`
+      already exist on all three `-iac` repos — no tofu/github change. **Next:** port the
+      `gh pr edit --add-label automerge --add-label dependencies` one-liner (OUTSIDE the
+      create-if-absent branch — the branches are long-lived) into sleep-tracking, circles,
+      oracle-fleet, snore-recorder. Reference: agent-runtime PR#37.
 - [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
       gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
       fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
@@ -367,21 +380,16 @@ six OVERSIZE items pointer-ized into
       is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
       fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
       clauses were IDLE at deploy, so it is tested against real history, not live traffic.
-- [ ] **FU-146** — **FIX SHIPPED `fc606e2`, awaiting live proof.** The `changes-requested` hold was
-      written for WIP=1; ADR-097's raise to 3 silently retired it, so every tick **and doorbell**
-      re-emitted the same unit while its own fix round rode. Measured on circles PR#39 2026-08-06:
-      **~59 of 71 coordinator sessions did nothing**, 13 of that PR's 22 comments were bot noise,
-      rate rising with round count. Now holds per-ITEM on the PR's `Implements #<n>` link
-      (agent-runtime#34) vs live ride-pod names; also resets `WIPPODS_JSON` per repo (it leaked the
-      previous repo's pods). Fail-safe: no link → old behaviour; the hold needs a LIVE pod, so it
-      self-releases. ⛔ **NOT VERIFIED — I claimed it prematurely on 2026-08-07 and the same night
-      disproved it.** `fc606e2` added the hold to the MAIN scan path only; `fast_unit_dispatch()`
-      never got it, and the doorbell takes that path. Its WIP check is a COUNT vs `REPO_MAX_WIP`,
-      so one live pod (`flive=1 < 3`) still dispatches — proven live: tick `t967f` dispatched
-      `pr-45` while `agent-circles-issue-18-r3` had been Running 13 min. The earlier "one round
-      each" was the WIP cap and timing, not the hold. ⚠ The fast path's own contract says it "may
-      only ever be cheaper, never weaker" — it is weaker. **Next:** port the per-item hold into
-      `fast_unit_dispatch()` (same predicate, `return 0` with the ⏳ line); then verify BOTH paths.
+- [ ] **FU-146** — **The `changes-requested` hold, now on BOTH dispatch paths — awaiting live proof.**
+      Written for WIP=1; ADR-097's raise to 3 retired it silently, so every tick **and doorbell**
+      re-emitted the same unit while its own fix round rode (~59 of 71 coordinator sessions did
+      nothing, circles PR#39). `fc606e2` holds per-ITEM on the PR's issue link vs live ride-pod
+      names — but on the MAIN scan path only. ⛔ I marked that VERIFIED 2026-08-07 and the same
+      night disproved it: the doorbell takes `fast_unit_dispatch()`, whose WIP check is a COUNT vs
+      `REPO_MAX_WIP`, so one live pod still dispatched (tick `t967f` vs a 13-min-old ride) while
+      the next full scan on identical state held. Ported `277a73f`, executed through three cases.
+      **Next:** verify BOTH paths on a real round — the earlier "one round each" I mistook for
+      proof was the WIP cap and timing, not the hold.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both

@@ -12,8 +12,10 @@ surfaces homelab doesn't reconcile at all are FU-097, same section.
 
 **Tracked by:** **FU-125** (Renovate is silently doing nothing — the §Ground truth finding),
 FU-097 (the ruling table this feeds), FU-051 (the app-side sibling), FU-046 (reviewable dep bumps),
-FU-016 (SLSA signing/SBOM). ADR-084 (deploy shape), ADR-093 (Argo as the orchestration engine),
-ADR-088/089 (the invariants a bump must not break).
+**FU-151** (the `automerge` label — §2's mechanical lane — is not set by the `-iac` deploy
+producers, so those bumps skip LLM review only by timing), FU-016 (SLSA signing/SBOM). ADR-084
+(deploy shape), ADR-093 (Argo as the orchestration engine), ADR-088/089 (the invariants a bump
+must not break).
 
 ---
 
