@@ -204,11 +204,23 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 
 ## How changes land (jail sessions)
 
-Sessions in this jail work **directly on `master`** — apply the change, verify it against the real
-thing, then commit and push. No feature branch, no PR, no review gate: **this repo has no CI**, so a
-PR would add ceremony without adding a check, and the branch would only delay the verification that
+> ⚠ **THIS SECTION IS FOR THE JAIL META-SESSION ONLY — if you are an agent riding this repo from
+> the fixer lane, it does NOT apply to you: open a PR and let the reviewer gate it, exactly as in a
+> stack repo.** homelab has a live fixer lane (`platform` claim → `repos[homelab].fixer`), so this
+> file IS read by worker agents, and "work directly on master" is the one instruction here that
+> would be actively wrong for them. Per-context guidance is an open design question the operator
+> owns; until it lands, this banner is the guard.
+
+Jail meta-sessions work **directly on `master`** — apply the change, verify it against the real
+thing, then commit and push. No feature branch, no PR, no review gate: a PR would add ceremony
+without adding the check that matters here, and the branch would only delay the verification that
 actually protects us. (Stack repos are the opposite — every agent change there is a strict PR
-through the reviewer gate. That asymmetry is deliberate: they have CI, this repo has an operator.)
+through the reviewer gate. That asymmetry is deliberate: the operator IS the gate in this seat.)
+⚠ **"this repo has no CI" was the old justification and it is FALSE as of 2026-08** — homelab now
+has required checks (`ci`, plus `manifest-lint` / `pin-only-lint` / `router-self-test` inside it).
+The reason to stay on master is the operator-in-the-loop end-state check, not an absence of CI, and
+the distinction matters: a jail commit still has to pass those checks on the next PR that touches
+the same paths.
 
 - **Verify, then commit** — never the reverse, and never commit a change that was not applied. The
   end-state check IS the gate here, so it must be an isolated probe against the live thing, not a
