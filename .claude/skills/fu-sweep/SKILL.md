@@ -3,8 +3,10 @@ name: fu-sweep
 description: >
   Triage every OPEN follow-up and act on it — not a closing spree. Sorts each item into DO-NOW
   (it fails the 5-minute rule), SOAK-DUE (a "let it soak" whose window has long passed, so the
-  question is answerable today), OPERATOR (needs a decision only the operator can make), or STILL
-  VALID, then DOES the do-now ones and VERIFIES the soaks against real evidence. Use on "sweep the
+  question is answerable today), UNBLOCKED (it waits on an FU that has since been archived),
+  OPERATOR (needs a decision only the operator can make), or STILL VALID — then DOES the do-now
+  ones, VERIFIES the soaks against live evidence, and re-reads the unblocked ones as if filed
+  today. Use on "sweep the
   follow-ups", "FU cleanup", "triage the tracker", "what follow-ups are still relevant", or when
   the open count / a section has grown out of control. Run BEFORE docs-cleanup, which propagates
   what this pass changes.
