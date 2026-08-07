@@ -180,6 +180,13 @@ six OVERSIZE items pointer-ized into
 
 ## Agents
 
+Sub-grouped 2026-08-07 — the block had reached 34 of the tracker's 57 open items and read as one
+lump, so nothing could be scanned by concern. The groups are the loop's own stages, not invented
+taxonomy: an item belongs where its NEXT ACTION lands. Keep them; adding a sixth group is a signal
+the block needs pruning, not more headings.
+
+### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
+
 - [ ] **FU-111** — **Native `blockedBy` migration: POINTER.** Doctrine, live-verified probe
       facts (create/cross-repo/union reader) and the 2026-08-03 authoring flip live in
       [`docs/agents/issue-authoring.md`](agents/issue-authoring.md) §Dependencies.
@@ -187,140 +194,6 @@ six OVERSIZE items pointer-ized into
       mint that token — FU-108's probe-that-looks lesson), then retire the body-line reader +
       lines. Relates FU-087/FU-110 (archived), FU-090.
 
-- [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
-      DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —
-      not BDUF). **Do NOT refactor yet** — keep noting sightings in
-      [`docs/agents/roles.md`](agents/roles.md) §"Context delivery", which holds the root finding
-      (goose never loads CLAUDE.md), the three context classes, the costs already paid, and the
-      boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
-      purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
-
-- [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
-      2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
-      comments-ONLY view (the body is not printed), so an issue with zero comments — every fresh
-      goal issue — yields empty output and exit 0. Proven both ways in the jail: circles#1
-      (0 comments) prints nothing, homelab#101 (has comments) prints only comment blocks. Image
-      exonerated (agent-base `2026.8.4-g90b229060e57`: `PAGER`/`GH_PAGER` unset, `gh config pager=`
-      empty, gh 2.97.0 — and gh never pages a non-TTY). Interim: circles recipes read
-      `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
-      that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
-      `new-stack --from` must already have it. Relates FU-114.
-- [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
-      from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
-      finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
-      `new-stack --from` donor) + sleep-tracking#115, both verified locally against the profile's
-      plugin. agent-runtime#30 switches the ride's nix `extra-substituters` → `substituters`, so a
-      LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest; a hang once egress
-      enforces). homelab side landed: `stack-lint` CACHE-01 probes what the LAUNCHER probes
-      (anonymous ghcr pull of `<repo>/devbox-cache:latest`) + `new-stack` step E2. **Next:** confirm
-      on a post-merge ride that no WAN fetch remains, then archive. (The one known residue is
-      `tofu validate`'s provider download, deliberately outside `ci` — `dependency-upgrades.md`.)
-- [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
-      on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
-      server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
-      so budget/guardrail/ledger/attribution keep working with no new credential and no new egress
-      hole; ~$0.005 + tokens per call, refused for anthropic-tier refs (they have WebSearch
-      in-harness). The env card states a guarantee per harness and passes `AGENT_SEARCH_URL`.
-      Verified live 2026-08-05 from a ride-shaped pod in ns circles: 10 citations for a
-      today's-web question. **Next:** watch a real goose ride actually use it (recipes may still
-      carry "no web" folklore — FU-117 class), then archive. Detail:
-      [`docs/agents/roles.md`](agents/roles.md) §Context delivery. Relates FU-117, FU-095, FU-020.
-- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
-      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
-      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e); the `subject:` key and the
-      IAC-G10 hand-off shipped after it; **subject DEDUP shipped 2026-08-06** (`6affc63`) — the key
-      had guarded duplicate issues but not duplicate SESSIONS (homelab#111: 3 sonnet triages in
-      33 min), and is now checked before one is spawned. **Remaining — correlation:**
-      `group_by = ["alertname"]` still keeps related alerts apart, so distinct subjects of one root
-      cause remain separate triages. Class postmortem:
-      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
-- [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
-      `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
-      ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
-      2/5/15/45s, and both outcomes are counters — `openrouter_generation_harvest_total{outcome=
-      "stored"|"missed"}` on the proxy's `/metrics` — so the blind spot is a series instead of a
-      hand-diffed export. **Next:** the T+1 sweep over `GET /activity?api_key_hash=` for whatever
-      still misses (per-session keys make attribution exact; needs a management key), and the
-      round-2 no-`/report` hole. Relates ADR-096, FU-095.
-- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
-      checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
-      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober.
-      Origin: meta-11 — a manual agentic
-      probe was the ONLY detector of a 13h Ready-but-dead prod outage.
-      **Next:** build the activation machinery per the checklist (attended-session class).
-      Composes with FU-044 as its deep post-deploy gate.
-
-- [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
-      IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
-      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
-      Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
-      (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
-      reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
-      advisory lens, then extend the G04 sentinel to **homelab** — one step owning two residues:
-      tier 1 (`argocd/resources/**`) back to unowned, and the 87-of-154 kinds `manifest-lint`
-      can't schema-check (operator 2026-08-06: the sentinel's, no separate id — doc §The platform
-      lane). Relates FU-087/FU-093, ADR-084, ADR-076.
-- [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
-      once I have more data and cleaned up the specs").** Write-up:
-      `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
-      with 0 rejections — the gate's value migrated to issue-time ⚖ pre-decision; ~half the
-      gates were mechanical diffs (marker flips, event-list syncs, provenance notes). Do NOT
-      implement before the operator re-opens this.
-- [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, the double-book
-      history, the lint (built 2026-08-02) and the 2026-08-03 reconciliation (121%→89%):
-      [`docs/storage-ledger.md`](storage-ledger.md).
-      **Next:** Garage admin-API metrics + ServiceMonitor and Longhorn per-disk
-      `storageScheduled`, each with a >80% alert. Blocks the FU-106 "mechanical" predicate.
-      Relates ADR-089, FU-116 (archived).
-
-- [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
-      the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
-      retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
-      **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
-      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`.
-      Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
-- [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
-      issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares
-      and cherry-picks.** **Platform legs BUILT same day:** `agents/research-fanout.sh` (per-model
-      task keys `research-<n>-<slug>` — adhoc to the launcher, no strike/atomic-gate collisions;
-      per-ride ephemeral budget keys; `AGENT_WIP_LIMIT=N`) + model-slug branch rule in both
-      research recipes (oracle-fleet#166, sleep-tracking#110) + oracle research.yaml itself
-      (grow-mode port). **Remaining:** first consumer run (idp-system specs — needs the idp stack
-      bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
-      specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
-      output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
-- [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
-      `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
-      overloaded-prefix rules in one commented place (incl. the cloaked `openrouter/<codename>`
-      case, where the prefix is part of the id). Migrated: agent-session.sh (both sites),
-      research-fanout.sh, `estimate_budget.normalize_model`. The proxy keeps its own copy — another
-      deployment unit, cannot import — so `devbox run model-id-test` executes that function out of
-      the proxy file by AST and fails CI if the two ever disagree. **Next:** the structured
-      `{rail,harness,model}` form in claims + `stacks.json` (string stays canonical; the parser is
-      the compatibility layer), which is also where a future rail (local vLLM) lands.
-      Relates FU-095, ADR-096.
-- [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
-      `agents/agent-session.sh`.
-- [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
-      the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
-      ~150 POLICY_DENIED drops were unclassifiable post-hoc (flow ring buffer rotates in minutes);
-      fixed at the METRIC level (`drop:…destinationContext=dns|ip` + `dns:query` — Prometheus now
-      names denied destinations and attempted lookups, panels on the `agent-issue` dashboard). If
-      per-flow detail (pod/port/timing) is ever needed durably: Hubble's built-in
-      `hubble.export` (static filter verdict=DROPPED → node file) tailed by the existing Alloy
-      DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
-      OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
-      no supported native OTel emitter. Relates FU-020.
-- [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
-      `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
-      coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
-      coordinator-session.sh's exit trap, so a tick that dies before it (OOM kill, node reboot,
-      DeadlineExceeded) loses its transcript, which IS the log for an exec-run session. Found while
-      checking FU-132's premise; harmless that time (267/267 files were already in Garage) by luck.
-      **Next:** render a per-loop-ns crash-net from the Composition. ⚠ the loop-ns S3 secret is
-      WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
-      upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
-      Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Closing keywords fire only on
       default-branch merges, so a `goal/**` child's issue stays open after its PR merges —
       C4/C5 re-rides merged work, `goal-review` never fires, siblings never unblock (live
@@ -341,75 +214,6 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
-      circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
-      (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
-      `repos[circles].fixer.docker: true` (flipped FOR #19) and the pod really is kata +
-      native-sidecar `dind` + `DOCKER_HOST`, so the worker CAN run kind. The two environments simply
-      differ (kata microVM dind vs the ARC runner). On a red the coordinator can neither re-run the
-      job (FU-148, no `actions:write`) nor re-run CI in-pod, so it parks at `agent/blocked` and
-      waits for a human — for a class of red that should be retried. **Operator direction
-      2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
-      environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
-- [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
-      The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
-      silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
-      failure modes at once: structurally red (it bumps `reflexes-argo.yaml`, carved out only for
-      arc-runner pins, so `pin-only-lint` rejects the tag) AND unmergeable (7 swept files are owned).
-      **Operator design, better than extending the lint:** hold the tag in ONE file the manifests
-      take it from — mechanically a kustomize `images:` transformer, converting `agents/coordinator`
-      from a plain directory app (no precedent here yet). One file bumped, one carve-out, no regex.
-      ⚠ `argocd/resources/agentstack/composition.yaml` holds the literal too, different app.
-      **Next:** convert the app + move the pin, then drop the extra carve-outs.
-- [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
-      `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
-      [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
-      `specs-pr:` PRs UNLABELLED. They survive only because `-iac` is `require_approval=false`,
-      so auto-merge beats the 15-min tick (sleep-iac#62, circles-iac#31: `reviews=0`) — a slow
-      CI run reverses it. Where the window IS long the same gap cost **5 reviewer sessions on 4
-      one-line pins** (homelab#102/#104/#105). Deferred: the lanes that actually burned sessions
-      are fixed (openrouter-operator#23, agent-coordinator#10), labels already exist on all three
-      `-iac` repos. **Next:** port `gh pr edit --add-label automerge --add-label dependencies`
-      (OUTSIDE create-if-absent) into sleep-tracking, circles, oracle-fleet, snore-recorder.
-- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
-      gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
-      fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
-      queues forever never does. ArgoCD read `Synced/Healthy` throughout (correct: the manifest was
-      fine, the CR *status* was not). Found only by a heartbeat comparing throughput against status.
-      **Next:** an alert on the throughput signal, not the manifest — candidates: zero
-      `AutoscalingListener` while an AutoscalingRunnerSet exists; a listener pod restarting on a
-      tight loop; or queued-age (needs a GitHub-side gauge the exporter does not yet emit). Prefer
-      the listener-count one — it is cluster-local and needs no new poller.
-      Incident: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
-- [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
-      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked); the
-      latch counts *spawned sessions* and is exact, so a day with 12 genuinely distinct alerts now
-      stops triage where the old cap let it run. **First datum 2026-08-06: 30 sessions, 26 of them
-      ONE incident** (the Actions outage) — that sizes the old hole, not the new steady state, and
-      it exhausted the budget the day it shipped. **Deferred because the value is an evidence
-      question** (as ADR-097's parallelism was). **Next:** after ~2 weeks of ORDINARY days, read
-      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — p95 well under
-      12, leave it; `ResponderTriageBudgetExhausted` on non-storm days, raise `RESPONDER_DAILY_MAX`.
-- [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
-      instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
-      (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
-      session diagnosed it correctly and dispatched NO worker — good — but `gh run rerun --failed`
-      was refused (`actions:write` absent from the coordinator App), so it closed/reopened the PR to
-      fire a fresh `pull_request` run. **That disarms auto-merge**; the session noticed and re-armed,
-      but nothing guarantees the next one will, and a silently disarmed PR is invisible to the merge
-      path (FU-079 class). **Next:** decide whether the coordinator App gets `actions: write`
-      (`tofu/github/`) — a privilege call, not a mechanical one — or whether re-running CI should be
-      a launcher-owned verb. Relates ADR-094 (launcher-owned dispatch), FU-079.
-- [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
-      broken.** A
-      `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
-      `-32602` truncation, classified `clean`, banked nothing — cause is agent-runtime#36).
-      Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
-      where `gh` puts it TOP-LEVEL, so `$head` was always "" and it returned "no-op" for **every**
-      PR; and comparison was wrong anyway — a good round posts stats AFTER its push. **Counting**
-      is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
-      fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
-      clauses were IDLE at deploy, so it is tested against real history, not live traffic.
 - [ ] **FU-146** — **The per-item dispatch hold, now on all three clauses — awaiting live proof.**
       Written for WIP=1; ADR-097's raise to 3 retired it silently, so ticks and doorbells re-emitted
       the same unit while its own fix round rode (~59 of 71 coordinator sessions did nothing,
@@ -426,6 +230,186 @@ six OVERSIZE items pointer-ized into
       cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
       **Next:** key the alert on the deterministic scan phase.
       Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
+- [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
+      broken.** A
+      `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
+      `-32602` truncation, classified `clean`, banked nothing — cause is agent-runtime#36).
+      Reusing FU-115b's predicate exposed two bugs in it: it read `.commits[]?.commit.committedDate`
+      where `gh` puts it TOP-LEVEL, so `$head` was always "" and it returned "no-op" for **every**
+      PR; and comparison was wrong anyway — a good round posts stats AFTER its push. **Counting**
+      is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
+      fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
+      clauses were IDLE at deploy, so it is tested against real history, not live traffic.
+- [ ] **FU-090** — **Sprout index / issue authoring: POINTER.** All legs, the breaker-#1 gate,
+      the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
+      retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
+      **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
+      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`.
+      Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
+- [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
+      2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
+      comments-ONLY view (the body is not printed), so an issue with zero comments — every fresh
+      goal issue — yields empty output and exit 0. Proven both ways in the jail: circles#1
+      (0 comments) prints nothing, homelab#101 (has comments) prints only comment blocks. Image
+      exonerated (agent-base `2026.8.4-g90b229060e57`: `PAGER`/`GH_PAGER` unset, `gh config pager=`
+      empty, gh 2.97.0 — and gh never pages a non-TTY). Interim: circles recipes read
+      `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
+      that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
+      `new-stack --from` must already have it. Relates FU-114.
+
+### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
+
+- [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
+      instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
+      (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
+      session diagnosed it correctly and dispatched NO worker — good — but `gh run rerun --failed`
+      was refused (`actions:write` absent from the coordinator App), so it closed/reopened the PR to
+      fire a fresh `pull_request` run. **That disarms auto-merge**; the session noticed and re-armed,
+      but nothing guarantees the next one will, and a silently disarmed PR is invisible to the merge
+      path (FU-079 class). **Next:** decide whether the coordinator App gets `actions: write`
+      (`tofu/github/`) — a privilege call, not a mechanical one — or whether re-running CI should be
+      a launcher-owned verb. Relates ADR-094 (launcher-owned dispatch), FU-079.
+- [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
+      `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
+      [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
+      `specs-pr:` PRs UNLABELLED. They survive only because `-iac` is `require_approval=false`,
+      so auto-merge beats the 15-min tick (sleep-iac#62, circles-iac#31: `reviews=0`) — a slow
+      CI run reverses it. Where the window IS long the same gap cost **5 reviewer sessions on 4
+      one-line pins** (homelab#102/#104/#105). Deferred: the lanes that actually burned sessions
+      are fixed (openrouter-operator#23, agent-coordinator#10), labels already exist on all three
+      `-iac` repos. **Next:** port `gh pr edit --add-label automerge --add-label dependencies`
+      (OUTSIDE create-if-absent) into sleep-tracking, circles, oracle-fleet, snore-recorder.
+- [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
+      The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
+      silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
+      failure modes at once: structurally red (it bumps `reflexes-argo.yaml`, carved out only for
+      arc-runner pins, so `pin-only-lint` rejects the tag) AND unmergeable (7 swept files are owned).
+      **Operator design, better than extending the lint:** hold the tag in ONE file the manifests
+      take it from — mechanically a kustomize `images:` transformer, converting `agents/coordinator`
+      from a plain directory app (no precedent here yet). One file bumped, one carve-out, no regex.
+      ⚠ `argocd/resources/agentstack/composition.yaml` holds the literal too, different app.
+      **Next:** convert the app + move the pin, then drop the extra carve-outs.
+- [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
+      circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
+      (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
+      `repos[circles].fixer.docker: true` (flipped FOR #19) and the pod really is kata +
+      native-sidecar `dind` + `DOCKER_HOST`, so the worker CAN run kind. The two environments simply
+      differ (kata microVM dind vs the ARC runner). On a red the coordinator can neither re-run the
+      job (FU-148, no `actions:write`) nor re-run CI in-pod, so it parks at `agent/blocked` and
+      waits for a human — for a class of red that should be retried. **Operator direction
+      2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
+      environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
+- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch."** On 2026-08-07 the ARC listener was
+      gone for 5h after the GitHub outage cleared; every run sat `queued`, `in_progress` was 0
+      fleet-wide, and no alert fired — `GithubWorkflowRunFailed` needs a run to FAIL, and a run that
+      queues forever never does. ArgoCD read `Synced/Healthy` throughout (correct: the manifest was
+      fine, the CR *status* was not). Found only by a heartbeat comparing throughput against status.
+      **Next:** an alert on the throughput signal, not the manifest — candidates: zero
+      `AutoscalingListener` while an AutoscalingRunnerSet exists; a listener pod restarting on a
+      tight loop; or queued-age (needs a GitHub-side gauge the exporter does not yet emit). Prefer
+      the listener-count one — it is cluster-local and needs no new poller.
+      Incident: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
+- [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
+      decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
+      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
+      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"); reflex skips `automerge`,
+      `rebaseWhen: conflicted` set. **Unproven, awaiting a real reviewable bump:** an armed `deps-review` PR through
+      the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
+      **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
+      manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
+      Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
+      an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
+- [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
+      from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
+      finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
+      `new-stack --from` donor) + sleep-tracking#115, both verified locally against the profile's
+      plugin. agent-runtime#30 switches the ride's nix `extra-substituters` → `substituters`, so a
+      LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest; a hang once egress
+      enforces). homelab side landed: `stack-lint` CACHE-01 probes what the LAUNCHER probes
+      (anonymous ghcr pull of `<repo>/devbox-cache:latest`) + `new-stack` step E2. **Next:** confirm
+      on a post-merge ride that no WAN fetch remains, then archive. (The one known residue is
+      `tofu validate`'s provider download, deliberately outside `ci` — `dependency-upgrades.md`.)
+- [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** Deterministic
+      rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`,
+      no LLM); what's left is dispatching a worker against the APP repo, in-cluster off ArgoCD
+      health events (never in the Actions deploy run). Deep acceptance stays the FU-102 prober;
+      operator prereq: harden app CI so breakages are rare. **⚖ IAC-G09 platform half WIRED
+      2026-08-04** (homelab reversible class = first-party image pins only; pin-only predicate in
+      `deploy-revert-argo.yaml`, unit-exercised, **never fired by a real Degraded homelab app**).
+      Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
+      post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
+
+### Models, cost & routing
+
+- [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
+      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
+      2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
+      ⛔ **The P4 soak has been measuring a router with an EMPTY strike table** — strikes were never
+      recorded (found + fixed 2026-08-07, `32b0fb3`), and enforcement stays OFF by operator ruling
+      because the evidence contradicts "N strikes and you're out" (3 deaths vs 3 clean on lg).
+      Mechanism + the open blacklist/retry/fan-out question: §M1a. **Next:** gather strike data with
+      enforcement off, decide the policy, THEN judge the P4 flip.
+      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
+      Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
+- [ ] **FU-127** — **One model-id parser LANDED; the structured claim field is the rest.**
+      `agents/model_id.py` is the single implementation of `{rail, harness, model}` with the
+      overloaded-prefix rules in one commented place (incl. the cloaked `openrouter/<codename>`
+      case, where the prefix is part of the id). Migrated: agent-session.sh (both sites),
+      research-fanout.sh, `estimate_budget.normalize_model`. The proxy keeps its own copy — another
+      deployment unit, cannot import — so `devbox run model-id-test` executes that function out of
+      the proxy file by AST and fails CI if the two ever disagree. **Next:** the structured
+      `{rail,harness,model}` form in claims + `stacks.json` (string stays canonical; the parser is
+      the compatibility layer), which is also where a future rail (local vLLM) lands.
+      Relates FU-095, ADR-096.
+- [ ] **FU-131** — **Cost-ledger undercount: harvest FIXED, the T+1 sweep is what remains.** The
+      `/generation` backoff was (2s, 5s) and gave up at ~7s, losing 49% of a fan-out arm's spend
+      ($2.196 of $4.328 stored, the stored 29 matching OpenRouter's export to the cent). Now
+      2/5/15/45s, and both outcomes are counters — `openrouter_generation_harvest_total{outcome=
+      "stored"|"missed"}` on the proxy's `/metrics` — so the blind spot is a series instead of a
+      hand-diffed export. **Next:** the T+1 sweep over `GET /activity?api_key_hash=` for whatever
+      still misses (per-session keys make attribution exact; needs a management key), and the
+      round-2 no-`/report` hole. Relates ADR-096, FU-095.
+- [ ] **FU-149** — **The responder's daily budget is binding, but 12 now means a different thing.**
+      ADR-099 changed the ceiling's UNIT: FU-113(c) counted distinct *incidents* (and leaked); the
+      latch counts *spawned sessions* and is exact, so a day with 12 genuinely distinct alerts now
+      stops triage where the old cap let it run. **First datum 2026-08-06: 30 sessions, 26 of them
+      ONE incident** (the Actions outage) — that sizes the old hole, not the new steady state, and
+      it exhausted the budget the day it shipped. **Deferred because the value is an evidence
+      question** (as ADR-097's parallelism was). **Next:** after ~2 weeks of ORDINARY days, read
+      `responder_triage_sessions_today` on the "Responder triage budget" dashboard — p95 well under
+      12, leave it; `ResponderTriageBudgetExhausted` on non-storm days, raise `RESPONDER_DAILY_MAX`.
+- [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
+      issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares
+      and cherry-picks.** **Platform legs BUILT same day:** `agents/research-fanout.sh` (per-model
+      task keys `research-<n>-<slug>` — adhoc to the launcher, no strike/atomic-gate collisions;
+      per-ride ephemeral budget keys; `AGENT_WIP_LIMIT=N`) + model-slug branch rule in both
+      research recipes (oracle-fleet#166, sleep-tracking#110) + oracle research.yaml itself
+      (grow-mode port). **Remaining:** first consumer run (idp-system specs — needs the idp stack
+      bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
+      specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
+      output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
+
+### Observability & evidence — alerts, transcripts, retro, the prober
+
+- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
+      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
+      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e); the `subject:` key and the
+      IAC-G10 hand-off shipped after it; **subject DEDUP shipped 2026-08-06** (`6affc63`) — the key
+      had guarded duplicate issues but not duplicate SESSIONS (homelab#111: 3 sonnet triages in
+      33 min), and is now checked before one is spawned. **Remaining — correlation:**
+      `group_by = ["alertname"]` still keeps related alerts apart, so distinct subjects of one root
+      cause remain separate triages. Class postmortem:
+      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
+- [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
+      `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
+      coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
+      coordinator-session.sh's exit trap, so a tick that dies before it (OOM kill, node reboot,
+      DeadlineExceeded) loses its transcript, which IS the log for an exec-run session. Found while
+      checking FU-132's premise; harmless that time (267/267 files were already in Garage) by luck.
+      **Next:** render a per-loop-ns crash-net from the Composition. ⚠ the loop-ns S3 secret is
+      WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
+      upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
+      Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
@@ -433,6 +417,62 @@ six OVERSIZE items pointer-ized into
       candidates (list in §B2). Absorbs FU-057's residue (`key_hash` activity-API backfill).
       Relates FU-095.
 
+- [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
+      the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
+      ~150 POLICY_DENIED drops were unclassifiable post-hoc (flow ring buffer rotates in minutes);
+      fixed at the METRIC level (`drop:…destinationContext=dns|ip` + `dns:query` — Prometheus now
+      names denied destinations and attempted lookups, panels on the `agent-issue` dashboard). If
+      per-flow detail (pod/port/timing) is ever needed durably: Hubble's built-in
+      `hubble.export` (static filter verdict=DROPPED → node file) tailed by the existing Alloy
+      DaemonSet into Loki — ALL maintained components. Explicitly REJECTED: the `hubble-otel`
+      OTLP adapter (blog-circulated pattern) — the project is archived/unmaintained; Cilium has
+      no supported native OTel emitter. Relates FU-020.
+- [ ] **FU-102** — **Prober role (the agentic canary): POINTER.** Brief + the full machinery
+      checklist (predicate/edge/backstop/key/breaker; belt stack blackbox→prober→responder):
+      [`docs/agents/roles.md`](agents/roles.md) §"Role machinery checklists" → prober.
+      Origin: meta-11 — a manual agentic
+      probe was the ONLY detector of a 13h Ready-but-dead prod outage.
+      **Next:** build the activation machinery per the checklist (attended-session class).
+      Composes with FU-044 as its deep post-deploy gate.
+
+### Roles & platform capabilities — new lanes, sandboxes, context delivery
+
+- [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
+      IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
+      [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
+      Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
+      (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
+      reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
+      advisory lens, then extend the G04 sentinel to **homelab** — one step owning two residues:
+      tier 1 (`argocd/resources/**`) back to unowned, and the 87-of-154 kinds `manifest-lint`
+      can't schema-check (operator 2026-08-06: the sentinel's, no separate id — doc §The platform
+      lane). Relates FU-087/FU-093, ADR-084, ADR-076.
+- [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
+      on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
+      server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
+      so budget/guardrail/ledger/attribution keep working with no new credential and no new egress
+      hole; ~$0.005 + tokens per call, refused for anthropic-tier refs (they have WebSearch
+      in-harness). The env card states a guarantee per harness and passes `AGENT_SEARCH_URL`.
+      Verified live 2026-08-05 from a ride-shaped pod in ns circles: 10 citations for a
+      today's-web question. **Next:** watch a real goose ride actually use it (recipes may still
+      carry "no web" folklore — FU-117 class), then archive. Detail:
+      [`docs/agents/roles.md`](agents/roles.md) §Context delivery. Relates FU-117, FU-095, FU-020.
+- [ ] **FU-019** — Migrate the worker plain `Pod` → agent-sandbox `Sandbox` CR (ADR-078).
+      `agents/agent-session.sh`.
+- [ ] **FU-117** — **Dedup the context-delivery spread into one role × context × source map.**
+      DELIBERATE let-it-pile-up item (operator style: grow organically, then analyse + refactor —
+      not BDUF). **Do NOT refactor yet** — keep noting sightings in
+      [`docs/agents/roles.md`](agents/roles.md) §"Context delivery", which holds the root finding
+      (goose never loads CLAUDE.md), the three context classes, the costs already paid, and the
+      boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
+      purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
+
+- [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
+      once I have more data and cleaned up the specs").** Write-up:
+      `docs/agents/spec-gate-tiering.md`. Kernel: meta-9 measured 16 codeowner spec gates/72h
+      with 0 rejections — the gate's value migrated to issue-time ⚖ pre-decision; ~half the
+      gates were mechanical diffs (marker flips, event-list syncs, provenance notes). Do NOT
+      implement before the operator re-opens this.
 - [ ] **FU-059** — **W1 DECIDED + built (2026-07-10, ADR-086): coordinator commits ⚑ spec gap-flags
       to open agent PR branches during merge-forward arbitration (record-in-git; issues = work
       pointers only). Remaining scope = W2+ (direct fixes/seeds), still needs design.** Original:
@@ -444,15 +484,13 @@ six OVERSIZE items pointer-ized into
       budget/credential/review-gate assumptions, so it must be designed in an ADR before any code. Relates
       the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
-- [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** Deterministic
-      rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`,
-      no LLM); what's left is dispatching a worker against the APP repo, in-cluster off ArgoCD
-      health events (never in the Actions deploy run). Deep acceptance stays the FU-102 prober;
-      operator prereq: harden app CI so breakages are rare. **⚖ IAC-G09 platform half WIRED
-      2026-08-04** (homelab reversible class = first-party image pins only; pin-only predicate in
-      `deploy-revert-argo.yaml`, unit-exercised, **never fired by a real Degraded homelab app**).
-      Design + rulings: [`docs/agents/iac-lane.md`](agents/iac-lane.md) §"ArgoCD health is NOT the
-      post-deploy gate" + §"Auto-revert does NOT generalize". Relates FU-041, FU-102, FU-090.
+- [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, the double-book
+      history, the lint (built 2026-08-02) and the 2026-08-03 reconciliation (121%→89%):
+      [`docs/storage-ledger.md`](storage-ledger.md).
+      **Next:** Garage admin-API metrics + ServiceMonitor and Longhorn per-disk
+      `storageScheduled`, each with a >80% alert. Blocks the FU-106 "mechanical" predicate.
+      Relates ADR-089, FU-116 (archived).
+
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**
       Provisionable capabilities (S3/Postgres/…) become typed Crossplane XRDs; discovery is a cluster query
       (`kubectl get xrd`) and the human catalog is *generated* from them rather than hand-curated. Open:
@@ -463,26 +501,6 @@ six OVERSIZE items pointer-ized into
       Design: [`docs/agents/platform-and-stacks.md`](agents/platform-and-stacks.md) §2, ADR-085. Relates
       [[service-discovery]], ADR-076 (app-owned resources via Crossplane).
 
-- [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
-      decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
-      review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
-      [`docs/renovate.md`](renovate.md) §"Coordinator × Renovate PRs"); reflex skips `automerge`,
-      `rebaseWhen: conflicted` set. **Unproven, awaiting a real reviewable bump:** an armed `deps-review` PR through
-      the **review reflex** (not the coordinator) → CHANGES_REQUESTED → a worker adapting on the
-      **`renovate/*` branch** → loop → merge. Verify specifically that **Renovate leaves a
-      manually-edited branch alone** and the worker pushes to `renovate/*`, not a new `agent/*`.
-      Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
-      an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
-- [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
-      pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
-      2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
-      ⛔ **The P4 soak has been measuring a router with an EMPTY strike table** — strikes were never
-      recorded (found + fixed 2026-08-07, `32b0fb3`), and enforcement stays OFF by operator ruling
-      because the evidence contradicts "N strikes and you're out" (3 deaths vs 3 clean on lg).
-      Mechanism + the open blacklist/retry/fan-out question: §M1a. **Next:** gather strike data with
-      enforcement off, decide the policy, THEN judge the P4 flip.
-      **Open:** legs (b)+(c) unstarted; wiring the coordinator lane to `/route` (§M10).
-      Relates ADR-077, ADR-081, ADR-096, FU-044, FU-046, FU-057, FU-062, FU-105.
 ## Hardware & nodes
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
