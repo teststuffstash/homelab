@@ -374,13 +374,14 @@ six OVERSIZE items pointer-ized into
       rate rising with round count. Now holds per-ITEM on the PR's `Implements #<n>` link
       (agent-runtime#34) vs live ride-pod names; also resets `WIPPODS_JSON` per repo (it leaked the
       previous repo's pods). Fail-safe: no link → old behaviour; the hold needs a LIVE pod, so it
-      self-releases. ✅ **VERIFIED LIVE 2026-08-07:** circles #44+#45 both went `CHANGES_REQUESTED`
-      at once and each got **exactly one** fix round (wip 1, then wip 2), no duplicates while the
-      pods rode. **Residual — the hold ends when the POD does, not when the work does:** once a fix
-      round pushes, the stale `CHANGES_REQUESTED` re-qualifies the PR on every scan until the
-      reviewer re-reviews (4 coordinator sessions in ~10 min on #45, each correctly exiting clean —
-      one even named the staleness itself). **Next:** hold when the review predates the newest
-      non-merge commit — a deterministic predicate, so it replaces paid judgement with a free one.
+      self-releases. ⛔ **NOT VERIFIED — I claimed it prematurely on 2026-08-07 and the same night
+      disproved it.** `fc606e2` added the hold to the MAIN scan path only; `fast_unit_dispatch()`
+      never got it, and the doorbell takes that path. Its WIP check is a COUNT vs `REPO_MAX_WIP`,
+      so one live pod (`flive=1 < 3`) still dispatches — proven live: tick `t967f` dispatched
+      `pr-45` while `agent-circles-issue-18-r3` had been Running 13 min. The earlier "one round
+      each" was the WIP cap and timing, not the hold. ⚠ The fast path's own contract says it "may
+      only ever be cheaper, never weaker" — it is weaker. **Next:** port the per-item hold into
+      `fast_unit_dispatch()` (same predicate, `return 0` with the ⏳ line); then verify BOTH paths.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
