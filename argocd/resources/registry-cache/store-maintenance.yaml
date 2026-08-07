@@ -1,0 +1,106 @@
+# Mirror store maintenance — the homelab#116 fix.
+#
+# WHAT WENT WRONG. `registry garbage-collect --delete-untagged` was added for capacity
+# (#80/#93/#99 — the PVC filled four times in eight days). In a PULL-THROUGH cache, images pulled
+# by digest (`FROM …@sha256:…`, which is what the pinning convention produces) are cached as
+# UNTAGGED manifests, so that flag deletes exactly the images we pin — and it removes the blob
+# while leaving the per-repository layer link behind. The registry then answers `200` with ZERO
+# BYTES for a live layer, forever, and the symptom surfaces downstream as `short read: expected
+# 3642247 bytes but got 0`. It cost circles#19 four rounds.
+#
+# THE TRADE, RESOLVED. The flag was the only thing reclaiming space in a proxy cache, so dropping
+# it needs a replacement valve. The replacement is to throw the WHOLE store away when it gets
+# full: ADR-080 says durable git/S3 is truth and caches are cache, so a pull-through mirror is
+# rebuildable BY DEFINITION — and a wipe, unlike a selective delete, cannot leave a dangling link.
+# That is the entire reason to prefer it over anything cleverer.
+#
+# ⚠ A WIPE IS EXPENSIVE AND IS MEANT TO BE RARE (operator, 2026-08-07). It costs the next day in
+# slow builds while the cache re-warms to roughly where it already was, so the design deliberately
+# pushes it toward "never": the PVCs were oversized well past the working set the same day (ghcr
+# 40→100Gi against 28.4G actual, docker-io 20→40Gi against 7.1G) and the threshold sits at 90%.
+# If wipes ever start happening, the answer is a BIGGER PVC, not a lower threshold — the
+# RegistryMirrorWipedRepeatedly alert says exactly that. Ordinary reclamation is meant to come
+# from REGISTRY_PROXY_TTL eviction plus the plain (safe) collection in step 3.
+#
+# The three steps below run in an initContainer, which is the only moment the store provably has
+# no writer (same reasoning as the GC it replaces: scaling to 0 or flipping READONLY mutates a
+# Deployment that ArgoCD selfHeals back mid-run — confirmed live).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: store-maintenance
+  namespace: registry-cache
+data:
+  maintain.sh: |
+    #!/bin/sh
+    # Never `set -e`: every step here is best-effort, and a maintenance failure must not stop the
+    # mirror from serving. A mirror that is down is a build outage (ADR-091 dropped the docker.io
+    # egress FQDNs, so there is no silent internet fallback).
+    set -u
+    STORE=/var/lib/registry/docker/registry/v2
+    MIRROR="${MIRROR_NAME:-unknown}"
+    PG="${PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+    WIPE_PCT="${WIPE_THRESHOLD_PCT:-90}"
+    dangling=0
+    wiped=0
+
+    # ── 1. CAPACITY VALVE ────────────────────────────────────────────────────────────────────
+    used_pct=$(df -P /var/lib/registry 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5}')
+    [ -n "${used_pct:-}" ] || used_pct=0
+    if [ "$used_pct" -ge "$WIPE_PCT" ]; then
+      echo "WIPE: ${MIRROR} store at ${used_pct}% (>= ${WIPE_PCT}%) — deleting the entire cache."
+      echo "      It re-warms from upstream on the next pulls. This is the capacity mechanism"
+      echo "      that replaces --delete-untagged (homelab#116); a wipe cannot dangle a link."
+      rm -rf "$STORE" 2>/dev/null || echo "WARN wipe incomplete — check permissions"
+      wiped=1
+    else
+      echo "capacity: ${MIRROR} store at ${used_pct}% used (wipe threshold ${WIPE_PCT}%)"
+    fi
+
+    # ── 2. DANGLING-LINK SWEEP (the #116 invariant) ──────────────────────────────────────────
+    # A repository layer link whose blob is missing or zero-length IS the bug: the registry sees
+    # the link, answers 200, and writes nothing. Detect it, repair it (drop the link so the next
+    # pull re-fetches from upstream), and — critically — COUNT it, because this failure is
+    # invisible to the mirror's own metrics and to every consumer until a build fails oddly.
+    if [ "$wiped" -eq 0 ] && [ -d "$STORE/repositories" ]; then
+      tmp=/tmp/dangling.$$
+      : > "$tmp"
+      find "$STORE/repositories" -path '*/_layers/sha256/*/link' -type f 2>/dev/null |
+        while read -r link; do
+          d=$(cat "$link" 2>/dev/null)
+          d=${d#sha256:}
+          [ -n "$d" ] || continue
+          blob="$STORE/blobs/sha256/$(echo "$d" | cut -c1-2)/$d/data"
+          if [ ! -s "$blob" ]; then
+            echo "DANGLING: ${link#$STORE/repositories/} -> ${d} (blob absent or 0 bytes) — unlinking"
+            rm -f "$link" && echo x >> "$tmp"
+          fi
+        done
+      dangling=$(wc -l < "$tmp" 2>/dev/null | tr -d ' ')
+      [ -n "$dangling" ] || dangling=0
+      rm -f "$tmp"
+    fi
+    echo "store-check: ${MIRROR} repaired ${dangling} dangling link(s)"
+
+    # ── 3. GARBAGE COLLECT, WITHOUT --delete-untagged ────────────────────────────────────────
+    # Plain collection removes only blobs that NO manifest references. Untagged manifests are
+    # kept, so digest-pinned images keep their blobs — that is the whole point. It still pairs
+    # correctly with REGISTRY_PROXY_TTL: the TTL scheduler evicts stale manifests, and this
+    # sweeps the blobs they orphaned.
+    # A collection that fails on one malformed repo dir stops collecting the ENTIRE store, and
+    # `|| true` would make that identical to success — hence the loud WARN (homelab#93).
+    if [ "$wiped" -eq 0 ]; then
+      registry garbage-collect /etc/distribution/config.yml ||
+        echo "WARN garbage-collect FAILED — starting anyway, the store is not being reclaimed"
+    fi
+
+    # ── 4. REPORT ────────────────────────────────────────────────────────────────────────────
+    # Best-effort: the mirror must start whether or not monitoring is reachable.
+    wget -q -O- --timeout=5 \
+      --post-data="registry_mirror_dangling_links_repaired ${dangling}
+    registry_mirror_store_wiped ${wiped}
+    registry_mirror_store_used_percent ${used_pct}
+    " "${PG}/metrics/job/registry_mirror_maintenance/mirror/${MIRROR}" >/dev/null 2>&1 &&
+      echo "pushed maintenance metrics for ${MIRROR}" ||
+      echo "WARN could not push maintenance metrics (mirror starts regardless)"
+    exit 0

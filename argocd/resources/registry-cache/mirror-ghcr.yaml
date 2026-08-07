@@ -20,12 +20,20 @@ spec:
       # pre-committed to exactly this: bump only after collection proves it cannot help.
       # Capacity checked before asking: both replicas are co-located on wk-metal-01 (below), which
       # has 191G physically free and sits at 50% committed — +40G of commitment lands inside it.
-      storage: 40Gi # 10Gi filled 2026-07-27 (fresh agent-base builds + the FU-096 devbox-cache artifacts): a full disk TRUNCATES in-flight proxy writes → nodes see layer digest mismatches + 500s, and dead _uploads pile up uncleaned. Purge recipe: rm -rf .../repositories/*/*/_uploads/* in the pod.
-      # ⚠ Replica placement (2026-07-27): the bulk tier is only wk-02 + wk-metal-01, and wk-02's
-      # allocation couldn't fit the expansion — the volume's replicas are CO-LOCATED on
-      # wk-metal-01 by explicit choice (replicaSoftAntiAffinity=enabled on the volume). For a
-      # pull-through cache that's acceptable (upstream is the redundancy; loss = re-pull); real
-      # spread returns when bulk capacity grows.
+      # 40→100Gi 2026-08-07, and this one is a DELIBERATE OVERSIZE rather than a fit to the
+      # working set. Since --delete-untagged had to go (homelab#116 — it deleted the digest-pinned
+      # images we depend on), the capacity valve of last resort is a FULL WIPE, and a wipe is
+      # expensive in a way GC never was: the next day is spent on slow builds while the cache
+      # re-warms to roughly where it already was. Operator call: buy headroom instead of paying
+      # that repeatedly. At 28.4G actual, 100Gi is >3x the live working set, so the 90% wipe
+      # threshold should be unreachable in normal operation and wipes stay a genuine last resort.
+      # Affordable only because bulk grew: wk-metal-04 joined the tier the same day, so bulk went
+      # from 2 disks (one of them a thin-provisioned VM disk on a 99%-full pool) to 706G
+      # allocatable across two independent physical disks.
+      storage: 100Gi
+      # Replica placement is REAL again (2026-08-07): the co-location note below is obsolete —
+      # the two replicas now sit on wk-metal-01 + wk-metal-04, one per zone, as the tier intends.
+      # (Was: both on wk-metal-01 because wk-02's allocation couldn't fit the 40Gi expansion.)
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -59,18 +67,23 @@ spec:
       # failure is LOUD in the init log instead of silent. It does happen: docker-io's collection
       # died on `Path not found: .../library/debian/_layers`, an aborted pull leaving a repo dir
       # with _manifests and no _layers, which stops the mark phase dead (cleared 2026-08-04).
+      # ⚠ `--delete-untagged` was REMOVED here on 2026-08-07 (homelab#116): in a pull-through
+      # cache it deletes exactly the digest-pinned images we depend on, and leaves the layer link
+      # behind so the mirror answers 200/0-bytes for a live blob. The capacity it was buying now
+      # comes from wipe-if-full instead. Script + full rationale: store-maintenance.yaml.
       initContainers:
-        - name: garbage-collect
+        - name: store-maintenance
           image: registry:3.0.0
-          command: ["/bin/sh", "-c"]
-          args:
-            - registry garbage-collect --delete-untagged /etc/distribution/config.yml
-              || echo "WARN garbage-collect FAILED — starting anyway, the store is not being reclaimed (homelab#93)"
+          command: ["/bin/sh", "/maintenance/maintain.sh"]
+          env:
+            - { name: MIRROR_NAME, value: "mirror-ghcr" }
+            - { name: WIPE_THRESHOLD_PCT, value: "90" }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: data, mountPath: /var/lib/registry }
+            - { name: maintenance, mountPath: /maintenance, readOnly: true }
           resources:
             requests: { cpu: "50m", memory: "64Mi" }
             limits:   { cpu: "1",   memory: "512Mi" }
@@ -113,6 +126,8 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: mirror-ghcr-data }
+        - name: maintenance
+          configMap: { name: store-maintenance, defaultMode: 0555 }
 ---
 apiVersion: v1
 kind: Service

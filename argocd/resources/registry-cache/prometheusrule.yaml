@@ -23,6 +23,31 @@ spec:
           annotations:
             summary: "Registry mirror PVC {{ $labels.persistentvolumeclaim }} is over 85% full"
             description: "{{ $labels.persistentvolumeclaim }} has under 15% free. At 100% the mirror truncates in-flight pull-through writes and nodes see digest mismatches/500s instead of a loud failure. Check what's big: legit blobs (capacity/TTL decision — argocd/resources/registry-cache/) vs _uploads debris (should self-reap within ~1h via uploadpurging; if it isn't, that mechanism is broken)."
+        # homelab#116's own complaint was "this is not detectable today": a 200-with-0-bytes is
+        # invisible to the mirror's metrics and to every consumer until a build fails oddly, and
+        # it took four rounds of circles#19 to find. The store-maintenance initContainer now
+        # counts dangling links every restart and pushes the count, so the invariant breaking is
+        # a metric instead of an archaeology exercise. NON-ZERO MEANS IT ALREADY HAPPENED — the
+        # links are repaired by then, but something produced them and that wants explaining.
+        - alert: RegistryMirrorDanglingLinks
+          expr: registry_mirror_dangling_links_repaired > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.mirror }} had {{ $value }} dangling layer link(s) repaired at last restart"
+            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. Investigate what deleted the blobs: --delete-untagged was removed on 2026-08-07, so a recurrence means a NEW mechanism (check the store-maintenance init log for a wipe, and REGISTRY_PROXY_TTL eviction racing a live reference)."
+        # The store now reclaims by WIPING when full rather than by selective deletion. A wipe is
+        # correct but not free — it forces a cold re-pull herd, which is what left the abandoned
+        # _uploads debris in #80. Frequent wipes therefore mean the PVC is undersized, not that
+        # the mechanism is misbehaving.
+        - alert: RegistryMirrorWipedRepeatedly
+          expr: sum_over_time(registry_mirror_store_wiped[14d]) >= 3
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.mirror }} has wiped its cache {{ $value }} times in 14 days"
+            description: "The capacity valve is firing often enough to hurt: every wipe costs a full cold re-warm from upstream. This is a SIZING signal — grow the PVC (bulk tier has headroom since wk-metal-04 joined, see docs/storage-ledger.md) rather than lowering the threshold."
         # Weekly GC: the gc-mirrors CronJob (Sunday 04:00 UTC) deletes the mirror pods
         # so the garbage-collect initContainer runs with no writer (FU-136 / #93).
         # This alert fires when it has not completed successfully in >8 days

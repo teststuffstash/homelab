@@ -19,7 +19,10 @@ spec:
   storageClassName: longhorn-bulk
   resources:
     requests:
-      storage: 20Gi
+      # 20→40Gi 2026-08-07. Same oversize rationale as the ghcr sibling: with --delete-untagged
+      # gone (homelab#116) the fallback valve is a full wipe, which costs a day of slow builds
+      # while the cache re-warms — so headroom is cheaper than reclamation. 7.1G actual today.
+      storage: 40Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,22 +45,23 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
         seccompProfile: { type: RuntimeDefault }
-      # Same GC-in-init as the ghcr sibling — see mirror-ghcr.yaml for why it lives here and not
-      # in a job that stops the registry (homelab#93). This mirror is not the one that filled up,
-      # but it is the same component with the same unbounded growth; the gc-mirrors CronJob
-      # restarts both.
+      # Store maintenance in init — wipe-if-full, dangling-link repair, then plain GC. The
+      # script and the full rationale live in store-maintenance.yaml (homelab#116). It runs
+      # here because init is the only moment the store provably has no writer; the gc-mirrors
+      # CronJob triggers it weekly by deleting the pod.
       initContainers:
-        - name: garbage-collect
+        - name: store-maintenance
           image: registry:3.0.0
-          command: ["/bin/sh", "-c"]
-          args:
-            - registry garbage-collect --delete-untagged /etc/distribution/config.yml
-              || echo "WARN garbage-collect FAILED — starting anyway, the store is not being reclaimed (homelab#93)"
+          command: ["/bin/sh", "/maintenance/maintain.sh"]
+          env:
+            - { name: MIRROR_NAME, value: "mirror-docker-io" }
+            - { name: WIPE_THRESHOLD_PCT, value: "90" }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
           volumeMounts:
             - { name: data, mountPath: /var/lib/registry }
+            - { name: maintenance, mountPath: /maintenance, readOnly: true }
           resources:
             requests: { cpu: "50m", memory: "64Mi" }
             limits:   { cpu: "1",   memory: "512Mi" }
@@ -98,6 +102,8 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: mirror-docker-io-data }
+        - name: maintenance
+          configMap: { name: store-maintenance, defaultMode: 0555 }
 ---
 # LoadBalancer (BGP VIP) rather than ClusterIP: kata microVM guests can't reach ClusterIPs
 # (FU-072) but routed VIPs work, and the same stable IP serves off-cluster consumers
