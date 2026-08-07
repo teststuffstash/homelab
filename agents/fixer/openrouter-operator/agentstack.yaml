@@ -36,9 +36,16 @@ spec:
   # below is what dispatches. The deny is here so the exclusion still holds after the P4
   # authoritative flip (FU-095); the head swap is what takes effect today.
   # REVISIT when a 0731 ride completes cleanly elsewhere, or the router gains a latency lever.
+  # SUBSCRIPTION CUTOVER (operator direction 2026-08-07): platform roles ride the SUBSCRIPTION —
+  # fixer/builder = claude/haiku (the launcher derives --harness claude from the prefix; both
+  # fixer repos below carry claudeTier: true so the session secret renders). The OpenRouter chain
+  # above (mimo head, hy3 tail) is retired for THIS stack, not disavowed — the benchmark history
+  # stays for the stack claims that still ride it. No OpenRouter fallback on purpose: platform
+  # work is the loop's own substrate, and the operator wants it on the pool they control; a
+  # subscription outage defers dispatch (FU-088 latch) rather than silently switching rails.
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: xiaomi/mimo-v2.5
-  workerModelFallbacks: [tencent/hy3, claude/haiku]
+  workerModel: claude/haiku
+  workerModelFallbacks: []
   repos:
     # Platform-image repos, context-only (FU-052 "still to onboard", visibility half done
     # 2026-07-16): the review-reflex derives its scan set from the stack claims, so agent PRs
@@ -82,9 +89,10 @@ spec:
         # before spend and the ride could never start. budgetUSD is what bounds it.
         guardrail: none
         docker: false
-        # FU-134 ruling: research capability must be platform-wide, not a property of which harness
-        # got spawned. claudeTier is NOT the way to give this fixer web lookup.
-        claudeTier: false
+        # true since 2026-08-07 (subscription cutover, workerModel: claude/haiku above) — renders
+        # the claude-session secret this ns needs for the ref rail. The FU-134 ruling stands:
+        # claudeTier is for RIDING the subscription, never the backdoor for web lookup.
+        claudeTier: true
         egress:
           profile: none # baseline FQDNs only — homelab work is YAML/HCL, no pypi/npm pulls
           # raw.githubusercontent.com is the fixer's OWN GATE, not a convenience: `devbox run
@@ -125,7 +133,7 @@ spec:
         # object, so omitting them leaves the ArgoCD app permanently OutOfSync (same rule as
         # extraFQDNs below; observed live 2026-07-16 when claudeTier's default landed).
         docker: false
-        claudeTier: false
+        claudeTier: true # 2026-08-07 subscription cutover — see workerModel above
         egress:
           profile: python # kopf operator, uv/pip toolchain
           extraFQDNs: [] # explicit (server default) — earned from a harvest, currently none; also keeps ArgoCD diff clean
