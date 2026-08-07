@@ -95,6 +95,37 @@ one cause spend budget AND produce conflicting PRs that a human then has to reco
 ⚠ This is FU-133's correlation half, one step further downstream — that item is about the alert lane
 filing uncorrelated ISSUES; this is about DISPATCHING them uncorrelated. Same root, different cost.
 
+**BUILT 2026-08-07 (`fix-debounce`, operator design)** — bell-driven, deliberately not cron-first:
+a cron's latency is random within its window, a bell's is exactly the debounce. The verdict/queue
+split is the load-bearing move: `agent-fix` became a *diagnosis* (the triage session ends its issue
+with `fix-verdict: fix|report-only`; the responder shell applies the label — inert, because the
+scan dispatches only on `agent-fix ∧ agent/queued`) and `agent/queued` is granted ONLY by the
+set-judged debouncer:
+
+- **Edge**: the responder rings `POST /fix-verdict` after labelling → Sensor submits a
+  `fix-debounce` workflow (`agents/coordinator/fix-debounce-argo.yaml`).
+- **Debounce**: suspend `wait` (default 10m) — suspends run in PARALLEL, so every bell guarantees
+  a decision ≥ wait after *it*; only `decide` serializes (mutex). A burst wakes together; the
+  first decide sweeps the whole set, the rest exit empty.
+- **State is GitHub, nowhere else**: the pending set IS the live label query
+  `agent-fix ∧ ¬agent/queued ∧ ¬agent/linked` over the claims' repos (REST only — the search
+  index lags and the GraphQL pool is the one the reflex drained, FU-084). A killed workflow
+  loses nothing.
+- **Decide**: 0 pending → exit. 1 → deterministic gates, queue. ≥2 → ONE sonnet set-pass
+  (latch-gated, subscription-semaphore held only across decide) emits cause/downstream/
+  independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned
+  code acts). Downstream issues get `agent/linked` + a comment naming the cause; `unsure` waits.
+- **Queue-time deny = the ❌ table only** (`.github/`, `.agents/`, `devbox.json|lock`,
+  `scripts/`): the paths where authoring takes effect before a human approves. Everything else
+  queues freely — CODEOWNERS gates the MERGE (the §above correction). `self-referential: true`
+  bodies are skipped at wake: dispatch onto broken substrate stays a human call.
+- **Backstop** (machinery slot 3): a 2h cron re-derives the pending set a lost bell left behind,
+  with `wait=10s` — normal latency stays bell-shaped; the cron only rescues drops.
+- **Bounds**: no ledger of its own — set-passes ≤ verdict rings/day (≤ `RESPONDER_DAILY_MAX`),
+  plus the FU-088 latch and the shared claude semaphore.
+- **Re-entry**: if a linked issue's alert refires after the cause-fix merged, the responder's
+  fp/subject belts reopen the SAME issue; removing `agent/linked` re-enters it in the pending set.
+
 **The line is "does it take effect before a human approves?" — not "is it governance"** (operator
 correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent
 that can edit them is not gated at all, whatever the ruleset says."* That is false for most of

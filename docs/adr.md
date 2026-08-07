@@ -1248,3 +1248,26 @@ and each blocked alert is recorded with a `budget-<date>` marker so a deliberate
 distinguishable from a dropped event in `meta-alert-crosscheck.sh`. The ceiling's VALUE is now
 measured in sessions rather than incidents and is unvalidated at that meaning — FU-149 soaks it.
 Triggered by homelab#111 taking three sessions in 33 minutes during the GitHub Actions outage.
+
+### ADR-100 — Merge is the gate: path-tiered CODEOWNERS, un-gating only by owner→rule replacement
+
+**Accepted 2026-08-04, corrected 2026-08-07 (recorded 2026-08-07 — backfill; the dated decision
+trail lived only in FU-068/FU-142, both archived and due to expire).** **Decision:** homelab runs
+`require_approval + require_code_owner_review` with a **path-tiered CODEOWNERS** (tier 3 governance
+/ tier 2 out-of-band-applied / tier 1 merge-is-deploy, temporarily owned pending the IAC-G04
+sentinel). A gated path is un-gated **only by replacing the owner with a rule that is stricter than
+the review it stands in for** (`pin-only-lint` in required `ci`; real edits take the operator path,
+direct to master, where the check does not run). **Correction (2026-08-07):** the deny line is
+*"does it take effect before a human approves?"*, **not** *"is it governance"* — the loop runs from
+`master`, so authoring `agents/**`/`policy/**`/`tofu/github/**` on a branch is a **proposal**; only
+`.github/**`, `.agents/**`, `devbox.json|lock` + CI-invoked `scripts/**` take effect pre-merge, and
+they alone stay agent-untouchable. Fixers therefore author freely at 2am and the codeowner reads a
+DIFF in the morning (prose was the wrong deliverable — #99). **Considered:** dropping owners
+outright (rejected — no gate at all on merge-is-deploy paths); human-gating everything (rejected —
+one-line pins sat blocked on the operator, #104/#105/#113); denying at *dispatch* instead of merge
+(rejected by the correction — authoring is not effect, and a queued diff is the deliverable).
+**Consequences:** mechanical lanes auto-merge behind regexes a human cannot be talked past;
+CODEOWNERS carve-outs each carry their lint; tier-1 ownership is a scaffold that MUST fall when
+IAC-G04 enforces on homelab; queue-time denial anywhere (e.g. the fix-debounce lane) may use only
+the ❌ table. Doctrine + tier table: `docs/agents/iac-lane.md` §"The platform lane"; enforcement:
+`CODEOWNERS`, `scripts/pin-only-lint.sh`, `tofu/github/repo_rulesets.tf`.

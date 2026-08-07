@@ -400,12 +400,11 @@ the block needs pruning, not more headings.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
-      **Remaining — correlation, on BOTH sides.** FILING: `group_by = ["alertname"]` keeps related
-      alerts apart. DISPATCH: nothing relates them either — ADR-097's footprint hold keys on declared
-      PATHS, so same-cause issues with different `Touches:` all queue at once (#103/#110/#111 live
-      2026-08-07) and several fixers attack one root cause. **Next (operator 2026-08-07):** alert
-      issues need a pass over the whole open SET before any is labelled — trap, evidence and what the
-      pass must decide: [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues".
+      **DISPATCH half BUILT 2026-08-07**: verdict/queue split + bell-driven `fix-debounce` set-pass
+      (`agent-fix` = diagnosis; `agent/queued` only from the set-judged debouncer) — mechanism +
+      bounds: [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
+      **Remaining:** (a) FILING-side correlation (`group_by = ["alertname"]` keeps related alerts
+      apart); (b) watch the first live ≥2-pending set-pass before trusting its judgement.
       Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
