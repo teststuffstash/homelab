@@ -74,6 +74,13 @@
 /argocd/platform/arc-runners.yaml
 /agents/coordinator/reflexes-argo.yaml
 
+# The agent-coordinator deploy-pin (FU-152). The tag used to be swept across EIGHT manifests under
+# agents/coordinator/ — seven of them owned by the /agents/ rule above, so a one-line first-party
+# bump could never auto-merge (homelab#113), and the eighth was reflexes-argo.yaml where
+# pin-only-lint only permits ARC-RUNNER pins, making the same PR structurally red. The tag now lives
+# in this one kustomize file and nothing else, so one carve-out replaces a regex per guarded file.
+/agents/coordinator/kustomization.yaml
+
 # The CHART-deploy lane (ADR-084), same ruling as the runner-image lane above and for the same
 # reason: `agents/images.env` was carved out so the agent-base half of the deploy lane keeps
 # flowing, but the chart half writes `argocd/platform/openrouter-operator.yaml` — a tier-2 path —

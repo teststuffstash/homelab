@@ -23,7 +23,12 @@ spec:
     repoURL: https://github.com/teststuffstash/homelab.git
     targetRevision: master
     path: agents/coordinator
-    directory: { recurse: false } # README.md + non-yaml are ignored
+    # Rendered by KUSTOMIZE since 2026-08-07 (FU-152): a `kustomization.yaml` at this path
+    # makes ArgoCD use kustomize, and the old `directory: { recurse: false }` no longer
+    # applies. The move exists so the agent-coordinator image tag lives in ONE file that the
+    # deploy-pin bumps and CODEOWNERS carves out — see that file's header.
+    # ⚠ `resources:` there must list every manifest: this app syncs with prune: true, so a
+    # file omitted from the list is DELETED from the cluster, not merely unmanaged.
   destination:
     server: https://kubernetes.default.svc
     namespace: agent-coordinator

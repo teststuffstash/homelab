@@ -80,7 +80,7 @@ spec:
       metadata:
         labels: { app: deploy-revert-workflow }
       container:
-        image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+        image: ghcr.io/teststuffstash/agent-coordinator
         env:
           - { name: HOME, value: "/home/node" }
           - { name: PAYLOAD, value: "{{inputs.parameters.payload}}" }

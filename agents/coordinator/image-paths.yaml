@@ -1,0 +1,29 @@
+# Image paths for the kustomize `images:` transformer (FU-152).
+#
+# ⚠ THIS FILE REPLACES kustomize's BUILT-IN image paths, it does not extend them. Supplying only
+# the Argo paths tagged the 12 WorkflowTemplate/CronWorkflow references and silently left the
+# Deployment + CronJob ones UNTAGGED (i.e. resolving to :latest). Both halves must be listed here.
+# Verified by counting: all 14 agent-coordinator references must render WITH the tag.
+#
+# The Argo entries are the reason this file exists at all — kustomize's built-ins only walk the
+# standard PodSpec locations, and Argo hangs container specs off `spec.templates[]`.
+images:
+  # ── standard PodSpec shapes (restoring the built-ins) ──
+  - path: spec/containers/image
+  - path: spec/initContainers/image
+  - path: spec/template/spec/containers/image
+  - path: spec/template/spec/initContainers/image
+  - path: spec/jobTemplate/spec/template/spec/containers/image
+  - path: spec/jobTemplate/spec/template/spec/initContainers/image
+  # ── Argo Workflows shapes (what kustomize does not know) ──
+  - path: spec/templates/container/image
+    kind: WorkflowTemplate
+  - path: spec/templates/container/image
+    kind: CronWorkflow
+  - path: spec/workflowSpec/templates/container/image
+    kind: CronWorkflow
+  # An Argo Events Sensor embeds a whole Workflow as a trigger payload, so the image sits four
+  # levels deeper than any PodSpec. Two of the fourteen references live here (Sensor/coordinator,
+  # Sensor/review) and nothing shallower reaches them.
+  - path: spec/triggers/template/argoWorkflow/source/resource/spec/templates/container/image
+    kind: Sensor

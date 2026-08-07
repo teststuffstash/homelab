@@ -1,0 +1,52 @@
+# The agent-coordinator subsystem, rendered through kustomize so the IMAGE TAG lives in exactly
+# ONE place (FU-152, operator design 2026-08-07).
+#
+# WHY: the deploy-pin used to `git grep` the tag and rewrite every manifest carrying it — 8 files
+# and growing silently as manifests are added. That made a one-line first-party bump (homelab#113)
+# BOTH unmergeable (7 of those files are CODEOWNERS-owned) and structurally red (it wrote an
+# agent-coordinator tag into reflexes-argo.yaml, which pin-only-lint only permits arc-runner pins
+# into). Extending the lint would have meant teaching a regex about every guarded file AND every
+# image that may legitimately appear in it. One tag, one file, one carve-out removes the category.
+#
+# ⚠ NO `namespace:` FIELD, deliberately. This app spans namespaces — the responder budget rule and
+# dashboard render into `monitoring`, the rest into `agent-coordinator`. A kustomize `namespace:`
+# would rewrite ALL of them into one and silently orphan the originals (the app prunes).
+#
+# ⚠ `resources:` MUST list every manifest. ArgoCD switches this app from directory-rendering to
+# kustomize the moment this file exists, and it syncs with `prune: true` — anything missing here is
+# DELETED from the cluster, not merely unmanaged. Verified against the live 49-resource inventory
+# before this landed; re-verify the same way if you add a file.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - agent-read-rbac.yaml
+  - claude-token.yaml
+  - coordinate-argo.yaml
+  - deploy-revert-argo.yaml
+  - garage-workspace.yaml
+  - git-token.yaml
+  - rbac.yaml
+  - reflexes-argo.yaml
+  - responder-argo.yaml
+  - responder-budget-alerts.yaml
+  - responder-budget-dashboard.yaml
+  - retro-argo.yaml
+  - review-argo.yaml
+  - reviewer-git.yaml
+  - transcripts-pvc.yaml
+  - transcripts-sync-script.yaml
+  - transcripts-sync.yaml
+  - transcripts-viewer.yaml
+
+# THE PIN. This is the only line the deploy-pin writes, and the only path CODEOWNERS carves out for
+# it. The manifests reference the image WITHOUT a tag; kustomize supplies it here.
+# ⚠ arc-runner and cchv-server tags are deliberately NOT here — they have their own bump lanes and
+# stay inline (the arc-runner auto-bump writes reflexes-argo.yaml + argocd/platform/arc-runners.yaml
+# and is guarded by pin-only-lint; moving it is a separate change).
+configurations:
+  - image-paths.yaml
+
+images:
+  - name: ghcr.io/teststuffstash/agent-coordinator
+    newTag: 2026.7.25-g141235c93140

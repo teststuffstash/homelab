@@ -69,7 +69,7 @@ spec:
       # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
       - name: guard
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          image: ghcr.io/teststuffstash/agent-coordinator
           command: ["bash", "-lc"]
           args:
             - |
@@ -130,7 +130,7 @@ spec:
           artifacts:
             - { name: ride-log, path: /work/ride.log, archive: { none: {} } }
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          image: ghcr.io/teststuffstash/agent-coordinator
           command: ["bash", "-lc"]
           args:
             - |
@@ -172,7 +172,7 @@ spec:
             - { name: log-a, path: /work/log-a }
             - { name: log-b, path: /work/log-b }
         container:
-          image: ghcr.io/teststuffstash/agent-coordinator:2026.7.25-g141235c93140
+          image: ghcr.io/teststuffstash/agent-coordinator
           command: ["bash", "-lc"]
           args:
             - |
