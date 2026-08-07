@@ -60,6 +60,14 @@ spec:
     # The labels below ADOPT the 27 that tofu forgot in the same change (labels.tf retired).
     - name: homelab
       labels: { extra: [] }
+      # ADR-089 quota-as-contract, ARMED 2026-08-07. Until today NO claim set spec.repos[].storage,
+      # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
+      # fails fast at CREATE" promise was never in force. This repo is docker:false, so it takes
+      # no per-ride 20Gi scratch volume — scratch stays at the "0" default DELIBERATELY, which
+      # means flipping docker:true later also requires setting a scratch cap here. That coupling
+      # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
+      storage:
+        standard: "5Gi"
       # FIXER BLOCK 2026-08-04 — homelab becomes a dispatch target. The gate it lands behind is
       # PATH-based, not repo-based (docs/agents/iac-lane.md §The platform lane): CODEOWNERS owns
       # the governance tiers, and tier 1 (argocd/resources/) is owned as a temporary scaffold until
@@ -95,6 +103,14 @@ spec:
           enforce: true # the -iac lane's ring-2 posture; harvest first if a ride trips it
     - name: openrouter-operator
       labels: { extra: [] } # claim-owned label set (FU-068; live diff 2026-07-16: strict taxonomy subset)
+      # ADR-089 quota-as-contract, ARMED 2026-08-07. Until today NO claim set spec.repos[].storage,
+      # so `kubectl get resourcequota -A` returned nothing cluster-wide and the "over-cap PVC
+      # fails fast at CREATE" promise was never in force. This repo is docker:false, so it takes
+      # no per-ride 20Gi scratch volume — scratch stays at the "0" default DELIBERATELY, which
+      # means flipping docker:true later also requires setting a scratch cap here. That coupling
+      # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
+      storage:
+        standard: "5Gi"
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly
