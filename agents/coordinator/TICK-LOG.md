@@ -2669,3 +2669,71 @@ what else answers the same question.**
 harvest correctly EMPTY — the review said "no new follow-ups"); a coordinator session declined to
 act on a stale `CHANGES_REQUESTED` naming the 03:37-review vs 04:17-commit gap itself; and
 `deepseek-v4-flash`, which struck twice yesterday, ran three clean rounds tonight.
+
+### 2026-08-07 (07:00–08:30Z) — the operator corrected me four times, and each one was load-bearing
+**Condition:** an operator-directed working session rather than a watch. The pattern worth recording
+is not the shipped work — it is that **four of my confident assertions were wrong, all the same
+way: I read a document or an issue body where the live object was one command away.**
+
+**The four, because the shape repeats.** (1) `ls … | head -5` hid `private-key.pem` → I reported the
+reviewer credential missing and nearly sent the operator hunting a blocker that did not exist.
+(2) `spec.fixer` returned null → "circles has no fixer block"; it is PER-REPO, `spec.repos[].fixer`,
+and carried `docker: true` all along. (3) `.spec.containers` showed one container → "no dind"; a
+native sidecar is an **initContainer with `restartPolicy: Always`**, and it was there with kata +
+`DOCKER_HOST`. (4) On homelab#103 I recommended a `topologySpreadConstraint` from the issue's text,
+then learned wk-metal-04 is the only 16G node — the constraint would have pushed a kata microVM onto
+a 6.3Gi box. Then compounded it twice more: "the only other kata node" (all FOUR wk-metal are kata;
+`CLAUDE.md`'s table was stale) and "give kata rides memory requests" (they exist — 2560Mi dind +
+2048Mi agent + 512Mi overhead = 5120Mi Guaranteed, sized to fit the 8G laptops). **Rule now written
+into meta-state: when a probe returns empty and that absence would CHANGE a conclusion, re-query the
+whole object. An empty result is a claim about the query, not about the world.**
+
+**FU-152 shipped end to end and is the night's cleanest chain.** Operator design: one version file
+instead of a `git grep` sweep across 8 manifests. `agents/coordinator` now renders through kustomize;
+the manifests carry the image UNTAGGED and `kustomization.yaml` supplies it. Verified before landing
+because the app syncs `prune: true` — **49 rendered vs 49 live, nothing pruned**. Two traps the
+verification caught, both of which would have shipped looking correct: kustomize's images transformer
+only walks standard PodSpec paths (first render left **12 of 14 untagged**, i.e. `:latest`), and
+`configurations:` REPLACES the built-ins rather than extending them (adding only Argo's paths
+inverted it). Proof was a COUNT, not a diff read. homelab#113 then went 9 files → 2, `ci` green,
+mechanically approved, **merged with no human in the path**.
+
+**Three more fixes, one per class already logged:** the `ci-red` clause got the FU-146 per-item hold
+(third clause to need it — and its probe needed `body` added or the hold could never fire);
+`renovate-approve` got an idempotency guard after my own label fix caused SEVEN approvals and tripped
+the review-reflex breaker; and the router now RECORDS strikes without acting on them.
+
+**The strike ruling is the operator's, and it inverted my recommendation.** I found
+`router_strikes_total = 1` against three harness deaths — `record_report` tests `error_class` against
+a set holding `outcome` vocabulary, so `goose-32602-truncation` never matched the `harness-death`
+§M1 says it IS. My instinct was "make strikes work". The operator's: **the bug was LUCKY** — #19 r1
+died on deepseek-v4-flash and r2 completed the same task on the same model; 3 deaths vs 3 clean on lg
+work means "N strikes and you're out" is not supported by the evidence. So: fix the data gathering,
+leave the routing. `STRIKE_ENFORCE` defaults OFF, proven both ways before deploy, and the accident is
+now a decision. The open question — retry vs blacklist vs **fan out N parallel and keep the
+survivor** — is the operator's, and the data now exists to answer it.
+
+**The tracker got a bar, a shape, and a sweep.** Measured: creation ran 2.4 ids/day over FU-050→100
+and **4.4/day over FU-100→153**; the Agents share of open items went **34% → 92%**. The 5-minute rule
+keyed on the ARTIFACT ("don't FILE"), which is exactly why it failed on FU-146 — I extended an item
+instead of doing a five-minute fix I had already written twice. It now keys on the ACTION. Agents
+sub-grouped into five stages (id set verified byte-identical). New `fu-sweep` skill, deliberately NOT
+a closing spree, with the operator's UNBLOCKED bucket — and its own caveat recorded: a blocker-word
+regex found 0, widening found 23 of 57, so the query is a PRE-FILTER for reading, never the answer.
+Closing an FU now means asking who was waiting on it, bounded at 3 passes.
+
+**The loop used a diagnosis I put on an issue, and that is the result worth repeating.** circles#19
+failed its own kind gate four rounds running. The 07:46Z CI printed
+`target=http://127.0.0.1:8888/` with `HTTP 000000` — no connection, while `7d` PASSED with a real
+ClusterIP. So: kind fine, chart fine, **port-forward race**, and the in-pod/in-CI split was TIMING,
+not environment (the kata microVM is slow enough to lose the race that the ARC runner wins).
+⚠ That retires my earlier "in-pod vs in-CI genuinely differ" framing — `ci_passed: true` from rounds
+2 and 3 was never evidence. Posted it as a ⚖-pre-decided comment; the next round opened **PR#51
+"poll until ready"** citing *"the maintainer's diagnosis"*. Five rounds of guessing became one round
+of implementing.
+
+⚠ **UNFILED, flagged to the operator: closing a PR and opening a new one RESETS the anti-livelock
+bound.** `RED_ROUNDS_MAX=3` counts `Agent run stats` comments **per PR**. #19 has consumed five
+rounds; #50 carried 2 and the fresh #51 carries 1. Same shape as FU-148 — **PR identity is the unit
+of state, and re-creating the PR silently resets it** — but a different actor and a different reset,
+so it is noted rather than merged into that item.
