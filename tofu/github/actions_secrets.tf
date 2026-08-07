@@ -112,9 +112,10 @@ resource "github_actions_organization_secret_repositories" "renovate_app_private
   selected_repository_ids = [github_repository.homelab.repo_id]
 }
 
-# homelab-reviewer App creds → the reviewer-approves-Renovate reflex (sleep-tracking
-# renovate-approve.yaml) posts an approving review on Renovate's automerge PRs, satisfying
-# required-approval so auto-merge completes. Scoped to sleep-tracking only.
+# homelab-reviewer App creds → the reviewer-approves-Renovate reflex (each repo's
+# renovate-approve.yaml) posts an approving review on Bot-authored automerge PRs, satisfying
+# required-approval so auto-merge completes. Scoped to `local.reviewer_repos` below — NOT to
+# sleep-tracking only, as this comment claimed until 2026-08-07.
 resource "github_actions_organization_secret" "reviewer_app_id" {
   count       = var.reviewer_app_id != "" ? 1 : 0
   secret_name = "REVIEWER_APP_ID"
@@ -130,8 +131,14 @@ resource "github_actions_organization_secret" "reviewer_app_private_key" {
 }
 
 # The renovate-approve reflex runs on every repo that requires an approving review (require_approval=true
-# in var.protected_repos) — the reviewer bot's approval is what lets a Renovate automerge PR complete
-# there. sleep-iac/homelab opt out (CI-only), so they're excluded.
+# in var.protected_repos) — the reviewer bot's approval is what lets a Bot-authored automerge PR complete
+# there. sleep-iac/circles-iac opt out (require_approval=false, CI-only), so they're excluded.
+#
+# ⚠ THE INVARIANT: this list must equal { repos with require_approval = true }. A repo that flips to
+# true without landing here demands an approving review while being denied the only identity that
+# posts one — every mechanical PR then waits on a human forever, with a GREEN `approve` check,
+# because the reflex skips gracefully on the missing secret rather than failing. That has now
+# happened twice: oracle-fleet (2026-07-25 parity audit) and homelab (below).
 locals {
   reviewer_repos = [
     github_repository.sleep_tracking.repo_id,
@@ -140,6 +147,18 @@ locals {
     github_repository.openrouter_operator.repo_id,
     github_repository.agent_runtime.repo_id,
     github_repository.agent_coordinator.repo_id,
+    # homelab — added 2026-08-07. It was excluded as "CI-only", which was TRUE until FU-068 flipped it
+    # to require_approval = true + require_code_owner_review = true on 2026-08-04; the exclusion was
+    # never revisited, so the premise outlived the fact. Symptom: the first-party deploy-pin lane
+    # (ADR-084, `agents/images.env`) stalled on #104/#105/#109/#112 — one-line image bumps, `ci` green,
+    # `approve` green, sitting BLOCKED on a human. The `approve` job's log is the only place it showed:
+    # "REVIEWER_APP_ID not set … Skipping auto-approve; the dep PR just waits."
+    # ⚠ Scoping the secret here does NOT widen what gets approved. The reflex still requires
+    # user.type == 'Bot' AND labels automerge AND dependencies, so agent PRs (agent/* labels) are
+    # untouched; and `require_code_owner_review` is unaffected — a bot approval never satisfies an
+    # OWNED path, so only the CODEOWNERS carve-outs (images.env, the arc-runner and chart pins) can
+    # actually merge on it. That is precisely the mechanical lane and nothing else.
+    github_repository.homelab.repo_id,
   ]
 }
 
