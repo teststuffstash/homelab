@@ -2842,3 +2842,16 @@ revisit the 08-07 entry predicted.
 - oracle #177 → PR#181 (`fix/issue-177-title-fold` into the goal branch) — first goal-child PR,
   review reflex owns it. The transient `AgentWorkerEgressDropped` during its devbox phase
   self-cleared (the known jetify phone-home shape).
+
+### 2026-08-07 (~22:15Z correction) — "wedged post-clone" was me misreading exec-run pods
+
+The earlier addendum's `coordinator-204804` diagnosis is WRONG in mechanism: item sessions are
+EXEC-RUN — the scan workflow pod execs the session INTO the `coordinator-HHMMSS` substrate pod, so
+the substrate's OWN log always ends at "cloning …" (exec output goes to the exec'ing client) and
+the pod lingers after the session finishes until cleanup/deadline. Log-ends-at-clone is NORMAL,
+not a wedge tell. Proven by `coordinator-214211`: log "stuck" at cloning while its arbitration
+comment + r5 dispatch landed on PR#56. What 204804 most likely was: an ORPHANED substrate (its
+exec parent `coordinate-perstack-76shj` finished/died mid-session, no arbitration ever landed
+from that window) — the kill was coincidentally right, the reasoning was not. **Rule: judge an
+item session by the SCAN pod's log and by its on-record output (comments/dispatches), never by
+the substrate pod's log; a lingering substrate is design, the 3600s deadline reaps it.**
