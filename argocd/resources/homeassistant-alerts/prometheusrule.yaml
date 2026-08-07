@@ -41,9 +41,16 @@ spec:
             description: "A Home Assistant power sensor has stopped receiving updates while still reporting available=1 — its last value is being served as if live. Known cause (2026-08-07): the Tuya cloud returns API_QPS_LIMIT_OR_DEGRADE, the tuya_sharing MQTT channel never connects, and every plug freezes. Check `/api/error_log` on Home Assistant for `tuya_sharing`; reloading the config entry republishes the cached state ONCE (last_updated jumps, the value does not) which is NOT a fix. Consequences while stale: perf/W numbers are fiction and the ThinkCentre's smart-plug power control does not work."
         # Wider net, deliberately looser: any HA sensor Prometheus scrapes that has gone a full day
         # without moving. Catches the next integration to rot silently without naming it up front.
+        # ⚠ Excluded: the Tuya CLOUD integration was DELETED on 2026-08-07 when the plugs moved to
+        # LAN polling (FU-038), and what it left behind is four orphaned entity-registry entries
+        # (`*_corrected`, the old /10 templates) with no definition anywhere — permanently
+        # `unavailable`, so they would fire this every day forever. Clearing them properly needs
+        # HA's websocket registry API; until then this exclusion is the cheaper answer. The live
+        # readings come from tuya_local and surface as sensor.plug_<box>_*, which the rule above
+        # still watches.
         - alert: HomeAssistantSensorStale
           expr: |
-            time() - homeassistant_last_updated_time_seconds{entity=~"sensor\\..*"} > 86400
+            time() - homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"} > 86400
           for: 2h
           labels:
             severity: info

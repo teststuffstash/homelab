@@ -8,6 +8,20 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-038** *(archived 2026-08-07)* — **Tuya plugs → local polling, and the cloud fenced off.**
+  Shipped: `tuya_local` 2026.7.2 (pinned, `scripts/ha-tuya-local{,-devices}.sh`) polls all 7 devices
+  over the LAN and feeds the `sensor.plug_<box>_*` templates. The `/10` deci-watt correction was
+  DELETED, not ported — the device profile applies it (verified 358.0 raw → 35.8). Device material
+  (`device_id`+`local_key`+LAN IP+version) is in the wallet as `tuya-local`/devices.json; all 7 are
+  DHCP-pinned, which is load-bearing because the four protocol-3.5 plugs never answer UDP discovery.
+  Egress fenced by `opnsense/tuya-egress.py` (block `tuya_devices` → NOT `rfc1918`).
+  **Acceptance:** Tuya cloud reports 7/7 offline while HA keeps reading all of them locally.
+  **Gotchas kept:** pf filters only NEW connections — the rule looked broken for 8 minutes until
+  existing cloud states were killed (`diagnostics/firewall/kill_states`); `local_key` ROTATES on
+  re-pair, so re-pairing means opening the fence and re-extracting; and a device answers only ONE
+  local connection at a time, so a probe can "fail" while HA is happily connected.
+  Provenance + limits: [`docs/power-measurements.md`](power-measurements.md).
+
 - **FU-142** *(archived 2026-08-05)* — **homelab had no fixer recipe, so the lane was gated but
   undispatchable.** `.agents/fix.yaml` + `.agents/review.md` shipped (`c5db520`), ADAPTED from the
   sleep-iac donor rather than designed — the same copy-paste that produced oracle-iac's pair. Three
