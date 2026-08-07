@@ -77,7 +77,12 @@ rail works and the "invisible blocking" risk is retired.
 nominal ceiling of 12 — and 26 of them were ONE incident** (`GithubWorkflowRunFailed/monitoring`,
 the Actions outage). Same incident → `INC_SEEN != 0` → the old cap never applied. 8 `budget-`
 markers written since deploy, so the latch is actively blocking.
-⚠ **Do NOT raise the cap in response to this firing** — it is the alert doing its job on an
+✅ **The midnight rollover + day-gate are PROVEN (2026-08-07 05:18Z):** `sessions_today` went
+30 → **1**, `blocked` → 0, and `responder_triage_day_start` = **1786060800** = today 00:00Z exactly.
+The count resets with no reset job because it is DERIVED from date-keyed ledger entries, and the
+day gate (`(time() - day_start) < 86400`) replaced a 3h freshness gate that let a 23:21Z sample
+report "no triage today" 65 min into the next day.
+⚠ **Do NOT raise the cap in response to a firing** — it is the alert doing its job on an
 anomalous day. Triage resumes at 00:00Z on its own; alerts still reach Home Assistant meanwhile.
 ⚠ **Effect cannot yet be split between the two fixes.** No session has spawned since the subject
 dedup shipped (the budget has blocked every one), so zero `subj-` keys exist — that is an absence
