@@ -225,6 +225,27 @@ the goose worker. Concrete cost already paid: #71-r1 downloaded a kind binary in
 profile; the #48 rounds never configured the registry mirror. Both are CLAUDE.md-rule gaps. The env
 card became the smuggling route, which *is* the spread.
 
+**Sighting 2026-08-07 — the JAIL is a third context, and it has no env-card mechanism at all.**
+Operator direction: [`teststuffstash/claude-jail`](https://github.com/teststuffstash/claude-jail)
+needs one so its `CLAUDE.md` can be *clean of instructions*. Today the jail's ground rules live
+inline in `/workspace/CLAUDE.md` (container permissions, devbox-not-apt, the scratchpad) and
+homelab's own `CLAUDE.md` mixes jail-session procedure ("work directly on `master`") with
+repo-universal facts. Two costs already visible:
+
+- **Wrong-context instructions are READ AS APPLICABLE.** homelab has a live fixer lane, so agents
+  ride this repo — and `## How changes land (jail sessions)` tells the reader to push to master,
+  which is the opposite of a worker's contract. Structurally the ruleset rejects such a push, so
+  the cost is confusion rather than damage — but the doc is the wrong place to be relying on
+  branch protection to correct.
+- **The duplication now runs three ways, not two.** `render_env_card()` already restates CLAUDE.md
+  rules for goose; the jail restates a third set for the meta-session. The map this item is waiting
+  to draw therefore has THREE contexts (jail meta-session / claude-harness ride / goose ride), not
+  two, and the jail is the only one with no delivery mechanism to refactor *into*.
+
+⚑ Interim guard only (2026-08-07): a banner at that section scoping it to the jail. It reaches
+Claude-Code readers and NOT goose rides — belt, not fix, and precisely the spread this item exists
+to remove.
+
 **A boundary the model must respect (sighting 2026-07-28).** The ride clones ONLY `/work/repo` —
 the project repo, never homelab — so a worker **cannot** grep SERVICES.md. And it shouldn't:
 **service context** (endpoints, buckets, existing-secret refs) is the **issue author's /

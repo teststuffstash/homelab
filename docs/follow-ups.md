@@ -471,7 +471,10 @@ the block needs pruning, not more headings.
       [`docs/agents/roles.md`](agents/roles.md) §"Context delivery", which holds the root finding
       (goose never loads CLAUDE.md), the three context classes, the costs already paid, and the
       boundary a worker must respect. Interim duplication into `render_env_card()` is accepted on
-      purpose 2026-07-28; this item tracks removing it. Relates FU-114, ADR-094.
+      purpose 2026-07-28; this item tracks removing it. **Scope widened 2026-08-07 (operator): the
+      JAIL is a third context — `teststuffstash/claude-jail` needs an env-card mechanism of its own
+      so its `CLAUDE.md` is clean of instructions**, and homelab's stops mixing jail procedure with
+      repo-universal facts. Relates FU-114, ADR-094.
 
 - [ ] **FU-094** — **Tiered spec gate — PROPOSAL ONLY (operator 2026-07-24: "will consider
       once I have more data and cleaned up the specs").** Write-up:
