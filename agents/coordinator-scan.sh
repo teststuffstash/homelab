@@ -831,7 +831,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # Guarded probe: statusCheckRollup needs checks:read; a 403/bad read SKIPS loudly (rule #6). Held
     # while a worker Runs (the fix round owns it). Dispatch cap 2/repo/scan; arbitrate is uncapped
     # (labeling is cheap + idempotent).
-    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup 2>/dev/null)" || red_probe=''
+    # `body` rides this list for the FU-146 per-item hold below — without it the hold's issue-link
+    # capture is always empty and the hold silently never fires (fail-safe, but useless).
+    red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
     if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"$red_probe"; then
       # MANDATE check (homelab#88, sleep-tracking#113 livelock 2026-08-03): red CI on a PR the
       # loop did NOT author is the author's to fix — the scan kept dispatching sessions at a
@@ -853,8 +855,25 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           | select(.autoMergeRequest != null)
           | select([.statusCheckRollup[]? | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT")] | length > 0)
           | .number'); do
+        # FU-146 PER-ITEM hold, ported here 2026-08-07 — the THIRD clause to need it (main scan
+        # path `fc606e2`, doorbell fast path `277a73f`, now this one). The comment above claims
+        # "Held while a worker Runs (the fix round owns it)", but `wip_busy` is the PROJECT-wide
+        # cap: at ADR-097's REPO_MAX_WIP=3 it stays empty while ONE worker rides, so the clause
+        # re-emitted the same unit every tick. Live 2026-08-07: tick `q66s7` dispatched pr-50 at
+        # wip 2 while `agent-circles-issue-19-r3` had ridden 6 minutes, and each session correctly
+        # exited clean — waste, on a subscription the loop needs for real dispatch.
+        # Same predicate and fail-safes as the other two: no issue link or no pod probe → falls
+        # through unchanged (can only ADD holds), and the hold needs a LIVE pod so it self-releases.
+        red_issue="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")
+            | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
+        if [ -n "$red_issue" ] && [ -n "$WIPPODS_JSON" ] \
+           && printf '%s' "$WIPPODS_JSON" | jq -e --arg pat "issue-${red_issue}-" \
+                '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
+          orphans="${orphans}[$repo] ⏳ ci-red held — a worker is already riding issue #${red_issue} (FU-146 per-item):\n  PR #${u}\n"
+          continue
+        fi
         if [ -n "$wip_busy" ]; then
-          orphans="${orphans}[$repo] ⏳ ci-red held (worker Running in ${repo} — the fix round owns it):\n  PR #${u}\n"
+          orphans="${orphans}[$repo] ⏳ ci-red held (project WIP at ${REPO_MAX_WIP} in ${repo}):\n  PR #${u}\n"
           continue
         fi
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
