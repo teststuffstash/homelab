@@ -27,6 +27,11 @@
 #                incident cap, which had an `INC_SEEN == 0` escape hatch and so was never binding.
 #   breakers   = one issue max per session (brief + the fp belts); no agent labels on filed
 #                issues (inert, breaker #1); loop-smell → report-only stop
+#   dispatch   = SPLIT from triage (FU-133 dispatch half, 2026-08-07): the session's issue
+#                carries a 'fix-verdict:' line, the shell applies agent-fix (inert — the scan
+#                needs agent-fix ∧ agent/queued) and rings /fix-verdict; the fix-debounce
+#                workflow (fix-debounce-argo.yaml) judges the whole pending SET before any
+#                issue gets agent/queued. Replaces selfQueue (cb4ae5a).
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -338,56 +343,14 @@ spec:
                 kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1;;
               esac
               case "$NAME" in Agent*) SELF_REF=1;; esac
+              # ⚠ This text is the BINDING rule — the comment above and the echo below only describe
+              # it. It drifted once (50b8418/60c2826 updated comment+echo but not this string, so
+              # "report-only" kept running for 3 days after the cap-the-merge ruling; found 2026-08-07).
               SELF_NOTE=""
               [ -n "$SELF_REF" ] && SELF_NOTE="
-            ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate, so any fix needs the very thing that is broken — pod scheduling, image pull, PVC attach, the git-token broker, or the CI runners that gate every agent PR. Your outcome is CAPPED AT REPORT-ONLY: do not open a PR and do not propose one as the next step; describe the fix in prose for a human instead. End any issue body you file with the line 'self-referential: true' on its own line."
+            ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate — the fix's merge path (CI runners, image pulls, volumes, the git-token broker) may be the very thing that is broken, and a green check proves nothing while the substrate is sick. The cap is on MERGING, not on working: you MAY author a fix PR, but NEVER enable auto-merge on it — state in the PR body that a human must merge it against the sick substrate. End any issue body you file with the line 'self-referential: true' on its own line."
               [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — may PR + be reviewed, must NOT auto-merge"
 
-              # ── selfQueue (FU-090) — the switch that makes an alert dispatch a fixer ──────────
-              # DETERMINISTIC, never the model's judgment: breaker #1 says the session must not
-              # label its own issue, so the session still files INERT and the shell decides after.
-              # Three gates, all fail-closed — anything unclear leaves the issue inert for a human:
-              #   1. not self-referential (a fixer would need the broken thing)
-              #   2. the issue declares a Touches: footprint at all (ADR-097 — undeclared is
-              #      treated as exclusive, and auto-dispatching an exclusive unit serialises the
-              #      whole lane)
-              #   3. that footprint touches no GOVERNANCE path, in any repo: agent machinery, CI
-              #      definitions, policy, scripts. sleep-iac#28 self-merged an edit to
-              #      .github/workflows/ in 38 seconds — that class must never auto-dispatch.
-              SQ_DENY='^(agents/|scripts/|policy/|\.github/|tofu/github/|tofu/cloudflare/)'
-              sq_decide() { # <repo> <issue-number>
-                local body touches p
-                body="$(gh issue view "$2" --repo "$1" --json body --jq .body 2>/dev/null || true)"
-                touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | head -1)"
-                [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive)"; return 1; }
-                for p in $(printf '%s' "$touches" | tr ',' ' '); do
-                  case "$p" in ''|' ') continue;; esac
-                  printf '%s' "$p" | grep -qE "$SQ_DENY" && { echo "footprint touches governance: $p"; return 1; }
-                done
-                return 0
-              }
-              if [ -n "$SELF_REF" ]; then
-                echo "→ selfQueue: REFUSED for $FP — self-referential substrate"
-              elif [ -n "$WIN" ]; then
-                echo "→ selfQueue: REFUSED for $FP — inside app '$WIN' observation window; the -iac lane owns it"
-              else
-                sq="$(gh search issues --owner "$ORG" "alert-fp:$FP" --state open --json repository,number --limit 3 2>/dev/null \
-                      | jq -r '.[] | "\(.repository.nameWithOwner) \(.number)"' | head -1)"
-                if [ -z "$sq" ]; then
-                  echo "→ selfQueue: no open issue for $FP (triage was report-only) — nothing to queue"
-                else
-                  sqrepo="${sq%% *}"; sqnum="${sq##* }"
-                  if gh issue view "$sqnum" --repo "$sqrepo" --json labels --jq '[.labels[].name]|index("agent-fix")' 2>/dev/null | grep -qv null; then
-                    echo "→ selfQueue: $sqrepo#$sqnum already adopted — leaving it alone"
-                  elif why="$(sq_decide "$sqrepo" "$sqnum")"; then
-                    gh issue edit "$sqnum" --repo "$sqrepo" --add-label agent-fix --add-label agent/queued >/dev/null 2>&1 \
-                      && echo "→ selfQueue: QUEUED $sqrepo#$sqnum for dispatch" \
-                      || echo "→ selfQueue: labelling $sqrepo#$sqnum failed (non-fatal) — stays inert"
-                  else
-                    echo "→ selfQueue: left $sqrepo#$sqnum inert — $why"
-                  fi
-                fi
-              fi
               echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
@@ -411,12 +374,54 @@ spec:
             STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
             (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.
             (b) a GitOps quick fix on the stack's -iac repo (bad pin → revert/bump PR; the CI-only lane auto-merges): do it now — branch, PR, 'gh pr merge --auto --squash' — and report.
-            (c) needs real work → file EXACTLY ONE issue on '$ROUTE_REPO' (or the stack's app repo instead if your diagnosis clearly points at app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. NO agent labels — the issue is inert; the stack loop/human triages it.
+            (c) needs real work → file EXACTLY ONE issue on '$ROUTE_REPO' (or the stack's app repo instead if your diagnosis clearly points at app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. ALSO end the body with a verdict line, exactly one of: 'fix-verdict: fix' (a code/manifest change in a repo would durably fix this) or 'fix-verdict: report-only' (transient, vendor-side, or needs a human decision first). The verdict is a DIAGNOSIS, not a dispatch — queueing is the platform's job, never yours. NO agent labels — the issue is inert; the shell reads your verdict after.
             (d) platform-ward escalation only (see STEP 1): the issue goes on teststuffstash/homelab with the stated reason.
 
             HARD RULES: before filing, search the target repo for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
                 --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
+
+              # ── verdict → agent-fix + doorbell (FU-133 dispatch half, 2026-08-07) ───────────
+              # Replaces selfQueue (cb4ae5a), which labelled agent-fix+agent/queued per-issue and
+              # so dispatched same-cause issues in parallel (iac-lane.md §"one root cause, N alert
+              # issues"). Split: the session's issue carries 'fix-verdict: fix|report-only' (a
+              # DIAGNOSIS — breaker #1 still keeps labels out of the session's hands); this shell
+              # applies agent-fix, which is INERT by the scan's own predicate (dispatch requires
+              # agent-fix ∧ agent/queued, coordinator-scan.sh:8); QUEUEING belongs to the
+              # fix-debounce workflow (fix-debounce-argo.yaml), rung here via /fix-verdict.
+              # REST reads, not `gh search` — the search index lags a just-filed issue; and REST
+              # keeps this lane off the GraphQL pool the reflex drained on 2026-07-17 (FU-084).
+              # One deterministic no-bell case: inside an observation window the -iac lane owns
+              # the symptom; if the problem outlives the window the alert refires and re-rings.
+              # Self-referential issues DO ring — the debouncer skips 'self-referential: true'
+              # bodies at wake (dispatch onto broken substrate stays a human call), but the
+              # agent-fix verdict is still the durable record.
+              VHIT=""
+              for vrepo in "$ROUTE_REPO" "teststuffstash/homelab"; do
+                VHIT="$(gh api "repos/$vrepo/issues?state=open&sort=updated&direction=desc&per_page=20" \
+                        --jq "[.[] | select((.body // \"\") | contains(\"alert-fp:$FP\"))] | first | .number // empty" 2>/dev/null || true)"
+                [ -n "$VHIT" ] && { VREPO="$vrepo"; break; }
+              done
+              if [ -z "$VHIT" ]; then
+                echo "→ verdict: no open issue carries alert-fp:$FP (report-only triage or quick-fix PR) — nothing to label"
+              else
+                VBODY="$(gh api "repos/$VREPO/issues/$VHIT" --jq '.body // ""' 2>/dev/null || true)"
+                if printf '%s' "$VBODY" | grep -qi '^fix-verdict:[[:space:]]*fix[[:space:]]*$'; then
+                  gh api -X POST "repos/$VREPO/issues/$VHIT/labels" -f "labels[]=agent-fix" >/dev/null 2>&1 \
+                    && echo "→ verdict: $VREPO#$VHIT labelled agent-fix (inert — queueing is the debouncer's)" \
+                    || echo "→ verdict: labelling $VREPO#$VHIT failed (non-fatal) — stays unlabelled, backstop re-derives"
+                  if [ -n "$WIN" ]; then
+                    echo "→ verdict: NO bell — inside app '$WIN' observation window; a refire re-rings after it"
+                  else
+                    curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"repo\":\"$VREPO\",\"number\":$VHIT}" \
+                      "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/fix-verdict" >/dev/null 2>&1 \
+                      && echo "→ verdict: rang /fix-verdict for $VREPO#$VHIT (debounce decides the set)" \
+                      || echo "→ verdict: bell failed (non-fatal) — the debounce backstop cron re-derives the pending set"
+                  fi
+                else
+                  echo "→ verdict: $VREPO#$VHIT carries no 'fix-verdict: fix' — stays inert (report-only diagnosis)"
+                fi
+              fi
             done
         resources:
           requests: { cpu: "100m", memory: "256Mi" }

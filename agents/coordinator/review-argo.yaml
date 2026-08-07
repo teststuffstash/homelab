@@ -71,6 +71,14 @@ spec:
       port: "12000"
       endpoint: /deploy-degraded
       method: POST
+    # FU-133 dispatch half: the responder rings this after applying an agent-fix VERDICT label.
+    # Consumed by the `fix-debounce` Sensor (fix-debounce-argo.yaml) — suspend N minutes, then
+    # judge the whole pending set (agent-fix without agent/queued) before any issue is queued.
+    # Missed delivery = the backstop cron in the same file re-derives the set from GitHub.
+    fix-verdict:
+      port: "12000"
+      endpoint: /fix-verdict
+      method: POST
 ---
 # Sensor — on a review event, submit a `review` Workflow with repo/number from the event body.
 apiVersion: argoproj.io/v1alpha1

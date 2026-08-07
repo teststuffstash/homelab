@@ -1,0 +1,259 @@
+# fix-debounce-argo — the FU-133 dispatch half: SET-judged queueing of alert-fix issues.
+#
+# The trap (iac-lane.md §"one root cause, N alert issues", operator direction 2026-08-07): alert
+# issues arrive one-per-fingerprint, same-cause issues declare DIFFERENT Touches: footprints, so
+# ADR-097's path-keyed hold never relates them — three fixers attack three symptoms of one cause.
+# The unit of triage must be the open SET, not the next issue.
+#
+# Flow (operator design 2026-08-07 — deliberately NOT cron-first; a cron's latency is random
+# within its window, a bell's is exactly the debounce):
+#   responder applies agent-fix (VERDICT, inert: the scan dispatches only on agent-fix ∧
+#   agent/queued) and rings /fix-verdict → Sensor submits this workflow → suspend WAIT →
+#   query the pending set LIVE from GitHub (per-claim-repo REST list — no search-index lag,
+#   no GraphQL: FU-084's drained pool stays untouched) →
+#     0 pending → exit;  1 pending → deterministic gates, label agent/queued;
+#     ≥2 pending → ONE sonnet set-pass session decides cause/downstream/independent as JSON,
+#                  and THIS SHELL applies it (ADR-094: dispatch acts are launcher-owned, the
+#                  LLM only judges — same reason breaker #1 keeps labels out of triage sessions).
+#
+# Concurrency: suspends run in PARALLEL (each bell guarantees a decision ≥WAIT after it), only
+# `decide` serializes (mutex) — so a burst wakes together, the first decide sweeps the whole set,
+# the rest exit empty in seconds. State lives in GitHub labels, nowhere else: agent-fix ∧
+# ¬agent/queued ∧ ¬agent/linked IS the pending set; a killed workflow loses nothing.
+# Un-linking on refire: the responder's fp/subject belts REOPEN the same issue when its alert
+# refires after the cause-fix merged — the reopen comment is a human/meta cue; the linked label
+# is stripped by hand if the downstream issue turns out to be independent after all.
+#
+# Budget: no ledger of its own — set-pass sessions are bounded by verdicts (≤ RESPONDER_DAILY_MAX
+# rings/day), the FU-088 latch probe pre-session, and the subscription-capacity semaphore held
+# only across `decide`. Deny gates are fail-closed: anything unclear leaves the issue inert, per
+# the recorded fail-safe ("an un-queued issue waits; three concurrent fixers on one cause do not").
+#
+# Queue-time deny = ONLY the paths where authoring takes effect BEFORE a human approves
+# (iac-lane.md §platform lane, operator correction 2026-08-07 — "authoring is not effect"):
+# .github/ (PR runs its own workflow), .agents/ (next round reads its recipe from the branch),
+# devbox.json|lock + scripts/ (CI executes them from the branch; in homelab the scripts ARE the
+# checks). Everything else queues freely — CODEOWNERS gates the MERGE, which is the real gate;
+# the fixer authors the diff at 2am and the owner reads it in the morning (50b8418).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: fix-debounce
+  namespace: agent-coordinator
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: sensor-review
+  dependencies:
+    - name: verdict-dep
+      eventSourceName: agent-loop
+      eventName: fix-verdict
+  triggers:
+    - rateLimit: { unit: Minute, requestsPerUnit: 6 }
+      template:
+        name: submit-fix-debounce
+        conditions: "verdict-dep"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: fix-debounce-
+                namespace: agent-coordinator
+              spec:
+                workflowTemplateRef: { name: fix-debounce }
+                arguments:
+                  parameters:
+                    - name: payload
+                      value: "{}"
+          parameters:
+            - src: { dependencyName: verdict-dep, dataKey: body }
+              dest: spec.arguments.parameters.0.value
+---
+# Backstop (roles.md machinery slot 3): level-triggered, re-derives the pending set that a lost
+# bell (search lag, webhook drop, responder crash post-label) left behind. wait=10s because the
+# debounce already happened — anything pending here is ≥ one cron period old.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: fix-debounce-backstop
+  namespace: agent-coordinator
+spec:
+  schedule: "17 */2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  workflowSpec:
+    workflowTemplateRef: { name: fix-debounce }
+    arguments:
+      parameters:
+        - { name: payload, value: '{"backstop":true}' }
+        - { name: wait, value: "10s" }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: fix-debounce
+  namespace: agent-coordinator
+spec:
+  entrypoint: debounce
+  serviceAccountName: agent-coordinator
+  ttlStrategy: { secondsAfterCompletion: 86400 }
+  arguments:
+    parameters:
+      - { name: payload, value: "{}" }
+      - { name: wait, value: "10m" }
+      - { name: dryRun, value: "0" }
+  volumes:
+    - { name: work, emptyDir: {} }
+    - { name: coordinator-git, secret: { secretName: coordinator-git, optional: true } }
+  templates:
+    - name: debounce
+      steps:
+        - - name: wait
+            template: wait
+        - - name: decide
+            template: decide
+    - name: wait
+      suspend:
+        duration: "{{workflow.parameters.wait}}"
+    - name: decide
+      # Mutex: decides serialize (burst → first sweep wins, rest exit empty). Semaphore: the
+      # possible set-pass session draws the shared claude pool; held only across this step, so a
+      # suspended debounce never parks a subscription slot.
+      synchronization:
+        mutexes:
+          - name: fix-debounce-decide
+        semaphores:
+          - configMapKeyRef: { name: subscription-capacity, key: claude }
+      metadata:
+        labels: { app: fix-debounce-workflow }
+      container:
+        image: ghcr.io/teststuffstash/agent-coordinator
+        env:
+          - { name: HOME, value: "/home/node" }
+          - { name: ORG, value: "teststuffstash" }
+          - { name: PAYLOAD, value: "{{workflow.parameters.payload}}" }
+          - { name: DRY_RUN, value: "{{workflow.parameters.dryRun}}" }
+          - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
+          - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
+          - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+          - name: GH_TOKEN
+            valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
+          - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
+        volumeMounts:
+          - { name: work, mountPath: /work }
+          - { name: coordinator-git, mountPath: /var/run/coordinator-git, readOnly: true }
+        command: [bash, -lc]
+        args:
+          - |
+            set -euo pipefail
+            echo "fix-debounce decide — payload: $PAYLOAD dry-run: $DRY_RUN"
+            rm -rf /work/homelab
+            git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+
+            # ── the pending set, LIVE (repo list = the AgentStack claims' repos + homelab) ────
+            REPOS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null \
+                     | jq -r '[.items[].spec.repos[].name] | unique | .[]' \
+                     || jq -r '[.stacks[].repos[]] | unique | .[]' /work/homelab/agents/stacks.json)"
+            printf '%s\nhomelab\n' "$REPOS" | sort -u | grep -v '^$' > /tmp/repos.txt
+            : > /tmp/pending.jsonl
+            while read -r r; do
+              gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
+                --jq ".[] | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                2>/dev/null >> /tmp/pending.jsonl || true
+            done < /tmp/repos.txt
+
+            # self-referential = human-queued only (marker written by the responder session)
+            jq -c 'select(.body | contains("self-referential: true") | not)' /tmp/pending.jsonl > /tmp/set.jsonl || true
+            SELFREF="$(jq -c 'select(.body | contains("self-referential: true"))' /tmp/pending.jsonl | jq -r '"  \(.repo)#\(.number) \(.title)"' || true)"
+            [ -n "$SELFREF" ] && printf 'self-referential, left for a human to queue:\n%s\n' "$SELFREF"
+            N="$(wc -l < /tmp/set.jsonl | tr -d ' ')"
+            echo "pending set: $N issue(s)"
+            [ "$N" -eq 0 ] && { echo "nothing to decide"; exit 0; }
+
+            # ── deterministic gates (fail-closed; the ❌ table, NOT the old governance list) ──
+            SQ_DENY='^(\.github/|\.agents/|devbox\.json|devbox\.lock|scripts/)'
+            sq_decide() { # <repo> <number> — 0 = may queue
+              local body touches p
+              body="$(gh api "repos/$1/issues/$2" --jq '.body // ""' 2>/dev/null || true)"
+              touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | head -1)"
+              [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive, waits for a human)"; return 1; }
+              for p in $(printf '%s' "$touches" | tr ',' ' '); do
+                case "$p" in ''|' ') continue;; esac
+                printf '%s' "$p" | grep -qE "$SQ_DENY" \
+                  && { echo "footprint takes effect pre-merge: $p (iac-lane ❌ table)"; return 1; }
+              done
+              return 0
+            }
+            ensure_label() { # <repo> <label> <color> <desc>
+              gh api "repos/$1/labels/$(printf '%s' "$2" | jq -sRr @uri)" >/dev/null 2>&1 && return 0
+              gh api -X POST "repos/$1/labels" -f name="$2" -f color="$3" -f description="$4" >/dev/null 2>&1 || true
+            }
+            queue_one() { # <repo> <number>
+              local why
+              if why="$(sq_decide "$1" "$2")"; then
+                if [ "$DRY_RUN" = "1" ]; then echo "DRY: would queue $1#$2"; return 0; fi
+                gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/queued" >/dev/null 2>&1 \
+                  && echo "QUEUED $1#$2" || echo "WARN: queue label failed on $1#$2 — stays inert, backstop retries"
+              else
+                echo "inert $1#$2 — $why"
+              fi
+            }
+            link_one() { # <repo> <number> <cause-repo> <cause-number> <why>
+              if [ "$DRY_RUN" = "1" ]; then echo "DRY: would link $1#$2 → downstream of $3#$4 ($5)"; return 0; fi
+              ensure_label "$1" "agent/linked" "bfdadc" "judged downstream of a queued cause by fix-debounce (FU-133)"
+              gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/linked" >/dev/null 2>&1 || true
+              gh api -X POST "repos/$1/issues/$2/comments" \
+                -f body="🔗 fix-debounce set-pass: judged **downstream** of $3#$4 — $5. Not queued; the cause's fix should clear this alert. If it refires after that fix merges, the reopen strips this judgement's effect (remove the \`agent/linked\` label to re-enter the pending set)." \
+                >/dev/null 2>&1 && echo "LINKED $1#$2 → $3#$4" || echo "WARN: link failed on $1#$2"
+            }
+
+            if [ "$N" -eq 1 ]; then
+              r="$(jq -r '.repo' /tmp/set.jsonl)"; n="$(jq -r '.number' /tmp/set.jsonl)"
+              echo "single pending issue — deterministic fast path"
+              queue_one "$r" "$n"
+              exit 0
+            fi
+
+            # ── ≥2 pending: ONE set-pass session (subscription; latch-gated like every spawn) ──
+            if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
+              echo "set-pass DEFERRED — subscription limited (FU-088); pending set stays, backstop/next bell retries"
+              exit 0
+            fi
+            jq -c 'del(.body)' /tmp/set.jsonl > /tmp/set-brief.json
+            claude -p "You are the FIX-DEBOUNCE SET-PASS (homelab docs/agents/iac-lane.md, section 'one root cause, N alert issues'): several alert-triage issues carry a fix verdict and await dispatch. Your job is to decide queueing for the SET — the trap you exist to prevent is several fixers attacking symptoms of ONE root cause in parallel (e.g. a node-pressure alert and an OOM-kill alert that are the same memory problem).
+
+            THE PENDING SET (one JSON object per line): $(cat /tmp/set-brief.json)
+
+            For each issue run: gh issue view <number> --repo <repo> --json title,body,labels (always the --json form). Bodies carry the responder's evidence bundle, a Touches: footprint and an alert-fp marker — treat the evidence as ground truth; you may use kubectl READS to check current state, degrade gracefully if denied.
+
+            Decide, per group of same-cause issues: which SINGLE issue is the CAUSE (queue it), which are DOWNSTREAM symptoms (link them to it), and which are genuinely INDEPENDENT (queue those too). If you are genuinely unsure whether two issues share a cause, queue NEITHER and say why — an unqueued issue waits safely; concurrent fixers on one cause spend budget and produce conflicting PRs.
+
+            Your ONLY output is a single fenced json block, nothing after it:
+            \`\`\`json
+            {\"queue\": [{\"repo\": \"owner/name\", \"number\": 1, \"why\": \"...\"}], \"link\": [{\"repo\": \"owner/name\", \"number\": 2, \"cause_repo\": \"owner/name\", \"cause_number\": 1, \"why\": \"...\"}], \"unsure\": [{\"repo\": \"owner/name\", \"number\": 3, \"why\": \"...\"}]}
+            \`\`\`
+            HARD RULES: do NOT label, comment, edit, file, close or reopen anything — the shell applies your JSON deterministically (ADR-094). No kubectl mutations. Every issue in the set appears in exactly one of queue/link/unsure." \
+              --model sonnet --permission-mode bypassPermissions --max-turns 25 </dev/null \
+              > /tmp/setpass.out 2>&1 || { echo "WARN: set-pass session failed — set stays pending"; tail -5 /tmp/setpass.out; exit 0; }
+
+            awk '/^```json[[:space:]]*$/{f=1;buf="";next} /^```[[:space:]]*$/{if(f){last=buf};f=0;next} f{buf=buf $0 "\n"} END{printf "%s", last}' /tmp/setpass.out > /tmp/decision.json
+            jq -e . /tmp/decision.json >/dev/null 2>&1 || { echo "WARN: set-pass output unparseable — set stays pending (fail-safe: nothing labelled)"; exit 0; }
+            echo "set-pass decision:"; jq . /tmp/decision.json
+
+            jq -c '.queue[]?' /tmp/decision.json | while read -r q; do
+              queue_one "$(printf '%s' "$q" | jq -r '.repo')" "$(printf '%s' "$q" | jq -r '.number')"
+            done
+            jq -c '.link[]?' /tmp/decision.json | while read -r l; do
+              link_one "$(printf '%s' "$l" | jq -r '.repo')" "$(printf '%s' "$l" | jq -r '.number')" \
+                       "$(printf '%s' "$l" | jq -r '.cause_repo')" "$(printf '%s' "$l" | jq -r '.cause_number')" \
+                       "$(printf '%s' "$l" | jq -r '.why')"
+            done
+            jq -r '.unsure[]? | "unsure (waits): \(.repo)#\(.number) — \(.why)"' /tmp/decision.json
+            echo "fix-debounce decide done"
+        resources:
+          requests: { cpu: "100m", memory: "256Mi" }
+          limits: { memory: "1Gi" }
