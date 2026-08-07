@@ -721,6 +721,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         orphans="${orphans}[$repo] ⏳ changes-requested held — a worker is already riding issue #${pr_issue} (FU-146 per-item):\n  PR #${u}\n"
         continue
       fi
+      # BLOCKED-SOURCE hold (2026-08-07): an `agent/blocked` source issue is a HUMAN gate (budget
+      # refusal, design decision) — re-judging its PR cannot move it and burned one sonnet judge
+      # per cycle on circles PR#58 (AGENT_BUDGET_REFUSED, two sessions in 25 min). Fail-safe like
+      # the hold above: no link, or issue not in openall → falls through unchanged; self-releases
+      # the tick after the human clears the label (openall is re-fetched every tick).
+      if [ -n "$pr_issue" ] \
+         && printf '%s' "$openall" | jq -e --argjson n "$pr_issue" \
+              '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+        orphans="${orphans}[$repo] ⏳ changes-requested held — source issue #${pr_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
+        continue
+      fi
       if [ -n "$wip_busy" ]; then
         orphans="${orphans}[$repo] ⏳ changes-requested trigger held (project WIP at ${REPO_MAX_WIP} in ${repo}):\n  PR #${u}\n"
         continue
@@ -872,6 +883,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
            && printf '%s' "$WIPPODS_JSON" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — a worker is already riding issue #${red_issue} (FU-146 per-item):\n  PR #${u}\n"
+          continue
+        fi
+        # BLOCKED-SOURCE hold (2026-08-07) — same as the changes-requested clause's, same
+        # fail-safes; this clause is where the churn was actually measured (circles PR#58).
+        if [ -n "$red_issue" ] \
+           && printf '%s' "$openall" | jq -e --argjson n "$red_issue" \
+                '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
+          orphans="${orphans}[$repo] ⏳ ci-red held — source issue #${red_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
           continue
         fi
         if [ -n "$wip_busy" ]; then
