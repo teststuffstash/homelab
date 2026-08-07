@@ -63,6 +63,27 @@ dispatch capacity; at 91% the cheapest lever available is to CLEAR and stop cons
 that is the latch working, not a bug — do NOT "fix" the thresholds (operator ruling 2026-08-06).
 Suspending non-critical reflexes (retro, model-scout) is the operator's lever, not mine.
 
+## ⏳ OPERATOR ACTION PENDING — first-party deploy pins still need one `tofu apply`
+
+**Committed, NOT applied.** `tofu/github/actions_secrets.tf` now adds homelab to
+`local.reviewer_repos`; it takes effect only after **`devbox run github-tofu apply` from the HOST**
+(tofu/github is operator-only — the org-admin PAT is deliberately outside the jail).
+
+**Why they stall:** homelab is `require_approval = true` (FU-068, 2026-08-04) but was excluded from
+`reviewer_repos` as "CI-only" — true when written, false since the flip. So the `renovate-approve`
+reflex has no `REVIEWER_APP_ID` and takes its skip-gracefully branch: **`approve` reports GREEN
+while doing nothing**, and the PR waits on a human forever. Fourth occurrence: #104, #105, #109,
+#112. Same class as oracle-fleet's 2026-07-25 parity audit — the invariant is now written into the
+locals block: `reviewer_repos == { repos with require_approval = true }`.
+
+⚠ **It widens nothing.** The reflex still requires `user.type == 'Bot'` AND `automerge` AND
+`dependencies`, so agent PRs (`agent/*` labels) never qualify; and `require_code_owner_review` is
+untouched — a bot approval cannot satisfy an OWNED path, so only the CODEOWNERS carve-outs
+(`agents/images.env`, the arc-runner pins, the openrouter-operator chart pin) can merge on it.
+⚠ **Until it is applied, each pin needs `gh pr merge <n> --admin`** (the jail is the OrgAdmin
+bypass). #112 was merged that way 05:59Z — verified first that `f77880d417da` is agent-runtime's
+master HEAD and that `build-image` succeeded on that sha, so it was not a stale tag.
+
 ## Platform queue (homelab has no fixer loop — the meta-coordinator IS its fixer)
 
 - **#111** — ✅ **CLOSED 2026-08-06** as not-ours (outage, not `maxRunners: 4` capacity — the
