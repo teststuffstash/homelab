@@ -328,16 +328,16 @@ six OVERSIZE items pointer-ized into
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
-- [ ] **FU-153** — **A worker cannot run the gate it authors, so a red CI escalates to a human.**
-      circles#19 authors a kind system-testing gate; its ride pod has ONE container (`agent`, no
-      dind — `fixer.docker` unset), so in-pod `devbox run ci` **cannot run kind** — it skipped the
-      gate and still reported `ci_passed: true` while Actions failed it twice (`HTTP 000000`).
-      Running `ci` in-pod is a suggestion by design and CI is the real gate — but on a red the
-      coordinator has **no lever to find the truth**: it cannot re-run the job (FU-148, no
-      `actions:write`) nor reproduce in-pod (no docker), so it parks at `agent/blocked`.
-      **Operator direction 2026-08-07:** give each stack coordinator levers — re-run CI, and/or
-      invoke an in-pod CI run — so a red is retried, not escalated. ⚠ in-pod vs in-CI CAN
-      legitimately differ under kind; the lever must reveal which. Relates FU-148, ADR-097.
+- [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
+      circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
+      (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
+      `repos[circles].fixer.docker: true` (flipped FOR #19) and the pod really is kata +
+      native-sidecar `dind` + `DOCKER_HOST`, so the worker CAN run kind. The two environments simply
+      differ (kata microVM dind vs the ARC runner). On a red the coordinator can neither re-run the
+      job (FU-148, no `actions:write`) nor re-run CI in-pod, so it parks at `agent/blocked` and
+      waits for a human — for a class of red that should be retried. **Operator direction
+      2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
+      environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
 - [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
       The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
       silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
