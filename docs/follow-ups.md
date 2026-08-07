@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-154**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-155**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -215,8 +215,9 @@ the block needs pruning, not more headings.
       so renovate, devbox-update AND a human/jail applying `agent/queued` all ring nothing.
       Measured cost: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″;
       corrected emitter row: [`workflow.md`](agents/workflow.md) §Triggers. Workaround shipped
-      2026-08-06 — `scripts/reflex-now.sh` takes a namespace.
-      **Next:** teach the emitters the `{stack, loop_ns}` payload (⚠ they read
+      2026-08-06 — `scripts/reflex-now.sh` takes a namespace. The NEW fix-debounce emitter sends
+      the graduated payload from birth (`83907ea`) — it never joins this gap.
+      **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (⚠ they read
       `agents/stacks.json`, the scan reads the live claim — the two-readers trap), or fan the
       global trigger out over graduated namespaces; then decide if global has a reader left.
       Relates FU-085 (archived — built these emitters pre-graduation), FU-143, FU-145, ADR-094.
@@ -265,6 +266,15 @@ the block needs pruning, not more headings.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
+- [ ] **FU-154** — **Closing a PR and opening a new one RESETS the anti-livelock bound.**
+      `RED_ROUNDS_MAX=3` counts `Agent run stats` comments **per PR**; circles#19 consumed five
+      rounds across PR#50 (2) + fresh #51 (1) after earlier rounds elsewhere. Same class as
+      FU-148 — PR identity is the unit of state and re-creating the PR silently resets it — but a
+      different actor (worker re-PR, not coordinator close/reopen) and a different reset (rounds,
+      not auto-merge arming). Flagged by the circles jail 2026-08-07 (TICK-LOG note, then unfiled).
+      **Next:** count rounds against the ISSUE (the stable id — e.g. sum stats comments across all
+      PRs whose body/branch references it), not the PR; decide alongside FU-148's re-run lever
+      since both want issue-keyed state.
 - [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
       instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
       (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The

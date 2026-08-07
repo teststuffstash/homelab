@@ -81,6 +81,15 @@ until the reset epoch unless someone pushes one 2xx through: port-forward
 `Authorization: Bearer ref:agent-coordinator/coordinator-claude` (proxy injects token + oauth
 beta). Verify via `GET /anthropic-limit`.
 
+## ⏳ BEFORE the #29 assembly PR merges — review the goal branch as ONE artifact
+
+The circles jail flagged it (2026-08-07) and PR#25 is the precedent: the bot review covered CODE
+only and the 13 spec files were judged separately by a meta comment. When `goal/29-p0-complete` →
+master opens: confirm the reviewer runs the review-goal brief (`REVIEW_GOAL_MODEL`, reviewer
+`goalModel` knob) against the WHOLE branch diff — specs included — not just the last child's
+delta. If the review lands code-only again, that is the FU to file (grep first: `review-goal`,
+`assembly`). Related watch, filed this session: **FU-154** (rounds reset on PR re-creation).
+
 ## Where the goal stands (2026-08-07 09:15Z)
 
 - **circles#19 / PR#51** — the four-round mystery was a PLATFORM fault, now fixed: the docker.io
