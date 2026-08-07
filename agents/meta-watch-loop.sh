@@ -3,14 +3,14 @@
 # Emits ONLY on change: scan-tick summaries, agent pod lifecycle, PR review/commit state, stalls,
 # proxy auth-circuit events. Override STACK_NS/RIDE_NS/REPO to point at another stack.
 # Lessons wired in (2026-08-02): a redispatched ride pod REUSES its name — key pod state on
-# startTime, not name; a ride nearing the 2h session-key window is a failure signal, not calm;
+# startTime, not name; a ride nearing its 4h key/deadline window is a failure signal, not calm;
 # an armed PR sitting BEHIND >15min means the updater backstop failed (FU-124).
 cd /workspace/homelab || { echo "PROBE-FAIL: repo missing"; exit 1; }
 K="devbox run -- kubectl --kubeconfig tofu/kubeconfig"
 STACK_NS="${STACK_NS:-sleep-agents}"; RIDE_NS="${RIDE_NS:-sleep-tracking}"
 REPO="${REPO:-teststuffstash/sleep-tracking}"; SCAN_PREFIX="${SCAN_PREFIX:-coordinate-sleep-}"
 last_scan=""; last_pods=""; last_pr=""; last_emitted_sum=""; last_scan_seen=$(date +%s)
-probe_fails=0; last_keywarn=""; behind_since=0; last_am=""; last_wrongbase=""; last_armed=""
+probe_fails=0; last_keywarn=""; behind_since=0; last_am=""; last_wrongbase=""; last_armed=""; last_loopwarn=""
 seen_deaths=""   # pod@startTime@phase keys already judged by the harness-death clause
 while true; do
   now=$(date +%s)
@@ -105,16 +105,36 @@ while true; do
     fi
     seen_deaths="$seen_deaths $rp"
   done
-  # --- ride age vs the 2h session-key window: >100min without a PR = expiry-death risk ---
+  # --- ride age vs its REAL bound: the session key TTL and activeDeadlineSeconds are both 4h ---
+  # ⚠ FIXED 2026-08-07: this warned "expires at 2h" and fired at 100min. That constant was WRONG —
+  # circles-issue-42-round-1 carried expiresAt 4h after start, matching activeDeadlineSeconds=14400.
+  # The false alarm cost a real investigation, and worse, it pointed AWAY from the actual fault:
+  # that ride was not near a key death, it had been in a degenerate repetition loop since minute 10.
+  # So the age threshold moved to 3h (still ahead of the 4h reap, no longer crying at 100min) and a
+  # SEPARATE clause below watches for the thing age cannot see.
   ride_start=$($K get pods -n "$RIDE_NS" -l app=agent-session \
       -o jsonpath='{.items[0].status.startTime}' 2>/dev/null)
   if [ -n "$ride_start" ]; then
     age=$(( now - $(date -d "$ride_start" +%s 2>/dev/null || echo "$now") ))
-    if [ "$age" -gt 6000 ] && [ "$last_keywarn" != "$ride_start" ]; then
-      echo "KEY-WINDOW: ride started $ride_start is ${age}s old — session key expires at 2h; no PR yet means an expiry death is near"
+    if [ "$age" -gt 10800 ] && [ "$last_keywarn" != "$ride_start" ]; then
+      echo "RIDE-AGE: ride started $ride_start is ${age}s old — session key + activeDeadline both 4h; no PR yet means a deadline reap is near"
       last_keywarn="$ride_start"
     fi
   fi
+  # --- degenerate repetition: a ride can be DEAD while its pod reads Running (agent-runtime#13) ---
+  # circles#42 r1 looped one line 65× from minute 10 to the 4h deadline — phase Running throughout,
+  # so every liveness view called it healthy while it held a WIP slot and ~5Gi of kata memory.
+  # Cheap proxy: the last 40 log lines collapsing to almost no distinct content.
+  for rp in $($K get pods -n "$RIDE_NS" -l app=agent-session --no-headers 2>/dev/null \
+                | awk '$3=="Running"{print $1}'); do
+    tail40=$($K logs -n "$RIDE_NS" "$rp" -c agent --tail=40 2>/dev/null)
+    [ -n "$tail40" ] || continue
+    distinct=$(printf '%s\n' "$tail40" | sed 's/[0-9]//g' | sort -u | wc -l)
+    if [ "${distinct:-99}" -le 3 ] && [ "$last_loopwarn" != "$rp" ]; then
+      echo "RIDE-LOOPING: $rp last 40 log lines collapse to ${distinct} distinct — degenerate repetition (agent-runtime#13); pod reads Running but is not progressing"
+      last_loopwarn="$rp"
+    fi
+  done
   # --- Alertmanager firing set (AWARENESS only — the responder owns triage; this exists because
   #     dedup'd repeat fingerprints never re-escalate, so the meta session was blind to a live
   #     symptom unless the operator pasted it, 2026-08-02 egress-drop) ---
