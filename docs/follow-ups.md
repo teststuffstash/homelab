@@ -52,6 +52,12 @@ tracker.
   are historical and exempt. **Scrubbing a pointer item's id = repointing, not deleting**: the
   code/doc comment loses the `FU-NNN` but gains a link to the doc that survived, so the trail
   doesn't go cold. `devbox run follow-ups-lint` checks all of this.
+  **Then ask who was waiting on it** — `grep -n 'FU-NNN' docs/follow-ups.md` and re-read every
+  hit as if filed today. Resolution is a graph walk, not a single edit: the item you just closed
+  is often the reason another was deferred, and that one may now be a five-minute fix that
+  unblocks a third. Keep going until a pass turns up nothing — one closure can drain a chain, and
+  a chain left un-walked is how items outlive their blockers (23 of 57 open items cite an
+  already-archived id, 2026-08-07).
   **Check for this actively:** FU-080 sat open at 91 lines with zero remaining work because its
   last leg was archived under a different id. A long item is a good place to look for a done one.
 - **Adding an item:** next free id, into the fitting theme section (ids don't encode theme), bump

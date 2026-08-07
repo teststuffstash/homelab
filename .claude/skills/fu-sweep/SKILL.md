@@ -88,11 +88,20 @@ FU-050→100 and 4.4/day over FU-100→153**, the Agents block reached **34 of 5
    evidence says the soak FAILED, that is the most valuable output of the whole pass: re-scope the
    item with what was measured, do not quietly extend it.
 
-5. **Write the operator list.** ≤10 lines total, each: id, the decision needed, the options, your
+5. **LOOP — every resolution can unblock the next.** After finishing DO-NOW and SOAK-DUE, re-run
+   the UNBLOCKED pre-filter against the ids you just archived and re-classify what cites them. A
+   closure often turns a STILL-VALID item into a DO-NOW: its blocker is gone and the fix is now
+   five minutes. Repeat until a pass produces no new DO-NOW — this is the compounding part of a
+   sweep and the reason it beats closing items one at a time as they come up.
+   ⚠ Bound it: stop after 3 passes or when the remaining work stops being ≲5-minute shaped, and
+   say where you stopped. A chain that keeps growing is a sign you are doing a PROJECT inside a
+   sweep — file it properly (ROADMAP or a scoped item) instead of following it to the bottom.
+
+6. **Write the operator list.** ≤10 lines total, each: id, the decision needed, the options, your
    recommendation. If an item has sat in OPERATOR across two sweeps, say so — that is a signal the
    framing is wrong, not that the operator is slow.
 
-6. **Verify + hand off.** `devbox run follow-ups-lint` green, the archived items' fixes each
+7. **Verify + hand off.** `devbox run follow-ups-lint` green, the archived items' fixes each
    verified, then run **docs-cleanup** to propagate every status this pass changed into the docs
    that reference those ids.
 
