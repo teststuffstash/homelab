@@ -834,13 +834,40 @@ def collect_rate_limits(lines):
             lines.append(metric("github_rate_limit_reset_timestamp", labels, r.get("reset", 0)))
 
 
+GITHUBSTATUS_URL = "https://www.githubstatus.com/api/v2/components.json"
+# statuspage.io status strings, worst-last — the gauge is the index, so `>= 2` = partial outage+.
+VENDOR_STATUS_SCALE = ["operational", "degraded_performance", "partial_outage", "major_outage"]
+
+
+def collect_vendor_status(lines):
+    """FU-150 (vendor half): GitHub's OWN view of GitHub, as a gauge. During the 2026-08-07
+    Actions outage every in-cluster signal looked like ours (runners idle, queues frozen, zero
+    failures — a queued run never FAILS) and the operator had to check githubstatus.com by hand.
+    Unauthenticated statuspage.io endpoint — no token, no rate-limit pool. A component we don't
+    recognize maps to 4 (worse than major_outage): unknown is not okay."""
+    req = urllib.request.Request(GITHUBSTATUS_URL, headers={"User-Agent": "homelab-github-exporter"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        components = json.loads(resp.read()).get("components", [])
+    lines += [
+        "# TYPE github_vendor_component_status gauge",
+        "# HELP github_vendor_component_status githubstatus.com component state: 0 operational, 1 degraded_performance, 2 partial_outage, 3 major_outage, 4 unrecognized.",
+    ]
+    for c in components:
+        name = c.get("name") or ""
+        if not name or c.get("group") or name.startswith("Visit "):  # group rows duplicate
+            continue  # their members; "Visit www.githubstatus.com…" is a banner, not a component
+        status = c.get("status") or ""
+        value = VENDOR_STATUS_SCALE.index(status) if status in VENDOR_STATUS_SCALE else 4
+        lines.append(metric("github_vendor_component_status", {"component": name}, value))
+
+
 def poll_forever():
     global _body, _errors, _last_success
     while True:
         lines = []
         ok = True
         for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing,
-                          collect_rate_limits, collect_app_permission_drift):
+                          collect_rate_limits, collect_app_permission_drift, collect_vendor_status):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below

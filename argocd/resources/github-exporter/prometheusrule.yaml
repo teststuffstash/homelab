@@ -35,6 +35,24 @@ spec:
             summary: "GitHub workflow {{ $labels.repo }}/{{ $labels.workflow }} failed"
             description: "Run #{{ $labels.number }} ({{ $labels.event }} on {{ $labels.branch }}) concluded {{ $labels.conclusion }}: https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/actions/runs/{{ $labels.id }} — auto-resolves 1h after the run."
 
+        # FU-150 (vendor half): GitHub's OWN status page as an alert, because during the
+        # 2026-08-07 Actions outage every in-cluster signal looked like ours (idle runners,
+        # frozen queues, ZERO failures — a queued run never fails) and the operator had to
+        # check githubstatus.com by hand. `triage: none` — a vendor outage is self-describing
+        # and unfixable from here; a triage session would spend budget restating this
+        # annotation. The responder prompt already tells sessions to consult this signal.
+        # >= 2 = partial_outage or worse (1 = degraded_performance happens weekly, not
+        # actionable); 10m `for:` rides out statuspage flaps.
+        - alert: GithubVendorOutage
+          expr: github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"} >= 2
+          for: 10m
+          labels:
+            severity: warning
+            triage: none
+          annotations:
+            summary: "GitHub-side outage: {{ $labels.component }}"
+            description: "githubstatus.com reports {{ $labels.component }} at status index {{ $value }} (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com"
+
         # METERED usage only — the Team-plan seat license ($4/mo) is a subscription and never
         # shows in the usage API. Metered spend should stay $0 inside included usage (hosted
         # minutes discounted to $0, self-hosted runners and public ghcr free; the org's 2026-07
