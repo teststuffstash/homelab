@@ -103,9 +103,28 @@ setpci -s 04:00.0 CAP_PM+4.w                        # want: 0003
 Safe on this box: the card is `boot_vga=1` but nothing was using it (no `/proc/fb` entry, no
 driver), firmware still drives POST, and all four VMs kept running throughout. The residual-cooling
 caveat that a one-way test would have left open is closed by the A/B/A above: the temperature
-tracks the GPU's D-state, not the clock. The **watt** figure is still unmeasured — a 9600 GT idling
-at full clocks is plausibly tens of watts of pve's ~128 W, but that is an expectation, not a
-result, and it stays that way until the plugs are back (FU-038).
+tracks the GPU's D-state, not the clock.
+
+### And the watts: ~7 W, not the "tens" I guessed
+
+Measured once the plugs came back, as a second A/B/A at 5-second resolution (48 samples):
+
+| leg | state | n | mean | median | range |
+|---|---|---|---|---|---|
+| 1 | `D3hot` | 16 | 127.81 W | 126.70 | 124.4–136.1 |
+| 2 | **`D0`** | 16 | **134.94 W** | 133.45 | 132.0–146.1 |
+| 3 | `D3hot` | 16 | 130.28 W | 131.55 | 126.2–134.8 |
+
+**≈7 W**, from the two adjacent legs. Leg 3 is knowingly contaminated: the cluster got busier
+during it (load 1-min 3.04 vs 15-min 2.09, CPU package 25.7 W vs ~22 W), which lifts it toward D0
+levels and drags the naive 3-leg mean down to 5.9 W. Treat the answer as **6–7 W** — the signal is
+genuinely small next to pve's own ±5 W of load variation, so a tighter figure would be false
+precision.
+
+Worth recording that the **prediction was wrong**: "tens of watts" was the expectation from a
+9600 GT's idle spec, and the truth is roughly a quarter of that. With `driver=none` the card was
+evidently not at full clocks after all. The thermal win (−5–6 °C on the NVMe) is the better
+justification for keeping it bound; ~7 W ≈ €8/year is a rounding error by comparison.
 
 ## Method
 
@@ -122,6 +141,16 @@ kubectl run powertest --restart=Never --image=colinianking/stress-ng \
 
 Poll the node's plug power for ~3 min (`homeassistant_sensor_power_w{entity="sensor.plug_<box>_power"}`
 or the HA `/api/states`), record the peak, then `delete pod` + `uncordon`.
+
+> ⚠ **The plugs do not stream continuously — open the Tuya app on the device first.** Learned the
+> hard way 2026-08-07: 18 consecutive "samples" of a GPU A/B were one frozen value, because the
+> plug had last reported 12 minutes earlier. The history shows the mechanism plainly — updates
+> arrive every **5 seconds** while the phone app is open on that device, then stop dead when it is
+> closed, with gaps of 15–30 minutes. A stress test still measures fine unattended (a ~30 W jump
+> crosses the device's own report-on-change threshold), but any **small** delta — a few watts —
+> is invisible unless the app is held open for the whole run. Verify you are seeing DISTINCT
+> values before trusting a mean. This is a further argument for FU-038: local polling would sample
+> on our schedule, not the vendor's.
 
 ## Results — 2026-06-05 (stress-ng `matrixprod`)
 
