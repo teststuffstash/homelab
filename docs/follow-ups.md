@@ -29,8 +29,21 @@ tracker.
   history.** The doc backlinks the id. Never grow a second copy here afterwards — edit the doc.
   A pointer's doc **survives archival**: it's documentation, not tracker residue.
   Postmortems go to `docs/incidents/`, programs to `ROADMAP.md`, decisions to `docs/adr.md`.
-- **Don't file what's faster to do:** if it takes ≲5 minutes, the context is already in hand, and
-  it's safe to do now — just do it. An entry costs more than the fix; file only genuine deferrals.
+- **THE BAR — the tracker is for work someone must do LATER, and nothing else.** Measured
+  2026-08-07, and the trend is the argument: creation ran **2.4/day** over FU-050→100 and
+  **4.4/day** over FU-100→153 — the last 53 ids took 12 days against 24 for the first 100. The
+  Agents share of OPEN items went **34% (ids <100) → 92% (ids ≥100)**. The block did not grow
+  because the loop has more debt; it grew because every finding became an entry.
+  Before adding OR extending, three tests:
+  1. **Can I just do it?** Context in hand, ≲5 min, safe now → **do it**. ⚠ **This applies to
+     EXTENDING an existing item exactly as it applies to filing a new one** — it keys on the
+     ACTION, not the artifact. Adding "Next: port the hold to `ci-red`" to FU-146 was deferring a
+     five-minute fix I had already written twice; "I'm only updating an FU" is not an exemption,
+     and that is precisely how it was rationalised (2026-08-07).
+  2. **Is there a next action someone could start today?** No → it is NOT an FU. A finding goes
+     to the owning doc, a session's story to `agents/coordinator/TICK-LOG.md`, an undecided fork
+     to `docs/spikes/`. "Watch whether X recurs" is an observation, not a deferral.
+  3. **Does an existing item already own this?** Extend it — but re-run test 1 first.
 - **Resolving an item:** move it to [`follow-ups-archive.md`](follow-ups-archive.md) in the same
   commit as the fix, trimmed to the grep residue (what shipped / when / acceptance evidence /
   gotcha — a few lines) with an *(archived YYYY-MM-DD)* stamp. References elsewhere stay legal
