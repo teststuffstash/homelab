@@ -397,16 +397,15 @@ six OVERSIZE items pointer-ized into
       is the fix (`>= 2` stats after the newest non-merge commit). Never fired: 0 `agent/arbitrate`
       fleet-wide. One shared `NOOP_ROUND_JQ` now. **Next:** verify on a real no-op round — both
       clauses were IDLE at deploy, so it is tested against real history, not live traffic.
-- [ ] **FU-146** — **The per-item dispatch hold exists on ONE clause of THREE.** Written for WIP=1;
-      ADR-097's raise to 3 retired it silently, so ticks and doorbells re-emitted the same unit while
-      its own fix round rode (~59 of 71 coordinator sessions did nothing, circles PR#39). `fc606e2`
-      added a per-ITEM hold (PR's issue link vs live ride-pod names) to the MAIN scan path only.
-      ⛔ I marked that VERIFIED 2026-08-07 and disproved it the same night: the doorbell takes
-      `fast_unit_dispatch()`, whose WIP check is a COUNT vs `REPO_MAX_WIP` — ported `277a73f`,
-      executed through three cases. ⛔ **Then the `ci-red` clause showed the SAME gap**: tick `q66s7`
-      dispatched `pr-50` at wip 3 while `agent-circles-issue-19-r3` had ridden 6 min. **Next:** port
-      the hold to `ci-red` (and audit every remaining clause for it), then verify all paths — the
-      "one round each" I mistook for proof was the WIP cap and timing, not the hold.
+- [ ] **FU-146** — **The per-item dispatch hold, now on all three clauses — awaiting live proof.**
+      Written for WIP=1; ADR-097's raise to 3 retired it silently, so ticks and doorbells re-emitted
+      the same unit while its own fix round rode (~59 of 71 coordinator sessions did nothing,
+      circles PR#39). Shipped to the main scan path (`fc606e2`), then — after I wrongly marked it
+      VERIFIED — to the doorbell fast path (`277a73f`) and to `ci-red` (`f0169f1`, which also had to
+      add `body` to its probe or the hold could never fire). Each port's predicate was executed
+      against real data, not inspected. **Next:** verify on a real round that all three hold, and
+      audit any clause added later for the same omission — the pattern is that a new clause copies
+      the project-wide `wip_busy` check and not the per-item one.
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
