@@ -66,12 +66,12 @@ mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the rela
 
 ## Platform queue (homelab issues — the platform fixer lane owns queued ones; meta owns the rest)
 
-- **#118 + #68** — QUEUED by the first live fix-debounce set-pass (20:32Z, judged independent —
-  correctly). The platform coordinate loop dispatches fixers. ⚠ Both fixes are TOFU surfaces:
-  #68 (`tofu/longhorn.tf`) the JAIL can apply after merge; #118 (`tofu/github/repo_rulesets.tf`)
-  needs a **HOST-side `github-tofu apply`** — flag it to the operator when the PR merges.
-  ⚠ Until #118 applies, `circles/update-pr-branch` fails every ~15min on PR#54
-  (`GithubWorkflowRunFailed` refires are THIS, not news).
+- **#118** — QUEUED (fix-debounce set-pass 20:32Z), awaiting its dispatch (the 21:00Z platform
+  tick spent its unit on #68's refusal and skipped the doorbell on the latch — expect the
+  21:30Z tick). ⚠ The fix (`tofu/github/repo_rulesets.tf`) needs a **HOST-side
+  `github-tofu apply`** — flag the operator when the PR merges. ⚠ Until then
+  `circles/update-pr-branch` fails every ~15min on PR#54 (`GithubWorkflowRunFailed` refires
+  are THIS, not news).
 - **#117** — ✅ diagnosed 2026-08-07 (meta comment): NIC link-flap storm on wk-metal-02
   (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre bad-cable class.
   **Operator, physical:** reseat/replace cable / switch port. FU-032 updated.
@@ -79,9 +79,13 @@ mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the rela
   concurrent COORDINATOR Jobs across stacks/items. ⚠ Do NOT tighten `activeDeadlineSeconds`
   (1800 is right; tail reaches 1458s). ⚠ Do NOT implement "reject `unit=-`" — `-` is the
   legitimate full-scan default. (Debouncer re-queued it 20:21Z pre-scoping-fix; harmless.)
-- **#110 / #101 / #65 / #63 / #116** — untouched this session: #63 rides #68's fix, #65
-  deliberately `unsure`, #116 is the mirror-capacity decision (operator: grow the volume per the
-  oversize-caches doctrine), #110/#101 await triage on an ordinary day.
+- ✅ **#110 / #101 / #65 / #63 / #68 all CLOSED 2026-08-07 ~21:20Z** (meta, each with verified
+  evidence): #110 fixed by `8da2825` (512Mi live, 0 restarts); #101 forensic window lost (wk-02
+  rebooted 13:26Z today) but the sd-reset at 18:08Z supports the storage-stall read; #68's scope
+  ceiling was ALREADY SHIPPED (the coordinator refused the unit — the FU-133 first-ride
+  finding); #63/#65 were its shared-fate collateral. The PSI-stall residual class → **FU-155**.
+- **#116** — still open: the mirror-capacity decision (operator: grow the volume per the
+  oversize-caches doctrine).
 - ⚠ **A human comment on a responder issue disables its auto-close** — every issue you comment on
   becomes yours to close by hand (#117 is now such).
 

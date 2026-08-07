@@ -2796,3 +2796,33 @@ thresholds may need the heavy/dispatch split revisited if the latch starts bindi
 ⚠ **Watch items:** homelab#118 + #68 are now BOTH queued for the homelab fixer lane —
 `repo_rulesets.tf` and `longhorn.tf` are tofu surfaces, so the fixer PRs still need an operator
 `apply` (github root is host-only). #118 is load-bearing for the FU-143 re-soak.
+
+## 2026-08-07 (~20:50–21:30Z, meta-coordination: circles + oracle; the set-pass correction)
+
+- **The FU-133 "CORRECT" verdict lasted one hour.** The 21:00Z platform coordinator refused the
+  #68 unit the set-pass had queued: the body's scope ceiling (longhornManager.resources) had been
+  SHIPPED since FU-112(b)/FU-139 (zero BestEffort live), the reopening kill was Error-137
+  shared-fate (PSI class), and `agent/queued` landed 11 min AFTER the resolve leg recorded the
+  alert clearing — human-engaged issues survive the resolve leg and sit ripe in the pending set.
+  Independence verdict stays right; the queue gate needs a CURRENCY check → FU-133 leg (c).
+  iac-lane BUILT block amended — the earlier "CORRECT" bullet was premature (a firing-set
+  transition is an event, not a measurement — same lesson, other direction).
+- **Platform queue swept to 3**: #110 closed (8da2825 verified live), #101 closed (dmesg window
+  lost — wk-02 REBOOTED 13:26Z today; an sd reset at 18:08Z supports the storage-stall read),
+  #68/#63/#65 closed as the PSI shared-fate class → **FU-155 filed** (research Talos
+  OOMController/PSI tunables vs accept the ~10-day cadence). #117 diagnosed: NIC flap storm
+  (carrier_changes 2→3778, no reboot, flat plug power) — physical cable/port action, operator.
+  Remaining open: #118 (queued, awaits 21:30Z dispatch), #103, #116, #117.
+- **FU-143 archived** on meta-state's evidence (#40 machine-only + #48 via PR#53); the `12e7fcf`
+  hold KEPT — ~zero cost with guaranteed links, still catches genuine abandonment.
+- **circles**: assembly PR#54's review found one gap → child #57 (r1 riding), #42 r4 riding,
+  pr-56 changes-requested round dispatched. Goal lane healthy, self-driving.
+- **oracle**: operator queued goal #174 (20:48Z) + ported FU-129/FU-151 (#173) — goal-decompose
+  (opus) dispatched by the 21:00Z tick, running. ScanWedged fired on it = the FU-145 false-fire
+  shape, left to belts.
+- Watches re-armed (loop watch circles, handoff, 2h heartbeat), verified by process presence.
+
+⚠ **Watch items:** oracle decompose output (children + goal branch → then arm the oracle loop
+watch with that BASE_EXPECT); #118's fixer PR → operator host-side apply; the platform tick ended
+"subscription latched" — if the latch binds ordinary dispatch, FU-088 tier thresholds need the
+revisit the 08-07 entry predicted.

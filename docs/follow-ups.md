@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-155**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-156**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -244,9 +244,9 @@ the block needs pruning, not more headings.
       (0 comments) prints nothing, homelab#101 (has comments) prints only comment blocks. Image
       exonerated (agent-base `2026.8.4-g90b229060e57`: `PAGER`/`GH_PAGER` unset, `gh config pager=`
       empty, gh 2.97.0 — and gh never pages a non-TTY). Interim: circles recipes read
-      `--json title,body,comments` (96fe003); homelab itself never uses the flag. **Next:** port
-      that form to the sleep-tracking + oracle-fleet recipes (PRs there) — the donor for the next
-      `new-stack --from` must already have it. Relates FU-114.
+      `--json title,body,comments` (96fe003); homelab itself never uses the flag. oracle-fleet
+      ported 2026-08-07 (operator, oracle-fleet#173). **Next:** the sleep-tracking recipes —
+      the donor for the next `new-stack --from` must already have it. Relates FU-114.
 
 ### Merge path, CI & deploys — reviewer, auto-merge, first-party bumps, the gates
 
@@ -277,8 +277,9 @@ the block needs pruning, not more headings.
       CI run reverses it. Where the window IS long the same gap cost **5 reviewer sessions on 4
       one-line pins** (homelab#102/#104/#105). Deferred: the lanes that actually burned sessions
       are fixed (openrouter-operator#23, agent-coordinator#10), labels already exist on all three
-      `-iac` repos. **Next:** port `gh pr edit --add-label automerge --add-label dependencies`
-      (OUTSIDE create-if-absent) into sleep-tracking, circles, oracle-fleet, snore-recorder.
+      `-iac` repos. oracle-fleet ported 2026-08-07 (operator, oracle-fleet#173). **Next:** port
+      `gh pr edit --add-label automerge --add-label dependencies` (OUTSIDE create-if-absent)
+      into sleep-tracking, circles, snore-recorder.
 - [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
       The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
       silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
@@ -391,11 +392,14 @@ the block needs pruning, not more headings.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
-      **DISPATCH half BUILT 2026-08-07**, and its first live ≥2-pending set-pass judged CORRECTLY
-      the same day (homelab#68 vs #118: independent, both queued) — mechanism + bounds:
-      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
-      **Remaining:** (a) FILING-side correlation (`group_by = ["alertname"]` keeps related alerts
-      apart).
+      **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass same day: independence verdict
+      RIGHT (homelab#68 vs #118), queue decision WRONG — it queued #68 off a stale body 11 min
+      AFTER the resolve leg recorded its alert clearing; the coordinator refused the unit
+      (premise already shipped). Full autopsy: [`iac-lane.md`](agents/iac-lane.md) §"one root
+      cause, N alert issues" (BUILT block). **Remaining:** (a) FILING-side correlation
+      (`group_by = ["alertname"]` keeps related alerts apart); (c) queue-time CURRENCY gate —
+      `sq_decide` must skip an issue whose alert has a resolve marker / is no longer firing
+      (human-engaged issues survive the resolve leg and go stale in the pending set).
       Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
@@ -514,6 +518,16 @@ the block needs pruning, not more headings.
       flap storm** (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre
       bad-cable class, NOT battery/power. **Next (operator, physical):** reseat/replace
       wk-metal-02's cable / switch port; evidence + counters on homelab#117.
+- [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes.** The FU-112(b)/FU-139
+      kubelet reservations changed who acts first but "reservations don't tune PSI" (FU-139
+      archive): wk-metal-03 (hardened 07-28) was hit again ~10 days later, wk-02 rebooted/reset
+      2026-08-07 — each burst = one Talos OOMController PSI fire killing 4-5 pods in one second,
+      surfacing as N PodSigkilled alerts + responder sessions (homelab#63/#65/#68/#101, all
+      closed as this class). **Next:** research what Talos 1.13 actually exposes for
+      OOMController/PSI thresholds, then operator decision: tune, or accept the ~10-day cadence
+      and teach the responder the shared-fate signature. Relates FU-139/FU-112/FU-082 (archived),
+      ADR-044.
+
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios

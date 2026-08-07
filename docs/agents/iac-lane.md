@@ -125,12 +125,18 @@ set-judged debouncer:
   plus the FU-088 latch and the shared claude semaphore.
 - **Re-entry**: if a linked issue's alert refires after the cause-fix merged, the responder's
   fp/subject belts reopen the SAME issue; removing `agent/linked` re-enters it in the pending set.
-- **First live ≥2-pending set-pass: CORRECT (2026-08-07).** The set was homelab#68
-  (longhorn-manager BestEffort OOM — `tofu/longhorn.tf`) + #118 (circles updater blocked by the
-  `goal/**` ruleset — `tofu/github/repo_rulesets.tf`). Verdict: independent root causes, both
-  queued, and the stated "why" correctly noted #68's body already names its own cause and that
-  its OOM family (#63/#65) was NOT in the set. The FU-133 watch clause on trusting its
-  judgement is satisfied; filing-side correlation (leg a) remains the open half.
+- **First live ≥2-pending set-pass (2026-08-07): independence RIGHT, queueing WRONG — and the
+  coordinator caught it.** The set was homelab#68 + #118; the verdict "independent root causes"
+  was correct. But #68 was queued off its BODY — a 07-28 diagnosis whose scope ceiling
+  (`longhornManager.resources`) had ALREADY shipped (FU-112(b)/FU-139; zero BestEffort pods
+  live) — and `agent/queued` landed 11 minutes AFTER the responder's resolve leg recorded the
+  alert clearing (#68 was human-engaged, so the resolve leg could not close it, and it sat
+  ripe in the pending set). The 21:00Z platform coordinator refused the unit and parked it
+  `agent/blocked` with the full refutation. **Lesson: the set-pass reads bodies, not current
+  state — the queue gate needs a CURRENCY check (FU-133 leg c): skip when the alert has
+  resolved, and treat a body older than its subject's last state change as suspect.** The
+  reopening kill was `Error`-137 shared-fate (the PSI-stall class, FU-139 archive), not a
+  values problem — #63/#65 are the same collateral, not riders on any longhorn-values fix.
 
 **The line is "does it take effect before a human approves?" — not "is it governance"** (operator
 correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent
