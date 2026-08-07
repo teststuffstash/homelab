@@ -8,6 +8,18 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-143** *(archived 2026-08-07)* — **A goal's child cannot close itself — SHIPPED and
+  soak-PROVEN both paths.** The 7-point contract landed 2026-08-06; the first soak failed on its
+  input (a PR that never cited its issue → agent-runtime#32, fixed by #34, carried by
+  `agent-base:2026.8.7-gf77880d417da`). Proof: circles#40 closed MACHINE-ONLY
+  (`queued → in-progress → review → done → closed`, every transition by `homelab-agents-1234[bot]`)
+  and #48 (grandchild) closed via PR#53, re-firing `goal-review` to a "goal met" verdict; #32
+  proved the atypical six-round path earlier. **The `12e7fcf` C4/C5 goal-child hold STAYS by
+  decision** — with finalize guaranteeing the link, linked children close via C6 and never reach
+  it, so its cost is ~zero while it still catches genuine abandonment; the `e704c36` strong-link
+  guard stays regardless. Mechanism: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
+  §A child cannot close itself.
+
 - **FU-111** *(archived 2026-08-07)* — **Native `blockedBy` is the ONLY dependency reader; the
   `Depends-on:` body-line reader is retired.** The soak's bar was met: App-authored native edges
   observed flowing through full lifecycles in real scans (circles #30→#31→#32 closed in dependency

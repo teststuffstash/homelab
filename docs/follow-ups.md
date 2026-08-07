@@ -198,14 +198,6 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
-- [ ] **FU-143** — **A goal's child cannot close itself: POINTER.** Mechanism, the 7-point
-      contract (shipped 2026-08-06), the failed first soak (a PR that never cites its issue —
-      agent-runtime#32): [`docs/agents/issue-authoring.md`](agents/issue-authoring.md)
-      §A child cannot close itself + §The soak FAILED. **UNBLOCKED 2026-08-07:** the #32 fix
-      (agent-runtime#34) merged and the pinned `agent-base:2026.8.7-gf77880d417da` carries it
-      (= agent-runtime master, verified); C4/C5 still holds goal children (`12e7fcf`).
-      **Next:** re-soak on the next goal child, then lift the C4/C5 hold. ⚠ prerequisite:
-      homelab#118 — circles' goal lane is wedged on the goal/** ruleset until that fix lands.
 - [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
       emitter rings only the GLOBAL Sensor, and the global scan skips graduated stacks. Gap,
       measured cost, workaround (`scripts/reflex-now.sh <ns>`), fix shape and the two-readers
@@ -518,8 +510,10 @@ the block needs pruning, not more headings.
 ## Hardware & nodes
 
 - [ ] **FU-032** — Watch: thinkcentre's one 1Gbps link blip since the cable fix (2026-06-11) and
-      wk-metal-02's one unexplained reboot. On recurrence: chase cable/switch-port
-      (thinkcentre) resp. battery/power (wk-metal-02, plug `laptop4`).
+      wk-metal-02's flaky wired link. **2026-08-07 (homelab#117): wk-metal-02 had a 4.5h NIC
+      flap storm** (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre
+      bad-cable class, NOT battery/power. **Next (operator, physical):** reseat/replace
+      wk-metal-02's cable / switch port; evidence + counters on homelab#117.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios

@@ -5,48 +5,12 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 (Keep it short: a bloated meta-state is the token-waste a fresh `/meta-coordinate` bootstrap is
 meant to avoid.)
 
-## ✅ CI RECOVERED 2026-08-07 ~03:25Z — the outage cleared at ~01:00Z, OUR breakage did not
+## ✅ 2026-08-07 ARC wedge: fully closed out (details: the incident doc + FU-150)
 
-**The GitHub outage ended; our CI stayed down five more hours and that part was ours.** At
-22:11:49Z the ARC controller tore down its own listener + ephemeral runner set + the GitHub-side
-scale set and never rebuilt them; the rebuilt listener then chased a deleted `EphemeralRunnerSet`
-(`67zqb` vs the live `dk77x`) and crashlooped every ~6s. Fixed by rebuilding the
-`AutoscalingRunnerSet` (ArgoCD `selfHeal` recreated it) and then the stale `AutoscalingListener`.
-Verified: listener 1/1, 4 runners `2/2 Running`, `in_progress=2`, queues draining.
-Full timeline + root cause: [`docs/incidents/2026-08-07-arc-listener-wedge.md`](../incidents/2026-08-07-arc-listener-wedge.md).
-⚠ **Nothing alerted for those 5h** — `GithubWorkflowRunFailed` needs a run to FAIL and a queued run
-never does; ArgoCD read `Synced/Healthy` the whole time (correct — manifest fine, CR *status* not).
-That gap is **FU-150**. Until it ships, a heartbeat that compares `in_progress` against
-`githubstatus` is the only detector.
-
-⏳ **NOW EXPECTED, verify on the next sweep:** the ~10 queued jobs drain; circles PR#44/#45 and
-circles-iac #30/#31 go green and auto-merge; **agent-runtime PR#37 needs `gh pr merge --admin`**
-once green (no bot will ever approve it — `reviewer.enabled=false` for the platform stack).
-✅ homelab#111's closure condition already met: `update-pr-branch` green at 01:07Z and 01:11Z.
-
-## ⛔ SUPERSEDED — the outage section below is kept only for the pre-recovery reasoning
-
-`githubstatus.com/api/v2/components.json` → **`Actions: major_outage`**. GitHub's 18:11Z update:
-*"Workflow runs are still failing or delayed in starting, and some queued jobs may time out.
-Customers using self-hosted runners may see errors or rate limiting when runners register."*
-
-Measured here: **`in_progress=0` in every repo** against `queued` 5 (circles) / 1 (agent-runtime) /
-2 (homelab), while **4 ARC runner pods sit `2/2 Running` aged 42m–98m**. Ephemeral runners exit
-after one job, so a 98-minute-old runner has acquired **nothing**.
-
-**Do NOT re-run anything** — re-runs only deepen the dead queue. Everything below is waiting on
-this and needs no action until Actions recovers:
-
-- circles **PR#44** (#41 script-escape) and **PR#45** (#18 evidence chain) — both armed into
-  `goal/29-p0-complete`, both `ci` pending. They merge themselves when CI returns.
-- circles-iac **#30/#31** (specs-pr routes for #44/#45) — same.
-- agent-runtime **PR#37** (test surface + fixer lane + the #109 deploy-pin label fix) — `ci`/`unit`
-  pending. ⚠ `reviewer.enabled=false` for the `platform` stack, so **no bot will ever approve it**;
-  merge it yourself with `gh pr merge --admin` once green (the jail IS the OrganizationAdmin bypass).
-- circles **#42** and **#19** are correctly held on ADR-097 footprint overlap, not stuck.
-
-**First action on recovery:** confirm `oracle-fleet/update-pr-branch` completes one green scheduled
-run, then **close homelab#111**.
+All post-recovery expectations verified by the 2026-08-07 ~21:00Z meta session: queues drained,
+circles PR#44/#45 + circles-iac #30/#31 merged, agent-runtime PR#37 admin-merged 03:48Z,
+`oracle-fleet/update-pr-branch` green on schedule (20:55Z success). homelab#111 closed. FU-150
+carries the ours-side alert gap; the incident doc carries the story.
 
 ## ⏳ OPERATOR ACTION PENDING — first-party deploy pins still need one `tofu apply`
 
@@ -81,42 +45,55 @@ until the reset epoch unless someone pushes one 2xx through: port-forward
 `Authorization: Bearer ref:agent-coordinator/coordinator-claude` (proxy injects token + oauth
 beta). Verify via `GET /anthropic-limit`.
 
-## ⏳ BEFORE the #29 assembly PR merges — review the goal branch as ONE artifact
+## ✅ The assembly review DID cover the whole branch (watch satisfied 2026-08-07)
 
-The circles jail flagged it (2026-08-07) and PR#25 is the precedent: the bot review covered CODE
-only and the 13 spec files were judged separately by a meta comment. When `goal/29-p0-complete` →
-master opens: confirm the reviewer runs the review-goal brief (`REVIEW_GOAL_MODEL`, reviewer
-`goalModel` knob) against the WHOLE branch diff — specs included — not just the last child's
-delta. If the review lands code-only again, that is the FU to file (grep first: `review-goal`,
-`assembly`). Related watch, filed this session: **FU-154** (rounds reset on PR re-creation).
+PR#54 (`goal/29-p0-complete` → master) got a real assembly review: the 20:31Z goal-review
+arbitration records the `homelab-reviewer` verdict confirming the coverage map (91/91 CIR-* ids
+owned/deferred, CI exercises the kind gate) — specs included, NOT the PR#25 code-only failure
+mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the related open item.
 
-## Where the goal stands (2026-08-07 09:15Z)
+## Where goal #29 stands (2026-08-07 ~21:00Z)
 
-- **circles#19 / PR#51** — the four-round mystery was a PLATFORM fault, now fixed: the docker.io
-  mirror served `HTTP 200 / 0 bytes` for a live layer (dangling link, GC `--delete-untagged` on a
-  digest-pinned base). Link removed + mirror restarted → full 3642247 bytes. CI re-running.
-  Root cause + the capacity tradeoff it forces: **homelab#116**.
-- **circles#42** — round 1 was wedged in a repetition loop from minute 10 (65 repeats, nothing
-  banked); pod killed, issue re-queued by hand (FU-143 containment). Evidence on agent-runtime#13.
-- **#18/#41/#30/#31/#32/#40 done**; #19 and #42 are the remainder of goal #29.
+- **Assembly PR#54 open, CHANGES_REQUESTED**: the review found ONE blocking gap, routed as child
+  **#57** (bake step into the real Docker image build) — worker r1 riding since 20:36Z.
+- **#42 r4 riding** (20:52Z; its 20:21Z re-queue was the pre-sync debouncer bug, but dispatch is
+  legitimate — the ADR-097 hold no longer bites since #19 closed). **pr-56** (#42's earlier PR)
+  got a changes-requested round dispatched 21:0xZ.
+- **#19 done** (PR#51 poll-until-ready merged). #30/#31/#32/#40/#18/#41/#48 done.
+- ⚠ PR#54 sits **BEHIND** and `update-pr-branch` cannot update a `goal/**`-headed PR —
+  **homelab#118** (queued, platform fixer) is the fix; its PR needs a HOST-side
+  `github-tofu apply`. Not blocking while children ride; becomes blocking when #54 arms.
 
-## Platform queue (homelab has no fixer loop — the meta-coordinator IS its fixer)
+## Platform queue (homelab issues — the platform fixer lane owns queued ones; meta owns the rest)
 
-- **#111** — ✅ **CLOSED 2026-08-06** as not-ours (outage, not `maxRunners: 4` capacity — the
-  responder's diagnosis was corrected). Two class fixes came out of it: `ecb74bb` (the prompt now
-  names the saturated-vs-broken distinction) and `6affc63` (subject dedup — it had taken THREE
-  sonnet triages in 33 min). ⚠ `maxRunners: 4` is neither exonerated nor indicted.
-  ⏳ **Post-recovery check, tracked HERE not there:** one green `oracle-fleet/update-pr-branch`
-  scheduled run. If it fails again after Actions recovers **with `in_progress > 0` elsewhere**,
-  that is a real capacity question → file a FRESH issue, do not reopen #111.
-  ⚠ **A human comment on a responder issue disables its auto-close** (the resolve leg closes only
-  when no human engaged) — so every issue you comment on becomes yours to close by hand.
-- **#103** — `NodeSystemSaturation` on wk-01. OPEN, containment shipped (`fc7e9fb`). **This goal is
-  NOT its test** (the goal lane serializes on `Depends-on:`; wk-01 sat at 16% CPU mid-rollout). The
-  real shape is concurrent COORDINATOR Jobs across stacks/items. ⚠ Do NOT tighten
-  `activeDeadlineSeconds` (already 1800; legitimate tail reaches 1458s, so 600s kills ~9 real
-  scans/week). ⚠ Do NOT implement the issue's "reject `unit=-`" candidate — `-` is the legitimate
-  full-scan default.
+- **#118 + #68** — QUEUED by the first live fix-debounce set-pass (20:32Z, judged independent —
+  correctly). The platform coordinate loop dispatches fixers. ⚠ Both fixes are TOFU surfaces:
+  #68 (`tofu/longhorn.tf`) the JAIL can apply after merge; #118 (`tofu/github/repo_rulesets.tf`)
+  needs a **HOST-side `github-tofu apply`** — flag it to the operator when the PR merges.
+  ⚠ Until #118 applies, `circles/update-pr-branch` fails every ~15min on PR#54
+  (`GithubWorkflowRunFailed` refires are THIS, not news).
+- **#117** — ✅ diagnosed 2026-08-07 (meta comment): NIC link-flap storm on wk-metal-02
+  (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre bad-cable class.
+  **Operator, physical:** reseat/replace cable / switch port. FU-032 updated.
+- **#103** — `NodeSystemSaturation` on wk-01. OPEN, containment shipped (`fc7e9fb`). Real shape =
+  concurrent COORDINATOR Jobs across stacks/items. ⚠ Do NOT tighten `activeDeadlineSeconds`
+  (1800 is right; tail reaches 1458s). ⚠ Do NOT implement "reject `unit=-`" — `-` is the
+  legitimate full-scan default. (Debouncer re-queued it 20:21Z pre-scoping-fix; harmless.)
+- **#110 / #101 / #65 / #63 / #116** — untouched this session: #63 rides #68's fix, #65
+  deliberately `unsure`, #116 is the mirror-capacity decision (operator: grow the volume per the
+  oversize-caches doctrine), #110/#101 await triage on an ordinary day.
+- ⚠ **A human comment on a responder issue disables its auto-close** — every issue you comment on
+  becomes yours to close by hand (#117 is now such).
+
+## Oracle goal lane — STARTED 2026-08-07 20:48Z
+
+Operator queued **oracle-fleet#174** (goal: act resolution without knowing the lyhend;
+task/goal + agent-fix + agent/queued, labeled by RasmusSoot 20:48:52Z). The human-labelling
+doorbell gap (FU-144) means the 21:00Z `coordinate-oracle` cron is the pickup — goal-decompose
+(opus, `1b4bda5`) should fire there. #175/#176 are follow-on goals, NOT queued. 🌱 #160 + #170
+await the operator's FU-090 gate. PR#171/#172/#173 merged 20:37–42Z (goal-lane CI precondition +
+TRACKS wording + the FU-129/FU-151 recipe ports — oracle-fleet is now the up-to-date donor).
+⏳ Once decompose names the goal branch, arm the oracle loop watch with that `BASE_EXPECT`.
 
 ## ✅ RESPONDER BUDGET — live, binding, and it fired within minutes (ADR-099, FU-149)
 
@@ -152,26 +129,17 @@ before the next busy day.
 
 ## LIVE CHAIN — circles#29, the P0-complete goal
 
-**Terminus:** an assembly PR `goal/29-p0-complete` → master, ARMED, blocked by the CODEOWNERS gate
-on `/specs/`, waiting on an OrgAdmin merge. **If it stops anywhere short of that, treat it as a
-platform bug, not a model failure.** `goal-review` re-judges on every child closure and opens the
-assembly PR itself when the goal is met.
-
-Done so far: #30, #31, #32, #40 all merged + closed. In flight: #41 (PR#44), #18 (PR#45). Queued/
-held: #42, #19. Harvest sprouts #38 (inert, test hygiene outside P0 scope) and #33/#34/#35 (inert
-deferrals) await the operator's FU-090 gate.
+**Terminus:** assembly PR#54 (`goal/29-p0-complete` → master) merges after the CODEOWNERS gate
+on `/specs/` — an OrgAdmin merge. **If it stops anywhere short of that, treat it as a platform
+bug, not a model failure.** Current state: "Where goal #29 stands" above. Harvest sprouts #38 +
+#33/#34/#35 stay inert awaiting the operator's FU-090 gate.
 
 **Work-vs-wait ledger** lives in [`observability-and-retro.md`](observability-and-retro.md)
 §Part A″ — keep appending there, not here.
 
-✅ **FU-143 is fully proven and needs no more soaking.** Both paths now have live evidence: #32
-(six rounds → ended `agent/in-progress`, the atypical path) and **#40 (one clean round → ended
-`agent/review`, the REPRESENTATIVE path)**, which closed machine-only — `agent/queued → in-progress
-→ review → done → closed`, every transition by `homelab-agents-1234[bot]`, no meta hand-close.
-⏳ **Remaining bookkeeping:** archive FU-143, and decide whether the `12e7fcf` C4/C5 goal-child
-containment can be RELAXED — it exists because "no open PR" could not separate merged-but-unlinked
-from abandoned, and finalize's guaranteed issue link now removes that ambiguity. The `e704c36`
-strong-link guard STAYS regardless.
+✅ **FU-143: ARCHIVED 2026-08-07** (proof: #40 machine-only closure + #48 via PR#53; the
+`12e7fcf` hold KEPT by decision — ~zero cost now links are guaranteed, still catches genuine
+abandonment). Archive entry has the detail.
 
 ## Frozen — from goal #17, do not touch (the comparison is the operator's)
 
