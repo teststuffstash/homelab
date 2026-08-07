@@ -2596,3 +2596,36 @@ the deadline before diagnosing the wait.**
 answers that is Alertmanager's `state` + `inhibitedBy`
 (`curl -s 'http://192.168.40.14:9093/api/v2/alerts?inhibited=true'`). An unroutable alert is worse
 than no alert, because it reads as cover. Recorded in meta-state's durable warnings and ADR-099.
+
+### 2026-08-07 (01:05Z heartbeat) — the alert outlived its own day
+**Condition:** the 2-hourly backstop sweep, doing exactly the job it exists for. Nothing had
+changed, no watch had fired, and the sweep found a bug anyway.
+
+`ResponderTriageBudgetExhausted` was still reporting *"no further LLM triage today"* **65 minutes
+into a day whose budget had reset to 0/12.** The latch was innocent — the ledger is date-keyed, so
+the reset happened correctly at 00:00Z with nothing to run. **The ALERT was reading a 23:21Z sample
+and the 3h freshness gate waved it through.**
+
+**Push age was the wrong invariant in BOTH directions, which is why the bug survived review.**
+Within a day a stale sample is still ACCURATE — the session count only grows, so an exhausted budget
+stays exhausted whether or not anything re-pushes. Across midnight a FRESH-looking sample is
+worthless. Freshness and validity are different questions, and the gate answered the wrong one.
+Fix: the script publishes `responder_triage_day_start` (00:00Z epoch of the day it computed) and the
+alert gates on `(time() - responder_triage_day_start) < 86400` — self-clearing at midnight with no
+push required, which is what the old gate only appeared to do. Checked the PromQL PARSES against
+live Prometheus rather than assuming `scalar - vector` is legal, and that the payload really carries
+`1786060800` = 2026-08-07T00:00:00Z. Cleared 01:10:48Z, confirmed by the watch that had been
+reporting it firing.
+
+**Third defect in ONE alert, each found by watching rather than reasoning:** `severity: info`
+silently suppressed by the stock InfoInhibitor (dispatched to nobody for 10 minutes); a liveness
+probe of my own that false-alarmed on a process count that legitimately flaps 6↔7 (`meta-watch-loop`
+spawns a transient subshell); and a sample outliving its day. **Every one of them looked correct at
+the layer I had checked** — Prometheus said `firing`, `ps` said a number, the gate said `< 10800`.
+The alerting path has more layers than it appears to, and each answers a different question:
+Prometheus answers "did the rule match", Alertmanager answers "was anyone told", and only the
+day-gate answers "is this still true".
+
+⏳ Still unexercised: the alert's own `triage: none` guard. Every delivery so far was stopped by the
+budget gate, which runs first by design; after midnight nothing has fired at all. It remains a
+spot-check in meta-state, not a suspicion.
