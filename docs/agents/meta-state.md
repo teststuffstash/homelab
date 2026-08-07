@@ -84,6 +84,29 @@ untouched — a bot approval cannot satisfy an OWNED path, so only the CODEOWNER
 bypass). #112 was merged that way 05:59Z — verified first that `f77880d417da` is agent-runtime's
 master HEAD and that `build-image` succeeded on that sha, so it was not a stale tag.
 
+## 🔴 SUBSCRIPTION LATCH ACTIVE 2026-08-07 09:15Z — the loop is NOT dispatching
+
+`7d = 0.95` reached the `ANTHROPIC_UTIL_THRESHOLD_7D` and the FU-088 latch is deferring every
+subscription dispatch: `subscription limited (FU-088, utilization-7d, tier=dispatch): 5h=0.1
+7d=0.95`. Scans still run and report; no coordinator/reviewer session spawns. **Level-triggered —
+it resumes on its own as the 7d window rolls; nothing needs re-arming.**
+⚠ **Do NOT "fix" the thresholds** (operator ruling 2026-08-06). ⚠ Worker rides are unaffected
+(OpenRouter), so the loop can look busy while its judgement layer is stopped — that asymmetry is
+the thing to remember when reading a quiet board.
+⚠ **A long meta session is a direct competitor for this pool.** This one ran ~14h and contributed;
+clearing is the cheapest lever available. The operator's other lever is suspending non-critical
+reflexes (retro, model-scout).
+
+## Where the goal stands (2026-08-07 09:15Z)
+
+- **circles#19 / PR#51** — the four-round mystery was a PLATFORM fault, now fixed: the docker.io
+  mirror served `HTTP 200 / 0 bytes` for a live layer (dangling link, GC `--delete-untagged` on a
+  digest-pinned base). Link removed + mirror restarted → full 3642247 bytes. CI re-running.
+  Root cause + the capacity tradeoff it forces: **homelab#116**.
+- **circles#42** — round 1 was wedged in a repetition loop from minute 10 (65 repeats, nothing
+  banked); pod killed, issue re-queued by hand (FU-143 containment). Evidence on agent-runtime#13.
+- **#18/#41/#30/#31/#32/#40 done**; #19 and #42 are the remainder of goal #29.
+
 ## Platform queue (homelab has no fixer loop — the meta-coordinator IS its fixer)
 
 - **#111** — ✅ **CLOSED 2026-08-06** as not-ours (outage, not `maxRunners: 4` capacity — the
