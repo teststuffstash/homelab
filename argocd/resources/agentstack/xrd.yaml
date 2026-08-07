@@ -150,6 +150,33 @@ spec:
                       default: 0.99
                       description: "30-day availability target; 1 - this = the error budget."
                   required: [endpoint]
+                prober:
+                  type: object
+                  description: >-
+                    FU-102 — the agentic canary (roles.md §prober), scheduled leg. NO default on
+                    this object ON PURPOSE: an omitted defaulted object is stamped into the
+                    stored claim by the API server and permanently OutOfSyncs every claim file
+                    that does not carry it (the 2026-07-16 claudeTier lesson). Absent = no
+                    prober rendered. When enabled: a probe-<stack> CronWorkflow in the loop ns
+                    runs the brief at <mainRepo>/.agents/probe.md on the SUBSCRIPTION
+                    (claude/<model>, operator direction 2026-08-07) — prod-read, REPORT-ONLY BY
+                    CONSTRUCTION (the pod holds no git/gh credential). Brief LOCATION is the
+                    only contract; its content shape deliberately waits for a second stack's
+                    probe (the ≥2-projects rule). Requires loop.perStack (renders into the loop
+                    ns). Deep post-deploy acceptance composes with FU-044; the sync-succeeded
+                    edge is FU-102's remaining machinery.
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Render the probe cron. Omit the whole block to keep the stack prober-free.
+                    schedule:
+                      type: string
+                      default: "41 */6 * * *"
+                      description: Cron for the scheduled leg (Argo CronWorkflow syntax, UTC).
+                    model:
+                      type: string
+                      default: haiku
+                      description: Claude model alias for the probe session (subscription rail).
                 loop:
                   type: object
                   default: {}
