@@ -31,10 +31,26 @@ resource "github_repository_ruleset" "required_checks" {
   bypass_actors {
     # actor_id noise: for OrganizationAdmin the API's read-back is INCONSISTENT — measured
     # 2026-07-25, four rulesets read 0 while ten read 1 for the identical write. No literal
-    # converges the fleet, so the lifecycle block below ignores bypass_actors drift entirely;
+    # converges the fleet, so the lifecycle block below ignores this ONE attribute's drift;
     # 1 stays as the create value (every existing ruleset was created with it successfully).
     actor_id    = 1
     actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
+  # The homelab-merge App (FU-041 updater) bypasses — added 2026-08-07 for #118. `update-pr-branch`
+  # pushes a merge commit straight onto a PR's HEAD branch via the update-branch API, and since the
+  # goal lane went live (2026-08-06) a head branch can itself be `goal/**`, i.e. covered here. A bare
+  # push carries no check run, so required-status-checks rejects it: "Required status check 'ci' is
+  # expected" — one half of the observed 422 (the other half is required-approval-goal below).
+  # ⚠ A ruleset bypass is per-RULESET, not per-ref, so this also waives required-checks on
+  # ~DEFAULT_BRANCH for this App. Bounded, and checked before adding: homelab-merge still cannot
+  # reach master, because the ORG structural ruleset (org_ruleset.tf) requires a PR there and does
+  # not list it, and required-approval below still demands an approving review it cannot waive.
+  # This is NOT the agents App — that one stays off every bypass list so agent PRs must go green.
+  bypass_actors {
+    actor_id    = tonumber(var.merge_gh_app_id) # Integration actor_id = the GitHub App id
+    actor_type  = "Integration"
     bypass_mode = "always"
   }
 
@@ -54,7 +70,13 @@ resource "github_repository_ruleset" "required_checks" {
   lifecycle {
     # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
     # without this, every plan re-diffs whichever cohort disagrees with the literal.
-    ignore_changes = [bypass_actors]
+    # NARROWED 2026-08-07 (#118) from the whole `bypass_actors` list to that one attribute: ignoring
+    # the list wholesale made every LATER bypass-actor edit a SILENT NO-OP on already-created
+    # rulesets — the Integration actor above would never have been reconciled. Safe to narrow,
+    # because this ignore only ever suppressed PLAN NOISE: the value Terraform would write is the
+    # config value, which is what we want live anyway, so the worst case of narrowing is a diff
+    # that re-asserts actor_id = 1 — never a wrong live state.
+    ignore_changes = [bypass_actors[0].actor_id]
   }
 
 }
@@ -105,6 +127,10 @@ resource "github_repository_ruleset" "required_approval" {
   # (No homelab-deploy App bypass here: sleep-iac isn't in this ruleset at all — require_approval=false —
   # because a GitHub App's Integration bypass does NOT waive the "required approvals" rule on a merge, so
   # bypassing was never going to let the App's deploy-bump merge through. CI gates the bump instead.)
+  #
+  # (And no homelab-merge App bypass here either, unlike its goal/** twin below — DELIBERATE, not an
+  # oversight of #118. The updater only ever pushes to a PR's HEAD branch, and a head branch is never
+  # master; the master-targeted approval gate has no legitimate reason to be waivable by any App.)
 
   rules {
     pull_request {
@@ -123,7 +149,10 @@ resource "github_repository_ruleset" "required_approval" {
   lifecycle {
     # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
     # without this, every plan re-diffs whichever cohort disagrees with the literal.
-    ignore_changes = [bypass_actors]
+    # NARROWED 2026-08-07 (#118) for the same reason as its two siblings — no bypass-actor change
+    # is needed on THIS ruleset today, but leaving one wholesale ignore in the file leaves the
+    # silent-no-op trap armed for whoever edits it next. All three now ignore only the noisy field.
+    ignore_changes = [bypass_actors[0].actor_id]
   }
 
 }
@@ -156,10 +185,29 @@ resource "github_repository_ruleset" "required_approval_goal" {
   bypass_actors {
     # actor_id noise: for OrganizationAdmin the API's read-back is INCONSISTENT — measured
     # 2026-07-25, four rulesets read 0 while ten read 1 for the identical write. No literal
-    # converges the fleet, so the lifecycle block below ignores bypass_actors drift entirely;
+    # converges the fleet, so the lifecycle block below ignores this ONE attribute's drift;
     # 1 stays as the create value (every existing ruleset was created with it successfully).
     actor_id    = 1
     actor_type  = "OrganizationAdmin"
+    bypass_mode = "always"
+  }
+
+  # The homelab-merge App (FU-041 updater) bypasses — added 2026-08-07 for #118, the other half of
+  # the same 422. This ruleset's pull_request rule means "changes to goal/** must come via a
+  # reviewed PR", which by construction forbids the update-branch API's direct push onto a PR head
+  # branch that IS a goal branch (circles PR #54, head `goal/29-p0-complete`). Latent since
+  # 2026-08-06; it bit the first time the FIFO queue reached such a PR.
+  # Why this is not the caveat recorded on required-approval above: THAT warning is about GitHub
+  # refusing to let an App's Integration bypass waive required approvals when MERGING a pull
+  # request. This is a raw ref update — a different enforcement path, which a bypass actor does
+  # cover. Confirm empirically after apply in the repo's Rule Insights: the App's update-branch
+  # push should read "Bypass", not "Fail". If it reads Fail, the actor entry is wrong (wrong id),
+  # not the approach.
+  # Note this does NOT let homelab-merge merge a goal PR or approve anything — the App has no
+  # approval permission and the rule above still needs the reviewer bot's review.
+  bypass_actors {
+    actor_id    = tonumber(var.merge_gh_app_id) # Integration actor_id = the GitHub App id
+    actor_type  = "Integration"
     bypass_mode = "always"
   }
 
@@ -176,7 +224,9 @@ resource "github_repository_ruleset" "required_approval_goal" {
   lifecycle {
     # the OrganizationAdmin actor_id read-back is nondeterministic (see bypass_actors note) —
     # without this, every plan re-diffs whichever cohort disagrees with the literal.
-    ignore_changes = [bypass_actors]
+    # NARROWED 2026-08-07 (#118) — see the identical note on required_checks: ignoring the whole
+    # list made any later bypass-actor edit a silent no-op on already-created rulesets.
+    ignore_changes = [bypass_actors[0].actor_id]
   }
 
 }
