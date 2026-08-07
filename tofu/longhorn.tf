@@ -40,6 +40,11 @@ locals {
   # Longhorn node CR with tags, like the Optane pattern) so no untagged default disk appears.
   longhorn_bulk_zones = {
     "wk-metal-01" = "wk-metal-01" # 500G MX500; ephemeral/compute-tier node (tainted, wipe-on-PXE)
+    "wk-metal-04" = "wk-metal-04" # 500G SATA; same tier/shape (2026-08-07) — the third bulk zone.
+    # Added because the bulk tier was a PAIR, and one half (wk-02) is a thin-provisioned VM disk on
+    # a pve pool that had run to 99.14%. Two disks also meant every 2-replica bulk volume pinned one
+    # copy to each, so wk-02 carried 298.5G of promises on 253.3G. A third zone gives the scheduler
+    # somewhere to put a replica that is neither wk-02 nor the other laptop.
   }
 }
 
