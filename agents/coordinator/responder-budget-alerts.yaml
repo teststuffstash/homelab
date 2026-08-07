@@ -20,16 +20,22 @@ spec:
   groups:
     - name: responder-budget
       rules:
-        # Freshness gate, same pattern as AgentRunInfraDeathBurst: the pushgateway serves every
-        # pushed group FOREVER, so without it yesterday's "exhausted" would still be firing this
-        # morning. The responder pushes on EVERY invocation, and Alertmanager's repeat_interval is
-        # ≤3h, so a fresh push is guaranteed for as long as anything is actually firing. When
-        # nothing fires, the series goes stale and this correctly stops — "triage is off" is only
-        # interesting while there is something to triage.
+        # DAY gate, not a freshness gate — the pushgateway serves every pushed group FOREVER, so
+        # something must stop yesterday's "exhausted" from firing into today.
+        # ⚠ The first cut used push age < 3h and was WRONG, live on 2026-08-07 01:05Z: the last
+        # responder run was 23:21Z, so a 1h44m-old sample sailed through the freshness window and
+        # the alert reported "no further triage today" 65 minutes into a day whose budget had
+        # already reset to 0/12. Push age is the wrong invariant in BOTH directions — within a day
+        # a stale sample is still accurate (the session count only grows, so an exhausted budget
+        # stays exhausted whether or not anything re-pushes), and across midnight a FRESH-looking
+        # one is worthless. What actually matters is whether the sample describes the day we are
+        # in, so the script publishes the 00:00Z epoch of its own day and this compares against it.
+        # Self-clearing at midnight with no push required, which is what the old gate only pretended
+        # to do.
         - alert: ResponderTriageBudgetExhausted
           expr: |
             responder_triage_blocked == 1
-              and on (job) (time() - push_time_seconds{job="responder_budget"}) < 10800
+              and on (job) (time() - responder_triage_day_start) < 86400
           for: 5m
           labels:
             # ⚠ severity is `warning`, NOT `info`, and that is not a judgement about urgency.

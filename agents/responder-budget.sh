@@ -33,6 +33,13 @@ CM="${RESPONDER_LEDGER_CM:-responder-seen}"
 MAX="${RESPONDER_DAILY_MAX:-12}"
 PGW="${PUSHGATEWAY-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 TODAY="$(date -u +%Y-%m-%d)"
+# 00:00Z of the day these numbers describe. Pushed alongside them so the ALERT can tell a stale
+# sample from a current one across the date boundary — the metrics only refresh when the responder
+# runs, and within a day a stale sample is still ACCURATE (the session count only ever grows), but
+# one minute past midnight it is flatly wrong. Found live 2026-08-07 01:05Z: the last push was
+# 23:21Z, so the alert was still reporting "no further triage today" 65 minutes into a day whose
+# budget had reset to 0/12.
+DAY_START=$(( $(date -u +%s) / 86400 * 86400 ))
 
 # Push is best-effort and must never change the verdict: a dead pushgateway is an observability
 # fault, not a budget fault. Freshness matters to the alert, so we push on every invocation.
@@ -54,6 +61,9 @@ push() { # $1=used $2=remaining $3=blocked $4=probe_ok
     "# TYPE responder_triage_probe_ok gauge" \
     "# HELP responder_triage_probe_ok 0 = the budget could not be read, so triage is blocked fail-closed." \
     "responder_triage_probe_ok $4" \
+    "# TYPE responder_triage_day_start gauge" \
+    "# HELP responder_triage_day_start Unix epoch of 00:00Z of the UTC day these numbers describe — the alert gates on it so a sample cannot outlive its day." \
+    "responder_triage_day_start $DAY_START" \
     | curl -fsS --max-time 5 --data-binary @- "$PGW/metrics/job/responder_budget" >/dev/null 2>&1 \
     || echo "responder-budget: pushgateway unreachable ($PGW) — verdict unaffected, dashboard will go stale" >&2
 }
