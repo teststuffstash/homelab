@@ -7,6 +7,59 @@ Max-power (stress) measurements of homelab nodes, taken at the wall via the Tuya
 (`sensor.plug_<box>_power`, see `homeassistant/ha-config/packages/power.yaml`) while all CPU cores
 are maxed. Reproducible.
 
+> ⚠ **The plugs are DEAD as of 2026-08-07 and the method below cannot be run.** Tracked by FU-038
+> (which is where the local-polling fix lives; this section is the evidence). Every Tuya entity
+> froze between 2026-07-29 and 2026-08-01 — cloud-side `API_QPS_LIMIT_OR_DEGRADE`, so
+> `tuya_sharing`'s MQTT channel never connects. **The entities still report `available=1` and serve
+> their last value**, which is why nine days passed unnoticed and why a "measurement" taken today
+> returns a plausible constant. Reloading the config entry republishes the cached value once
+> (`last_updated` moves, the number does not) — not a fix. `HomeAssistantPowerSensorStale`
+> (`argocd/resources/homeassistant-alerts/`) now catches this. Existing results below were taken
+> while the plugs worked and remain valid; NEW wall measurements are blocked until Tuya is
+> restored or the plugs move to local control.
+
+## The pve GPU: −6 °C on the NVMe for nothing (2026-08-07)
+
+pve carries a **GeForce 9600 GT** (G94, 2008) that cannot be removed — the X99-P4 board refuses to
+POST without it — and it sits between the CPU cooler and the M.2, so its heat rises straight onto
+the NVMe. It ran with **`driver=none`**, which is the worst case: no driver means no power
+management at all, so it idled at power-on clocks doing nothing but holding a console.
+
+Wall watts were unmeasurable (plugs dead, above), so the experiment used NVMe temperature as the
+proxy and **CPU package power via `intel-rapl` as a control** — the GPU is not in that domain, so a
+flat CPU figure rules out load as the explanation.
+
+| metric | baseline (`D0`) | `vfio-pci` (`D3hot`) | delta |
+|---|---|---|---|
+| NVMe sensor 1 (controller) | 75.8 °C (n=20, 71–78) | **69.8 °C** (n=26, 69–72) | **−6.0** |
+| NVMe composite | 54.4 °C | 48.8 °C | −5.6 |
+| NVMe sensor 2 | 47.2 °C | 42.8 °C | −4.4 |
+| CPU package (control) | 22.6 W | 22.1 W | −0.5 |
+
+**What did NOT work:** `power/control = auto`. `runtime_status` flips to `suspended` and it looks
+like a win, but `power_state` stays `D0` and PMCSR reads `0000` — with no driver bound the PCI core
+marks the device suspended without transitioning the D-state. **Always confirm with PMCSR, not
+`runtime_status`.**
+
+**What worked:** binding the card to `vfio-pci`, which actively idles it into D3hot
+(`PMCSR=0003`). Applied at runtime and **deliberately NOT persisted** — pve is not
+config-managed, so a reboot restores the stock state rather than leaving undocumented drift:
+
+```bash
+modprobe vfio-pci
+echo vfio-pci > /sys/bus/pci/devices/0000:04:00.0/driver_override
+echo 0000:04:00.0 > /sys/bus/pci/drivers/vfio-pci/bind
+cat /sys/bus/pci/devices/0000:04:00.0/power_state   # want: D3hot
+setpci -s 04:00.0 CAP_PM+4.w                        # want: 0003
+```
+
+Safe on this box: the card is `boot_vga=1` but nothing was using it (no `/proc/fb` entry, no
+driver), firmware still drives POST, and all four VMs kept running throughout. ⚠ Caveat on the
+numbers: the baseline was taken shortly after heavy storage IO, so some residual cooling may be
+folded into the delta — but the drop is consistent across all three NVMe sensors and the CPU
+control is flat. The **watt** figure remains unmeasured; a 9600 GT idling at full clocks is
+plausibly tens of watts of pve's ~128 W, but that is an expectation, not a measurement.
+
 ## Method
 
 Talos nodes have no shell, so "prime95" is a **stress-ng pod pinned to the node** (`nodeName`,

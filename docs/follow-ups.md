@@ -531,15 +531,16 @@ the block needs pruning, not more headings.
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
       (which would also adopt the audit user, `scripts/aws-bootstrap-audit-user.sh`).
-- [ ] **FU-038** — Tuya plugs: drop the cloud dependency for local-API polling, which also kills
-      the `/10` power correction (`homeassistant/ha-config/packages/power.yaml`). DIRECTION
-      (investigated 2026-07-28): standardize on HA-local WiFi plugs via `make-all/tuya-local` (or
-      the `xZetsubou/hass-localtuya` fork) — one-time `device_id`+`local_key` extraction (free Tuya
-      IoT project / `tinytuya wizard`), then pure LAN polling, no soldering, true-unit DPs.
-      Reflashing to ESPHome-LibreTiny / OpenBeken (BK7231) stays an OPTIONAL per-device upgrade.
-      Same path for the 2 new metal nodes — buy cheap WiFi metering plugs (SonOff via SonoffLAN or
-      Matter, or Tuya via tuya-local; block cloud egress at OPNsense), NOT the FU-034 Zigbee
-      coordinator.
+- [ ] **FU-038** — **Tuya plugs → local polling: POINTER. NO LONGER OPTIONAL — the cloud already
+      failed.** Every plug frozen since 2026-07-29 (`API_QPS_LIMIT_OR_DEGRADE`), and
+      `switch.konditsioneer_socket` with them, so ADR-013 remote power for the ThinkCentre is out
+      too — a recovery-path outage, not just telemetry. Outage, suspected trigger, the −6 °C GPU
+      experiment it blocked and the freshness alert now guarding it:
+      [`power-measurements.md`](power-measurements.md).
+      **Direction unchanged:** `tuya-local`/`hass-localtuya`, one-time `device_id`+`local_key`
+      (free Tuya IoT project), then LAN polling; BK7231 reflash optional. Same path for the 2 new
+      metal nodes, NOT the FU-034 Zigbee coordinator.
+      **Next:** operator picks re-auth vs local keys vs reflash; then drop the `/10` correction.
 ---
 
 See also `ROADMAP.md` → "Backlog / parked features" (self-hosted SLSA L3 build-out, bare-metal node
