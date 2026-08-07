@@ -65,6 +65,36 @@ cannot key on the repo. It keys on the **path**.
 | `agents/**`, `policy/**`, `tofu/github/**`, `tofu/cloudflare/**` | the loop's own machinery | ✅ | **codeowner** — see the pre-merge rule below |
 | `.github/**`, `devbox.json`, CI-invoked `scripts/**`, `.agents/**` | executes BEFORE review | ❌ **never** | operator only |
 
+### ⚠ The trap: one root cause, N alert issues, N concurrent fixers
+
+**Alert issues arrive one-per-fingerprint, so a single underlying fault becomes several issues that
+look independent.** Queue them the way ordinary work is queued — one at a time, up to
+`REPO_MAX_WIP` — and you get **three fixers attacking three symptoms of one cause**, each authoring
+a PR against a different file, none aware of the others.
+
+**ADR-097's footprint hold does NOT catch this.** It holds a queued issue whose declared `Touches:`
+overlaps an in-progress one — it keys on PATHS. Same-cause issues routinely declare *different*
+paths. Live on 2026-08-07, all three open and mutually non-overlapping:
+
+| issue | `Touches:` |
+|---|---|
+| #103 `NodeSystemSaturation` on wk-01 | `agents/coordinator/*-argo.yaml` |
+| #110 `PodSigkilled` bucket-sync OOM | `agents/coordinator/transcripts-viewer.yaml` |
+| #111 `GithubWorkflowRunFailed` | `argocd/platform/arc-runners.yaml` |
+
+#103 and #110 are both memory-pressure stories; nothing in the footprint gate relates them, so both
+are dispatchable at once. The three fixes would then be authored against a symptom each, and the
+one that is actually the cause gets no more attention than the two that are downstream of it.
+
+**So alert issues need a different queueing rule from ordinary work: look at ALL of them together
+BEFORE labelling any** (operator direction 2026-08-07). The unit of triage is the open SET, not the
+next issue. What that pass has to decide, per group: which single issue is the cause (queue that
+one), which are downstream (leave inert, link them to it), and which are genuinely independent.
+⚠ Fail-safe direction is *not to label*: an un-queued issue waits, while three concurrent fixers on
+one cause spend budget AND produce conflicting PRs that a human then has to reconcile.
+⚠ This is FU-133's correlation half, one step further downstream — that item is about the alert lane
+filing uncorrelated ISSUES; this is about DISPATCHING them uncorrelated. Same root, different cost.
+
 **The line is "does it take effect before a human approves?" — not "is it governance"** (operator
 correction, 2026-08-07). The old rule put all six prefixes in ❌ on the reasoning that *"an agent
 that can edit them is not gated at all, whatever the ruleset says."* That is false for most of

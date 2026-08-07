@@ -397,15 +397,16 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing.**
-      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes** (the ghcr mirror alone 8
-      across 8 days). **Resolve half SHIPPED 2026-08-04** (be7b62e); the `subject:` key and the
-      IAC-G10 hand-off shipped after it; **subject DEDUP shipped 2026-08-06** (`6affc63`) — the key
-      had guarded duplicate issues but not duplicate SESSIONS (homelab#111: 3 sonnet triages in
-      33 min), and is now checked before one is spawned. **Remaining — correlation:**
-      `group_by = ["alertname"]` still keeps related alerts apart, so distinct subjects of one root
-      cause remain separate triages. Class postmortem:
-      [`docs/incidents/2026-07-27-ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
+- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
+      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
+      (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
+      **Remaining — correlation, on BOTH sides.** FILING: `group_by = ["alertname"]` keeps related
+      alerts apart. DISPATCH: nothing relates them either — ADR-097's footprint hold keys on declared
+      PATHS, so same-cause issues with different `Touches:` all queue at once (#103/#110/#111 live
+      2026-08-07) and several fixers attack one root cause. **Next (operator 2026-08-07):** alert
+      issues need a pass over the whole open SET before any is labelled — trap, evidence and what the
+      pass must decide: [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues".
+      Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
       coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
