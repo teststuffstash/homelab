@@ -67,12 +67,21 @@ Wall watts were unmeasurable (plugs dead, above), so the experiment used NVMe te
 proxy and **CPU package power via `intel-rapl` as a control** — the GPU is not in that domain, so a
 flat CPU figure rules out load as the explanation.
 
-| metric | baseline (`D0`) | `vfio-pci` (`D3hot`) | delta |
+Run as **A/B/A** — D0, then vfio D3hot, then unbound back to D0 — because a one-way drop could
+just be the drive still cooling from earlier storage IO. The reversal is what settles it.
+
+| metric | A: `D0` | B: `vfio-pci` `D3hot` | A2: back to `D0` |
 |---|---|---|---|
-| NVMe sensor 1 (controller) | 75.8 °C (n=20, 71–78) | **69.8 °C** (n=26, 69–72) | **−6.0** |
-| NVMe composite | 54.4 °C | 48.8 °C | −5.6 |
-| NVMe sensor 2 | 47.2 °C | 42.8 °C | −4.4 |
-| CPU package (control) | 22.6 W | 22.1 W | −0.5 |
+| NVMe sensor 1 (controller) | 75.8 °C (n=20, 71–78) | **69.8 °C** (n=26, **69–72**) | returns to a 75 °C plateau |
+| NVMe composite | 54.4 °C | 48.8 °C | 50.6 °C (mean incl. warm-up) |
+| NVMe sensor 2 | 47.2 °C | 42.8 °C | 44.0 °C |
+| CPU package (control) | 22.6 W | 22.1 W | 22.1 W |
+
+A2's sensor-1 trace: `69 69 69 69 73 71 70 69 69 69 73 75 75 75 75 75 75 75 73 71 70 70 70 70` —
+about five minutes of thermal lag, then a plateau at **75 °C, reproducing A**. Its *mean* (71.6)
+understates the effect because it averages the warm-up ramp in. Note the distributions rather than
+just the means: **D0 is wide and noisy (70–78 °C), D3hot is tight (69–72 °C)** — so call it ~5–6 °C,
+not a precise 6.0.
 
 **What did NOT work:** `power/control = auto`. `runtime_status` flips to `suspended` and it looks
 like a win, but `power_state` stays `D0` and PMCSR reads `0000` — with no driver bound the PCI core
@@ -92,11 +101,11 @@ setpci -s 04:00.0 CAP_PM+4.w                        # want: 0003
 ```
 
 Safe on this box: the card is `boot_vga=1` but nothing was using it (no `/proc/fb` entry, no
-driver), firmware still drives POST, and all four VMs kept running throughout. ⚠ Caveat on the
-numbers: the baseline was taken shortly after heavy storage IO, so some residual cooling may be
-folded into the delta — but the drop is consistent across all three NVMe sensors and the CPU
-control is flat. The **watt** figure remains unmeasured; a 9600 GT idling at full clocks is
-plausibly tens of watts of pve's ~128 W, but that is an expectation, not a measurement.
+driver), firmware still drives POST, and all four VMs kept running throughout. The residual-cooling
+caveat that a one-way test would have left open is closed by the A/B/A above: the temperature
+tracks the GPU's D-state, not the clock. The **watt** figure is still unmeasured — a 9600 GT idling
+at full clocks is plausibly tens of watts of pve's ~128 W, but that is an expectation, not a
+result, and it stays that way until the plugs are back (FU-038).
 
 ## Method
 
