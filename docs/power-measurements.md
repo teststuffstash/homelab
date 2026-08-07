@@ -18,6 +18,44 @@ are maxed. Reproducible.
 > while the plugs worked and remain valid; NEW wall measurements are blocked until Tuya is
 > restored or the plugs move to local control.
 
+### Restoring them: `tuya-local` only — reflashing is ruled out
+
+Three ways back: re-auth the cloud integration, `tuya-local` (LAN polling after a one-time
+`local_key` extraction), or reflashing the plugs to ESPHome-LibreTiny/OpenBeken. **Only
+`tuya-local` is eligible**, and the reason is not convenience.
+
+This plug fleet is the **dev/test ground for the edge/appliance product's device tier** (product
+thinking lives in the private business repo — `CONTEXT.md` §2). That device strategy is built on a
+*one-time app step and no per-device flashing*, because per-device flashing does not survive
+contact with a non-technical household. Reflashing the lab's plugs would leave the lab testing a
+path the product will never ship — the test bed would stop testing the thing under test. So
+firmware-as-code stays an optional per-device upgrade elsewhere and is **excluded here by design**,
+not by effort.
+
+What the HA config entry tells us about the job (read from `.storage/core.config_entries`):
+
+- **One `tuya` config entry, one user code** ⇒ all 7 devices sit in a **single Tuya account**, so
+  one IoT-project link yields every `local_key` in one pass. Region: EU (`apigw.tuyaeu.com`),
+  added 2026-06-04, `tuya_sharing` (user-code flow).
+- HA does **not** record which phone app onboarded them — the user code is issued per *account*,
+  and Tuya Smart / Smart Life / OEM white-labels (Nous Smart) share one account backend. To
+  identify it, compare the stored `user_code` against the code each app shows under Me/Settings.
+- Two hardware families, which is why `power.yaml` carries a `/10` correction for only some:
+  **`Smart Socket A1`** (`m6ei1t46nqn0p0p9`) = Konditsioneer + Aquarium, the "old plugs" needing
+  the correction, and Nous-A1-class hardware; **`Smart plug`** (`9y0qx7npuny0pnwt`) = the four
+  node plugs. Plus a `Temp-5` sensor.
+
+**Restoring the cloud is not as simple as it looks** (2026-08-07, in this order): reloading the
+config entry republishes the cached values ONCE — `last_updated` moves, the number does not — and
+the operator re-logging into the Tuya phone app refreshes the *account* but not HA's own stored
+session, so a reload after it still failed. It needs a full **re-auth** (remove and re-add the
+entry with a fresh user code). This also revises the earlier guess that FU-038's 2026-07-28
+`tinytuya wizard` run triggered the QPS state: an expired session that kept retrying fits the
+evidence better. Re-run key extraction sparingly anyway.
+
+⚠ Which app: the operator re-authenticated via the **Tuya** app (not Nous Smart), which settles the
+open question — the account backing all seven devices is the Tuya-app account.
+
 ## The pve GPU: −6 °C on the NVMe for nothing (2026-08-07)
 
 pve carries a **GeForce 9600 GT** (G94, 2008) that cannot be removed — the X99-P4 board refuses to
