@@ -495,10 +495,14 @@ the block needs pruning, not more headings.
       the `AgentStack` claim (would carry the tier as policy — platform-and-stacks.md) and the merge-path reflexes.
 
 - [ ] **FU-093** — **Storage-tier ledger + metering: POINTER.** The rule, the double-book
-      history, the lint (built 2026-08-02) and the 2026-08-03 reconciliation (121%→89%):
-      [`docs/storage-ledger.md`](storage-ledger.md).
-      **Next:** Garage admin-API metrics + ServiceMonitor and Longhorn per-disk
-      `storageScheduled`, each with a >80% alert. Blocks the FU-106 "mechanical" predicate.
+      history, the lint (2026-08-02), the 2026-08-03 reconciliation (121%→89%) and the 2026-08-07
+      retier (third bulk zone, wk-02 → std, the half-applied fence, the never-armed quota, and the
+      LVM thin pool underneath wk-02 that no sum could see): [`docs/storage-ledger.md`](storage-ledger.md).
+      **Longhorn metering DONE** 2026-08-04 (`02cf8bb`) — both sums, `argocd/resources/longhorn-alerts/`.
+      **ADR-089's quota DONE** 2026-08-07 — it had never been set on a single claim, so no
+      ResourceQuota existed cluster-wide; now armed on all four stacks.
+      **Next:** Garage admin-API metrics (`:3903`) + ServiceMonitor + >80% alert — the last
+      unmetered tier. Blocks the FU-106 "mechanical" predicate.
       Relates ADR-089, FU-116 (archived).
 
 - [ ] **FU-049** — **Platform services published as XRDs supersede `SERVICES.md` as the source of truth.**

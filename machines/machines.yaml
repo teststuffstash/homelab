@@ -99,7 +99,7 @@ machines:
     notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
 
   - name: wk-metal-04
-    role: k8s worker (ephemeral / compute tier, tainted; KATA node — microVM runtime)
+    role: k8s worker (ephemeral / compute tier, tainted; KATA node + Longhorn BULK tier)
     hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
     cpu_cores: 4
     memory_gb: 16
@@ -109,7 +109,12 @@ machines:
     load_w: null
     singlecore_bogo_s: null
     multicore_bogo_s: null
-    notes: The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so opencode/Bun rides are excluded; onboarded 2026-07-28.
+    notes: >-
+      The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so
+      opencode/Bun rides are excluded; onboarded 2026-07-28. Carries the THIRD bulk-tier
+      Longhorn disk since 2026-08-07 (ADR-089 addendum): 150Gi reserved, because Longhorn shares
+      the ephemeral partition with the containerd+kata image store and the kubelet's nodefs
+      floor evicts pods when they collide.
 
   - name: hp-01
     role: k8s worker (storage tier, WoL-capable)

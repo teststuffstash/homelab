@@ -724,6 +724,22 @@ bulk ≈150Gi grantable at 2 replicas (wk-02-side headroom bounds it); std stays
 until more always-on disks join; wipe/power-off of wk-metal-01 degrades bulk volumes until
 rebuild — acceptable by tier definition, alert via Longhorn robustness metrics; disk tags +
 bulk-disk registration are node-CR patches (`scripts/longhorn-tag-disks.sh`), not tofu.
+**Addendum (2026-08-07): three bulk zones, wk-02 moves to `std`, and the quota finally exists.**
+`wk-metal-04` (477.6G, tainted kata node, onboarded two weeks *after* this ADR and never
+revisited) joins **bulk** with 150Gi reserved — larger than wk-metal-01's 100Gi because
+`/var/lib/longhorn` shares the Talos EPHEMERAL partition with the containerd+kata image store, and
+wk-metal-01's image store measured **137.5G**, more than its whole reservation; the kubelet's
+`nodefs` floor evicts PODS, so losing that race takes rides down. With a third bulk zone, **wk-02
+leaves bulk for `std`** — its third tier change, each earlier one correct about the problem in
+front of it (dual-tag → it won every placement, #94; bulk-only → std fell to two zones, hp-01 hit
+105% and a 2Gi transcripts PVC could not place, #98). **Consequences:** bulk has **no always-on
+member** — Garage's only two copies live on tainted wipe-on-PXE nodes. Accepted as an *upgrade*:
+they are two independent physical disks in two independent boxes, whereas wk-02's disk is a thin
+volume on a single consumer NVMe shared with three VMs, on a pool measured at **99.14%** the same
+day (`storage-ledger.md` §"A third sum"). *Always-on ≠ durable.* Also: the `std` fence turned out
+to apply only to PVCs created after it (14 legacy volumes had an empty `diskSelector`, one of them
+Garage's metadata sitting on the bulk laptop) — backfilled; and **`spec.repos[].storage` had never
+been set by any claim**, so the quota-as-contract half of this ADR was decorative until now.
 **Addendum (2026-07-16, FU-081):** a fourth tier `longhorn-scratch` — replica=1 on the bulk
 disks, for per-ride throwaway volumes (the docker-mode dind `/var/lib/docker` ephemeral BLOCK
 PVC). Same fence, no redundancy by definition: losing the replica kills a ride that dies with

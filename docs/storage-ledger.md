@@ -12,6 +12,25 @@ jointly blow the tier — which is exactly what happened.
 > **A tier's committed capacity is the sum of every cap charged against it, across every repo, and
 > exactly one ledger owns that sum.** A claim that doesn't appear in the ledger doesn't exist.
 
+## Current shape (2026-08-07)
+
+| tier | zones | raw | allocatable | committed | physically used |
+|---|---|---|---|---|---|
+| `std` | hp-01, thinkcentre, **wk-02** | 496.6G | 410.6G | 237.3G (58%) | 193.7G (39%) |
+| `bulk` | wk-metal-01, **wk-metal-04** | 975.1G | 706.7G | 633.5G (90%) | 384.9G (39%) |
+| `fast` | thinkcentre Optane ×2 | 28.7G | 28.7G | 5.4G | 1.3G |
+
+Two things to read off it. **`bulk`'s 90% is deliberate, not drift** — the registry mirrors were
+oversized on purpose (see homelab#116 below), which spends nominal headroom to buy the thing that
+actually matters, and physical sits at 39%. **`std`'s comfort is new**: it had two zones and
+hp-01 at 105% until wk-02 moved into it the same day.
+
+**hp-01 remains the tight node and no knob fixes it.** 104% of allocatable, 70% physical, and
+43.3G of that is the container image store on the smallest disk in the tier. Its reservation
+already under-covers its own images, so lowering it would only move the lie. This is the one place
+in the lab where the honest answer is *buy a disk* — and see the hypervisor section for why that
+disk cannot be a SATA SSD in pve.
+
 ## The double-booking that started this (2026-07-22, closing oracle-iac#40)
 
 Two accountings against the same ~150Gi bulk tier:
@@ -66,7 +85,46 @@ schedule, nothing breaks) into a late destructive one (volume fills mid-write, g
 That trade is only sound with metering, so the **Longhorn per-disk alert below stops being optional
 and becomes the prerequisite it was always described as.**
 
-### Where the physical bytes actually are (measured 2026-08-04, post-raise)
+## A THIRD sum: the hypervisor underneath (2026-08-07)
+
+The two sums above both live inside Kubernetes. wk-02's "disk" is an **LVM thin volume on pve**,
+and that layer has its own sum that neither the ledger nor Longhorn can see. It was at **99.14%**:
+
+```
+data          337.86g  Data% 99.14   ← 2.9G free
+vm-8112-disk-0 240.00g  96.95% allocated   (guest was using ~118G)
+LVs promised: 448G on a 337.86G pool;  VG free: 16G
+```
+
+At 100% a thin pool stops accepting writes and **every VM on it goes read-only together** —
+cp-01, wk-01, wk-02 and ci-runner-01, i.e. the control plane and the CI runner. Nothing watched
+it: there is no Proxmox exporter, so no alert could have fired, and Longhorn cheerfully reported a
+healthy 253G disk sitting on 2.9G of real headroom.
+
+It also only ratchets **up**: `scsi0` had `discard=ignore`, so blocks freed inside the guest were
+never returned to the pool. That is why the guest could use 118G while the pool held 232G for it.
+
+**The lesson that generalises:** *"always-on" is not the same property as "durable".* wk-02 was
+treated as the reliable half of the bulk tier precisely because it is a VM that never powers off
+— while its bytes sat on a single consumer NVMe, shared with three other VMs, on a pool with 2.9G
+to spare. The two laptops/desktops it was trusted over are independent physical disks in
+independent boxes. That reasoning is what moved Garage's replicas to them (ADR-089 addendum).
+
+Done: pool extended by 15G from VG free (→ 94.92%) and `thin_pool_autoextend_threshold` set to 80
+(LVM warned it was disabled; it is a belt that can only consume free VG extents, not capacity).
+`discard=on` + `ssd=1` are set on wk-02's scsi0 but are **pending a VM stop/start** — that reclaim
+(~115G) needs a maintenance window because wk-02 carries ArgoCD repo-server, Crossplane, ESO, a
+CoreDNS replica, cloudflared and three CNPG Postgres instances (two of them forgejo's).
+
+⚠ **pve cannot take a SATA SSD.** Checked 2026-08-07: of 90 PCI devices the NVMe is the *only*
+mass-storage controller — no AHCI enumerated, `ahci` not loaded, `/sys/class/ata_port/` empty. The
+board (`INTEL X99-P4`) exposes SATA ports physically but they are disabled in firmware. The x16
+slot is permanently occupied: the box **refuses to POST without the GPU** (a GeForce 9600 GT with
+`driver=none`, so it idles at full clocks heating the M.2 beneath it — NVMe sensor 1 reads ~69°C).
+So growth means **replacing the 500G NVMe with a larger one**, or freeing the x1 slot by swapping
+the GPU for a single-slot card.
+
+### Where the physical bytes actually are (measured 2026-08-04, post-raise; superseded by the table at the top)
 
 | tier | physical used | committed | committed as % of physical |
 |---|---|---|---|
@@ -87,6 +145,43 @@ The honest summary: raising the percentage removed a scheduling wall that was bl
 exchange it removed the mechanism that was refusing to let wk-02 get any more overcommitted. That
 refusal was doing real work. Metering is what replaces it.
 
+## The tier fence was only ever half-applied (2026-08-07)
+
+ADR-089 calls the `std` fence "load-bearing" because Longhorn schedules onto the emptiest disk and
+**empty-selector volumes match any disk**. The fence was implemented as the chart's
+`persistence.defaultDiskSelector`, which stamps `diskSelector: ["std"]` onto **newly created**
+PVCs only. Every volume that predated it kept an **empty** selector — 14 of them, i.e. essentially
+the entire platform: prometheus, loki, garage-meta, home-assistant, both forgejo and both
+infisical Postgres volumes, redis, unifi ×2, nix-cache, uv-cache, gitea-shared.
+
+It was not theoretical. `garage/meta-garage-0` had a replica on wk-metal-01 — Garage's *metadata*,
+on the wipe-prone laptop the fence exists to keep platform data off. And it was caught live: the
+first replica moved during this session rebuilt onto **wk-metal-04**, the emptiest disk in the
+cluster, exactly as the ADR predicted an unfenced volume would.
+
+Fixed by stamping `spec.diskSelector: ["std"]` onto all 14 volumes. Longhorn does not relocate
+existing replicas on a selector change — it only constrains the next placement — so misplaced
+replicas were deleted individually and allowed to rebuild inside the fence.
+
+**Generalisable trap:** a StorageClass parameter is a *creation-time* default, never a retroactive
+invariant. Any fence introduced after volumes exist has to be backfilled onto the existing objects,
+and "the setting is in the chart" is not evidence that it applies to anything already running.
+
+## Why the registry mirrors are deliberately oversized (homelab#116)
+
+`--delete-untagged` was the bulk tier's largest single consumer of *reclamation*, and it had to go:
+in a pull-through cache it deletes exactly the digest-pinned images we pin, leaving a layer link
+whose blob is gone, so the mirror serves `200` with **0 bytes** forever. Its replacement valve is a
+**full store wipe** at 90% (ADR-080 — a pull-through cache is rebuildable by definition, and a wipe
+cannot dangle a link).
+
+A wipe is correct but costs a day of slow builds while the cache re-warms, so the design pushes it
+toward *never*: **ghcr 40→100Gi** (19.4G actual) and **docker-io 20→40Gi** (2.3G actual) the same
+day. That is what spends `bulk`'s nominal headroom down to 90% — a deliberate purchase of
+correctness with capacity, affordable only because wk-metal-04 joined the tier. If wipes ever start
+happening, `RegistryMirrorWipedRepeatedly` says the fix is a **bigger PVC, never a lower
+threshold**.
+
 ## Build
 
 - **The ledger itself — BUILT 2026-08-02 (FU-093a)**: `devbox run storage-ledger`
@@ -104,12 +199,23 @@ refusal was doing real work. Metering is what replaces it.
   ([`tofu-state.md`](tofu-state.md)); it was sized against the actual 1.4MB main-root state
   precisely because the tier has no room for a round-number guess.
 - **Garage metering** — enable the admin-API metrics (`:3903`) + a ServiceMonitor; per-bucket
-  usage-vs-cap panels; a **>80% alert**.
-- **Longhorn metering — now the PREREQUISITE, not a nice-to-have** (see the over-provisioning
-  section above; raising the percentage to 200 removed the scheduler's own refusal). Two alerts,
-  not one: per-disk `storageScheduled` vs `(max − reserved) × pct` (the provisioning sum, the one
-  homelab#94 hit twice) **and** per-disk physical used vs max (the byte sum, which now has nothing
-  bounding it). The kubelet metrics already exist (`longhorn_disk_*`).
+  usage-vs-cap panels; a **>80% alert**. Still the open item.
+- **Longhorn metering — BUILT 2026-08-04** (`02cf8bb`,
+  `argocd/resources/longhorn-alerts/prometheusrule.yaml`). Both sums, as specified:
+  `LonghornDiskFillingUp`/`LonghornDiskAlmostFull` on physical bytes (85%/93%) and
+  `LonghornNodeOverProvisioned` on the provisioning sum (>150%). ⚠ Metric-shape compromise
+  recorded there: Longhorn exports `scheduled` only **per node**, not per disk, so the
+  provisioning rule is node-scoped — exact for the one-disk nodes, pessimistic for thinkcentre
+  (its two Optanes sum in with its std disk).
+- **The quota half of ADR-089 — ARMED 2026-08-07, and it had never been armed before.** The XRD
+  carried `spec.repos[].storage` from day one, no claim in any stack ever set it, so the
+  Composition's `{{- if $r.storage }}` never fired and `kubectl get resourcequota -A` returned
+  **nothing, cluster-wide**. The "over-cap PVC fails fast at CREATE with a legible error instead
+  of wedging unschedulable" promise was therefore decorative for the whole life of the ADR — and
+  the unbounded version is exactly what produced the 2026-07-25 scratch exhaustion in the list
+  above. Now set: platform repos in `agents/fixer/openrouter-operator/agentstack.yaml`; the three
+  docker-mode repos (`sleep-tracking`, `oracle-fleet`, `circles`) via their own IaC repos, at
+  `scratch: 60Gi` = 20Gi × 3 concurrent rides.
 
 ## Consumer
 
