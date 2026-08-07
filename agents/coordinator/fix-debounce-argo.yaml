@@ -155,10 +155,14 @@ spec:
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
 
             # ── the pending set, LIVE (repo list = the AgentStack claims' repos + homelab) ────
-            REPOS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null \
-                     | jq -r '[.items[].spec.repos[].name] | unique | .[]' \
-                     || jq -r '[.stacks[].repos[]] | unique | .[]' /work/homelab/agents/stacks.json)"
-            printf '%s\nhomelab\n' "$REPOS" | sort -u | grep -v '^$' > /tmp/repos.txt
+            # The claims also feed a repo→stack→loop-ns map: after queueing, the debouncer rings
+            # /coordinate so dispatch is edge-driven, not cron-bound — and a GRADUATED stack needs
+            # the {stack, loop_ns} payload (FU-144: a bare {repo} POST fires only the global
+            # trigger, whose scan SKIPS graduated stacks; this lane must not re-trip that).
+            CLAIMS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null)" \
+              || CLAIMS="$(jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {loop: {graduated: (.graduated // false)}, repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
+            printf '%s' "$CLAIMS" | jq -r '.items[] | .metadata.name as $s | ((.spec.loop.graduated // false) | if . then $s + "-agents" else "" end) as $ns | .spec.repos[].name | [., $s, $ns] | @tsv' > /tmp/stackmap.tsv
+            { cut -f1 /tmp/stackmap.tsv; echo homelab; } | sort -u | grep -v '^$' > /tmp/repos.txt
             : > /tmp/pending.jsonl
             while read -r r; do
               # ⚠ ALERT-LANE ONLY (`alert-fp:` in body) — found by the 2026-08-07 dry run: stack
@@ -197,12 +201,28 @@ spec:
               gh api "repos/$1/labels/$(printf '%s' "$2" | jq -sRr @uri)" >/dev/null 2>&1 && return 0
               gh api -X POST "repos/$1/labels" -f name="$2" -f color="$3" -f description="$4" >/dev/null 2>&1 || true
             }
+            ring_coordinate() { # <owner/repo> — same payload shape as agent-session.sh's _door
+              local short stack lns payload
+              short="${1##*/}"
+              stack="$(awk -F'\t' -v r="$short" '$1==r{print $2; exit}' /tmp/stackmap.tsv)"
+              lns="$(awk -F'\t' -v r="$short" '$1==r{print $3; exit}' /tmp/stackmap.tsv)"
+              payload="$(jq -cn --arg repo "$short" --arg stack "$stack" --arg lns "$lns" \
+                '{repo: $repo, unit: "-"} + (if $lns != "" then {stack: $stack, loop_ns: $lns} else {} end)')"
+              curl -m 5 -fsS -X POST -H "Content-Type: application/json" -d "$payload" \
+                "http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate" >/dev/null 2>&1 \
+                && echo "rang /coordinate for $1 (${lns:-global})" \
+                || echo "coordinate bell failed for $1 (non-fatal — the */30 cron catches it)"
+            }
             queue_one() { # <repo> <number>
               local why
               if why="$(sq_decide "$1" "$2")"; then
-                if [ "$DRY_RUN" = "1" ]; then echo "DRY: would queue $1#$2"; return 0; fi
-                gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/queued" >/dev/null 2>&1 \
-                  && echo "QUEUED $1#$2" || echo "WARN: queue label failed on $1#$2 — stays inert, backstop retries"
+                if [ "$DRY_RUN" = "1" ]; then echo "DRY: would queue $1#$2 (+ring /coordinate)"; return 0; fi
+                if gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/queued" >/dev/null 2>&1; then
+                  echo "QUEUED $1#$2"
+                  ring_coordinate "$1"
+                else
+                  echo "WARN: queue label failed on $1#$2 — stays inert, backstop retries"
+                fi
               else
                 echo "inert $1#$2 — $why"
               fi
