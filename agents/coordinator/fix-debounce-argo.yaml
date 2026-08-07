@@ -161,8 +161,13 @@ spec:
             printf '%s\nhomelab\n' "$REPOS" | sort -u | grep -v '^$' > /tmp/repos.txt
             : > /tmp/pending.jsonl
             while read -r r; do
+              # ⚠ ALERT-LANE ONLY (`alert-fp:` in body) — found by the 2026-08-07 dry run: stack
+              # loops use agent-fix-without-queued for their OWN deliberate holds (ADR-097
+              # footprint overlap, goal gating), and the unscoped query swept circles#42 —
+              # an issue meta-state records as held — into "would queue". The fingerprint
+              # marker is what makes an issue the RESPONDER's; everything else is not ours.
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select(.pull_request | not) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
                 2>/dev/null >> /tmp/pending.jsonl || true
             done < /tmp/repos.txt
 
