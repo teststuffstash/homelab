@@ -162,7 +162,7 @@ spec:
             : > /tmp/pending.jsonl
             while read -r r; do
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                --jq ".[] | select(.pull_request | not) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
                 2>/dev/null >> /tmp/pending.jsonl || true
             done < /tmp/repos.txt
 
