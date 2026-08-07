@@ -66,12 +66,12 @@ mode. Watch closed. **FU-154** (rounds reset on PR re-creation) remains the rela
 
 ## Platform queue (homelab issues — the platform fixer lane owns queued ones; meta owns the rest)
 
-- **#118** — QUEUED (fix-debounce set-pass 20:32Z), awaiting its dispatch (the 21:00Z platform
-  tick spent its unit on #68's refusal and skipped the doorbell on the latch — expect the
-  21:30Z tick). ⚠ The fix (`tofu/github/repo_rulesets.tf`) needs a **HOST-side
-  `github-tofu apply`** — flag the operator when the PR merges. ⚠ Until then
-  `circles/update-pr-branch` fails every ~15min on PR#54 (`GithubWorkflowRunFailed` refires
-  are THIS, not news).
+- **#118** — QUEUED; the resolve leg closed it 21:25Z (alert cleared because the updater stops
+  attempting CHANGES_REQUESTED PRs — defect LATENT, not gone) → **meta reopened 21:40Z**, now
+  human-engaged so it stays open. Expect fixer dispatch on the 22:00Z platform tick. ⚠ The fix
+  (`tofu/github/repo_rulesets.tf`) needs a **HOST-side `github-tofu apply`** — flag the operator
+  when the PR merges; it re-bites at PR#54's merge moment otherwise. Datum for FU-133 leg (c):
+  resolve-state ≠ defect-state, in both directions.
 - **#117** — ✅ diagnosed 2026-08-07 (meta comment): NIC link-flap storm on wk-metal-02
   (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre bad-cable class.
   **Operator, physical:** reseat/replace cable / switch port. FU-032 updated.

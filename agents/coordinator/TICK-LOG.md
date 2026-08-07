@@ -2826,3 +2826,19 @@ thresholds may need the heavy/dispatch split revisited if the latch starts bindi
 watch with that BASE_EXPECT); #118's fixer PR → operator host-side apply; the platform tick ended
 "subscription latched" — if the latch binds ordinary dispatch, FU-088 tier thresholds need the
 revisit the 08-07 entry predicted.
+
+### 2026-08-07 (~21:25–21:45Z addendum) — the resolve leg closed a latent defect
+
+- The `GithubWorkflowRunFailed` clear (~21:25Z) was the updater going green by SKIPPING the
+  changes-requested PR#54, not the ruleset gap closing — and the resolve leg closed #118 on it.
+  Meta reopened 21:40Z (now human-engaged, stays open). Both directions of the same lesson in
+  one day: the set-pass queued #68 with its alert resolved (defect gone, issue live), the
+  resolve leg closed #118 with its alert resolved (defect live, issue gone). FU-133 leg (c)
+  should gate on DEFECT state, and the resolve leg needs the same distinction for issues whose
+  alert is a downstream symptom of a still-unfixed cause.
+- Killed `coordinator-204804` (circles, pr-56 unit): wedged silent post-clone for 36 min in the
+  LLM phase — within its 3600s deadline (the belt exists, `coordinator-session.sh:229`), killed
+  early by hand. One occurrence = noted, not filed.
+- oracle #177 → PR#181 (`fix/issue-177-title-fold` into the goal branch) — first goal-child PR,
+  review reflex owns it. The transient `AgentWorkerEgressDropped` during its devbox phase
+  self-cleared (the known jetify phone-home shape).
