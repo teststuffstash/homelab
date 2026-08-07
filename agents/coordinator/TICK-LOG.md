@@ -2629,3 +2629,43 @@ day-gate answers "is this still true".
 ⏳ Still unexercised: the alert's own `triage: none` guard. Every delivery so far was stopped by the
 budget gate, which runs first by design; after midnight nothing has fired at all. It remains a
 spot-check in meta-state, not a suspicion.
+
+### 2026-08-07 (post-recovery) — I marked my own fix verified, and the loop disproved it the same night
+**Condition:** CI recovered ~03:25Z and the goal lane resumed. Watching it run produced a better
+finding than watching it break.
+
+**FU-146 was NOT verified, and I said it was.** Two PRs went `CHANGES_REQUESTED` at once and each
+got exactly one fix round; I read that as the per-item hold working and wrote "✅ VERIFIED LIVE"
+into the tracker. It was the WIP cap and timing. **`fc606e2` added the hold to the MAIN scan path
+only — `fast_unit_dispatch()` never got it, and the doorbell takes that path.** Its WIP check is a
+COUNT against `REPO_MAX_WIP`, so one live pod (`flive=1 < 3`) still dispatches.
+
+**The disproof was a clean A/B inside one window**, which is why it was worth chasing rather than
+shrugging at: tick `t967f` (fast path) dispatched `pr-45` while `agent-circles-issue-18-r3` had been
+Running 13 minutes; the very next FULL scan, on identical state, correctly reported nothing
+dispatchable. Same input, two paths, opposite answers — exactly what that function's own contract
+forbids: *"the compound may only ever be cheaper, never weaker."* It was weaker.
+
+⚠ **My first hypothesis was wrong and testing killed it.** I assumed the hold missed because PR#45
+says `Closes #18` while FU-146 keys on `Implements #<n>`. The predicate at line 696 already accepts
+`implements|closes|fixes|resolves`, so it would have matched fine. Reading the code beat inferring
+from the doc.
+
+Ported the hold into the fast path (`277a73f`) — `body` rides the existing `gh pr view`, the pods
+JSON is already fetched for the WIP probe, so zero new API calls. Executed three cases through the
+REAL extracted function: live pod + `Closes #18` → held; no live pod → dispatches; no link →
+dispatches unchanged. That last case is the fail-safe — like the main path it can only ever ADD a
+hold, and the hold needs a LIVE pod so it self-releases and cannot wedge. Deployed mid-flight
+deliberately, reversing my own earlier "wait until the clause is idle": that rule guards editing
+dispatch logic BLIND, and this was additive with live proof and tests.
+
+**Three instances tonight of ONE class — "one contract, two predicates":** C6's verb keyword vs
+finalize's `Issue:` trailer; the budget alert's freshness gate vs the validity question it should
+have asked; and now the main path's hold vs the fast path's. Every time, the second implementation
+was written first and never revisited when the first one changed. **When a clause gains a guard, ask
+what else answers the same question.**
+
+**Also proven healthy while watching:** #41's closeout ran machine-only (flip + close by the bot,
+harvest correctly EMPTY — the review said "no new follow-ups"); a coordinator session declined to
+act on a stale `CHANGES_REQUESTED` naming the 03:37-review vs 04:17-commit gap itself; and
+`deepseek-v4-flash`, which struck twice yesterday, ran three clean rounds tonight.
