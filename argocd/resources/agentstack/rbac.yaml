@@ -70,6 +70,17 @@ rules:
   - apiGroups: [""]
     resources: [namespaces]
     verbs: [get, list, watch, create, update, patch, delete]
+  # ADR-089 quota-as-contract: the Composition has been able to compose a per-repo ResourceQuota
+  # since the tier work landed, but the block is gated on `{{- if $r.storage }}` and NO claim had
+  # ever set `storage` — so this grant was never needed and its absence never showed. Arming the
+  # first claim on 2026-08-07 immediately took ALL FOUR composites to
+  # `ReconcileError: ... failed waiting for *unstructured.Unstructured Informer to sync`,
+  # exactly the failure the FU-104 comment above warns about, and it breaks the whole XR rather
+  # than just the new resource. The general shape, third time now (endpoints, IAC-G03 reads, this):
+  # a Composition branch that has never executed carries no evidence that its RBAC exists.
+  - apiGroups: [""]
+    resources: [resourcequotas, resourcequotas/status]
+    verbs: [get, list, watch, create, update, patch, delete]
   # FU-080 perStack: the Composition composes the per-stack claims-read ClusterRoleBinding.
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterrolebindings]
