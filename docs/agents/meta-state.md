@@ -48,6 +48,21 @@ this and needs no action until Actions recovers:
 **First action on recovery:** confirm `oracle-fleet/update-pr-branch` completes one green scheduled
 run, then **close homelab#111**.
 
+## ⚠ SUBSCRIPTION WEEKLY POOL AT 91% (2026-08-07 05:50Z) — 4 points from a dispatch stall
+
+`anthropic_subscription_utilization{7d} = 0.91`, 5h = 0.31 (only the WEEKLY window binds).
+**`ANTHROPIC_UTIL_THRESHOLD_7D = 0.95` is where the FU-088 latch starts DEFERRING every
+subscription dispatch** — coordinator sessions, reviewer runs, the retro. More than a day until the
+weekly reset, so this does not self-heal in time.
+⚠ **Worker rides are NOT affected** (they draw OpenRouter keys, not the subscription) — so a goal
+child can still ride while the loop's own judgement layer starves. The failure mode is the loop
+going quiet while looking healthy.
+⚠ **A meta session draws on the SAME pool.** Long narrated meta sessions are a direct competitor to
+dispatch capacity; at 91% the cheapest lever available is to CLEAR and stop consuming.
+**If it reaches 0.95:** expect `triage DEFERRED`/`capacity limited` lines in scan + responder logs;
+that is the latch working, not a bug — do NOT "fix" the thresholds (operator ruling 2026-08-06).
+Suspending non-critical reflexes (retro, model-scout) is the operator's lever, not mine.
+
 ## Platform queue (homelab has no fixer loop — the meta-coordinator IS its fixer)
 
 - **#111** — ✅ **CLOSED 2026-08-06** as not-ours (outage, not `maxRunners: 4` capacity — the
