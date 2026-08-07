@@ -392,14 +392,11 @@ the block needs pruning, not more headings.
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
-      **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass same day: independence verdict
-      RIGHT (homelab#68 vs #118), queue decision WRONG — it queued #68 off a stale body 11 min
-      AFTER the resolve leg recorded its alert clearing; the coordinator refused the unit
-      (premise already shipped). Full autopsy: [`iac-lane.md`](agents/iac-lane.md) §"one root
-      cause, N alert issues" (BUILT block). **Remaining:** (a) FILING-side correlation
-      (`group_by = ["alertname"]` keeps related alerts apart); (c) queue-time CURRENCY gate —
-      `sq_decide` must skip an issue whose alert has a resolve marker / is no longer firing
-      (human-engaged issues survive the resolve leg and go stale in the pending set).
+      **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass: independence RIGHT, queueing
+      WRONG (stale body, alert already resolved — coordinator refused the unit). Autopsy:
+      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
+      **Remaining:** (a) FILING-side correlation (`group_by = ["alertname"]`); (c) queue-time
+      CURRENCY gate — `sq_decide` skips resolved/stale-bodied issues (detail in the autopsy).
       Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
