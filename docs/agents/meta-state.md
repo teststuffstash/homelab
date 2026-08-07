@@ -191,12 +191,14 @@ returning clean BEFORE any failure signature is consulted, so only round 1 can s
 has now died THREE times on `goose-32602-truncation` (circles#32 r1+r3 on 08-06, circles#19 r1 on
 08-07 05:31Z) — and #19's round 2 was dispatched **onto the same model**, `GOOSE_MODEL=
 deepseek/deepseek-v4-flash`, read off the live pod spec. `AGENT_STRIKE:` comments are posted
-correctly, so the signal exists and nothing consumes it. ⚠ **It is task-SIZE correlated, not a
-broken model:** the same model completed circles#18 r2 (1543s) and r3 (874s) cleanly the same
-night; all three deaths were `agent-budget/lg`-scale work, and `goose-32602-truncation` is
-consistent with an output/context overflow. So the remedy is a size-aware pick or an override on
-lg items, NOT a blanket deny. **Next:** if #19 r2 dies the same way, override the model for that
-issue before a third attempt, and take the routing gap to ADR-096/FU-095 with these four samples.
+correctly, so the signal exists and nothing consumes it. ⚠ **CORRECTED with the 4th sample — it is STOCHASTIC, not a size limit.** #19 r2 ran the SAME
+model on the SAME lg task and finished clean (2073s, $0.0795, PR#50). Tally: 3 deaths (circles#32
+r1+r3, #19 r1) vs 3 clean (#18 r2+r3, #19 r2) — so `goose-32602-truncation` is roughly a coin-flip
+on lg work, not a wall. **RETRY IS AN EFFECTIVE REMEDY and no model override is warranted** — I had
+said I would override if r2 died the same way; it did not. What stays true is the routing gap: a
+struck model is re-picked immediately. That is now *tolerable* rather than urgent, because a retry
+costs ~$0.04 and one meta re-queue. **Next:** take the gap to ADR-096/FU-095 with these six samples
+— the ask is a cooldown that survives one strike, not a deny.
 ⚠ **Its TESTS assert presence, not the property — 3 instances in ONE PR** (#39). One PR is not a
 fleet pattern; if it recurs on another stack it is a model-selection fact, not prompt tuning.
 
