@@ -3079,3 +3079,40 @@ the Argo subscription-capacity ConfigMap, the jail latch default); verified live
 read Anthropic's own per-plan fraction headers, so the plan upgrade recalibrates them at the
 source. This answers the 01:00Z "semaphore is the binder" datum and the FU-088/FU-109 tier-split
 revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~30m (known class).
+
+## 2026-08-08 (~17:00–22:30Z, operator-paired) — the fleet ran its tank dry, and every cost became visible
+
+- **Fleet dispatch starved ~18:58Z: TWO stacked exhaustions** — OpenRouter's keys-modify DAILY
+  limit (kopf hot-retrying ~28/min, 13 deletions finalizer-wedged; openrouter-operator#26:
+  park-until-reset + ops/day telemetry) AND the account balance at $0.17 (no balance monitoring
+  ANYWHERE — the FU-150 class with money; #26(b): credits gauge + self-scaling low-water alert).
+  Operator topped up $20 → balance-link hypothesis REFUTED live (429s unchanged post-top-up:
+  calendar-bound). ClaudeTier rides ran THROUGH the outage (3 concurrent haiku rides mid-storm)
+  — proving the FU-127 rail split; my #158 leg-1 claim they'd deferred was an over-read
+  (corrected in-flight; leg 1 → regression pin, leg 2 the substance: OR-primary stacks degrade
+  to subscription haiku, semaphore-bounded). M11 recorded in model-routing.md (the cross-rail
+  cost ladder, learned per (class,urgency); shadow leg = #159). Subscription concurrency 3→5
+  (Max 20x) verified live at max=5.
+- **"Where does the money go" answered with instruments, not a guess**: ledger $11.41 total —
+  circles $9.22 (81%); oracle's whole goal cost $0.68 OR + ~$30 subscription-equiv. OR lifetime
+  $29.83; the $18 gap = pre-ledger July. Subscription-equiv ~$285/7d ≈ 6× the subscription's
+  cost — the quantified headroom M11 spends into. agent-cost dashboard: per-STACK rollup +
+  daily-per-project + project×issue drill TABLE with data links into the agent-issue dashboard.
+- **Label audit (operator: "put jail")**: only the coordinator was fully attributed. Reviewer
+  lacked stack ($103.74/7d as stack=""); responder + fix-debounce + claude-harness WORKERS
+  exported NOTHING. All five sites now share the attrs contract; the jail got an OTLP LAN door
+  (otel-collector-lb, VIP .40.29, verified 200 from the jail) + stack=jail env (new sessions).
+- **Comment audit (operator ask)**: 27/80 of the day's homelab comments were resolve-leg
+  ✅-notices → #148 (fixed same evening, PR#150, one _record_clear helper); cross-class subject
+  GRAFTING found on #103/#100 (one thread = search hit for two resources) → #149; FU-155's
+  ~10-day-cadence premise broke (4 PSI cycles in one afternoon) → research dispatched #157.
+  Loop-improvement batch: #155 phantom-label reconciler belt, #156 issue-keyed rounds (FU-154
+  load-bearing now), agent-runtime#52 devbox-cache. FU-148 closed the loop: App actions:write
+  granted+wired+verified (201 from the minted token); ci-red play gained retry-once, close/
+  reopen retired. e2e cold-cache reds explained (#218/#217: rebuild tax + blind 300s timeout —
+  #228 carries guard-vs-belt guidance; VM proven NOT saturated at 12% CPU during the race).
+- **Forgejo**: wallet key + API token both verified live from the jail ("host-side only" was a
+  search-radius error; CLAUDE.md secrets section rewritten — wallet canonical, cache dirs
+  current); sleep-lab mirrors broken since the 08-04 DB migration → FU-007 extended with the
+  idp session's repair recipe. Goal-174 drawn as an artifact (6h11m to master, 19 sprouts,
+  squash boundary = the expensive tail).

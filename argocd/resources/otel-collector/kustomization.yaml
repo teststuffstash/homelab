@@ -8,6 +8,7 @@ namespace: monitoring
 resources:
   - deployment.yaml
   - service.yaml
+  - service-lb.yaml
   - servicemonitor.yaml
 
 configMapGenerator:

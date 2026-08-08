@@ -206,7 +206,13 @@
         "value": 5.79
        }
       ]
-     }
+     },
+     "links": [
+      {
+       "title": "open issue drill-down for ${__field.labels.project}",
+       "url": "/d/agent-issue/agents-e28094-issue-drill-down?var-project=${__field.labels.project}"
+      }
+     ]
     },
     "overrides": []
    },
@@ -334,7 +340,14 @@
     }
    ],
    "fieldConfig": {
-    "defaults": {},
+    "defaults": {
+     "links": [
+      {
+       "title": "open issue drill-down for ${__field.labels.project}",
+       "url": "/d/agent-issue/agents-e28094-issue-drill-down?var-project=${__field.labels.project}"
+      }
+     ]
+    },
     "overrides": [
      {
       "matcher": {
@@ -478,6 +491,114 @@
      },
      "legendFormat": "{{stack}}",
      "expr": "sum by (stack) (label_replace(label_replace(label_replace(label_replace(agent_run_cost_usd, \"stack\",\"oracle\",\"project\",\"oracle-.*\"),\"stack\",\"sleep\",\"project\",\"sleep-.*|snore-recorder\"),\"stack\",\"circles\",\"project\",\"circles.*\"),\"stack\",\"platform\",\"project\",\"homelab|agent-.*|openrouter-operator|xrdsst|allure.*\"))"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Daily worker OpenRouter $ by project (click a series \u2192 issue drill-down)",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 27
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "interval": "1d",
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "links": [
+      {
+       "title": "open issue drill-down for ${__field.labels.project}",
+       "url": "/d/agent-issue/agents-e28094-issue-drill-down?var-project=${__field.labels.project}"
+      }
+     ],
+     "custom": {
+      "drawStyle": "bars",
+      "fillOpacity": 70,
+      "stacking": {
+       "mode": "normal"
+      }
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "legendFormat": "{{project}}",
+     "expr": "sum by (project) (delta((sum by (project) (agent_run_cost_usd))[1d:15m]))"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "type": "table",
+   "title": "Worker $ drill \u2014 project \u00d7 issue (row links \u2192 drill-down dashboard)",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 27
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "options": {
+    "sortBy": [
+     {
+      "displayName": "Value",
+      "desc": true
+     }
+    ]
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 2,
+     "links": [
+      {
+       "title": "drill into ${__data.fields.project} #${__data.fields.issue}",
+       "url": "/d/agent-issue/agents-e28094-issue-drill-down?var-project=${__data.fields.project}&var-issue=${__data.fields.issue}"
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true
+      }
+     }
+    }
+   ],
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "instant": true,
+     "format": "table",
+     "expr": "topk(20, sum by (project, issue) (agent_run_cost_usd))"
     }
    ]
   }
