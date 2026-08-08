@@ -1,0 +1,13 @@
+# NOT synced (extension .example): the shape a stack's -iac ships. First live test: a claim in
+# a scratch ns against a harmless echo backend; the capability stays inert until the operator
+# arms CLOUDFLARE_INGRESS_WRITE in Infisical.
+apiVersion: platform.teststuff.net/v1alpha1
+kind: PublicRoute
+metadata:
+  name: probe
+  namespace: default
+spec:
+  hostname: cf-probe.default.teststuff.net
+  backend:
+    service: podinfo.default.svc.cluster.local.
+    port: 9898

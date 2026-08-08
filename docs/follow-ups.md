@@ -130,9 +130,11 @@ six OVERSIZE items pointer-ized into
       doesn't DR). `tofu/homeassistant.tf`.
 - [ ] **FU-039** — **Next legs of platform self-service (XRD claims).** LAN subdomain opt-in is
       still a thin homelab PR per stack (HTTPS-names shipped — ADR-092); git repos + ArgoCD
-      AppProject/namespace remain operator PRs; **NEW leg (operator direction 2026-08-08): public
-      ingress** — Cloudflare routes/cache/no-challenge-API knobs as a stack claim, admin rights +
-      defaults + deprecation lifecycle + edge observability platform-side; design:
+      AppProject/namespace remain operator PRs; **Public-ingress leg BUILT 2026-08-08 (ADR-101),
+      UNARMED**: PublicRoute XRD+Composition (per-claim tunnel, subtree enforcement) + the
+      cloudflare-exporter + all token mints staged; arming = operator stores
+      CLOUDFLARE_INGRESS_WRITE (mint: `cloudflare-token-tofu apply`). Open: zone-phase ruleset
+      aggregation (≥2nd consumer), the ha retrofit (consumer #2), product zones. Design:
       [`docs/cloudflare.md`](cloudflare.md) §Public ingress. Program context:
       `ROADMAP.md` → Programs in flight → "Platform self-service via Crossplane". Relates ADR-076,
       ADR-085, ADR-092, FU-068.

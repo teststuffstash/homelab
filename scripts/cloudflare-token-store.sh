@@ -23,6 +23,8 @@ MAP="
 observability_read_token cloudflare-observability-read cloudflare/observability-read CLOUDFLARE_OBSERVABILITY_READ
 tofu_apply_token         cloudflare-write-key          cloudflare/write-key          -
 acme_dns_token           cloudflare-acme-token         cloudflare/acme-token         -
+ingress_write_token      cloudflare-ingress-write      cloudflare/ingress-write      CLOUDFLARE_INGRESS_WRITE
+inventory_read_token     cloudflare-inventory-read     cloudflare/inventory-read     CLOUDFLARE_INVENTORY_READ
 "
 
 # cred root + wallet, same dual-path resolution as wallet-files.sh

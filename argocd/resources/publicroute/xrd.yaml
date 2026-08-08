@@ -1,0 +1,60 @@
+# PublicRoute (FU-039 public ingress, ADR-101) — a stack claims a public hostname; the platform
+# owns everything else (zone, tunnel plumbing defaults, credentials, deprecation lifecycle,
+# edge observability). v1 scope: routes on the PLATFORM zone (teststuff.net) via a PER-CLAIM
+# Cloudflare Tunnel — per-hostname-safe resources only. Zone-phase rulesets (cache rules,
+# api-no-challenge Skip rules) are the known-open aggregation leg: Cloudflare allows ONE
+# entrypoint ruleset per phase per zone, so per-claim Workspaces cannot own them — that design
+# lands with the second consumer (docs/cloudflare.md §Public ingress).
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xpublicroutes.platform.teststuff.net
+spec:
+  group: platform.teststuff.net
+  names:
+    kind: XPublicRoute
+    plural: xpublicroutes
+  claimNames:
+    kind: PublicRoute
+    plural: publicroutes
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [hostname, backend]
+              properties:
+                hostname:
+                  type: string
+                  description: >-
+                    Public FQDN. Must lie in the claiming namespace's delegated subtree
+                    (<anything>.<namespace>.teststuff.net) — enforced by the composition
+                    (the XRD is the privilege boundary; Cloudflare has no sub-zone grain).
+                backend:
+                  type: object
+                  required: [service, port]
+                  properties:
+                    service:
+                      type: string
+                      description: In-cluster origin host (Service FQDN — use a trailing dot to defeat ndots search expansion, see docs/cloudflare.md gotcha #1).
+                    port:
+                      type: integer
+                    protocol:
+                      type: string
+                      enum: [http, https]
+                      default: http
+                    originServerName:
+                      type: string
+                      description: TLS SNI/verify name when protocol=https.
+                    noTLSVerify:
+                      type: boolean
+                      default: false
+                replicas:
+                  type: integer
+                  default: 1
+                  description: cloudflared connector replicas in the claiming namespace.

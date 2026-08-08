@@ -1271,3 +1271,23 @@ CODEOWNERS carve-outs each carry their lint; tier-1 ownership is a scaffold that
 IAC-G04 enforces on homelab; queue-time denial anywhere (e.g. the fix-debounce lane) may use only
 the ❌ table. Doctrine + tier table: `docs/agents/iac-lane.md` §"The platform lane"; enforcement:
 `CODEOWNERS`, `scripts/pin-only-lint.sh`, `tofu/github/repo_rulesets.tf`.
+
+### ADR-101 — Public ingress as a platform XRD: zone classes, per-claim tunnels, credential-armed
+
+**Status:** Accepted (operator direction 2026-08-08). **Decision:** public HTTP exposure is a
+Crossplane claim (`PublicRoute`), not per-stack Cloudflare access: the composition (provider-
+terraform, ADR-076) owns zone/account constants, sane defaults, the Cloudflare deprecation
+lifecycle, credentials, and edge observability (cloudflare-exporter); a claim owns hostname +
+backend contract only, valid solely inside its namespace's delegated subtree. Zones come in two
+classes — product zones (one stack owns the whole zone) and platform zones (platform owns;
+stacks are subtree tenants; cross-tenancy = a `delegations:` consent line in the OWNER's IaC).
+Each claim gets its OWN tunnel + cloudflared (no shared-singleton config contention). The
+capability arms only when the operator stores the scoped write token (CLOUDFLARE_INGRESS_WRITE)
+— rendering works unarmed, Cloudflare stays untouched. **Considered:** per-stack CF tokens
+(rejected: zone tokens are CF's finest grain — no subtree enforcement, shared blast radius);
+Business-plan partial DNS (deferred: SLA-triggered, priced in the private plan); hand-managed
+tofu per hostname (the ha one-off — becomes consumer #2 and retires). **Why:** the XRD is the
+privilege boundary (Garage-bucket precedent), giving Enterprise-grade delegation semantics on
+the Free plan. **Consequences:** zone-phase rulesets (cache, api-no-challenge Skip) cannot be
+per-claim (one entrypoint ruleset per phase per zone) — the aggregation design is the named
+open leg, decided no earlier than the second consumer; mechanism doc: docs/cloudflare.md.
