@@ -533,13 +533,14 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
-- [ ] **FU-156** — **`homelab-tofu-apply` Cloudflare token EXPIRES 2027-01-01** (`expires_on`
-      default in `tofu/cloudflare-token/variables.tf`; confirmed live in the dashboard
-      2026-08-08) — on that day jail `tofu/cloudflare` applies fail with nothing alerting.
-      **Next (before ~2026-12):** `devbox run cloudflare-token-tofu apply` with a fresh
-      `expires_on` → re-store per the printed checklist (wallet `cloudflare-write-key`, jail
-      cache, OPNsense env for the acme twin if rotated too). Decide then whether write tokens
-      keep expiries at all — the observability-read token deliberately has none (FU-150 lesson).
+- [ ] **FU-156** — **Credential-expiry BELT (re-scoped 2026-08-08, operator: dates-in-git is the
+      wrong system).** One gauge `credential_expiry_timestamp_seconds` + one <30d alert; live-poll
+      Cloudflare `/user/tokens` (needs a tiny User:API-Tokens:Read mint), declared expiries for
+      file-shaped creds. Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry.
+      **Urgency is real**: 4 CF tokens expire 2026-12-14…2027-01-09 (earliest = the broad
+      "Read all resources" token — RETIRE it when `homelab-observability-read` lands, don't
+      renew). **Next:** mint the inventory-read token + the exporter leg (can ride the
+      cloudflare-exporter build). Relates FU-150 (silent-expiry class), FU-039.
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root
