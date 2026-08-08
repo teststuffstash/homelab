@@ -58,7 +58,7 @@ while true; do
                | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, CI green, waiting on the human gate"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
-  blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
+  blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
     | jq -r '.items[]? | "NEEDS-META blocked: \(.repository_url | sub(".*/";""))#\(.number) \(.title[:60])"' 2>/dev/null)
   [ -n "$blocked" ] && out="$out$blocked"$'\n'
   # Clause 3: unlabeled platform-repo issues >24h — no agent-* label at all means no clause can
