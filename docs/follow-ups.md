@@ -400,8 +400,12 @@ the block needs pruning, not more headings.
       **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass: independence RIGHT, queueing
       WRONG (stale body, alert already resolved — coordinator refused the unit). Autopsy:
       [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
-      **Remaining:** (a) FILING-side correlation (`group_by = ["alertname"]`); (c) queue-time
-      CURRENCY gate — `sq_decide` skips resolved/stale-bodied issues (detail in the autopsy).
+      **Resolve leg VERDICT-KEYED 2026-08-08** (PR#129, from responder-filed #124): `fix`-verdict
+      issues no longer close/comment on alert clear (alert-state ≠ defect-state — the #107
+      13-comment churn class), first live closure by-the-doctrine on #107 itself. **Remaining:**
+      (a) FILING-side correlation (`group_by = ["alertname"]`); (c) queue-time CURRENCY gate —
+      `sq_decide` skips resolved/stale-bodied issues (detail in the autopsy; PR#129's resolve
+      change is NOT this — (c) is the debounce/queue side).
       Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
