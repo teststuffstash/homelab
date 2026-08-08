@@ -235,6 +235,41 @@ wantbrief "dedup hit → read the prior thread before re-deriving" "READ THAT TH
 wantbrief "…and the --json form is named (the plain view renders empty)" "the plain view renders EMPTY under this token"
 wantbrief "bodies are composed with --body-file" "gh issue create --body-file"
 wantbrief "…never as an interpolated argument" "NEVER build it as an interpolated double-quoted argument"
+wantbrief "the one-subject-per-thread boundary rides every triage, not just the graft-prone ones" "ONE SUBJECT PER THREAD"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#149 — subject identity: a related-but-different subject files FRESH and links, never grafts"
+# 2026-08-08, two live grafts by the same mechanism. #103 was born a wk-01 CPU-containment record
+# (NodeSystemSaturation); a NodeMemoryMajorPagesFaults triage commented onto it carrying its OWN
+# marker, subject:workload:monitoring/kube-prometheus-stack-prometheus-node-exporter — a subject
+# with no prior issue anywhere. The dedup search greps COMMENTS, so that thread is now the org-wide
+# hit for both resources, permanently (closing it does not unindex the comment). #100 took a third
+# alert class the same way. The instinct was FU-133's anti-fragmentation and it was right; the
+# mechanism was marker-attachment and it is drift with a mechanism.
+#
+# ⚠ WHAT THIS CAN AND CANNOT ASSERT. The org-wide 'subject:' search runs INSIDE the session, not in
+# this shell — the harness stubs claude, so no search happens here and no fixture can stage one. The
+# only lever the manifest holds is the INSTRUCTION the brief carries, so that is what is asserted:
+# for an alert whose subject is exactly the grafted one, the brief must (a) compute that subject as
+# its own, and (b) instruct filing fresh + linking whenever the thread found does not already carry
+# it. A regression that deleted the boundary would fail here even though no issue is ever touched.
+
+scenario subject-identity-graft
+go "$(alert f15 '{"alertname":"NodeMemoryMajorPagesFaults","namespace":"monitoring","pod":"kube-prometheus-stack-prometheus-node-exporter-x7k2p"}')"
+want      "the grafted alert computes its OWN subject (not #103's node/workload one)" \
+          "subject=workload:monitoring/kube-prometheus-stack-prometheus-node-exporter"
+wantbrief "comment ONLY where the alert's own subject marker is already on the thread" \
+          "is ALREADY a marker on that thread"
+wantbrief "a related-but-different subject files its OWN issue" "file your OWN issue and cross-reference by LINK"
+wantbrief "…and correlates by LINK, in the 'related: #N' form" "related: #N"
+wantbrief "never attach a second subject marker to someone else's thread" \
+          "NEVER attach your 'subject:' marker to a thread that does not already carry it"
+wantbrief "…because the dedup search greps COMMENTS (the aliasing mechanism is stated)" \
+          "the dedup search greps COMMENTS"
+wantbrief "grouping belongs at Alertmanager/filing, not to a comment (FU-133 leg a)" \
+          "Grouping alerts together is Alertmanager's job at filing time"
+wantbrief "the marker rule itself is split: FILE always carries it, a COMMENT only on a match" \
+          "a COMMENT carries it ONLY on a thread that already does"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "LEG 2 — the resolve leg keys on the recorded verdict, not on the alert"
