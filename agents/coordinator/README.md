@@ -38,8 +38,8 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | Label | Meaning | Set by |
 |---|---|---|
 | `agent-fix` | opt-in: this issue is fair game for the agent | human |
-| `agent/queued` | ready to dispatch | human or coordinator |
-| `agent/in-progress` | a worker pod is running this round | coordinator |
+| `agent/queued` | ready to dispatch | human or coordinator — **or the scan itself**, restoring it when it reconciles a phantom `agent/in-progress` (homelab#155, IL-T16) |
+| `agent/in-progress` | a worker pod is running this round | coordinator; the deterministic scan REMOVES it when the state is a phantom — no live pod, no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label also holds every sibling through the ADR-097 footprint intersection (IL-T16) |
 | `agent/review` | PR open, awaiting review (human or agent) | coordinator |
 | `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) | coordinator |
 | `agent/done` | merged | coordinator |

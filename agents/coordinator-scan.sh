@@ -9,7 +9,11 @@
 #   PR:    open ∧ ¬`major/awaiting-human` ∧ (`major` ∨ `merge-conflict` ∨ reviewDecision=CHANGES_REQUESTED)
 #   v2:    issue open ∧ `agent-fix` ∧ `agent/in-progress` ∧ no Running worker pod ∧ no open PR
 #          referencing it (C4/C5 — a worker went terminal and nothing re-ticked; pod read via
-#          kubectl, probe failures skip the clause rather than fail into a wake)
+#          kubectl, probe failures skip the clause rather than fail into a wake). Once that state
+#          has PERSISTED past C4C5_PERSIST_S and no merged PR mentions the issue, the scan
+#          RECONCILES the label itself — agent/queued back on, agent/in-progress off, audit
+#          commented (homelab#155) — because the phantom label also holds every sibling through
+#          the ADR-097 footprint intersection. Everything it holds still rides as a unit.
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
 # `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
 # report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
@@ -56,6 +60,14 @@ NOOP_ROUND_JQ='([.comments[]|select(.body|test("Agent run stats"))|.createdAt] |
   | ([.comments[]|select(.body|test("Agent run stats"))|.createdAt | select($head == "" or . > $head)] | length) as $after
   | if $after >= 2 then "1" else "" end'
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
+
+# homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
+# scan reconciles the label itself. One full scan interval is the */10 coordinator-reflex cron
+# (agents/coordinator/reflexes-argo.yaml); 15 min is that plus margin for cron jitter and the
+# doorbell, so the belt can never actuate on the same instant of state it first observed. The
+# asymmetry sets the default: a phantom held one extra pass costs 10 minutes, a wrongly cleared
+# label costs a duplicate ride on live work.
+C4C5_PERSIST_S="${C4C5_PERSIST_S:-900}"
 
 # kubectl for the v2 (C4/C5) predicate — same resolution as agent-session.sh: jail → tofu/kubeconfig;
 # in-cluster (the coordinator-reflex CronJob) → the pod ServiceAccount (KUBE empty).
@@ -274,7 +286,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # footprint — a human is on it) but is excluded from the C4/C5 clause below: FU-069 makes it
     # invisible to every ACTIONABLE clause (missed on the first item-mode cut — two workers were
     # dispatched INTO a breaker-flagged issue 2026-07-21 before the breaker was cleared).
-    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
+    # `updatedAt` is fetched for the homelab#155 belt's persistence guard (condition (c)) — read
+    # the mergeStateStatus warning by the PR fetch below before touching this list: a selector
+    # field that is not in --json comes back absent and silently matches nothing.
+    inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
     jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
@@ -786,14 +801,136 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null || echo '[]')"
-          # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and in the
-          # unit emission below) or c4c5-redispatch, which outranks merged-closeout, re-rides
-          # merged work every tick while the closeout unit starves. Detection block above.
-          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
-            '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+          # ONE selector, THREE derivations (the belt, the report line, the unit) — this is
+          # conditions (a)+(b) of the abandoned-ride predicate and the copies MUST NOT drift.
+          # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and so in
+          # every derivation) or c4c5-redispatch, which outranks merged-closeout, re-rides merged
+          # work every tick while the closeout unit starves. Detection block above.
+          # ⚠ Kept SINGLE-quoted and concatenated as `jq "$C4C5_SEL"'|…'`. Pasting it into a
+          # double-quoted jq program would eat one backslash and turn the `\\b` word boundary into
+          # jq's `\b` BACKSPACE — the reference test would then match nothing and every
+          # in-progress issue would read as abandoned. Variable expansion does no such thing.
+          C4C5_SEL='.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
              | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-             | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
+             | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+          # ── THE BELT (homelab#155): RECONCILE the phantom label, do not only report it ────────
+          # A phantom `agent/in-progress` starves far more than its own issue: it counts against
+          # REPO_MAX_WIP and holds every SIBLING through the ADR-097 footprint intersection
+          # ("overlaps an in-progress issue's Touches"). Six of them across two stacks idled
+          # oracle+circles for ~3h on 2026-08-08 and were cleared BY HAND — found only because the
+          # operator asked why nothing was running. agent-runtime#36 owns the CAUSE (finalize must
+          # run on every exit path); this is the BELT, because causes recur in new shapes (deadline
+          # reap, node loss, OOM) and a belt catches every shape.
+          # Two more holds before it writes, both fail-SAFE — an unreadable probe HOLDS, it never
+          # clears (rule #6: never fail INTO a write):
+          #   (c) PERSISTENCE. Nothing in a dispatch is transactional: the coordinator applies
+          #       `agent/in-progress` and THEN creates the pod, and finalize opens the PR from
+          #       inside a pod that is still Running. So a scan can land mid-transition and see
+          #       (a)+(b) on perfectly live work. Two anchors, BOTH must be older than
+          #       C4C5_PERSIST_S: the issue has been quiet (`updatedAt` — the label write that
+          #       starts a ride bumps it, so this covers the dispatch race), and no agent-session
+          #       pod for THIS issue went terminal recently (covers the finalize race, where the
+          #       pod exits a beat before its PR appears).
+          #   (d) NO MERGED PR mentions the issue. `Fixes #N` closes on a master merge so the
+          #       normal case never reaches here — but a PR merged with a NON-closing reference
+          #       leaves exactly this state, and re-queueing it re-rides finished work (the
+          #       FU-143 lesson, one lane over). A bare mention is enough to hold: holding costs a
+          #       report line, guessing costs a duplicate ride.
+          # Anything the belt HOLDS keeps today's behaviour exactly — reported, and the
+          # c4c5-redispatch unit still rides, so the LLM tick stays the path for every case the
+          # belt will not touch by itself. Anything it CLEARS leaves the unit list: the issue is an
+          # ordinary `agent/queued` item again and the normal dispatch path (with its footprint,
+          # WIP and PR-cap gates) owns it on the next pass — no LLM tick spent to say "re-run it".
+          c4c5_cleared=""
+          c4c5_cands=""
+          [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
+            | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+              "$C4C5_SEL"' | "\($n)|\(.updatedAt // "")"')"
+          if [ -n "$c4c5_cands" ]; then
+            now_s="$(date -u +%s)"
+            # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
+            # predicate and stays byte-for-byte what it was. This one wants the TERMINAL pods it
+            # filters out, with their finish times. Both probes failing is the same story — hold.
+            TPODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" -o json 2>/dev/null)" || TPODS=""
+            c4c5_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || c4c5_merged=""
+            if ! jq -e . >/dev/null 2>&1 <<<"${TPODS:-}" || ! jq -e . >/dev/null 2>&1 <<<"${c4c5_merged:-}"; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED (terminal pods / merged PRs) — the phantom-label belt held every candidate this tick; the C4/C5 report + unit below are unaffected (rule #6)\n"
+            else
+              for cand in $c4c5_cands; do
+                cn="${cand%%|*}"; cupd="${cand#*|}"
+                # jq parses the timestamps, not `date -d` — same reader the pod janitor at the top
+                # of this file uses, and it does not assume GNU date in the scan image. An
+                # UNPARSEABLE stamp yields -1, which is < the window, so it holds.
+                cage="$(jq -rn --arg t "$cupd" --argjson now "$now_s" \
+                  '($t | fromdateiso8601? // null) as $s | if $s == null then -1 else ($now - $s) end' 2>/dev/null || echo -1)"
+                case "$cage" in ''|*[!0-9-]*) cage=-1;; esac
+                if [ "$cage" -lt "$C4C5_PERSIST_S" ]; then
+                  orphans="${orphans}[$repo] ⏳ phantom-label belt HELD — issue #${cn} was touched $(( cage < 0 ? 0 : cage / 60 ))m ago (< the ${C4C5_PERSIST_S}s transition-race guard, or an unreadable timestamp); re-checked next scan\n"
+                  continue
+                fi
+                # Pod-transition anchor. No matching terminal pod at all ⇒ nothing recent to race
+                # with (the big sentinel); a jq/read failure ⇒ 0 ⇒ held.
+                ctage="$(jq -r --arg pat "issue-${cn}-" --argjson now "$now_s" \
+                  '[ .items[]? | select((.metadata.name // "") | contains($pat))
+                     | .status.containerStatuses[]?.state.terminated.finishedAt // empty
+                     | fromdateiso8601? // empty ] | max as $m
+                   | if $m == null then 999999999 else ($now - $m) end' <<<"$TPODS" 2>/dev/null || echo 0)"
+                case "$ctage" in ''|*[!0-9-]*) ctage=0;; esac
+                if [ "$ctage" -lt "$C4C5_PERSIST_S" ]; then
+                  orphans="${orphans}[$repo] ⏳ phantom-label belt HELD — issue #${cn}: a worker pod for it went terminal $(( ctage / 60 ))m ago (< the ${C4C5_PERSIST_S}s guard — finalize may still be landing its PR)\n"
+                  continue
+                fi
+                if [ "$(jq -r --argjson nn "$cn" '[.[] | select(test("#\($nn)\\b"))] | length' <<<"$c4c5_merged" 2>/dev/null || echo 1)" -gt 0 ]; then
+                  orphans="${orphans}[$repo] ⛔ phantom-label belt HELD — issue #${cn} is mentioned by a MERGED PR: this may be finished work whose reference did not close it, not an abandoned ride. Re-queueing it would re-ride merged work — verify by hand (the c4c5-redispatch unit still carries it to the tick).\n"
+                  continue
+                fi
+                # ⚠ ORDER IS LOAD-BEARING, and `gh issue edit --add-label X --remove-label Y` is
+                # NOT atomic: if the add fails while the remove lands, the issue holds no lifecycle
+                # label at all and goes invisible to EVERY clause. That is precisely how the
+                # 2026-08-08 hand-clear lost oracle#193 a second time. Add `agent/queued` FIRST,
+                # remove `agent/in-progress` SECOND, then RE-READ and prove the end state — the
+                # audit comment is posted only against a state we verified.
+                # The re-read runs on BOTH legs: a half-applied write is exactly the state that
+                # needs reporting ACCURATELY, and "the edit returned non-zero" says nothing about
+                # which of the two landed.
+                # ⚠ `set -euo pipefail` is on: a bare `A && B` whose result is non-zero is NOT in a
+                # condition context and would ABORT THE WHOLE SCAN mid-write — every later clause
+                # and every other repo in the stack silently starved by one failed label edit.
+                # (Caught in the fixture harness, exit 1 right after the failing edit.) The `if`
+                # and the `|| true` are what keep a refused write a REPORTED write.
+                cok=""
+                if gh issue edit "$cn" --repo "$slug" --add-label agent/queued >/dev/null 2>&1; then
+                  gh issue edit "$cn" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+                fi
+                cend="$(gh issue view "$cn" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+                case ",${cend}," in
+                  *",agent/queued,"*) case ",${cend}," in *",agent/in-progress,"*) : ;; *) cok=1;; esac;;
+                esac
+                if [ -n "$cok" ]; then
+                  gh issue comment "$cn" --repo "$slug" --body "$(printf '%s\n' \
+                    "🤖 **Phantom \`agent/in-progress\` cleared — re-queued \`agent/queued\`** (deterministic scan belt, homelab#155)." \
+                    "" \
+                    "Audit, as of \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`:" \
+                    "" \
+                    "- **No worker pod.** \`kubectl -n ${repo} get pods -l app=agent-session,project=${repo} --field-selector=status.phase!=Succeeded,status.phase!=Failed\` returned nothing, and no \`agent-session\` pod named for this issue went terminal within the last $(( C4C5_PERSIST_S / 60 ))m." \
+                    "- **No open PR** references \`#${cn}\` (every open PR body in \`${slug}\` was checked), and no merged PR mentions it either." \
+                    "- **The state persisted.** The issue had been untouched for $(( cage / 60 ))m — past the $(( C4C5_PERSIST_S / 60 ))m guard, which is one full scan interval plus margin, so this is not a pod-transition race." \
+                    "" \
+                    "The label was starving more than this issue: it counted against the repo WIP ceiling and held every sibling whose \`Touches:\` intersect it (ADR-097). The cause of the missing finalize is agent-runtime#36; this belt only reconciles the state it left behind." \
+                    "" \
+                    "If a ride really is live, its pod is what proves it — the clause holds as soon as one is visible. Re-applying \`agent/in-progress\` by hand with no pod behind it will simply be cleared again after the guard window." )" >/dev/null 2>&1 || true
+                  c4c5_cleared="${c4c5_cleared}${cn} "
+                  orphans="${orphans}[$repo] ⚠ phantom \`agent/in-progress\` RECONCILED → \`agent/queued\`: issue #${cn} (no live pod, no open PR, state persisted $(( cage / 60 ))m — audit commented; homelab#155). Frees its ADR-097 footprint + a WIP slot; dispatch resumes on the next pass.\n"
+                else
+                  orphans="${orphans}[$repo] ⛔ phantom-label reconcile FAILED or landed HALF-APPLIED on issue #${cn} — labels are now [${cend}]. Check by hand: with NEITHER label the issue is invisible to every clause; with BOTH it still holds its footprint. The issue keeps its c4c5-redispatch unit either way.\n"
+                fi
+              done
+            fi
+          fi
+          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+            --arg done "${c4c5_cleared:-}" \
+            "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
           # The held goal children get their OWN report line — silence here is what let the first
           # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
@@ -805,13 +942,12 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
              | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
           [ -n "$ambig" ] && orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
           if [ -n "$dispatchable" ]; then
+            # An issue the belt RE-QUEUED is deliberately excluded: it is a plain queued item now,
+            # and emitting the unit too would race the queued lane onto the same issue.
             for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
-                '.[] | select(((.labels|map(.name))|index("agent/error"))|not)
-                 | .number as $n
-                 | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-                 | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
-                 | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
-                 | "\(.number)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
+                --arg done "${c4c5_cleared:-}" \
+                "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+                 | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
               units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
             done
           fi
