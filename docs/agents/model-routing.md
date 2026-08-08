@@ -398,6 +398,41 @@ exceeded 30s**. Not one run matched the premise. Raising goal-* to `heavy` was c
 taken (2026-08-05) — it is a whole-lane question, not a goal-lane one, and belongs with evidence
 about what the latch is actually protecting.
 
+
+### M11. The cost ladder across RAILS — free → subscription-headroom → paid (operator direction 2026-08-08)
+
+The gap the 2026-08-08 starvation night exposed, stated as the target: **the router picks the
+"best" option across ALL rails, and the ladder is learned, not configured.** Preference order by
+true marginal cost: (1) **:free OpenRouter models** where the dispatch can afford the gamble and
+the (class, model) cell has proven itself; (2) **the claude subscription** while there is
+definite headroom (it is already paid — marginal cost ≈ $0 — bounded by the FU-088 semaphore +
+utilization gates that protect the review/coordination safety net); (3) **paid OpenRouter** as
+the reliable spender of last resort. Three missing pieces over M8:
+
+- **The subscription becomes a route CANDIDATE, not a claim knob.** /route's ordering today is
+  effective price *within OpenRouter*; the subscription rail enters the same ordering priced at
+  ~0 when `5h/7d utilization < threshold ∧ semaphore free`, and infinite when not. homelab#158's
+  or-capacity-down degrade is the EMERGENCY case of this same ladder — this section is the
+  steady-state generalization.
+- **Urgency is a route input.** Free-tier picks risk 429-storms and slow completions (laguna:
+  100% "up", 81% 429 for us). A dispatch carries whether it is deadline-tight (ci-red fix rounds,
+  goal-chain children with a waiting assembly, review rounds) or backlog-elastic (cosmetic
+  sprouts, research spikes, retro digests) — scan/authoring-time deterministic, like every other
+  class input (ADR-094: never inferred in the data plane). Tight ⇒ skip tier 1 unless the cell
+  is proven-fast; elastic ⇒ tier 1 first, always.
+- **The LADDER is learned per (class, urgency) cell.** M8's own-outcomes feed corrects within a
+  tier; extend it to tier-START selection: a cell whose tier-1 attempts keep banking clean
+  outcomes keeps starting at tier 1; degradations (strikes, deadline blows, retry storms) climb
+  the start-tier — and the jitter band occasionally re-probes downward so recovered free models
+  get re-discovered. Same store, same shadow-decision visibility, same P4-flip discipline: run it
+  in shadow first, flip when the shadow log reads sane. **The operator stops being the ladder's
+  tuner — the outcomes are.**
+
+Buildable first leg: homelab#159 (shadow-mode: subscription-rail candidate + urgency input +
+per-cell start-tier in the store, decisions logged, no behavior change until the soak reads
+clean). Relates ADR-096 (the /route contract), homelab#158 (the emergency degrade), FU-095
+(the pilot evidence), FU-088 (the safety-net gates this must never starve).
+
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
 Direction 2026-07-25. The downstream consumer is the IdP project's **reasoning** agents (auditing,
