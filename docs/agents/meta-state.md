@@ -88,9 +88,13 @@ meant to avoid.)
   2026-08-06 "no `.agents/` by design" ruling. It ships `.agents/fix.yaml`, `tests/` + a `unit` CI
   job over `agent-finalize`, and a CODEOWNERS owning the governor paths (`.github/`, Dockerfile,
   lockfiles, `.agents/`) while leaving the fixer's lane unowned. Its recipe uses `Fixes #n`, which
-  genuinely closes since these PRs target master. ⚠ Still no bot reviewer (`reviewer.enabled=false`
-  for the `platform` stack), so a PR there merges via the OrgAdmin bypass — `gh pr merge --admin` —
-  never by waiting. ⚠ First `unit` run took **16m** on a cold nix cache; that is not a hang.
+  genuinely closes since these PRs target master. ⚠ CORRECTED 2026-08-08 (~15:00Z): **"no bot
+  reviewer on platform repos" is STALE for FIXER-ENABLED ones** — reviewer coverage follows the
+  fixer block, and agent-runtime PR#40 went worker→bot-APPROVE→auto-merge with no human, which is
+  the DESIGN on the unowned lane paths (agent-base/*): the codeowner gate guards only the governor
+  paths there. homelab/agent-coordinator PRs still need the meta read + OrgAdmin merge (homelab's
+  gate is whole-repo by operator ruling). ⚠ First `unit` run took **16m** on a cold nix cache;
+  that is not a hang.
 - **⚠ Arming is keyed on the `goal/` PREFIX** (`agent-session.sh` + `review-reflex.sh` C9). NEVER
   widen to "any non-default base": the prefix is the only thing carrying the ruleset, and arming
   into an unprotected base merges ON OPEN.
