@@ -20,10 +20,18 @@
 # Poll is 10 min — this watches for HUMAN-latency states, not machine ones.
 cd /workspace/homelab || { echo "PROBE-FAIL: repo missing"; exit 1; }
 PLATFORM_REPOS="${PLATFORM_REPOS:-homelab agent-runtime agent-coordinator openrouter-operator}"
+# Clause-1 split (2026-08-08 ~15:20Z): reviewer coverage FOLLOWS the fixer block, so on
+# fixer-enabled repos a bot review IS coming for REVIEW_REQUIRED PRs (PR#42 false-flagged while
+# its reviewer pod was Running) — there, only the codeowner-park state (bot APPROVED, human
+# pending) is meta's. GATED repos have no bot at all; REVIEW_REQUIRED + CI-green is the PR#123
+# gap. Source of truth for the split: repos[].fixer in agents/fixer/openrouter-operator/
+# agentstack.yaml — update BOTH when a fixer block flips.
+GATED_REPOS="${GATED_REPOS:-homelab agent-coordinator}"
+LANE_REPOS="${LANE_REPOS:-agent-runtime openrouter-operator}"
 seen=""
 while true; do
   out=""
-  for r in $PLATFORM_REPOS; do
+  for r in $GATED_REPOS; do
     rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
              --json number,reviewDecision,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
            | jq -r --arg r "$r" '.[] | select(.isDraft|not)
@@ -33,6 +41,14 @@ while true; do
                    and .conclusion != "SKIPPED")] | length == 0)
                | select((.statusCheckRollup | length) > 0)
                | "NEEDS-META review: \($r)#\(.number) CI-green, no reviewer will come"' 2>/dev/null)
+    [ -n "$rows" ] && out="$out$rows"$'\n'
+  done
+  for r in $LANE_REPOS; do
+    rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
+             --json number,latestReviews,isDraft 2>/dev/null | tail -1 \
+           | jq -r --arg r "$r" '.[] | select(.isDraft|not)
+               | select([.latestReviews[]? | select(.state == "APPROVED")] | length > 0)
+               | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, waiting on the human gate"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
   blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
