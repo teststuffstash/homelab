@@ -48,11 +48,16 @@
 #                name the read that works from THIS pod, name the fallback and its blind spot, and
 #                do not let "I could not verify" stand on a query nobody ran. Runbook + the two
 #                reads: docs/agents/roles.md §responder.
-#   resolve    = keyed on the recorded verdict (#124, FU-133 leg c). 'report-only' keeps the
-#                auto-close below — right for transient noise. 'fix' means the DEFECT outlives
-#                its alert (egress drops fire per ride and clear when the ride dies), so the
-#                clear neither closes nor comments; closure belongs to the merged fix and its
-#                acceptance probe, or to a human. Alert state ≠ defect state (iac-lane.md).
+#   resolve    = keyed on the recorded verdict (#124, FU-133 leg c), then on ENGAGEMENT (#148).
+#                'fix' means the DEFECT outlives its alert (egress drops fire per ride and clear
+#                when the ride dies), so the clear neither closes nor comments; closure belongs
+#                to the merged fix and its acceptance probe, or to a human. Alert state ≠ defect
+#                state (iac-lane.md). 'report-only' splits: bots-only → comment + auto-close
+#                (right for transient noise, unchanged); a HUMAN has spoken so the issue stays
+#                open → no comment either, same single rewritten 'last-cleared:' line. ONE
+#                comment per clear on a thread that never closes is unbounded by construction —
+#                27 of homelab's 80 comments on 2026-08-08 were this leg, #63 taking four in ~2h
+#                of PSI flapping. A comment is only worth posting where it is also the last word.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -169,11 +174,35 @@ spec:
             # halves of the damage — #118 was closed by this leg while its defect was latent (a
             # human reopened it), and #107 accumulated ~10 fire/clear comments that buried the
             # verdict its 00:37Z re-triage needed. So the leg keys on the verdict the triage
-            # already records: 'report-only' → everything below, unchanged (auto-close is right
-            # for transient noise); 'fix' → no close, no comment, at most a last-cleared line in
-            # the body. Closure then belongs to the fix lane (merged fix + acceptance probe) or a
-            # human. No new state — it is the same 'fix-verdict:' line the dispatch half at the
-            # bottom of this file already reads, matched with the same regex.
+            # already records: 'report-only' → the engagement split below; 'fix' → no close, no
+            # comment, at most a last-cleared line in the body. Closure then belongs to the fix
+            # lane (merged fix + acceptance probe) or a human. No new state — it is the same
+            # 'fix-verdict:' line the dispatch half at the bottom of this file already reads,
+            # matched with the same regex.
+            #
+            # ── then keyed on ENGAGEMENT, because that cured the churn on ONE path (#148) ─────
+            # The verdict split above fixed the 'fix' path and the disease survived on the other
+            # one: report-only + a human engaged = comment every clear AND never close, i.e. one
+            # comment per flap cycle, forever. Measured 2026-08-08 — 27 of the day's 80 homelab
+            # issue comments were this leg's ✅-notices, #63 alone taking four in ~2h as a PSI
+            # storm flapped, #103 five. The rule underneath both fixes: a per-clear COMMENT is
+            # only earned where it is also the LAST word (the bots-only close below). Wherever
+            # the issue stays OPEN, the clear is a fact ABOUT the issue, and a fact belongs in
+            # the body — rewritten in place, exactly once.
+            #
+            # Both no-comment paths record it through this one helper, so "N clears stay 1 line"
+            # is implemented once: drop every '^last-cleared:' line, append exactly one. GUARDED
+            # on the marker that identifies the issue ($4) — a body that came back short or lost
+            # that marker is NOT written, because a half-written body is worse than an unrecorded
+            # clear. Reads $rname/$rfp from the resolve loop below.
+            # Exit: 0 written, 1 edit failed, 2 guard refused.
+            _record_clear() { # <repo> <number> <issue-json> <guard-regex> <tail-sentence>
+              printf '%s' "$3" | jq -r '.body // ""' | grep -v '^last-cleared:' > /tmp/rbody.md || true
+              printf 'last-cleared: %s — %s stopped firing (alert-fp:%s). %s\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rname" "$rfp" "$5" >> /tmp/rbody.md
+              [ -s /tmp/rbody.md ] && grep -qi "$4" /tmp/rbody.md || return 2
+              gh issue edit "$2" --repo "$1" --body-file /tmp/rbody.md >/dev/null 2>&1 || return 1
+            }
             jq -r '.alerts[]? | select(.status == "resolved") | [(.fingerprint // ""), (.labels.alertname // "?")] | @tsv' \
               /tmp/alerts.json 2>/dev/null | while IFS="$(printf '\t')" read -r rfp rname; do
               [ -n "$rfp" ] || continue
@@ -192,34 +221,43 @@ spec:
               # The verdict split. Same regex the dispatch half uses, against the same body line.
               if printf '%s' "$rmeta" | jq -r '.body // ""' | grep -qi '^fix-verdict:[[:space:]]*fix[[:space:]]*$'; then
                 # At most a last-cleared line: it carries the "not seen since" fact without adding
-                # a comment to bury the verdict under. Rewritten in place, so N clears stay 1 line.
-                # Guarded — a body that came back short or lost its verdict marker is not written.
-                printf '%s' "$rmeta" | jq -r '.body // ""' | grep -v '^last-cleared:' > /tmp/rbody.md || true
-                printf 'last-cleared: %s — %s stopped firing (alert-fp:%s). The DEFECT closes this issue, not the alert.\n' \
-                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rname" "$rfp" >> /tmp/rbody.md
-                if [ -s /tmp/rbody.md ] && grep -qi '^fix-verdict:' /tmp/rbody.md; then
-                  gh issue edit "$rnum" --repo "$rrepo" --body-file /tmp/rbody.md >/dev/null 2>&1 \
-                    && echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment, last-cleared line updated" \
-                    || echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body edit failed, non-fatal)"
-                else
-                  echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body unreadable, left untouched)"
-                fi
+                # a comment to bury the verdict under. The guard is the verdict marker itself —
+                # the line this branch was selected by.
+                rc=0; _record_clear "$rrepo" "$rnum" "$rmeta" '^fix-verdict:' \
+                  'The DEFECT closes this issue, not the alert.' || rc=$?
+                case "$rc" in
+                  0) echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment, last-cleared line updated";;
+                  1) echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body edit failed, non-fatal)";;
+                  *) echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body unreadable, left untouched)";;
+                esac
                 continue
               fi
-              # ── report-only (or no verdict recorded): the original behaviour, unchanged ───────
+              # ── report-only (or no verdict recorded): split on ENGAGEMENT ────────────────────
               # Human engagement = anyone whose login is not a bot. gh renders App logins with a
               # [bot] suffix HERE (REST); the reviewer's REST-vs-GraphQL mismatch (FU-069) does not
               # apply to this endpoint, but the test stays suffix-tolerant on purpose.
               humans="$(printf '%s' "$rmeta" \
                         | jq -r '[.comments[]? | select((.author.login // "") | test("\\[bot\\]$") | not)] | length' 2>/dev/null || echo 0)"
-              gh issue comment "$rnum" --repo "$rrepo" \
-                --body "✅ **Alert cleared** — \`$rname\` (alert-fp:\`$rfp\`) stopped firing at $(date -u +%Y-%m-%dT%H:%M:%SZ). Posted by the responder's resolve leg (FU-133); the issue does not have to be true any more just because it was filed." >/dev/null 2>&1 || true
               if [ "${humans:-0}" -eq 0 ]; then
+                # Bots only → the comment is also the LAST word on the thread, so it is bounded by
+                # the close that follows it. This half is unchanged.
+                gh issue comment "$rnum" --repo "$rrepo" \
+                  --body "✅ **Alert cleared** — \`$rname\` (alert-fp:\`$rfp\`) stopped firing at $(date -u +%Y-%m-%dT%H:%M:%SZ). Posted by the responder's resolve leg (FU-133); the issue does not have to be true any more just because it was filed." >/dev/null 2>&1 || true
                 gh issue close "$rnum" --repo "$rrepo" --reason completed >/dev/null 2>&1 \
                   && echo "→ resolved $rname ($rfp): commented + CLOSED $hit (no human had engaged)" \
                   || echo "→ resolved $rname ($rfp): commented $hit, close failed (non-fatal)"
               else
-                echo "→ resolved $rname ($rfp): commented $hit, left OPEN — $humans human comment(s), someone owns it"
+                # A human owns it → the issue stays open, so a comment here is never anyone's last
+                # word and repeats once per flap cycle (#148). Same single-line treatment as the
+                # 'fix' verdict above; the guard is the alert-fp marker, which is what the firing
+                # path's belt finds (and REOPENS) this issue by.
+                rc=0; _record_clear "$rrepo" "$rnum" "$rmeta" '^alert-fp:' \
+                  'A human is engaged, so the DEFECT closes this issue, not the alert.' || rc=$?
+                case "$rc" in
+                  0) echo "→ resolved $rname ($rfp): $hit left OPEN — $humans human comment(s), someone owns it; no comment, last-cleared line updated";;
+                  1) echo "→ resolved $rname ($rfp): $hit left OPEN — $humans human comment(s), someone owns it; no comment (body edit failed, non-fatal)";;
+                  *) echo "→ resolved $rname ($rfp): $hit left OPEN — $humans human comment(s), someone owns it; no comment (body carries no alert-fp marker, left untouched)";;
+                esac
               fi
             done
 

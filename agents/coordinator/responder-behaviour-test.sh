@@ -109,7 +109,9 @@ ok()  { PASS=$((PASS+1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); FAILED+=("$1"); printf '  \033[31m✗\033[0m %s\n       %s\n' "$1" "$2"; }
 section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; export H; }
+# /tmp/rbody.md is the script's own scratch file for a body rewrite; clear it per scenario so a
+# `grep -c '^last-cleared:'` can never pass on the PREVIOUS scenario's leftovers.
+scenario() { H="$TMP/run/$1"; rm -rf "$H"; mkdir -p "$H/gh"; rm -f /tmp/rbody.md; export H; }
 go() {
   PAYLOAD="$1" ORG="teststuffstash" HOME="$TMP/home" REPO_UNDER_TEST="$REPO" \
   PUSHGATEWAY="" PATH="$BIN:$PATH" \
@@ -270,16 +272,47 @@ alert-fp:r2
 fix-verdict: report-only' '[{"author":{"login":"homelab-agents-1234[bot]"}}]'
 go "$(resolved r2 PVCNearFull)"
 want     "report-only, bots only → commented + CLOSED (unchanged)" "commented + CLOSED"
+wantcall "report-only, bots only → the ✅ comment is still posted" "issue comment"
 wantcall "report-only → close issued" "issue close"
 
+# ── #148: the OTHER churn path. PR#129 gave the single-line treatment to 'fix' verdicts only, so
+# report-only + human-engaged kept commenting every clear on a thread that never closes: 27 of the
+# 80 comments homelab took on 2026-08-08 were this leg, #63 four in ~2h of PSI flapping. An open
+# issue is exactly where a per-clear comment is unbounded, so it gets the body line instead.
 scenario resolve-report-only-human
 searchhit teststuffstash/homelab 77
 issuebody 'evidence
 alert-fp:r3
 fix-verdict: report-only' '[{"author":{"login":"RasmusSoot"}}]'
 go "$(resolved r3 PVCNearFull)"
-want       "report-only + a human → commented, left OPEN (unchanged)" "left OPEN"
+want       "report-only + a human → left OPEN (unchanged)" "left OPEN"
 wantnocall "report-only + a human → not closed" "issue close"
+wantnocall "report-only + a human → NO ✅ comment any more (#148)" "issue comment"
+wantcall   "report-only + a human → one guarded body edit instead" "issue edit"
+n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+[ "$n" = "1" ] && ok "report-only + a human → exactly 1 last-cleared line" || bad "open-issue last-cleared count" "got $n"
+grep -q '^alert-fp:r3' /tmp/rbody.md 2>/dev/null && grep -q '^fix-verdict: report-only' /tmp/rbody.md 2>/dev/null \
+  && ok "report-only + a human → markers survive the rewrite" \
+  || bad "markers survive the rewrite (report-only)" "a marker was lost"
+
+scenario resolve-report-only-human-second-clear
+searchhit teststuffstash/homelab 77
+issuebody 'evidence
+alert-fp:r3
+fix-verdict: report-only
+last-cleared: 2026-08-07T23:00:00Z — PVCNearFull stopped firing (alert-fp:r3). A human is engaged.' '[{"author":{"login":"RasmusSoot"}}]'
+go "$(resolved r3 PVCNearFull)"
+wantnocall "second clear on an OPEN human-engaged issue → ZERO new comments (the flap case)" "issue comment"
+n="$(grep -c '^last-cleared:' /tmp/rbody.md 2>/dev/null || echo 0)"
+[ "$n" = "1" ] && ok "second clear → still exactly 1 line (N flaps never accumulate)" || bad "second-clear line count (open issue)" "got $n"
+
+scenario resolve-report-only-human-no-marker
+searchhit teststuffstash/homelab 77
+issuebody 'a body the search matched via a COMMENT — it carries no alert-fp line of its own' '[{"author":{"login":"RasmusSoot"}}]'
+go "$(resolved r8 PVCNearFull)"
+want       "no alert-fp in the body → left untouched, never half-written" "left untouched"
+wantnocall "…and still no comment (an unguarded body is not a reason to churn)" "issue comment"
+wantnocall "…and still not closed" "issue close"
 
 scenario resolve-no-verdict
 searchhit teststuffstash/homelab 77
