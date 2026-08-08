@@ -29,20 +29,20 @@ jobs:
     steps:
       # Check out homelab just for the GLOBAL config file (the supply-chain baseline applied to every
       # autodiscovered repo — cooldown, SHA-pin actions, OSV alerts). See .github/renovate-global.json.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # No `repositories:` → the installation token spans every repo the App is installed on, which is
       # exactly what RENOVATE_AUTODISCOVER should walk.
       - name: Mint homelab-renovate token
         id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.RENOVATE_APP_ID }}
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
           owner: teststuffstash
 
       - name: Renovate
-        uses: renovatebot/github-action@v46.1.17
+        uses: renovatebot/github-action@dd5302ec17783b2fc721b19ae7209b57b1587765 # v46.1.17
         with:
           token: ${{ steps.app.outputs.token }}
         env:
