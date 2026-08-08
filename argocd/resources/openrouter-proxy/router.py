@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS budget_anchors(
 CREATE TABLE IF NOT EXISTS run_reports(
   ts REAL, session TEXT PRIMARY KEY, task TEXT, stack TEXT, role TEXT, round INTEGER,
   model TEXT, served_model TEXT, served_provider TEXT, cache_hit REAL, cost_usd REAL,
-  error_class TEXT, outcome TEXT);
+  error_class TEXT, outcome TEXT, rail TEXT);
 CREATE TABLE IF NOT EXISTS generations(
   id TEXT PRIMARY KEY, ts REAL, requested_model TEXT, served_model TEXT, provider TEXT,
   tokens_prompt INTEGER, tokens_completion INTEGER, tokens_cached INTEGER,
@@ -132,6 +132,14 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                 # ALTER'd layout and positional INSERTs stay valid on both.
                 try:
                     conn.execute("ALTER TABLE generations ADD COLUMN generation_ms INTEGER")
+                except sqlite3.OperationalError:
+                    pass  # duplicate column — schema already current
+                # homelab#164: same story for run_reports.rail — the launcher has been sending
+                # `rail` in every /report body since homelab#158 and record_report dropped it for
+                # want of a column, so a degraded ride's cost was answerable only from ephemeral
+                # pod labels. Same LAST-column discipline as above.
+                try:
+                    conn.execute("ALTER TABLE run_reports ADD COLUMN rail TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
                 if attempt != ":memory:":
@@ -221,12 +229,13 @@ def record_report(d: dict) -> tuple[bool, bool]:
     may retry): INSERT OR REPLACE on the session key."""
     now = time.time()
     stored = _write(
-        "INSERT OR REPLACE INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (now, str(d.get("session") or ""), str(d.get("task") or ""), str(d.get("stack") or ""),
          str(d.get("role") or "worker"), int(d.get("round") or 1), str(d.get("model") or ""),
          str(d.get("served_model") or ""), str(d.get("served_provider") or ""),
          float(d.get("cache_hit") or 0.0), float(d.get("cost_usd") or 0.0),
-         str(d.get("error_class") or ""), str(d.get("outcome") or "")))
+         str(d.get("error_class") or ""), str(d.get("outcome") or ""),
+         str(d.get("rail") or "")))
     err = str(d.get("error_class") or "")
     outcome = str(d.get("outcome") or "")
     # ⚠ MATCH EITHER FIELD. The launcher (agent-session.sh /report body) sends the COARSE class in
@@ -1069,9 +1078,38 @@ def self_test() -> int:
     # instead of the caller's output.
     stored4, striked4 = record_report({
         "session": "t-3", "task": "issue-19", "stack": "circles", "role": "worker", "round": 1,
-        "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.0368,
+        "model": "deepseek/deepseek-v4-flash", "cost_usd": 0.0368, "rail": "subscription-fallback",
         "error_class": "goose-32602-truncation", "outcome": "harness-death"})
     assert stored4 and striked4, "the REAL launcher shape must strike (sub-type in error_class, class in outcome)"
+    # homelab#164: …and the rail RIDES that shape. The launcher has sent `rail` since homelab#158
+    # (agent-session.sh, the /report body) but run_reports had no column, so record_report dropped
+    # it and the only record of a degraded ride was the pod label — gone with the pod, while the
+    # store retains 90 days. This asserts the round-trip, not just the write: a positional INSERT
+    # that lost its arity would put the rail in the wrong column and still "succeed".
+    assert _read("SELECT rail FROM run_reports WHERE session='t-3'") == [("subscription-fallback",)]
+    assert _read("SELECT outcome, rail FROM run_reports WHERE session='t-2'") == [("pr", "")], \
+        "a report with no rail lands as empty string, not NULL — and does not shift its neighbours"
+    # THE MIGRATED STORE, on a side connection. Everything above runs against a FRESH database, so
+    # it only ever proves the CREATE TABLE path — but the live store is a PVC sqlite that will take
+    # this column by ALTER, and the two layouts have to agree for a positional INSERT to be valid.
+    # This replays the real sequence (v1 schema → ALTER → today's writer) and reads the columns
+    # back BY NAME, which is what catches a rail written into `outcome`'s slot.
+    _mig = sqlite3.connect(":memory:")
+    _mig.execute("""CREATE TABLE run_reports(
+      ts REAL, session TEXT PRIMARY KEY, task TEXT, stack TEXT, role TEXT, round INTEGER,
+      model TEXT, served_model TEXT, served_provider TEXT, cache_hit REAL, cost_usd REAL,
+      error_class TEXT, outcome TEXT)""")  # the pre-#164 layout, verbatim
+    _mig.execute("INSERT INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                 (1.0, "old-1", "issue-1", "sleep", "worker", 1, "m", "", "", 0.0, 0.0, "", "pr"))
+    _mig.execute("ALTER TABLE run_reports ADD COLUMN rail TEXT")
+    _mig.execute("INSERT OR REPLACE INTO run_reports VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                 (2.0, "new-1", "issue-2", "sleep", "worker", 1, "m", "", "", 0.0, 0.0, "",
+                  "harness-death", "subscription-fallback"))
+    assert _mig.execute(
+        "SELECT outcome, rail FROM run_reports ORDER BY ts").fetchall() == [
+        ("pr", None), ("harness-death", "subscription-fallback")], \
+        "ALTER'd layout must match the CREATE TABLE one — else the positional write is off by a column"
+    _mig.close()
     assert strikes_for("issue-19", "circles") == ["deepseek/deepseek-v4-flash"]
     # Recording is not acting: enforcement stays OFF until a policy decision (see STRIKE_ENFORCE).
     assert STRIKE_ENFORCE is False, "strike enforcement must default OFF — routing is unchanged by design"
