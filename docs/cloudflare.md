@@ -306,3 +306,9 @@ scratchpad `cf-graphql-probe.sh`, one dataset per query so errors can't mask eac
 window; adaptive retention does NOT improve, and a poller that scrapes every few minutes makes
 both moot (Prometheus keeps the history). The FU-039 DIY poller targets the four free ✅ rows.
 A Pro upgrade should be justified by WAF/bot features on public endpoints, not analytics.
+
+**Web Analytics (RUM), free, deferred until real pages exist** (operator, 2026-08-08): the
+upcoming browser-facing surfaces — the IdP OIDC login flow and oracle's public "sales" page —
+are what RUM measures (page-load timing per URL, per-browser). Enable per-site when those pages
+ship; a JS beacon per page, no plan requirement. Not relevant for `ha.teststuff.net` (an app
+behind mTLS, not a page we optimize).

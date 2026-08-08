@@ -140,6 +140,16 @@ wantbrief "oracle-fleet → payload names the claim path" "oracle-fleet/agent/ag
 wantbrief "oracle-fleet → payload names the acceptance probe" "ACCEPTANCE PROBE"
 wantbrief "oracle-fleet → STEP 1 routes by the named fix surface" "ROUTE BY THE FIX SURFACE YOU NAME"
 
+# ── #125: the payload must name reads that WORK FROM THE POD, not the jail's `devbox run hubble` ──
+# The 2026-08-08 failure was not a missing tool, it was a brief that named an absent one and then
+# licensed "cannot verify". These assert the composed brief still carries both reads and, for the
+# hubble fallback, its single-node caveat — the exact sentence a session must repeat if it uses it.
+wantbrief "oracle-fleet → payload names the Prometheus read that works in-pod" "kube-prometheus-stack-prometheus.monitoring.svc:9090"
+wantbrief "oracle-fleet → …with the POLICY_DENIED query scoped to this namespace" 'source="oracle-fleet"'
+wantbrief "oracle-fleet → payload names the cilium-agent hubble fallback" "kubectl exec -n kube-system ds/cilium -- hubble observe"
+wantbrief "oracle-fleet → …and states its single-node ring-buffer blind spot" "ONE node's ring buffer"
+wantbrief "oracle-fleet → 'cannot name it' is gated on having actually run them" "an unrun query is not a blocked one"
+
 scenario egress-sleep
 go "$(alert f2 '{"alertname":"AgentWorkerEgressDropped","source":"sleep-tracking"}')"
 want "sleep-tracking → route default sleep / sleep-iac" "stack=sleep repo=teststuffstash/sleep-iac"
@@ -210,6 +220,19 @@ want "multi-alert payload → SECOND alert triaged too (the </dev/null stdin bel
 scenario selfref
 go "$(alert f13 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet"}')"
 want "Agent* alert is self-referential — may PR, must not auto-merge" "SELF-REFERENTIAL"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#125 — the two brief rules that ride EVERY triage, not just egress drops"
+# Both are 2026-08-08 failures with no schema that could catch them: a session that re-derived from
+# scratch on a thread already carrying the answer, and an authoring path that spliced its own tool
+# output into the issue body. They are unconditional text, so any alert shape must carry them.
+
+scenario brief-universal-rules
+go "$(alert f14 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"prom-db"}')"
+wantbrief "dedup hit → read the prior thread before re-deriving" "READ THAT THREAD BEFORE YOU RE-DERIVE"
+wantbrief "…and the --json form is named (the plain view renders empty)" "the plain view renders EMPTY under this token"
+wantbrief "bodies are composed with --body-file" "gh issue create --body-file"
+wantbrief "…never as an interpolated argument" "NEVER build it as an interpolated double-quoted argument"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "LEG 2 — the resolve leg keys on the recorded verdict, not on the alert"
