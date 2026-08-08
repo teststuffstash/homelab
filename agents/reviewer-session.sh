@@ -59,6 +59,12 @@ KUBECTL="$(command -v kubectl || true)"
 PROJECT="${1:?usage: reviewer-session <project> <pr-number> [--repo owner/name] [--model m] [--rubric path]}"
 PR="${2:?usage: reviewer-session <project> <pr-number> ...}"
 shift 2 || true
+# Stack for the telemetry attrs (cost attribution): derived from the claims mirror, tolerant of
+# both repo-entry shapes (plain string and {name:} object). Env override wins; unknown → none.
+STACK_LABEL="${STACK_LABEL:-$(jq -r --arg r "$PROJECT" \
+  '.stacks[] | select([.repos[] | if type=="object" then .name else . end] | index($r)) | .name' \
+  "$(dirname "$0")/stacks.json" 2>/dev/null | head -1)}"
+STACK_LABEL="${STACK_LABEL:-none}"
 
 # Pro/Max subscription ⇒ sonnet (a strong reviewer, free at margin). Override for a high-stakes PR
 # (e.g. --model opus) or a metered run. Rubric path is relative to the project repo root.
@@ -327,7 +333,10 @@ spec:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "${OTLP_ENDPOINT:-http://otel-collector.monitoring.svc.cluster.local:4318}"
         - name: OTEL_RESOURCE_ATTRIBUTES
-          value: "service.name=claude-code,role=reviewer,project=${PROJECT},pr=${PR}"
+          # stack derived from the claims mirror (2026-08-08): the reviewer was the ONE role
+          # without it — $103.74 of 7d subscription-equiv sat unattributable as stack="" on the
+          # cost dashboard until the label audit caught it.
+          value: "service.name=claude-code,role=reviewer,stack=${STACK_LABEL:-none},project=${PROJECT},pr=${PR}"
         # §A1 transcript capture: write-only key for the agent-transcripts bucket (same-ns Secret,
         # written by the Crossplane Workspace). optional:true → reviews run before it exists.
         - name: AGENT_TS_ENDPOINT
