@@ -11,16 +11,57 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
 # The token YAMLs are shaped `repositories:\n    - name  # comment` — extract the bare names.
+# ⚠ Reads the file ONCE into memory and runs both the extraction and the raw item count on that
+# single buffer, then asserts they AGREE (homelab#168): on 2026-08-08 CI reported circles-iac
+# MISSING from a tree that verifiably contained it — a one-shot flake whose shape (one adjacent
+# entry dropped) smelled like a truncated read. Rule #6: a broken probe must fail as PROBE-FAIL,
+# never report false content. A real missing entry changes BOTH counts equally, so the invariant
+# only trips when the parse and the raw view of the SAME bytes disagree.
 list_repos() { # <file>
-  awk '
+  local buf extracted raw n_ex n_raw
+  buf="$(cat "$1")"
+  extracted="$(printf '%s\n' "$buf" | awk '
     /^[[:space:]]+repositories:/ { f=1; next }
     f && /^[[:space:]]+-[[:space:]]/ {
       line=$0; sub(/#.*/,"",line); sub(/^[[:space:]]+-[[:space:]]*/,"",line)
       gsub(/[[:space:]]/,"",line); if (line != "") print line; next
     }
     f { exit }
-  ' "$1"
+  ')"
+  raw="$(printf '%s\n' "$buf" | awk '
+    /^[[:space:]]+repositories:/ { f=1; next }
+    f && /^[[:space:]]+-[[:space:]]/ { n++; next }
+    f { exit }
+    END { print n+0 }
+  ')"
+  n_ex="$(printf '%s\n' "$extracted" | grep -c . || true)"
+  n_raw="${raw:-0}"
+  if [ "$n_ex" -ne "$n_raw" ]; then
+    echo "agents-registration-lint: PROBE-FAIL — extraction/raw mismatch on $1 (${n_ex} extracted vs ${n_raw} raw '- ' items in the repositories block). The parse is broken or the read was torn; refusing to report MISSING from a probe that disagrees with itself (homelab#168)." >&2
+    exit 3
+  fi
+  printf '%s\n' "$extracted"
 }
+
+# --self-test: prove the PROBE-FAIL path fires on a torn/parse-hostile fixture, and the normal
+# path still extracts. Runs on EVERY invocation (cheap, <10ms) so the probe proves itself in the
+# same CI run whose verdict depends on it — a self-test that only runs by hand is decoration.
+registration_lint_self_test() {
+  local d; d="$(mktemp -d)"
+  # Positive control: 2 entries, one with a comment → extracts 2.
+  printf '  repositories:\n    - alpha  # c\n    - beta\n  other:\n' > "$d/ok.yaml"
+  [ "$(list_repos "$d/ok.yaml" | tr '\n' ' ')" = "alpha beta " ] \
+    || { echo "agents-registration-lint: SELF-TEST FAILED — positive control broke" >&2; rm -rf "$d"; exit 3; }
+  # Negative control: an item line the extractor drops but the raw count sees (comment-only value)
+  # → the two views of one buffer disagree → PROBE-FAIL (exit 3) is REQUIRED.
+  printf '  repositories:\n    - alpha\n    - # torn\n' > "$d/torn.yaml"
+  if ( list_repos "$d/torn.yaml" >/dev/null 2>&1 ); then
+    echo "agents-registration-lint: SELF-TEST FAILED — torn fixture did not PROBE-FAIL" >&2
+    rm -rf "$d"; exit 3
+  fi
+  rm -rf "$d"
+}
+registration_lint_self_test
 
 stack_repos="$(jq -r '.stacks[].repos[]' "$HERE/agents/stacks.json" | sort -u)"
 fail=0
