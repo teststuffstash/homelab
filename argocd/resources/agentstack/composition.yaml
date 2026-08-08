@@ -464,7 +464,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.8.7-gd6dc9ced82f2
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -475,7 +475,7 @@ spec:
                             || { echo "FATAL: loop-git token fetch refused/failed — not scanning blind"; exit 1; }
                           export GH_TOKEN
                           rm -rf /work/homelab
-                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }}
                           exec bash /work/homelab/agents/coordinator-scan.sh --spawn
                       env:
@@ -516,7 +516,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.8.7-gd6dc9ced82f2
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -525,7 +525,7 @@ spec:
                             "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/loop-git-token?ns={{ $loopns }}&role=coordinator")" \
                             || { echo "FATAL: loop-git token fetch refused/failed — not polling blind"; exit 1; }
                           rm -rf /work/homelab
-                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }}
                           exec bash /work/homelab/agents/review-reflex.sh
                       env:
@@ -573,7 +573,7 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.8.7-gd6dc9ced82f2
                       command: ["bash", "-lc"]
                       args:
                         - |
@@ -584,7 +584,7 @@ spec:
                             || { echo "FATAL: loop-git token fetch refused/failed — not sweeping blind"; exit 1; }
                           export GH_TOKEN
                           rm -rf /work/homelab
-                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           export SCAN_STACK={{ $stack }} LOOP_NS={{ $loopns }} SCAN_JANITOR=1
                           exec bash /work/homelab/agents/coordinator-scan.sh --spawn
                       env:
@@ -664,13 +664,13 @@ spec:
                 templates:
                   - name: main
                     container:
-                      image: ghcr.io/teststuffstash/agent-coordinator:2026.7.8-g916d1ef5a81c
+                      image: ghcr.io/teststuffstash/agent-coordinator:2026.8.7-gd6dc9ced82f2
                       command: ["bash", "-lc"]
                       args:
                         - |
                           set -e
                           rm -rf /work/homelab /work/main
-                          git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
+                          timeout 120 git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab || { echo "FATAL: homelab clone timed out/failed — not running blind (homelab#134)"; exit 1; }
                           if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
                             echo "probe DEFERRED — subscription limited (FU-088); next cron tick retries"; exit 0
                           fi
