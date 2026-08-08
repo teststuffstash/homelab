@@ -314,10 +314,18 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
        2. Optionally open work-queue issues for the fixes (`agent-fix` + track label, NOT
           `agent/queued`) — issues manage WORK; the RECORD lives in the spec flag, which cites
           them as `work #M`.
-       3. Comment the arbitration on the PR, then **re-dispatch the reviewer** — AFTER the flag
-          push (dismiss-stale-on-push voids any approval landed before it). Expect
-          approve-with-follow-ups; the gate + auto-merge complete it. The spirit of the task
-          being right outweighs one ambiguity in the spec.
+       3. Comment the arbitration on the PR, then close the round out. You never dispatch the
+          reviewer yourself (you can't — no pod-create in ns `agent-coordinator`); WHICH
+          mechanism finishes it depends on whether step 1 pushed anything:
+          - **a flag commit was pushed** → that commit is new content after the newest review, so
+            the reflex re-picks the PR on its own (`reviewable_again`). Comment AFTER the push
+            (dismiss-stale-on-push voids any approval landed before it) and watch the next tick.
+          - **nothing was pushed** (no spec to flag; the fix is filed as an issue only) → the
+            stale `CHANGES_REQUESTED` blocks the merge and nothing can replace it: **dismiss it**
+            per §arbitrate → "Completing a follow-up-class ruling", guards and audit message
+            included. This is the common case in non-spec-governed repos (homelab#141).
+          Expect approve-with-follow-ups; the gate + auto-merge complete it. The spirit of the
+          task being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
        **step 3** with a fresh pod + fresh session key, **passing the reviewer's comments to the
@@ -537,14 +545,82 @@ Read the diff + the whole review thread, then rule — exactly one of:
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
   into the worker's context. This RESETS nothing — if it comes back a third time, escalate.
+- **Rule the finding follow-up-class**: the blocking finding is real, but it does not have to
+  land in THIS PR (the step-7 policy test — pre-prod repo, PR better than master, findings are
+  edge semantics / spec ambiguity / new-code corners). File the fix as its own issue, comment
+  the ruling — and then **finish the terminal mechanically: dismiss the superseded verdict**
+  (next section). Do NOT stop at the comment: a ruling is not a verdict, the PR still carries
+  CHANGES_REQUESTED, and nothing else in the loop can mint the approval you just ruled for.
 - **Close as not-mergeable**: master is better off without it. Close the PR with the reasoning,
   relabel the issue `agent/queued` only if a fresh attempt with a re-scoped issue makes sense
   (edit the issue first), else `agent/blocked` + why.
 - **Escalate**: genuinely ambiguous / policy-level → `agent/blocked` + one comment framing the
   decision for the human. Leave `agent/arbitrate` in place (the label pair records the path).
 
-Never re-dispatch the reviewer directly from this play — fix rounds re-enter the reviewable
-path on their own once new content lands.
+Never re-dispatch the reviewer directly from this play — fix rounds re-enter the reviewable path
+on their own once new content lands, and a ruling that lands NO new content exits through the
+dismissal below instead.
+
+### Completing a follow-up-class ruling — dismiss the superseded verdict (homelab#141, 2026-08-08)
+
+A follow-up-class ruling ends the round **without changing the PR branch**, and that is precisely
+the state the loop could not exit on its own:
+
+- the reviewer's `CHANGES_REQUESTED` blocks the merge by itself, independent of any approval
+  landed after it (merge-path.md — verified live: agent-runtime#42 sat `BLOCKED` /
+  `reviewDecision: CHANGES_REQUESTED` with a human approval already on it);
+- `reviewable_again` (review-reflex.sh) requires a **new commit** after the newest review — a
+  ruling comment is not a commit, so the reflex will never re-pick the PR;
+- and you cannot dispatch the reviewer yourself: your SA (`platform-agents:agentstack-loop`)
+  cannot create pods in ns `agent-coordinator`, where `reviewer-git` lives — and trying anyway is
+  what tripped the oracle-fleet#210 breaker at 02:56Z on 2026-08-08.
+
+So the terminal is the **dismissal**, done via the API. Your App token has push access, which is
+the documented requirement, and no branch-protection dismissal restriction is in play (exercised
+live on agent-runtime#42, 2026-08-08 ~15:25Z: `200 DISMISSED` → `reviewDecision` flipped to
+`APPROVED` → the already-armed auto-merge landed it ~20s later, with no further action):
+
+```sh
+slug=teststuffstash/<repo>
+# the LOOP REVIEWER's own newest CHANGES_REQUESTED — not a human's, not another bot's
+rid=$(gh api "/repos/$slug/pulls/<PR>/reviews?per_page=100" --jq \
+  '[.[] | select(.user.login == "homelab-reviewer[bot]" and .state == "CHANGES_REQUESTED")] | last | .id')
+gh api -X PUT "/repos/$slug/pulls/<PR>/reviews/$rid/dismissals" \
+  -f event=DISMISS -f message="<the audit message — mandatory, see below>"
+```
+
+Three guards, all mandatory — a dismissal without them is the rubber stamp this whole play exists
+to prevent:
+
+1. **Follow-up-class path only.** Never to unstick a red PR, a genuinely blocking finding, or a
+   round you simply want to end. Those have their own terminals above.
+2. **The loop reviewer's own verdict only** (`homelab-reviewer[bot]`). A human's
+   changes-requested is a conversation, not a stale status — escalate instead.
+3. **The message carries the ruling AND the filed follow-up id.** Say that the finding *stands
+   as correct and is being acted on*, and that it is the merge-blocking **status** that is stale
+   — not the review. A bare "superseded" reads as the coordinator overruling the reviewer, which
+   is the opposite of what this doctrine does. The live shape to copy (agent-runtime#42):
+   > Superseded — arbitration ruled this finding follow-up-class (PR #42 comment <id>) and the
+   > fix is filed as #43 with your reproduction and measurements. The finding stands as correct
+   > and is being acted on — it is the merge-blocking status that is stale, not the review.
+   > Dismissal returns this PR to the ordinary path so the armed auto-merge can complete.
+
+Then **remove `agent/arbitrate`**: the reflex pick filters that label out (review-reflex.sh), so
+leaving it on parks the PR you just unblocked. Two exits, and they are NOT the same thing —
+know which one you are in before you call it done:
+
+- **an approving review already at head** (a human read the ruling, or an approval predates the
+  dismissed verdict) → `reviewDecision` flips to `APPROVED` and the ARMED auto-merge completes
+  the PR within seconds. Confirm the merge, then run the ordinary closeout.
+- **no approval at head** (the unattended case) → the PR re-enters the reflex's ordinary pick
+  path (armed ∧ green ∧ no verdict at head) and gets a **fresh reviewer dispatch**, which now
+  reads the arbitration on record. Nothing merges yet; watch the next reflex tick and do not
+  dispatch anything yourself.
+
+A dismissed review's state is `DISMISSED`, so it also drops out of the reflex's bot-verdict
+breaker count (which filters on APPROVED/CHANGES_REQUESTED) — the re-entered PR gets that round
+back instead of instantly re-tripping ROUNDS_MAX. That is intended: the ruling ended the disputed
+round, it did not spend a fresh one.
 
 ## The `ci-red` clause (FU-115 / merge-path MP-T12, content-based rewrite 2026-07-28)
 
