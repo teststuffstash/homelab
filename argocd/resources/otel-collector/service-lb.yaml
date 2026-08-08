@@ -1,0 +1,21 @@
+# LAN-reachable OTLP ingest at http://192.168.40.29:4318 (BGP VIP — next free after circles'
+# .28, docs/ip-plan.md). Consumer: the JAIL's claude-code sessions (stack=jail telemetry —
+# until 2026-08-08 the jail exported nothing, so the operator's own meta-session cost was
+# invisible on the agent-cost dashboard while every in-cluster role was counted). In-cluster
+# consumers keep the ClusterIP service; this is the LAN door only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-lb
+  namespace: monitoring
+  labels:
+    app: otel-collector
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.29"
+spec:
+  type: LoadBalancer
+  selector:
+    app: otel-collector
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
