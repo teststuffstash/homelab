@@ -548,9 +548,10 @@ the block needs pruning, not more headings.
       PSI-kill cycles in ~2.5h ONE afternoon (clear-stamps 15:18/16:54/16:59/17:10 across
       #63/#65/#100) — not ~10-day; and the rate was only visible by hand-auditing comments,
       smeared across 3 issues (no aggregation view; #148/#149 fix the comment side).
-      **Next:** research DISPATCHED as homelab#157 (queued 2026-08-08) → deliverable
-      `docs/spikes/talos-psi-thresholds.md` through the gate; then the operator rules
-      tune-vs-accept — today's burst rate argues for TUNE. Relates FU-139/FU-112/FU-082 (archived), ADR-044.
+      **Next:** research LANDED (#157/PR#160, 2026-08-08) → `docs/spikes/talos-psi-thresholds.md`
+      explains the burst mechanism; its ⚖ §5 recommends pinning the ephemeral tier to v1.13.8
+      first, alone, and re-measuring. The operator rules tune-vs-accept; run the spike's §6
+      `talosctl get oomactions` capture BEFORE any upgrade. Relates FU-139/FU-112, ADR-044.
 
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
