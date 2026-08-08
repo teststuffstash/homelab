@@ -267,9 +267,9 @@ the block needs pruning, not more headings.
       FU-148 — PR identity is the unit of state and re-creating the PR silently resets it — but a
       different actor (worker re-PR, not coordinator close/reopen) and a different reset (rounds,
       not auto-merge arming). Flagged by the circles jail 2026-08-07 (TICK-LOG note, then unfiled).
-      **Next:** count rounds against the ISSUE (the stable id — e.g. sum stats comments across all
-      PRs whose body/branch references it), not the PR; decide alongside FU-148's re-run lever
-      since both want issue-keyed state.
+      **Load-bearing since 2026-08-08**: close-and-re-PR became a DESIGNED play (#210→#221, #214
+      re-queue, #209→#218-v2). **Next:** homelab#156 (queued) builds the issue-keyed count —
+      status follows that issue; FU-148's re-run lever landed the same day (App actions:write).
 - [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
       instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
       (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
