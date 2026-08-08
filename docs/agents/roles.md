@@ -152,6 +152,33 @@ tier allowed, dual-model worth it) are FU-095's.
   and every brief. Detection belts stack: FU-099 blackbox (seconds, dumb) → prober (minutes,
   contract-deep) → responder; until a claim flips `enabled`, the stack remains
   blackbox → *nothing* → responder and the alert lane carries the prober's load.
+
+  **⚖ SUGGESTED IDEAS — operator thinking in progress (2026-08-08), NOT decisions. Do not build
+  from this block; it exists so the flip-time design starts from the whole option space. The
+  operator's framing question comes first: what is a PROBE vs an E2E TEST — what should run ONCE
+  as a smoke gate on a change, and what deserves a cron? "The simplistic probe is not the
+  solution to all problems" — don't reach for the probe hammer on every nail-shaped problem.**
+  - *Two MCP-attachment modes for an agentic probe* (found reading the rendered template: as
+    built, the `claude -p` session has NO MCP wiring — no `--mcp-config`, endpoint not even in
+    env; the brief carries everything and the session probes with raw streamable-HTTP JSON-RPC
+    via curl, the meta-11 shape). Raw-HTTP tests the WIRE contract with no client-library
+    smoothing — arguably the stronger canary; `--mcp-config` harness-attached (an `.mcp.json`
+    rendered from a claim endpoint field) tests what a real consumer experiences, including
+    client-side schema conformance. Candidate sequencing: raw-HTTP brief first (zero machinery),
+    harness-attached as a second case once a second stack's brief exists (≥2-projects rule).
+  - *Probe vs e2e-test split (undecided):* oracle's `probe-e2e.sh` in kind mode is closer to an
+    E2E TEST (deterministic serve leg, fixture corpus, asserts on transcripts) — a per-change,
+    run-once artifact; the prober's cron probe is a CANARY against the LIVE contract (drift,
+    corpus rot, cert/route breakage — things a merge gate cannot catch because they happen
+    later). The boundary question: which assertions belong to the change (smoke, once, gate-ish
+    but never merge-blocking per the 2026-07-24 ruling) vs to time (cron, report-only).
+  - *Progressive delivery (operator sketch):* deploy a goal branch's serving artifact as
+    `mcp-goal<N>.oracle.teststuff.net` — or main URL + a feature-flag header — and run the
+    probe/e2e AGAINST THAT before the assembly merge, so acceptance bullet-4-style "live half"
+    checks stop being post-merge operator chores. The specs-preview machinery
+    (`specs-<pr>.oracle.teststuff.net`, torn down on PR close) is the existing precedent/donor
+    shape. Open: per-goal endpoint vs header-based flag routing, teardown, and whether the
+    probe that runs there is the smoke (once) or the canary (cron) flavor.
 - **responder** (FU-103) — alert-triggered triage. **v2 LIVE + full-E2E-proven 2026-07-27 (triage-first —
   operator ruled issues must be triage-gated and stack-routed, never one-per-alert):**
   predicate = Alertmanager firing (fan-out route `continue: true` in
