@@ -213,6 +213,44 @@ tier allowed, dual-model worth it) are FU-095's.
   the ones that disable it — the pod, the pull, the PVC attach, the git token or the CI runners it
   needs are the broken thing. The future `selfQueue` knob reads the marker instead of re-deriving
   it. Verified against 11 alert shapes from the corpus (7 self, 4 dispatchable).
+
+  **POLICY_DENIED runbook — BUILT 2026-08-08 (homelab#125).** Before this, the lane faulted sessions
+  for not following a runbook that was written down nowhere and whose only named tool
+  (`devbox run hubble`) is a *jail* recipe: the `agent-coordinator` image carries no `hubble` and no
+  `cilium` binary, and `agent-read-infra` grants no `pods/portforward`. So a triage reported "cannot
+  name the FQDN" three hours after a sibling session had named it. The reads that actually work from
+  the responder pod, cheapest first — both verified from an agent pod under the enforced egress
+  profile:
+  1. **Prometheus, and it is usually the whole answer.** The drop metric already resolves names —
+     `tofu/cilium.tf` sets `drop:sourceContext=namespace;destinationContext=dns|ip`, so `destination`
+     *is* the FQDN whenever the DNS proxy knew it. `hubble` was never needed to answer "which
+     destination was denied".
+     `curl -sG http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode 'query=topk(10, sum by (source,destination,protocol) (increase(hubble_drop_total{reason="POLICY_DENIED",source="<ns>"}[6h])) > 0)'`
+     — in-cluster service DNS, **not** the `192.168.40.13` LAN VIP: an LB IP is a `world` destination
+     and only reaches Prometheus because pod→VIP is DNAT'd before policy evaluation
+     ([`agentstack.md`](agentstack.md) §egress). Widen `[6h]`→`[24h]`/`[7d]` before concluding
+     nothing is there; a bare-IP `destination` means the DNS proxy saw no name for it, which is a
+     finding, not a dead end.
+  2. **Hubble, for per-flow detail only** (port, timing, the exact pod). No binary in the image and
+     no port-forward verb, so exec it in a cilium agent, which does carry it:
+     `kubectl exec -n kube-system ds/cilium -- hubble observe --namespace <ns> --verdict DROPPED`
+     (`pods/exec` is already granted by the `agent-coordinator` ClusterRole). ⚠ That is **one node's
+     ring buffer** — an absence is not evidence of no drops. Add
+     `--server <hubble-relay clusterIP>:80` for the fleet, or name the node you sampled.
+     Same blind spot `scripts/hubble-observe.sh` port-forwards around for jail sessions.
+  RBAC moved once, narrowly: `cilium.io` `ciliumnetworkpolicies` +
+  `ciliumclusterwidenetworkpolicies` get/list on `agent-read-infra` — the lane was asked to diagnose
+  a deny without reading the policy that produced it. `pods/portforward` and `services/proxy` were
+  asked for and **declined** (rationale in `agent-read-rbac.yaml`): the first is useless without
+  shipping the CLI, the second buys a route that already exists.
+  Two brief rules landed with it, both from the same night: **on a subject/fingerprint dedup hit,
+  read the prior thread before re-deriving** — a predecessor's triage is evidence, and the session
+  must cite its verdict or say why it is wrong; and **compose issue bodies with `--body-file`, never
+  an interpolated `"$(…)"`** — that authoring bug spliced 360 lines of flow logs into #125's own
+  body and ate every inline code span, deleting exactly the identifiers a fixer needs.
+  Gate for all of it: `bash agents/coordinator/responder-behaviour-test.sh` (kubeconform SKIPS both
+  resources in `responder-argo.yaml` — `argoproj.io` has no schema, so `manifest-lint` validates
+  none of this shell).
 - **researcher/planner** (FU-105) — **LIVE** (first mode) — spec/requirements research. dispatch-on-goal (human-queued
   `goal` issue, FU-090(c) shape); reasoning tier + dual-model review (FU-095 rules); output =
   spec PRs through the codeowner gate. **Boundary is the new piece: open-web egress** — a
