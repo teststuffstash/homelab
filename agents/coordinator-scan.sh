@@ -973,7 +973,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # maybe_dispatch_cired → /coordinate) instead of only the poll. Per red PR we read the fix-round
     # history from durable `🔴 ci-red round rN @ <head8>` markers (coordinator posts one per dispatch):
     #   attempts==0                    → DISPATCH (first red)
-    #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break)
+    #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break). The count is
+    #                                    keyed on the ISSUE, summed across every PR that references
+    #                                    it (homelab#156) — per-PR is only the fast path, because
+    #                                    close-and-re-PR would otherwise hand out a fresh budget.
     #   head8 != last dispatched head  → DISPATCH (a round pushed new-but-still-red content; re-attempt)
     #   else (same head, round done)   → ARBITRATE (NO-OP round: the worker produced nothing → escalate,
     #                                    never re-dispatch the same input — this is the anti-livelock)
@@ -1035,7 +1038,8 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         fi
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
-        # attempts = durable count of completed fix rounds on this PR (the launcher's finalize posts
+        # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
+        # issue-keyed ceiling below, and still what the no-op detector needs (the launcher's finalize posts
         # one `🤖 Agent run stats` comment per round — no extra marker needed, restart-safe: reads
         # GitHub). Bounds the loop: a no-op round costs at most RED_ROUNDS_MAX attempts before it
         # escalates, never the old infinite 4h-spaced livelock. (Immediate no-op detection — same
@@ -1054,13 +1058,50 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           noop_round="$(printf '%s' "$round_probe" | jq -r "$NOOP_ROUND_JQ" 2>/dev/null)" || noop_round=""
         fi
         RED_MAX="${RED_ROUNDS_MAX:-3}"
+        # ISSUE-KEYED ROUNDS CEILING (homelab#156, FU-154). `attempts` above is PER-PR, and PR
+        # identity is not the unit of the work: close-and-re-PR is a DESIGNED play as of 2026-08-08
+        # (#210 re-landed as #221, #214 closed and its issue re-queued, #209 superseded by #218-v2),
+        # so every re-creation handed the loop a fresh RED_MAX budget — circles#19 burned five rounds
+        # across PR#50 (2) + a fresh #51 (1) plus earlier ones and never hit the cap. The ISSUE is the
+        # stable key: sum the SAME run-stats evidence across every PR in this repo whose branch or
+        # body references that issue id. Per-PR stays the FAST PATH (no extra API call when it already
+        # trips); the issue-keyed sum is the CEILING and can only RAISE the count, never lower it.
+        # FAIL-OPEN, matching this clause's guarded-probe posture: an unreadable list warns and leaves
+        # the per-PR count standing — the window is the newest 100 PRs, so a miss only UNDER-counts.
+        # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+        # duplicated in review-reflex.sh's issue-keyed verdict ceiling. Change both or neither.
+        # The key falls back to the fix/issue-<n>- branch convention when the body carries no closing
+        # keyword; `red_issue` above stays body-only on purpose (it gates the per-item holds).
+        red_key="$red_issue"
+        if [ -z "$red_key" ]; then
+          red_key="$(printf '%s' "$u_head" | sed -n 's/.*issue-\([0-9][0-9]*\)\(-.*\)\{0,1\}$/\1/p')"
+        fi
+        red_rounds="$attempts"; red_rounds_key="PR #${u}"
+        if [ "$attempts" -lt "$RED_MAX" ] && [ -n "$red_key" ]; then
+          if red_sib="$(gh pr list --repo "$slug" --state all --limit 100 \
+                          --json number,headRefName,body,comments 2>/dev/null)"; then
+            red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" '
+              def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
+                            or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+              [ .[] | select(refs($n)) ]
+              | "\(length) \([ .[] | .comments[]? | select(.body|test("Agent run stats")) ] | length)"
+            ' 2>/dev/null)" || red_sum=""
+            read -r red_sib_prs red_sib_n <<<"${red_sum:-}"
+            case "${red_sib_n:-}" in ''|*[!0-9]*) red_sib_n=""; echo "  [$repo] WARN: issue-keyed round sum unreadable for issue #${red_key} — per-PR count stands for PR #${u}" >&2;; esac
+            if [ -n "$red_sib_n" ] && [ "$red_sib_n" -gt "$red_rounds" ]; then
+              red_rounds="$red_sib_n"; red_rounds_key="issue #${red_key} (${red_sib_prs} PRs)"
+            fi
+          else
+            echo "  [$repo] WARN: issue-keyed round probe FAILED (gh pr list --state all) — per-PR count stands for PR #${u}" >&2
+          fi
+        fi
         if [ -n "$noop_round" ]; then
           gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
             && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \
             && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
             || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
-        elif [ "$attempts" -lt "$RED_MAX" ]; then
-          # DISPATCH a fix round (under the attempt cap)
+        elif [ "$red_rounds" -lt "$RED_MAX" ]; then
+          # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
             # infra-enrich class (diff values.schema.json, enrich the bump PR), not the generic play.
@@ -1070,7 +1111,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             esac
             # units-only clauses were invisible to the `[ -z "$items" ]` gate (the meta-14 stall) —
             # every dispatchable unit MUST also add an items line.
-            items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((attempts+1))/${RED_MAX} @ ${head8})\n"
+            items="${items}[$repo] PR #${u} — ${rclause} (CI red, armed; attempt $((red_rounds+1))/${RED_MAX} on ${red_rounds_key} @ ${head8})\n"
             red_n=$((red_n+1))
           fi
         else
@@ -1078,8 +1119,8 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # agent/arbitrate + comment; the arbitrate scan clause + coordinator tie-break (re-dispatch
           # a stronger model / park / close) take over. This is the Red→arbitrate edge the FSM lacked.
           gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
-            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${attempts} fix rounds and CI still red at ${head8} (cap ${RED_MAX}). The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
-            && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${attempts} rounds, still red — exhausted)\n" \
+            && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red, FU-115): ${red_rounds} fix rounds counted on ${red_rounds_key} and CI still red at ${head8} (cap ${RED_MAX}). Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. The CI-red fix-round loop is not converging on its own — review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with a stronger model / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+            && orphans="${orphans}[$repo] ⚠ ci-red → agent/arbitrate: PR #${u} (${red_rounds} rounds on ${red_rounds_key}, still red — exhausted)\n" \
             || orphans="${orphans}[$repo] ⚠ ci-red arbitrate FAILED to label PR #${u} (gh write refused?) — human check\n"
         fi
       done
