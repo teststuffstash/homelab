@@ -242,3 +242,40 @@ cache rules, configuration rules, custom rules w/ Skip — not the deprecated Pa
 the schema settles: ≤20-line ADR (the ADR-076→085→092 chain's next link) pointing here; the
 composition lands in `argocd/resources/` on provider-terraform (the Garage-bucket donor shape),
 token minted by `tofu/cloudflare-token` host-side, delivered via ESO; `SERVICES.md` row when LIVE.
+
+### Zone division: two zone classes + a delegation verb (operator design, 2026-08-08)
+
+**The Cloudflare zone is the real tenancy boundary** (tokens, WAF baseline, rulesets, cache
+config are zone-scoped; Free/Pro has no finer grain), so a zone has exactly ONE owner:
+
+- **Product zones** — one stack's claim owns the whole zone (full-domain scope, zone-scoped
+  token bound in the composition). No co-owners.
+- **Platform zones** — the platform composition owns the zone; stacks are TENANTS of delegated
+  subtrees (`<stack>.<domain>` — ADR-092's LAN model at the WAN). teststuff.net is this class.
+
+A new stack wanting to live UNDER an existing domain is a **consent record, not a modeling
+problem**: platform zone → ordinary subtree claim, self-service; product zone → the owning
+stack's `-iac` claim grows a `delegations:` entry granting the named subtree — consent is a
+reviewable line in the OWNER's IaC, and the tenant claims routes only within the grant. The
+XRD invariant that holds it all: **a claim may create routes only in zones it owns ∪ subtrees
+delegated to it.** Cloudflare cannot enforce subtrees (zone tokens are its finest grain below
+Enterprise) — and that costs nothing, because the privilege boundary is the XRD: claims never
+touch tokens, the composition validates the grant. Promotion (tenant outgrows the subtree →
+own domain) is a claim migration, not Cloudflare surgery.
+
+### Token matrix (who holds what, 2026-08-08)
+
+| Token | Scope | Canonical + delivery | Consumer / applier |
+|---|---|---|---|
+| **Account admin** | everything | **KeePass ONLY**, host | the operator, solely to apply `tofu/cloudflare-token` (the mint). Never jail, never cluster. |
+| `homelab-tofu-apply` (existing) | teststuff.net DNS/SSL/WAF + account Tunnel, write | KeePass; jail copy `~/.claude/cloudflare/` | jail applies `tofu/cloudflare/` (the ha one-off). **Retires** when the XRD absorbs that root (consumer #2 retrofit). |
+| `homelab-acme-dns` (existing) | one zone, DNS write | KeePass; OPNsense env | acme.sh DNS-01 |
+| **`homelab-observability-read` (NEW, `observability-read.tf`)** | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, audit logs) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL, no more UI-clicking), the CF Prometheus exporter, later responder triage |
+| platform-ingress write (FUTURE) | managed zones: DNS/rulesets/tunnel write | KeePass → Infisical → ESO → crossplane ProviderConfig; never in claims, never jail | the public-ingress composition |
+
+**Operator-applied tofu = exactly one root**: `tofu/cloudflare-token/` (it needs the admin
+token). Everything else consumes minted tokens. **Observability ships first**: apply the mint →
+store the read token (KeePass canonical, jail file, Infisical key) → the exporter lands as an
+`argocd/resources/` app on the ESO copy. Free-plan honesty: per-request logs are Enterprise
+(Logpush/Logpull) — the GraphQL Analytics API (aggregated series + security/firewall events) is
+what the jail and exporter actually query, and it covers the logs/errors-hunting use case.
