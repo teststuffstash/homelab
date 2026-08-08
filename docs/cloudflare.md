@@ -82,7 +82,16 @@ v5 resource names (verified against the provider's GitHub docs, then `tofu valid
 > Lesson confirmed: don't trust stale model memory for CF v5 — the GitHub provider docs + a
 > credential-free `tofu validate` caught every renamed resource/attribute before any apply.
 
-## Rollout gotchas (hit + fixed 2026-06-06)
+## Rollout gotchas (hit + fixed 2026-06-06; +1 2026-08-08)
+
+3. **(2026-08-08, token root) Provider v5 "inconsistent result after apply" on
+   `cloudflare_api_token` modify = ORDERING, not failure.** Editing a token's permission
+   groups errors with four "Provider produced inconsistent result" messages — the API returns
+   policies/groups in a different order than sent and the provider doesn't normalize. The
+   mutation LANDS anyway: verify live (`/user/tokens/verify` with the STORED value — it does
+   not rotate on modify — then hit the endpoint the permission was for), then re-`plan`; if
+   the plan shows only a policy/group reorder, it is cosmetic. Confirmed on the
+   `observability-read` audit-logs fix: apply "failed", audit endpoint worked seconds later.
 
 Two stacked bugs after the first apply, worth remembering:
 
