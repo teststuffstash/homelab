@@ -36,11 +36,11 @@ tofu "$@"
 rc=$?
 
 case "${1:-}" in apply)
-  echo ""
-  echo "→ minted-token bookkeeping (FU-001 pattern): store each new/rotated output THREE places —"
-  echo "   1. ordinary wallet entry (scripts/keepass-init.sh names, e.g. cloudflare-observability-read)"
-  echo "   2. jail cache file      (~/.claude/cloudflare/<name> — wallet-files.sh regenerates it)"
-  echo "   3. Infisical            (cluster consumers via ESO, e.g. CLOUDFLARE_OBSERVABILITY_READ)"
-  echo "   e.g.: tofu output -raw observability_read_token"
+  if [ "${CF_STORE:-1}" = "1" ] && [ "$rc" -eq 0 ]; then
+    echo ""
+    echo "→ storing minted tokens (wallet + cred cache + Infisical) — CF_STORE=0 to skip"
+    bash "$ROOT/scripts/cloudflare-token-store.sh" || \
+      echo "→ store FAILED — run manually: bash scripts/cloudflare-token-store.sh" >&2
+  fi
 ;; esac
 exit $rc
