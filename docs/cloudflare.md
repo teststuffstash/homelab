@@ -286,3 +286,23 @@ exporter lands as an `argocd/resources/` app on the ESO copy. Free-plan honesty:
 logs are Enterprise (Logpush/Logpull) — the GraphQL Analytics API (aggregated series +
 security/firewall events) is what the jail and exporter actually query, and it covers the
 logs/errors-hunting use case.
+
+### Free-zone GraphQL matrix (VALIDATED LIVE 2026-08-08, teststuff.net free vs eid-demo.com pro)
+
+Probed with `homelab-observability-read` against `api.cloudflare.com/client/v4/graphql` — the
+limits below are the API's own error messages, not doc paraphrase (probe script shape:
+scratchpad `cf-graphql-probe.sh`, one dataset per query so errors can't mask each other):
+
+| Dataset | free (teststuff.net) | pro (eid-demo.com) | monitoring use |
+|---|---|---|---|
+| `httpRequests1dGroups` | ✅ (requests/cached/bytes/threats/encrypted + uniques; no wall hit at 11 months back) | ✅ | daily traffic + threat trending |
+| `httpRequestsAdaptiveGroups` | ✅ — **1d max window/query, 1w1d retention**; host+status dims proven | ✅ — window widens to 1w1d, **retention SAME 1w1d** | per-host/per-status series — poll short windows into Prometheus and retention becomes ours |
+| `firewallEventsAdaptive` | ✅ (0 rows = no events in window) | ✅ | WAF hits on `ha.teststuff.net` = someone probing the public edge |
+| `dnsAnalyticsAdaptiveGroups` | ✅ live rows (queryName, responseCode) | ✅ | authoritative-DNS query monitoring |
+| `httpRequests1mGroups` | ❌ "does not have access to the path" | ✅ | minute-granularity totals — **the lablabs exporter's dataset** (why it can't serve free zones, #132) |
+| `healthCheckEventsAdaptiveGroups` | ❌ | ❌ (Health Checks not configured; Biz/Ent feature) | n/a |
+
+**Pro-for-monitoring verdict: thin.** The measured delta is 1-minute granularity + 8× query
+window; adaptive retention does NOT improve, and a poller that scrapes every few minutes makes
+both moot (Prometheus keeps the history). The FU-039 DIY poller targets the four free ✅ rows.
+A Pro upgrade should be justified by WAF/bot features on public endpoints, not analytics.
