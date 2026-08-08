@@ -218,3 +218,27 @@ Backend HTTP requirements (streaming/SSE for MCP, no buffering surprises, header
 are claim inputs, not platform guesses. Build order when this lands: XRD+composition for routes
 + cache + skip rules first (the knobs a stack needs on day one), exporter second, wider settings
 only on demand. Prior art to extend, never duplicate: ADR-092's `stack_gateways` opt-in seam.
+
+**Requirements come from four live artifacts, not from design sessions:**
+
+1. **Diff-the-existing**: [`tofu/cloudflare/`](../tofu/cloudflare/) — the hand-built
+   `ha.teststuff.net` instance (tunnel, DNS, mTLS client-cert WAF rule, ingress rules) is the
+   floor: the claim schema must be able to express everything this one-off already does, or the
+   XRD can't absorb it. The diff between that root and the draft schema IS the gap list.
+2. **The first consumer's backend contract**: the oracle stack's gateway — streamable-HTTP/SSE
+   (no buffering, long-lived connections), never-challenge on the MCP path, health endpoint for
+   LB probes, auth-header passthrough. Owned by that stack's repo/specs; arrives as claim
+   fields, not platform assumptions.
+3. **ADR-092 parity**: whatever a stack does freely on the LAN leg (add HTTPRoutes in its own
+   `-iac` with zero homelab change) must have a public-leg equivalent — the LAN claim is the
+   ergonomics benchmark.
+4. **The ≥2-projects rule** (the G05 lesson): do NOT freeze the schema from the oracle alone —
+   **retrofit `ha.teststuff.net` itself as consumer #2** (it becomes a claim of the same XRD),
+   which both de-product-shapes the schema and deletes the one-off. The retrofit converging is
+   the acceptance test that the XRD generalizes.
+
+Current Cloudflare primitives are checked against the Docs MCP at build time (rulesets engine:
+cache rules, configuration rules, custom rules w/ Skip — not the deprecated Page Rules). When
+the schema settles: ≤20-line ADR (the ADR-076→085→092 chain's next link) pointing here; the
+composition lands in `argocd/resources/` on provider-terraform (the Garage-bucket donor shape),
+token minted by `tofu/cloudflare-token` host-side, delivered via ESO; `SERVICES.md` row when LIVE.
