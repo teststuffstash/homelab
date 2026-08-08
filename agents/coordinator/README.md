@@ -140,6 +140,22 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
 >   like `deepseek-r1*` — slow, verbose, pricier). Changing the chain itself is the human's call
 >   (stacks.json is policy).
 
+> **RAIL — the chain's rail decides whether steps 3–4 apply at all. Read it before you read them.**
+> The `workerModel` you just read tells you: a **`claude/` prefix** means this dispatch rides the
+> **subscription** rail (`kubectl get agentstack <stack> -o jsonpath='{.spec.workerModel}'` →
+> `claude/haiku` on the platform claim), and the launcher self-derives `--harness claude` from it.
+> For such a ride, **the OpenRouter key is the FALLBACK rail, never the prerequisite** — steps 3–4
+> (estimate + mint) do not apply, and a key that is absent, unminted, deferred or rate-limited must
+> **not** defer the dispatch. `agents/agent-session.sh` already encodes exactly this: it sends no
+> `key_ref` for a `claude/*` ride and skips the OpenRouter credit probe entirely — *"a claudeTier
+> ride's relationship to the OpenRouter key is 'fallback I am not using', full stop"*. Reading
+> steps 3–4 as unconditional prerequisites is what inverted this live on 2026-08-08: four
+> claudeTier dispatches deferred on OpenRouter key state while the subscription sat idle
+> (homelab#158). The **only** capacity condition that defers a subscription ride is the FU-088
+> latch, which the launcher probes itself — you dispatch and let it decide. Full procedure:
+> step 5 §**Claude tier**.
+> An **OpenRouter-primary** chain (any non-`claude/` `workerModel`) takes steps 3–4 as written.
+
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
 2. **Claim it FIRST — before investigating.** Relabel and comment a one-line plan, so the work is
@@ -156,7 +172,9 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    ambiguous, `gh issue view <N> --json comments` and CHECK before re-posting — a slow API
    response is not a missing comment (double claim comments on #45 + #81, 2026-07-22: both were
    one session re-composing after an ambiguous tool result, ~7–43s apart).
-3. **Read + estimate.** Pipe the issue text into the budget estimator:
+3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
+   next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
+   estimator:
    ```sh
    gh issue view <N> --repo teststuffstash/<project> --json title,body -q '.title+"\n"+.body' \
      | python3 agents/estimate_budget.py --model <chain-model> \
@@ -166,8 +184,9 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    tier cap, not merely "tier == lg") → label `agent/blocked`, comment the numbers, **stop**: the cap
    can't cover the run so it would 403 unfinished, and a human must approve. A `$1.0/M` price in the
    verdict means the model was **unpriced** (you used the wrong one) — fix the model, don't escalate.
-4. **Mint the per-session budget IMMEDIATELY before dispatch** — by re-running the estimate command
-   from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
+4. **Mint the per-session budget IMMEDIATELY before dispatch — OpenRouter-primary chains only**
+   (a `claude/` chain has no key to mint; the turn cap is its spend bound — RAIL note above) — by
+   re-running the estimate command from step 3 with `| kubectl apply -f -` (it sets a fresh `expiresAt` each time). Hard `budgetUSD`,
    no reset, ~4h `expiresAt` (was 2h — a laguna:free ride at ~306s/turn outlasted its key,
    sleep-tracking#96 2026-08-02; slow free models need the headroom). The openrouter-operator mints the key and writes the Secret
    `<project>-session-issue-<N>-round-<r>-openrouter`. **Wait on the CR**, not the Secret (you can't
@@ -197,9 +216,11 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
        --task issue-<N> --round <r> \
        --recipe /work/<project>/.agents/fix.yaml
    ```
-   **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — there
+   **Claude tier** (`claude/<alias>` chain entries — FU-066): **skip steps 3–4 entirely** — this is
+   the procedure for the rail rule stated at the head of this runbook. There
    is no OpenRouter key (auth = `ref:<project>/claude-session` via the egress proxy; the estimator
-   and the budget CR have no role; the turn cap below is the spend bound). Same `--recipe` line,
+   and the budget CR have no role; the turn cap below is the spend bound), so nothing about the key
+   — including a mint you never ran — may hold up the dispatch. Same `--recipe` line,
    drop `--harness`/`--openrouter-secret` (the launcher self-derives `--harness claude` from the
    `claude/` model prefix):
    ```sh
@@ -328,7 +349,8 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
           task being right outweighs one ambiguity in the spec.
      - If a finding is genuinely **blocking-class** (secrets/blobs/CI-red/breaks master, or
        invariant-poisoning in a prod-serving repo) and `round < max` → bump the round and go to
-       **step 3** with a fresh pod + fresh session key, **passing the reviewer's comments to the
+       **step 3** with a fresh pod + fresh session key (on a `claude/` chain, steps 3–4 are skipped
+       as always and you re-enter at **step 5**), **passing the reviewer's comments to the
        fixer** (feed `gh pr view <PR> --json reviews -q '.reviews[-1].body'` into its context).
    - `round == max` with a genuinely blocking finding, or ambiguous → `agent/blocked` + comment.
      **`agent/blocked` is for "master would be worse off with this PR" — never for an imperfect
@@ -339,7 +361,8 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
    PR in the stack's `-iac` repo (e.g. sleep-iac); an in-cluster webhook makes ArgoCD sync near-instantly.
    So a merged fix reaches prod on its own. At most, *confirm* the rollout went Healthy — post-deploy
    health/rollback is FU-044, handled in-cluster. See homelab `docs/sleep-iac.md` §"Deploy pipeline".
-8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop).
+8. **Clean up.** Delete the ephemeral `OpenRouterKey` CR (its `expiresAt` is the backstop) — an
+   OpenRouter-primary round only; a `claude/` ride minted none, so there is nothing to clean up.
 
 ## The `merged-closeout` clause (C6 — FU-090a / merge-path MP-G03, built 2026-07-27)
 
