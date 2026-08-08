@@ -56,7 +56,29 @@ spec:
             severity: warning
           annotations:
             summary: "Worker egress DROPPED by netpol in {{ $labels.source }}"
-            description: "Sustained POLICY_DENIED drops from namespace {{ $labels.source }}. SYMPTOM ONLY — observed causes so far: tool phone-home noise (jetify update+telemetry, 2026-07-21/22 — rides ran fine throughout) and genuine allowlist misses; a drop does not imply a hung ride. Identify the flows: `devbox run hubble -- --namespace {{ $labels.source }} --verdict DROPPED` (+ `--protocol dns` for the FQDN). Legit destination → the claim's egress.extraFQDNs; phone-home → kill at the tool (agent-session.sh env), never widen policy."
+            # The first instruction must be a read that works from an IN-CLUSTER responder pod: the
+            # agent-coordinator image carries no `hubble`/`cilium` binary and agent-read-infra has no
+            # pods/portforward, so the old `devbox run hubble` first step sent the responder into a
+            # wall (homelab#125, #137). Prometheus is also usually the whole answer — `destination`
+            # already IS the FQDN (drop:destinationContext=dns|ip, tofu/cilium.tf). Full runbook:
+            # docs/agents/roles.md §responder; keep the two in sync.
+            description: >-
+              Sustained POLICY_DENIED drops from namespace {{ $labels.source }}. SYMPTOM ONLY — observed causes so far:
+              tool phone-home noise (jetify update+telemetry, 2026-07-21/22 — rides ran fine throughout) and genuine
+              allowlist misses; a drop does not imply a hung ride.
+              STEP 1, name the destination (works from anywhere, and usually the whole answer): `curl -sG
+              http://kube-prometheus-stack-prometheus.monitoring.svc:9090/api/v1/query --data-urlencode
+              'query=topk(10, sum by (source,destination,protocol) (increase(hubble_drop_total{reason="POLICY_DENIED",source="{{ $labels.source }}"}[6h])) > 0)'`
+              — in-cluster service DNS, NOT the 192.168.40.13 LAN VIP. `destination` already resolves to the FQDN
+              whenever the DNS proxy knew the name (drop:destinationContext=dns|ip, tofu/cilium.tf); widen [6h] to
+              [24h]/[7d] before concluding nothing is there, and a bare-IP destination is a finding, not a dead end.
+              STEP 2, per-flow detail only (port, timing, exact pod): in-cluster
+              `kubectl exec -n kube-system ds/cilium -- hubble observe --namespace {{ $labels.source }} --verdict DROPPED`
+              (⚠ ONE node's ring buffer — an absence is not evidence); from a JAIL SESSION ONLY, `devbox run hubble --
+              --namespace {{ $labels.source }} --verdict DROPPED` (+ `--protocol dns`). Full runbook:
+              docs/agents/roles.md §responder.
+              Legit destination → the claim's egress.extraFQDNs; phone-home → kill at the tool (agent-session.sh env),
+              never widen policy.
         # 2026-08-05: the coordinator Sensor hit a JetStream AckSync timeout, redelivered the same
         # event in a loop, then kept spinning at ~2-4 cores AFTER the loop went silent — a leaked
         # goroutine. It ate 65% of wk-01 for ~50 min and surfaced only as NodeSystemSaturation,
