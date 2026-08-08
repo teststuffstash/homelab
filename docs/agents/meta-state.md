@@ -12,26 +12,14 @@ circles PR#44/#45 + circles-iac #30/#31 merged, agent-runtime PR#37 admin-merged
 `oracle-fleet/update-pr-branch` green on schedule (20:55Z success). homelab#111 closed. FU-150
 carries the ours-side alert gap; the incident doc carries the story.
 
-## ⏳ OPERATOR ACTION PENDING — first-party deploy pins still need one `tofu apply`
+## ✅ github-tofu APPLIED 2026-08-08 (~05:10Z) — both pending changes landed
 
-**Committed, NOT applied.** `tofu/github/actions_secrets.tf` now adds homelab to
-`local.reviewer_repos`; it takes effect only after **`devbox run github-tofu apply` from the HOST**
-(tofu/github is operator-only — the org-admin PAT is deliberately outside the jail).
-
-**Why they stall:** homelab is `require_approval = true` (FU-068, 2026-08-04) but was excluded from
-`reviewer_repos` as "CI-only" — true when written, false since the flip. So the `renovate-approve`
-reflex has no `REVIEWER_APP_ID` and takes its skip-gracefully branch: **`approve` reports GREEN
-while doing nothing**, and the PR waits on a human forever. Fourth occurrence: #104, #105, #109,
-#112. Same class as oracle-fleet's 2026-07-25 parity audit — the invariant is now written into the
-locals block: `reviewer_repos == { repos with require_approval = true }`.
-
-⚠ **It widens nothing.** The reflex still requires `user.type == 'Bot'` AND `automerge` AND
-`dependencies`, so agent PRs (`agent/*` labels) never qualify; and `require_code_owner_review` is
-untouched — a bot approval cannot satisfy an OWNED path, so only the CODEOWNERS carve-outs
-(`agents/images.env`, the arc-runner pins, the openrouter-operator chart pin) can merge on it.
-⚠ **Until it is applied, each pin needs `gh pr merge <n> --admin`** (the jail is the OrgAdmin
-bypass). #112 was merged that way 05:59Z — verified first that `f77880d417da` is agent-runtime's
-master HEAD and that `build-image` succeeded on that sha, so it was not a stale tag.
+The operator ran `devbox run github-tofu apply` (first attempt had silently aborted at the
+confirm prompt — "forgot to put yes"). Verified by read-back: circles goal rulesets carry the
+`Integration 4207260` (homelab-merge) bypass; #118 verification comment on record. This same
+apply landed `actions_secrets.tf` reviewer_repos += homelab, so the renovate-approve reflex can
+approve homelab first-party pins from now on — no more `gh pr merge --admin` for those.
+Behavioral acceptance of the bypass = PR#54's next armed+behind update run.
 
 ## ✅ SUBSCRIPTION LATCH CLEARED 2026-08-07 — plan upgraded, windows refreshed by hand
 
