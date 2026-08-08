@@ -52,12 +52,18 @@ runcmd:
   - install -d -o runner -g runner /home/runner/.config/nix
   - printf 'experimental-features = nix-command flakes\nsubstituters = http://192.168.40.23 https://cache.nixos.org\n' > /home/runner/.config/nix/nix.conf && chown runner:runner /home/runner/.config/nix/nix.conf
   - su - runner -c 'curl -fsSL "https://releases.nixos.org/nix/nix-2.35.1/install" | sh -s -- --no-daemon --no-channel-add'
-  - install -d -o runner -g runner /home/runner/actions-runner
+  # TWO runner slots (operator 2026-08-08): one e2e at a time serialized org-wide while 6 cores
+  # sat at 17–26% — the e2e scripts are already run-scoped (oracle-e2e-$${GITHUB_RUN_ID}) so
+  # concurrent runs on the shared docker daemon don't collide. Each slot is its own extracted
+  # runner dir + its own systemd service; one boot-minted registration token registers both.
+  - install -d -o runner -g runner /home/runner/actions-runner /home/runner/actions-runner-2
   - su - runner -c 'cd ~/actions-runner && curl -fsSL -o r.tar.gz https://github.com/actions/runner/releases/download/v${runner_version}/actions-runner-linux-x64-${runner_version}.tar.gz && tar xzf r.tar.gz && rm r.tar.gz'
+  - su - runner -c 'cp -a ~/actions-runner/. ~/actions-runner-2/'
   # The runner is a systemd service (non-login) → job steps don't source ~/.profile, so single-user
   # nix (~/.nix-profile) and devbox (/usr/local/bin) miss the PATH. The actions-runner `.env` is
   # loaded for every job step — put both on PATH there. `nix` must be present for `devbox run`.
   - printf 'PATH=/home/runner/.nix-profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/runner/.local/bin\n' > /home/runner/actions-runner/.env && chown runner:runner /home/runner/actions-runner/.env
+  - cp -p /home/runner/actions-runner/.env /home/runner/actions-runner-2/.env
   - |
     set -e
     TOKEN=$(GH_APP_ID='${app_id}' GH_APP_INSTALLATION_ID='${installation_id}' \
@@ -65,4 +71,7 @@ runcmd:
       /usr/local/bin/mint-runner-token.sh)
     su - runner -c "cd ~/actions-runner && ./config.sh --unattended --replace \
       --url https://github.com/${org} --token $TOKEN --name ci-runner-01 --labels '${labels}'"
+    su - runner -c "cd ~/actions-runner-2 && ./config.sh --unattended --replace \
+      --url https://github.com/${org} --token $TOKEN --name ci-runner-01-2 --labels '${labels}'"
     cd /home/runner/actions-runner && ./svc.sh install runner && ./svc.sh start
+    cd /home/runner/actions-runner-2 && ./svc.sh install runner && ./svc.sh start

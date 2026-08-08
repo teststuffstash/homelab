@@ -38,7 +38,9 @@ variable "ci_runner_cores" {
 
 variable "ci_runner_memory_mb" {
   type    = number
-  default = 12288 # k3d + Garage + Grafana + a browser is hungry
+  default = 16384 # 2 concurrent kind e2es (runner slots 1+2, operator 2026-08-08) — one run's
+  # true working set is ~2G + docker/kind cache; 12G was mostly page cache (9.9G available
+  # measured mid-run). 6 cores at 17–26% were wasted on a single slot.
 }
 
 variable "ci_runner_disk_gb" {
