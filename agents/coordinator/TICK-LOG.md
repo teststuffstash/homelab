@@ -3116,3 +3116,42 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   current); sleep-lab mirrors broken since the 08-04 DB migration → FU-007 extended with the
   idp session's repair recipe. Goal-174 drawn as an artifact (6h11m to master, 19 sprouts,
   squash boundary = the expensive tail).
+
+## 2026-08-08 (~20:20–21:00Z) — fresh meta session: the red-CI cork pulled, and every gate drained
+
+- **Operator: "red ci holding everything back is not good" — root already filed as #151** (the
+  worker's triage was exact): FU-148 granted `actions:write` live + at the mint site, but
+  `docs/github-apps.yaml:38` still declared read; the FU-098 lint failed EVERY homelab PR at
+  birth. One line + regenerated exporter JSON, lint green, pushed. All five blocked PRs
+  branch-updated → **all five merged within ~40 min** (#147 deploy bump self-merged first; then
+  #152→#149, #160→#157 PSI spike, #161→#155 phantom-belt, #162→#158 rail-degrade). #154's two
+  holds (the ci-red + a footprint collision with PR#152) both cleared → re-queued.
+- **PR#161 reviewed by EXECUTION, not reading**: C4C5_SEL selector, age calc (garbage→-1→HELD),
+  no-terminal-pod sentinel, done-exclusion — all run against synthetic fixtures pre-approve.
+  PR#162's latch verified live post-roll (`router_openrouter_capacity_down 0` on the new pod).
+- **The codeowner gate had TWO invisible parks**: oracle PR#217 sat 17h (PR#230 2h) bot-approved
+  + green + REVIEW_REQUIRED — the reflex correctly refuses an approved head, so NOTHING announced
+  the state ("nothing to review" every 15 min, truthfully). Both spec diffs read + approved
+  (#230's third error channel `internal_error`; #217's doc_types never-a-silent-pick). **Class
+  fix: needs-meta clause 4** (codeowner-park on the require_code_owner_review stack repos), dry-run
+  with positive+negative controls — it caught circles PR#54 on its FIRST live pass.
+- **circles P0 assembly (PR#54) landed through the delegated gate**: specs delta verified
+  evidence-only (205 PASS rows, zero contract-text edits, manifest join) → approved → goal #29
+  closed. Goal-branch `Fixes` never fires at the squash boundary — #47 verified on master
+  (hard-fail is there) and hand-closed with audit.
+- **#153's missing fact fetched from the jail** (`pods/log` in monitoring): the duplicate-
+  timestamp offender is **github-exporter**, 68 lines/24h in bursts, and the emission STOPPED at
+  20:21Z when my #151 exporter-JSON commit rolled the pod — restart-clears-it datum recorded,
+  issue re-scoped + queued with ⚖ (duplicate-proof exposition + find the transient mechanism).
+  The worker's refuse-to-apply-honorTimestamps verdict was right and is now proven right.
+- **openrouter-operator#26 fixed pre-reset**: PR#28 reviewed (port-seam clean, park-vs-backoff
+  pinned both directions, MeteredPort counts by construction, roll-on-read) + merged 20:48Z.
+  #107's scope call ruled: NO egress widening from one ride's incidental need (G05 doctrine).
+  #138 ruled option (a): VIP reachability is a DNAT incidental — comment fixed on master.
+- **#133 done**: responder-behaviour-test wired into CI (devbox script + ci.yaml step, 75/75).
+- **Reviewer-coverage premise CORRECTED**: the platform reviewer log says `reviewer.enabled=false`
+  for all four platform repos TODAY — whatever PR#40 rode yesterday, no bot review is coming on
+  the platform stack now; the meta read + admin merge is the path (clause 1/park watches it).
+- Lessons re-proven this session: `git push` rejected mid-session by auto-merge master movement
+  (fetch-compare caught it, warning held); zsh ate `echo ===` (quote it); the comment stream +
+  loop watch armed per operator ask ("keep a closer eye, nudge along" — 4 repos, 2-min poll).

@@ -6,23 +6,36 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~22:30Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-08 ~21:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **⚠ FLEET OR-DISPATCH STARVED until ~00:00Z reset (openrouter-operator#26; balance topped to
-  $20.17, limits calendar-bound)**: post-midnight heartbeat MUST (1) verify the 13 wedged key
-  deletions drain + a mint succeeds, (2) clear oracle-fleet#228's agent/error + restore
-  agent/queued (it recorded the infra failure, not its content), (3) supervise the dispatch wave
-  — oracle #194/#195/#207/#211/#215(⚠ Touches:* wildcard)/#228, homelab #103/#149/#156/#159,
-  agent-runtime #41/#52, openrouter-operator#26. ClaudeTier lanes unaffected (ran all evening).
+- **⚠ FLEET OR-DISPATCH STARVED until ~00:00Z reset (openrouter-operator#26 CLOSED — fix merged
+  PR#28 20:48Z, park-until-reset + daily-op counters; balance $20.17)**: post-midnight heartbeat
+  MUST (1) verify the 13 wedged key deletions drain + a mint succeeds (the #26 acceptance
+  observation), (2) verify the openrouter-operator IMAGE actually redeployed with the #28 fix
+  (find its deploy-bump path; if the old image still runs, kopf resumes hammering at the NEXT
+  limit hit), (3) clear oracle-fleet#228's agent/error + restore agent/queued (it recorded the
+  infra failure, not its content), (4) supervise the dispatch wave — oracle
+  #194/#195/#206/#211/#212/#213/#215/#227/#228, homelab #103/#134/#137/#145/#153/#156/#159/
+  #163..#166, agent-runtime #45/#46/#49/#50, plus openrouter-operator#27 (chart half of #26,
+  needs queue decision if the debounce hasn't taken it). ClaudeTier lanes unaffected.
 - **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
-- **In flight tonight (subscription rides)**: homelab #155 (reconciler belt), #157 (PSI spike),
-  #158 (haiku degrade — leg 1 re-scoped to regression pin via my in-flight correction). Their
-  PRs land on the gated repo → my review.
-- **Telemetry attribution rebuilt ~22:00Z**: all roles labeled, jail OTLP door live (.40.29,
-  verified 200) — jail cost visible from NEXT session; corrected per-stack numbers accumulate
-  from each role's next run. agent-cost dashboard: stack rollup + daily + drill links.
-- **circles**: PR#54 assembly awaiting re-review; children flowing. **oracle**: PR#230 (#193 fix)
-  + PR#217 in review pipeline (both post-CI). Frozen: circles PR#21/#25.
+- **CI-red arc RESOLVED ~20:30Z**: #151 (github-apps declaration drift) fixed on master; ALL five
+  blocked homelab PRs landed (#147 deploy, #152→#149, #160→#157, #161→#155, #162→#158). #154
+  re-queued (both holds gone). #153 re-scoped: offender is github-exporter (not cloudflare-exp;
+  Prometheus log names it), transient duplicate-emission state cleared by the 20:21Z pod roll —
+  queued with ⚖ (find mechanism + duplicate-proof exposition).
+- **#162's proxy latch verified live post-roll**: router_openrouter_capacity_down{,_total} = 0 on
+  the rolled pod. Alert for the latch = #163 (queued, ⚖ severity-warning note attached).
+- **circles**: PR#54 assembly MERGED 2026-08-08 ~20:47Z via my delegated codeowner approve (specs
+  delta = evidence-blocks only, 205 PASS, contract text untouched); goal #29 CLOSED; #47/#138
+  hand-closed with audits (goal-branch Fixes never fires at the squash boundary). Frozen:
+  PR#21/#25 (unchanged). **oracle**: PR#230 MERGED (codeowner gate); PR#217 approved, ci
+  re-running (concurrency cancel), auto-merge on green — CHECK IT LANDED, then watch for the
+  oracle-iac deploy bump + pin-follow (fix-cycle chain, both are server/chassis code).
+- **agent-runtime**: 5 issues queued (#43 ridden → PR '#54' open, rest follow via wip caps).
+  ⚠ reviewer.enabled=false for the WHOLE platform stack (reviewer log 20:45Z) — the earlier
+  "reviewer follows the fixer block" note is NOT what the claim says today: every platform-repo
+  PR needs MY read + admin merge until that's reconciled (needs-meta clause 1/park covers).
 - **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
   94–98°C baseline); wk-metal-02 at 1 Gbps (fixed by the poke).
 - **tuya frozen-accepted** (silence c73baef2 → ~08-22 auto re-triage).
@@ -130,7 +143,9 @@ meant to avoid.)
 ## Re-arm on a fresh session
 
 - **needs-meta watch (REQUIRED)**: `Monitor` (persistent) `bash agents/meta-needs-attention.sh`
-  — unreviewed platform PRs + `agent/blocked` issues only. ⚠ verify by process AFTER arming
+  — unreviewed platform PRs, `agent/blocked` issues, unlabeled>24h, AND (clause 4, 2026-08-08)
+  stack-repo codeowner parks (bot-approved+green+REVIEW_REQUIRED on oracle-fleet/circles — it
+  caught circles PR#54 on its first pass; oracle PR#217 had sat 17h). ⚠ verify by process AFTER arming
   (`ps aux | grep NEEDS-META` for an inline variant, the script name for the script one — an
   absence is a claim about your grep, proven again 2026-08-08 05:00Z).
 - Backstop heartbeat: `Monitor` (persistent) `while true; do sleep 7200; echo "META-HEARTBEAT:
