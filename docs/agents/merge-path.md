@@ -413,10 +413,20 @@ floor only policy and scheduling help, which is why the O(N²) options above are
      ≥`REVIEW_ROUNDS_MAX` (8) verdicts ever (the escalation table's rounds-exhausted row).
      Deliberately recomputed from raw fields, NOT the pick predicate's defs — shared code is a
      shared bug.
-  2. *Agent self-guard (reviewer prompt STEP 0):* if the reviewer finds its own verdict already
-     covering the head — or anything else that smells like automation gone wrong — it posts one
-     `AGENT_ERROR:` comment and submits nothing (it can't label: the reviewer App has no
-     issues:write, FU-069). One burned no-op session, no duplicate verdict.
+  2. *Agent self-guard (reviewer prompt STEP 0):* the reviewer re-checks its dispatch premise at
+     EXECUTION time and submits no verdict when it no longer holds — but **which terminal that
+     refusal picks depends on whether dispatching again would resolve the state** (homelab#122 /
+     PR #123, master `11c2045`, 2026-08-08). A **precondition failure** — `mergeStateStatus`
+     DIRTY/UNKNOWN, checks not concluded on the current head, or **one** verdict of its own
+     identity already at this exact commit — is ordinary semaphore contention (the queue gap
+     routinely reaches ~10 min), so it posts one `STANDING ASIDE:` comment keyed by (head sha,
+     precondition), adds **no** label, and stops; the path is level-triggered, so the state
+     settling *is* the re-dispatch. Only a **genuine anomaly** — **more than one** own verdict at
+     head, a pile of near-identical bot reviews/comments, a review history irreconcilable with the
+     commits, contradictory labels — trips the breaker: `agent/error` + one `AGENT_ERROR:` comment
+     (the reviewer App has had `issues:write` since FU-069 b, 2026-07-16). One burned no-op
+     session, no duplicate verdict — and, since #123, no frozen PR: oracle-fleet#60's 5 h
+     fix-round freeze was the precondition case latching the breaker.
   3. *Out-of-band detection (github-exporter):* per-PR `github_pull_request_reviews_recent`
      (verdicts per author in the trailing hour — the exporter PAT can't see commit objects, so
      since-head isn't computable there) and `github_pull_request_label` metrics feed the
