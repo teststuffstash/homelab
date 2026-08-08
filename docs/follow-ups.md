@@ -108,9 +108,15 @@ six OVERSIZE items pointer-ized into
       CI-gate pods use `dnsPolicy: None` + the LAN resolver) — fine for k3d/registry work, blocks
       in-cluster consumers like Garage transcript upload. Relates FU-116.
 - [ ] **FU-007** — **ArgoCD → Forgejo cutover** (offline-resilience goal). Prereq: pull-mirror the
-      **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21).
-      Then flip `var.argocd_repo_url` + child-app `repoURL`s and deliver the Forgejo read cred via
-      ESO. Procedure: `argocd/README.md` → "Forgejo cutover".
+      **homelab** repo itself into Forgejo (the `sleep-lab` org mirrors exist since 2026-06-21) —
+      ⚠ **and those mirrors are BROKEN since the 2026-08-04 Forgejo DB migration**: pod logs show
+      `SyncMirrors` failing for the sleep-lab repos (observed 2026-08-08 by the idp jail session
+      while repairing the same migration's orphaned-repo residue — its fix recipe: remove the
+      orphan dir on the git volume via kubectl exec, recreate through the API with the wallet
+      password; the API token lacks org scopes). Next: apply that recipe to the sleep-lab
+      mirrors, verify a sync cycle, THEN the cutover steps. Then flip `var.argocd_repo_url` +
+      child-app `repoURL`s and deliver the Forgejo read cred via ESO. Procedure:
+      `argocd/README.md` → "Forgejo cutover".
 - [ ] **FU-010** — Infisical↔CNPG uses `sslmode=disable` (node-pg rejects CNPG's self-signed
       cert). Fine pod-to-pod; revisit if Cilium transparent encryption lands.
 - [ ] **FU-011** — Pin the Crossplane `provider-terraform` package to a digest (currently the
