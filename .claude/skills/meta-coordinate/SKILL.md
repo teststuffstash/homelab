@@ -17,8 +17,9 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   rubber-stamp; never approve without reading.
 - **Issue authoring from specs/failures**: file well-formed issues (spec anchors, deliverables
   with ⚖ guidance pre-decided where the call is the codeowner's, acceptance criteria, track/*
-  label, Depends-on lines per FU-087). Queue = `agent-fix` + `agent/queued`. Bot-authored 🌱
-  sprouts stay unlabeled for the operator.
+  label, dependencies as NATIVE blocked-by edges — the `Depends-on:` body-line reader retired
+  2026-08-07, FU-111). Queue = `agent-fix` + `agent/queued`. Bot-authored 🌱 sprouts stay
+  unlabeled for the operator.
 - **C6 close-the-loop — MACHINE-OWNED since 2026-07-27** (the `merged-closeout` clause,
   MP-T10): the scan dispatches a `merged-closeout` unit; the coordinator session verifies,
   flips `agent/done` and harvests review `Follow-ups:` bullets as inert issues. Your duty is now VERIFICATION, not performance: spot-check that closed issues got
@@ -50,13 +51,17 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 1. `tail -120 agents/coordinator/TICK-LOG.md` — the last 2-3 entries are the arc's state +
    doctrines. Do NOT skip; the current doctrines live there (exclude-and-count, pin-follow,
    symptoms-only alerts, launcher-owned dispatch, "a belt is not a guard").
-2. **The PLATFORM work queue first — open 🚨 issues on homelab** (operator direction
-   2026-07-27): homelab has no fixer loop, so responder-filed platform issues have NO agent
-   lane — the meta-coordinator IS the platform's fixer. `gh issue list --repo
-   teststuffstash/homelab --state open` — triage/act/CLOSE these before loop work ("alerts
-   clear themselves, issues don't"), and during a BIG ROLLOUT sweep them FIRST and often:
-   infra breakage stalls the rollout silently while every event-watch stays quiet (#55, the
-   wk-01 memory squeeze, sat un-owned mid-rollout as the founding example).
+2. **The PLATFORM work queue first — open 🚨 issues on homelab.** ⚠ Premise UPDATED 2026-08-08:
+   homelab HAS a fixer lane (FU-068/FU-142) and the platform stack runs its own coordinate loop —
+   queued issues dispatch without you. What the lane CANNOT do is yours, and it is exactly three
+   things: (1) TRIAGE the unlabeled (fix-verdict/queue decisions the debounce hasn't made, stale
+   `agent/blocked` labels whose gate has since resolved — the label outlives the gate, nothing
+   clears it but you); (2) REVIEW + MERGE platform-lane PRs — platform repos have NO bot approver
+   by design, so every fixer PR there waits on your read and an OrgAdmin merge (PR#123 sat 1.5h
+   unseen before the needs-meta watch existed); (3) APPLY what is host/jail-only (tofu roots,
+   physical actions) and FLAG the operator when it is theirs. `gh issue list --repo
+   teststuffstash/homelab --state open` — sweep before loop work ("alerts clear themselves,
+   issues don't"); during a BIG ROLLOUT sweep FIRST and often (#55, the founding example).
 3. Live board, per active repo (oracle-fleet, oracle-iac at minimum):
    `gh issue list --repo teststuffstash/<r> --state open --json number,title,labels`
    `gh pr list --repo teststuffstash/<r> --state open --json number,title,labels,reviewDecision,mergeStateStatus`
@@ -67,9 +72,16 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 4. Cluster: latest `coordinate-<stack>` tick logs (`kubectl -n <stack>-agents logs <newest
    coordinate pod> -c main`), running ride/reviewer pods, any Failed workflow pods in workload
    namespaces.
-5. Re-arm BOTH standing watches:
-   - The loop watch: `Monitor` (persistent) running `bash agents/meta-watch-loop.sh` —
-     change-dedup'd scan ticks, ride/reviewer pods, open-PR set, 25-min stall clause. Probes must
+5. Re-arm the standing watches — the DEFAULT set changed 2026-08-08 (operator: "too many
+   monitors"; the per-event loop watches produced ~10 routine wakes per real signal once the
+   loops proved self-driving):
+   - **needs-meta watch (REQUIRED)**: `Monitor` (persistent) running
+     `bash agents/meta-needs-attention.sh` — emits ONLY states no machinery announces: a
+     platform-lane PR sitting CI-green with no bot approver coming, and open `agent/blocked`
+     issues (each = "re-check the gate this label recorded"; clear stale ones with an audit
+     comment). It caught a stale goal-blocking label on its first pass.
+   - The loop watch (`bash agents/meta-watch-loop.sh`, per stack) is now OPTIONAL — arm it only
+     for an active rollout or a lane you distrust; expect event volume. Probes must
      FAIL LOUDLY (rule #6; three dead-probe incidents in meta-9 alone).
    - The **backstop heartbeat**: `Monitor` (persistent) running
      `while true; do sleep 7200; echo "META-HEARTBEAT: sweep due"; done` — an unconditional
@@ -134,6 +146,13 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   monitor to verify, not to trust: probe its subject by hand once per heartbeat. Dead probes
   read as calm (jsonpath erroring into 2>/dev/null; a filter that misses the failure signal;
   `|| echo 0` fabricating empty state — all three happened in meta-9).
+- **An agent's verdict line is a claim about its investigation, not the investigation.** Before
+  you repeat, act on, or archive any machine conclusion (a set-pass "why", a triage verdict, a
+  stats `exit_status`), read its evidence IN FULL — never the first 400 chars, never just the
+  verdict field. Both 2026-08-08 meta corrections were this one failure: "set-pass judged
+  CORRECTLY" recorded off a `why` line an hour before the coordinator refuted the queue against
+  live state, and nine egress fires labeled "benign transient" off truncated triage reads while
+  the full 21:35Z triage contained both the real cause and the right fix.
 - **Watch FAILURE signals explicitly.** A watch that only matches the happy path (PR set
   changes, phase transitions) is blind to red CI, a struck ride, a latched breaker. If the
   failure signature isn't in the filter, widen the filter or add a check to the heartbeat sweep.
