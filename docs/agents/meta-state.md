@@ -21,14 +21,16 @@ meant to avoid.)
 - **platform queue**: #124 CLOSED — PR#129 meta-reviewed (behaviour harness 47/47 in-jail) +
   merged ~10:30Z; PR#130 (clone timeout-wrap, the scan-wedge class #108/#120) merged ~10:36Z.
   Queued now: #125 (responder toolbox), #126+#128 (reviewer STEP-0: injected login + `,comments`
-  — same surface, sibling-bundle note on #126), #127 (merge-path docs drift), #132 (cloudflare
-  exporter missing CF_ACCOUNTS). #103 open (containment holds; do NOT tighten activeDeadline /
-  reject unit=-). #116 = operator mirror-capacity decision. #107 CLOSED ~10:50Z with both
-  acceptance probes (ghcr allowlisted `1904096`; astral 0 drops over 6h incl. a fresh-clone ride).
-- **Cloudflare public-ingress (FU-039/ADR-101)**: built + unarmed; `cloudflare-ingress-write`
-  ExternalSecret is SecretSyncedError BY DESIGN until the operator's `devbox run
-  cloudflare-token-tofu apply` mints + stores CLOUDFLARE_INGRESS_WRITE. That apply is the
-  arming switch; test claim + ha retrofit are operator-witnessed acts after it.
+  — same surface, sibling-bundle note on #126), #127 (merge-path docs drift). #103 open
+  (containment holds; do NOT tighten activeDeadline / reject unit=-). #132 meta-fixed by hand
+  ~11:20Z (CF_ACCOUNTS + LOG_LEVEL=info, dequeued; close on the acceptance probe —
+  cloudflare_zone_requests_total present). #116 CLOSED ~11:25Z (fix was already merged
+  `8578973` 2026-08-07; maintenance verified live on both mirrors via pushgateway metrics).
+  #107 CLOSED ~10:50Z with both acceptance probes.
+- **Cloudflare public-ingress (FU-039/ADR-101): ARMED ~11:15Z** — operator ran the token apply;
+  CLOUDFLARE_INGRESS_WRITE stored, ExternalSecret SecretSynced after a force-refresh kick, and
+  the provider-terraform pod restarted so the token is IN-PROCESS (verified by exec). Remaining
+  operator-witnessed acts: the echo test claim, then the ha retrofit as consumer #2.
 - **Operator physical/one-trip**: wk-metal-02 cable/switch-port (#117) + the laptop4 plug
   (#121) — same corner.
 - **FU-149 spot-check** still pending a post-rollover firing of `ResponderTriageBudgetExhausted`
