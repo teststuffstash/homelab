@@ -155,6 +155,12 @@ fi
 #     slots, and when the subscription is limited too the ride defers exactly as it does today.
 #  3. per-stack opt-out — `subscriptionFallback: false` on the stack row for a stack that should
 #     strictly wait instead; `AGENT_SUBSCRIPTION_FALLBACK=0` is the per-run override.
+#
+# ⚠ The `>>>REPLAY:…>>>` / `<<<REPLAY:…<<<` sentinels below are load-bearing: agents/rail-degrade-replay.sh
+# EXTRACTS the block between them and runs it against stubbed probes, so the nine-case table in
+# homelab#162 is pinned against the real code rather than a transcription of it. Move the sentinels
+# with the block if you move it; don't delete them (the replay fails loudly if a marker goes missing).
+# >>>REPLAY:rail-degrade>>>
 OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"
 OR_CREDITS=""; OR_CAPACITY_DOWN=""; RAIL_DEGRADED=""
 # Router trigger — AUTHORITATIVE mode only, keyed on `_router_defer`, i.e. exactly the case where
@@ -224,6 +230,8 @@ if [ -n "${_router_defer:-}" ]; then
   echo "→ router: DEFER (${_rwhy}) retry_after=${_retry:-?}s — not dispatching. chain-exhausted means every model is struck/denied for this task: escalate." >&2
   exit 1
 fi
+# <<<REPLAY:rail-degrade<<<
+# >>>REPLAY:chainless-guard>>>
 # Chainless-stack guard (ADR-096 P5 pilot, 2026-08-03): a stack row WITHOUT workerModel has no
 # static chain, and the hardcoded MODEL default would be a silent lie. Only an authoritative
 # routed dispatch (or an explicit --model) may proceed — shadow/off/unreachable-router all
@@ -244,6 +252,7 @@ if [ -z "${MODEL_SET:-}" ] && [ -z "${RAIL_DEGRADED:-}" ] \
     exit 1
   fi
 fi
+# <<<REPLAY:chainless-guard<<<
 
 # workerModel notation from the AgentStack claim (first used by oracle, oracle-iac#8): the string
 # encodes the RAIL and sometimes the HARNESS by prefix, because the XRD carries no harness field
@@ -252,9 +261,11 @@ fi
 # estimate_budget.py and in the proxy. This keeps the same self-executing behaviour: the dispatcher
 # passes --model straight from stacks.json and gets the right harness + a bare model id, and an
 # explicit --harness still wins.
+# >>>REPLAY:model-id-resolution>>>
 eval "$(python3 "$HERE/model_id.py" --shell "$MODEL")"
 [ -z "$MODEL_HARNESS" ] || [ -n "${HARNESS_SET:-}" ] || HARNESS="$MODEL_HARNESS"
 MODEL="$MODEL_MODEL"
+# <<<REPLAY:model-id-resolution<<<
 
 # Without an explicit --task (interactive/ad-hoc runs) the transcript still lands somewhere findable.
 TASK="${TASK:-adhoc-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -986,9 +997,11 @@ REPORT_STACK="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))
 [ "$REPORT_STACK" = "null" ] && REPORT_STACK=""
 # homelab#158: the resolved rail, one string, computed once from the FINAL harness — never re-derived
 # downstream (the same one-parser rule FU-127 applied to model ids).
+# >>>REPLAY:agent-rail>>>
 if [ -n "${RAIL_DEGRADED:-}" ]; then AGENT_RAIL="subscription-fallback"
 elif [ "$HARNESS" = "claude" ];  then AGENT_RAIL="subscription"
 else                                  AGENT_RAIL="openrouter"; fi
+# <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
@@ -1135,6 +1148,7 @@ DIND
   DIND_CONTAINER="${DIND_CONTAINER/__MIRROR_HOST__/${MIRROR_DOCKER_IO#http://}}"
 fi
 
+# >>>REPLAY:fu088-gates>>>
 # FU-088(a): a claude-harness worker draws on the one operator subscription — defer the spawn
 # while the egress proxy's 429 latch / utilization threshold / concurrency semaphore says so
 # (OpenRouter harnesses are unaffected).
@@ -1155,6 +1169,7 @@ if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-
   echo "→ ${PROJECT} dispatch deferred — OpenRouter account credit \$${OR_CREDITS} below the \$${OR_MIN} floor (FU-088b; top up, or OPENROUTER_MIN_CREDIT / AGENT_CREDIT_GATE=0 to override)"
   exit 0
 fi
+# <<<REPLAY:fu088-gates<<<
 
 # The atomic gate: reap a TERMINAL same-key holder, refuse a LIVE one, then `create` (NOT apply —
 # apply would silently adopt/patch an existing pod and the whole idempotency story dies).
