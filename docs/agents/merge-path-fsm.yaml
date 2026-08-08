@@ -221,7 +221,7 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: 'index\("agent/arbitrate"\)' }
       - desc: "scan emits arbitrate units; sibling clauses exclude the label"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'arbitrate\|' }
-      - desc: "the play: re-dispatch-with-clarification / close-not-mergeable / escalate (meta-4 doctrine)"
+      - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
     incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
 
