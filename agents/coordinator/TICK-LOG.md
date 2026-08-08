@@ -2891,3 +2891,31 @@ merge-conflict lane that owns DIRTY. Cleared with audit on the PR. One occurrenc
 dispatch-state race trips the breaker, the fix is the reviewer REQUEUEING (or re-checking state
 at execution start) instead of latching — file it then, on agent-runtime. Semaphore contention
 widens every dispatch→execution gap, so tonight makes races likelier (same FU-088 datum).
+
+## 2026-08-08 (~02:30–03:00Z, operator-directed) — budget semantics fixed, the astral fetch killed at the tool, triage debt filed
+
+- **Budget gate rewritten to ACTUAL spend** (`a9d89c9`, operator ruling): settled children charge
+  harvested `agent_run_cost_usd` (pushgateway = the ledger finalize already writes), caps reserve
+  only for live keys + the dispatch, ridden-but-unledgered children charge cap (conservative),
+  never-ridden $0; ledger unreachable → old cap-sum, loudly. Cap-sum had refused circles#29 at
+  ~$2.40 of $12 actually spent (13 × $2 flat caps = $26). Every component executed against live
+  data before commit. **#29 unstuck end-to-end**: Budget €12→$16 (it was a EURO sign — the gate
+  reads number-as-USD), #57 un-blocked + re-queued, doorbell → the new gate PASSED → #57-r2
+  riding 02:52Z. The blocked-source hold released on the label flip exactly as built.
+- **The night's egress story, corrected by the operator**: "cleared in minutes" = the ride DIED,
+  not the cause. 6h of drops = ONE flow, oracle-fleet → releases.astral.sh (~272 drops, nine
+  fire/clear cycles) — uv fetching a MANAGED CPython while devbox provisions a satisfying 3.13.
+  **Killed at the tool** (`e5f568e`): `UV_PYTHON_PREFERENCE=only-system` in the worker env card,
+  beside the jetify kills; allowlist withdrawn (oracle-iac#307 closed with reasoning). The
+  21:35Z responder triage HAD this fix — it never entered a lane.
+- **Triage-debt filings, all queued for the platform fixer**: homelab#124 (stack-ns egress
+  verdicts route to the stack's -iac with the fix payload), homelab#125 (responder toolbox:
+  hubble path broken, no portforward/CNP-read/Prometheus RBAC, and re-triage must READ its own
+  thread — the 00:37Z session re-derived blind on a thread that named the answer at 21:35Z).
+- **Watch posture thinned (operator)**: both per-stack loop watches stopped — heartbeat (2h,
+  runs crosscheck) + handoff watch remain; in-cluster belts own minute-scale reaction.
+
+⚠ **Watch items:** first ride dispatched after `e5f568e` = the uv-fix acceptance (zero astral
+drops); #57-r2's round lands the last gap child of circles#29 → assembly PR#54 then needs its
+re-review + the applied ruleset bypass proves out on its first update; oracle assembly PR#202
+still awaits its whole-branch review behind the semaphore.
