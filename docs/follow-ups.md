@@ -277,9 +277,11 @@ the block needs pruning, not more headings.
       privilege call was made 2026-08-08 (~17:30Z): **operator granted the App `actions: write`**;
       the coordinator token generator (`git-token.yaml`, coordinator-git ONLY — workers keep no
       Actions verb) + the ci-red play's retry terminal (retry ONCE, state the diagnosis, second
-      red ≠ environmental) wired the same hour; close/reopen RETIRED in the play text. **Next:**
-      acceptance = the first live environmental red self-retries via `gh run rerun --failed`
-      (token refresh ~45m post-sync carries the permission) → then archive. Relates ADR-094,
+      red ≠ environmental) wired the same hour; close/reopen RETIRED in the play text. **Permission chain
+      VERIFIED live ~17:55Z** (the minted coordinator token returned 201 on a real
+      rerun-failed-jobs call — grant → installation → generator → token → write, all proven).
+      **Next:** acceptance = the first live environmental red self-retries through the PLAY
+      (diagnosis comment + one rerun) → then archive. Relates ADR-094,
       FU-079.
 - [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
       `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
