@@ -951,8 +951,11 @@ spec:
                 # rather than guess. Read verbs are still bounded by RBAC, which is where the
                 # boundary belongs; this only makes the apiserver reachable, never `secrets`
                 # readable. NB in-cluster consumers must use service DNS
-                # (kube-prometheus-stack-prometheus.monitoring:9090), NOT the LAN VIP — a
-                # LoadBalancer IP is a `world` destination and stays blocked by design.
+                # (kube-prometheus-stack-prometheus.monitoring:9090), NOT the LAN VIP. A VIP may
+                # in fact answer (pod→LB-VIP is DNAT'd to the backend BEFORE policy evaluation —
+                # the registry-mirror note below, Hubble-verified; #125 saw .40.13:9090 return
+                # 200): that reachability is a DNAT incidental, not an allow — do not rely on it
+                # (homelab#138 ruling: service DNS is the rule, option a).
                 - toEntities:
                     - kube-apiserver
                   toPorts:
