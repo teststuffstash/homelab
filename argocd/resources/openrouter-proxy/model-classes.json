@@ -73,6 +73,27 @@
    "class": "coding"
   }
  },
+ "urgency_map": {
+  "_comment": "M11 leg 2 (homelab#159): urgency is a DISPATCH property, resolved deterministically and never inferred from the prompt (ADR-094) — which is why the table lives here beside label_map rather than in any model. Precedence in /route: the caller's explicit `urgency` field wins (it is the only input that can carry round STATE — 'this round is a ci-red retry', 'this child has an assembly waiting' — which no label spells), then these labels (tight wins a tie), then the role, then `default`. The launcher/scan reads the SAME table when it supplies the field, so the two sides cannot drift.",
+  "default": "tight",
+  "labels": {
+   "task/goal": "tight",
+   "task/reviewer": "tight",
+   "task/research": "elastic",
+   "agent-budget/xs": "elastic"
+  },
+  "roles": {
+   "researcher": "elastic",
+   "retro": "elastic",
+   "scout": "elastic"
+  }
+ },
+ "ladder": {
+  "_comment": "M11 (homelab#159) cross-rail cost ladder, SHADOW-only today: rungs free → subscription → paid, ordered by TRUE MARGINAL cost. subscription_model is the rail's stand-in candidate when a chain names no claude/* entry (same constant as the §M12 degrade, AGENT_SUBSCRIPTION_FALLBACK_MODEL). promote_after = banked clean runs at the start rung before the cell tries one rung cheaper; tight_floor_tier = the rung tight work starts at until the cell has PROVEN the free rung. The subscription rung is only ever priced ~0 while the FU-088 gates (429 latch, per-window utilization, semaphore) are all clear — the safety net's slots are not the ladder's to spend.",
+  "subscription_model": "claude/haiku",
+  "promote_after": 3,
+  "tight_floor_tier": 1
+ },
  "tier_thresholds": {
   "_comment": "FU-109 (P2, live): a tier only RAISES a window's threshold \u2014 the proxy composes effective = max(ANTHROPIC_UTIL_THRESHOLD_<W>, tier). dispatch = ~30s dispatch units (coordinator/responder), heavy = full sessions (reviewer, claude-tier worker).",
   "dispatch": 0.9,

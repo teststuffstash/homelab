@@ -85,8 +85,26 @@ CREATE TABLE IF NOT EXISTS capability(
 CREATE TABLE IF NOT EXISTS task_market(
   tag TEXT, model TEXT, rank INTEGER, usage_share REAL, token_share REAL, updated_ts REAL,
   PRIMARY KEY(tag, model));
+CREATE TABLE IF NOT EXISTS cell_start_tier(
+  class TEXT, urgency TEXT, start_tier INTEGER, clean INTEGER, degraded INTEGER,
+  updated_ts REAL, PRIMARY KEY(class, urgency));
+CREATE TABLE IF NOT EXISTS shadow_decisions(
+  ts REAL, session TEXT, stack TEXT, class TEXT, urgency TEXT, urgency_source TEXT,
+  served_rail TEXT, served_model TEXT, shadow_rail TEXT, shadow_model TEXT,
+  ladder_tier TEXT, start_tier TEXT, learned_tier TEXT, reprobe INTEGER,
+  sub_gate TEXT, agrees INTEGER);
+CREATE INDEX IF NOT EXISTS ix_shadow_session ON shadow_decisions(session);
 CREATE INDEX IF NOT EXISTS ix_pe_model_ts ON provider_events(model, ts);
 """
+
+# ── M11 (homelab#159): the cross-rail cost ladder, in SHADOW ────────────────────────────────────
+# The rungs are ordered by TRUE MARGINAL cost, which is not the same axis as the effective $/M the
+# in-rail ordering uses: a :free model costs nothing, the claude subscription is already bought (so
+# a slot with headroom is also ~$0 at the margin — bounded by the FU-088 gates, which are the
+# safety net's, not the ladder's, to spend), and paid OpenRouter is the reliable spender of last
+# resort. See docs/agents/model-routing.md §M11.
+LADDER = ("free", "subscription", "paid")
+URGENCIES = ("tight", "elastic")
 
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
@@ -176,6 +194,8 @@ def _write(sql: str, params: tuple) -> bool:
                               (now - RETAIN_EVENTS_D * 86400,))
                 _conn.execute("DELETE FROM openrouter_keys WHERE last_seen < ?",
                               (now - RETAIN_EVENTS_D * 86400,))
+                _conn.execute("DELETE FROM shadow_decisions WHERE ts < ?",
+                              (now - RETAIN_EVENTS_D * 86400,))
             _conn.commit()
         return True
     except sqlite3.Error as e:
@@ -227,7 +247,119 @@ def record_report(d: dict) -> tuple[bool, bool]:
             "INSERT INTO strikes VALUES(?,?,?,?,?,?,?)",
             (now, str(d.get("task") or ""), str(d.get("stack") or ""), str(d.get("model") or ""),
              err, int(d.get("round") or 1), str(d.get("session") or "")))
+    if stored:  # M11 leg 3 (shadow): the same feed, folded into the (class, urgency) start tier
+        fold = fold_outcome_into_cell(d, striked)
+        if fold:
+            _log(f"ladder cell {fold['class']}/{fold['urgency']}: {fold['verdict']} at "
+                 f"{fold['used_tier']} → start_tier={fold['start_tier']} (shadow)")
     return stored, striked
+
+
+def _ladder_cfg() -> dict:
+    cfg = _classes.get("ladder") or {}
+    return {"subscription_model": str(cfg.get("subscription_model") or "claude/haiku"),
+            "promote_after": max(1, int(cfg.get("promote_after", 3))),
+            "tight_floor_tier": min(len(LADDER) - 1, max(0, int(cfg.get("tight_floor_tier", 1))))}
+
+
+def ladder_tier(model: str, rail: str, price: float | None) -> int:
+    """Which RUNG a candidate sits on. Rail decides the subscription rung (it is the rail that is
+    already paid for, whatever the model id); on the OpenRouter rail a $0 price is the free rung
+    and everything else is the paid one."""
+    if rail == "subscription":
+        return 1
+    if str(model).endswith(":free") or price == 0.0:
+        return 0
+    return 2
+
+
+def resolve_urgency(payload: dict) -> tuple[str, str]:
+    """(urgency, source). ADR-094 order: the CALLER's explicit value wins — it is the only input
+    that can carry round-state facts a label cannot (this round is a ci-red retry; this child has
+    an assembly waiting). Absent that, the git-owned `urgency_map` in model-classes.json is a
+    deterministic lookup over the labels/role the dispatch already carries — the same seam and the
+    same table the launcher will read when the caller side lands, so the two cannot disagree.
+    Nothing here infers anything from the prompt. Missing everywhere ⇒ `tight`, the conservative
+    default (a tight cell never gambles a deadline on the free rung)."""
+    explicit = str(payload.get("urgency") or "").strip().lower()
+    if explicit in URGENCIES:
+        return explicit, "caller"
+    umap = _classes.get("urgency_map") or {}
+    labmap = umap.get("labels") or {}
+    hits = [str(labmap[l]).lower() for l in (str(x) for x in (payload.get("labels") or []))
+            if l in labmap and str(labmap[l]).lower() in URGENCIES]
+    if hits:  # tight wins a tie — the conservative direction
+        return ("tight" if "tight" in hits else "elastic"), "label_map"
+    role_u = str((umap.get("roles") or {}).get(str(payload.get("role") or "")) or "").lower()
+    if role_u in URGENCIES:
+        return role_u, "role"
+    default = str(umap.get("default") or "tight").lower()
+    return (default if default in URGENCIES else "tight"), "default"
+
+
+def cell_state(cls: str, urgency: str) -> dict:
+    """The learned (class, urgency) cell: which rung this cell STARTS on, plus the streaks behind
+    it. Absent row = start at rung 0 (free) with no evidence — the optimistic prior M11 asks for,
+    which urgency then floors for tight work."""
+    rows = _read("SELECT start_tier, clean, degraded FROM cell_start_tier WHERE class=? AND "
+                 "urgency=?", (cls, urgency))
+    if not rows:
+        return {"start_tier": 0, "clean": 0, "degraded": 0, "seen": False}
+    return {"start_tier": int(rows[0][0] or 0), "clean": int(rows[0][1] or 0),
+            "degraded": int(rows[0][2] or 0), "seen": True}
+
+
+def _cell_for_session(session: str) -> tuple[str, str] | None:
+    """(class, urgency) for a finished run — the join that turns the EXISTING outcomes feed into
+    ladder evidence. The shadow row is authoritative (it is the one that recorded the urgency);
+    a decision row without one still gives the class, and urgency falls back to the same
+    conservative default /route would have used."""
+    rows = _read("SELECT class, urgency FROM shadow_decisions WHERE session=? ORDER BY ts DESC "
+                 "LIMIT 1", (session,))
+    if rows:
+        return str(rows[0][0] or ""), str(rows[0][1] or "tight")
+    rows = _read("SELECT class FROM decisions WHERE session=? ORDER BY ts DESC LIMIT 1",
+                 (session,))
+    return (str(rows[0][0] or ""), "tight") if rows and rows[0][0] else None
+
+
+def fold_outcome_into_cell(d: dict, striked: bool) -> dict | None:
+    """M11 leg 3: one run report → the (class, urgency) start-tier table. Reads the SAME feed the
+    strike bookkeeping already consumes (no new producer): a banked PR keeps or LOWERS the start
+    rung, a strike RAISES it above the rung that just failed. A re-probe one rung down that banks
+    clean is adopted immediately — that is the whole point of the re-probe, and waiting
+    promote_after runs to believe it would make recovery take days.
+
+    SHADOW: this table is written and logged, and nothing reads it in the served path."""
+    session = str(d.get("session") or "")
+    cell = _cell_for_session(session) if session else None
+    if not cell:
+        return None
+    cls, urgency = cell
+    model = str(d.get("model") or "")
+    rail = "subscription" if model.startswith("claude/") else "openrouter"
+    used = ladder_tier(model, rail, 0.0 if model.endswith(":free") else None)
+    st = cell_state(cls, urgency)
+    start, clean, degraded = st["start_tier"], st["clean"], st["degraded"]
+    outcome = str(d.get("outcome") or "")
+    if striked:
+        if used >= start:
+            start = min(used + 1, len(LADDER) - 1)
+        clean, degraded = 0, degraded + 1
+        verdict = "degraded"
+    elif outcome.startswith("pr"):
+        clean, degraded = clean + 1, 0
+        if used < start:
+            start, clean = used, 0          # the re-probe proved this rung — adopt it now
+        elif clean >= _ladder_cfg()["promote_after"] and start > 0:
+            start, clean = start - 1, 0     # banked enough at the start rung to try one cheaper
+        verdict = "clean"
+    else:
+        return None  # a round (changes-requested, ci-red) is neither: §M1, rounds are not strikes
+    _write("INSERT OR REPLACE INTO cell_start_tier VALUES(?,?,?,?,?,?)",
+           (cls, urgency, start, clean, degraded, time.time()))
+    return {"class": cls, "urgency": urgency, "used_tier": LADDER[used],
+            "start_tier": LADDER[start], "verdict": verdict}
 
 
 def record_generation(gen_id: str, requested_model: str, data: dict) -> bool:
@@ -479,10 +611,119 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     return out
 
 
+def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck: set,
+                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float) -> dict:
+    """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
+
+    The would-be pick if the ladder were authoritative: rungs ordered by true marginal cost
+    (free → subscription headroom → paid), entered at the (class, urgency) cell's learned start
+    rung, walking UP until a rung has an eligible candidate, cheapest-effective + the usual jitter
+    band within the rung.
+
+    ⚠ FU-088 IS THE BOUND, not a preference: the subscription rung is priced ~0 only while
+    `subscription_ok` says the 429 latch is clear, both utilization windows are under their
+    (tier-composed) thresholds AND the semaphore has a free slot. Otherwise it is priced
+    UNPICKABLE — the safety net's slots are not the ladder's to spend, so the ladder can only ever
+    consume headroom the reviewer/coordinator lane was already willing to give up."""
+    urgency, usrc = resolve_urgency(payload)
+    cfg = _ladder_cfg()
+    st = cell_state(cls, urgency)
+    learned = st["start_tier"]
+    # Urgency is the PRIOR, the cell is the correction: elastic takes the learned rung as-is (which
+    # begins at free and only climbs on our own evidence — "tier 1 first, always"), tight floors at
+    # the subscription rung until the cell has PROVEN the free rung for this class ("skip tier 1
+    # unless the cell is proven"). §M11.
+    proven = learned == 0 and st["clean"] >= cfg["promote_after"]
+    start = max(learned, cfg["tight_floor_tier"]) if (urgency == "tight" and not proven) else learned
+    pick = ctx.get("pick", random.choice)
+    pct = max(0, min(100, int(round(jitter * 100))))
+    reprobe = bool(start > 0 and pick([False] * (100 - pct) + [True] * pct))
+    if reprobe:
+        start -= 1  # the exploration budget that lets a recovered free model be re-discovered
+
+    def _rung(model: str, rail: str) -> dict:
+        blocked = None
+        price = basis = None
+        if rail == "subscription":
+            ok, reason, _retry = sub_gate()
+            if ok:
+                price, basis = 0.0, "subscription"
+            else:
+                blocked = reason or "subscription-limited"
+        else:
+            ok, reason = or_gate()
+            if ok:
+                price, basis = ctx["price"](model)
+            else:
+                blocked = reason or "openrouter-unavailable"
+        return {"model": model, "rail": rail, "_t": ladder_tier(model, rail, price),
+                "price_per_mtok": price, "basis": basis, "blocked": blocked}
+
+    cands = [_rung(m, rail) for m, rail in eligible]
+    sub_model = cfg["subscription_model"]
+    if (not any(c["rail"] == "subscription" for c in cands) and "subscription" in rails
+            and sub_model not in deny and sub_model not in struck and sub_model not in cool
+            and capability_floor_block(cls, sub_model) is None):
+        # The rail enters the ordering as a CANDIDATE even when no chain names it — that is leg 1.
+        cands.append({**_rung(sub_model, "subscription"), "synthetic": True})
+    for c in cands:
+        c["tier"] = LADDER[c["_t"]]
+    choice, walk = None, "none"
+    # Up from the start rung first; only if nothing at or above it is pickable do we look below
+    # (a cell that has climbed past every candidate it actually has must still route somewhere).
+    for t in list(range(start, len(LADDER))) + list(range(start - 1, -1, -1)):
+        pool = [c for c in cands if c["_t"] == t and c["blocked"] is None]
+        if not pool:
+            continue
+        priced = [c for c in pool if c["price_per_mtok"] is not None]
+        if priced:
+            floor = min(c["price_per_mtok"] for c in priced)
+            band = [c for c in priced if c["price_per_mtok"] <= floor * (1 + jitter) + 1e-12]
+        else:
+            band = pool[:1]  # unpriced rung: keep caller order, exactly as the served path does
+        choice = pick(band)
+        walk = "at-or-above-start" if t >= start else "below-start"
+        break
+    sub = next((c for c in cands if c["rail"] == "subscription"), None)
+    return {
+        "urgency": urgency, "urgency_source": usrc,
+        "learned_start_tier": LADDER[learned], "start_tier": LADDER[start], "reprobe": reprobe,
+        "cell": {"class": cls, "clean": st["clean"], "degraded": st["degraded"],
+                 "seen": st["seen"]},
+        "subscription": {"model": (sub or {}).get("model"),
+                         "eligible": bool(sub and sub["blocked"] is None),
+                         "blocked": (sub or {}).get("blocked")},
+        "walk": walk,
+        "decision": "dispatch" if choice else "defer",
+        "model": (choice or {}).get("model"), "rail": (choice or {}).get("rail"),
+        "ladder_tier": (choice or {}).get("tier"),
+        "price_per_mtok": (choice or {}).get("price_per_mtok"),
+        "candidates": [{k: v for k, v in c.items() if k != "_t"} for c in cands],
+    }
+
+
+def record_shadow_decision(payload: dict, cls: str, served: dict, shadow: dict) -> bool:
+    """The soak's evidence surface (M11 acceptance): one row per /route with the served pick and
+    the would-be ladder pick side by side, keyed by cell. `agrees` is what the P4 flip reads —
+    a shadow log that tracks the served behaviour is a ladder that changes nothing, and a shadow
+    log that diverges is exactly the review the operator has to sign off."""
+    return _write(
+        "INSERT INTO shadow_decisions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (time.time(), str(payload.get("session") or ""), str(payload.get("stack") or ""), cls,
+         shadow["urgency"], shadow["urgency_source"],
+         str(served.get("rail") or ""), str(served.get("model") or ""),
+         str(shadow.get("rail") or ""), str(shadow.get("model") or ""),
+         str(shadow.get("ladder_tier") or ""), shadow["start_tier"],
+         shadow["learned_start_tier"], 1 if shadow["reprobe"] else 0,
+         str(shadow["subscription"].get("blocked") or ""),
+         1 if served.get("model") == shadow.get("model") else 0))
+
+
 def route(payload: dict, ctx: dict) -> dict:
     """The ADR-096 /route decision core — pure given ctx, so the self-test can drive it.
 
-    payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?}
+    payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?,
+              urgency?}
     ctx:     {price: fn(model)->(usd_per_mtok|None, basis|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
               openrouter_ok:  fn(key_ref)->(ok, reason|None),
@@ -492,7 +733,11 @@ def route(payload: dict, ctx: dict) -> dict:
     rotation-fed) → filter deny/strikes/cooldowns/rail → per class-rail-order pick the
     effective-cheapest with a jitter-band uniform pick → capacity-gate the rail → dispatch,
     or a TYPED defer (capacity reasons and cooldowns carry retry_after; only chain-exhausted
-    escalates — M1 doctrine)."""
+    escalates — M1 doctrine).
+
+    The M11 cross-rail LADDER rides along in `decision["shadow"]` and changes nothing about the
+    walk above: it is computed from the same filtered candidates and the same capacity gates, and
+    it is written to the store + the proxy log for the soak review (homelab#159)."""
     now = time.time()
     role = str(payload.get("role") or "worker")
     labels = [str(x) for x in (payload.get("labels") or [])]
@@ -539,12 +784,28 @@ def route(payload: dict, ctx: dict) -> dict:
             eligible.append((m, rail))
     capacity_block: dict | None = None
     result: dict | None = None
+    # Memoized so a route() costs AT MOST ONE read of each capacity gate — the shadow ladder
+    # (below) needs the subscription verdict on every call, where the served walk needed it only
+    # when a claude/* candidate survived filtering. Same state, same call, just not twice
+    # (§M11: read the proxy's own /anthropic-limit state, add no probes).
+    _gate_cache: dict = {}
+
+    def sub_gate():
+        if "sub" not in _gate_cache:
+            _gate_cache["sub"] = ctx["subscription_ok"](tier)
+        return _gate_cache["sub"]
+
+    def or_gate():
+        if "or" not in _gate_cache:
+            _gate_cache["or"] = ctx["openrouter_ok"](payload.get("key_ref"))
+        return _gate_cache["or"]
+
     for rail in rails:
         pool = [m for m, r in eligible if r == rail]
         if not pool:
             continue
         if rail == "subscription":
-            ok, reason, retry = ctx["subscription_ok"](tier)
+            ok, reason, retry = sub_gate()
             if not ok:
                 reason = reason or "subscription-limited"
                 capacity_block = capacity_block or {"reason": reason, "retry_after_s": retry}
@@ -553,7 +814,7 @@ def route(payload: dict, ctx: dict) -> dict:
             result = {"model": pool[0], "rail": rail, "price_per_mtok": None,
                       "basis": "subscription", "jitter_pool": pool[:1]}
         else:
-            ok, reason = ctx["openrouter_ok"](payload.get("key_ref"))
+            ok, reason = or_gate()
             if not ok:
                 reason = reason or "openrouter-budget-exhausted"
                 capacity_block = capacity_block or {"reason": reason, "retry_after_s": 900}
@@ -587,12 +848,17 @@ def route(payload: dict, ctx: dict) -> dict:
             retry = None
         decision = {"decision": "defer", "reason": reason, "retry_after_s": retry,
                     "class": cls, "tier": tier, "source": source, "skipped": skipped}
+    # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
+    shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
+                            sub_gate, or_gate, jitter)
+    record_shadow_decision(payload, cls, decision, shadow)
+    decision["shadow"] = shadow
     _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
            (now, str(payload.get("session") or ""), str(payload.get("stack") or ""), role, cls,
             decision["decision"], decision.get("rail") or "",
             decision.get("model") or "", decision.get("reason") or "",
             json.dumps({"skipped": skipped, "source": source,
-                        "jitter_pool": decision.get("jitter_pool")})))
+                        "jitter_pool": decision.get("jitter_pool"), "shadow": shadow})))
     return decision
 
 
@@ -619,7 +885,7 @@ def status_summary() -> dict:
     counts = {t: (_read(f"SELECT COUNT(*) FROM {t}") or [(0,)])[0][0]
               for t in ("run_reports", "strikes", "provider_events", "rotation", "decisions",
                         "generations", "circuit_events", "openrouter_keys", "capability",
-                        "task_market")}
+                        "task_market", "shadow_decisions", "cell_start_tier")}
     gen_24h = _read(
         "SELECT requested_model, provider, COUNT(*), ROUND(SUM(cost_usd), 6), "
         "SUM(tokens_cached), SUM(tokens_prompt) FROM generations WHERE ts > ? "
@@ -659,6 +925,21 @@ def status_summary() -> dict:
                       "age_s": round(now - (ts or now))} for s, n, ts in rot],
         "classes_loaded": bool(_classes),
         "tier_thresholds": _classes.get("tier_thresholds") or {},
+        # M11 shadow (homelab#159) — the soak review reads THESE two: the learned ladder per cell,
+        # and where the would-be pick disagreed with what actually got served.
+        "ladder_cells": [
+            {"class": c, "urgency": u, "start_tier": LADDER[min(int(t or 0), len(LADDER) - 1)],
+             "clean": cl, "degraded": dg, "age_s": round(now - (ts or now))}
+            for c, u, t, cl, dg, ts in _read(
+                "SELECT class, urgency, start_tier, clean, degraded, updated_ts "
+                "FROM cell_start_tier ORDER BY class, urgency")],
+        "shadow_24h": [
+            {"class": c, "urgency": u, "start_tier": st, "shadow": f"{srl}:{sm}",
+             "served": f"{vrl}:{vm}", "agrees": bool(ag), "n": n}
+            for c, u, st, srl, sm, vrl, vm, ag, n in _read(
+                "SELECT class, urgency, start_tier, shadow_rail, shadow_model, served_rail, "
+                "served_model, agrees, COUNT(*) FROM shadow_decisions WHERE ts > ? "
+                "GROUP BY 1,2,3,4,5,6,7,8 ORDER BY 9 DESC LIMIT 20", (now - 86400,))],
     }
 
 
@@ -727,6 +1008,28 @@ def metrics_lines() -> list[str]:
                            (now - 7 * 86400,)):
         if tp:
             lines.append(f'router_observed_cache_hit{{model="{m}"}} {(tc or 0) / tp:.3f}')
+    # ── M11 shadow (homelab#159): what the cross-rail ladder WOULD have done, per cell ──
+    lines += ["# TYPE router_shadow_decisions_total counter",
+              "# HELP router_shadow_decisions_total Would-be ladder picks per rung/urgency, and whether they matched the SERVED pick (agrees=0 is the divergence the M11 soak reviews).",
+              "# TYPE router_shadow_start_tier gauge",
+              "# HELP router_shadow_start_tier Learned start rung per (class, urgency) cell: 0=free 1=subscription 2=paid.",
+              "# TYPE router_shadow_subscription_blocked_total counter",
+              "# HELP router_shadow_subscription_blocked_total Routes where the subscription rung was priced unpickable, by FU-088 gate reason (the safety net holding the ladder off)."]
+    shadow = _read("SELECT COALESCE(NULLIF(shadow_rail,''),'-'), COALESCE(NULLIF(ladder_tier,''),'-'), "
+                   "urgency, agrees, COUNT(*) FROM shadow_decisions GROUP BY 1,2,3,4")
+    if shadow:
+        lines += [f'router_shadow_decisions_total{{rail="{rl}",tier="{t}",urgency="{u}",agrees="{a}"}} {n}'
+                  for rl, t, u, a, n in shadow]
+    else:
+        lines.append("router_shadow_decisions_total 0")
+    for c, u, t in _read("SELECT class, urgency, start_tier FROM cell_start_tier"):
+        lines.append(f'router_shadow_start_tier{{class="{c}",urgency="{u}"}} {int(t or 0)}')
+    blocked = _read("SELECT sub_gate, COUNT(*) FROM shadow_decisions WHERE sub_gate != '' "
+                    "GROUP BY sub_gate")
+    if blocked:
+        lines += [f'router_shadow_subscription_blocked_total{{reason="{r}"}} {n}' for r, n in blocked]
+    else:
+        lines.append("router_shadow_subscription_blocked_total 0")
     lines += ["# TYPE router_observed_decode_tps gauge",
               "# HELP router_observed_decode_tps Measured completion tokens per second of generation_time over 7d — the §M8 free-band latency tie-break (homelab#22; rows without generation_time excluded)."]
     for m, tok, ms in _read("SELECT requested_model, SUM(tokens_completion), SUM(generation_ms) "
@@ -877,6 +1180,80 @@ def self_test() -> int:
     assert capability_floor_block("coding", "lowcap/model:free") == "coding=9.0<30"
     assert record_task_market([{"tag": "code:devops_config", "model": "xiaomi/mimo-v2.5",
                                 "rank": 1, "usage_share": 0.182, "token_share": 0.183}]) == 1
+    # ── M11 shadow ladder (homelab#159): free → subscription-headroom → paid, per (class, urgency) ──
+    # Every assertion here is about the SHADOW block. The served pick is asserted unchanged beside
+    # each one — that is the acceptance criterion of this leg, not a nicety.
+    assert resolve_urgency({"urgency": "elastic"}) == ("elastic", "caller")
+    assert resolve_urgency({"urgency": "ELASTIC "}) == ("elastic", "caller"), "normalized"
+    assert resolve_urgency({"urgency": "yesterday"}) == ("tight", "default"), "garbage ⇒ default"
+    assert resolve_urgency({}) == ("tight", "default"), "missing ⇒ tight (conservative)"
+    if _classes.get("urgency_map"):
+        assert resolve_urgency({"labels": ["task/research"]}) == ("elastic", "label_map")
+        assert resolve_urgency({"labels": ["task/research", "task/goal"]})[0] == "tight", \
+            "tight wins a label tie — the conservative direction"
+        assert resolve_urgency({"role": "retro"}) == ("elastic", "role")
+        assert resolve_urgency({"urgency": "tight", "labels": ["task/research"]})[1] == "caller", \
+            "the caller's round-state knowledge outranks the label table (ADR-094)"
+    # tight (the default) floors at the subscription rung while the cell is unproven; the SERVED
+    # pick stays the cheapest-effective OpenRouter model exactly as before.
+    dsh = route(dict(base, session="t-shadow-1"), CTX)
+    assert dsh["model"] == "inclusionai/ling-3.0-flash:free", "served pick UNCHANGED by the shadow"
+    sh = dsh["shadow"]
+    assert (sh["urgency"], sh["urgency_source"]) == ("tight", "default"), sh
+    assert sh["start_tier"] == "subscription" and sh["learned_start_tier"] == "free", sh
+    assert (sh["model"], sh["rail"], sh["ladder_tier"]) == ("claude/haiku", "subscription",
+                                                            "subscription"), sh
+    assert sh["subscription"]["eligible"] and sh["price_per_mtok"] == 0.0, sh
+    # elastic takes the learned rung as-is — rung 0, the free model, "tier 1 first"
+    de = route(dict(base, session="t-shadow-2", urgency="elastic"), CTX)
+    assert de["model"] == "inclusionai/ling-3.0-flash:free"
+    assert de["shadow"]["ladder_tier"] == "free" and de["shadow"]["urgency_source"] == "caller"
+    # ⚠ THE FU-088 BOUND. Semaphore full / utilization past threshold ⇒ the subscription rung is
+    # priced UNPICKABLE and the ladder climbs past it to paid. The safety net's slots are not the
+    # ladder's to spend, and this is the assertion that says so.
+    lim2 = {**CTX, "subscription_ok": lambda tier: (False, "subscription-limited:semaphore", 300)}
+    dlim = route(dict(base, session="t-shadow-3"), lim2)
+    assert dlim["model"] == "inclusionai/ling-3.0-flash:free", "served pick still unchanged"
+    shl = dlim["shadow"]
+    assert shl["rail"] == "openrouter" and shl["ladder_tier"] == "paid", shl
+    assert shl["model"] == "deepseek/deepseek-v4-flash", shl
+    assert not shl["subscription"]["eligible"], shl
+    assert shl["subscription"]["blocked"] == "subscription-limited:semaphore", shl
+    # leg 1: the rail is a CANDIDATE even when the chain names no claude/* entry
+    dsyn = route(dict(base, session="t-shadow-4", chain=["deepseek/deepseek-v4-flash"]), CTX)
+    assert dsyn["model"] == "deepseek/deepseek-v4-flash", "served pick unchanged"
+    assert any(c.get("synthetic") and c["model"] == "claude/haiku"
+               for c in dsyn["shadow"]["candidates"]), dsyn["shadow"]["candidates"]
+    assert dsyn["shadow"]["model"] == "claude/haiku", dsyn["shadow"]
+    # the jitter band re-probes ONE rung down (pick the last band member instead of the first)
+    dj = route(dict(base, session="t-shadow-5"), {**CTX, "pick": lambda b: b[-1]})
+    assert dj["shadow"]["reprobe"] and dj["shadow"]["start_tier"] == "free", dj["shadow"]
+    # a class whose rails exclude the subscription never grows the candidate (research pins
+    # openrouter — coordination must not be routed onto the safety net by the ladder)
+    if (_classes.get("classes") or {}).get("research"):
+        dres = route(dict(base, session="t-shadow-6", **{"class": "research"}), CTX)
+        assert all(c["rail"] == "openrouter" for c in dres["shadow"]["candidates"]), dres["shadow"]
+    # ── leg 3: the cell LEARNS from the existing outcomes feed (no new producer) ──
+    for sess, model, outcome, err in (
+            ("t-cell-1", "claude/haiku", "harness-death", "goose-32602-truncation"),
+            ("t-cell-2", "inclusionai/ling-3.0-flash:free", "pr", ""),
+            ("t-cell-3", "inclusionai/ling-3.0-flash:free", "pr", ""),
+            ("t-cell-4", "inclusionai/ling-3.0-flash:free", "pr", ""),
+            ("t-cell-5", "inclusionai/ling-3.0-flash:free", "pr", "")):
+        route(dict(base, session=sess), CTX)
+        record_report({"session": sess, "task": "issue-42", "stack": "sleep", "role": "worker",
+                       "model": model, "outcome": outcome, "error_class": err})
+        if sess == "t-cell-1":  # a strike at the subscription rung climbs the cell above it
+            assert cell_state("coding", "tight")["start_tier"] == 2, cell_state("coding", "tight")
+        if sess == "t-cell-2":  # a re-probe one rung down that BANKS is adopted immediately
+            assert cell_state("coding", "tight")["start_tier"] == 0, cell_state("coding", "tight")
+    proven = cell_state("coding", "tight")
+    assert proven["start_tier"] == 0 and proven["clean"] >= 3, proven
+    dp = route(dict(base, session="t-shadow-7"), CTX)
+    assert dp["shadow"]["start_tier"] == "free" and dp["shadow"]["ladder_tier"] == "free", \
+        "a PROVEN cell lets even tight work start on the free rung (§M11)"
+    assert dp["model"] == "inclusionai/ling-3.0-flash:free", "…and the served pick never moved"
+    assert status_summary()["ladder_cells"] and status_summary()["shadow_24h"], "soak surfaces"
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
@@ -888,16 +1265,33 @@ def self_test() -> int:
     summary_gen = status_summary()["generations_24h"]
     assert summary_gen and summary_gen[0]["observed_cache_hit"] == 0.8, \
         "first full record wins; measured cache hit = 80/100"
+    assert 'router_shadow_start_tier{class="coding",urgency="tight"} 0' in body, \
+        "the learned cell must surface as a gauge for the M11 soak"
+    assert 'router_shadow_decisions_total{rail="subscription"' in body, body
+    assert 'router_shadow_subscription_blocked_total{reason="subscription-limited:semaphore"} 1' \
+        in body, "the FU-088 gate holding the ladder off must be countable"
     summary = status_summary()
-    # 3 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape) and
-    # 2 strikes (issue-9/sleep from the vocabulary fixture, issue-19/circles from the real one).
-    assert summary["rows"]["run_reports"] == 3 and summary["rows"]["strikes"] == 2
+    # 8 run_reports (t-1 is INSERT OR REPLACE'd, + t-2 clean, + t-3 the real producer shape,
+    # + the 5 M11 ladder-cell fixtures) and 3 strikes (issue-9/sleep from the vocabulary fixture,
+    # issue-19/circles from the real one, issue-42/sleep from the ladder's degradation step).
+    assert summary["rows"]["run_reports"] == 8 and summary["rows"]["strikes"] == 3
     if _classes:
         assert "tier_thresholds" in _classes, "model-classes.json must carry tier_thresholds"
         for tier, thr in _classes["tier_thresholds"].items():
             if tier.startswith("_"):  # _comment keys are docs, not tiers
                 continue
             assert 0.0 < float(thr) <= 1.0, f"tier {tier} threshold out of range"
+        # M11 policy sanity (homelab#159): the two git-owned halves of the ladder.
+        umap = _classes.get("urgency_map") or {}
+        assert umap, "model-classes.json must carry urgency_map — it is the table BOTH sides read"
+        assert str(umap.get("default", "tight")) in URGENCIES, "urgency_map default must be tight/elastic"
+        for scope in ("labels", "roles"):
+            for k, v in (umap.get(scope) or {}).items():
+                assert str(v) in URGENCIES, f"urgency_map.{scope}[{k}] = {v!r} is not tight/elastic"
+        lad = _ladder_cfg()
+        assert lad["subscription_model"] in (_classes.get("model_tiers") or {}), \
+            "the ladder's subscription candidate must be a graded model (model_tiers)"
+        assert 0 <= lad["tight_floor_tier"] < len(LADDER)
         cb = _classes.get("circuit_breaker") or {}
         assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
             "auth breaker must trip before the generic one (auth never self-heals)"

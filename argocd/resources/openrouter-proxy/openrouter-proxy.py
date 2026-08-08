@@ -1712,6 +1712,19 @@ class Proxy(BaseHTTPRequestHandler):
                 f"role={req_body.get('role')} → {decision['decision']} "
                 f"{decision.get('model') or decision.get('reason')} "
                 f"[{decision.get('basis') or ''}{'+half-open' if decision.get('half_open') else ''}]")
+            # THE M11 SHADOW LINE (homelab#159) — what the cross-rail ladder WOULD have picked,
+            # beside what was actually served. Nothing acts on it: this line, the shadow_decisions
+            # table and the router_shadow_* series ARE the deliverable, and the P4 flip happens
+            # only after a soak review reads them (docs/agents/model-routing.md §M11).
+            sh = decision.get("shadow") or {}
+            if sh:
+                log(f"  shadow cell={decision.get('class')}/{sh['urgency']}"
+                    f"({sh['urgency_source']}) start={sh['start_tier']}"
+                    f"{'(reprobe)' if sh.get('reprobe') else ''} learned={sh['learned_start_tier']}"
+                    f" → rail={sh.get('rail') or '-'} {sh.get('model') or sh['decision']}"
+                    f" tier={sh.get('ladder_tier') or '-'}"
+                    f" subscription={'free' if sh['subscription']['eligible'] else (sh['subscription']['blocked'] or 'n/a')}"
+                    f" served={decision.get('model') or decision.get('reason')}")
             self._reply_json(200, decision)
             return
         if self.path == "/rotation":
