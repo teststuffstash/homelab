@@ -1084,6 +1084,15 @@ ${DIND_CONTAINER}
           value: "1"
         - name: DEVBOX_DISABLE_TELEMETRY
           value: "1"
+        # 2026-08-08 (operator + the homelab#107 21:35Z triage, same conclusion): uv with an
+        # unpinned python-preference FETCHES A MANAGED CPython from releases.astral.sh even when
+        # devbox already provisions an interpreter satisfying the project's constraint — ~272
+        # POLICY_DENIED drops in one night from oracle-fleet rides. Kill at the tool, not the
+        # allowlist: only-system makes uv reuse the devbox interpreter; a repo whose constraint
+        # the devbox python cannot satisfy now fails LOUDLY ("no matching interpreter") and the
+        # fix is that repo's devbox pin — never a per-ride WAN fetch of an unpinned binary.
+        - name: UV_PYTHON_PREFERENCE
+          value: "only-system"
         # 2026-08-02, third phone-home path: the /usr/local/bin/devbox LAUNCHER (jetify's wrapper
         # script) ignores all of the above — without DEVBOX_USE_VERSION it re-downloads
         # releases.jetify.com/devbox/stable/version whenever ~/.cache/devbox/current-version is
