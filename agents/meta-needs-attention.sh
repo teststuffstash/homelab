@@ -44,11 +44,18 @@ while true; do
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
   for r in $LANE_REPOS; do
+    # Green-checks filter added after the first live emission (PR#44, 2026-08-08): approved with
+    # CI still RUNNING is auto-merge doing its job, not a park — only approved+green+still-open
+    # means the codeowner gate is what's holding it.
     rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
-             --json number,latestReviews,isDraft 2>/dev/null | tail -1 \
+             --json number,latestReviews,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
            | jq -r --arg r "$r" '.[] | select(.isDraft|not)
                | select([.latestReviews[]? | select(.state == "APPROVED")] | length > 0)
-               | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, waiting on the human gate"' 2>/dev/null)
+               | select([.statusCheckRollup[]? | select(.status != "COMPLETED")] | length == 0)
+               | select([.statusCheckRollup[]? | select(.conclusion != null
+                   and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL"
+                   and .conclusion != "SKIPPED")] | length == 0)
+               | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, CI green, waiting on the human gate"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
   blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
