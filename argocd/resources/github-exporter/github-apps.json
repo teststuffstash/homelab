@@ -31,8 +31,8 @@
           "why": "merge-path require_passed_checks reads (loop-git gens)"
         },
         "actions": {
-          "level": "read",
-          "why": "coordinator `gh run watch`/rerun on agent repos (loop-git gens)"
+          "level": "write",
+          "why": "coordinator `gh run watch`/rerun on agent repos (loop-git gens); WRITE since FU-148 (2026-08-08) — the ci-red play's retry terminal is `gh run rerun`"
         },
         "workflows": {
           "level": "write",
