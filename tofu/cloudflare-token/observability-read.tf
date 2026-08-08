@@ -30,9 +30,17 @@ data "cloudflare_api_token_permission_groups_list" "tunnel_read" {
   scope = "com.cloudflare.api.account"
 }
 
-# Audit-logs read: the exact catalog name drifted from every guess ("Audit Logs Read" → empty
-# list, live 2026-08-08), so select by regex over the unfiltered account-scope catalog instead.
-# `one()` keeps it FAIL-LOUD: zero or multiple matches abort the plan with a clear error.
+# Audit-logs read, take 3 — and the lesson is "ask the ENDPOINT, not the catalog". Take 1
+# exact-matched "Audit Logs Read": no such group exists at account scope, empty list. Take 2
+# regexed "(?i)audit log" over the catalog and silently matched "Access: Audit Logs Read" —
+# the Zero Trust Access product's group, useless here — and the minted token 403'd on both
+# audit-log endpoints (found live 2026-08-08 when the meta session probed them). The
+# authoritative answer is in the endpoint's own docs
+# (developers.cloudflare.com/fundamentals/account/account-security/audit-logs/): the
+# accounts/{id}/logs/audit API requires **Account Settings Read** (or Write). So: exact name,
+# the one the docs demand, `one()` still fail-loud if Cloudflare ever renames it. Slightly
+# broader than audit logs alone (it reads account settings generally) — read-only, accepted
+# for the observability token.
 data "cloudflare_api_token_permission_groups_list" "account_all" {
   scope = "com.cloudflare.api.account"
 }
@@ -40,7 +48,7 @@ data "cloudflare_api_token_permission_groups_list" "account_all" {
 locals {
   audit_logs_read_id = one([
     for g in data.cloudflare_api_token_permission_groups_list.account_all.result :
-    g.id if can(regex("(?i)audit log", g.name)) && can(regex("(?i)read", g.name))
+    g.id if g.name == "Account Settings Read"
   ])
 }
 
