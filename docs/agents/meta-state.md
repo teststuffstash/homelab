@@ -114,6 +114,12 @@ meant to avoid.)
   it becomes ONE command word, fails, and behind `2>/dev/null` yields an empty capture that a `-z`
   test reads as "the object is gone". Wrap ad-hoc probes in `bash -c '…'`, or call the binary
   directly. Scripts under `agents/` are safe only because they are invoked as `bash <script>`.
+- **⚠ NEVER pipe-filter `git push`; verify pushes by fetch-compare.** `push -q | grep | head`
+  swallowed 11 consecutive non-fast-forward rejections (2026-08-08 — PR#123's squash had moved
+  master) while the shared host/jail worktree kept every apply working, so nothing LOOKED wrong
+  until ArgoCD couldn't see new files. After each push: `git fetch -q && [ "$(git rev-parse
+  HEAD)" = "$(git rev-parse origin/master)" ]`. Auto-merge makes mid-session master movement
+  routine.
 - **⚠ Shell/API traps that each cost real time:** `gh --jq` takes NO `--arg/--argjson`; an
   APOSTROPHE inside a jq program kills review-reflex FLEET-WIDE and `bash -n` cannot see it
   (EXECUTE the block — stub the expensive callee and assert the assembled string); `gh pr view` has

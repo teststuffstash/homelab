@@ -2948,3 +2948,16 @@ still awaits its whole-branch review behind the semaphore.
   #216 (operator spec PR) is DIRTY post-#202 — author rebases, meta reviews+merges after.
   The search doc_type ⚖ fork is the operator's ruling; meta lean recorded in-session (carry
   doc_type in hits). #193-r1 verified mid-ride at 110m: working, not looping.
+
+### 2026-08-08 (~10:45Z) — five hours of pushes silently rejected; the mask was my own pipeline
+
+PR#123's squash-merge moved origin/master under the session; every `git push` after it was
+REJECTED non-fast-forward — and I read "success" 11 times, because `git push -q … 2>&1 | grep -v
+remote | head -1` swallows both the `! [rejected]` line and the exit code, and the `git log`
+after the pipe prints LOCAL HEAD, which looks exactly like a landed push. Undetected because the
+HOST shares the jail's working tree (the operator's applies used the files regardless); detected
+only when ArgoCD refused to see the new Applications. Fix: rebased 15 commits onto the squash
+(clean), pushed, VERIFIED BY FETCH (`origin/master == HEAD`). **Rule: never pipe-filter a push;
+after every push, `git fetch && rev-parse` both sides — "the push printed a To-line" is a claim
+about stdout, not about the remote** (the absence-lesson, output edition). Auto-merge landing on
+master mid-session makes this ROUTINE, not exotic — pull --rebase before push batches.
