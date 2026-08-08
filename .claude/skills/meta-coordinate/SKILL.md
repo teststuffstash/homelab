@@ -51,17 +51,23 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 1. `tail -120 agents/coordinator/TICK-LOG.md` — the last 2-3 entries are the arc's state +
    doctrines. Do NOT skip; the current doctrines live there (exclude-and-count, pin-follow,
    symptoms-only alerts, launcher-owned dispatch, "a belt is not a guard").
-2. **The PLATFORM work queue first — open 🚨 issues on homelab.** ⚠ Premise UPDATED 2026-08-08:
+2. **The PLATFORM work queue first — open issues on EVERY platform-claim repo** (homelab,
+   agent-runtime, agent-coordinator, openrouter-operator — read the list from the platform
+   stack in `agents/stacks.json`, not from memory). ⚠ Premise UPDATED 2026-08-08 (twice):
    homelab HAS a fixer lane (FU-068/FU-142) and the platform stack runs its own coordinate loop —
-   queued issues dispatch without you. What the lane CANNOT do is yours, and it is exactly three
-   things: (1) TRIAGE the unlabeled (fix-verdict/queue decisions the debounce hasn't made, stale
-   `agent/blocked` labels whose gate has since resolved — the label outlives the gate, nothing
-   clears it but you); (2) REVIEW + MERGE platform-lane PRs — platform repos have NO bot approver
-   by design, so every fixer PR there waits on your read and an OrgAdmin merge (PR#123 sat 1.5h
-   unseen before the needs-meta watch existed); (3) APPLY what is host/jail-only (tofu roots,
-   physical actions) and FLAG the operator when it is theirs. `gh issue list --repo
-   teststuffstash/homelab --state open` — sweep before loop work ("alerts clear themselves,
-   issues don't"); during a BIG ROLLOUT sweep FIRST and often (#55, the founding example).
+   queued issues dispatch without you. And the sweep is NOT homelab-only: five agent-runtime
+   issues sat unlabeled up to a month because only homelab's board got read (operator catch,
+   2026-08-08) — an unlabeled issue is invisible to every clause, and only this sweep (plus the
+   needs-meta watch's >24h clause) ever finds one. What the lane CANNOT do is yours, and it is
+   exactly three things: (1) TRIAGE the unlabeled across ALL platform repos (fix-verdict/queue
+   decisions the debounce hasn't made, stale `agent/blocked` labels whose gate has since
+   resolved — the label outlives the gate, nothing clears it but you); (2) REVIEW + MERGE
+   platform-lane PRs — platform repos have NO bot approver by design, so every fixer PR there
+   waits on your read and an OrgAdmin merge (PR#123 sat 1.5h unseen before the needs-meta watch
+   existed); (3) APPLY what is host/jail-only (tofu roots, physical actions) and FLAG the
+   operator when it is theirs. `for r in $(platform repos); do gh issue list -R teststuffstash/$r
+   --state open; done` — sweep before loop work ("alerts clear themselves, issues don't");
+   during a BIG ROLLOUT sweep FIRST and often (#55, the founding example).
 3. Live board, per active repo (oracle-fleet, oracle-iac at minimum):
    `gh issue list --repo teststuffstash/<r> --state open --json number,title,labels`
    `gh pr list --repo teststuffstash/<r> --state open --json number,title,labels,reviewDecision,mergeStateStatus`
