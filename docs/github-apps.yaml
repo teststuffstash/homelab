@@ -35,7 +35,7 @@ apps:
       issues: { level: write, why: "queue labels, strike/report comments, coordinator C6 (composition worker gens + git-token.yaml)" }
       checks: { level: read, why: "coordinator `gh pr checks` (git-token.yaml + composition loop-git gens; fine-grained PATs cannot read Checks — App-only)" }
       statuses: { level: read, why: "merge-path require_passed_checks reads (loop-git gens)" }
-      actions: { level: read, why: "coordinator `gh run watch`/rerun on agent repos (loop-git gens)" }
+      actions: { level: write, why: "coordinator `gh run watch`/rerun on agent repos (loop-git gens); WRITE since FU-148 (2026-08-08) — the ci-red play's retry terminal is `gh run rerun`" }
       workflows: { level: write, why: "fleet#134 — track/chassis carve-out needs workers pushing .github/workflows/ci.yaml; DECLARED 2026-07-26 ahead of the grant (the drift alert rings until the operator clicks)" }
     installs: selected # the agent repos — live matrix: the exporter /apps page
     key_locations: [Infisical AGENTS_GH_APP_PRIVATE_KEY, "~/.claude/homelab-github-agents/"]
