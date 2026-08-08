@@ -633,8 +633,14 @@ predicate, homelab#88 2026-08-03) — a human's armed+red PR is a report-only li
 The scan already decided this is a dispatch (attempts < `RED_ROUNDS_MAX`), so
 your play: **re-dispatch a fix round** on the PR's branch with the failing check's log excerpt in
 context (the usual case — a worker's own Gate-A escape, a flaky base, a missing platform fact like
-sleep-tracking#67's kind mirror); **park** (`agent/blocked` + why) when the red is environmental and
-a human must act; or **close** per the not-mergeable rule. If CI is red because master itself is
+sleep-tracking#67's kind mirror); **retry** when the red is ENVIRONMENTAL — a transient
+network/vendor blip or infra cold-start, the diff demonstrably not implicated:
+`gh run rerun <run-id> --failed` (your token has `actions: write` since 2026-08-08, FU-148 —
+four environmental reds in two days needed a human because it didn't; the old close/reopen
+workaround is RETIRED: it silently disarms auto-merge, the FU-079 class). State the environmental
+diagnosis in a PR comment WITH the rerun, and retry ONCE — a second red on the rerun is not
+environmental anymore: park it; **park** (`agent/blocked` + why) when a human must act; or
+**close** per the not-mergeable rule. If CI is red because master itself is
 broken, that's a platform incident — say so and stop (the responder/operator lane owns master
 health, not a PR fix round). **When the fix round keeps failing, the SCAN escalates for you**: at
 `RED_ROUNDS_MAX` fix rounds still-red it labels `agent/arbitrate` (the Red→arbitrate edge, MP-T13) →

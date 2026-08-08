@@ -54,9 +54,14 @@ spec:
     issues: write                  #   move the agent/* labels
     checks: read                   #   review-reflex reads statusCheckRollup to detect "green"
     statuses: read                 #     (rollup mixes Checks-API + commit-status signals)
-    actions: read                  #     + `gh --json statusCheckRollup`'s fixed fragment also reaches
-                                   #       checkSuite.workflowRun (an Actions resource); without this the
-                                   #       whole GraphQL query 403s and gh returns empty. Read-only.
+    actions: write                 #     + `gh --json statusCheckRollup`'s fixed fragment also reaches
+                                   #       checkSuite.workflowRun (an Actions resource); without read the
+                                   #       whole GraphQL query 403s and gh returns empty.
+                                   #     WRITE since 2026-08-08 (FU-148, operator granted it on the App
+                                   #     after 4 machine-unretriable environmental reds): the ci-red
+                                   #     play's retry terminal is `gh run rerun <id> --failed` — the
+                                   #     close/reopen workaround (which silently disarms auto-merge)
+                                   #     retires. COORDINATOR token only; workers keep no Actions verb.
   repositories:                    # ALL stack repos the coordinator lists/labels/merges/clones
     - sleep-tracking               # (stack clones + FU-060; the homelab-agents App installation
     - snore-recorder               #  must cover each — verify the App covers it BEFORE adding (the SERVED live Apps page: github-exporter /apps (in-cluster http://github-exporter.monitoring.svc:9504/apps; humans: kubectl -n monitoring port-forward svc/github-exporter 9504)),

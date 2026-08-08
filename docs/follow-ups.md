@@ -274,9 +274,12 @@ the block needs pruning, not more headings.
       path (FU-079 class). **THREE more in ONE day 2026-08-08** (all post-VM-rebuild cold caches or
       GH blips): oracle PR#218 close/reopened, oracle PR#217 + circles PR#69 needed META's jail
       token (#69 latched `agent/blocked` — the coordinator's own comment names the 403). The
-      privilege call is now evidence-backed: **Next (OPERATOR, ~2 min):** grant the App
-      `actions: write` (GitHub UI + accept on the installation; App perms are not tofu-able), then
-      the ci-red play gains the uniform retry terminal and close/reopen retires. Relates ADR-094,
+      privilege call was made 2026-08-08 (~17:30Z): **operator granted the App `actions: write`**;
+      the coordinator token generator (`git-token.yaml`, coordinator-git ONLY — workers keep no
+      Actions verb) + the ci-red play's retry terminal (retry ONCE, state the diagnosis, second
+      red ≠ environmental) wired the same hour; close/reopen RETIRED in the play text. **Next:**
+      acceptance = the first live environmental red self-retries via `gh run rerun --failed`
+      (token refresh ~45m post-sync carries the permission) → then archive. Relates ADR-094,
       FU-079.
 - [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
       `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
