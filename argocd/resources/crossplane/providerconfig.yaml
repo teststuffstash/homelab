@@ -16,6 +16,9 @@ spec:
         infisical = {
           source = "Infisical/infisical"
         }
+        cloudflare = {
+          source = "cloudflare/cloudflare"
+        }
       }
       backend "kubernetes" {
         secret_suffix     = "garage"
@@ -25,6 +28,11 @@ spec:
     }
 
     provider "garage" {}
+
+    # PublicRoute Workspaces (FU-039 public ingress). Reads CLOUDFLARE_API_TOKEN from the pod
+    # env — the ESO-delivered cloudflare-ingress-write secret (OPTIONAL on the pod: absent key
+    # in Infisical = the capability is UNARMED and only cloudflare workspaces fail, loudly).
+    provider "cloudflare" {}
 
     # App Workspaces can publish keys to Infisical. Auth via the crossplane-tf-writer
     # Universal-Auth creds in the pod env (INFISICAL_UNIVERSAL_AUTH_CLIENT_ID/SECRET).

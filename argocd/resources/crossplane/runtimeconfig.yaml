@@ -31,6 +31,16 @@ spec:
                 # Infisical write creds — so app Workspaces can publish their generated
                 # keys into Infisical (infisical_secret). Identity: crossplane-tf-writer
                 # (tofu/infisical), project member. Host is set in the provider block.
+                # FU-039 public ingress: the scoped Cloudflare write token (ESO ←
+                # CLOUDFLARE_INGRESS_WRITE). OPTIONAL: until the operator arms the Infisical
+                # key, the secret is absent and the provider still runs — only cloudflare
+                # Workspaces fail (loudly). Arming this credential IS the human gate.
+                - name: CLOUDFLARE_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: cloudflare-ingress-write
+                      key: token
+                      optional: true
                 - name: INFISICAL_UNIVERSAL_AUTH_CLIENT_ID
                   valueFrom:
                     secretKeyRef:

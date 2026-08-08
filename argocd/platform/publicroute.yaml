@@ -1,0 +1,26 @@
+# PublicRoute XRD/Composition (FU-039 public ingress, ADR-101) — wave 5 with agentstack (needs
+# crossplane + functions from wave 4). UNARMED until CLOUDFLARE_INGRESS_WRITE exists in
+# Infisical (the crossplane app's ExternalSecret): claims render, Workspaces fail loudly on the
+# missing provider credential, Cloudflare is untouched. Design: docs/cloudflare.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: publicroute
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/publicroute
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

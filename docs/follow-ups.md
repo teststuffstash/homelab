@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-156**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-157**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -128,11 +128,14 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
-- [ ] **FU-039** — **Next leg of platform self-service: make per-stack subdomain opt-in an XRD
-      claim.** Today it's a thin homelab PR once per stack (the HTTPS-names leg itself shipped —
-      ADR-092). Then the two remaining legs — **git repos** and **ArgoCD AppProject/namespace** —
-      both still operator PRs against `tofu/github` + `argocd/platform`; decide per resource:
-      Crossplane provider vs a thin homelab PR seam. Program context:
+- [ ] **FU-039** — **Next legs of platform self-service (XRD claims).** LAN subdomain opt-in is
+      still a thin homelab PR per stack (HTTPS-names shipped — ADR-092); git repos + ArgoCD
+      AppProject/namespace remain operator PRs; **Public-ingress leg BUILT 2026-08-08 (ADR-101),
+      UNARMED**: PublicRoute XRD+Composition (per-claim tunnel, subtree enforcement) + the
+      cloudflare-exporter + all token mints staged; arming = operator stores
+      CLOUDFLARE_INGRESS_WRITE (mint: `cloudflare-token-tofu apply`). Open: zone-phase ruleset
+      aggregation (≥2nd consumer), the ha retrofit (consumer #2), product zones. Design:
+      [`docs/cloudflare.md`](cloudflare.md) §Public ingress. Program context:
       `ROADMAP.md` → Programs in flight → "Platform self-service via Crossplane". Relates ADR-076,
       ADR-085, ADR-092, FU-068.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
@@ -532,6 +535,15 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
+- [ ] **FU-156** — **Credential-expiry BELT (re-scoped 2026-08-08, operator: dates-in-git is the
+      wrong system).** One gauge `credential_expiry_timestamp_seconds` + one <30d alert; live-poll
+      Cloudflare `/user/tokens` (needs a tiny User:API-Tokens:Read mint), declared expiries for
+      file-shaped creds; alert is `triage: none` → HA (responder can't touch admin creds — the
+      remedy is host-side). Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry.
+      **Urgency is real**: 4 CF tokens expire 2026-12-14…2027-01-09 (earliest = the broad
+      "Read all resources" token — RETIRE it when `homelab-observability-read` lands, don't
+      renew). **Next:** mint the inventory-read token + the exporter leg (can ride the
+      cloudflare-exporter build). Relates FU-150 (silent-expiry class), FU-039.
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root

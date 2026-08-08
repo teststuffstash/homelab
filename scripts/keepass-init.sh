@@ -93,6 +93,13 @@ add_secret aws-audit-secret     "$(file_or "$HOME/.claude/homelab-aws/audit-secr
 add_secret cloudflare-acme-token "$(file_or "$HOME/.claude/cloudflare/acme-token" REPLACE)"
 add_secret cloudflare-read-key   "$(file_or "$HOME/.claude/cloudflare/read-key" REPLACE)"
 add_secret cloudflare-write-key  "$(file_or "$HOME/.claude/cloudflare/write-key" REPLACE)"
+# 2026-08-08: all-zones+account READ token (jail LLM analytics queries, CF Prometheus exporter,
+# responder triage). Minted by tofu/cloudflare-token (observability-read.tf) via
+# `devbox run cloudflare-token-tofu apply` on the HOST. The account-ADMIN mint credential is NOT
+# here — it lives in the separate host-only admin wallet (see scripts/cloudflare-token-tf.sh).
+add_secret cloudflare-observability-read "$(file_or "$HOME/.claude/cloudflare/observability-read" REPLACE)"
+add_secret cloudflare-ingress-write      "$(file_or "$HOME/.claude/cloudflare/ingress-write" REPLACE)"
+add_secret cloudflare-inventory-read     "$(file_or "$HOME/.claude/cloudflare/inventory-read" REPLACE)"
 add_secret cloudflare-ha-client-p12-password "$(file_or "$HOME/.claude/cloudflare/ha-client.p12.password" REPLACE)"
 add_secret forgejo-api-token     "$(file_or "$HOME/.claude/homelab-forgejo/api-token" REPLACE)"
 add_secret forgejo-rasmus-password "$(file_or "$HOME/.claude/homelab-forgejo/rasmus-password" REPLACE)"

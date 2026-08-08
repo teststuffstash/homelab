@@ -190,3 +190,99 @@ read-only. The **Docs** server (`https://docs.mcp.cloudflare.com/mcp`) is wired 
 (local scope) and fixes "model too old / UI hides IaC options". No token-management server exists
 (define tokens in tofu). The read servers (GraphQL, Audit Logs, CASB, DNS Analytics) aren't
 self-hostable → a future headless in-cluster agent uses the scoped `agent-read` token directly.
+
+## Public ingress as a platform capability — design direction (operator, 2026-08-08; FU-039 leg)
+
+The tunnel plumbing (`ha.teststuff.net`) is proven, but that was never the hard part: **open
+traffic to a functional backend** is, and it must land as the same mechanism/policy split as
+every other platform capability (ADR-076 provider-terraform, ADR-085 XRD doctrine, ADR-092's LAN
+precedent — the stack adds routes freely once the platform wired the namespace ONCE). The stack's
+`-iac` repo must NOT hold Cloudflare admin rights, and should not hold ANY Cloudflare credential:
+**the XRD is the privilege boundary** — exactly the Garage-bucket pattern.
+
+- **Claim (stack-owned, safe knobs only):** hostnames/routes under the delegated namespace →
+  in-cluster backend; per-path cache behavior (Cache Rules); `api: true` paths — an API endpoint
+  must NEVER hit a challenge/captcha, rendered as a WAF custom rule with the **Skip** action
+  (Rulesets API — the current primitive; Page Rules are the cautionary deprecated ancestor).
+- **Composition (platform-owned):** sane defaults (TLS posture, WAF baseline, security level),
+  tunnel + zone + DNS wiring, the scoped least-privilege token (minted via `tofu/cloudflare-token`
+  outside the jail; claims never see it), and the DEPRECATION LIFECYCLE — when Cloudflare
+  retires a primitive or changes how HTTP traffic flows, the composition absorbs it once and
+  every claim re-renders; no stack ever migrates a Cloudflare feature.
+- **Observability (platform-owned):** a Cloudflare Prometheus exporter as an
+  `argocd/resources/` app (per-hostname traffic/errors/cache panels + symptom alerts), beside
+  the backend's own gateway metrics — the platform is responsible for seeing the edge, the
+  stack for its backend contract.
+
+Backend HTTP requirements (streaming/SSE for MCP, no buffering surprises, header passthrough)
+are claim inputs, not platform guesses. Build order when this lands: XRD+composition for routes
++ cache + skip rules first (the knobs a stack needs on day one), exporter second, wider settings
+only on demand. Prior art to extend, never duplicate: ADR-092's `stack_gateways` opt-in seam.
+
+**Requirements come from four live artifacts, not from design sessions:**
+
+1. **Diff-the-existing**: [`tofu/cloudflare/`](../tofu/cloudflare/) — the hand-built
+   `ha.teststuff.net` instance (tunnel, DNS, mTLS client-cert WAF rule, ingress rules) is the
+   floor: the claim schema must be able to express everything this one-off already does, or the
+   XRD can't absorb it. The diff between that root and the draft schema IS the gap list.
+2. **The first consumer's backend contract**: the oracle stack's gateway — streamable-HTTP/SSE
+   (no buffering, long-lived connections), never-challenge on the MCP path, health endpoint for
+   LB probes, auth-header passthrough. Owned by that stack's repo/specs; arrives as claim
+   fields, not platform assumptions.
+3. **ADR-092 parity**: whatever a stack does freely on the LAN leg (add HTTPRoutes in its own
+   `-iac` with zero homelab change) must have a public-leg equivalent — the LAN claim is the
+   ergonomics benchmark.
+4. **The ≥2-projects rule** (the G05 lesson): do NOT freeze the schema from the oracle alone —
+   **retrofit `ha.teststuff.net` itself as consumer #2** (it becomes a claim of the same XRD),
+   which both de-product-shapes the schema and deletes the one-off. The retrofit converging is
+   the acceptance test that the XRD generalizes.
+
+Current Cloudflare primitives are checked against the Docs MCP at build time (rulesets engine:
+cache rules, configuration rules, custom rules w/ Skip — not the deprecated Page Rules). When
+the schema settles: ≤20-line ADR (the ADR-076→085→092 chain's next link) pointing here; the
+composition lands in `argocd/resources/` on provider-terraform (the Garage-bucket donor shape),
+token minted by `tofu/cloudflare-token` host-side, delivered via ESO; `SERVICES.md` row when LIVE.
+
+### Zone division: two zone classes + a delegation verb (operator design, 2026-08-08)
+
+**The Cloudflare zone is the real tenancy boundary** (tokens, WAF baseline, rulesets, cache
+config are zone-scoped; Free/Pro has no finer grain), so a zone has exactly ONE owner:
+
+- **Product zones** — one stack's claim owns the whole zone (full-domain scope, zone-scoped
+  token bound in the composition). No co-owners.
+- **Platform zones** — the platform composition owns the zone; stacks are TENANTS of delegated
+  subtrees (`<stack>.<domain>` — ADR-092's LAN model at the WAN). teststuff.net is this class.
+
+A new stack wanting to live UNDER an existing domain is a **consent record, not a modeling
+problem**: platform zone → ordinary subtree claim, self-service; product zone → the owning
+stack's `-iac` claim grows a `delegations:` entry granting the named subtree — consent is a
+reviewable line in the OWNER's IaC, and the tenant claims routes only within the grant. The
+XRD invariant that holds it all: **a claim may create routes only in zones it owns ∪ subtrees
+delegated to it.** Cloudflare cannot enforce subtrees (zone tokens are its finest grain below
+Enterprise) — and that costs nothing, because the privilege boundary is the XRD: claims never
+touch tokens, the composition validates the grant. Promotion (tenant outgrows the subtree →
+own domain) is a claim migration, not Cloudflare surgery.
+
+### Token matrix (who holds what, 2026-08-08)
+
+| Token | Scope | Canonical + delivery | Consumer / applier |
+|---|---|---|---|
+| **Account admin** | everything | **KeePass ONLY**, host | the operator, solely to apply `tofu/cloudflare-token` (the mint). Never jail, never cluster. |
+| `homelab-tofu-apply` (existing) | teststuff.net DNS/SSL/WAF + account Tunnel, write | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (the ha one-off). **Retires** when the XRD absorbs that root (consumer #2 retrofit). |
+| `homelab-acme-dns` (existing) | one zone, DNS write | wallet `cloudflare-acme-token`; OPNsense env | acme.sh DNS-01 |
+| **`homelab-observability-read` (NEW, `observability-read.tf`)** | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, audit logs) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL, no more UI-clicking), the CF Prometheus exporter, later responder triage |
+| platform-ingress write (FUTURE) | managed zones: DNS/rulesets/tunnel write | KeePass → Infisical → ESO → crossplane ProviderConfig; never in claims, never jail | the public-ingress composition |
+
+**Operator-applied tofu = exactly one root, one command**: `devbox run cloudflare-token-tofu
+plan|apply` — the github-tofu twin (`scripts/cloudflare-token-tf.sh`). The account-ADMIN token
+lives in the SAME separate host-only admin wallet as the GitHub org-admin token
+(`~/Documents/homelab-admin.kdbx`, keyfile-unlocked, entry `cloudflare-account-admin`) — the
+jail cannot reach it by construction. Minted tokens flow the OTHER way, into the ordinary
+wallet: `keepass-init.sh` entry `cloudflare-observability-read` → `wallet-files.sh` regenerates
+the jail cache (`~/.claude/cloudflare/observability-read`) → Infisical
+`CLOUDFLARE_OBSERVABILITY_READ` for cluster consumers via ESO. **Observability ships first**:
+apply the mint → store the read token (three places, the apply prints the checklist) → the
+exporter lands as an `argocd/resources/` app on the ESO copy. Free-plan honesty: per-request
+logs are Enterprise (Logpush/Logpull) — the GraphQL Analytics API (aggregated series +
+security/firewall events) is what the jail and exporter actually query, and it covers the
+logs/errors-hunting use case.

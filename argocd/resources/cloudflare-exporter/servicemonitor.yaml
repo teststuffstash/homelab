@@ -1,0 +1,11 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudflare-exporter
+  labels: { app: cloudflare-exporter }
+spec:
+  selector:
+    matchLabels: { app: cloudflare-exporter }
+  endpoints:
+    - port: http
+      interval: 120s # the exporter itself polls the GraphQL API on its own cadence

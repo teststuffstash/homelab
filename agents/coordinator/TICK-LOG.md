@@ -2919,3 +2919,32 @@ widens every dispatch→execution gap, so tonight makes races likelier (same FU-
 drops); #57-r2's round lands the last gap child of circles#29 → assembly PR#54 then needs its
 re-review + the applied ruleset bypass proves out on its first update; oracle assembly PR#202
 still awaits its whole-branch review behind the semaphore.
+
+## 2026-08-08 (~03:15–05:00Z, operator-paired) — the lane's first full night, audited honestly
+
+- **"You missed quite a bit" — and the re-audit proved it**: PR#123 (the fixer's implementation
+  of #122, reviewer stand-aside terminal) sat CI-green 1.5h because platform PRs have no bot
+  approver and nothing announced it; #121 (power-stale triage, report-only — laptop4 is
+  wk-metal-02's plug, SAME physical corner as the #117 cable errand) went unread. Both now
+  handled: PR#123 meta-reviewed + merged (faithful to the #122 contract; idempotent asides,
+  fifteen-minute test). **Root fix = the needs-meta watch** (committed
+  `agents/meta-needs-attention.sh`, armed): emits ONLY unreviewed-platform-PRs +
+  `agent/blocked` — its first pass caught circles#29's STALE blocked label (gate resolved,
+  label lingering, feeding the blocked-source hold against the assembly PR). Cleared with audit.
+- **meta-coordinate skill hardened** (`9d08144`): needs-meta REQUIRED in re-arm, loop watches
+  demoted to rollout-time; platform-queue premise corrected (homelab HAS a fixer lane — meta =
+  triage + platform-PR review/merge + host-only applies); FU-111 native edges in the authoring
+  delegation; **the verdict-line rule** (both of tonight's meta corrections were trusting a
+  verdict line over its evidence — read the evidence IN FULL before repeating/acting/archiving).
+- **Reopen-model ruling material → #124 amended** (operator design conversation): route by the
+  triage's NAMED FIX SURFACE (tonight's uv fix was platform-side for a stack symptom —
+  namespace-routing would have misfiled it), and key the resolve leg on the verdict —
+  report-only keeps auto-close; `fix` verdicts stop the close/comment churn until the fix's
+  acceptance probe passes. Explains #107's 13-comment breathing AND the #118 latent-close as
+  one bug: issue-state was tracking ALERT-state, not DEFECT-state.
+- **uv-fix acceptance held**: 0 astral drops after the pre-fix-clone rides drained.
+- **Oracle post-goal queue**: probe evidence for acceptance bullet 4 landed on merged #202
+  (operator jail run); #215 (launch-gating parser variant) queued + PINNED alongside #193/#194;
+  #216 (operator spec PR) is DIRTY post-#202 — author rebases, meta reviews+merges after.
+  The search doc_type ⚖ fork is the operator's ruling; meta lean recorded in-session (carry
+  doc_type in hits). #193-r1 verified mid-ride at 110m: working, not looping.

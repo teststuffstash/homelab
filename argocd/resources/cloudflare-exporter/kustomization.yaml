@@ -1,0 +1,17 @@
+# cloudflare-exporter — the Cloudflare edge into Prometheus (FU-039 public-ingress observability
+# leg, operator direction 2026-08-08: "the platform is responsible for observability"; also the
+# jail's GraphQL read token's in-cluster twin). lablabs/cloudflare_exporter polls the GraphQL
+# Analytics API with the SAME read-only token the jail uses (Infisical
+# CLOUDFLARE_OBSERVABILITY_READ) — all-zones scope, so future product zones appear without a
+# config change. FREE_TIER=true: the plan serves aggregated analytics only (per-request logs are
+# Enterprise, docs/cloudflare.md §Token matrix).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - externalsecret.yaml
+  - servicemonitor.yaml
+  - prometheusrule.yaml

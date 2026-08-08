@@ -65,6 +65,7 @@ val github-reviewer-slug                "$CRED/homelab-github-reviewer/slug"
 att cloudflare-ha-client ha-client.p12       "$CRED/cloudflare/ha-client.p12"
 att cloudflare-ha-client ha-client.cert.pem  "$CRED/cloudflare/ha-client.cert.pem"
 val cloudflare-ha-client-p12-password        "$CRED/cloudflare/ha-client.p12.password"
+val cloudflare-observability-read            "$CRED/cloudflare/observability-read"
 # FU-038 tuya-local: device_id+local_key+lan_ip+version for the 7 Tuya devices. This is ALL that
 # local control needs — no Tuya cloud account or IoT project at runtime. ⚠ local_key ROTATES on
 # re-pair/factory-reset, so a device that stops responding locally needs re-extraction via the

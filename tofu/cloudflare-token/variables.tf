@@ -28,3 +28,9 @@ variable "allowed_ips" {
   description = "Optional CIDR allow-list (e.g. your egress IP) pinning where the token may be used. Empty = no IP restriction."
   default     = []
 }
+
+variable "user_id" {
+  type        = string
+  description = "Cloudflare user id (FU-156 inventory-read token; user-scoped). Empty = token not minted."
+  default     = ""
+}

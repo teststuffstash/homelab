@@ -1,0 +1,144 @@
+# PublicRoute Composition — renders, per claim:
+#   1. a provider-terraform Workspace (claim ns): Cloudflare Tunnel + remote config + proxied
+#      CNAME on the platform zone; tunnel token → connection secret (claim ns, never git)
+#   2. a cloudflared Deployment (claim ns) consuming that token
+# SUBTREE ENFORCEMENT lives here (fail-loud template): hostname must be under
+# <ns>.teststuff.net. The zone/account ids are platform constants (docs/cloudflare.md).
+# v5 provider idioms mirror tofu/cloudflare (the proven ha.teststuff.net one-off, which this
+# XRD exists to eventually absorb as consumer #2).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: publicroute
+spec:
+  compositeTypeRef:
+    apiVersion: platform.teststuff.net/v1alpha1
+    kind: XPublicRoute
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $ns := $xr.spec.claimRef.namespace }}
+            {{- $claim := $xr.spec.claimRef.name }}
+            {{- $host := $xr.spec.hostname }}
+            {{- $b := $xr.spec.backend }}
+            {{- /* the privilege boundary: a claim only creates routes in its delegated subtree */}}
+            {{- if not (hasSuffix (printf ".%s.teststuff.net" $ns) $host) }}
+              {{- fail (printf "PublicRoute %s/%s: hostname %q is outside the namespace's delegated subtree *.%s.teststuff.net (zone-class + delegations doctrine: docs/cloudflare.md)" $ns $claim $host $ns) }}
+            {{- end }}
+            {{- $res := printf "pr-%s-%s" $ns $claim }}
+            {{- $origin := printf "%s://%s:%d" (default "http" $b.protocol) $b.service (int $b.port) }}
+            ---
+            apiVersion: tf.upbound.io/v1beta1
+            kind: Workspace
+            metadata:
+              name: {{ $res }}
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: workspace
+            spec:
+              providerConfigRef:
+                name: default
+              writeConnectionSecretToRef:
+                namespace: {{ $ns }}
+                name: {{ $res }}-tunnel
+              forProvider:
+                source: Inline
+                module: |
+                  # platform constants (docs/cloudflare.md §Live IDs)
+                  locals {
+                    account_id = "07b08646b26bb43cd3073826f43b73da"
+                    zone_id    = "6b63f95592a9e036f8b8f6934511d321" # teststuff.net (platform zone)
+                  }
+                  resource "cloudflare_zero_trust_tunnel_cloudflared" "this" {
+                    account_id = local.account_id
+                    name       = "{{ $res }}"
+                    config_src = "cloudflare"
+                  }
+                  data "cloudflare_zero_trust_tunnel_cloudflared_token" "this" {
+                    account_id = local.account_id
+                    tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
+                  }
+                  resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
+                    account_id = local.account_id
+                    tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
+                    config = {
+                      ingress = [
+                        {
+                          hostname = "{{ $host }}"
+                          service  = "{{ $origin }}"
+                          {{- if or $b.originServerName $b.noTLSVerify }}
+                          origin_request = {
+                            {{- if $b.originServerName }}
+                            origin_server_name = "{{ $b.originServerName }}"
+                            {{- end }}
+                            {{- if $b.noTLSVerify }}
+                            no_tls_verify = true
+                            {{- end }}
+                          }
+                          {{- end }}
+                        },
+                        { service = "http_status:404" },
+                      ]
+                    }
+                  }
+                  resource "cloudflare_dns_record" "this" {
+                    zone_id = local.zone_id
+                    name    = "{{ $host }}"
+                    type    = "CNAME"
+                    content = "${cloudflare_zero_trust_tunnel_cloudflared.this.id}.cfargotunnel.com"
+                    proxied = true
+                    ttl     = 1
+                  }
+                  output "tunnel_token" {
+                    value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.this.token
+                    sensitive = true
+                  }
+            ---
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: {{ $res }}-cloudflared
+              namespace: {{ $ns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: cloudflared
+              labels: { app: {{ $res }}-cloudflared }
+            spec:
+              replicas: {{ default 1 $xr.spec.replicas }}
+              selector:
+                matchLabels: { app: {{ $res }}-cloudflared }
+              template:
+                metadata:
+                  labels: { app: {{ $res }}-cloudflared }
+                spec:
+                  containers:
+                    - name: cloudflared
+                      # same pin as tofu/cloudflare (the proven one-off)
+                      image: cloudflare/cloudflared:2026.5.2@sha256:12ff5c6992a9863db4da270746af7c244bcaee49353039af8104268a18d6c4f0
+                      args: ["tunnel", "--no-autoupdate", "run", "--token", "$(TUNNEL_TOKEN)"]
+                      env:
+                        - name: TUNNEL_TOKEN
+                          valueFrom:
+                            secretKeyRef:
+                              name: {{ $res }}-tunnel
+                              key: tunnel_token
+                      resources:
+                        requests: { cpu: 10m, memory: 32Mi }
+                        limits: { memory: 128Mi }
+                      securityContext:
+                        runAsNonRoot: true
+                        runAsUser: 65532
+                        allowPrivilegeEscalation: false
+                        capabilities: { drop: ["ALL"] }
+                        seccompProfile: { type: RuntimeDefault }
+    - step: ready
+      functionRef:
+        name: function-auto-ready

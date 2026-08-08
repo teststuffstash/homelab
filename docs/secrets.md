@@ -100,3 +100,36 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
   the UI (ad-hoc, as admin), or a **Crossplane Workspace** publishing via the Infisical TF provider
   (the `crossplane-tf-writer` identity — how app-generated keys land in Infisical, ADR-076).
 - Rotation: re-run the relevant `tofu`/`infisical-secret`; ESO re-syncs consumers on its refresh.
+
+## Credential expiry is telemetry, not documentation (design direction 2026-08-08, FU-156)
+
+A tracker line saying "renew token X before December" is the wrong system — it relies on a human
+reading it in time, and the operator mints everything with ≤1-year TTLs on purpose, so the
+inventory of fuses only grows. The certificate half of this problem is ALREADY solved here the
+right way (blackbox `probe_ssl_earliest_cert_expiry` — nobody documents cert expiry dates), and
+credentials get the same shape:
+
+- **One gauge**: `credential_expiry_timestamp_seconds{provider, credential}` + one alert rule
+  (warning at <30d, escalating <7d), **labeled `triage: none`** — the responder can do NOTHING
+  about admin credentials (the remedy is host-side by construction: admin wallet, dashboard,
+  a host-only apply), and the condition is deterministic, so an LLM triage session would be
+  pure waste. The alert routes to the HUMAN surface (Home Assistant) with its annotation
+  naming the renewal runbook (which mint root + the re-store checklist) — the
+  `GithubVendorOutage` precedent: machine-unactionable, human-informational. No
+  per-credential tracker lines, ever.
+- **Live-polled where the provider allows**: Cloudflare `GET /user/tokens` lists every token with
+  `expires_on` — needs a tiny `User: API Tokens: Read`-scoped token (user-scoped, so it is NOT
+  covered by `homelab-observability-read`; mint it beside it). GitHub fine-grained PATs are
+  listable org-side for org-granted ones.
+- **Declared where not**: file-shaped credentials (client `.p12`s, App private keys with known
+  rotation policy) get their expiry read from the artifact itself (`openssl`) or from the mint
+  code (tofu `expires_on`) — rendered into the exporter's config, never hand-copied.
+- **Renewal ≠ rotation bookkeeping**: the alert names the credential; the runbook is the minting
+  root's own apply (`devbox run cloudflare-token-tofu apply`, `github-tofu`, …) + the printed
+  re-store checklist. Retirement counts as resolution — a superseded credential (e.g. the broad
+  2026-06 "Read all resources" token once `homelab-observability-read` exists) is DELETED at its
+  review, not renewed on autopilot.
+
+First inventory (Cloudflare, dashboard-read 2026-08-08): `homelab-acme-dns` + `homelab-tofu-apply`
+(both → 2027-01-01), the mint credential "Create Additional Tokens" (→ 2027-01-09, admin-wallet,
+manual renewal — root of trust), "Read all resources" (→ **2026-12-14**, retire-not-renew).
