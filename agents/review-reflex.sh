@@ -95,7 +95,8 @@ WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}" # the worker App's PR-
 # carrying `Base: <branch>`, 2026-08-05) and is un-armed on purpose — C9 must not "repair" that.
 # Every repo in the fleet uses master; overridable rather than hardcoded at the jq call site.
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-master}"
-ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per PR, ever
+ROUNDS_MAX="${REVIEW_ROUNDS_MAX:-8}"                   # circuit breaker: max bot verdicts per ISSUE, ever
+                                                       # (summed across every PR that references it — homelab#156)
 KUBECTL="$(command -v kubectl || echo kubectl)"
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
@@ -147,13 +148,16 @@ for repo in $REPOS; do
   # worst-case node count from the query's first:/last: args (independent of how many PRs actually exist).
   # At 50 that estimate is ~515k > GitHub's 500k cap → hard error; 40 (~412k) always clears it. Bump only
   # in lockstep with this ceiling. 40 open+auto-merge PRs/repo is far beyond anything the agent flow hits.
+  # `body` is a scalar (no node cost against that ceiling) and rides along for the issue-keyed
+  # rounds ceiling below — it is where a PR that does not follow the fix/issue-<n>- branch
+  # convention still names its issue.
   # One retry absorbs GitHub's one-shot GraphQL transients ("Something went wrong while executing
   # your query", seen 2026-07-15 on oracle-iac) without weakening the fail-loud posture: a real
   # outage/scope problem still aborts the run rather than silently reviewing nothing.
   errfile="$(mktemp)"
   attempt=0
   while ! prs="$(gh pr list --repo "$slug" --state open --limit 40 \
-      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName \
+      --json number,createdAt,isDraft,mergeStateStatus,reviewDecision,autoMergeRequest,statusCheckRollup,reviews,commits,labels,author,headRefName,baseRefName,body \
       2>"$errfile")"; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 2 ]; then
@@ -280,14 +284,22 @@ EOF_C9
          | select((.author.login // "") | startswith($bot))
          | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ]) as $verdicts
     | ($verdicts | map(select(.submittedAt > $head))) as $at_head
-    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-")"
+    # ISSUE KEY of the pick, for the issue-keyed rounds ceiling in the shell below: the branch
+    # convention fix/issue-<n>-<slug> first, else the first closing keyword in the body. "-" when
+    # neither names an issue (then only the per-PR count applies). Boundary-anchored on purpose:
+    # issue-15 must not match a fix/issue-156-... branch.
+    | ((((.headRefName // "") | capture("issue-(?<i>[0-9]+)(-|$)") | .i)
+        // ((.body // "") | capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i)
+        // "-")) as $ikey
+    | "\(.number) \($verdicts | length) \($at_head | length) \([ $at_head[] | select(.state == "APPROVED") ] | length) \(.headRefName // "-") \($ikey)"
   ')"
 
   [ -n "$pick" ] || { log "[$repo] nothing to review"; continue; }
-  read -r pick v_total v_head v_head_approved pick_head <<<"$pick"
+  read -r pick v_total v_head v_head_approved pick_head pick_issue <<<"$pick"
 
   # Breaker: a legit pick has ZERO bot approvals at head (the predicate filters those), <2 bot
-  # verdicts at head, and fewer than ROUNDS_MAX verdicts ever (beyond that it's a worker↔reviewer
+  # verdicts at head, and fewer than ROUNDS_MAX verdicts ever ON ITS ISSUE — see the issue-keyed
+  # ceiling below; the at-head checks stay strictly per-PR (beyond that it's a worker↔reviewer
   # flip-flop — merge-path.md escalation table). Any of these ⇒ label agent/error + one AGENT_ERROR
   # comment, never dispatch. Labelled PRs are filtered before the pick, so this fires ONCE; a human
   # removes the label to resume automation. Label add failing (missing label/scope) is logged loud
@@ -308,12 +320,52 @@ EOF_C9
     fi
     continue
   fi
-  if [ "$v_total" -ge "$ROUNDS_MAX" ]; then
-    log "[$repo] ROUNDS EXHAUSTED on #$pick (${v_total} bot verdicts ≥ cap ${ROUNDS_MAX}) — agent/arbitrate (coordinator tie-break), NOT dispatching"
+  # ISSUE-KEYED ROUNDS CEILING (homelab#156, FU-154). $v_total counts verdicts on THIS PR, and PR
+  # identity is not the unit of the work: close-and-re-PR is a DESIGNED play as of 2026-08-08
+  # (the merge-conflict lane re-landed #210 as #221, the coordinator closed #214 and re-queued its
+  # issue, #209 was superseded by #218-v2). Every re-creation restarted the count at zero, so a
+  # pathological loop could launder unlimited rounds through fresh PRs. The ISSUE is the stable
+  # key: sum the SAME verdict evidence across every PR in this repo whose branch or body references
+  # that issue id. Per-PR stays the FAST PATH (it trips with no extra API call); the issue-keyed sum
+  # is the CEILING and can only raise the number, never lower it.
+  # PR#143 INTENDED-SEMANTICS EXCEPTION PRESERVED: a DISMISSED verdict deliberately does NOT count
+  # (the arbitration ruling ended that round, it did not spend one). A dismissal rewrites the review
+  # state to DISMISSED, so the APPROVED/CHANGES_REQUESTED filter below drops it exactly as the
+  # per-PR counter above already does — the two counters must stay identical on this point.
+  # FAIL-OPEN on a bad read (the FU-104 posture — availability of the gate < the gate): warn loudly
+  # and let the per-PR count stand rather than park a lane on a flaky list. The window is the newest
+  # 100 PRs of the repo, so anything missed can only UNDER-count.
+  # ⚠ The sibling-match rule (branch `issue-<n>-`, else body `#<n>`, both boundary-anchored) is
+  # duplicated in coordinator-scan.sh's ci-red clause, which counts run-stats rounds on the same
+  # key. Two copies WILL drift — change both or neither.
+  rounds_total="$v_total"; rounds_key="PR #${pick}"
+  if [ "$v_total" -lt "$ROUNDS_MAX" ] && [ "$pick_issue" != "-" ]; then
+    if sib="$(gh pr list --repo "$slug" --state all --limit 100 \
+                --json number,headRefName,body,reviews 2>/dev/null)"; then
+      sib_sum="$(printf '%s' "$sib" | jq -r --arg bot "$REVIEWER_LOGIN" --arg n "$pick_issue" '
+        def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
+                      or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
+        [ .[] | select(refs($n)) ]
+        | "\(length) \([ .[] | .reviews[]?
+              | select((.author.login // "") | startswith($bot))
+              | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED") ] | length)"
+      ' 2>/dev/null)" || sib_sum=""
+      read -r sib_prs sib_v <<<"${sib_sum:-}"
+      case "${sib_v:-}" in ''|*[!0-9]*) sib_v=""; log "[$repo] WARN: issue-keyed rounds sum unreadable for issue #${pick_issue} — per-PR count stands for #$pick";; esac
+      if [ -n "$sib_v" ] && [ "$sib_v" -gt "$rounds_total" ]; then
+        rounds_total="$sib_v"; rounds_key="issue #${pick_issue} (${sib_prs} PRs)"
+        log "[$repo] issue-keyed rounds for #$pick: ${sib_v} verdicts across ${sib_prs} PRs referencing issue #${pick_issue} (per-PR: ${v_total})"
+      fi
+    else
+      log "[$repo] WARN: issue-keyed rounds probe FAILED (gh pr list --state all) — per-PR count stands for #$pick"
+    fi
+  fi
+  if [ "$rounds_total" -ge "$ROUNDS_MAX" ]; then
+    log "[$repo] ROUNDS EXHAUSTED on #$pick (${rounds_total} bot verdicts on ${rounds_key} ≥ cap ${ROUNDS_MAX}) — agent/arbitrate (coordinator tie-break), NOT dispatching"
     gh label create "agent/arbitrate" --repo "$slug" --color "d93f0b" --force \
       --description "rounds exhausted / flip-flop — coordinator tie-break (merge-path escalation table)" >/dev/null 2>&1 || true
     if gh pr edit "$pick" --repo "$slug" --add-label "agent/arbitrate" >/dev/null 2>&1; then
-      gh pr comment "$pick" --repo "$slug" --body "ARBITRATE: ${v_total} bot review verdicts on this PR (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
+      gh pr comment "$pick" --repo "$slug" --body "ARBITRATE: ${rounds_total} bot review verdicts counted on ${rounds_key} (cap ${ROUNDS_MAX}) — a worker↔reviewer loop that will not converge on its own. Rounds are counted against the ISSUE, not the PR (homelab#156), so closing this PR and opening a fresh one does not restore the budget. Review automation now skips it; the coordinator's arbitrate unit rules per the escalation table (re-dispatch with clarified instructions / close as not-mergeable / escalate to a human)." >/dev/null 2>&1 \
         || log "[$repo] WARN: arbitrate comment on #$pick failed"
     else
       log "[$repo] WARN: could not add agent/arbitrate to #$pick — dispatch still skipped"
