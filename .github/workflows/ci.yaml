@@ -14,6 +14,12 @@ on:
     branches: [master]
   workflow_dispatch: {}
 
+# One live run per PR (org standard — docs/ci.md §Concurrency): superseded PR heads cancel,
+# push/master runs queue serially and never cancel.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ci:
     runs-on: homelab-ephemeral

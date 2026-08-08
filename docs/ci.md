@@ -32,6 +32,26 @@ privileged ns) so CI noise/privilege stays off the service nodes.
 Example (sleep-tracking): `devbox run ci` = ruff + ruff-format-check + pytest-cov; `devbox run
 test-chart` = helm-unittest; `devbox run scan-secrets` = gitleaks. The workflow just lists those steps.
 
+## Concurrency — the org-standard block (every `ci.yaml`, 2026-08-08)
+
+Every validation workflow (`ci.yaml`; other PR-triggered checks may opt in) carries:
+
+```yaml
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+One live run per PR: a superseded PR head's run **cancels** instead of queuing; push/master runs
+keep their own serial group and **never cancel** — a cancelled push run can leave a publish
+(specs site, evidence bundle, image) half-written. Why it exists: `update-pr-branch` retriggers
+full CI on every open PR after every master move, and on a single-slot runner (oracle's e2e on
+ci-runner-01) one merge cost ~one queued e2e per open PR (~5 min each, measured 2026-08-08;
+oracle-fleet#222 → PR#224). ARC repos burn `maxRunners` slots the same way. Safe with the merge
+path: branch protection + auto-merge read the LATEST head sha's checks, so a cancelled
+superseded-sha run never enters any merge predicate. ⚠ Do NOT put the cancel form on
+deploy/publish/bake workflows — queue-only groups there, if any.
+
 ## Tier A — ARC (self-hosted GitHub runner)
 
 - ArgoCD apps: `argocd/platform/arc-controller.yaml` (operator, `arc-systems`, stable tier) +
