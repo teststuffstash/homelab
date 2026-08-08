@@ -6,33 +6,29 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~15:00Z heartbeat — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-08 ~22:30Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **Cloudflare/PublicRoute: ARMED, zero consumers.** Operator's acts: echo test claim → ha
-  retrofit. FU-039 open legs: DIY GraphQL poller; declare cloudflared :2000 in tofu.
-- **agent-runtime lane LIVE and self-running**: #12 done (full machine cycle, PR#40), #41
-  (self-filed follow-up) + #33/#35/#36 queued, #13→PR#42 in review. Reviewer coverage follows
-  the fixer block (unowned paths auto-merge; governor paths codeowner-gated).
-- **circles**: PR#65 (#59) + PR#66 (#60) riding/armed — goal-#29 grind moving post-phantom-clear.
-  Assembly PR#54 waits on the children. Frozen: PR#21/#25.
-- **oracle**: PR#217 (#188) BLOCKED in review pipeline; queued #193/#194/#195/#207/#211/#215
-  (pinned, gates corpus rebuild); #225 ingest = next frontier; goals #175/#176 unstarted.
-  Artifact: claude.ai/code/artifact/6828adf5-165d-4092-aa92-a3c2e8800903 (goal-174 map).
-- **homelab queue**: #103 (containment holds), #133/#137/#138 pending debounce (responder-filed
-  today), #41-class watch: the >24h clause owns unlabeled platform issues now (v3: alert-records
-  excluded).
-- **Operator physical**: wk-metal-02 cable reseat (100Mbps, was 1G). **tuya**: frozen-accepted,
-  silence c73baef2 → ~08-22 auto re-triage.
-- **⚠ FLEET DISPATCH STARVED until ~00:00Z reset (OpenRouter keys-modify DAILY limit,
-  openrouter-operator#26)**: no worker keys mint anywhere since ~18:58Z; queued issues defer.
-  Post-midnight heartbeat MUST: (1) verify the 13 wedged deletions drained + a mint succeeds,
-  (2) clear oracle-fleet#228's agent/error (it recorded THIS infra failure, not its content)
-  and restore agent/queued, (3) supervise the backed-up dispatch wave (oracle
-  #194/#195/#207/#211/#215/#228, homelab #103/#149/#155/#156/#157, agent-runtime #41/#52,
-  openrouter-operator#26 itself). ⚠ #215 declares `Touches: *` — a wildcard footprint that
-  serializes against EVERYTHING; expect it to hold or be held.
+- **⚠ FLEET OR-DISPATCH STARVED until ~00:00Z reset (openrouter-operator#26; balance topped to
+  $20.17, limits calendar-bound)**: post-midnight heartbeat MUST (1) verify the 13 wedged key
+  deletions drain + a mint succeeds, (2) clear oracle-fleet#228's agent/error + restore
+  agent/queued (it recorded the infra failure, not its content), (3) supervise the dispatch wave
+  — oracle #194/#195/#207/#211/#215(⚠ Touches:* wildcard)/#228, homelab #103/#149/#156/#159,
+  agent-runtime #41/#52, openrouter-operator#26. ClaudeTier lanes unaffected (ran all evening).
+- **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
+- **In flight tonight (subscription rides)**: homelab #155 (reconciler belt), #157 (PSI spike),
+  #158 (haiku degrade — leg 1 re-scoped to regression pin via my in-flight correction). Their
+  PRs land on the gated repo → my review.
+- **Telemetry attribution rebuilt ~22:00Z**: all roles labeled, jail OTLP door live (.40.29,
+  verified 200) — jail cost visible from NEXT session; corrected per-stack numbers accumulate
+  from each role's next run. agent-cost dashboard: stack rollup + daily + drill links.
+- **circles**: PR#54 assembly awaiting re-review; children flowing. **oracle**: PR#230 (#193 fix)
+  + PR#217 in review pipeline (both post-CI). Frozen: circles PR#21/#25.
+- **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
+  94–98°C baseline); wk-metal-02 at 1 Gbps (fixed by the poke).
+- **tuya frozen-accepted** (silence c73baef2 → ~08-22 auto re-triage).
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); Monday retro (FU-058);
-  FU-149 spot-check; first concurrent double-e2e on the 2-slot runner (glance at contention).
+  FU-149 spot-check; FU-148 acceptance (first organic environmental-red self-retry); first
+  concurrent double-e2e contention glance; M11 shadow lines once #159 lands.
 
 ## Durable warnings — re-read before touching these files
 
