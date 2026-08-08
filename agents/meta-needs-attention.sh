@@ -9,6 +9,13 @@
 #      gate (circles#29 kept it after the budget was raised): treat each emission as "re-check
 #      the gate this label recorded", not as noise, and clear it with an audit comment when the
 #      gate is resolved.
+#   4. A STACK-repo PR parked on the codeowner gate: bot APPROVED at head + CI green, yet
+#      reviewDecision still REVIEW_REQUIRED — that combination means require_code_owner_review
+#      matched a CODEOWNERS path (specs/ or .agents/) and only the delegated codeowner read
+#      unparks it. The review reflex correctly refuses to re-review an approved head, so NO
+#      machinery announces this state: oracle-fleet#217 sat 17h (2026-08-08) with every reviewer
+#      tick logging "nothing to review". Repos = the require_code_owner_review=true set in
+#      tofu/github/variables.tf minus the platform lane (which clauses 1/park cover).
 #   3. An UNLABELED issue on a platform repo older than a day — invisible to every clause (the
 #      loop dispatches on agent-fix∧agent/queued; the debounce rings on responder verdict lines;
 #      neither ever sees it). Five agent-runtime issues sat this way for up to a MONTH
@@ -28,6 +35,8 @@ PLATFORM_REPOS="${PLATFORM_REPOS:-homelab agent-runtime agent-coordinator openro
 # agentstack.yaml — update BOTH when a fixer block flips.
 GATED_REPOS="${GATED_REPOS:-homelab agent-coordinator}"
 LANE_REPOS="${LANE_REPOS:-agent-runtime openrouter-operator}"
+# require_code_owner_review=true stack repos (tofu/github/variables.tf) — clause 4.
+CODEOWNER_REPOS="${CODEOWNER_REPOS:-oracle-fleet circles}"
 seen=""
 while true; do
   out=""
@@ -56,6 +65,23 @@ while true; do
                    and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL"
                    and .conclusion != "SKIPPED")] | length == 0)
                | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, CI green, waiting on the human gate"' 2>/dev/null)
+    [ -n "$rows" ] && out="$out$rows"$'\n'
+  done
+  # Clause 4: stack-repo codeowner park — approved head + green + rd STILL REVIEW_REQUIRED is the
+  # require_code_owner_review signature (a bot approval never satisfies it). latestReviews (not
+  # reviews) so a dismissed/stale approval doesn't count as parked.
+  for r in $CODEOWNER_REPOS; do
+    rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
+             --json number,reviewDecision,latestReviews,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
+           | jq -r --arg r "$r" '.[] | select(.isDraft|not)
+               | select(.reviewDecision == "REVIEW_REQUIRED")
+               | select([.latestReviews[]? | select(.state == "APPROVED")] | length > 0)
+               | select([.statusCheckRollup[]? | select(.status != "COMPLETED")] | length == 0)
+               | select([.statusCheckRollup[]? | select(.conclusion != null
+                   and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL"
+                   and .conclusion != "SKIPPED")] | length == 0)
+               | select((.statusCheckRollup | length) > 0)
+               | "NEEDS-META codeowner-gate: \($r)#\(.number) bot-approved + green but REVIEW_REQUIRED — a specs/.agents path needs the delegated codeowner read"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
   blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
