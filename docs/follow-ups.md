@@ -231,10 +231,9 @@ the block needs pruning, not more headings.
       self-resolving). Evidence, the two remedies ruled OUT, and why the `fc7e9fb` calibration
       cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
       Minted TWO false issues (#120, #134 — the #134 ride's disproof is the class writeup).
-      **Next:** key the alert on the deterministic scan phase, AND fix the description's
-      "compare logs twice a minute apart" guidance — silence is the EXPECTED output of a healthy
-      buffered `claude -p` ride, so that test cannot distinguish wedged from busy.
-      Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
+      Description fixed 2026-08-08 (leads with the FP class + the early-death-vs-reached-clones
+      discriminator; the log-compare test is retired). **Next:** key the alert on the
+      deterministic scan phase. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
