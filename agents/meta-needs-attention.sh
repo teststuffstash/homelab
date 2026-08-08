@@ -13,6 +13,9 @@
 #      loop dispatches on agent-fix∧agent/queued; the debounce rings on responder verdict lines;
 #      neither ever sees it). Five agent-runtime issues sat this way for up to a MONTH
 #      (2026-08-08, operator catch) because only homelab's board got swept. Emission = triage it.
+#      ⚠ Responder alert-record issues (body carries 'alert-fp:') are EXCLUDED: unlabeled is
+#      their design and the fp/subject belts own their whole lifecycle — clause 3 flagged the
+#      reopened #108 on its first day and would re-flag every report-only record forever.
 # Each distinct line emits once per process lifetime; restart the monitor to re-baseline.
 # Poll is 10 min — this watches for HUMAN-latency states, not machine ones.
 cd /workspace/homelab || { echo "PROBE-FAIL: repo missing"; exit 1; }
@@ -39,11 +42,12 @@ while true; do
   # ever reach them. Renovate's dashboard issue is the one legitimate permanent resident.
   for r in $PLATFORM_REPOS; do
     unl=$(devbox run -- gh issue list -R "teststuffstash/$r" --state open \
-            --json number,title,labels,createdAt 2>/dev/null | tail -1 \
+            --json number,title,labels,createdAt,body 2>/dev/null | tail -1 \
           | jq -r --arg r "$r" --arg cutoff "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" \
               '.[] | select([.labels[].name | select(startswith("agent"))] | length == 0)
                    | select(.createdAt < $cutoff)
                    | select(.title != "Dependency Dashboard")
+                   | select(.body | contains("alert-fp:") | not)
                    | "NEEDS-META triage: \($r)#\(.number) unlabeled >24h — invisible to every clause"' 2>/dev/null)
     [ -n "$unl" ] && out="$out$unl"$'\n'
   done
