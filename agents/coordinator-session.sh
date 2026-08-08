@@ -126,7 +126,7 @@ COMMON_FLAGS="--model ${MODEL} --append-system-prompt-file ${BRIEF_PATH} --permi
 # Clone the current homelab (public) so the coordinator runs the live brief + launchers + estimator.
 # The /work/session-start marker is the "what did THIS session write" baseline the exit-trap upload
 # diffs the transcripts PVC against (the PVC accumulates across sessions).
-PREP="set -e; ${LOOP_FETCH}touch /work/session-start; git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
+PREP="set -e; ${LOOP_FETCH}touch /work/session-start; timeout 120 git clone --depth 1 -b ${BASE_REF} ${REPO_URL} /work/homelab"
 
 # A coordinator is scoped to a STACK, so clone ALL its repos (--repos) shallow into /work/<repo>
 # and run from the stack's MAIN repo (--main-repo, default homelab) — so that repo's CLAUDE.md + specs
@@ -138,7 +138,7 @@ PREP="set -e; ${LOOP_FETCH}touch /work/session-start; git clone --depth 1 -b ${B
 CLONE_STEPS=""
 for repo in $STACK_REPOS; do
   [ "$repo" = "homelab" ] && continue
-  CLONE_STEPS="${CLONE_STEPS}; if [ -d /work/${repo} ]; then echo \"→ ${repo} already present\"; else echo \"→ cloning ${repo}…\"; gh repo clone ${ORG}/${repo} /work/${repo} -- --depth 1 || echo \"⚠ clone of ${repo} FAILED (non-fatal) — coordinator uses its GitHub URL instead\"; fi"
+  CLONE_STEPS="${CLONE_STEPS}; if [ -d /work/${repo} ]; then echo \"→ ${repo} already present\"; else echo \"→ cloning ${repo}…\"; timeout 120 gh repo clone ${ORG}/${repo} /work/${repo} -- --depth 1 || echo \"⚠ clone of ${repo} FAILED (non-fatal) — coordinator uses its GitHub URL instead\"; fi"
 done
 # Only surface gh auth (and clone) when there's actually a private/extra repo to fetch. `gh repo clone`
 # needs the pod's GH_TOKEN (coordinator-git) to reach the private oracle-* repos — verify it's wired
