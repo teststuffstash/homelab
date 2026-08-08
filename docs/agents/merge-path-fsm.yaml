@@ -108,8 +108,24 @@ transitions:
       - desc: "per-stack reviewer.enabled knob"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewer.enabled" }
     belts:
-      - desc: "reviewer STEP-0 self-guard (own verdict at head → AGENT_ERROR, no duplicate)"
-        anchor: { file: agents/reviewer-session.sh, pattern: "STEP 0" }
+      - desc: "reviewer STEP-0 self-guard, PRECONDITION arm (homelab#122 / PR #123, master 11c2045,
+          2026-08-08): a premise true when the reviewer was QUEUED and false when it EXECUTED —
+          mergeStateStatus DIRTY/UNKNOWN, checks not concluded at head, or ONE verdict of its own
+          identity already at this exact commit — is ordinary semaphore contention, NOT an anomaly:
+          one standing-aside comment, NO label, NO verdict, and the level-triggered path
+          re-dispatches when the state settles"
+        anchor: { file: agents/reviewer-session.sh, pattern: "PRECONDITION FAILURE" }
+      - desc: "the aside is keyed by (head sha, precondition), not by pass — the reviewer reads the
+          comments it already fetched and posts nothing if one of its own asides names this head and
+          this precondition, so a draining queue cannot manufacture the near-identical-comment pile
+          this very guard watches for"
+        anchor: { file: agents/reviewer-session.sh, pattern: "IDEMPOTENT ASIDE" }
+      - desc: "reviewer STEP-0 self-guard, ANOMALY arm — only a state re-dispatch CANNOT resolve
+          trips the breaker (agent/error + one AGENT_ERROR: comment): MORE THAN ONE own verdict at
+          head, a pile of near-identical bot reviews or comments, a review history irreconcilable
+          with the commit history, contradictory labels; an agent/error already present still means
+          touch nothing and stop silently"
+        anchor: { file: agents/reviewer-session.sh, pattern: "GENUINE ANOMALY" }
       - desc: "in-band breaker: impossible verdict counts trip agent/error"
         anchor: { file: agents/review-reflex.sh, pattern: "CIRCUIT-BREAKER TELEMETRY" }
       - desc: "out-of-band: AgentReviewLoop / AgentErrorFlagged alerts (different code+token)"
@@ -124,9 +140,13 @@ transitions:
     guards:
       - desc: "new CONTENT since verdict (non-merge commits only, via newest_commit_at)"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewable_again" }
-      - desc: "the exporter edge carries the SAME arm — delegating it to the STEP-0 belt makes
-          every benign re-POST an agent/error latch that freezes the PR's own MP-T07 fix round
-          (private repos null commit dates → edge stays off, CronWorkflow owns re-reviews)"
+      - desc: "the exporter edge carries the SAME arm — the edge must not re-POST a just-verdicted
+          head at all. Until homelab#122 / PR #123 (master 11c2045, 2026-08-08) delegating the check
+          to the STEP-0 belt made every benign re-POST an agent/error latch that froze the PR's own
+          MP-T07 fix round; since #123 that re-POST lands in STEP-0's PRECONDITION arm instead — one
+          standing-aside comment, no label — so the residual cost is a burned reviewer session, not
+          a frozen PR. The arm stays because a burned session is still waste (private repos null
+          commit dates → edge stays off, CronWorkflow owns re-reviews)"
         anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "reviewable_again" }
     incidents: ["2026-07-09 oracle-fleet#6 (the BEHIND-re-review exception's origin)", "2026-07-21 oracle-fleet#60 (exporter re-POST one poll after the verdict — restart-emptied dedup; STEP-0 tripped, breaker froze the fix round 5h)"]
 
@@ -168,9 +188,12 @@ transitions:
     guards:
       - desc: "reflex does NOT re-dispatch while parked (bot_approved_head, not reviewDecision)"
         anchor: { file: agents/review-reflex.sh, pattern: "bot_approved_head" }
-      - desc: "exporter edge carries the SAME arm (a parked PR reads REVIEW_REQUIRED — without
-          this, the edge re-POSTs the approved head and STEP-0's refusal latches agent/error on a
-          PR merely waiting for a human; commit dates via REST fallback, fail-closed when unknown)"
+      - desc: "exporter edge carries the SAME arm (a parked PR reads REVIEW_REQUIRED — without this
+          the edge re-POSTs the approved head of a PR merely waiting for a human; that refusal
+          latched agent/error until homelab#122 / PR #123 (master 11c2045, 2026-08-08) and now
+          stands aside instead, so the arm is what keeps a parked PR from collecting a reviewer
+          session plus an aside comment on every poll; commit dates via REST fallback, fail-closed
+          when unknown)"
         anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "bot_approved_head" }
     incidents: ["2026-07-12 oracle-fleet#13", "2026-07-21 oracle-fleet#60 (edge re-POSTed the approved head 2 min after the verdict — second breaker latch of the day, same class both arms)"]
 
@@ -228,8 +251,11 @@ transitions:
 
   - id: MP-T09
     name: breaker trip and clear
-    owner: any layer (reflex counts / reviewer STEP-0 / worker recipe / exporter alerts / human)
-    when: "loop anomaly detected → agent/error + one AGENT_ERROR comment; HUMAN clears"
+    owner: any layer (reflex counts / reviewer STEP-0 ANOMALY arm / worker recipe / exporter alerts / human)
+    when: "loop anomaly detected → agent/error + one AGENT_ERROR comment; HUMAN clears. Since
+      homelab#122 / PR #123 (master 11c2045, 2026-08-08) the reviewer STEP-0 layer feeds this
+      transition ONLY from its anomaly class (MP-T03 belt 3); its precondition class stands aside
+      without a label, so a state the machinery resolves by re-dispatching never reaches here"
     status: guarded
     guards:
       - desc: "agent/error excluded from EVERY actionable clause (queued, c4c5, review pick, C9)"
