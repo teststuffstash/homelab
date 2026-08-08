@@ -25,6 +25,11 @@ TokenReview-gated), latch persistence across restarts, GET /router-status, and t
 /metrics series. The decision endpoint (POST /route) and the budgeter legs land per the
 ADR-096 phases.
 
+homelab#158: the OpenRouter leg has an ACCOUNT-scope capacity latch beside the FU-088(a) subscription
+one (see the `_or_capacity_*` block). It is what makes "the provider is down" a *typed* /route
+defer (`or-capacity-down:*`) instead of one more silent deferral — the launcher degrades a
+class=fix ride to the haiku subscription rail on it (docs/agents/model-routing.md §M12).
+
 Stdlib only; runs on a stock python:3.13-slim from a ConfigMap (github-exporter pattern).
 """
 
@@ -919,7 +924,135 @@ def _headroom_loop() -> None:
                 log(f"headroom: refreshed {n} OpenRouter keys")
         except Exception as e:  # noqa: BLE001
             log(f"headroom: tick failed: {e}")
+        try:
+            # homelab#158: the account balance rides the SAME loop — per-key headroom and account
+            # credit are the two halves of "can the OpenRouter rail still buy anything", and a
+            # failed credit poll must never starve the headroom refresh (or vice versa).
+            bal = _credit_tick()
+            if bal is not None:
+                log(f"credit: OpenRouter account balance ${bal} (floor ${OR_MIN_CREDIT})")
+        except Exception as e:  # noqa: BLE001
+            log(f"credit: poll failed: {e} — capacity latch keeps its data-plane legs")
         time.sleep(HEADROOM_POLL_S)
+
+
+# ── The ACCOUNT-scope OpenRouter capacity latch (homelab#158, operator directive 2026-08-08) ──
+# The evening this comes from: OpenRouter went hard-down for workers (the provisioning
+# keys-modify daily limit + a $0.17 balance) and the ENTIRE fleet's dispatch deferred for hours,
+# while the subscription rail sat at 2/5 semaphore slots on a fresh plan. Deferring is the right
+# answer to "this model costs money we do not have" and the WRONG answer to "the provider is
+# down" — the second is an infra failure, the class the loop already knows how to survive.
+#
+# So the OpenRouter side of /route grows a SECOND, differently-typed refusal, and the split is
+# the whole point:
+#   per-KEY headroom spent  → `openrouter-budget-exhausted` — a BUDGET decision. It still stops
+#                             the dispatch: spilling it onto the subscription would route around
+#                             the very ceiling the project key exists to impose.
+#   ACCOUNT capacity down   → `or-capacity-down:<what>` — an INFRA failure, no different in kind
+#                             from a 5xx. Typed so the launcher may DEGRADE a class=fix ride to
+#                             the haiku subscription rail instead of deferring the fleet
+#                             (agents/agent-session.sh, docs/agents/model-routing.md §M12).
+# Three inputs, all account-scope, all from data this proxy already holds:
+#   credit   — the polled account balance under OPENROUTER_MIN_CREDIT (the same floor the
+#              launcher's FU-088(b) gate uses; GET /api/v1/credits is the probed surface in
+#              model-routing.md's API table). This is what 2026-08-08 actually looked like.
+#   hard-402 — an upstream 402 on the data plane: "insufficient credits", account-scope by
+#              construction (the signature agent-finalize already classifies as budget-403).
+#   rpd      — 429s from ≥2 DISTINCT models inside OR_RPD_WINDOW_S. ONE model 429ing is a model
+#              cooldown and router.cooldown_note must keep owning it (a bad model is not a dead
+#              provider); several unrelated models 429ing together is the ACCOUNT's limit, and
+#              that tells the two apart without guessing at upstream header semantics. It is a
+#              heuristic on purpose — bounded by the hold below, and cleared by the next 2xx.
+# Self-healing both ways like the FU-088(a) anthropic latch above: the hold expires on its own,
+# and any OpenRouter 2xx clears it early (the provider answered — it is not down). In-memory by
+# design; a proxy roll forgets, and the next 402/429/credit poll re-latches.
+OR_CAPACITY_HOLD_S = int(os.environ.get("OR_CAPACITY_HOLD_S", "900"))
+OR_MIN_CREDIT = float(os.environ.get("OPENROUTER_MIN_CREDIT", "0.25"))
+OR_RPD_WINDOW_S = int(os.environ.get("OR_RPD_WINDOW_S", "300"))
+_or_cap = {"until": 0.0, "reason": "", "since": 0.0, "count": 0,
+           "credit": None, "credit_at": 0.0}
+_or_cap_lock = threading.Lock()
+_or_429: dict[str, float] = {}  # model -> last 429 epoch (the cross-model rpd detector)
+
+
+def _or_capacity_latch(reason: str, hold: float = 0.0) -> str:
+    """Latch the OpenRouter ACCOUNT as capacity-down. Returns a note suffix."""
+    now = time.time()
+    hold = hold or OR_CAPACITY_HOLD_S
+    with _or_cap_lock:
+        first = _or_cap["until"] <= now
+        _or_cap["until"] = max(_or_cap["until"], now + hold)
+        _or_cap["reason"] = reason
+        if first:
+            _or_cap["since"] = now
+            _or_cap["count"] += 1
+    if first:
+        log(f"openrouter ACCOUNT capacity DOWN ({reason}) for {hold:.0f}s — /route now defers "
+            f"the openrouter rail as or-capacity-down:{reason}; class=fix launchers may degrade "
+            f"to the haiku subscription rail instead of deferring (homelab#158)")
+    return "+or-capacity-down"
+
+
+def _or_capacity_clear(why: str) -> str:
+    """A 2xx from OpenRouter means the provider is answering — drop an active hold early."""
+    now = time.time()
+    with _or_cap_lock:
+        if _or_cap["until"] <= now:
+            return ""
+        reason, _or_cap["until"], _or_cap["reason"] = _or_cap["reason"], 0.0, ""
+    _or_429.clear()
+    log(f"openrouter 2xx while capacity-latched ({reason}) — latch cleared early ({why})")
+    return "+or-capacity-cleared"
+
+
+def _or_capacity_429(model: str) -> str:
+    """Fold one upstream 429 into the rpd detector: ≥2 distinct models inside the window is the
+    ACCOUNT's limit, not a model's (which router.cooldown_note handles per model, unchanged)."""
+    now = time.time()
+    _or_429[model] = now
+    recent = {m for m, ts in list(_or_429.items()) if now - ts <= OR_RPD_WINDOW_S}
+    for m, ts in list(_or_429.items()):
+        if now - ts > OR_RPD_WINDOW_S:
+            _or_429.pop(m, None)
+    if len(recent) < 2:
+        return ""
+    return _or_capacity_latch("rpd")
+
+
+def _or_capacity_down(now: float | None = None) -> str | None:
+    """The launcher-visible verdict: the latch reason while it holds, else None."""
+    with _or_cap_lock:
+        return _or_cap["reason"] if _or_cap["until"] > (now or time.time()) else None
+
+
+def _credit_tick() -> float | None:
+    """Account balance → the `credit` leg of the latch. Same probe the launcher's FU-088(b) gate
+    makes per dispatch, done once here so /route can TYPE the condition. Hold spans one poll
+    interval (+slack) so a recovered balance un-latches on the next tick rather than by timeout."""
+    resolved = _resolve_ref(ROUTER_ACCOUNT_REF) if ROUTER_ACCOUNT_REF else None
+    if not resolved or resolved.get("kind") != "openrouter":
+        return None  # off-cluster / no account ref — the data-plane legs still latch
+    req = urllib.request.Request(
+        f"{UPSTREAM}/api/v1/credits",
+        headers={"Authorization": "Bearer " + resolved["key"],
+                 "User-Agent": "homelab-openrouter-proxy"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.load(resp).get("data") or {}
+    total, used = data.get("total_credits"), data.get("total_usage")
+    if not isinstance(total, (int, float)) or not isinstance(used, (int, float)):
+        return None
+    balance = round(total - used, 4)
+    with _or_cap_lock:
+        _or_cap["credit"], _or_cap["credit_at"] = balance, time.time()
+        latched_on_credit = _or_cap["until"] > time.time() and _or_cap["reason"] == "credit"
+    if balance < OR_MIN_CREDIT:
+        _or_capacity_latch("credit", HEADROOM_POLL_S + 120)
+    elif latched_on_credit:
+        with _or_cap_lock:
+            _or_cap["until"], _or_cap["reason"] = 0.0, ""
+        log(f"openrouter account credit back to ${balance} (floor ${OR_MIN_CREDIT}) — "
+            "capacity latch cleared")
+    return balance
 
 
 def _anthropic_latch_update(status: int, resp_headers) -> str:
@@ -1043,6 +1176,15 @@ class Proxy(BaseHTTPRequestHandler):
             router.record_provider_event(or_model, or_provider or "", status)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
+            # homelab#158: and the ACCOUNT-scope capacity latch. Strictly a different question from
+            # the per-model cooldown below — that one asks "is THIS model misbehaving", this one
+            # asks "is the provider buying anything for us at all".
+            if status == 402:
+                note += _or_capacity_latch("credit")
+            elif status == 429:
+                note += _or_capacity_429(or_model)
+            elif 200 <= status < 300:
+                note += _or_capacity_clear("2xx on the openrouter leg")
             # addendum 4: and the model cooldown state (temporary blacklist + auto-recovery)
             cd = router.cooldown_note(or_model, status)
             if cd:
@@ -1226,6 +1368,21 @@ class Proxy(BaseHTTPRequestHandler):
                         lines.append(f'router_openrouter_key_limit_remaining_usd{{key="{ref}"}} {d["limit_remaining"]}')
                     if isinstance(d.get("usage"), (int, float)):
                         lines.append(f'router_openrouter_key_usage_usd{{key="{ref}"}} {d["usage"]}')
+            # homelab#158: the account-scope capacity latch — the fleet-wide "OpenRouter is down"
+            # bit and the balance behind it. `_down` is what /route types as or-capacity-down,
+            # i.e. exactly the condition under which class=fix rides degrade to the subscription.
+            with _or_cap_lock:
+                or_cap = dict(_or_cap)
+            lines += ["# TYPE router_openrouter_capacity_down gauge",
+                      "# HELP router_openrouter_capacity_down 1 while the OpenRouter ACCOUNT is capacity-down (credit floor / hard-402 / cross-model 429s) — the homelab#158 degrade signal.",
+                      f"router_openrouter_capacity_down {1 if or_cap['until'] > now else 0}",
+                      "# TYPE router_openrouter_capacity_down_total counter",
+                      "# HELP router_openrouter_capacity_down_total Times the capacity latch engaged (in-memory; resets on roll).",
+                      f"router_openrouter_capacity_down_total {or_cap['count']}"]
+            if isinstance(or_cap.get("credit"), (int, float)):
+                lines += ["# TYPE router_openrouter_account_credit_usd gauge",
+                          "# HELP router_openrouter_account_credit_usd Polled account balance (total_credits - total_usage); absent = never polled, NOT zero.",
+                          f"router_openrouter_account_credit_usd {or_cap['credit']}"]
             # homelab#22: in-flight requests by model/leg + oldest age — the stall-detector's
             # view of a quiet-but-wedged proxy (a handler thread only logs on completion).
             with _inflight_lock:
@@ -1274,6 +1431,16 @@ class Proxy(BaseHTTPRequestHandler):
                                            for t in ("dispatch", "heavy")}}
             with _headroom_lock:
                 summary["openrouter_headroom"] = {k: dict(v) for k, v in _headroom.items()}
+            with _or_cap_lock:
+                or_cap = dict(_or_cap)
+            summary["openrouter_capacity"] = {
+                "down": or_cap["until"] > now, "reason": or_cap["reason"] or None,
+                "remaining_s": max(0, round(or_cap["until"] - now)),
+                "latched_total": or_cap["count"], "credit_usd": or_cap["credit"],
+                "credit_age_s": (round(now - or_cap["credit_at"]) if or_cap["credit_at"] else None),
+                "min_credit_usd": OR_MIN_CREDIT,
+                "recent_429_models": sorted(m for m, ts in list(_or_429.items())
+                                            if now - ts <= OR_RPD_WINDOW_S)}
             payload = json.dumps(summary, indent=1).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1506,6 +1673,13 @@ class Proxy(BaseHTTPRequestHandler):
                 return True, None, 0
 
             def _openrouter_ok(key_ref):
+                # homelab#158: account-scope capacity FIRST and typed distinctly — the launcher reads
+                # `or-capacity-down:*` as a DEGRADE signal (subscription haiku for class=fix)
+                # while `openrouter-budget-exhausted` below stays a stop. Order matters: when the
+                # provider is down, the per-key budget verdict is not the interesting fact.
+                down = _or_capacity_down(now)
+                if down:
+                    return False, f"or-capacity-down:{down}"
                 if key_ref:
                     with _headroom_lock:
                         d = _headroom.get(str(key_ref))
