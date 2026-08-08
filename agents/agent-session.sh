@@ -84,13 +84,20 @@ if [ "$AGENT_ROUTER" != "off" ]; then
       *)      _chain="$(printf '%s' "$_chain" | jq -c 'map(select(startswith("claude/") | not))')";;
     esac
   fi
+  # homelab#158 leg 1: a SUBSCRIPTION-rail ride sends NO key_ref. The OpenRouter key is that ride's
+  # fallback rail, never its prerequisite — passing the ref invites the router to weigh OpenRouter
+  # key state (headroom, a mint that never happened) in a decision about a rail that does not use
+  # it. On 2026-08-08 that inversion deferred claudeTier dispatches four times while the
+  # subscription sat idle. `null` = "this dispatch has no OpenRouter identity", which is the truth.
+  _keyref="${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}"
+  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _keyref="";; esac
   _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
       --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
-      --arg key_ref "${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}" \
+      --arg key_ref "$_keyref" \
       --argjson chain "$_chain" \
       --argjson deny "$(printf '%s' "$_srow" | jq -c '.modelDeny // []')" \
       '{stack: $stack, task: $task, role: "worker", session: $session,
-        key_ref: $key_ref, chain: $chain, deny: $deny}')"
+        key_ref: (if $key_ref == "" then null else $key_ref end), chain: $chain, deny: $deny}')"
   _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
       -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
   if [ -z "$_decision" ]; then
@@ -106,12 +113,116 @@ if [ "$AGENT_ROUTER" != "off" ]; then
       elif [ "$_verdict" = "dispatch" ] && [ -n "$_rmodel" ]; then
         MODEL="$_rmodel"
       elif [ "$_verdict" = "defer" ]; then
+        # homelab#158: the exit moved BELOW the rail-degrade block — an `or-capacity-down:*` defer is a
+        # provider outage, and this launcher has one more rail to try before it gives the round up.
+        # Every other defer reason still ends the dispatch here, unchanged, one block down.
+        _router_defer=1
         _retry="$(printf '%s' "$_decision" | jq -r '.retry_after_s // "?"')"
-        echo "→ router: DEFER (${_rwhy}) retry_after=${_retry}s — not dispatching. chain-exhausted means every model is struck/denied for this task: escalate." >&2
-        exit 1
       fi
     fi
   fi
+fi
+
+# ── homelab#158: an OpenRouter capacity outage DEGRADES to the haiku subscription rail ────────────────
+# (Operator directive, 2026-08-08; the reasoning and the doctrine amendment: model-routing.md §M12.)
+#
+# The evening it comes from: OpenRouter went hard-down for workers (provisioning keys-modify daily
+# limit + a $0.17 balance) and the ENTIRE fleet's dispatch deferred for hours, while the
+# subscription rail sat at 2/5 semaphore slots on a fresh plan. Deferring is the right answer to
+# "this model costs money we do not have" and the WRONG answer to "the provider is down" — the
+# second is an infra failure, the class this loop already knows how to survive.
+#
+# TWO triggers, because there are two ways the launcher can learn it and the fleet runs on both:
+#   • the router's TYPED defer — reason `or-capacity-down:*`, which the proxy raises for
+#     account-scope capacity ONLY (credit floor / hard-402 / cross-model 429s). A per-model
+#     cooldown and a per-KEY budget exhaustion deliberately are not it: a bad model is not a dead
+#     provider, and a spent project budget must not spill onto the subscription. Authoritative
+#     stacks only — a shadow-mode defer changes nothing by definition.
+#   • the launcher's own ACCOUNT-CREDIT probe — the FU-088(b) gate's read, hoisted here so the
+#     same fact can DEGRADE instead of only deferring. This is the one that fires for the fleet
+#     today (shadow is the default mode). Probed ONCE: the gate below reuses this value.
+#
+# What it degrades TO is a constant, not a search: `claude/haiku` on the subscription, the model
+# the directive names. Harness, env card, credential shape and the FU-088 capacity gate all follow
+# from the model id downstream — which is why this sits ABOVE the model_id parse rather than next
+# to the gate it pre-empts.
+#
+# BOUNDS, in the order they matter:
+#  1. class=fix only — a tasked `issue-*` ride. Research/adhoc rides keep deferring: human-gated
+#     or experimental, and neither is worth scarce subscription headroom.
+#  2. semaphore-bounded — the degraded ride IS a claude ride, so the FU-088 latch/utilization/
+#     semaphore gate below applies to it unchanged. The reviewer/coordinator safety net keeps its
+#     slots, and when the subscription is limited too the ride defers exactly as it does today.
+#  3. per-stack opt-out — `subscriptionFallback: false` on the stack row for a stack that should
+#     strictly wait instead; `AGENT_SUBSCRIPTION_FALLBACK=0` is the per-run override.
+OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"
+OR_CREDITS=""; OR_CAPACITY_DOWN=""; RAIL_DEGRADED=""
+# Router trigger — AUTHORITATIVE mode only, keyed on `_router_defer`, i.e. exactly the case where
+# the routed defer is about to stop this dispatch. In shadow mode a defer changes nothing by
+# contract ("consult + log, dispatch unchanged"), so degrading on it would be the launcher quietly
+# promoting shadow to authoritative; the credit probe below is what covers shadow stacks.
+if [ -n "${_router_defer:-}" ]; then
+  case "${_rwhy:-}" in *or-capacity-down*) OR_CAPACITY_DOWN="router:${_rwhy}";; esac
+fi
+# Is this ride ALREADY on the subscription rail? Then there is nothing to degrade to, and — leg 1
+# — no OpenRouter state may stand between it and its dispatch, so it does not even probe: a
+# claudeTier ride's relationship to the OpenRouter key is "fallback I am not using", full stop.
+_sub_rail_ride=""
+case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _sub_rail_ride=1;; esac
+_or_probe_url="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
+   && [ -n "$_or_probe_url" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
+  OR_CREDITS="$(curl -fsS --max-time 10 -H "Authorization: Bearer ref:${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}" \
+    "$_or_probe_url/api/v1/credits" 2>/dev/null \
+    | jq -r 'try ((.data.total_credits // empty) - (.data.total_usage // 0)) catch empty' 2>/dev/null)" || OR_CREDITS=""
+  if [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
+    OR_CAPACITY_DOWN="credit:\$${OR_CREDITS}<\$${OR_MIN}"
+  fi
+fi
+if [ -n "$OR_CAPACITY_DOWN" ] && [ -n "$_sub_rail_ride" ]; then
+  # A subscription ride that drew an or-capacity-down defer is blocked by something else (the
+  # router types the FIRST rail's capacity reason, and for a claude chain the OpenRouter one is
+  # noise). Degrading a claude ride TO claude would only convert an escalation into a silent
+  # deferral — leave the verdict exactly as the router meant it.
+  echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] but this ride is already on the subscription rail — nothing to degrade to; the routed verdict stands."
+elif [ -n "$OR_CAPACITY_DOWN" ]; then
+  # ⚠ NOT `.subscriptionFallback // true`: jq's `//` fires on FALSE as well as null, so the
+  # alternative swallows the very value the knob exists to express and the opt-out silently never
+  # works. Same family as the `${_srow:-{}}` trap above — caught by the replay, not by review.
+  # An unreadable row falls back to the fleet default (degrade): this is an opt-OUT knob, and a
+  # stack that means "strictly wait" says so explicitly.
+  _fb_ok="$(printf '%s' "$_srow" | jq -r 'if .subscriptionFallback == false then "" else "1" end' 2>/dev/null)" || _fb_ok="1"
+  _fb_why="subscriptionFallback:false on the stack row"
+  if [ "${AGENT_SUBSCRIPTION_FALLBACK:-1}" != "1" ]; then _fb_ok=""; _fb_why="AGENT_SUBSCRIPTION_FALLBACK=0"; fi
+  _fb_model="${AGENT_SUBSCRIPTION_FALLBACK_MODEL:-claude/haiku}"
+  # The claim's modelDeny binds here too. A degrade is still a MODEL CHOICE, and an outage is not a
+  # reason to hand a stack a model it has explicitly refused — /route filters deny before anything
+  # else (router.py), and a launcher-side fallback that skipped it would be a way around the claim.
+  if [ -n "$_fb_ok" ] \
+     && [ "$(printf '%s' "$_srow" | jq -r --arg m "$_fb_model" '[(.modelDeny // [])[] | select(. == $m)] | length' 2>/dev/null || echo 0)" != "0" ]; then
+    _fb_ok=""; _fb_why="${_fb_model} is in this stack's modelDeny — the claim wins over the fallback"
+  fi
+  case "${TASK:-}" in
+    issue-[0-9]*)
+      if [ -n "$_fb_ok" ]; then
+        RAIL_DEGRADED="$_fb_model"
+        echo "→ homelab#158 RAIL DEGRADE: OpenRouter capacity down [${OR_CAPACITY_DOWN}] — dispatching ${RAIL_DEGRADED} on the subscription instead of deferring (openrouter pick was: ${MODEL}). rail=subscription-fallback; the FU-088 gate still bounds this ride."
+        MODEL="$RAIL_DEGRADED"
+        # The explicit --harness the dispatcher passed selects WITHIN the OpenRouter rail, and that
+        # rail is down — so it cannot bind here. Clearing the flag lets the harness follow the model
+        # through the one parser (model_id.py) exactly as an undecorated claude/* dispatch does.
+        HARNESS_SET=""
+        _router_defer=""
+      else
+        echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] but the subscription fallback is OFF here (${_fb_why}) — strict wait, this ride defers as before."
+      fi;;
+    *)
+      echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] — no degrade for a non-fix ride (task=${TASK:-adhoc}); the existing gates decide this one.";;
+  esac
+fi
+if [ -n "${_router_defer:-}" ]; then
+  echo "→ router: DEFER (${_rwhy}) retry_after=${_retry:-?}s — not dispatching. chain-exhausted means every model is struck/denied for this task: escalate." >&2
+  exit 1
 fi
 # Chainless-stack guard (ADR-096 P5 pilot, 2026-08-03): a stack row WITHOUT workerModel has no
 # static chain, and the hardcoded MODEL default would be a silent lie. Only an authoritative
@@ -122,7 +233,10 @@ fi
 # values were still right — jq streams the leading value before choking on the trailing brace — so
 # it read as harmless noise while actually leaving this guard one jq-behaviour change from
 # silently inverting. _srow is normalized at its assignment; use it plainly.
-if [ -z "${MODEL_SET:-}" ] \
+# homelab#158: a rail-degraded dispatch satisfies this guard. The fallback is not the static default
+# leaking through a fail-open — it is a named constant chosen by an operator directive in response
+# to a MEASURED provider outage, which is the distinction rule #6 is actually about.
+if [ -z "${MODEL_SET:-}" ] && [ -z "${RAIL_DEGRADED:-}" ] \
    && [ "$(printf '%s' "$_srow" | jq -r '.name // ""')" != "" ] \
    && [ "$(printf '%s' "$_srow" | jq -r '.workerModel // ""')" = "" ]; then
   if [ "$AGENT_ROUTER" != "authoritative" ] || [ "${_verdict:-}" != "dispatch" ] || [ -z "${_rmodel:-}" ]; then
@@ -733,6 +847,11 @@ CLAUDE_ENV=""; SUB_LABEL=""
 if [ "$HARNESS" = "claude" ]; then
   # FU-088: mark subscription-drawing pods for the concurrency semaphore's label-selector count
   SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude'
+  # homelab#158: a DEGRADED ride carries its rail on the pod itself, so "which rides did the outage
+  # push onto the subscription, and what did they cost" is one kubectl/Loki query away rather than
+  # an inference from the model id. A separate label key — the semaphore's selector must keep
+  # counting this pod exactly like any other claude ride, because it draws the same capacity.
+  [ -z "${RAIL_DEGRADED:-}" ] || SUB_LABEL="${SUB_LABEL}"', "homelab.teststuff.net/rail": subscription-fallback'
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
@@ -860,6 +979,11 @@ fi
 # /report itself — resolution is launcher-owned (stacks.json; empty = unresolvable, finalize skips).
 REPORT_STACK="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
 [ "$REPORT_STACK" = "null" ] && REPORT_STACK=""
+# homelab#158: the resolved rail, one string, computed once from the FINAL harness — never re-derived
+# downstream (the same one-parser rule FU-127 applied to model ids).
+if [ -n "${RAIL_DEGRADED:-}" ]; then AGENT_RAIL="subscription-fallback"
+elif [ "$HARNESS" = "claude" ];  then AGENT_RAIL="subscription"
+else                                  AGENT_RAIL="openrouter"; fi
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
 PGW_URL="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 if [ -n "$DOCKER" ]; then # FU-072: service VIPs unreachable from kata guests — ride on endpoint IPs
@@ -1016,17 +1140,15 @@ fi
 
 # FU-088(b): account-level OpenRouter credit gate — credit exhaustion otherwise surfaces only as
 # per-pod 402 retry storms AFTER spawn (agent-runtime#8 hard-stops in-pod; this saves the spawn).
-# Probes the account's credit balance through the proxy with the pod's own opaque ref — no key
-# material touches this launcher. Fail-open on any probe failure.
-if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
-  OR_MIN="${OPENROUTER_MIN_CREDIT:-0.25}"
-  credits="$(curl -fsS --max-time 10 -H "Authorization: Bearer ref:${NS}/${SECRET}" \
-    "$PROXY_URL/api/v1/credits" 2>/dev/null \
-    | jq -r 'try ((.data.total_credits // empty) - (.data.total_usage // 0)) catch empty' 2>/dev/null)" || credits=""
-  if [ -n "$credits" ] && awk -v c="$credits" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
-    echo "→ ${PROJECT} dispatch deferred — OpenRouter account credit \$${credits} below the \$${OR_MIN} floor (FU-088b; top up, or OPENROUTER_MIN_CREDIT / AGENT_CREDIT_GATE=0 to override)"
-    exit 0
-  fi
+# The probe itself moved UP to the homelab#158 rail-degrade block (one curl per dispatch, same opaque
+# ref, no key material here either way, still fail-open on any probe failure) — because a fact this
+# gate can only defer on is a fact the degrade can ACT on, and it has to be known before the
+# harness is fixed. What remains here is the gate: everything that did NOT degrade (opted out,
+# non-fix ride, or a stack that strictly waits) defers exactly as it did before.
+if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ] \
+   && [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
+  echo "→ ${PROJECT} dispatch deferred — OpenRouter account credit \$${OR_CREDITS} below the \$${OR_MIN} floor (FU-088b; top up, or OPENROUTER_MIN_CREDIT / AGENT_CREDIT_GATE=0 to override)"
+  exit 0
 fi
 
 # The atomic gate: reap a TERMINAL same-key holder, refuse a LIVE one, then `create` (NOT apply —
@@ -1123,6 +1245,13 @@ ${DIND_CONTAINER}
         # stays LAUNCHER-owned (the pod has no homelab checkout).
         - name: AGENT_STACK
           value: "${REPORT_STACK}"
+        # homelab#158: the rail this ride actually buys its tokens on — \`subscription-fallback\` marks a
+        # ride the OpenRouter outage pushed onto the subscription, so its cost lands VISIBLY
+        # instead of looking like a free lunch. Three surfaces, deliberately: the pod label (live,
+        # queryable now), this env (for agent-finalize to fold into AGENT_RUN_STATS — the
+        # agent-runtime half, not shipped here), and the launcher's POST /report field below.
+        - name: AGENT_RAIL
+          value: "${AGENT_RAIL}"
         - name: AGENT_REPORT_URL
           value: "${PROXY_URL:+${PROXY_URL}/report}"
         # FU-134: the platform web-research endpoint, named in the env card. An env var rather than a
@@ -1380,11 +1509,16 @@ if [ -n "$RUN_CMD" ]; then
   # unreachable off-cluster (jail runs — the ClusterIP doesn't cross the BGP boundary) is fine.
   if [ -n "$PROXY_URL" ] && { [ -n "$STATS" ] || [ -n "${ERR_CLASS:-}" ]; }; then
     _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+    # homelab#158: `rail` rides the report so a degraded ride is attributable in the store, not only in
+    # the pod labels. The router's run_reports has no rail COLUMN yet (router.py — outside this
+    # issue's footprint), so today it lands as a field the ingest ignores; the pod label and the
+    # launcher log are the surfaces that answer the question until that column exists.
     _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
       --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
+      --arg rail "${AGENT_RAIL:-}" \
       --argjson stats "${STATS:-null}" '
       {session: $session, task: $task, stack: $stack, role: "worker",
-       round: ($round | tonumber? // 1), model: $model,
+       round: ($round | tonumber? // 1), model: $model, rail: $rail,
        cost_usd: (($stats.cost_usd? // 0) | tonumber? // 0),
        error_class: (if $err != "" then $err else ($stats.error_class? // "") end),
        outcome: (if $pr != "" then "pr" else ($stats.exit_status? // "no-pr") end)}' 2>/dev/null)"

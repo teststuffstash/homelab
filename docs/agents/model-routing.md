@@ -152,7 +152,9 @@ primary). Per-stack policy, exactly what the `AgentStack` claim's "model tiers" 
 reserved for; the JSON stand-in carries it until the XRD lands. Rules of thumb: chain entries must
 advertise `tools` support (registry check, M3); free entries are fine anywhere in the chain now that
 a failure = one strike; reasoning models (`deepseek-r1*`) stay out (slow, verbose, pricey);
-`openrouter/auto` at most LAST (see M6).
+`openrouter/auto` at most LAST (see M6). A chain that ENDS in `claude/haiku` (sleep, oracle) already
+falls to the subscription inside `/route` when the OpenRouter rail is capacity-blocked — §M12 is
+what covers the chains that do not, and the shadow-mode stacks whose defer never reaches `/route`.
 
 ### M3. A live model registry, not a price table
 
@@ -432,6 +434,84 @@ Buildable first leg: homelab#159 (shadow-mode: subscription-rail candidate + urg
 per-cell start-tier in the store, decisions logged, no behavior change until the soak reads
 clean). Relates ADR-096 (the /route contract), homelab#158 (the emergency degrade), FU-095
 (the pilot evidence), FU-088 (the safety-net gates this must never starve).
+
+### M12. Provider DOWN ≠ budget SPENT — the haiku degrade (operator directive, 2026-08-08)
+
+**This amends the standing tiering doctrine** ("workers stay cheap OpenRouter; the subscription is
+the coordinator/reviewer safety net" — §M10). The separation survives; what changes is that it is
+now a separation under *normal* conditions rather than an absolute.
+
+**§M11 above is the general case; this is the emergency one, and it is what actually shipped**
+(homelab#158, in the launcher + the proxy). M11's ladder makes the subscription an ordinary
+route candidate priced at ~0 while it has headroom; this section only answers "the OpenRouter rail
+cannot buy anything at all" — a narrower, typed condition with a constant answer. When M11's leg
+lands (homelab#159) the trigger below becomes one input to the ladder rather than its own branch;
+the BOUNDS are the part that must survive the merge, because they are what keeps either mechanism
+from eating the safety net.
+
+The evening that forced it: OpenRouter went hard-down for workers (the provisioning `keys-modify`
+daily limit + a $0.17 balance, openrouter-operator#26) and the **entire fleet's dispatch deferred
+for hours**, while the subscription rail sat at 2 of 5 semaphore slots on a fresh Max-20x plan. Every
+individual deferral was locally correct and the aggregate was absurd — a loop with an idle rail
+waiting on a dead one. The operator's ruling: *the router should have picked haiku.*
+
+**The distinction the fix is built on** — two OpenRouter refusals that used to look alike:
+
+| condition | typed as | reaction | why |
+|---|---|---|---|
+| the project key's headroom is spent | `openrouter-budget-exhausted` | **stop** (unchanged) | a BUDGET decision; spilling it onto the subscription routes around the ceiling the key exists to impose |
+| the ACCOUNT cannot buy anything (credit floor, hard-402, cross-model 429s) | `or-capacity-down:<what>` | **degrade** | an INFRA failure, the same class as a 5xx — and the loop survives those by moving, not by waiting |
+| one model is 429ing / struck | `cooldown:*` / `strike` | unchanged (§M1) | a bad model is not a dead provider |
+
+**Where each half lives.** The proxy raises the account-scope condition
+(`argocd/resources/openrouter-proxy/openrouter-proxy.py`, the `_or_capacity_*` block): a polled
+account balance under `OPENROUTER_MIN_CREDIT`, an upstream 402, or 429s from **≥2 distinct models**
+inside `OR_RPD_WINDOW_S` — that last one is how "the account is rate-limited" is told from "this
+model is", without guessing at upstream header semantics. It self-heals exactly like the FU-088(a)
+subscription latch: the hold expires, and any OpenRouter 2xx clears it early. `/route` then types
+its defer with it, and `/metrics` carries `router_openrouter_capacity_down{,_total}` +
+`router_openrouter_account_credit_usd`.
+
+The **launcher** (`agents/agent-session.sh`) decides — ADR-094: dispatch params are launcher-owned.
+Two triggers, because the fleet runs in two modes: an **authoritative** routed defer whose reason is
+`or-capacity-down:*`, and (for the shadow default) the launcher's own account-credit probe, which is
+the FU-088(b) gate's read hoisted above the harness decision so the same fact can *act* instead of
+only deferring. A shadow-mode routed defer is deliberately NOT a trigger — that would be the
+launcher quietly promoting shadow to authoritative.
+
+Degrading means `claude/haiku` on the subscription (`AGENT_SUBSCRIPTION_FALLBACK_MODEL` overrides).
+It is a constant, not a search: harness, env card, credential shape and capacity gate all follow
+from the model id through the one parser (§FU-127, `model_id.py`).
+
+**Bounds** — the reason this is not a hole in the safety net:
+
+1. **class=fix only.** A tasked `issue-*` ride. Research/adhoc rides keep deferring.
+2. **Semaphore-bounded.** The degraded ride *is* a claude ride, so the FU-088 latch / utilization
+   threshold / concurrency semaphore gate it unchanged — the reviewer and coordinator keep their
+   slots, and with the subscription also limited the ride defers exactly as before. The existing
+   capacity gate IS the protection; nothing new was needed.
+3. **Per-stack opt-out.** `subscriptionFallback: false` on the stack row for a stack that should
+   strictly wait; `AGENT_SUBSCRIPTION_FALLBACK=0` per run. ⚠ Read with `== false`, never
+   `// false` — jq's `//` fires on `false` as well as `null`, which silently disables the knob
+   (found by the replay, not by review). The claim's **`modelDeny` binds too**: a degrade is still
+   a model choice, and an outage is not licence to hand a stack a model it has refused.
+
+**Cost visibility.** A degraded ride carries `rail=subscription-fallback` on three surfaces: the pod
+label `homelab.teststuff.net/rail` (live and queryable now — the semaphore's own selector is
+untouched, since the pod draws exactly the capacity any claude ride does), the `AGENT_RAIL` pod env,
+and the launcher's `POST /report` field. The last two are **declared, not yet consumed**:
+`run_reports` has no `rail` column and `agent-finalize` does not fold `AGENT_RAIL` into
+`AGENT_RUN_STATS` — until those land (router.py; the agent-runtime repo) the label and the launcher
+log are what answer "what did the outage cost us".
+
+⚠ **A claudeTier claim never needed any of this** — its rides ride the subscription already. Its bug
+was the mirror image and is fixed as leg 1: a `claude/*` dispatch sends **no `key_ref`** to `/route`
+and probes no OpenRouter state at all, and the coordinator's item prompt says in as many words that
+a failed/deferred key mint must not defer a claude-tier dispatch. The OpenRouter key is that ride's
+*fallback* rail; treating it as a prerequisite is what deferred four dispatches into an idle
+subscription. Mint failures are also the one leg with no proxy signal — the provisioning API is the
+openrouter-operator's surface, not this proxy's — which is why leg 1 is an invariant rather than
+another detector.
 
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
