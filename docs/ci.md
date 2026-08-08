@@ -52,6 +52,15 @@ path: branch protection + auto-merge read the LATEST head sha's checks, so a can
 superseded-sha run never enters any merge predicate. ⚠ Do NOT put the cancel form on
 deploy/publish/bake workflows — queue-only groups there, if any.
 
+⚠ **Known gap the block does NOT close (oracle-fleet#228, 2026-08-08): the same-sha
+PR-check/post-merge-push race.** A PR's `pull_request` run (group keyed by PR number) and the
+`push` run after its merge (keyed by ref) are different groups — for the same commit they run
+CONCURRENTLY. On stateless ARC jobs that's just waste; on a shared-VM heavy job (oracle's e2e)
+two concurrent runs starve each other into timeouts — masked while the runner was single-slot,
+exposed the day it got two. Repos with such jobs add a JOB-level group keyed by sha
+(`jobs.<heavy>.concurrency: { group: <job>-${{ github.sha }}, cancel-in-progress: false }`):
+same-sha runs serialize, different PRs still use both slots.
+
 ## Tier A — ARC (self-hosted GitHub runner)
 
 - ArgoCD apps: `argocd/platform/arc-controller.yaml` (operator, `arc-systems`, stable tier) +
