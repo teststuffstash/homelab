@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-156**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-157**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -533,6 +533,13 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
+- [ ] **FU-156** — **`homelab-tofu-apply` Cloudflare token EXPIRES 2027-01-01** (`expires_on`
+      default in `tofu/cloudflare-token/variables.tf`; confirmed live in the dashboard
+      2026-08-08) — on that day jail `tofu/cloudflare` applies fail with nothing alerting.
+      **Next (before ~2026-12):** `devbox run cloudflare-token-tofu apply` with a fresh
+      `expires_on` → re-store per the printed checklist (wallet `cloudflare-write-key`, jail
+      cache, OPNsense env for the acme twin if rotated too). Decide then whether write tokens
+      keep expiries at all — the observability-read token deliberately has none (FU-150 lesson).
 - [ ] **FU-036** — AWS cleanup: delete the orphaned Route53 hosted zone `ZCGRPARGVE3CW` (+ the
       leftover ACM/Sectigo certs its `_*` validation records imply). Needs admin SSO (the jail key
       is read-only). Recipe: `docs/cloudflare.md`. Optionally do it as the first `tofu/aws/` root

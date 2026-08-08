@@ -268,8 +268,8 @@ own domain) is a claim migration, not Cloudflare surgery.
 | Token | Scope | Canonical + delivery | Consumer / applier |
 |---|---|---|---|
 | **Account admin** | everything | **KeePass ONLY**, host | the operator, solely to apply `tofu/cloudflare-token` (the mint). Never jail, never cluster. |
-| `homelab-tofu-apply` (existing) | teststuff.net DNS/SSL/WAF + account Tunnel, write | KeePass; jail copy `~/.claude/cloudflare/` | jail applies `tofu/cloudflare/` (the ha one-off). **Retires** when the XRD absorbs that root (consumer #2 retrofit). |
-| `homelab-acme-dns` (existing) | one zone, DNS write | KeePass; OPNsense env | acme.sh DNS-01 |
+| `homelab-tofu-apply` (existing) | teststuff.net DNS/SSL/WAF + account Tunnel, write | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (the ha one-off). **Retires** when the XRD absorbs that root (consumer #2 retrofit). |
+| `homelab-acme-dns` (existing) | one zone, DNS write | wallet `cloudflare-acme-token`; OPNsense env | acme.sh DNS-01 |
 | **`homelab-observability-read` (NEW, `observability-read.tf`)** | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, audit logs) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL, no more UI-clicking), the CF Prometheus exporter, later responder triage |
 | platform-ingress write (FUTURE) | managed zones: DNS/rulesets/tunnel write | KeePass → Infisical → ESO → crossplane ProviderConfig; never in claims, never jail | the public-ingress composition |
 
