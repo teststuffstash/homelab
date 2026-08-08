@@ -54,6 +54,13 @@ jobs:
       - name: Tracked Python parses (devbox run py-compile-lint)
         run: devbox run py-compile-lint
 
+      # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
+      # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
+      # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
+      # 63 assertions, no network, ~2s.
+      - name: Rail-degrade contract replay (devbox run rail-degrade-replay)
+        run: devbox run rail-degrade-replay
+
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)

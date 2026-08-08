@@ -89,6 +89,9 @@
       "py-compile-lint": [
         "bash scripts/py-compile-lint.sh"
       ],
+      "rail-degrade-replay": [
+        "bash agents/rail-degrade-replay.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
