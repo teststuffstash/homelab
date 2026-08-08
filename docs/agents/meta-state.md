@@ -8,16 +8,18 @@ meant to avoid.)
 
 ## Live state (2026-08-08 ~21:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **⚠ FLEET OR-DISPATCH STARVED until ~00:00Z reset (openrouter-operator#26 CLOSED — fix merged
-  PR#28 20:48Z, park-until-reset + daily-op counters; balance $20.17)**: post-midnight heartbeat
-  MUST (1) verify the 13 wedged key deletions drain + a mint succeeds (the #26 acceptance
-  observation), (2) verify the openrouter-operator IMAGE actually redeployed with the #28 fix
-  (find its deploy-bump path; if the old image still runs, kopf resumes hammering at the NEXT
-  limit hit), (3) clear oracle-fleet#228's agent/error + restore agent/queued (it recorded the
-  infra failure, not its content), (4) supervise the dispatch wave — oracle
-  #194/#195/#206/#211/#212/#213/#215/#227/#228, homelab #103/#134/#137/#145/#153/#156/#159/
-  #163..#166, agent-runtime #45/#46/#49/#50, plus openrouter-operator#27 (chart half of #26,
-  needs queue decision if the debounce hasn't taken it). ClaudeTier lanes unaffected.
+- **⚠ FLEET OR-DISPATCH STARVED until ~00:00Z reset (openrouter-operator#26 CLOSED+closed-out;
+  fix DEPLOYED — pod verified Running on 2026.8.8-gcd89b1ef93e4 at ~21:10Z via PR#28→homelab
+  PR#167; balance $20.17, credits probe 200)**: post-midnight heartbeat MUST (1) verify the 13
+  wedged key deletions drain + a mint succeeds (the #26 acceptance observation), (2) clear
+  oracle-fleet#228's agent/error + restore agent/queued (it recorded the infra failure, not its
+  content), (3) supervise the dispatch wave — oracle #194/#195/#206/#211/#212/#213/#215/#227/
+  #228, homelab #103/#137/#145/#153/#156/#159/#163..#166/#168, agent-runtime #45/#46/#49/#50,
+  openrouter-operator #27/#29 (both queued, ⚖ notes attached; #29's /credits precondition
+  settled 200 from the jail). ClaudeTier lanes draining NOW (#134 riding). PR#167's first `ci`
+  run false-failed the registration lint on correct content → filed+queued as homelab#168
+  (self-checking extraction + torn-read PROBE-FAIL). oracle fix-cycle: PR#230+#217 merged, bump
+  = oracle-iac PR#336 (tag gd96c783 == post-merge master tip, verified) auto-merging on CI.
 - **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
 - **CI-red arc RESOLVED ~20:30Z**: #151 (github-apps declaration drift) fixed on master; ALL five
   blocked homelab PRs landed (#147 deploy, #152→#149, #160→#157, #161→#155, #162→#158). #154
