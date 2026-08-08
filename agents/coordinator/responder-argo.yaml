@@ -174,7 +174,10 @@ spec:
               rrepo="${hit%#*}"; rnum="${hit#*#}"
               # ONE read serves both tests below (verdict + human engagement).
               rmeta="$(gh issue view "$rnum" --repo "$rrepo" --json body,comments 2>/dev/null || printf '{}')"
-              if [ "$rmeta" = "{}" ]; then
+              # "$rmeta = {}" catches the `|| printf '{}'` fallback; the jq -e catches a read that
+              # came back PARTIAL (truncated/interleaved output still exits 0), which would
+              # otherwise fall through to the report-only branch with 0 humans and close blind.
+              if [ "$rmeta" = "{}" ] || ! printf '%s\n' "$rmeta" | jq -e . >/dev/null 2>&1; then
                 echo "→ resolved $rname ($rfp): could not read $hit — left alone (never close on a failed read)"; continue
               fi
               # The verdict split. Same regex the dispatch half uses, against the same body line.
@@ -285,9 +288,25 @@ spec:
               # namespaces, so oracle-fleet's releases.astral.sh drop subject-deduped onto
               # homelab's ghcr.io issue #107 — and the route (below) fell through to 'platform'.
               # Nine fires, nine symptom-only comments, no fix in any lane. Reading `source` as the
-              # fallback namespace repairs subject, route, self-ref and ledger at their one origin;
-              # `source` is used by no other rule in argocd/resources/*/prometheusrule.yaml.
-              _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // .labels.source // empty')"
+              # fallback namespace repairs subject, route, self-ref and ledger at their one origin.
+              # ⚠ That fallback is SCOPED TO THIS ONE ALERT, and the scoping is the fix — a blanket
+              # `.labels.namespace // .labels.source` was wrong (round 1 of #124 shipped it on the
+              # false claim that no other rule uses `source`; caught in review). `source` is a
+              # namespace only because THIS rule aggregates hubble by it. The counterexample is
+              # RouterRotationStale (argocd/resources/openrouter-proxy/prometheusrule.yaml:58-59),
+              # a bare selector on `router_rotation_age_seconds{source="openrouter-daily-rankings"}`
+              # with no `triage: none`, so it flows through here carrying a `source` that is a FEED
+              # name, not a namespace. Unscoped, its subject flipped from `alert:RouterRotationStale`
+              # to `ns:openrouter-daily-rankings` — a marker discontinuity that files a duplicate on
+              # the next fire, i.e. exactly the failure this issue exists to remove, relocated.
+              # `.labels.namespace` stays the general path; the gate below mirrors the one
+              # EGRESS_NOTE uses further down, so the two read as one idea. Any future rule whose
+              # `source` really is a namespace opts in HERE, by name.
+              _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              case "$NAME" in
+                AgentWorkerEgressDropped)
+                  [ -n "$_ns" ] || _ns="$(printf '%s' "$a" | jq -r '.labels.source // empty')";;
+              esac
               _pvc="$(printf '%s' "$a" | jq -r '.labels.persistentvolumeclaim // empty')"
               _pod="$(printf '%s' "$a" | jq -r '.labels.pod // empty')"
               _node="$(printf '%s' "$a" | jq -r '.labels.node // empty')"
@@ -408,7 +427,7 @@ spec:
               # future selfQueue knob (FU-090) derives --no-arm without re-deriving any of this.
               # Widening this list is cheap; narrowing it after a loop has eaten its own outage is
               # not. Rationale + the corpus: docs/agents/roles.md §responder, FU-133.
-              ANS="$_ns" # includes the `source` fallback — see the _ns derivation above (#124)
+              ANS="$_ns" # includes the alert-scoped `source` fallback — see the _ns derivation above (#124)
               SELF_REF=""
               case "$ANS" in
                 kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1;;
