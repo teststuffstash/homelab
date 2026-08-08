@@ -212,6 +212,15 @@ The 2026-07-31 run showed the gap live, in both directions at once:
 
 Both failures are the same missing signal.
 
+The 2026-08-08 oracle goal run added the goal-lane cost of the same gap: with harvests
+auto-queued (`Base: goal/**` exception), a style-only reviewer comment became sprout #211 at
+depth 3 (#177→#185→#208→#211), and **each cosmetic sprout merge moved the goal branch head and
+DISMISSED the assembly PR's approval — three times** — so the churn was gating the goal's own
+terminus. Meanwhile two real crash bugs (#193/#194) sat queued behind six cosmetics until the
+operator's survey flagged them for a hand-pin. The depth-aware gate needs BOTH signals: depth
+(≥2 = don't auto-queue) and the reviewer's own severity language (a comment the reviewer calls
+style-only must not become queued work unasked).
+
 ### The rungs
 
 1. **Structure the lineage as GitHub sub-issues.** Native parent/child gives the tree UI and the
