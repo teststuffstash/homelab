@@ -2881,3 +2881,13 @@ review waits its turn. Utilization is NOT the binder (5h 0.36 / 7d 0.07 at 21:40
 SEMAPHORE is. → FU-088/FU-109 heavy-vs-dispatch tier split revisit, operator decision; the
 datum is a night of ordinary load, not a storm. (FU-149 spot-check: budget alert has not fired
 since the 00:00Z rollover — nothing to check yet.)
+
+### 2026-08-08 (~01:15Z) — reviewer breaker on PR#204: a race, not an anomaly
+
+The reviewer's self-guard tripped `agent/error` on oracle-fleet PR#204: dispatched while CLEAN,
+executed ~10 min later (semaphore queue) after PR#197's merge made it DIRTY. The refusal was
+right; the BREAKER was the wrong lever — it would have wedged the PR out of the very
+merge-conflict lane that owns DIRTY. Cleared with audit on the PR. One occurrence: if a second
+dispatch-state race trips the breaker, the fix is the reviewer REQUEUEING (or re-checking state
+at execution start) instead of latching — file it then, on agent-runtime. Semaphore contention
+widens every dispatch→execution gap, so tonight makes races likelier (same FU-088 datum).
