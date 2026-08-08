@@ -6,39 +6,33 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~11:00Z sweep — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-08 ~14:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **circles goal #29**: #57 DONE (closed 05:30Z, agent/done) — the assembly review spawned two
-  new children, #59 + #60 (queued). Assembly PR#54 still BEHIND+CHANGES_REQUESTED; when its
-  review clears, its next update run is the BEHAVIORAL acceptance of the goal/** ruleset bypass.
-- **oracle**: priority pins #193 (r1 riding, fresh-clone post-uv-fix — its 3h+ zero-drop window
-  was the #107 acceptance datum), #194 + #215 queued/review. **#216 (operator spec PR) still
-  DIRTY — its author (the oracle jail) rebases, then meta reviews+merges.** PR#210 UNWEDGED
-  ~10:45Z: agent/error cleared (pre-#122 guard residue, class already fixed by PR#123), stale
-  CHANGES_REQUESTED dismissed per the 02:52Z arbitration (#213 tracks the finding) — the
-  merge-conflict lane owns the rebase, reviewer re-verdicts the new head. The search `doc_type`
-  ⚖ fork awaits the operator's ruling (meta lean: carry doc_type in hits).
-- **platform queue**: #124 CLOSED — PR#129 meta-reviewed (behaviour harness 47/47 in-jail) +
-  merged ~10:30Z; PR#130 (clone timeout-wrap, the scan-wedge class #108/#120) merged ~10:36Z.
-  Queued now: #125 (responder toolbox), #126+#128 (reviewer STEP-0: injected login + `,comments`
-  — same surface, sibling-bundle note on #126), #127 (merge-path docs drift). #103 open
-  (containment holds; do NOT tighten activeDeadline / reject unit=-). #132 meta-fixed by hand
-  ~11:20Z (CF_ACCOUNTS + LOG_LEVEL=info, dequeued; close on the acceptance probe —
-  cloudflare_zone_requests_total present). #116 CLOSED ~11:25Z (fix was already merged
-  `8578973` 2026-08-07; maintenance verified live on both mirrors via pushgateway metrics).
-  #107 CLOSED ~10:50Z with both acceptance probes.
-- **Cloudflare public-ingress (FU-039/ADR-101): ARMED ~11:15Z** — operator ran the token apply;
-  CLOUDFLARE_INGRESS_WRITE stored, ExternalSecret SecretSynced after a force-refresh kick, and
-  the provider-terraform pod restarted so the token is IN-PROCESS (verified by exec). Remaining
-  operator-witnessed acts: the echo test claim, then the ha retrofit as consumer #2.
-- **Operator physical/one-trip**: wk-metal-02 cable/switch-port (#117) + the laptop4 plug
-  (#121) — same corner.
-- **FU-149 spot-check** still pending a post-rollover firing of `ResponderTriageBudgetExhausted`
-  with the `triage: none` guard (no firing yet = nothing to check).
-- **Frozen (goal #17, operator's comparison)**: circles PR#21 (`major/awaiting-human`, DIRTY) and
-  DRAFT PR#25 — do not touch, do not merge, do not dispatch.
+- **Cloudflare/PublicRoute: ARMED, zero consumers.** Operator's next acts: the echo test claim,
+  then the ha retrofit (consumer #2). SERVICES.md row deliberately deferred until one route has
+  actually flowed. Zone-ruleset leg deferred ≥consumer #2. FU-039 open legs: DIY GraphQL poller
+  (teststuff.net edge data), declare cloudflared's :2000 port in tofu (then PodMonitor back to
+  portNumber).
+- **CI throughput rebuilt today**: org-standard PR-cancel concurrency on all 11 ci.yamls
+  (docs/ci.md §Concurrency) + ci-runner-01 at 16G with TWO slots (verified active). Watch: first
+  time two e2es run concurrently, glance at dockerd/kind contention.
+- **oracle**: #216 (operator spec PR) still DIRTY — author rebases, meta reviews+merges. PR#210
+  in the merge-conflict lane post-unwedge. Pins #193/#194/#215 working through. doc_type fork
+  filed inert as #219 (operator handles oracle-side).
+- **circles**: assembly PR#54 BEHIND+CHANGES_REQUESTED (review-round grind); children #59/#60
+  queued. Frozen: PR#21/#25 (goal #17 comparison) — do not touch.
+- **platform queues**: agent-runtime #36/#35/#33/#13/#12 queued today (#12 first — the
+  actual-spend gate charges the cost_usd it corrupts); openrouter-operator#6 queued (expiry
+  re-mint, delete+create shape). homelab: #103 open (containment holds), #127 queued (docs
+  drift). Watch the platform loop actually DISPATCHES these (first agent-runtime rides ever).
+- **Operator physical/one-trip**: wk-metal-02 cable reseat (100Mbps after the knock-reseat, was
+  1G — #117 closed with the caveat) — same corner as the retired laptop4-plug errand.
+- **tuya fleet frozen, ACCEPTED** (plugs to be replaced eventually): silence c73baef2 expires
+  ~08-22 → responder re-triages automatically if still stale. konditsioneer remote power-cycle
+  untrustworthy until then.
+- **FU-149 spot-check** still pending a post-rollover ResponderTriageBudgetExhausted firing.
 - **Soak watches**: iac-sentinel shadow (→ G01 flip, FU-106); router shadow decisions (→ P4,
-  FU-095); Monday 05:00 retro (= FU-058 run 3); goal-decompose-on-opus quality (1b4bda5).
+  FU-095); Monday 05:00 retro (FU-058 run 3); goal-decompose-on-opus quality (1b4bda5).
 
 ## Durable warnings — re-read before touching these files
 
