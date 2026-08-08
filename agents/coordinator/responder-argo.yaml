@@ -590,14 +590,20 @@ spec:
               # bodies at wake (dispatch onto broken substrate stays a human call), but the
               # agent-fix verdict is still the durable record.
               # The candidate list is no longer (default, platform): STEP 1 routes by the named fix
-              # surface, so a session may legitimately land on any claimed -iac. Searching only the
+              # surface, so a session may legitimately land on ANY claimed repo. Searching only the
               # default would silently drop the verdict — the issue would sit unlabelled, the bell
               # would never ring, and the finding would look like a report-only triage. Order is
               # cheapest-first (the default is still the common case) and the loop breaks on the
               # first hit, so the extra REST reads only happen when the route actually moved.
+              # ⚠ The candidates are ALL claimed repo names, NOT just the `-iac` ones (#154): STEP 1
+              # also routes app-ward ("the fix is that stack's application code → the stack's app
+              # repo"), and a workflow/CI file in a stack repo is app-repo surface. Filtering to
+              # -iac here made those filings inert — oracle-fleet#228 carried 'fix-verdict: fix' and
+              # sat unlabelled for ~6h until a human hand-queued it. (The -iac filter on ROUTE_REPO
+              # above is a different question and stays: a stack's DEFAULT route is its -iac.)
               VREPOS=""
               for vr in "$ROUTE_REPO" "teststuffstash/homelab" \
-                        $(printf '%s' "$CLAIMS" | jq -r '.items[]?.spec.repos[]?.name | select(endswith("-iac")) | "teststuffstash/" + .' 2>/dev/null || true); do
+                        $(printf '%s' "$CLAIMS" | jq -r '.items[]?.spec.repos[]?.name | "teststuffstash/" + .' 2>/dev/null || true); do
                 case " $VREPOS " in *" $vr "*) continue;; esac # the default is usually also in the claim list
                 VREPOS="$VREPOS $vr"
               done
