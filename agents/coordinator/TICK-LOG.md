@@ -2989,3 +2989,46 @@ master mid-session makes this ROUTINE, not exotic — pull --rebase before push 
   deferral markers from the semaphore-starved night, not incidents (crosscheck belt: clean).
 - Watches re-armed (needs-meta + 2h heartbeat + handoff; killed 4 orphaned processes from the
   dead session first — they were still emitting into a closed session).
+
+## 2026-08-08 (~11:00–14:00Z, operator-paired) — arming day: the capability went live, and every lane got faster
+
+- **Cloudflare capability ARMED end-to-end**: operator's token apply → ESO force-refresh →
+  provider pod restart → token verified IN-PROCESS. PublicRoute: built+armed, zero consumers —
+  the test claim + ha retrofit stay operator-witnessed. docs/cloudflare.md REWRITTEN around what
+  Cloudflare now is ("the public edge"): status snapshot up top, PublicRoute completion table
+  leads, ONE token matrix (the June draft table died), §History compresses the migration.
+- **#132 took FOUR rounds and the lesson is the verdict-line rule applied to MYSELF**: merged the
+  triage's README-inferred CF_ACCOUNTS (no-op at v0.2.3 — never read the pinned source), then
+  FREE_TIER (gated every zone fetcher), then CF_EXCLUDE_ZONES (free zone leaks past
+  filterNonFreePlanZones and poisons the BATCHED query), then the structural truth: eid-demo.com
+  has NO DNS RECORDS — the absence-alert watched a metric that cannot exist. Re-keyed to
+  CloudflareExporterDown (target health). Real edge signal today = cloudflared's OWN metrics:
+  119 series via PodMonitor — the tunnel exported into the void for 25 days (portNumber trap:
+  it matches DECLARED container ports only; relabel to podIP:2000 until the port lands in tofu).
+- **Free-vs-pro GraphQL matrix VALIDATED LIVE** (the API's own error walls, not docs): free
+  zone gets 1dGroups/adaptiveGroups(1d-window,8d-retention)/firewallEvents/dnsAnalytics; Pro
+  adds ONLY 1mGroups + wider windows (retention UNCHANGED). Pro-for-monitoring: not justified.
+  Audit-log fix: the regex had matched "Access: Audit Logs Read" (wrong product); the ENDPOINT's
+  docs name the group — Account Settings Read. Provider v5 "inconsistent result" on token modify
+  = ordering, mutation lands (gotcha 3).
+- **CI throughput, both sides in one day**: org-standard concurrency block (docs/ci.md
+  §Concurrency; PR-heads cancel, pushes queue) landed on ALL 11 ci.yamls — oracle's PR#224
+  (operator-authored, conditional cancel protecting master publishes) + 9 mechanical PRs +
+  homelab direct; first live cancellation observed within minutes. Supply side: ci-runner-01
+  replaced at a drained-queue window — 16G + TWO runner slots (e2e scripts were already
+  run-scoped; in-guest truth: the "11.1/12G used" was page cache, 9.9G available). Verified
+  both services active post-cloud-init.
+- **The unlabeled-issue blind spot (operator: "nothing is happening here")**: SIX issues across
+  agent-runtime (5, up to a month old) + openrouter-operator (1) sat with NO labels — invisible
+  to every clause, and the board sweep read homelab only. All queued with currency checks
+  (agent-runtime#12 is now load-bearing: the actual-spend gate charges the cost_usd it corrupts).
+  Class fix ×2: needs-meta clause 3 (unlabeled >24h on platform repos; dry-run + positive
+  control, caught openrouter-operator#6 on its FIRST pass after the manual sweep missed it) +
+  skill step-2 reads the platform repo list from the claim. fu-sweep gained "reconcile the
+  machine lane FIRST" (the FU-133 "leg c" label collision as the canonical sync-by-substance
+  example).
+- **tuya verdict**: HA restart did NOT unfreeze the fleet (last_updated non-advancing across a
+  4-min gap) — operator accepts degradation, replaces plugs later. 14d silence c73baef2;
+  expiry = automatic re-triage. #117 closed (cable knock; ⚠ link renegotiated at 100Mbps, was
+  1G — a firm reseat recovers 10×). #121/#116/#107/#124/#125/#126/#128/#132/#222 all closed
+  today; PR#129/130/135/136/224 + 9 sweep PRs merged.
