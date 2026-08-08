@@ -120,10 +120,18 @@ as if at home; recipe in `docs/runbook.md`.
 
 ## Secrets
 
-Out-of-repo, in the jail under `~/.claude/`: `homelab-opnsense/{key,secret}` (OPNsense API),
-`homelab-pve-ssh/` (Proxmox token + SSH seed key), `homelab-matchbox/` (gRPC client certs),
-`homelab-ha/` (Home Assistant tokens + Grafana pw), `homelab-droplet/`, `cloudflare/`
-(read/write/acme tokens + the phone `.p12`), `homelab-aws/` (scoped read-only audit key). Tofu state, `*.tfvars`,
+**The KeePass wallet is canonical** (`~/.claude/homelab-keepass/homelab.kdbx`, keyfile-unlocked —
+`scripts/keepass-env.sh` exports string secrets, `scripts/wallet-files.sh` regenerates the file
+caches; read one ad-hoc with `keepassxc-cli show -q --no-password -k …/homelab.keyx …/homelab.kdbx
+<entry> -a Password`). File caches live under `~/.claude/<service>/` — **never `~/.ssh`**; a
+missing cache means "re-run wallet-files.sh", not "host-side only" (a jail session concluded
+exactly that about Forgejo, 2026-08-08, while `homelab-forgejo/id_ed25519` sat valid two
+directories over). Current cache dirs: `homelab-pve-ssh/` (Proxmox+VM SSH), `homelab-matchbox/`
+(gRPC certs), `homelab-forgejo/` (SSH + GPG keypairs; API token is a wallet STRING),
+`cloudflare/` (read/write/acme/ingress tokens + the phone `.p12`), `tuya/` (device keys),
+`homelab-garage/`, `homelab-github-{merge,reviewer}/`, `homelab-runner-app/`,
+`homelab-wireguard/`, `homelab-tofu-state-backups/`. (OPNsense/HA/droplet/AWS creds are
+wallet strings now — the old per-service dirs are gone, FU-001.) Tofu state, `*.tfvars`,
 `kubeconfig`, `talosconfig` are gitignored. The repo is **public** — keep secrets out of git
 (values live in KeePass/Infisical, see `docs/secrets.md`; SOPS is NOT used, ADR-062).
 
