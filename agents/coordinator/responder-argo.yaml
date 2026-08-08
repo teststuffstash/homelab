@@ -143,6 +143,15 @@ spec:
           - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
           - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
           - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
+          # Cost attribution (2026-08-08 label audit): the responder was one of the roles whose
+          # sessions exported NO telemetry — its subscription-equiv cost was invisible on the
+          # agent-cost dashboard. Same attrs contract as coordinator/reviewer-session.sh.
+          - { name: CLAUDE_CODE_ENABLE_TELEMETRY, value: "1" }
+          - { name: OTEL_METRICS_EXPORTER, value: "otlp" }
+          - { name: OTEL_LOGS_EXPORTER, value: "otlp" }
+          - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: "http/protobuf" }
+          - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.monitoring.svc.cluster.local:4318" }
+          - { name: OTEL_RESOURCE_ATTRIBUTES, value: "service.name=claude-code,role=responder,stack=platform" }
           - name: GH_TOKEN
             valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
           - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
