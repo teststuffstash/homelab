@@ -47,14 +47,31 @@ spec:
   workerModel: claude/haiku
   workerModelFallbacks: []
   repos:
-    # Platform-image repos, context-only (FU-052 "still to onboard", visibility half done
-    # 2026-07-16): the review-reflex derives its scan set from the stack claims, so agent PRs
-    # here were invisible until a human dispatched the reviewer by hand (found live on
-    # agent-runtime#14). No fixer: these build the agent images; workers don't run pods in them.
-    # labels: {} = claim-owned label set (FU-068, taxonomy only) — tofu label_repos handoff via
-    # `tofu state rm` like the oracle repos.
+    # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
+    # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by
+    # its PR#37 (2026-08-07): `.agents/fix.yaml`, tests + a `unit` CI job, CODEOWNERS on the
+    # governor paths. Only this claim-side switch was missing — five queued issues sat
+    # invisible to the scan because dispatchability is a fixer-block predicate (IAC-T03);
+    # found 2026-08-08 when the operator asked why nothing was happening. Every
+    # server-default declared explicitly (the 2026-07-16 OutOfSync lesson).
     - name: agent-runtime
       labels: { extra: [] } # explicit (server default) — bare {} gets stamped to {extra: []}, ArgoCD drifts
+      storage:
+        standard: "5Gi" # docker:false → no per-ride scratch; flipping docker later must add it (ADR-089)
+      fixer:
+        budgetUSD: 5
+        resetInterval: weekly
+        guardrail: none # paid stack chain — only-free would 403 before spend; budgetUSD bounds it
+        docker: false # rides run pytest/devbox over agent-finalize; images build in CI, never in rides
+        claudeTier: true # platform-stack posture (subscription cutover 2026-08-07, FU-134)
+        egress:
+          profile: none # devbox/nix are the only KNOWN deps (the `unit` gate is pytest under
+          # devbox); no pypi pre-declared — agent-finalize is stdlib-shaped, and harvest-first
+          # (FU-142) means the first trip names the REAL dep instead of a guessed one.
+          extraFQDNs: []
+          enforce: true
+    # agent-coordinator stays context-only (the 2026-07-16 ruling): no repo-side lane
+    # (.agents/), and its content is tier-3 loop machinery.
     - name: agent-coordinator
       labels: { extra: [] }
     # homelab: CONTEXT-ONLY (no fixer block) — FU-068, 2026-08-04. It is the platform's own -iac
