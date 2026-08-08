@@ -855,7 +855,12 @@ if [ "$HARNESS" = "claude" ]; then
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
-  CLAUDE_ENV=$'        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"'
+  # Cost attribution (2026-08-08 label audit): claude-harness WORKERS exported no telemetry, so
+  # every haiku ride was missing from the stacks' subscription-equiv on the agent-cost dashboard.
+  STACK_LABEL="${STACK_LABEL:-$(jq -r --arg r "$PROJECT" \
+    '.stacks[] | select([.repos[] | if type=="object" then .name else . end] | index($r)) | .name' \
+    "$HERE/stacks.json" 2>/dev/null | head -1)}"
+  CLAUDE_ENV=$'        - name: ANTHROPIC_BASE_URL\n          value: "'"$PROXY_URL"$'/anthropic"\n        - name: ANTHROPIC_AUTH_TOKEN\n          value: "ref:'"$NS"$'/claude-session"\n        - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\n          value: "1"\n        - name: CLAUDE_CODE_ENABLE_TELEMETRY\n          value: "1"\n        - name: OTEL_METRICS_EXPORTER\n          value: "otlp"\n        - name: OTEL_LOGS_EXPORTER\n          value: "otlp"\n        - name: OTEL_EXPORTER_OTLP_PROTOCOL\n          value: "http/protobuf"\n        - name: OTEL_EXPORTER_OTLP_ENDPOINT\n          value: "http://otel-collector.monitoring.svc.cluster.local:4318"\n        - name: OTEL_RESOURCE_ATTRIBUTES\n          value: "service.name=claude-code,role=worker,stack='"${STACK_LABEL:-none}"$',project='"$PROJECT"$'"'
 fi
 
 # ADR-087 / FU-018 leg A (DEFAULT-ON for goose+proxy since 2026-07-10 — acceptance green on
