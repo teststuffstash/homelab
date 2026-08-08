@@ -219,7 +219,11 @@ DISMISSED the assembly PR's approval — three times** — so the churn was gati
 terminus. Meanwhile two real crash bugs (#193/#194) sat queued behind six cosmetics until the
 operator's survey flagged them for a hand-pin. The depth-aware gate needs BOTH signals: depth
 (≥2 = don't auto-queue) and the reviewer's own severity language (a comment the reviewer calls
-style-only must not become queued work unasked).
+style-only must not become queued work unasked). And the assembly merge left a THIRD residue:
+auto-merge deleted the goal branch, so every still-queued sprout's inherited `Base: goal/**`
+line pointed at a dead ref — seven bodies hand-stripped to the master default before the pinned
+crash-bug rides struck on a failed fork. The assembly closeout should retarget (or drop) the
+surviving sprouts' `Base:` lines as part of closing the goal.
 
 ### The rungs
 
