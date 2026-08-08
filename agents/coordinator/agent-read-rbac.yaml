@@ -19,6 +19,17 @@
 # NEVER GRANTED, in either role: `secrets`. The platform's standing boundary is that agents wire
 # secret REFERENCES, never values (iac-lane.md). `configmaps` is also withheld — most are harmless,
 # but "most" is not a boundary and configmaps are where credentials get left by accident.
+#
+# DELIBERATELY NOT GRANTED, and homelab#125 asked for both — recorded so the next reader does not
+# re-litigate it. (a) `pods/portforward`: it only pays off with a `hubble` binary to point at the
+# relay, and the agent-coordinator image ships none; granting the verb alone buys a port with
+# nothing to speak to it, and shipping the CLI is an image change, not an RBAC one. (b)
+# `services/proxy`: it was wanted to reach Prometheus, but the responder can already reach
+# `kube-prometheus-stack-prometheus.monitoring.svc:9090` over the ordinary pod network (verified
+# from an agent pod under the enforced egress profile, 2026-08-08). A verb that widens the API
+# server into a generic in-cluster HTTP proxy is a poor price for a route that already exists.
+# Both gaps are closed in the responder BRIEF instead (responder-argo.yaml) — see roles.md
+# §responder, "POLICY_DENIED runbook".
 ---
 # The APP lane: a worker fixing its own service. Scope is the service's own runtime — is it up, what
 # did it log, what did the kubelet say about it. Deliberately nothing cluster-wide: an app worker has
@@ -74,6 +85,13 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [applications, workflows]
     verbs: [get, list]
+  - apiGroups: [cilium.io]
+    resources: [ciliumnetworkpolicies, ciliumclusterwidenetworkpolicies]
+    verbs: [get, list] # homelab#125 gap 3: the responder is asked to triage POLICY_DENIED without
+    # read access to the policy that PRODUCED the deny — `cilium.io` appeared zero times in this
+    # file. A drop tells you a destination was refused; only the policy says whether it is a missing
+    # allowlist entry, the wrong namespace selector, or working as intended. Same read-only
+    # rationale as the ESO rule below: a policy spec carries destination NAMES, never values.
   - apiGroups: [external-secrets.io, generators.external-secrets.io]
     resources: ["*"]
     verbs: [get, list] # specs carry remote REFERENCES (names), never values — the Secret itself stays unreadable
