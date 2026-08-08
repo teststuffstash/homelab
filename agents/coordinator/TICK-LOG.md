@@ -3070,3 +3070,12 @@ master mid-session makes this ROUTINE, not exotic — pull --rebase before push 
   4 children → 19 sprouts (≈5× amplification, half folded back same night), the squash boundary
   = the expensive tail (3 orphaned PRs, ~8h morning latency). If goal arcs recur: children must
   not base on the goal branch after assembly opens.
+
+### 2026-08-08 (~16:00Z) — subscription concurrency 3→5 (operator upgraded Max 5x→20x)
+
+All three declared sites in step (proxy Deployment env — now EXPLICIT, was code-default 3 —,
+the Argo subscription-capacity ConfigMap, the jail latch default); verified live:
+/anthropic-limit reports max=5 after the proxy roll. Utilization thresholds untouched — they
+read Anthropic's own per-plan fraction headers, so the plan upgrade recalibrates them at the
+source. This answers the 01:00Z "semaphore is the binder" datum and the FU-088/FU-109 tier-split
+revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~30m (known class).
