@@ -76,3 +76,24 @@ spec:
           annotations:
             summary: "OpenRouter key {{ $labels.key }} below 10% of its spend limit"
             description: 'Standing key {{ $labels.key }} has {{ with query (printf "router_openrouter_key_limit_remaining_usd{key=''%s''}" $labels.key) }}{{ . | first | value | humanize }}{{ end }} USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties.'
+
+        # homelab#158/#163: the ACCOUNT-scope capacity latch (credit floor / hard-402 / 429s from
+        # ≥2 distinct models) has held continuously for 30m — this is the whole OpenRouter leg,
+        # not one model, so it is fleet-wide. `for: 30m` is the judgment call and is set from the
+        # latch's own arithmetic: a single engagement holds OR_CAPACITY_HOLD_S=900s (the credit
+        # leg HEADROOM_POLL_S+120=1020s) and then self-expires, so one blip — including its full
+        # post-recovery tail on an idle fleet — cannot reach 30m. Staying latched that long means
+        # the latch was RE-engaged mid-window, i.e. the condition is persisting. A proxy roll
+        # forgets the in-memory latch, so a roll reads 0 and can never itself page; the cost is
+        # the reverse ~30m re-arm blank after a roll during an ongoing outage (the known class
+        # the #162 review flagged), which the multi-hour 2026-08-08 outage this alert exists for
+        # still clears comfortably. Same window as the two capacity facts above.
+        - alert: OpenRouterCapacityDown
+          expr: router_openrouter_capacity_down == 1
+          for: 30m
+          labels:
+            severity: warning
+            triage: none # capacity fact — the degrade IS the correct behavior, and a triage ride would defer on this same latch
+          annotations:
+            summary: "OpenRouter account is capacity-down"
+            description: 'OpenRouter account-scope capacity has been latched for 30m — worker dispatch is degrading to the haiku subscription rail or deferring the OpenRouter rail. Probe: GET openrouter-proxy.agent-egress:8080/router-status → .openrouter_capacity (reason / remaining_s / recent_429_models) names which leg latched.'
