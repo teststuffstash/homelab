@@ -134,7 +134,10 @@ while true; do
     # healthy 3-min-old pod (2026-08-08, homelab#164 ride). Distinct progress, not repetition —
     # drop them before counting; a pod emitting ONLY those is bootstrapping, not looping.
     tail40=$(printf '%s\n' "$tail40" | grep -v "^copying path ")
-    [ -n "$tail40" ] || continue
+    # …and judge repetition only on a FULL sample: right after warm-up the filter leaves 1-2
+    # residual lines, and "2 distinct of 2" fired on the same healthy pod the first fix was for.
+    # Fewer than 20 usable lines is a bootstrap/quiet tail, not evidence of a loop.
+    [ "$(printf '%s\n' "$tail40" | grep -c .)" -ge 20 ] || continue
     distinct=$(printf '%s\n' "$tail40" | sed 's/[0-9]//g' | sort -u | wc -l)
     if [ "${distinct:-99}" -le 3 ] && [ "$last_loopwarn" != "$rp" ]; then
       echo "RIDE-LOOPING: $rp last 40 log lines collapse to ${distinct} distinct — degenerate repetition (agent-runtime#13); pod reads Running but is not progressing"
