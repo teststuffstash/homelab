@@ -16,5 +16,16 @@ spec:
   selector:
     matchLabels: { app: cloudflared }
   podMetricsEndpoints:
-    - portNumber: 2000
-      interval: 60s
+    # NOT portNumber: that field matches against DECLARED container ports, and the tofu
+    # Deployment declares none — the generated keep-rule on
+    # __meta_kubernetes_pod_container_port_number matched nothing and the job had zero
+    # targets (found live: scrape config rendered, activeTargets empty). The CRD's own doc
+    # says undeclared ports need relabeling; this rewrites the address to podIP:2000.
+    # Declaring the port in tofu/cloudflare's Deployment is the cleaner fix — fold it into
+    # the next apply of that root, then this can revert to portNumber.
+    - interval: 60s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_ip]
+          targetLabel: __address__
+          replacement: $1:2000
+          action: replace
