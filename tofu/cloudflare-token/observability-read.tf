@@ -30,9 +30,18 @@ data "cloudflare_api_token_permission_groups_list" "tunnel_read" {
   scope = "com.cloudflare.api.account"
 }
 
-data "cloudflare_api_token_permission_groups_list" "audit_logs_read" {
-  name  = "Audit%20Logs%20Read"
+# Audit-logs read: the exact catalog name drifted from every guess ("Audit Logs Read" → empty
+# list, live 2026-08-08), so select by regex over the unfiltered account-scope catalog instead.
+# `one()` keeps it FAIL-LOUD: zero or multiple matches abort the plan with a clear error.
+data "cloudflare_api_token_permission_groups_list" "account_all" {
   scope = "com.cloudflare.api.account"
+}
+
+locals {
+  audit_logs_read_id = one([
+    for g in data.cloudflare_api_token_permission_groups_list.account_all.result :
+    g.id if can(regex("(?i)audit log", g.name)) && can(regex("(?i)read", g.name))
+  ])
 }
 
 resource "cloudflare_api_token" "observability_read" {
@@ -54,7 +63,7 @@ resource "cloudflare_api_token" "observability_read" {
       permission_groups = [
         { id = data.cloudflare_api_token_permission_groups_list.analytics_read_account.result[0].id },
         { id = data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.audit_logs_read.result[0].id },
+        { id = local.audit_logs_read_id },
       ]
       resources = jsonencode(local.account_resource)
     },
