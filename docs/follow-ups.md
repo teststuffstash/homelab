@@ -133,8 +133,10 @@ six OVERSIZE items pointer-ized into
       AppProject/namespace remain operator PRs; **Public-ingress leg BUILT 2026-08-08 (ADR-101),
       UNARMED**: PublicRoute XRD+Composition (per-claim tunnel, subtree enforcement) + the
       cloudflare-exporter + all token mints staged; arming = operator stores
-      CLOUDFLARE_INGRESS_WRITE (mint: `cloudflare-token-tofu apply`). Open: zone-phase ruleset
-      aggregation (≥2nd consumer), the ha retrofit (consumer #2), product zones. Design:
+      CLOUDFLARE_INGRESS_WRITE (mint: `cloudflare-token-tofu apply`; **ARMED 2026-08-08**). Open:
+      zone-phase ruleset aggregation (≥2nd consumer), the ha retrofit (consumer #2), product
+      zones, **teststuff.net edge metrics** (free-plan zone — invisible to the lablabs exporter
+      at v0.2.3 (#132); needs a DIY GraphQL poller, github-exporter pattern). Design:
       [`docs/cloudflare.md`](cloudflare.md) §Public ingress. Program context:
       `ROADMAP.md` → Programs in flight → "Platform self-service via Crossplane". Relates ADR-076,
       ADR-085, ADR-092, FU-068.

@@ -16,7 +16,7 @@ spec:
             severity: warning
           annotations:
             summary: "Cloudflare edge metrics absent"
-            description: "No cloudflare_zone_requests_total series for 30m. SYMPTOM ONLY — exporter pod down, GraphQL API failing, or the read token revoked/expired; the edge itself may be fine. Check: pod logs in monitoring, then token verify (docs/cloudflare.md §Token matrix)."
+            description: "No cloudflare_zone_requests_total series for 30m. SYMPTOM ONLY — exporter pod down, GraphQL API failing, or the read token revoked/expired; the edge itself may be fine. Check: pod logs in monitoring, then token verify (docs/cloudflare.md §Token matrix). ⚠ Scope (#132): at exporter v0.2.3 this metric exists for NON-free-plan zones only (eid-demo.com today) — teststuff.net (free plan) never emits it, so this alert guards the exporter pipeline, not the teststuff.net edge (that visibility is FU-039's DIY GraphQL leg)."
         # Symptom alert for the future public endpoints (armed now, quiet on today's traffic):
         # origin-side failures surface as 5xx at the edge before anything else user-visible.
         - alert: CloudflareEdge5xx
