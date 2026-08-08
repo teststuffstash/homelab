@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cloudflared
+  labels: { app: cloudflared }
+spec:
+  # The tunnel daemon has exported Prometheus metrics on :2000 since day one
+  # (`--metrics 0.0.0.0:2000` in tofu/cloudflare/) — unscraped for its first 25 days (#132's
+  # sibling find, 2026-08-08). This is the PLAN-INDEPENDENT half of edge observability:
+  # per-hostname tunnel requests + response codes, QUIC/HA connection health, retries —
+  # local truth about the ha.teststuff.net path regardless of what the free zone's GraphQL
+  # will serve. portNumber because the tofu Deployment declares no named ports; changing
+  # that would be a tofu apply for a cosmetic rename.
+  namespaceSelector:
+    matchNames: [cloudflared]
+  selector:
+    matchLabels: { app: cloudflared }
+  podMetricsEndpoints:
+    - portNumber: 2000
+      interval: 60s
