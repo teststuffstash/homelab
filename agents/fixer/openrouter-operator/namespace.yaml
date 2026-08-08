@@ -1,0 +1,14 @@
+# agent-runtime's ride namespace — declared here, NOT composed (2026-08-08). The AgentStack
+# composition creates only the `<stack>-agents` loop namespace; worker namespaces are
+# assumed-existing APP namespaces (ns==repo), and composing them was rejected because a
+# claim's deletion would then cascade into namespaces shared with real workloads. agent-runtime
+# is the first fixer-enabled repo with NO app: nothing ever created its ns, so the claim's
+# composed resources (quota, egress CNP, secrets) had nowhere to land (stack-lint K8S-01,
+# found at fixer-enablement). One declared Namespace in the same dir the fixer app already
+# syncs closes it; a future fixer-enabled app-less repo copies this file's pattern.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-runtime
+  labels:
+    platform.teststuff.net/agentstack: platform
