@@ -536,7 +536,8 @@ the block needs pruning, not more headings.
 - [ ] **FU-156** — **Credential-expiry BELT (re-scoped 2026-08-08, operator: dates-in-git is the
       wrong system).** One gauge `credential_expiry_timestamp_seconds` + one <30d alert; live-poll
       Cloudflare `/user/tokens` (needs a tiny User:API-Tokens:Read mint), declared expiries for
-      file-shaped creds. Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry.
+      file-shaped creds; alert is `triage: none` → HA (responder can't touch admin creds — the
+      remedy is host-side). Design: [`docs/secrets.md`](secrets.md) §Credential expiry is telemetry.
       **Urgency is real**: 4 CF tokens expire 2026-12-14…2027-01-09 (earliest = the broad
       "Read all resources" token — RETIRE it when `homelab-observability-read` lands, don't
       renew). **Next:** mint the inventory-read token + the exporter leg (can ride the

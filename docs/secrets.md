@@ -110,7 +110,12 @@ right way (blackbox `probe_ssl_earliest_cert_expiry` — nobody documents cert e
 credentials get the same shape:
 
 - **One gauge**: `credential_expiry_timestamp_seconds{provider, credential}` + one alert rule
-  (warning at <30d, escalating <7d) → the ordinary alert→responder lane owns the rest. No
+  (warning at <30d, escalating <7d), **labeled `triage: none`** — the responder can do NOTHING
+  about admin credentials (the remedy is host-side by construction: admin wallet, dashboard,
+  a host-only apply), and the condition is deterministic, so an LLM triage session would be
+  pure waste. The alert routes to the HUMAN surface (Home Assistant) with its annotation
+  naming the renewal runbook (which mint root + the re-store checklist) — the
+  `GithubVendorOutage` precedent: machine-unactionable, human-informational. No
   per-credential tracker lines, ever.
 - **Live-polled where the provider allows**: Cloudflare `GET /user/tokens` lists every token with
   `expires_on` — needs a tiny `User: API Tokens: Read`-scoped token (user-scoped, so it is NOT
