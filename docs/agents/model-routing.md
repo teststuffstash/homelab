@@ -435,6 +435,56 @@ per-cell start-tier in the store, decisions logged, no behavior change until the
 clean). Relates ADR-096 (the /route contract), homelab#158 (the emergency degrade), FU-095
 (the pilot evidence), FU-088 (the safety-net gates this must never starve).
 
+#### M11a. The shadow leg as built (homelab#159) — what to read during the soak
+
+All three pieces live in `router.py` and run on every `/route` call; **the served walk is byte-for-byte
+the one above it** — the ladder is computed from the same filtered candidates and the same capacity
+gates, attached to the response as `decision.shadow`, and written to the store. The launcher reads
+`.decision/.model/.reason/.basis/.half_open/.retry_after_s` and nothing else, so the extra key is
+inert by construction.
+
+| piece | where | what the soak reads |
+|---|---|---|
+| subscription as a candidate | `_shadow_ladder()` — priced `0.0` when `subscription_ok(tier)` passes, **unpickable** otherwise; a synthetic `ladder.subscription_model` (`claude/haiku`) enters the ordering when the chain names no `claude/*` | `router_shadow_decisions_total{rail,tier,urgency,agrees}`, `router_shadow_subscription_blocked_total{reason}` |
+| urgency | `resolve_urgency()` + `urgency_map` in `model-classes.json` | the `urgency`/`urgency_source` columns of `shadow_decisions` |
+| per-cell start tier | `cell_start_tier` table, fed by `fold_outcome_into_cell()` from the EXISTING `POST /report` feed | `router_shadow_start_tier{class,urgency}`, `/router-status` → `ladder_cells`, `shadow_24h` |
+
+Three readings had to be pinned down to build it; they are the things to re-argue at the flip:
+
+- **The rungs are ordered by TRUE MARGINAL cost, which is a different axis from the in-rail
+  effective $/M.** `free (0) → subscription (1) → paid (2)`; within a rung the existing
+  cheapest-effective + jitter-band pick is reused unchanged.
+- **Urgency is the prior, the cell is the correction.** `elastic` takes the learned rung as-is (it
+  begins at free — "tier 1 first" — and only climbs on our own evidence); `tight` floors at the
+  subscription rung until the cell has PROVEN free (`promote_after` banked-clean runs while
+  already starting there). Reading it the other way — elastic *forcing* rung 0 every time — would
+  make the learned table inert for exactly the half of the traffic it is supposed to teach.
+- **A re-probe that banks clean is adopted immediately**, not after `promote_after`. The jitter
+  band's whole job is re-discovering a recovered free model; making recovery wait days would
+  defeat it. Degradation is the asymmetric direction: a strike at rung *t* starts the cell at
+  *t+1*.
+
+⚠ **FU-088 is a BOUND, not a preference, and it is asserted in the self-test**: the subscription
+rung is priced unpickable whenever the 429 latch holds, either utilization window is past its
+(tier-composed) threshold, **or the semaphore is full** — so the ladder can only ever consume
+headroom the reviewer/coordinator lane was already willing to give up. `route()` memoizes the two
+capacity gates, so a routed dispatch still costs at most one read of each (§M11's "no new probes"):
+what changed is that the subscription verdict is now read on *every* route rather than only when a
+`claude/*` candidate survived filtering.
+
+⚠ **Known gap, and it bounds what the soak can conclude:** `agent-session.sh` does not send
+`urgency` *or* `labels` in its `/route` body yet, so every production shadow line will read
+`urgency=tight (default)` and the (class, **urgency**) table will have only tight cells until the
+caller side lands. Per-class rail/rung evidence is unaffected — the elastic half of the grid is
+simply not being exercised. That wiring is the next leg (launcher-side, `agents/**`, deliberately
+out of #159's `Touches:`); the table it must read already exists and is the same one `/route`
+falls back to.
+
+The flip criterion is unchanged and is the P4 discipline: read `shadow_24h` for a few days, and
+promote only if the divergences (`agrees=false`) are the ones you would have wanted — the
+homelab#158 shape (OpenRouter capacity down → served *defers* while the ladder says
+`subscription:claude/haiku`) is the signature to look for.
+
 ### M12. Provider DOWN ≠ budget SPENT — the haiku degrade (operator directive, 2026-08-08)
 
 **This amends the standing tiering doctrine** ("workers stay cheap OpenRouter; the subscription is
@@ -447,7 +497,9 @@ route candidate priced at ~0 while it has headroom; this section only answers "t
 cannot buy anything at all" — a narrower, typed condition with a constant answer. When M11's leg
 lands (homelab#159) the trigger below becomes one input to the ladder rather than its own branch;
 the BOUNDS are the part that must survive the merge, because they are what keeps either mechanism
-from eating the safety net.
+from eating the safety net. ⚠ #159 shipped SHADOW-only (§M11a), so **this branch is still the one
+that acts** — the ladder merely logs that it would have reached the same rail; the trigger folds in
+at the P4 flip, not before.
 
 The evening that forced it: OpenRouter went hard-down for workers (the provisioning `keys-modify`
 daily limit + a $0.17 balance, openrouter-operator#26) and the **entire fleet's dispatch deferred
