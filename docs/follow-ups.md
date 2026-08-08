@@ -271,9 +271,13 @@ the block needs pruning, not more headings.
       was refused (`actions:write` absent from the coordinator App), so it closed/reopened the PR to
       fire a fresh `pull_request` run. **That disarms auto-merge**; the session noticed and re-armed,
       but nothing guarantees the next one will, and a silently disarmed PR is invisible to the merge
-      path (FU-079 class). **Next:** decide whether the coordinator App gets `actions: write`
-      (`tofu/github/`) — a privilege call, not a mechanical one — or whether re-running CI should be
-      a launcher-owned verb. Relates ADR-094 (launcher-owned dispatch), FU-079.
+      path (FU-079 class). **THREE more in ONE day 2026-08-08** (all post-VM-rebuild cold caches or
+      GH blips): oracle PR#218 close/reopened, oracle PR#217 + circles PR#69 needed META's jail
+      token (#69 latched `agent/blocked` — the coordinator's own comment names the 403). The
+      privilege call is now evidence-backed: **Next (OPERATOR, ~2 min):** grant the App
+      `actions: write` (GitHub UI + accept on the installation; App perms are not tofu-able), then
+      the ci-red play gains the uniform retry terminal and close/reopen retires. Relates ADR-094,
+      FU-079.
 - [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
       `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
       [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
