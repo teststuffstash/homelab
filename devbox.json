@@ -64,6 +64,10 @@
         "tofu -chdir=tofu/github init -input=false",
         "sh scripts/github-tf.sh \"$@\""
       ],
+      "cloudflare-token-tofu": [
+        "tofu -chdir=tofu/cloudflare-token init -input=false",
+        "sh scripts/cloudflare-token-tf.sh \"$@\""
+      ],
       "github-apps": [
         "bash scripts/github-apps.sh"
       ],

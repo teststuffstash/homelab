@@ -273,9 +273,16 @@ own domain) is a claim migration, not Cloudflare surgery.
 | **`homelab-observability-read` (NEW, `observability-read.tf`)** | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, audit logs) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL, no more UI-clicking), the CF Prometheus exporter, later responder triage |
 | platform-ingress write (FUTURE) | managed zones: DNS/rulesets/tunnel write | KeePass → Infisical → ESO → crossplane ProviderConfig; never in claims, never jail | the public-ingress composition |
 
-**Operator-applied tofu = exactly one root**: `tofu/cloudflare-token/` (it needs the admin
-token). Everything else consumes minted tokens. **Observability ships first**: apply the mint →
-store the read token (KeePass canonical, jail file, Infisical key) → the exporter lands as an
-`argocd/resources/` app on the ESO copy. Free-plan honesty: per-request logs are Enterprise
-(Logpush/Logpull) — the GraphQL Analytics API (aggregated series + security/firewall events) is
-what the jail and exporter actually query, and it covers the logs/errors-hunting use case.
+**Operator-applied tofu = exactly one root, one command**: `devbox run cloudflare-token-tofu
+plan|apply` — the github-tofu twin (`scripts/cloudflare-token-tf.sh`). The account-ADMIN token
+lives in the SAME separate host-only admin wallet as the GitHub org-admin token
+(`~/Documents/homelab-admin.kdbx`, keyfile-unlocked, entry `cloudflare-account-admin`) — the
+jail cannot reach it by construction. Minted tokens flow the OTHER way, into the ordinary
+wallet: `keepass-init.sh` entry `cloudflare-observability-read` → `wallet-files.sh` regenerates
+the jail cache (`~/.claude/cloudflare/observability-read`) → Infisical
+`CLOUDFLARE_OBSERVABILITY_READ` for cluster consumers via ESO. **Observability ships first**:
+apply the mint → store the read token (three places, the apply prints the checklist) → the
+exporter lands as an `argocd/resources/` app on the ESO copy. Free-plan honesty: per-request
+logs are Enterprise (Logpush/Logpull) — the GraphQL Analytics API (aggregated series +
+security/firewall events) is what the jail and exporter actually query, and it covers the
+logs/errors-hunting use case.
