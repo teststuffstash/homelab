@@ -21,8 +21,15 @@ spec:
             - name: CF_API_TOKEN
               valueFrom:
                 secretKeyRef: { name: cloudflare-exporter-token, key: token }
-            # NO CF_ZONES: the all-zones read token auto-discovers — future product zones
-            # (FU-039) appear in Prometheus the day they exist, no re-deploy.
+            # NO CF_ZONES: zones auto-discover under the account — future product zones
+            # (FU-039) appear in Prometheus the day they exist, no re-deploy. But CF_ACCOUNTS
+            # is REQUIRED for an account-scoped token (#132): without it the exporter has no
+            # account to enumerate zones under and silently collects nothing every cycle.
+            # Account ids are not secrets.
+            - { name: CF_ACCOUNTS, value: "07b08646b26bb43cd3073826f43b73da" }
+            # info, not the default error: a misconfiguration here fails SILENTLY at error
+            # level (#132 ran 30m with zero series and two startup log lines).
+            - { name: LOG_LEVEL, value: "info" }
             - { name: FREE_TIER, value: "true" }
             - { name: LISTEN, value: ":8080" }
           resources:
