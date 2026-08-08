@@ -23,6 +23,7 @@ diagram: |
       Queued --> Queued: held — deps / footprint / WIP / PR-cap (IL-T04)
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
+      InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
       InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
       InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
       MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
@@ -115,14 +116,36 @@ transitions:
   - id: IL-T06
     name: abandoned in-progress → c4c5 re-dispatch
     owner: scan C4/C5 clause
-    when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143)"
+    when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143) ∧ NOT reconciled by IL-T16 this pass"
     status: guarded
     guards:
       - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
       - desc: "agent/error invisible to the clause (FU-069 breaker)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/error"\)' }
+      - desc: "ONE selector for the abandoned predicate — the unit, the report and the IL-T16 belt cannot drift apart"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_SEL=" }
     incidents: ["2026-08-05 circles#22: pre-FU-143, C4/C5 re-rode a merged child — breakage #1 of three"]
+
+  - id: IL-T16
+    name: phantom in-progress reconciled → queued (the belt)
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "IL-T06's predicate ∧ the state PERSISTED past C4C5_PERSIST_S (issue quiet AND no ride pod
+      gone terminal within the window) ∧ no MERGED PR mentions the issue → add agent/queued, remove
+      agent/in-progress, comment the audit. Anything held falls through to IL-T06 unchanged."
+    status: guarded
+    guards:
+      - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
+      - desc: "merged-PR hold — a non-closing reference on a merged PR leaves this exact state; holding beats re-riding finished work"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "is mentioned by a MERGED PR" }
+      - desc: "add agent/queued FIRST, remove agent/in-progress SECOND, then re-read and prove the end state (the edit is not atomic)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ORDER IS LOAD-BEARING" }
+      - desc: "probe failure holds every candidate and writes nothing (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the phantom-label belt held every candidate" }
+    incidents:
+      - "2026-08-08 oracle#193 + circles#42/#46/#49: six phantom labels, zero worker pods — ~3h of two stacks idle. WIP caps counted ghosts and ADR-097 footprint holds refused SIBLING issues against dead work; found only because the operator asked why nothing was running, cleared by hand"
+      - "2026-08-08 oracle#193 again: the hand-clear removed agent/in-progress and FORGOT agent/queued — the issue went invisible a second time. That is why the belt writes queued first and verifies the end state"
 
   - id: IL-T07
     name: close by master merge
@@ -256,6 +279,23 @@ gaps:
     detail: "The exporter does not yet walk the sub-issue lineage into a convergence metric
       (rate > 1/run = diverging), and the harvest gate does not read remaining budget."
     fu: FU-090
+
+  - id: IL-G06
+    name: "merged-but-unlinked on MASTER only HELD, never resolved"
+    detail: "IL-T16 refuses to reconcile an issue any merged PR merely MENTIONS, because a PR that
+      merged with a non-closing reference leaves a state identical to abandonment (the FU-143
+      hazard, one lane over). It reports and falls through to IL-T06, so a human/LLM still decides —
+      the belt just never guesses. Resolvable the same way the goal lane resolved it: once
+      agent-runtime#34's finalize guarantees a strong `Implements #N` link, the mention test can be
+      tightened into an ownership test."
+    accepted: "hold-not-guess is the asymmetry (a missed clear costs a report line, a wrong one costs a duplicate ride); revisit when finalize guarantees the link"
+
+  - id: IL-G07
+    name: "the belt treats the symptom; the missing finalize is the cause"
+    detail: "agent-runtime#36 owns making finalize run on every exit path. Until it lands, phantom
+      labels keep being CREATED and IL-T16 keeps clearing them ≤1 scan interval later — visible as
+      a stream of RECONCILED report lines, which is itself the signal for how often the cause fires."
+    accepted: "belt-and-cause are separate items by design (homelab#155 vs agent-runtime#36); the report lines are the meter"
 
   - id: IL-G05
     name: "master-lane harvest graduation knob unbuilt"
