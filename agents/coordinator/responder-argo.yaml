@@ -32,6 +32,18 @@
 #                needs agent-fix ∧ agent/queued) and rings /fix-verdict; the fix-debounce
 #                workflow (fix-debounce-argo.yaml) judges the whole pending SET before any
 #                issue gets agent/queued. Replaces selfQueue (cb4ae5a).
+#   routing    = the owner of the FIX, not the owner of the symptom (#124, operator amendment
+#                2026-08-08). The claim lookup over the alert's namespace computes a DEFAULT;
+#                when the triage names its fix surface — and it nearly always can — the repo
+#                owning that surface wins. One night measured both failure directions: nine
+#                oracle-fleet egress drops whose fix was one line in oracle's claim were filed
+#                platform-side, while a uv failure whose SYMPTOM was oracle-fleet had its fix
+#                platform-side. Namespace predicts where a symptom appears, not who fixes it.
+#   resolve    = keyed on the recorded verdict (#124, FU-133 leg c). 'report-only' keeps the
+#                auto-close below — right for transient noise. 'fix' means the DEFECT outlives
+#                its alert (egress drops fire per ride and clear when the ride dies), so the
+#                clear neither closes nor comments; closure belongs to the merged fix and its
+#                acceptance probe, or to a human. Alert state ≠ defect state (iac-lane.md).
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -139,6 +151,20 @@ spec:
             # auto-closing under them is worse than leaving it open. A flapping alert cannot churn
             # issues either: the firing path's fp-issue belt REOPENS what this closed rather than
             # filing a new one.
+            #
+            # ── keyed on the RECORDED VERDICT (#124, 2026-08-08; FU-133 leg c) ────────────────
+            # The condition above was still "did a human speak", which reads the alert as if it
+            # were the defect. For a PERSISTENT cause with an INTERMITTENT symptom they diverge:
+            # a worker's egress drops fire per ride and clear when the ride dies, so the clear
+            # says only "the ride ended", never "the allowlist is fixed". One night showed both
+            # halves of the damage — #118 was closed by this leg while its defect was latent (a
+            # human reopened it), and #107 accumulated ~10 fire/clear comments that buried the
+            # verdict its 00:37Z re-triage needed. So the leg keys on the verdict the triage
+            # already records: 'report-only' → everything below, unchanged (auto-close is right
+            # for transient noise); 'fix' → no close, no comment, at most a last-cleared line in
+            # the body. Closure then belongs to the fix lane (merged fix + acceptance probe) or a
+            # human. No new state — it is the same 'fix-verdict:' line the dispatch half at the
+            # bottom of this file already reads, matched with the same regex.
             jq -r '.alerts[]? | select(.status == "resolved") | [(.fingerprint // ""), (.labels.alertname // "?")] | @tsv' \
               /tmp/alerts.json 2>/dev/null | while IFS="$(printf '\t')" read -r rfp rname; do
               [ -n "$rfp" ] || continue
@@ -146,11 +172,34 @@ spec:
                      --limit 5 2>/dev/null | jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' | head -1)"
               if [ -z "$hit" ]; then echo "→ resolved $rname ($rfp): no open issue — nothing to close"; continue; fi
               rrepo="${hit%#*}"; rnum="${hit#*#}"
+              # ONE read serves both tests below (verdict + human engagement).
+              rmeta="$(gh issue view "$rnum" --repo "$rrepo" --json body,comments 2>/dev/null || printf '{}')"
+              if [ "$rmeta" = "{}" ]; then
+                echo "→ resolved $rname ($rfp): could not read $hit — left alone (never close on a failed read)"; continue
+              fi
+              # The verdict split. Same regex the dispatch half uses, against the same body line.
+              if printf '%s' "$rmeta" | jq -r '.body // ""' | grep -qi '^fix-verdict:[[:space:]]*fix[[:space:]]*$'; then
+                # At most a last-cleared line: it carries the "not seen since" fact without adding
+                # a comment to bury the verdict under. Rewritten in place, so N clears stay 1 line.
+                # Guarded — a body that came back short or lost its verdict marker is not written.
+                printf '%s' "$rmeta" | jq -r '.body // ""' | grep -v '^last-cleared:' > /tmp/rbody.md || true
+                printf 'last-cleared: %s — %s stopped firing (alert-fp:%s). The DEFECT closes this issue, not the alert.\n' \
+                  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$rname" "$rfp" >> /tmp/rbody.md
+                if [ -s /tmp/rbody.md ] && grep -qi '^fix-verdict:' /tmp/rbody.md; then
+                  gh issue edit "$rnum" --repo "$rrepo" --body-file /tmp/rbody.md >/dev/null 2>&1 \
+                    && echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment, last-cleared line updated" \
+                    || echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body edit failed, non-fatal)"
+                else
+                  echo "→ resolved $rname ($rfp): $hit is 'fix-verdict: fix' — OPEN, no comment (body unreadable, left untouched)"
+                fi
+                continue
+              fi
+              # ── report-only (or no verdict recorded): the original behaviour, unchanged ───────
               # Human engagement = anyone whose login is not a bot. gh renders App logins with a
               # [bot] suffix HERE (REST); the reviewer's REST-vs-GraphQL mismatch (FU-069) does not
               # apply to this endpoint, but the test stays suffix-tolerant on purpose.
-              humans="$(gh issue view "$rnum" --repo "$rrepo" --json comments \
-                        --jq '[.comments[]? | select((.author.login // "") | test("\\[bot\\]$") | not)] | length' 2>/dev/null || echo 0)"
+              humans="$(printf '%s' "$rmeta" \
+                        | jq -r '[.comments[]? | select((.author.login // "") | test("\\[bot\\]$") | not)] | length' 2>/dev/null || echo 0)"
               gh issue comment "$rnum" --repo "$rrepo" \
                 --body "✅ **Alert cleared** — \`$rname\` (alert-fp:\`$rfp\`) stopped firing at $(date -u +%Y-%m-%dT%H:%M:%SZ). Posted by the responder's resolve leg (FU-133); the issue does not have to be true any more just because it was filed." >/dev/null 2>&1 || true
               if [ "${humans:-0}" -eq 0 ]; then
@@ -227,7 +276,18 @@ spec:
               # (the ghcr mirror: #47 → #80 → #93, three issues, one resource).
               # Pod names are stripped of their generated suffixes, which is the whole trick:
               # coordinator-104803 and coordinator-110038 both become workload:platform-agents/coordinator.
-              _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              # ⚠ `namespace` is NOT universal, and everything below it degrades together when it
+              # is absent (found 2026-08-08, #124). AgentWorkerEgressDropped aggregates
+              # `sum by (source)`, so it carries a `source` label and NO namespace at all — while
+              # hubble's `source` IS the namespace (sourceContext=namespace, tofu/cilium.tf), i.e.
+              # the label was there under another name the whole time. Without it the subject fell
+              # through to the catch-all `alert:<name>`: ONE subject shared by all four watched
+              # namespaces, so oracle-fleet's releases.astral.sh drop subject-deduped onto
+              # homelab's ghcr.io issue #107 — and the route (below) fell through to 'platform'.
+              # Nine fires, nine symptom-only comments, no fix in any lane. Reading `source` as the
+              # fallback namespace repairs subject, route, self-ref and ledger at their one origin;
+              # `source` is used by no other rule in argocd/resources/*/prometheusrule.yaml.
+              _ns="$(printf '%s' "$a" | jq -r '.labels.namespace // .labels.source // empty')"
               _pvc="$(printf '%s' "$a" | jq -r '.labels.persistentvolumeclaim // empty')"
               _pod="$(printf '%s' "$a" | jq -r '.labels.pod // empty')"
               _node="$(printf '%s' "$a" | jq -r '.labels.node // empty')"
@@ -270,7 +330,7 @@ spec:
               # a spawned session identifiable after the fact. It no longer GATES anything: the
               # `INC_SEEN == 0` clause it used to carry was the escape hatch that made the cap
               # non-binding (FU-149).
-              INCIDENT="$NAME/$(printf '%s' "$a" | jq -r '.labels.namespace // "-"')"
+              INCIDENT="$NAME/${_ns:--}"
               # Re-checked per alert, not just once per workflow: a single Alertmanager group can
               # carry many firing alerts, and the pre-loop gate cannot see the budget being spent
               # BY THIS LOOP. The script re-reads the ledger, which already contains the entries
@@ -286,12 +346,23 @@ spec:
 
               printf '%s' "$a" > /tmp/alert-one.json
 
-              # OWNERSHIP IS A LOOKUP, NOT A JUDGMENT (decision-free → script, never the brief).
-              # Precedence: explicit stack/owner alert label → namespace ∈ AgentStack claims
-              # (repos[].name = fixer/app namespaces; '<stack>-agents' = the loop ns) → PLATFORM.
+              # OWNERSHIP: THIS LOOKUP COMPUTES THE DEFAULT — THE TRIAGE'S NAMED FIX SURFACE WINS.
+              # Precedence for the default: explicit stack/owner alert label → namespace ∈
+              # AgentStack claims (repos[].name = fixer/app namespaces; '<stack>-agents' = the loop
+              # ns) → PLATFORM.
               # ⚠ node/system alerts carry the EXPORTER's namespace (e.g. monitoring) — such
               # namespaces are in no claim, so they fall through to platform correctly.
-              ALERT_NS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              # ⚠ This block used to read "ownership is a lookup, not a judgment — never the brief",
+              # and that is no longer the whole rule (operator amendment 2026-08-08, #124). The
+              # lookup answers "where did the symptom appear", which is a different question from
+              # "who owns the fix". Both directions failed in one night: nine egress drops fixable
+              # by one line in oracle's claim were filed platform-side, AND a uv failure whose
+              # symptom was in oracle-fleet had its fix platform-side — routing purely by symptom
+              # would have misfiled that one the other way. What both triages DID state correctly
+              # was their fix surface, so that is the routing signal and this lookup is the
+              # fallback for when triage cannot name one. STEP 1 of the brief is the binding text;
+              # keep the two in sync (the 2026-08-07 SELF_NOTE drift below is the cautionary tale).
+              ALERT_NS="$_ns"
               OWNER_LABEL="$(printf '%s' "$a" | jq -r '.labels.stack // .labels.owner // empty')"
               CLAIMS="$(kubectl get agentstacks.platform.teststuff.net -o json 2>/dev/null                 || jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
               ROUTE_STACK="$(printf '%s' "$CLAIMS" | jq -r --arg ns "$ALERT_NS" --arg ol "$OWNER_LABEL" '
@@ -337,7 +408,7 @@ spec:
               # future selfQueue knob (FU-090) derives --no-arm without re-deriving any of this.
               # Widening this list is cheap; narrowing it after a loop has eaten its own outage is
               # not. Rationale + the corpus: docs/agents/roles.md §responder, FU-133.
-              ANS="$(printf '%s' "$a" | jq -r '.labels.namespace // empty')"
+              ANS="$_ns" # includes the `source` fallback — see the _ns derivation above (#124)
               SELF_REF=""
               case "$ANS" in
                 kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1;;
@@ -351,33 +422,59 @@ spec:
             ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate — the fix's merge path (CI runners, image pulls, volumes, the git-token broker) may be the very thing that is broken, and a green check proves nothing while the substrate is sick. The cap is on MERGING, not on working: you MAY author a fix PR, but NEVER enable auto-merge on it — state in the PR body that a human must merge it against the sick substrate. End any issue body you file with the line 'self-referential: true' on its own line."
               [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — may PR + be reviewed, must NOT auto-merge"
 
-              echo "── triaging $NAME ($FP) — route: stack=$ROUTE_STACK repo=$ROUTE_REPO (deterministic)"
+              # ── the fix PAYLOAD for egress drops (#124) ─────────────────────────────────────
+              # Deterministic (keys off the alertname alone), because this alert's fixable cause
+              # has exactly one shape: a legitimate destination missing from the claim's
+              # egress.extraFQDNs. Nine fires produced nine triages that named the destination and
+              # stopped there — correct symptom reports that no lane could act on, because none
+              # carried the claim path, the suggested line, or a probe. The one artifact that
+              # moved anything was hand-filed by a human (oracle-iac#307, a one-line addition).
+              # Naming the required payload is what turns "here is the drop" into a fixable issue.
+              EGRESS_NOTE=""
+              case "$NAME" in
+                AgentWorkerEgressDropped)
+                  EGRESS_NOTE="
+            ⚠ EGRESS-DROP PAYLOAD — this alert has NO namespace label; hubble's 'source' IS the namespace, so the namespace is '$_ns' and the fix almost always belongs to whoever owns that namespace's claim (STEP 1 still decides). If your verdict is a fixable allowlist miss, the issue you file MUST carry all three of:
+              (1) the DENIED DESTINATION(S) — the FQDN, not just a drop rate. The rule's own annotation names the read: 'devbox run hubble -- --namespace $_ns --verdict DROPPED' (add '--protocol dns' for the FQDN). That runs from the jail and may not be reachable from here — if you cannot get the destinations, say exactly that instead of guessing one, and prefer report-only over a fix issue naming an FQDN you never saw.
+              (2) the CLAIM PATH plus the exact suggested line: a stack's claim lives at <namespace>/agent/agentstack.yaml in that stack's -iac repo (oracle: oracle-fleet/agent/agentstack.yaml in oracle-iac; sleep: sleep-tracking/agent/agentstack.yaml in sleep-iac), the platform's at agents/fixer/openrouter-operator/agentstack.yaml in homelab, and the field is the repo's fixer.egress.extraFQDNs list.
+              (3) the ACCEPTANCE PROBE: zero POLICY_DENIED drops for that source+destination pair on the next ride.
+            A destination that is tool phone-home (telemetry, update pings) is NOT an allowlist miss: kill it at the tool (agents/agent-session.sh env), say so, and never widen policy for noise. A drop does not by itself imply a hung ride."
+                  ;;
+              esac
+
+              echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
             THE ALERT (JSON): $(cat /tmp/alert-one.json)
 
             SUBJECT (computed deterministically — the RESOURCE this alert is about): $SUBJ
-            Before filing anything, search the target repo for an issue containing 'subject:$SUBJ' — OPEN or CLOSED, and regardless of age. A match means this resource has failed before: comment there (reopening if closed) instead of filing a new issue, and say what is DIFFERENT this time. One root cause owns one issue; the fingerprint belt below is the narrower same-alert check, this is the same-RESOURCE one. Whatever you file or comment on must carry the literal marker 'subject:$SUBJ' on its own line.
+            Before filing anything, search ACROSS the agent repos for an issue containing 'subject:$SUBJ' — OPEN or CLOSED, regardless of age, and NOT just in the repo you intend to file on: 'gh search issues --owner teststuffstash --match body' plus the marker. Org-wide is required because STEP 1 routes by fix surface, so an earlier fire of this same resource may sit in a DIFFERENT repo than the one you pick today, and a per-repo search would file a duplicate instead of finding it. A match means this resource has failed before: comment there (reopening if closed) instead of filing a new issue, and say what is DIFFERENT this time. One root cause owns one issue; the fingerprint belt below is the narrower same-alert check, this is the same-RESOURCE one. Whatever you file or comment on must carry the literal marker 'subject:$SUBJ' on its own line.
 
             Context available: /work/homelab is a fresh homelab clone (docs/, agents/stacks.json). kubectl READS may work (degrade gracefully if RBAC-denied). gh is authenticated (issues + PRs + contents on the agent repos). Shallow-clone a stack repo under /work/ if you need code context.
 
-            STEP 1 — the route is ALREADY COMPUTED deterministically: owner stack = '$ROUTE_STACK', target repo for any issue/PR = '$ROUTE_REPO'. Do NOT re-derive or re-route to a different stack. The ONE allowed override: escalate platform-ward (file on teststuffstash/homelab instead) when your diagnosis shows the fix needs something only the platform can change — and state that reason in the issue.
+            STEP 1 — ROUTE BY THE FIX SURFACE YOU NAME, NOT BY THE SYMPTOM'S NAMESPACE. A default is already computed deterministically from the symptom's namespace ('$_ns'): owner stack = '$ROUTE_STACK', default target repo = '$ROUTE_REPO'. Use that default ONLY when your diagnosis cannot name a fix surface. The moment it can — and STEP 2 requires you to try — the issue goes to the repo that OWNS the file a fix would edit, and the 'Touches:' line must be paths in THAT repo:
+              - the fix is a stack's claim, manifests, workflows or CI (e.g. <namespace>/agent/agentstack.yaml) → that stack's -iac repo;
+              - the fix is that stack's application code → the stack's app repo;
+              - the fix is platform machinery — anything under agents/, argocd/, tofu/, ansible/, policy/ or docs/ in homelab, including the worker launcher's env card and this responder itself → teststuffstash/homelab.
+            State in ONE line which surface you named and therefore which repo you chose; when that repo is not the computed default, that line is the whole audit trail for the re-route. If two surfaces are genuinely plausible, file on the one you would edit FIRST and name the other in the body — still exactly one issue. Never file on a repo that is not in a claim in /work/homelab/agents/stacks.json.
+            Why this replaced the older 'the route is computed, do NOT re-derive': on the night of 2026-08-07 both directions failed at once. Nine egress-drop fires whose fix was ONE line in oracle's claim were filed platform-side, where no lane picked them up, while the fix would have been shipped within the hour by oracle's own live iac fixer; the same night a uv failure whose symptom appeared in oracle-fleet had its fix platform-side, so symptom-routing would have misfiled that one in the opposite direction. Both triages named their fix surface correctly. The namespace predicts where a symptom shows up; it does not predict who fixes it.
 
             STEP 2 — diagnose from the alert labels/annotations + whatever context you can actually reach. Say what you verified vs assumed.
 
             ⚠ SATURATED vs BROKEN — a steady-state COUNTER cannot tell them apart. 'running: 4, pending: 0' looks identical whether the pool is working at its ceiling or cannot pick up work at all, so a capacity diagnosis needs a THROUGHPUT signal, never a level one. Before blaming any cap (maxRunners, replicas, a semaphore, a connection pool), check that work is actually MOVING: a saturated pool has jobs RUNNING, a broken one has workers WAITING. For CI/runner-dispatch symptoms specifically ('not acquired by Runner', jobs stuck queued, acquirejob ServiceUnavailable) that means, and all three are cheap: (1) 'gh run list --status in_progress' across the repos — ZERO in_progress while runners idle is the broken signature, not contention; (2) the AGE of the ephemeral runner pods — they exit after ONE job, so a runner alive for an hour has acquired nothing; (3) https://www.githubstatus.com/api/v2/components.json for the 'Actions' component, because a vendor outage is invisible from inside the cluster and every in-cluster signal will look like ours. This exact misdiagnosis has been made twice, once by a responder session and once by the meta-coordinator (agents/coordinator/TICK-LOG.md, 2026-08-06). During a confirmed Actions outage the correct outcome is (a) transient: report it, do NOT re-run anything (re-runs deepen the dead queue) and do NOT propose a capacity change — an outage is not evidence about a cap.
 
             $SELF_NOTE
+            $EGRESS_NOTE
 
             ${WIN:+⚠ OBSERVATION WINDOW: ArgoCD app '$WIN' synced into this namespace within the last 120 minutes, so a deploy is the prime suspect and the -iac lane already owns this symptom — its deterministic revert (FU-044) may be acting on it right now. Do NOT open a fix PR and do NOT propose one: a revert racing a fix at the same symptom is the failure this rule exists to prevent. Report your evidence, name the app, and stop.}
 
             STEP 3 — act with the CHEAPEST SUFFICIENT outcome:
             (a) transient / already-recovered / known-benign → report your reasoning to stdout, touch NOTHING.
             (b) a GitOps quick fix on the stack's -iac repo (bad pin → revert/bump PR; the CI-only lane auto-merges): do it now — branch, PR, 'gh pr merge --auto --squash' — and report.
-            (c) needs real work → file EXACTLY ONE issue on '$ROUTE_REPO' (or the stack's app repo instead if your diagnosis clearly points at app code): title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. ALSO end the body with a verdict line, exactly one of: 'fix-verdict: fix' (a code/manifest change in a repo would durably fix this) or 'fix-verdict: report-only' (transient, vendor-side, or needs a human decision first). The verdict is a DIAGNOSIS, not a dispatch — queueing is the platform's job, never yours. NO agent labels — the issue is inert; the shell reads your verdict after.
-            (d) platform-ward escalation only (see STEP 1): the issue goes on teststuffstash/homelab with the stated reason.
+            (c) needs real work → file EXACTLY ONE issue on the repo STEP 1's rule selects — the owner of your named fix surface, defaulting to '$ROUTE_REPO' when you named none: title '🚨 <alertname>: <one-line summary>', body = evidence + your diagnosis + the literal marker 'alert-fp:$FP' + a 'Touches:' line (ADR-097) declaring the write surface a fix would need, as repo-relative paths or globs — e.g. 'Touches: argocd/resources/registry-cache/**'. Declare the NARROWEST surface your diagnosis actually supports; it is the footprint the scan uses to avoid double-dispatch and the reviewer uses to flag escapes, so a vague one is worse than none. If you genuinely cannot tell which paths a fix would touch, say so in the body and omit the line rather than guessing wide — an undeclared footprint is treated as exclusive, which is the safe default. ALSO end the body with a verdict line, exactly one of: 'fix-verdict: fix' (a code/manifest change in a repo would durably fix this) or 'fix-verdict: report-only' (transient, vendor-side, or needs a human decision first). The verdict is a DIAGNOSIS, not a dispatch — queueing is the platform's job, never yours. NO agent labels — the issue is inert; the shell reads your verdict after.
+            (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
-            HARD RULES: before filing, search the target repo for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
+            HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
                 --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
@@ -396,8 +493,20 @@ spec:
               # Self-referential issues DO ring — the debouncer skips 'self-referential: true'
               # bodies at wake (dispatch onto broken substrate stays a human call), but the
               # agent-fix verdict is still the durable record.
-              VHIT=""
-              for vrepo in "$ROUTE_REPO" "teststuffstash/homelab"; do
+              # The candidate list is no longer (default, platform): STEP 1 routes by the named fix
+              # surface, so a session may legitimately land on any claimed -iac. Searching only the
+              # default would silently drop the verdict — the issue would sit unlabelled, the bell
+              # would never ring, and the finding would look like a report-only triage. Order is
+              # cheapest-first (the default is still the common case) and the loop breaks on the
+              # first hit, so the extra REST reads only happen when the route actually moved.
+              VREPOS=""
+              for vr in "$ROUTE_REPO" "teststuffstash/homelab" \
+                        $(printf '%s' "$CLAIMS" | jq -r '.items[]?.spec.repos[]?.name | select(endswith("-iac")) | "teststuffstash/" + .' 2>/dev/null || true); do
+                case " $VREPOS " in *" $vr "*) continue;; esac # the default is usually also in the claim list
+                VREPOS="$VREPOS $vr"
+              done
+              VHIT=""; VREPO=""
+              for vrepo in $VREPOS; do
                 VHIT="$(gh api "repos/$vrepo/issues?state=open&sort=updated&direction=desc&per_page=20" \
                         --jq "[.[] | select((.body // \"\") | contains(\"alert-fp:$FP\"))] | first | .number // empty" 2>/dev/null || true)"
                 [ -n "$VHIT" ] && { VREPO="$vrepo"; break; }
