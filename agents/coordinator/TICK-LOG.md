@@ -2868,3 +2868,16 @@ opus judged, haiku typed, the expensive context went into the ISSUE not the ride
 ⏳ Defect closes only at the operator's host-side `github-tofu apply` (#118 stays open; one apply
 now covers reviewer_repos too). Meanwhile oracle's first goal child ran the FULL fixed lifecycle:
 #177 → PR#181 → changes-requested round r2 → APPROVED → auto-merged → merged-closeout dispatched.
+
+### 2026-08-08 (~01:00Z heartbeat) — the claude semaphore is BINDING; predicted revisit is due
+
+The 23:00Z entry's watch item fired: with coordinator + reviewer + responder + platform workers
+all on the subscription, tonight's healthy goal-lane throughput (oracle ran 4 core children + 4
+sprouts through judge→ride→review→closeout in ~4h) saturated `subscription-capacity/claude`
+(0/3 free at 01:00Z), so: respond workflows queue (4 HomeAssistantPowerSensorStale fingerprints
+sat `deferred-…-never-triaged` ~25 min — the crosscheck flagged them; retry chain fine, just
+starved), doorbells were skipped all evening ("subscription latched"), and the #202 assembly
+review waits its turn. Utilization is NOT the binder (5h 0.36 / 7d 0.07 at 21:40Z) — the
+SEMAPHORE is. → FU-088/FU-109 heavy-vs-dispatch tier split revisit, operator decision; the
+datum is a night of ordinary load, not a storm. (FU-149 spot-check: budget alert has not fired
+since the 00:00Z rollover — nothing to check yet.)
