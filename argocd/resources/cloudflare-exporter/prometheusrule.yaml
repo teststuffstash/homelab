@@ -9,14 +9,21 @@ spec:
       rules:
         # The FU-150 lesson applied to the edge: a dead exporter/credential looks exactly like a
         # quiet edge. Absence is the alert, not an error count.
-        - alert: CloudflareExporterAbsent
-          expr: absent(cloudflare_zone_requests_total)
+        # ⚠ Re-keyed 2026-08-08 (#132, round 4): the original expr was
+        # absent(cloudflare_zone_requests_total) — but NEITHER zone can produce that series
+        # (teststuff.net is free-plan-gated at exporter v0.2.3; eid-demo.com has no DNS records,
+        # so no request can ever reach its edge). An alert on a metric that cannot exist fires
+        # forever by construction. Scrape-target health is what the exporter can actually prove;
+        # END-TO-END edge-data absence becomes the DIY poller's belt (FU-039), which has real
+        # data to lose. The cloudflared_* series (PodMonitor) are today's live edge signal.
+        - alert: CloudflareExporterDown
+          expr: up{job=~".*cloudflare-exporter.*"} == 0 or absent(up{job=~".*cloudflare-exporter.*"})
           for: 30m
           labels:
             severity: warning
           annotations:
-            summary: "Cloudflare edge metrics absent"
-            description: "No cloudflare_zone_requests_total series for 30m. SYMPTOM ONLY — exporter pod down, GraphQL API failing, or the read token revoked/expired; the edge itself may be fine. Check: pod logs in monitoring, then token verify (docs/cloudflare.md §Token matrix). ⚠ Scope (#132): at exporter v0.2.3 this metric exists for NON-free-plan zones only (eid-demo.com today) — teststuff.net (free plan) never emits it, so this alert guards the exporter pipeline, not the teststuff.net edge (that visibility is FU-039's DIY GraphQL leg)."
+            summary: "Cloudflare exporter scrape target down/absent"
+            description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
         # Symptom alert for the future public endpoints (armed now, quiet on today's traffic):
         # origin-side failures surface as 5xx at the edge before anything else user-visible.
         - alert: CloudflareEdge5xx
