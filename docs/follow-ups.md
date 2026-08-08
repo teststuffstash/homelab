@@ -128,11 +128,12 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
-- [ ] **FU-039** — **Next leg of platform self-service: make per-stack subdomain opt-in an XRD
-      claim.** Today it's a thin homelab PR once per stack (the HTTPS-names leg itself shipped —
-      ADR-092). Then the two remaining legs — **git repos** and **ArgoCD AppProject/namespace** —
-      both still operator PRs against `tofu/github` + `argocd/platform`; decide per resource:
-      Crossplane provider vs a thin homelab PR seam. Program context:
+- [ ] **FU-039** — **Next legs of platform self-service (XRD claims).** LAN subdomain opt-in is
+      still a thin homelab PR per stack (HTTPS-names shipped — ADR-092); git repos + ArgoCD
+      AppProject/namespace remain operator PRs; **NEW leg (operator direction 2026-08-08): public
+      ingress** — Cloudflare routes/cache/no-challenge-API knobs as a stack claim, admin rights +
+      defaults + deprecation lifecycle + edge observability platform-side; design:
+      [`docs/cloudflare.md`](cloudflare.md) §Public ingress. Program context:
       `ROADMAP.md` → Programs in flight → "Platform self-service via Crossplane". Relates ADR-076,
       ADR-085, ADR-092, FU-068.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its

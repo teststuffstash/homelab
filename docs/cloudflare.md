@@ -190,3 +190,31 @@ read-only. The **Docs** server (`https://docs.mcp.cloudflare.com/mcp`) is wired 
 (local scope) and fixes "model too old / UI hides IaC options". No token-management server exists
 (define tokens in tofu). The read servers (GraphQL, Audit Logs, CASB, DNS Analytics) aren't
 self-hostable → a future headless in-cluster agent uses the scoped `agent-read` token directly.
+
+## Public ingress as a platform capability — design direction (operator, 2026-08-08; FU-039 leg)
+
+The tunnel plumbing (`ha.teststuff.net`) is proven, but that was never the hard part: **open
+traffic to a functional backend** is, and it must land as the same mechanism/policy split as
+every other platform capability (ADR-076 provider-terraform, ADR-085 XRD doctrine, ADR-092's LAN
+precedent — the stack adds routes freely once the platform wired the namespace ONCE). The stack's
+`-iac` repo must NOT hold Cloudflare admin rights, and should not hold ANY Cloudflare credential:
+**the XRD is the privilege boundary** — exactly the Garage-bucket pattern.
+
+- **Claim (stack-owned, safe knobs only):** hostnames/routes under the delegated namespace →
+  in-cluster backend; per-path cache behavior (Cache Rules); `api: true` paths — an API endpoint
+  must NEVER hit a challenge/captcha, rendered as a WAF custom rule with the **Skip** action
+  (Rulesets API — the current primitive; Page Rules are the cautionary deprecated ancestor).
+- **Composition (platform-owned):** sane defaults (TLS posture, WAF baseline, security level),
+  tunnel + zone + DNS wiring, the scoped least-privilege token (minted via `tofu/cloudflare-token`
+  outside the jail; claims never see it), and the DEPRECATION LIFECYCLE — when Cloudflare
+  retires a primitive or changes how HTTP traffic flows, the composition absorbs it once and
+  every claim re-renders; no stack ever migrates a Cloudflare feature.
+- **Observability (platform-owned):** a Cloudflare Prometheus exporter as an
+  `argocd/resources/` app (per-hostname traffic/errors/cache panels + symptom alerts), beside
+  the backend's own gateway metrics — the platform is responsible for seeing the edge, the
+  stack for its backend contract.
+
+Backend HTTP requirements (streaming/SSE for MCP, no buffering surprises, header passthrough)
+are claim inputs, not platform guesses. Build order when this lands: XRD+composition for routes
++ cache + skip rules first (the knobs a stack needs on day one), exporter second, wider settings
+only on demand. Prior art to extend, never duplicate: ADR-092's `stack_gateways` opt-in seam.
