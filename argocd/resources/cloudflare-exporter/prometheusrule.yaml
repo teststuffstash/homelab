@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudflare-exporter
+  labels: { app: cloudflare-exporter }
+spec:
+  groups:
+    - name: cloudflare-edge
+      rules:
+        # The FU-150 lesson applied to the edge: a dead exporter/credential looks exactly like a
+        # quiet edge. Absence is the alert, not an error count.
+        - alert: CloudflareExporterAbsent
+          expr: absent(cloudflare_zone_requests_total)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cloudflare edge metrics absent"
+            description: "No cloudflare_zone_requests_total series for 30m. SYMPTOM ONLY — exporter pod down, GraphQL API failing, or the read token revoked/expired; the edge itself may be fine. Check: pod logs in monitoring, then token verify (docs/cloudflare.md §Token matrix)."
+        # Symptom alert for the future public endpoints (armed now, quiet on today's traffic):
+        # origin-side failures surface as 5xx at the edge before anything else user-visible.
+        - alert: CloudflareEdge5xx
+          expr: sum by (zone) (rate(cloudflare_zone_requests_status{status=~"5.."}[15m])) > 0.2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Edge 5xx on zone {{ $labels.zone }}"
+            description: "Sustained >0.2 rps of 5xx responses at the Cloudflare edge for zone {{ $labels.zone }} over 15m. SYMPTOM ONLY — origin (tunnel/backend) failure, or an edge rule misfire."

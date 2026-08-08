@@ -1,0 +1,28 @@
+# cloudflare-exporter — the Cloudflare edge into Prometheus (lablabs GraphQL exporter on the
+# same read-only token the jail uses; FREE_TIER — aggregated analytics, per-request logs are
+# Enterprise). Wave 6 like github-exporter: needs the ESO ClusterSecretStore (wave 3); the
+# monitoring namespace/CRDs come from tofu's kube-prometheus-stack. Design + token matrix:
+# docs/cloudflare.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflare-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/cloudflare-exporter
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-exporter
+  labels: { app: cloudflare-exporter }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cloudflare-exporter }
+  template:
+    metadata:
+      labels: { app: cloudflare-exporter }
+    spec:
+      containers:
+        - name: exporter
+          # 0.2.3, digest-pinned (== latest at pin time). GraphQL poller; ~270s default lookback.
+          image: ghcr.io/lablabs/cloudflare_exporter:0.2.3@sha256:6bf84a81725c6d75b14fb584135ccfe5f8aff89d23c36b04511d22b1c6cc10cb
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cloudflare-exporter-token, key: token }
+            # NO CF_ZONES: the all-zones read token auto-discovers — future product zones
+            # (FU-039) appear in Prometheus the day they exist, no re-deploy.
+            - { name: FREE_TIER, value: "true" }
+            - { name: LISTEN, value: ":8080" }
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
