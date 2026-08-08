@@ -3032,3 +3032,41 @@ master mid-session makes this ROUTINE, not exotic — pull --rebase before push 
   expiry = automatic re-triage. #117 closed (cable knock; ⚠ link renegotiated at 100Mbps, was
   1G — a firm reseat recovers 10×). #121/#116/#107/#124/#125/#126/#128/#132/#222 all closed
   today; PR#129/130/135/136/224 + 9 sweep PRs merged.
+
+## 2026-08-08 (~13:00–15:00Z) — the platform lane's first self-run cycle, and the graph drawn
+
+- **"No workers running" (operator) = four PHANTOM `agent/in-progress` labels** from rides that
+  died without finalize (oracle#193 verified alive+productive at 3h then gone; circles#42/46/49
+  same shape). Blast radius bigger than the label: ADR-097 footprint holds starved SIBLINGS
+  (#211/#215 refused as "overlaps in-progress" against ghosts) + wip caps counted them. Cleared
+  with audits; all four data points attached to agent-runtime#36 (finalize-on-every-exit-path +
+  a label-vs-pods reconciler belt named as the fix shape). ⚠ my #193 clear initially left it
+  label-limbo (removed in-progress, forgot agent/queued) — re-queued.
+- **agent-runtime lane armed end-to-end and RAN ITSELF**: claim-side fixer switch (was never
+  flipped after PR#37 built the repo side — "dispatchability is a fixer-block predicate"),
+  .agents/review.md rubric (path-split maturity: finalize/entrypoint PROD-SERVING, #12/#36
+  classes as pinned invariants), declared ride namespace (first fixer repo with NO app — the
+  composition deliberately doesn't own worker namespaces; pattern documented in-file), egress
+  alert regex. Within ~90 min: #12 fixed→bot-APPROVED→auto-merged (PR#40)→closed, and the ride
+  FILED ITS OWN FOLLOW-UP (#41 — the detector-per-catch ratchet, unprompted). #13's PR#42 in
+  review. **Governance finding: reviewer coverage FOLLOWS the fixer block** — worker→bot→merge
+  is the design on CODEOWNERS-unowned lane paths; the "no bot reviewer on platform repos"
+  warning was stale (corrected in meta-state).
+- **openrouter-operator#6: the coordinator REFUSED my queue and was right** — fixed 2h20m after
+  filing (jail commit af04086, invisible to PR searches; check PATH-scoped commit history). My
+  currency grep had piped commits through `head -20` — the SECOND head-truncation of the day
+  (the first hid "Account Settings Read" in the token catalog). The durable warning exists;
+  compliance is the gap.
+- **PR#218's red = my VM replace's cold caches** (first e2e on the rebuilt runner blew the 5-min
+  fresh-download window; retry green on warmed caches). The coordinator diagnosed it and
+  close/reopened to force CI (no Actions:write) + re-armed — machine-recovered. Codeowner gate
+  done on its specs ⚑ flag; provenance one-worder (#209→#218) landed as PR#226 after the first
+  attempt died on a transient network timeout mid-chain.
+- **#108 reopen = threshold false-positive on a LEGITIMATE 15m dispatch tick** (claimed the
+  freed circles#59 → armed PR#65). PR#130's clone fix verified live by the triage (<1s clones).
+  Watch clause 3 refined: alert-record issues (body alert-fp:) excluded — unlabeled is THEIR
+  design.
+- **Goal #174 drawn as an artifact** (flowchart + gantt): 6h11m goal→master, 15h53m full drain,
+  4 children → 19 sprouts (≈5× amplification, half folded back same night), the squash boundary
+  = the expensive tail (3 orphaned PRs, ~8h morning latency). If goal arcs recur: children must
+  not base on the goal branch after assembly opens.

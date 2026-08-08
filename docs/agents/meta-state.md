@@ -6,33 +6,25 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~14:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-08 ~15:00Z heartbeat — everything below is CURRENT; history is TICK-LOG's)
 
-- **Cloudflare/PublicRoute: ARMED, zero consumers.** Operator's next acts: the echo test claim,
-  then the ha retrofit (consumer #2). SERVICES.md row deliberately deferred until one route has
-  actually flowed. Zone-ruleset leg deferred ≥consumer #2. FU-039 open legs: DIY GraphQL poller
-  (teststuff.net edge data), declare cloudflared's :2000 port in tofu (then PodMonitor back to
-  portNumber).
-- **CI throughput rebuilt today**: org-standard PR-cancel concurrency on all 11 ci.yamls
-  (docs/ci.md §Concurrency) + ci-runner-01 at 16G with TWO slots (verified active). Watch: first
-  time two e2es run concurrently, glance at dockerd/kind contention.
-- **oracle**: #216 (operator spec PR) still DIRTY — author rebases, meta reviews+merges. PR#210
-  in the merge-conflict lane post-unwedge. Pins #193/#194/#215 working through. doc_type fork
-  filed inert as #219 (operator handles oracle-side).
-- **circles**: assembly PR#54 BEHIND+CHANGES_REQUESTED (review-round grind); children #59/#60
-  queued. Frozen: PR#21/#25 (goal #17 comparison) — do not touch.
-- **platform queues**: agent-runtime #36/#35/#33/#13/#12 queued today (#12 first — the
-  actual-spend gate charges the cost_usd it corrupts); openrouter-operator#6 queued (expiry
-  re-mint, delete+create shape). homelab: #103 open (containment holds), #127 queued (docs
-  drift). Watch the platform loop actually DISPATCHES these (first agent-runtime rides ever).
-- **Operator physical/one-trip**: wk-metal-02 cable reseat (100Mbps after the knock-reseat, was
-  1G — #117 closed with the caveat) — same corner as the retired laptop4-plug errand.
-- **tuya fleet frozen, ACCEPTED** (plugs to be replaced eventually): silence c73baef2 expires
-  ~08-22 → responder re-triages automatically if still stale. konditsioneer remote power-cycle
-  untrustworthy until then.
-- **FU-149 spot-check** still pending a post-rollover ResponderTriageBudgetExhausted firing.
-- **Soak watches**: iac-sentinel shadow (→ G01 flip, FU-106); router shadow decisions (→ P4,
-  FU-095); Monday 05:00 retro (FU-058 run 3); goal-decompose-on-opus quality (1b4bda5).
+- **Cloudflare/PublicRoute: ARMED, zero consumers.** Operator's acts: echo test claim → ha
+  retrofit. FU-039 open legs: DIY GraphQL poller; declare cloudflared :2000 in tofu.
+- **agent-runtime lane LIVE and self-running**: #12 done (full machine cycle, PR#40), #41
+  (self-filed follow-up) + #33/#35/#36 queued, #13→PR#42 in review. Reviewer coverage follows
+  the fixer block (unowned paths auto-merge; governor paths codeowner-gated).
+- **circles**: PR#65 (#59) + PR#66 (#60) riding/armed — goal-#29 grind moving post-phantom-clear.
+  Assembly PR#54 waits on the children. Frozen: PR#21/#25.
+- **oracle**: PR#217 (#188) BLOCKED in review pipeline; queued #193/#194/#195/#207/#211/#215
+  (pinned, gates corpus rebuild); #225 ingest = next frontier; goals #175/#176 unstarted.
+  Artifact: claude.ai/code/artifact/6828adf5-165d-4092-aa92-a3c2e8800903 (goal-174 map).
+- **homelab queue**: #103 (containment holds), #133/#137/#138 pending debounce (responder-filed
+  today), #41-class watch: the >24h clause owns unlabeled platform issues now (v3: alert-records
+  excluded).
+- **Operator physical**: wk-metal-02 cable reseat (100Mbps, was 1G). **tuya**: frozen-accepted,
+  silence c73baef2 → ~08-22 auto re-triage.
+- **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); Monday retro (FU-058);
+  FU-149 spot-check; first concurrent double-e2e on the 2-slot runner (glance at contention).
 
 ## Durable warnings — re-read before touching these files
 
