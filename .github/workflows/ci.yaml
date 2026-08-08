@@ -47,6 +47,13 @@ jobs:
       - name: Responder behaviour harness (devbox run responder-behaviour-test)
         run: devbox run responder-behaviour-test
 
+      # The ConfigMap-shipped Python (exporters, the proxy/router) is the other thing manifest-lint
+      # can't see — it validates the YAML wrapper, never the script inside, so a syntax error only
+      # surfaced when ArgoCD rolled the pod (#173, found landing the #153 fix). Parse-only: no
+      # imports run, so in-cluster-only deps (kopf) don't break the lint.
+      - name: Tracked Python parses (devbox run py-compile-lint)
+        run: devbox run py-compile-lint
+
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)

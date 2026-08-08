@@ -86,6 +86,9 @@
       "responder-behaviour-test": [
         "bash agents/coordinator/responder-behaviour-test.sh \"$@\""
       ],
+      "py-compile-lint": [
+        "bash scripts/py-compile-lint.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
