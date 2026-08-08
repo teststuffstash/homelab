@@ -23,6 +23,14 @@ meant to avoid.)
   excluded).
 - **Operator physical**: wk-metal-02 cable reseat (100Mbps, was 1G). **tuya**: frozen-accepted,
   silence c73baef2 → ~08-22 auto re-triage.
+- **⚠ FLEET DISPATCH STARVED until ~00:00Z reset (OpenRouter keys-modify DAILY limit,
+  openrouter-operator#26)**: no worker keys mint anywhere since ~18:58Z; queued issues defer.
+  Post-midnight heartbeat MUST: (1) verify the 13 wedged deletions drained + a mint succeeds,
+  (2) clear oracle-fleet#228's agent/error (it recorded THIS infra failure, not its content)
+  and restore agent/queued, (3) supervise the backed-up dispatch wave (oracle
+  #194/#195/#207/#211/#215/#228, homelab #103/#149/#155/#156/#157, agent-runtime #41/#52,
+  openrouter-operator#26 itself). ⚠ #215 declares `Touches: *` — a wildcard footprint that
+  serializes against EVERYTHING; expect it to hold or be held.
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); Monday retro (FU-058);
   FU-149 spot-check; first concurrent double-e2e on the 2-slot runner (glance at contention).
 
