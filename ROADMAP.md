@@ -235,9 +235,38 @@ instantiated via `gh repo create --template` before `new-agent-repo.sh` — carr
 skeleton, `.agents/` skeletons, devbox `ci` + `scan-secrets`, and the merge-path caller workflows.
 stack-lint's REPO-03/04/05 already verify the result.
 
-**Onboarded:** sleep-tracking (reference), openrouter-operator. **To onboard:** snore-recorder,
-agent-runtime, agent-coordinator. **Excluded, different workflow (per Rasmus):** sleep-iac (CI-only
-deploy repo, no fixer) and homelab itself (platform/base-infra; dep policy unresolved).
+**Onboarded:** sleep-tracking (reference), openrouter-operator, **homelab** (fixer lane
+FU-068/FU-142, live since 2026-08), **agent-runtime** (PR#37, 2026-08-07), **sleep-iac**
+(FU-106). **To onboard:** snore-recorder, agent-coordinator.
+
+### The platform lane sheds the meta crutch (direction, operator 2026-08-08)
+
+The responder was the start, not the exception: machine belts that triage, file, and fix —
+extended out to the WHOLE platform stack (homelab, agent-runtime, agent-coordinator,
+openrouter-operator). The historical blocker was **context, not capability**: platform repos had
+no project shape a fixer could work against. That is turning — agent-runtime's tests + CODEOWNERS
++ `.agents/fix.yaml`, homelab's fixer lane, the extract-from-the-real-thing behaviour-test
+pattern (`responder-behaviour-test.sh`) — and the direction is to keep feeding it: every
+load-bearing platform contract gets a test/rubric a fixer can run and a reviewer can hold it to.
+
+Two boundaries are DELIBERATE and stay:
+
+- **The whole-repo CODEOWNER gate on platform repos stays human.** "It's just a version bump" is
+  an LLM writing its own review rules — self-classification never relaxes the gate, there is no
+  "trivial change" fast path, and meta's remaining review+merge duty concentrates here (the
+  needs-meta watch bounds its latency). Autonomy grows on the INTAKE and FIX sides, never the
+  approval side.
+- **Intake is the open front end.** Today platform issues are ~all jail/meta-authored (six sat
+  unlabeled for up to a month, 2026-08-08, precisely because filing+triage was a human act).
+  Target: issues arrive from BELTS — the responder shape generalized past alerts. Some intake is
+  already machine-owned (review-harvest via merged-closeout; alert triage); the pattern to
+  extend: **every meta catch leaves behind a detector that files the next instance** (ledger
+  anomalies, transcript audits, acceptance-probe failures). End state: meta reads PRs, not the
+  world.
+
+Next legs when commissioned (not yet FU'd — the operator shapes the order): per-platform-repo
+review rubrics (`.agents/review.md`) + fixer-facing context files; the detector-per-catch
+intake doctrine written into the meta skill; retro/ledger harvest as issue sources.
 
 ## Caching tier (nix + images LIVE)
 
