@@ -81,6 +81,7 @@ _lock = threading.Lock()
 _body = "# poller has not completed a cycle yet\n"
 _errors = 0
 _last_success = 0
+_dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0 in a healthy poller
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 
@@ -128,11 +129,33 @@ def graphql(query, variables):
 
 
 def gh_paged(path, key):
-    """Yield items across pages (path must already contain a query string)."""
+    """Yield items across pages (path must already contain a query string), each `id` at most once.
+
+    The dedup is load-bearing, not hygiene (#153). These endpoints page by OFFSET over a list they
+    sort NEWEST-FIRST, and the list GROWS while we walk it: a workflow run created between two page
+    fetches shifts every older item one slot down, so the item that was last on page N comes back as
+    the first item of page N+1 and is yielded TWICE in one poll. With ~460 runs/24h in this org
+    (5 pages) and runs starting constantly, that fired in bursts — the duplicated run's two series
+    were appended twice, and when its `updated_at` advanced between the two fetches while its
+    status/conclusion labels did not, the second append was the SAME series with a DIFFERENT value.
+    Prometheus drops those ("different value but same timestamp", `num_dropped=2..6` in its log) and
+    PrometheusDuplicateTimestamps fired. Deduping here fixes every caller at the source, including
+    the per-item accumulation in collect_open_prs that a later exposition-level dedup cannot repair.
+
+    The mirror image is not fixable with offset paging: an insertion can also push an item ACROSS a
+    boundary we already passed, so it is missed this poll. Harmless here — the next poll (120s) sees
+    it, and every series is re-emitted from scratch each poll anyway."""
+    seen = set()
     for page in range(1, 20):  # hard cap: 20 pages ≈ 2000 items, far beyond this org
         batch = gh(f"{path}&per_page=100&page={page}")
         items = batch[key] if key else batch
-        yield from items
+        for item in items:
+            ident = item.get("id") if isinstance(item, dict) else None
+            if ident is not None:
+                if ident in seen:
+                    continue
+                seen.add(ident)
+            yield item
         if len(items) < 100:
             return
 
@@ -146,8 +169,46 @@ def esc(value):
 
 
 def metric(name, labels, value):
-    inner = ",".join(f'{k}="{esc(v)}"' for k, v in labels.items())
+    # Labels are emitted SORTED so that one series has exactly one textual form regardless of which
+    # call site built the dict — that is what lets dedupe_exposition() key on the rendered
+    # `name{labels}` prefix and have it mean "the same series" the way Prometheus means it (#153).
+    inner = ",".join(f'{k}="{esc(v)}"' for k, v in sorted(labels.items()))
     return f"{name}{{{inner}}} {value}"
+
+
+def dedupe_exposition(lines):
+    """Collapse repeated samples of the same series, LAST WRITE WINS — the structural belt (#153).
+
+    A series appearing twice in one exposition is exactly what Prometheus reports as "error on
+    ingesting samples with different value but same timestamp": it drops them and the scrape loses
+    data silently. No collector may cause that, so this pass makes it unrepresentable rather than
+    relying on every present and future collector to be careful. The duplicate found in #153 was
+    offset-pagination re-yield (fixed at its source in gh_paged); this catches the class.
+
+    Line order is preserved EXACTLY — a repeat overwrites the first occurrence's slot rather than
+    appending — so the published body keeps the shape Prometheus already ingests here, header lines
+    ahead of the samples they describe. (A rebuild that regrouped by family would be a bigger,
+    unnecessary behaviour change: collect_workflow_runs has always interleaved its two families and
+    the scrape parser, which reads line by line, has always accepted it.) Identical header lines
+    collapse to one, since some text parsers reject a second `# HELP` for a name. Counts what it
+    collapsed into `_dupes`, which rides the exposition as a counter: if a new duplication path ever
+    appears, this fixes the metrics AND says so, instead of hiding it."""
+    global _dupes
+    out, at, meta = [], {}, set()
+    for line in lines:
+        if line.startswith("#"):
+            if line not in meta:
+                meta.add(line)
+                out.append(line)
+            continue
+        series = line.rsplit(" ", 1)[0]  # values never contain a space; label values are esc()aped
+        if series in at:
+            out[at[series]] = line
+            _dupes += 1
+            continue
+        at[series] = len(out)
+        out.append(line)
+    return out
 
 
 def collect_workflow_runs(lines):
@@ -407,7 +468,7 @@ query($org:String!, $cursor:String) {
         name
         agentIssues: issues(states:OPEN, first:50,
                             labels:["agent/queued","agent/in-progress","agent/blocked","agent/error"]) {
-          nodes { labels(first:10){ nodes { name } } }
+          nodes { number labels(first:10){ nodes { name } } }
         }
         pullRequests(states:OPEN, first:40) {
           nodes {
@@ -454,7 +515,12 @@ def collect_open_prs(lines):
         "# HELP github_pull_request_reviews_recent APPROVED/CHANGES_REQUESTED reviews per author in the trailing hour — a healthy worker↔reviewer iteration tops ~3, a dispatch loop runs 8+.",
     ]
     cursor = None
-    _AGENT_ISSUE_COUNTS.clear()
+    _AGENT_ISSUE_NUMBERS.clear()
+    # NB the repo walk pages a CURSOR over a mutable sort key (PUSHED_AT DESC), the GraphQL cousin
+    # of the offset hazard gh_paged documents: a push during the walk can re-present a repo on a
+    # later page. Not reachable today — the org has 11 repos and `first:50` ends the walk on page
+    # one — but it becomes live at 50+ repos, which is why the counting below is set-based and the
+    # exposition is deduped rather than trusting this to stay single-page.
     for _ in range(10):  # hard page cap
         data = graphql(_PR_QUERY, {"org": ORG, "cursor": cursor})
         repos = data["organization"]["repositories"]
@@ -464,14 +530,17 @@ def collect_open_prs(lines):
             # FU-108: per-repo agent-label counts ride THIS walk (the REST Search API silently
             # omits private repos under the fine-grained PAT — github_agent_issue_labels had
             # never emitted for oracle-fleet/sleep-tracking; same silent-success class as FU-063).
+            # Counted as a SET of issue numbers, not a running += 1: a repo visited twice in one
+            # walk would otherwise inflate the gauge, and no exposition-level dedup can repair an
+            # already-wrong value (#153). Sets make the count idempotent in the repo dimension.
             for iss in (repo.get("agentIssues") or {}).get("nodes") or []:
                 if not iss:
                     continue
                 for lb in (iss.get("labels") or {}).get("nodes") or []:
                     lname = (lb or {}).get("name") or ""
                     if lname.startswith("agent/"):
-                        key = (repo["name"], lname)
-                        _AGENT_ISSUE_COUNTS[key] = _AGENT_ISSUE_COUNTS.get(key, 0) + 1
+                        _AGENT_ISSUE_NUMBERS.setdefault(
+                            (repo["name"], lname), set()).add(iss.get("number"))
             for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
                 if not pr:
                     continue
@@ -578,7 +647,7 @@ def collect_open_prs(lines):
 
 
 
-_AGENT_ISSUE_COUNTS = {}  # (repo, label) -> n; filled by collect_open_prs' GraphQL walk (FU-108)
+_AGENT_ISSUE_NUMBERS = {}  # (repo, label) -> {issue numbers}; filled by collect_open_prs' walk (FU-108)
 
 
 def collect_agent_issues(lines):
@@ -594,8 +663,9 @@ def collect_agent_issues(lines):
         "# TYPE github_agent_issue_labels gauge",
         "# HELP github_agent_issue_labels Open issues per repo carrying each agent state label (source: the PR GraphQL walk, FU-108).",
     ]
-    for (repo, label), n in sorted(_AGENT_ISSUE_COUNTS.items()):
-        lines.append(metric("github_agent_issue_labels", {"owner": ORG, "repo": repo, "label": label}, n))
+    for (repo, label), numbers in sorted(_AGENT_ISSUE_NUMBERS.items()):
+        lines.append(metric("github_agent_issue_labels",
+                            {"owner": ORG, "repo": repo, "label": label}, len(numbers)))
 
 
 def _app_jwt(app_id, key_path):
@@ -738,11 +808,12 @@ def collect_app_permission_drift(lines):
         for perm, level in live.items():
             if perm not in want and perm != "metadata":
                 mismatches.append((perm, "absent", level))
-        lines.append(f'github_app_permission_drift{{app="{esc(slug)}"}} {1 if mismatches else 0}')
+        # Via metric() like every other series, so the dedup in dedupe_exposition() keys on the same
+        # canonical (sorted-label) rendering — a hand-rolled line is how a series escapes it (#153).
+        lines.append(metric("github_app_permission_drift", {"app": slug}, 1 if mismatches else 0))
         for perm, decl, liv in mismatches:
-            lines.append(
-                f'github_app_permission_mismatch{{app="{esc(slug)}",permission="{esc(perm)}",'
-                f'declared="{esc(decl)}",live="{esc(liv)}"}} 1')
+            lines.append(metric("github_app_permission_mismatch",
+                                {"app": slug, "permission": perm, "declared": decl, "live": liv}, 1))
         # /apps view: enumerate this keyed App's installed repos (the token-list guard in
         # git-token.yaml/reviewer-git.yaml — "verify the App covers each repo BEFORE adding").
         try:
@@ -876,12 +947,22 @@ def poll_forever():
                 print(f"{collector.__name__} failed: {exc}", flush=True)
         if ok:
             _last_success = int(time.time())
+        # Last gate before the body is published: no series may appear twice in one exposition
+        # (#153). Runs BEFORE the self-metrics below so it can report its own collapse count.
+        before = _dupes
+        lines = dedupe_exposition(lines)
+        if _dupes > before:
+            print(f"exposition: collapsed {_dupes - before} duplicate sample line(s) this poll "
+                  f"(github_exporter_duplicate_samples_total={_dupes})", flush=True)
         lines += [
             "# TYPE github_exporter_errors_total counter",
             f"github_exporter_errors_total {_errors}",
             "# TYPE github_exporter_last_success_timestamp gauge",
             "# HELP github_exporter_last_success_timestamp Epoch of the last fully successful poll (stale ⇒ token expired/revoked or API down).",
             f"github_exporter_last_success_timestamp {_last_success}",
+            "# TYPE github_exporter_duplicate_samples_total counter",
+            "# HELP github_exporter_duplicate_samples_total Duplicate sample lines collapsed out of the exposition (#153); >0 = a collector re-emitted a series and the dedup absorbed it — the poller is correct but a duplication path is back.",
+            f"github_exporter_duplicate_samples_total {_dupes}",
         ]
         with _lock:
             _body = "\n".join(lines) + "\n"
