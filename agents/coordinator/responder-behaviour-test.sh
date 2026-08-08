@@ -378,7 +378,7 @@ want "resolved with no open issue → nothing to close" "nothing to close"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "VERDICT read-back follows a RE-ROUTED filing"
-# STEP 1 can land a session on any claimed -iac, so searching only (default, platform) would drop
+# STEP 1 can land a session on ANY claimed repo, so searching only (default, platform) would drop
 # the verdict: the issue would sit unlabelled and the bell would never ring.
 
 scenario verdict-rerouted
@@ -389,6 +389,20 @@ jq -n '{body:"alert-fp:v1\nfix-verdict: fix"}' > "$H/gh/verdict-issue.json"
 go "$(alert v1 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
 want     "verdict found on the re-routed repo and labelled agent-fix" "sleep-iac#42 labelled agent-fix"
 wantcall "verdict → /fix-verdict bell rung" "/fix-verdict"
+
+# …and APP-ward, not just -iac-ward (#154). STEP 1's own rule routes to the stack's app repo when
+# the fix is that stack's application code — a workflow file in a stack repo is app-repo surface.
+# Filtering the candidates to `-iac` names made those filings inert: oracle-fleet#228 carried
+# 'fix-verdict: fix' and sat unlabelled for ~6h until a human hand-queued it.
+scenario verdict-rerouted-app-repo
+printf '[]' > "$H/gh/search.json"
+printf '[]' > "$H/gh/verdict-list-teststuffstash_homelab.json"
+jq -n '[{number:228, body:"alert-fp:v2\nfix-verdict: fix"}]' > "$H/gh/verdict-list-teststuffstash_oracle-fleet.json"
+jq -n '{body:"alert-fp:v2\nfix-verdict: fix"}' > "$H/gh/verdict-issue.json"
+go "$(alert v2 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x"}')"
+want     "verdict on a claimed APP repo found and labelled agent-fix" "oracle-fleet#228 labelled agent-fix"
+wantnot  "app-repo verdict → not written off as unfindable" "nothing to label"
+wantcall "app-repo verdict → /fix-verdict bell rung" "/fix-verdict"
 
 printf '\n\033[1mRESULT: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 if [ "$FAIL" -ne 0 ]; then printf 'failed:\n'; printf '  - %s\n' "${FAILED[@]}"; exit 1; fi
