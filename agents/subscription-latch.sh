@@ -41,7 +41,7 @@ fi
 # Semaphore belt: label-selector count of live subscription sessions. Launchers stamp the label
 # (homelab.teststuff.net/subscription-session=claude) on every pod that draws on the operator
 # plan. Needs cluster-wide pod list; a denied/absent kubectl fails open.
-MAX="${SUBSCRIPTION_MAX_RUNNING:-3}"
+MAX="${SUBSCRIPTION_MAX_RUNNING:-5}" # 3→5 2026-08-08 (Max 5x→20x); authority = the proxy Deployment env
 if [ "$server_semaphore" != "true" ] && [ "$MAX" -gt 0 ] 2>/dev/null && command -v kubectl >/dev/null 2>&1; then
   running="$(kubectl get pods -A -l homelab.teststuff.net/subscription-session=claude \
     --field-selector status.phase=Running --no-headers 2>/dev/null | wc -l)" || running=0

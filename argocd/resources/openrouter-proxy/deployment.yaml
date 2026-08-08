@@ -40,6 +40,13 @@ spec:
             # (ANTHROPIC_UTIL_THRESHOLD, unset here) = 0.80 governs 5h.
             - name: ANTHROPIC_UTIL_THRESHOLD_7D
               value: "0.95"
+            # FU-088 concurrency semaphore, EXPLICIT since 2026-08-08 (was the code default 3):
+            # operator upgraded the subscription Max 5x → Max 20x and raised this to 5. The
+            # utilization thresholds above need NO recalibration — they read Anthropic's own
+            # per-plan fraction headers. Keep in step with the subscription-capacity ConfigMap
+            # (agents/coordinator/reflexes-argo.yaml) and agents/subscription-latch.sh's default.
+            - name: SUBSCRIPTION_MAX_RUNNING
+              value: "5"
             # FU-089 finale (2026-07-26): /git-token refuses unauthenticated callers. Flipped
             # after live evidence — a full ride lifecycle (issue-135 r1 redispatch) fetched
             # with the agentstack-worker SA bearer, TokenReview-verified. Set "0" only for a
