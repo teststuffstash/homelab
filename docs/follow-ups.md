@@ -536,10 +536,13 @@ the block needs pruning, not more headings.
       archive): wk-metal-03 (hardened 07-28) was hit again ~10 days later, wk-02 rebooted/reset
       2026-08-07 — each burst = one Talos OOMController PSI fire killing 4-5 pods in one second,
       surfacing as N PodSigkilled alerts + responder sessions (homelab#63/#65/#68/#101, all
-      closed as this class). **Next:** research what Talos 1.13 actually exposes for
-      OOMController/PSI thresholds, then operator decision: tune, or accept the ~10-day cadence
-      and teach the responder the shared-fate signature. Relates FU-139/FU-112/FU-082 (archived),
-      ADR-044.
+      closed as this class). **⚠ CADENCE PREMISE BROKEN 2026-08-08:** wk-metal-03 flapped ≥4
+      PSI-kill cycles in ~2.5h ONE afternoon (clear-stamps 15:18/16:54/16:59/17:10 across
+      #63/#65/#100) — not ~10-day; and the rate was only visible by hand-auditing comments,
+      smeared across 3 issues (no aggregation view; #148/#149 fix the comment side).
+      **Next:** research what Talos 1.13 actually exposes for OOMController/PSI thresholds,
+      then operator decision: tune, or accept + teach the responder the shared-fate signature —
+      today's burst rate argues for TUNE. Relates FU-139/FU-112/FU-082 (archived), ADR-044.
 
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
