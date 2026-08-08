@@ -2961,3 +2961,31 @@ only when ArgoCD refused to see the new Applications. Fix: rebased 15 commits on
 after every push, `git fetch && rev-parse` both sides — "the push printed a To-line" is a claim
 about stdout, not about the remote** (the absence-lesson, output edition). Auto-merge landing on
 master mid-session makes this ROUTINE, not exotic — pull --rebase before push batches.
+
+## 2026-08-08 (~10:30–11:00Z, fresh meta session) — bootstrap sweep: two platform merges, one breaker autopsied to an already-fixed class
+
+- **Platform PRs merged (meta review + OrgAdmin, no bot approver coming)**: PR#129 (#124 —
+  fix-surface routing, verdict-keyed resolve leg, scoped `source` fallback + the extracted-from-
+  YAML behaviour harness: ran it in-jail from the PR branch, 47/47) and PR#130 (timeout-wrap the
+  coordinator clone steps — third occurrence of the scan-mutex wedge, #108/#120; verified
+  `timeout` exists in the image via the agent-coordinator Dockerfile — node:22-bookworm-slim,
+  coreutils is priority:required — the one regression the PR's own verification note didn't cover).
+- **oracle-fleet PR#210 breaker cleared with a NEGATIVE finding worth keeping**: the 02:56Z
+  agent/error was the reviewer's PRE-#122 STEP-0 latching own-verdict-at-head — a state the
+  reworked guard (merged PR#123 ~05:00Z) now classifies as stand-aside. Trip predates fix →
+  NO new issue (prior-art: the class fix had already merged before the audit). Cleared with
+  audit, dismissed the arbitrated-away CHANGES_REQUESTED (OrgAdmin, reason on record, #213
+  tracks the finding) so the DIRTY PR re-enters the merge-conflict lane. The triggering
+  coordinator re-dispatch violated §arbitrate's written "never re-dispatch the reviewer" — under
+  the new guard that mistake now degrades to a harmless stand-aside, so prose-hardening is not
+  worth an issue.
+- **#107 closed by the defect, not the alert** (first live use of the #124 doctrine, by hand):
+  both accumulated causes probed green — homelab/ghcr 0 drops over 12h containing fixer rides
+  (allowlisted `1904096` 2026-08-05), oracle/astral 0 drops over 6h containing the fresh-clone
+  post-fix ride #193-r1 (3h+). The 12h number (236) was PRE-fix tail — window discipline matters:
+  shrink the window past the fix time before reading a counter as a verdict.
+- **Triage**: #126/#127/#128 (PR#123 review harvest) queued; #126+#128 share the STEP-0 command
+  line — sibling-bundle note left on #126. The ~10 Failed respond-* pods (9–22h) are FU-113b
+  deferral markers from the semaphore-starved night, not incidents (crosscheck belt: clean).
+- Watches re-armed (needs-meta + 2h heartbeat + handoff; killed 4 orphaned processes from the
+  dead session first — they were still emitting into a closed session).

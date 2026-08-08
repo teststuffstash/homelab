@@ -6,25 +6,29 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~05:30Z sweep — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-08 ~11:00Z sweep — everything below is CURRENT; history is TICK-LOG's)
 
-- **circles goal #29**: one child left — #57 (r2 rode through the new actual-spend budget gate,
-  `a9d89c9`; Budget: $16). PR#58 is ci-red + CHANGES_REQUESTED with the loop counting rounds
-  (r1 was an auth-circuit salvage — watch FU-154 rounds semantics if a re-PR appears). Assembly
-  PR#54 BEHIND+CHANGES_REQUESTED; when its review clears, its next update run is the BEHAVIORAL
-  acceptance of the goal/** ruleset bypass (config verified by read-back, #118 closed).
-- **oracle**: goal #174 + #160 DONE (assembly #202 merged 02:59Z, codeowner review on record;
-  probe evidence attached post-merge). Priority pins riding/queued: #193 (ride verified
-  productive at 110m), #194, #215 (launch-gating parser variant — gates the corpus rebuild).
-  Cosmetic sprouts drain behind them. **#216 (operator spec PR) is DIRTY post-#202 — its author
-  (the oracle jail) rebases, then meta reviews+merges.** The search `doc_type` ⚖ fork awaits the
-  operator's ruling (meta lean: carry doc_type in hits).
-- **platform queue**: #124 (responder routing + verdict-keyed resolve leg — DESIGN AMENDED on the
-  issue 04:00Z, build to the amendment) and #125 (responder toolbox: hubble/RBAC/read-own-thread)
-  queued next now #122 merged (PR#123). #103 open (containment holds; do NOT tighten
-  activeDeadline / reject unit=-). #116 = operator mirror-capacity decision. #107 stays open as
-  the egress defect record until the uv-fix acceptance gets one fresh-clone oracle ride datum
-  (0 drops since the pre-fix clones drained). #121 report-only (physical errand).
+- **circles goal #29**: #57 DONE (closed 05:30Z, agent/done) — the assembly review spawned two
+  new children, #59 + #60 (queued). Assembly PR#54 still BEHIND+CHANGES_REQUESTED; when its
+  review clears, its next update run is the BEHAVIORAL acceptance of the goal/** ruleset bypass.
+- **oracle**: priority pins #193 (r1 riding, fresh-clone post-uv-fix — its 3h+ zero-drop window
+  was the #107 acceptance datum), #194 + #215 queued/review. **#216 (operator spec PR) still
+  DIRTY — its author (the oracle jail) rebases, then meta reviews+merges.** PR#210 UNWEDGED
+  ~10:45Z: agent/error cleared (pre-#122 guard residue, class already fixed by PR#123), stale
+  CHANGES_REQUESTED dismissed per the 02:52Z arbitration (#213 tracks the finding) — the
+  merge-conflict lane owns the rebase, reviewer re-verdicts the new head. The search `doc_type`
+  ⚖ fork awaits the operator's ruling (meta lean: carry doc_type in hits).
+- **platform queue**: #124 CLOSED — PR#129 meta-reviewed (behaviour harness 47/47 in-jail) +
+  merged ~10:30Z; PR#130 (clone timeout-wrap, the scan-wedge class #108/#120) merged ~10:36Z.
+  Queued now: #125 (responder toolbox), #126+#128 (reviewer STEP-0: injected login + `,comments`
+  — same surface, sibling-bundle note on #126), #127 (merge-path docs drift), #132 (cloudflare
+  exporter missing CF_ACCOUNTS). #103 open (containment holds; do NOT tighten activeDeadline /
+  reject unit=-). #116 = operator mirror-capacity decision. #107 CLOSED ~10:50Z with both
+  acceptance probes (ghcr allowlisted `1904096`; astral 0 drops over 6h incl. a fresh-clone ride).
+- **Cloudflare public-ingress (FU-039/ADR-101)**: built + unarmed; `cloudflare-ingress-write`
+  ExternalSecret is SecretSyncedError BY DESIGN until the operator's `devbox run
+  cloudflare-token-tofu apply` mints + stores CLOUDFLARE_INGRESS_WRITE. That apply is the
+  arming switch; test claim + ha retrofit are operator-witnessed acts after it.
 - **Operator physical/one-trip**: wk-metal-02 cable/switch-port (#117) + the laptop4 plug
   (#121) — same corner.
 - **FU-149 spot-check** still pending a post-rollover firing of `ResponderTriageBudgetExhausted`
