@@ -46,6 +46,10 @@ meant to avoid.)
   Crossplane-rendered (AgentStack Composition, argocd/resources/) and their tick pods verified
   WITHOUT the constraint (15:30Z pod, tsc null). Mirror the merged podSpecPatch shape into the
   Composition's CronWorkflow template + verify a fresh tick per stack. Composition = meta lane.
+- **TOMORROW (operator): rework DRAFT oracle-fleet#255** (ING-RT-RECONCILE mechanism) with
+  oracle context. Operator constraint captured on it: next bulk download is ATTENDED — no
+  scheduling until runaway-download protections exist (no egress volume/bandwidth belts today;
+  100-parallel-forever would be allowed). The protections piece likely splits to homelab.
 - **TOMORROW (operator, ~5 min): mint `homelab-jail-read-all`** — dashboard "Read all resources"
   template, all accounts/all zones, **plus user-scope API Tokens Read** (lets the jail list the
   permission-group catalog — the admin token can't, it has creation rights only). No IP filter,
