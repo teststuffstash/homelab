@@ -27,3 +27,14 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "1" # the Grafana sidecar discovers this label across ALL namespaces
+  # ADR-102 goal registry + convergence panel (#209). Lives HERE, beside the collector that emits
+  # its series, rather than in tofu/dashboards/ — the three aggregate agent dashboards there each
+  # need a `for_each` entry in tofu/monitoring.tf and an operator `tofu apply` to move, while the
+  # sidecar picks this ConfigMap up on ArgoCD sync. Same pattern as pushgateway's agent-issue
+  # drill-down, which this dashboard's tree table links into.
+  - name: grafana-dashboard-agent-goals
+    files:
+      - agent-goals.json=dashboard-agent-goals.json
+    options:
+      labels:
+        grafana_dashboard: "1"
