@@ -22,7 +22,7 @@ spec:
     # 1) the chart from ghcr (OCI). Public package → no repo credential. Bump targetRevision per release.
     - repoURL: ghcr.io/teststuffstash/charts
       chart: openrouter-operator
-      targetRevision: 2026.8.9-gd260b15f090d
+      targetRevision: 2026.8.9-gafdfa6dfd32b
       helm:
         valueFiles:
           - $values/argocd/platform/values/openrouter-operator.yaml
