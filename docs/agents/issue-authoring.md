@@ -93,7 +93,8 @@ covers homelab — **not** on adding more checks before the launch.
 ## Leg (a) — follow-up harvest — BUILT 2026-07-27
 
 The C6 / merged item session files each `Follow-ups:` bullet as an issue, with provenance links,
-`Depends-on:` lines (FU-087) and the track label inherited.
+dependencies (FU-087 — **native `blockedBy` edges** since FU-111 retired the body line, §Dependencies
+below) and the track label inherited.
 
 Mechanism: the scan emits **`merged-closeout`** units for issues closed by a merged PR but still
 `agent/in-progress` (21-day window, cap 3/repo/scan, `agent/error` excluded). The item session's
@@ -102,7 +103,9 @@ file each review `Follow-ups:` bullet as an inert issue → one closing comment.
 on all three stacks.
 
 **Visibility slice shipped 2026-07-18:** the scan reports 🌱 bot-authored issues lacking
-`agent-fix` per repo, so harvested drafts surface for human triage instead of rotting.
+`agent-fix` per repo, so harvested drafts surface for human triage instead of rotting. Since
+2026-08-09 an issue whose blockers have all closed is PROMOTED out of that list into its own
+🔓 UNBLOCKED-UNLABELED class — §Dependencies below.
 
 **Consumers registered 2026-07-27:** the harvest is the birth path for the infra-fixer's
 expand/contract debt tasks ([iac-lane.md](iac-lane.md) §rollout matrix, row d), and the goal-issue
@@ -511,6 +514,37 @@ lifecycle in dependency order; the FU-108 probe-that-looks bar). The one open bo
 oracle-fleet#84, was migrated to a native edge before the reader was removed. Only the native
 edge gates now; a body line is inert prose. Cycle detection also reads native `blockedBy`
 (the dep's nodes pointing back), no longer the dep's body.
+
+**Authoring a sequenced issue — the two lines that must both be true** (homelab#226, after the
+2026-08-09 miss below):
+
+1. The dependency is a **native edge**, created with the `gh api` call above. Not a body line, not
+   a sentence in the description, not "filed behind #215" in the filing session's head.
+2. The issue carries a **label** — even `agent-fix` alone, unqueued. An unlabelled issue is
+   invisible to every dispatch clause by design (breaker #1), and until 2026-08-09 it stayed
+   invisible after its blockers closed too.
+
+Both are now CHECKED rather than asked for, in `agents/coordinator-scan.sh` (report-only, replayed
+by `agents/replay/fixtures/depends-on-retired-format` and `…/unblocked-unlabeled-*`):
+
+| Clause | Fires on | Says |
+|---|---|---|
+| ⚠ **RETIRED FORMAT** | any open issue whose body carries a line-anchored `Depends-on:` (bulleted form included) | the line gates nothing — re-author it as a native edge, then delete it |
+| 🔓 **UNBLOCKED-UNLABELED** | an issue >24h old, no `agent*` label, ≥1 blocked-by edge, **all** of them closed | the gate you were waiting on is gone and nobody has triaged this |
+
+**The miss they were built from, 2026-08-09.** oracle-fleet#225 + oracle-iac#322 (the delta-job
+deployment) were filed on 2026-08-08 deliberately unlabelled, sequenced behind oracle-fleet#215 —
+with a `Depends-on:` body line written the day *after* FU-111 retired its reader. #215 closed at
+04:23Z; nothing fired for 12h, until the operator asked. Two failures, one of each kind: a
+dependency written in a dead format (so it could never fire on blocker close), and a resolved gate
+that no clause was watching (the needs-meta `unlabeled >24h` clause covers PLATFORM repos only, and
+the 🌱 slice reports a stack issue identically before and after its blockers close).
+
+🔓 is **report-only**, and that is not a gap to close later: the FU-090 human gate is the point.
+What was missing is visibility of a resolved gate, never permission to walk through it. It is also
+**not author-filtered** — the 🌱 slice is bot-only, which is exactly why a jail-authored chain was
+invisible to it, and an author allowlist would re-narrow the same way one ring out. The blocked-by
+requirement is what keeps it quiet instead: an issue that never had a blocker never appears.
 
 ## Why sub-issues here and not elsewhere
 
