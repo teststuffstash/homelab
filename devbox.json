@@ -98,6 +98,9 @@
       "state-fp-replay": [
         "bash agents/state-fp-replay.sh"
       ],
+      "clause-replay": [
+        "bash agents/replay/run.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],

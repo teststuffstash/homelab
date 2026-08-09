@@ -73,6 +73,31 @@ jobs:
       - name: State-fingerprint debounce replay (devbox run state-fp-replay)
         run: devbox run state-fp-replay
 
+      # ADR-103 leg 1: every committed clause replay executes on every push — the generalized
+      # harness (agents/replay/, homelab#206). Fixtures are offline recordings; ~seconds.
+      - name: Clause replays (devbox run clause-replay)
+        run: devbox run clause-replay
+
+      # The ADR-103 RATCHET: a PR that changes clause-carrying files without touching any replay
+      # fixture is red. This does not prove the fixture COVERS the change — it forces the author
+      # to look at the replay tree at all, which is the compliance gap the recurrence audit named
+      # (every prose-warned class recurred; every executed gate held). Widen the file list as
+      # clause code moves; loosen ONLY by ADR.
+      - name: Changed clauses carry replay changes (ADR-103 ratchet)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q origin "${{ github.base_ref }}" --depth=1
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|coordinator/(reflexes|review|coordinate)[^/]*\.ya?ml)$' || true)
+          replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
+          if [ -n "$clause" ] && [ -z "$replay" ]; then
+            echo "::error::ADR-103 ratchet: clause files changed with NO replay fixture change:"
+            printf '%s\n' "$clause"
+            echo "Add/extend a fixture under agents/replay/fixtures/ (or record why none applies IN a fixture README diff)."
+            exit 1
+          fi
+          echo "ratchet: ok (clause files: $(printf '%s' "$clause" | grep -c . || true), replay files touched: $(printf '%s' "$replay" | grep -c . || true))"
+
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
