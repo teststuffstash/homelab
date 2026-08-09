@@ -92,6 +92,9 @@
       "rail-degrade-replay": [
         "bash agents/rail-degrade-replay.sh"
       ],
+      "prompt-transport-lint": [
+        "python3 scripts/prompt-transport-lint.py \"$@\""
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
