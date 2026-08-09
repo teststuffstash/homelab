@@ -13,12 +13,18 @@ meant to avoid.)
   see TICK-LOG) ✓#209 panel ✓#207 harvest→post-launch-bucket (PR#216) ✓#212 optout shared read
   ✓#215. REMAINING: **#208 verdict terminals** (dispatches now #207's footprint freed — review
   like a hawk, replay fixtures are the acceptance) + **#210 channel separation**. Monday retro
-  (08-10 05:00Z) scores the two ADR-103 KPIs first — CHECK ITS REPORT.
-- **minutark.ee**: zone LIVE on CF (benedict/paris), empty by design, survey → oracle-iac#351
-  (blocked: operator re-mints ingress token host-side — token root already prepped with the
-  two-zone map + account-first policy order; expect a CLEAN apply, the old 4-error flap is
-  fixed). After re-mint: I run #351 bootstrap + first PublicRoute claim (placeholder backend).
-  DNSSEC enable rides the bootstrap; DS hand-back at zone.ee is manual. NO LB (ladder rung 1).
+  (08-10 05:00Z) scores the two ADR-103 KPIs first — CHECK ITS REPORT. ADR-102 clause set
+  COMPLETE (PR#216+#218); remaining program: #210 channels (riding, homelab leg + agent-
+  runtime#62), #217 spend belt (queued).
+- **minutark.ee LIVE + SERVING** (placeholder, 2026-08-09 ~12:45Z) through the full new chain:
+  cf-api-proxy (allowlist = the permission model, reconciler tokenless) + PublicRoute product-
+  zone class + zone bootstrap applied (TLS 1.2 / always-HTTPS / SPF+DMARC / DNSSEC). ONE step
+  remains, OPERATOR: add the DS at zone.ee —
+  `2371 13 2 B6C05FC87C68195F40C98F4A2099E3DFFF02447920A84A0A633CF11DA4B48D79`
+  then authoritative-verify (`dig DS minutark.ee @ns.tld.ee +norecurse` shows the digest) and
+  close oracle-iac#351. NO LB (ladder rung 1); MCP exposure waits on the gateway (T3c).
+  Design + boundaries: docs/cloudflare.md. Spend belt queued homelab#217; FU-157 account-token
+  migration opportunistic.
 - **ert-verify-2026089-mpws5**: waiting out riigiteataja's weekly regeneration (LOEMIND.txt
   sentinel); backoff hourly; monitor armed; completes when upstream publishes. oracle-iac#343
   corrected+de-queued (wrong premise — do NOT re-queue unless proxy 504s while in-pod curl
