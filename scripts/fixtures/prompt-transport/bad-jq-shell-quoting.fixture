@@ -1,0 +1,17 @@
+# FIXTURE — NOT LIVE CODE, never sourced or executed. Positive control for #197 instance 4.
+#
+# The pre-fix headless path of agents/coordinator-session.sh (shipped 2026-08-08 20:30Z, fixed by
+# 51e7f5c 2026-08-09 02:35Z), reproduced verbatim. jq escapes for JSON, and backticks and dollar
+# signs are not JSON-special, so the prompt survived into the pod's `bash -lc` and was RE-EXPANDED
+# there: the #162 RAIL RULE's backticked fragments ran as commands and were STRIPPED from every
+# delivered item prompt for ~6h.
+#
+# It is the PAIR that makes the bug: an inner substitution feeding a string that is itself handed
+# to a shell. The OUTER jq on the ARGS line is the sanctioned transport and must stay unflagged —
+# a lint that flags every jq -R in the file fails on today's fixed tree.
+# EXPECT: JQ-QUOTING@16
+#
+  WRAPPED="${PREP}
+${UPLOAD_FN}
+set +e; claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .); RC=\$?; upload_transcripts; exit \$RC"
+  ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"

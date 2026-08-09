@@ -1,0 +1,28 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control for the ordinary shell the launchers are full of, so
+# the two heuristics stay narrow: positional parameters in an arg parser and inside a NON-manifest
+# heredoc are not the bug (only $<digit> in an EXPANDING k8s-manifest heredoc is), a here-string
+# `<<<` is not a heredoc, a quoted `<<'EOF'` delimiter never expands, an apostrophe in a trailing
+# comment must not run the quote scanner off the end of the file, and a jq -R feeding a value that
+# is never handed to a shell is fine.
+# EXPECT: clean
+#
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --run)  RUN_CMD="$2"; shift 2;;   # don't inline this — it's the prompt
+    *)      echo "unknown arg: $1" >&2; exit 2;;
+  esac
+done
+
+STATE="$(jq -r .state <<<"$PRJSON")"
+LABEL="$(printf '%s' "$TITLE" | jq -Rs .)"           # a JSON field, not a shell argument
+curl -sS -X POST -d "{\"body\":${LABEL}}" "$API_URL" >/dev/null
+
+cat <<'SNIP' > /tmp/inner.sh
+set +e
+claude -p "$PROMPT" --model "$MODEL" > /tmp/result.json
+exit $?
+SNIP
+
+cat <<EOF > /tmp/notes.txt
+positional $1 in a plain text heredoc is not a manifest — nothing here reaches kubectl
+EOF
