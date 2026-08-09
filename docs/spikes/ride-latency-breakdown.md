@@ -48,7 +48,8 @@ reconstruction into standing metrics + an alert).
   BUT the counter-example was 6h earlier the same day: the #107 dispatch session refused a
   meta mis-queue (fix already merged). Right shape: a **guarded mechanical fast-path**
   (fix-class ∧ round 1 ∧ no open PR ∧ no breaker signals → deterministic claim/mint/launch,
-  ~10s; anything else → LLM session). FU-045-adjacent; needs its own design pass.
+  ~10s; anything else → LLM session). Same family as the launcher-owned-params doctrine
+  (ADR-094) and the long migration of decisions out of the LLM; needs its own design pass.
 - **Push + PR-open are LLM tool calls** (model-assembled `git push`, `gh pr create` heredoc).
   A deterministic `pr-open` finalize step (model supplies title/body; script does
   branch-push-PR-arm) shaves ~2–4 round-trips (~30–60s) and removes the heredoc-assembly
