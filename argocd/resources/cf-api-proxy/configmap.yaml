@@ -1,0 +1,71 @@
+# The allowlist IS the permission model (operator design session 2026-08-09, third instantiation
+# of the proxy+policy pattern after the OpenRouter proxy and ert-egress-proxy). Cloudflare's
+# permission-group catalog is undocumented and coarser than its API (Zone Settings Write also
+# toggles USAGE-BILLED features — Argo Smart Routing bills per-GB and a card is attached to the
+# account), so the effective surface for the AUTONOMOUS consumer (provider-terraform reconciling
+# PublicRoute claims) is pinned here in paths we can read and diff:
+#   • dns_records CRUD on the two product zones
+#   • cfd_tunnel CRUD/config/token under the account
+#   • read-only zone lookups + token verify
+# Everything else — argo/*, settings writes, billing, other zones — 403s with a body that names
+# this file. The JAIL's write-key deliberately does NOT route through here (operator ruling:
+# jail tofu applies are human-gated per plan; the bootstrap needs paths this allowlist must
+# never contain).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cf-api-proxy-nginx
+  namespace: cf-api-proxy
+data:
+  default.conf.template: |
+    # kube-dns ClusterIP (stable; nginx resolver needs an IP). valid=30s re-resolves the
+    # Cloudflare edge per-TTL — the ert-egress-proxy pin-forever lesson (oracle-iac#343).
+    resolver 10.96.0.10 valid=30s ipv6=off;
+
+    map $request_method $cf_ro_allowed {
+      GET     1;
+      HEAD    1;
+      default 0;
+    }
+
+    server {
+      listen 8080;
+
+      set $cf_upstream https://api.cloudflare.com;
+      proxy_ssl_server_name on;
+      proxy_ssl_name api.cloudflare.com;
+      proxy_ssl_protocols TLSv1.2 TLSv1.3;
+      proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+      proxy_ssl_verify on;
+      proxy_ssl_verify_depth 3;
+      proxy_http_version 1.1;
+      proxy_set_header Host api.cloudflare.com;
+      proxy_set_header Authorization "Bearer ${CF_TOKEN}";
+      proxy_set_header Connection "";
+
+      # default: DENY, loudly, in the API's own error shape so the provider surfaces it verbatim
+      location / {
+        default_type application/json;
+        return 403 '{"success":false,"errors":[{"code":10403,"message":"cf-api-proxy: path/method not in the allowlist — argocd/resources/cf-api-proxy/configmap.yaml (homelab)"}],"messages":[],"result":null}';
+      }
+
+      # dns_records CRUD on the product zones (teststuff.net, minutark.ee)
+      location ~ ^/client/v4/zones/(6b63f95592a9e036f8b8f6934511d321|fa1b02951c29ee4828b8948d0dd7baaf)/dns_records {
+        proxy_pass $cf_upstream;
+      }
+
+      # per-claim tunnels: create/config/delete + the token read
+      location ~ ^/client/v4/accounts/07b08646b26bb43cd3073826f43b73da/cfd_tunnel {
+        proxy_pass $cf_upstream;
+      }
+
+      # read-only: token verify + zone lookups (provider refresh paths). $cf_ro_allowed guards
+      # method; a POST here falls to 403 — settings/argo WRITES can never transit this proxy.
+      location ~ ^/client/v4/(user/tokens/verify|zones($|\?)|zones/(6b63f95592a9e036f8b8f6934511d321|fa1b02951c29ee4828b8948d0dd7baaf)($|/)) {
+        if ($cf_ro_allowed = 0) {
+          return 403 '{"success":false,"errors":[{"code":10403,"message":"cf-api-proxy: write outside dns_records/cfd_tunnel — argocd/resources/cf-api-proxy/configmap.yaml"}],"messages":[],"result":null}';
+        }
+        default_type application/json;
+        proxy_pass $cf_upstream;
+      }
+    }

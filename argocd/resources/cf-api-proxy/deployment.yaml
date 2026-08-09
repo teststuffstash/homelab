@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cf-api-proxy
+  namespace: cf-api-proxy
+  labels: { app: cf-api-proxy }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cf-api-proxy }
+  template:
+    metadata:
+      labels: { app: cf-api-proxy }
+    spec:
+      containers:
+        - name: nginx
+          # same pin as ert-egress-proxy (oracle-iac) — the unprivileged image reads
+          # /etc/nginx/templates/*.template and envsubsts ${CF_TOKEN} at start.
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: CF_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cf-api-token, key: token }
+            - name: NGINX_ENVSUBST_OUTPUT_DIR
+              value: /etc/nginx/conf.d
+          volumeMounts:
+            - { name: tmpl, mountPath: /etc/nginx/templates }
+          readinessProbe:
+            httpGet: { path: /client/v4/user/tokens/verify, port: 8080 }
+            initialDelaySeconds: 2
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+      volumes:
+        - name: tmpl
+          configMap: { name: cf-api-proxy-nginx }

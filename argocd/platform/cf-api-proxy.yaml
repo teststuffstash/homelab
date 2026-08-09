@@ -1,0 +1,27 @@
+# cf-api-proxy (operator design session 2026-08-09) — the allowlisting Cloudflare API proxy for
+# the AUTONOMOUS write path (PublicRoute/provider-terraform). Holds the ingress-write token;
+# the reconciler is tokenless and the effective permission model is the nginx allowlist in git,
+# not Cloudflare's undocumented permission-group catalog. Wave 4: must be Ready before the
+# publicroute wave can reconcile a claim through it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cf-api-proxy
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teststuffstash/homelab.git
+    targetRevision: master
+    path: argocd/resources/cf-api-proxy
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

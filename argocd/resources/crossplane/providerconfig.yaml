@@ -29,10 +29,16 @@ spec:
 
     provider "garage" {}
 
-    # PublicRoute Workspaces (FU-039 public ingress). Reads CLOUDFLARE_API_TOKEN from the pod
-    # env — the ESO-delivered cloudflare-ingress-write secret (OPTIONAL on the pod: absent key
-    # in Infisical = the capability is UNARMED and only cloudflare workspaces fail, loudly).
-    provider "cloudflare" {}
+    # PublicRoute Workspaces (FU-039 public ingress) — ROUTED THROUGH cf-api-proxy (operator
+    # design session 2026-08-09): the reconciler holds NO Cloudflare credential; the proxy owns
+    # the ingress-write token and enforces a method+path allowlist in git
+    # (argocd/resources/cf-api-proxy). api_token is a non-empty placeholder the provider
+    # requires — the proxy REPLACES the Authorization header. Unarmed now means: proxy absent
+    # or its Infisical key missing → cloudflare Workspaces fail loudly, Cloudflare untouched.
+    provider "cloudflare" {
+      base_url  = "http://cf-api-proxy.cf-api-proxy.svc.cluster.local/client/v4"
+      api_token = "routed-via-cf-api-proxy"
+    }
 
     # App Workspaces can publish keys to Infisical. Auth via the crossplane-tf-writer
     # Universal-Auth creds in the pod env (INFISICAL_UNIVERSAL_AUTH_CLIENT_ID/SECRET).
