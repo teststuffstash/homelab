@@ -28,11 +28,11 @@ meant to avoid.)
   regeneration (LOEMIND.txt sentinel); backoff hourly; completes when upstream publishes.
   oracle-iac#343 corrected+de-queued (do NOT re-queue unless proxy 504s while in-pod curl works
   AFTER the files return). This is the #217/#235 fix-cycle verification tail.
-- **homelab#107 QUEUED 12:2xZ** (astral-CDN leg only; ghcr leg closed by `1904096`): ⚖ =
-  UV_PYTHON_PREFERENCE=only-system in agent-session.sh, NOT an extraFQDNs widening; Touches
-  repointed. Watch the ride's PR like any platform-lane PR (needs meta read + admin merge).
-- **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 (death-class test
-  self-referential) + #62 queued by meta. or-op#34 SOAKS until first daily-class 429 datum.
+- **homelab#107 CLOSED 13:05Z** — the 12:23Z queue was a meta mis-queue (fix already on master
+  e5f568e; triaged from a truncated thread read — TICK-LOG has the lesson); dispatch refused the
+  no-op, all defect legs fixed, fingerprint re-fire is the net.
+- **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 DONE (PR#63 merged
+  13:1xZ, ast-pin); #62 queued. or-op#34 SOAKS until first daily-class 429 datum.
   **or-op#25 QUEUED ~13:00Z** — gating question settled by code (default rail = proxy-resolved
   `ref:`, 60s cache → rotation reaches live rides); ⚖ on-issue: remaining-carry budget,
   no-delete old key, threshold > cache TTL.
