@@ -29,12 +29,22 @@ spec:
               type: object
               required: [hostname, backend]
               properties:
+                zone:
+                  type: string
+                  default: teststuff.net
+                  description: >-
+                    Which zone the route lives in (ADR-101 zone classes). Platform zone
+                    (teststuff.net, the default): any namespace may claim inside its delegated
+                    subtree. Product zone (e.g. minutark.ee): ONLY the owning namespace may
+                    claim, anywhere in the zone incl. the apex — the owner map is a platform
+                    constant in the composition.
                 hostname:
                   type: string
                   description: >-
-                    Public FQDN. Must lie in the claiming namespace's delegated subtree
-                    (<anything>.<namespace>.teststuff.net) — enforced by the composition
-                    (the XRD is the privilege boundary; Cloudflare has no sub-zone grain).
+                    Public FQDN. Platform zone: must lie in the claiming namespace's delegated
+                    subtree (<anything>.<namespace>.teststuff.net). Product zone: must be the
+                    zone apex or inside it. Enforced by the composition (the XRD is the
+                    privilege boundary; Cloudflare has no sub-zone grain).
                 backend:
                   type: object
                   required: [service, port]

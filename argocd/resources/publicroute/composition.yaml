@@ -30,9 +30,28 @@ spec:
             {{- $claim := $xr.spec.claimRef.name }}
             {{- $host := $xr.spec.hostname }}
             {{- $b := $xr.spec.backend }}
-            {{- /* the privilege boundary: a claim only creates routes in its delegated subtree */}}
-            {{- if not (hasSuffix (printf ".%s.teststuff.net" $ns) $host) }}
-              {{- fail (printf "PublicRoute %s/%s: hostname %q is outside the namespace's delegated subtree *.%s.teststuff.net (zone-class + delegations doctrine: docs/cloudflare.md)" $ns $claim $host $ns) }}
+            {{- /* ADR-101 zone classes (platform constants — docs/cloudflare.md §Live IDs).
+                 platform: any ns claims inside its delegated subtree. product: ONLY the owning
+                 ns, anywhere in the zone (apex included) — the stack owns the whole zone. */}}
+            {{- $zones := dict
+                  "teststuff.net" (dict "id" "6b63f95592a9e036f8b8f6934511d321" "class" "platform")
+                  "minutark.ee"   (dict "id" "fa1b02951c29ee4828b8948d0dd7baaf" "class" "product" "owner" "oracle-fleet") }}
+            {{- $zoneName := $xr.spec.zone | default "teststuff.net" }}
+            {{- $zone := get $zones $zoneName }}
+            {{- if not $zone }}
+              {{- fail (printf "PublicRoute %s/%s: zone %q is not a platform-known zone (add it to the composition's zone map — docs/cloudflare.md)" $ns $claim $zoneName) }}
+            {{- end }}
+            {{- if eq $zone.class "product" }}
+              {{- if ne $ns $zone.owner }}
+                {{- fail (printf "PublicRoute %s/%s: product zone %q is owned by namespace %q (zone-class doctrine, ADR-101)" $ns $claim $zoneName $zone.owner) }}
+              {{- end }}
+              {{- if and (ne $host $zoneName) (not (hasSuffix (printf ".%s" $zoneName) $host)) }}
+                {{- fail (printf "PublicRoute %s/%s: hostname %q is outside product zone %q" $ns $claim $host $zoneName) }}
+              {{- end }}
+            {{- else }}
+              {{- if not (hasSuffix (printf ".%s.teststuff.net" $ns) $host) }}
+                {{- fail (printf "PublicRoute %s/%s: hostname %q is outside the namespace's delegated subtree *.%s.teststuff.net (zone-class + delegations doctrine: docs/cloudflare.md)" $ns $claim $host $ns) }}
+              {{- end }}
             {{- end }}
             {{- $res := printf "pr-%s-%s" $ns $claim }}
             {{- $origin := printf "%s://%s:%d" (default "http" $b.protocol) $b.service (int $b.port) }}
@@ -56,7 +75,7 @@ spec:
                   # platform constants (docs/cloudflare.md §Live IDs)
                   locals {
                     account_id = "07b08646b26bb43cd3073826f43b73da"
-                    zone_id    = "6b63f95592a9e036f8b8f6934511d321" # teststuff.net (platform zone)
+                    zone_id    = "{{ $zone.id }}" # {{ $zoneName }} ({{ $zone.class }} zone)
                   }
                   resource "cloudflare_zero_trust_tunnel_cloudflared" "this" {
                     account_id = local.account_id
