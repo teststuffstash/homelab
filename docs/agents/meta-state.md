@@ -23,7 +23,12 @@ meant to avoid.)
   close oracle-iac#351. NO LB (ladder rung 1); MCP exposure waits on the gateway (T3c).
   Design + boundaries: docs/cloudflare.md. FU-157 account-token migration opportunistic.
   Host-side: next `tofu/cloudflare-token` apply is PREPPED (account-first policy order + two-zone
-  ingress token) — operator runs it outside the jail.
+  ingress token) — operator runs it outside the jail. **ADDED 13:45Z (PR#220 live-verify): with
+  the admin token first run `GET /user/tokens/permission_groups | grep -i argo` — the argo/
+  smart_routing setting 1015-refuses BOTH Zone Settings Read and Write, so the spend-probe's argo
+  leg is BLIND (CloudflareSpendProbeBlind firing is EXPECTED + known-cause, don't re-triage) until
+  a group is found + added to observability-read.tf; if no group exists, re-scope the argo leg +
+  the doctrine's write-vector claim (docs/cloudflare.md §Spend surface has the ⚠).**
 - **ert-verify-2026089-mpws5**: still Running (5h+), waiting out riigiteataja's weekly
   regeneration (LOEMIND.txt sentinel); backoff hourly; completes when upstream publishes.
   oracle-iac#343 corrected+de-queued (do NOT re-queue unless proxy 504s while in-pod curl works

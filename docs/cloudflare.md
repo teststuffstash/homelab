@@ -134,9 +134,14 @@ constant in the PublicRoute composition; the zone BOOTSTRAP (records, TLS floor,
 `tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
 
 **Spend surface**: the account has a payment card attached (eid-demo.com is Pro), and some
-usage-billed features are toggled by ordinary zone Write groups — the proven case: **Argo Smart
-Routing (per-GB) enables via `PATCH /zones/{id}/argo/smart_routing`, gated by Zone Settings
-Write**. Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries —
+usage-billed features are toggled by ordinary zone Write groups — the assumed case was **Argo
+Smart Routing (per-GB) via `PATCH /zones/{id}/argo/smart_routing`, gated by Zone Settings
+Write** — ⚠ **UNPROVEN as of 2026-08-09 (PR#220 live-verify): the argo setting refuses BOTH our
+Zone Settings Read and Write tokens (HTTP 401 code 1015 `Cause(s): smart_routing`), and the docs'
+zone-permission catalog names no Argo group at all** — settle it with the admin token
+(`GET /user/tokens/permission_groups | grep -i argo`) at the next host-side token apply; until
+then the spend-probe's argo leg is blind (its Blind alert says so) and the write vector may not
+exist. Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries —
 verify anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES;
 plans show hex only). Containment: the autonomous path can't reach those endpoints (allowlist);
 the jail token can, so the drift belt (homelab#217, **built** — §Observability) alerts on any

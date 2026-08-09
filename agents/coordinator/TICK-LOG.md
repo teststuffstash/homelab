@@ -3387,3 +3387,31 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   no-rotation, not rotation-can't-land.
 - Remaining ADR-103 program: agent-runtime#62 (queued) + homelab#217 (queued). Monday retro
   08-10 05:00Z scores the KPIs first.
+
+## 2026-08-09 (~13:15–13:50Z) — ADR-103 program COMPLETE both repos; the spend belt ships and immediately earns its blind alert
+
+- **PR#64 merged (agent-runtime#62)** — the pod-half of channel separation, byte-identical
+  machine interface to #219's launcher half (marker/header/entry verified side-by-side; the
+  tests copy the scan's counting regex VERBATIM). Its real find: `stats_comment_by_pod` is a
+  SUPPRESSION CONTRACT — the old pod comment was actively cancelling the launcher's new-shape
+  leg, so #219 alone changed nothing on pod-emitting rides. Flag now set only on real emission.
+  ADR-103 #210+#62: DONE. Old-shape reader branch deletes when no open PR carries old comments.
+- **PR#220 merged (homelab#217, spend belt)** — reviewed by execution (ran its self-test from
+  the PR head; checked the ServiceMonitor label shape against the working sibling). Took all
+  three of its operator findings: (1) `spend-probe-self-test` wired into devbox.json + ci.yaml
+  (⚠ my first commit's lint check was pipe-masked — `lint | tail && commit` takes tail's rc; the
+  lint was actually failing because my FU-158 insert had CLOBBERED the FU-133 header line via a
+  careless Edit old_string — restored, rc=0, both pushed); (2) FU-158 filed — no PrometheusRule
+  in the repo has a behaviour gate, promtool-vs-selftest decision open; (3) live-verified.
+- **The live-verify found the real thing**: plan leg LIVE on both zones; **argo leg blind —
+  HTTP 401 code 1015 on GET argo/smart_routing from BOTH the observability token (Zone Settings
+  Read) and the write-key (Zone Settings Write)**, and the docs' zone-permission catalog names
+  NO Argo group at all. So the doctrine's "Argo enables via PATCH gated by Zone Settings Write"
+  is UNPROVEN — annotated in docs/cloudflare.md, not rewritten; the admin-token permission-group
+  grep is now step 1 of the prepped host-side token apply (meta-state). CloudflareSpendProbeBlind
+  firing until then is EXPECTED + known-cause. Possible silver lining: if writes 1015 the same
+  way, the assumed spend vector never existed and the plan-change leg is the belt's real coverage.
+- Lesson re-learned twice in one hour: `head -N` a thread before queueing (#107 mis-queue,
+  previous entry) and `| tail` masking a lint's exit code — both are the same shape: a
+  truncated/filtered read standing in for the evidence. Pipelines around a GATE must preserve
+  the gate's rc (`set -o pipefail` or separate the gate from the filter).
