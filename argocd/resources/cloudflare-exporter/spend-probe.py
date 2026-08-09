@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+"""Cloudflare spend-toggle drift probe → Prometheus (homelab#217).
+
+WHY this exists: the Cloudflare account has a payment card attached, and some usage-billed
+features are toggled by ORDINARY zone Write permission groups — the proven case is Argo Smart
+Routing (per-GB), enabled by `PATCH /zones/{id}/argo/smart_routing` and gated by Zone Settings
+Write, which `homelab-tofu-apply` legitimately needs for the minutark bootstrap and which lives in
+the jail wallet (LLM-session-readable by construction). Purchase-shaped spend is already closed —
+no token carries Billing groups (`devbox run cloudflare-token-audit`). Usage toggles are the
+residual, and with a card on file they bill silently. This is the BELT: it cannot prevent the
+toggle, it makes the toggle loud. Design + doctrine: docs/cloudflare.md §Zone classes + spend
+surface.
+
+WHY a second poller in `monitoring` and not a change to the exporter next door: that exporter is
+upstream `ghcr.io/lablabs/cloudflare_exporter` — a third-party binary with none of our code in it,
+so it cannot grow these gauges. The one-poller doctrine still holds: same namespace, same
+credential (the ESO-delivered `cloudflare-exporter-token` ← Infisical CLOUDFLARE_OBSERVABILITY_READ,
+which carries Zone Settings READ), different API surface — the exporter polls GraphQL analytics,
+this polls the zone-settings REST surface. NOT routed through `cf-api-proxy`: that allowlist
+deliberately 403s `argo/*` and settings paths, and injects a different token.
+
+⚠ It also covers a zone the exporter structurally cannot see: `CF_EXCLUDE_ZONES` drops
+teststuff.net from the exporter's batched query (#132), so both product zone ids are configured
+here explicitly and independently of that exclusion.
+
+Runs from a ConfigMap on a stock python image (spend-probe-deployment.yaml next to this file;
+kustomize's configMapGenerator hash rolls the pod on edits) — stdlib only, no state, each poll
+re-reads the full truth. Same shape as github-exporter.py and openrouter-proxy/router.py.
+
+Config (env): CF_API_TOKEN (Zone Settings Read on the configured zones), CF_SPEND_ZONE_IDS
+(comma-separated zone ids), POLL_INTERVAL_SECONDS (120), LISTEN_PORT (9505).
+
+Self-test (no network, no credential):
+    python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test
+It replays recorded API shapes — today's and a FLIPPED one — through the real collector AND
+through the alert expressions scraped out of the committed prometheusrule.yaml. See §self-test
+for exactly what that does and does not prove.
+"""
+
+import json
+import os
+import re
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+API = "https://api.cloudflare.com/client/v4"
+
+TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
+# The two PRODUCT zones (ids are not secrets — the sibling deployment already carries one in
+# plain env). eid-demo.com is deliberately OUT of scope: it is legitimately Pro, sits outside
+# every write token's zone map, and is not homelab's to watch.
+ZONE_IDS = [z.strip() for z in os.environ.get("CF_SPEND_ZONE_IDS", "").split(",") if z.strip()]
+# Drift detection, not latency-sensitive: matched to the sibling exporter's 120s scrape rather
+# than tuned. Two GETs per zone per poll — negligible against Cloudflare's 1200/5min limit.
+INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
+PORT = int(os.environ.get("LISTEN_PORT", "9505"))
+
+_lock = threading.Lock()
+_body = "# probe has not completed a cycle yet\n"
+_errors = 0
+_last_success = 0
+
+HEADERS = [
+    "# HELP cloudflare_zone_argo_smart_routing Argo Smart Routing (per-GB billed) state on the zone: 0 only when the API says exactly \"off\", else 1.",
+    "# TYPE cloudflare_zone_argo_smart_routing gauge",
+    "# HELP cloudflare_zone_plan_is_free 1 when the zone's plan.legacy_id is \"free\", else 0.",
+    "# TYPE cloudflare_zone_plan_is_free gauge",
+    "# HELP cloudflare_zone_spend_probe_ok 1 when BOTH spend reads succeeded for the zone this poll. 0 or absent means the gauges above are unknown, NOT safe.",
+    "# TYPE cloudflare_zone_spend_probe_ok gauge",
+]
+
+
+def api_get(path):
+    """GET a Cloudflare v4 path and return `result`. Raises on transport or envelope failure."""
+    req = urllib.request.Request(
+        API + path,
+        headers={
+            "Authorization": f"Bearer {TOKEN}",
+            "Accept": "application/json",
+            "User-Agent": "homelab-cloudflare-spend-probe",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.load(resp)
+    except urllib.error.HTTPError as exc:  # the body carries Cloudflare's error code + message
+        raise RuntimeError(f"GET {path} → HTTP {exc.code}: {exc.read()[:300]!r}") from None
+    if not payload.get("success"):
+        raise RuntimeError(f"GET {path} → success=false: {payload.get('errors')}")
+    return payload.get("result")
+
+
+def esc(value):
+    return str(value).replace("\\", r"\\").replace('"', r"\"").replace("\n", r"\n")
+
+
+def metric(name, labels, value):
+    inner = ",".join(f'{k}="{esc(v)}"' for k, v in sorted(labels.items()))
+    return f"{name}{{{inner}}} {value}"
+
+
+def argo_enabled(result):
+    """The issue's rule verbatim: fire when argo != off. So ONLY the literal "off" reads as 0 —
+    an unrecognised value is treated as enabled rather than quietly as safe. A response with no
+    `value` at all is not a reading; it raises, and the zone goes probe_ok=0."""
+    value = str((result or {}).get("value", "")).strip().lower()
+    if not value:
+        raise ValueError("argo/smart_routing result carries no `value`")
+    return 0 if value == "off" else 1
+
+
+def plan_is_free(result):
+    """Same asymmetry: an unreadable plan must not render as "not free" (a false page) NOR as
+    "free" (a false all-clear) — it raises, and the blind alert owns the case."""
+    legacy = str(((result or {}).get("plan") or {}).get("legacy_id", "")).strip().lower()
+    if not legacy:
+        raise ValueError("zone result carries no plan.legacy_id")
+    return 1 if legacy == "free" else 0
+
+
+def collect(lines, fetch=api_get, zone_ids=None):
+    """Emit the three per-zone gauges. Every configured zone emits `spend_probe_ok` no matter
+    what failed, so a zone that silently stops answering is visible as a zone, not as a gap."""
+    global _errors
+    lines += HEADERS
+    for zone_id in zone_ids if zone_ids is not None else ZONE_IDS:
+        # Label value is the zone NAME from the API; a zone whose name lookup fails falls back to
+        # its id so the sample is never dropped (an id label is still unambiguous, just uglier).
+        zone, failed = zone_id, 0
+        try:
+            result = fetch(f"/zones/{zone_id}")
+            zone = str((result or {}).get("name") or zone_id)
+            lines.append(metric("cloudflare_zone_plan_is_free", {"zone": zone}, plan_is_free(result)))
+        except Exception as exc:
+            failed += 1
+            _errors += 1
+            print(f"zone {zone_id}: plan read failed: {exc}", flush=True)
+        try:
+            argo = argo_enabled(fetch(f"/zones/{zone_id}/argo/smart_routing"))
+            lines.append(metric("cloudflare_zone_argo_smart_routing", {"zone": zone}, argo))
+        except Exception as exc:
+            failed += 1
+            _errors += 1
+            print(f"zone {zone_id}: argo read failed: {exc}", flush=True)
+        lines.append(metric("cloudflare_zone_spend_probe_ok", {"zone": zone}, 0 if failed else 1))
+
+
+def poll_forever():
+    global _body, _last_success
+    while True:
+        lines, before = [], _errors
+        try:
+            collect(lines)
+        except Exception as exc:  # collect() swallows per-zone failures; this is the unexpected rest
+            print(f"collect failed: {exc}", flush=True)
+        if _errors == before and ZONE_IDS:
+            _last_success = int(time.time())
+        lines += [
+            "# TYPE cloudflare_spend_probe_errors_total counter",
+            f"cloudflare_spend_probe_errors_total {_errors}",
+            "# HELP cloudflare_spend_probe_last_success_timestamp Epoch of the last poll where every configured zone read cleanly.",
+            "# TYPE cloudflare_spend_probe_last_success_timestamp gauge",
+            f"cloudflare_spend_probe_last_success_timestamp {_last_success}",
+        ]
+        with _lock:
+            _body = "\n".join(lines) + "\n"
+        time.sleep(INTERVAL)
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path not in ("/metrics", "/healthz", "/"):
+            self.send_error(404)
+            return
+        with _lock:
+            body = _body.encode()
+        if self.path == "/healthz":
+            body = b"ok\n"
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+# ── the self-test ────────────────────────────────────────────────────────────────────────────────
+# Same shape as `router.py --self-test` / `github-exporter.py --self-test`, and it carries the
+# acceptance criterion "the rule fires in a replay with a flipped fixture" as far as this repo's
+# toolbox allows.
+#
+# ⚠ HONESTY, because a check that overstates itself is the failure class this platform keeps
+# paying for (FU-108/FU-125/FU-131): this is NOT `promtool test rules`. promtool is not in this
+# repo's devbox.json and adding it is outside the fixer's write ceiling (devbox.json and the
+# CI-invoked scripts/ are off-limits to an agent branch — CI would run them FROM that branch), so
+# there is no time-series replay and no `for:` duration is exercised here.
+#
+# What it DOES prove, which is the part that actually breaks: the alert expressions are read out
+# of the COMMITTED prometheusrule.yaml — not restated here — and evaluated against the exposition
+# the REAL collector builds from recorded API shapes. A metric renamed on one side only, an
+# inverted gauge polarity (`plan_is_free == 0` vs `> 0`), a comparison against the wrong constant,
+# or a zone that stops emitting all fail this. The evaluator understands EXACTLY two expression
+# forms and RAISES on anything else, so an expr it cannot model can never pass silently.
+
+_Z_PLATFORM = "6b63f95592a9e036f8b8f6934511d321"  # teststuff.net
+_Z_PRODUCT = "fa1b02951c29ee4828b8948d0dd7baaf"  # minutark.ee
+
+# Recorded response shapes. TODAY = the state the issue records as current (argo off, plan free).
+_TODAY = {
+    f"/zones/{_Z_PLATFORM}": {"id": _Z_PLATFORM, "name": "teststuff.net",
+                              "plan": {"legacy_id": "free", "name": "Free Website"}},
+    f"/zones/{_Z_PLATFORM}/argo/smart_routing": {"id": "smart_routing", "value": "off", "editable": True},
+    f"/zones/{_Z_PRODUCT}": {"id": _Z_PRODUCT, "name": "minutark.ee",
+                             "plan": {"legacy_id": "free", "name": "Free Website"}},
+    f"/zones/{_Z_PRODUCT}/argo/smart_routing": {"id": "smart_routing", "value": "off", "editable": True},
+}
+# FLIPPED: someone enabled Argo on the platform zone and moved the product zone off free — one
+# drift per zone, so the test also proves each alert selects the RIGHT zone rather than both.
+_FLIPPED = json.loads(json.dumps(_TODAY))
+_FLIPPED[f"/zones/{_Z_PLATFORM}/argo/smart_routing"]["value"] = "on"
+_FLIPPED[f"/zones/{_Z_PRODUCT}"]["plan"] = {"legacy_id": "pro", "name": "Pro Website"}
+
+RULE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prometheusrule.yaml")
+
+_ALERT_RE = re.compile(r"^\s*-\s*alert:\s*(\S+)\s*$")
+_EXPR_RE = re.compile(r"^\s*expr:\s*(.+?)\s*$")
+_SAMPLE_RE = re.compile(r'^([a-zA-Z_:][a-zA-Z0-9_:]*)\{zone="([^"]*)"\}\s+(-?[\d.]+)$')
+_CMP_RE = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)\s*(==|!=|>=|<=|>|<)\s*(-?[\d.]+)$")
+_ABSENT_RE = re.compile(r"^absent\(([a-zA-Z_:][a-zA-Z0-9_:]*)\)$")
+_OPS = {"==": lambda a, b: a == b, "!=": lambda a, b: a != b, ">": lambda a, b: a > b,
+        ">=": lambda a, b: a >= b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b}
+
+
+def rule_exprs(path=RULE_FILE):
+    """alert name → expr, line-scanned out of the committed PrometheusRule. A line scan and not a
+    YAML parse on purpose: the pod image is stdlib-only (no PyYAML) and vendoring a parser for a
+    two-key lookup is worse than a regex the caller proves found what it expected."""
+    found, current = {}, None
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            match = _ALERT_RE.match(line)
+            if match:
+                current = match.group(1)
+                continue
+            match = _EXPR_RE.match(line)
+            if match and current:
+                found[current] = match.group(1)
+                current = None
+    return found
+
+
+def samples_of(lines):
+    """exposition lines → {(metric, zone): value}, comments and unlabelled self-metrics ignored."""
+    out = {}
+    for line in lines:
+        match = _SAMPLE_RE.match(line)
+        if match:
+            out[(match.group(1), match.group(2))] = float(match.group(3))
+    return out
+
+
+def firing_zones(expr, samples):
+    """The set of `zone` labels an expr selects over one instant of samples.
+
+    Supported: `<metric> <cmp> <number>` and `absent(<metric>)`, joined by ` or `. Anything else
+    raises — an evaluator that shrugs at an expression it does not understand would report green
+    on a rule it never checked."""
+    firing = set()
+    for arm in expr.split(" or "):
+        arm = arm.strip()
+        match = _CMP_RE.match(arm)
+        if match:
+            name, op, threshold = match.group(1), match.group(2), float(match.group(3))
+            firing |= {zone for (series, zone), value in samples.items()
+                       if series == name and _OPS[op](value, threshold)}
+            continue
+        match = _ABSENT_RE.match(arm)
+        if match:
+            if not any(series == match.group(1) for series, _ in samples):
+                firing.add("<absent>")
+            continue
+        raise AssertionError(f"expr arm not modelled by this evaluator: {arm!r} (in {expr!r})")
+    return firing
+
+
+def _fixture_fetch(table):
+    def fetch(path):
+        if path not in table:
+            raise RuntimeError(f"fixture has no {path}")
+        return table[path]
+    return fetch
+
+
+def _exposition(table, zone_ids=(_Z_PLATFORM, _Z_PRODUCT)):
+    lines = []
+    collect(lines, fetch=_fixture_fetch(table), zone_ids=list(zone_ids))
+    return lines
+
+
+def self_test():
+    """`python3 spend-probe.py --self-test` — recorded fixtures through the real collector, then
+    through the committed alert expressions."""
+    global _errors
+
+    # 1. Parsers: only "off" is off, and an unreadable field is an error, never a reading.
+    assert argo_enabled({"value": "off"}) == 0
+    assert argo_enabled({"value": "on"}) == 1
+    assert argo_enabled({"value": "ON"}) == 1, "case-insensitive"
+    assert argo_enabled({"value": "something-new"}) == 1, "unknown reads as enabled, not as safe"
+    for bad in ({}, {"value": ""}, None):
+        try:
+            argo_enabled(bad)
+            raise AssertionError(f"argo_enabled({bad!r}) must raise, not guess")
+        except ValueError:
+            pass
+    assert plan_is_free({"plan": {"legacy_id": "free"}}) == 1
+    assert plan_is_free({"plan": {"legacy_id": "pro"}}) == 0
+    for bad in ({}, {"plan": {}}, {"plan": None}, None):
+        try:
+            plan_is_free(bad)
+            raise AssertionError(f"plan_is_free({bad!r}) must raise, not guess")
+        except ValueError:
+            pass
+
+    # 2. Today's fixture → the exact samples the issue's acceptance names (argo off, plan free).
+    today = _exposition(_TODAY)
+    body = "\n".join(today)
+    for sample in (
+        'cloudflare_zone_argo_smart_routing{zone="teststuff.net"} 0',
+        'cloudflare_zone_argo_smart_routing{zone="minutark.ee"} 0',
+        'cloudflare_zone_plan_is_free{zone="teststuff.net"} 1',
+        'cloudflare_zone_plan_is_free{zone="minutark.ee"} 1',
+        'cloudflare_zone_spend_probe_ok{zone="teststuff.net"} 1',
+        'cloudflare_zone_spend_probe_ok{zone="minutark.ee"} 1',
+    ):
+        assert sample in body, f"missing sample: {sample}\n--- exposition ---\n{body}"
+
+    # 3. The committed rules, read from disk — the test states the names it expects so a rename
+    #    or a deleted alert fails here instead of silently reducing coverage.
+    exprs = rule_exprs()
+    toggle, plan, blind = ("CloudflareZoneSpendToggleEnabled", "CloudflareZonePlanNotFree",
+                           "CloudflareSpendProbeBlind")
+    for name in (toggle, plan, blind):
+        assert name in exprs, f"{name} is not in {RULE_FILE} (renamed? deleted?): {sorted(exprs)}"
+
+    # 4. Replay: today's state is quiet, on every rule.
+    quiet = samples_of(today)
+    for name in (toggle, plan, blind):
+        assert firing_zones(exprs[name], quiet) == set(), \
+            f"{name} fires on today's state ({exprs[name]!r})"
+
+    # 5. Replay: the flipped fixture fires — each alert on its own zone, not on both.
+    flipped = samples_of(_exposition(_FLIPPED))
+    assert firing_zones(exprs[toggle], flipped) == {"teststuff.net"}, firing_zones(exprs[toggle], flipped)
+    assert firing_zones(exprs[plan], flipped) == {"minutark.ee"}, firing_zones(exprs[plan], flipped)
+    assert firing_zones(exprs[blind], flipped) == set(), "a drifted zone is still a READ zone"
+
+    # 6. A zone that stops answering is blind, not silently safe: no gauges, probe_ok=0, and the
+    #    blind alert names that zone while the two spend alerts stay quiet (nothing to assert on).
+    before = _errors
+    broken = samples_of(_exposition({f"/zones/{_Z_PLATFORM}": _TODAY[f"/zones/{_Z_PLATFORM}"]},
+                                    zone_ids=(_Z_PLATFORM,)))
+    assert ("cloudflare_zone_argo_smart_routing", "teststuff.net") not in broken, \
+        "a failed read must emit NO gauge — an absent sample, never a fabricated 0"
+    assert broken[("cloudflare_zone_spend_probe_ok", "teststuff.net")] == 0
+    assert firing_zones(exprs[blind], broken) == {"teststuff.net"}
+    assert firing_zones(exprs[toggle], broken) == set()
+    assert _errors == before + 1, "a failed read must count toward cloudflare_spend_probe_errors_total"
+    _errors = before
+
+    # 7. …and a probe that is gone entirely (pod dead, ESO secret pulled) fires the blind alert
+    #    through its absent() arm. This is the FU-150 lesson: absence is the alert.
+    assert firing_zones(exprs[blind], {}) == {"<absent>"}, \
+        f"{blind} must survive the series disappearing: {exprs[blind]!r}"
+
+    print("cloudflare spend-probe self-test: OK (parsers, today's exposition, and the committed "
+          f"{toggle}/{plan}/{blind} exprs replayed against flipped + blind fixtures)")
+    return 0
+
+
+if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        sys.exit(self_test())
+    if not TOKEN:
+        sys.exit("cloudflare-spend-probe: CF_API_TOKEN is empty/unset — refusing to start")
+    if not ZONE_IDS:
+        sys.exit("cloudflare-spend-probe: CF_SPEND_ZONE_IDS is empty — refusing to start blind")
+    threading.Thread(target=poll_forever, daemon=True).start()
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

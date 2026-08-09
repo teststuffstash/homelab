@@ -1,0 +1,69 @@
+# cloudflare-spend-probe (homelab#217) — the spend-toggle drift belt on the two PRODUCT zones.
+# Stock python image + the script from the generated ConfigMap, the github-exporter/openrouter-proxy
+# pattern (both pin `python:3.13-slim` the same way — no custom image pipeline, so nothing here to
+# digest-pin beyond what those two already established). Parks in CreateContainerConfigError until
+# ESO materialises the token Secret — the SAME Secret the exporter beside it uses, no new credential.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflare-spend-probe
+  labels: { app: cloudflare-spend-probe }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cloudflare-spend-probe }
+  template:
+    metadata:
+      labels: { app: cloudflare-spend-probe }
+    spec:
+      containers:
+        - name: probe
+          image: python:3.13-slim
+          command: ["python3", "/app/spend-probe.py"]
+          env:
+            # CLOUDFLARE_OBSERVABILITY_READ via the exporter's existing ExternalSecret
+            # (externalsecret.yaml, same namespace) — it carries Zone Settings READ, which is all
+            # the two GETs need. ⚠ Do NOT point this at cf-api-proxy: that allowlist deliberately
+            # 403s argo/* and settings paths, and injects the ingress-write token instead.
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cloudflare-exporter-token, key: token }
+            # The two product zones: teststuff.net (platform) + minutark.ee (product, oracle-fleet).
+            # Zone ids are not secrets (the sibling deployment carries one in plain env too).
+            # ⚠ Listed explicitly rather than auto-discovered, because the point is to watch BOTH —
+            # teststuff.net is invisible to the exporter next door by configuration (CF_EXCLUDE_ZONES,
+            # #132). eid-demo.com is deliberately absent: legitimately Pro, outside every write
+            # token's zone map, not homelab's to watch (issue #217 scope).
+            - name: CF_SPEND_ZONE_IDS
+              value: "6b63f95592a9e036f8b8f6934511d321,fa1b02951c29ee4828b8948d0dd7baaf"
+            # Drift detection, not latency-sensitive — matched to the sibling exporter's scrape
+            # cadence rather than tuned. 2 GETs × 2 zones per poll.
+            - name: POLL_INTERVAL_SECONDS
+              value: "120"
+          ports:
+            - { name: http-metrics, containerPort: 9505 }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 9505 }
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: cloudflare-spend-probe-script # kustomize rewrites to the hashed name

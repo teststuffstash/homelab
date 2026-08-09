@@ -139,8 +139,8 @@ Routing (per-GB) enables via `PATCH /zones/{id}/argo/smart_routing`, gated by Zo
 Write**. Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries —
 verify anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES;
 plans show hex only). Containment: the autonomous path can't reach those endpoints (allowlist);
-the jail token can, so the drift belt (homelab#217) alerts on any usage-toggle/plan change on
-the product zones. Doctrine (the mTLS/audit-logs lesson, generalized): **permission semantics
+the jail token can, so the drift belt (homelab#217, **built** — §Observability) alerts on any
+usage-toggle/plan change on the product zones. Doctrine (the mTLS/audit-logs lesson, generalized): **permission semantics
 come from the target ENDPOINT's "accepted permissions" docs line — the catalog names document
 nothing, the dashboard shows a subset, and any `*Write` group is presumed entitlement-toggling
 until the endpoint list says otherwise.**
@@ -155,6 +155,20 @@ jail; the lablabs exporter (`argocd/resources/cloudflare-exporter/`) — correct
 keyed to scrape-target health (`CloudflareExporterDown`), not data presence. End-to-end
 edge-data absence becomes the DIY poller's belt when built (FU-039 open leg: a ConfigMap-python
 GraphQL poller, github-exporter pattern, targeting the four ✅ rows below).
+
+**Spend-toggle drift belt** (homelab#217, 2026-08-09): `cloudflare-spend-probe` — a
+ConfigMap-python poller beside the exporter in the same app/namespace, on the same ESO-delivered
+`CLOUDFLARE_OBSERVABILITY_READ` token (Zone Settings **Read** is all it needs), polling the
+zone-settings REST surface the exporter doesn't touch. Two gauges per product zone —
+`cloudflare_zone_argo_smart_routing` and `cloudflare_zone_plan_is_free` — plus
+`cloudflare_zone_spend_probe_ok`, so a blind belt is loud rather than reassuring
+(`CloudflareZoneSpendToggleEnabled` / `CloudflareZonePlanNotFree` / `CloudflareSpendProbeBlind`,
+all `severity: warning` into the normal responder path). Unlike the exporter it watches
+`teststuff.net` too — `CF_EXCLUDE_ZONES` hides that zone from the exporter (#132) and the belt
+must not inherit that blind spot. `eid-demo.com` is out of scope: legitimately Pro, outside every
+write token's zone map. Why a belt and not a guard is §Spend surface above; the mechanism and its
+`--self-test` (recorded API shapes replayed through the committed alert exprs) live in
+`argocd/resources/cloudflare-exporter/spend-probe.py`.
 
 ### Free-zone GraphQL matrix (VALIDATED LIVE 2026-08-08, teststuff.net free vs eid-demo.com pro)
 
