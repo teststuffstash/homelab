@@ -1042,7 +1042,8 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # loop lacked the review loop's ROUNDS_MAX→arbitrate). NOW keyed on CONTENT + a cap, symmetric
     # with the review path (MP-T11), and woken near-instant by the exporter's red edge (github-exporter
     # maybe_dispatch_cired → /coordinate) instead of only the poll. Per red PR we read the fix-round
-    # history from durable `🔴 ci-red round rN @ <head8>` markers (coordinator posts one per dispatch):
+    # history from the durable `Agent run stats` comments plus `headRefOid` (NOT from `🔴 ci-red
+    # round` markers — those were a design that never shipped; stale prose caught by the #198 ride):
     #   attempts==0                    → DISPATCH (first red)
     #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break). The count is
     #                                    keyed on the ISSUE, summed across every PR that references

@@ -221,6 +221,8 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: 'index\("agent/arbitrate"\)' }
       - desc: "scan emits arbitrate units; sibling clauses exclude the label"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'arbitrate\|' }
+      - desc: "unchanged-state debounce: the unit is emitted only when the PR's state fingerprint (head|reviewDecision|checks|newest verdict) differs from the recorded state-fp marker — PR#234 drew 5 identical dispatches in 30m before this (homelab#198)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "STATE_FP_JQ" }
       - desc: "the play, exactly one of four: re-dispatch-with-clarification / rule-follow-up-class (terminal = dismiss the superseded reviewer verdict, homelab#141) / close-not-mergeable / escalate (meta-4 doctrine)"
         anchor: { file: agents/coordinator/README.md, pattern: "arbitrate. clause" }
     incidents: ["MP-G04 origin: tie-break rows existed only as breaker counts — the coordinator never got the structured dispatch"]
@@ -233,6 +235,8 @@ transitions:
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
+      - desc: "unchanged-state debounce on the dispatch leg (before the per-repo cap, so a frozen PR never spends a slot a live red PR could use) — homelab#198"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "pr_state_fp_pair" }
       - desc: "exporter red edge-trigger: POST /coordinate on an armed agent PR going CI-red, deduped per head_sha (a no-op pushes no commit → no re-wake)"
         anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "maybe_dispatch_cired" }
       - desc: "the play: fix round with the failing log in context / park / close; red-master = platform incident, not a fix round"
