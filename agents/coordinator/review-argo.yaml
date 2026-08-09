@@ -186,8 +186,17 @@ spec:
                           REPO="{{workflow.parameters.repo}}"; PR="{{workflow.parameters.number}}"; NS="{{workflow.parameters.loop_ns}}"
                           echo "review(perstack): ${REPO}#${PR} ns=${NS} (exporter edge)"
                           # Same idempotency guard as the global review workflow, scoped to OUR
-                          # ns — the */15 review-<stack> cron may have dispatched first;
-                          # reviewer-session.sh STEP-0 is the final backstop.
+                          # ns — the */15 review-<stack> cron may have dispatched first.
+                          # BACKSTOPS, and which one covers what (homelab#204): reviewer-session.sh
+                          # runs a SHELL guard before it creates anything — agents/reviewer-optout.sh
+                          # (the stack's reviewer.enabled knob, fail-CLOSED) — and the pod's prompt
+                          # STEP-0 self-guards on review history. This trigger is one of three
+                          # dispatch sites and deliberately reads NEITHER knob itself: the sites
+                          # converge on reviewer-session.sh, so the knob is read once there. It used
+                          # to be read only inside the reflex tick, and this path approved +
+                          # auto-merged agent-runtime#57 on an opted-out stack (2026-08-09 08:00Z).
+                          # If you add a fourth dispatch site, route it through reviewer-session.sh
+                          # too — do not copy a jq in here.
                           if kubectl get pods -n "${NS}" -l "app=agent-reviewer,project=${REPO},pr=${PR}" \
                                --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name 2>/dev/null | grep -q .; then
                             echo "review(perstack): ${REPO}#${PR} already under review — skipping (idempotent)"; exit 0
@@ -259,7 +268,15 @@ spec:
             REPO="{{inputs.parameters.repo}}"; PR="{{inputs.parameters.number}}"
             # Safe parallel with the CronJob reflex: skip if a reviewer pod for this PR already
             # exists (the CronJob may have dispatched first) — the same app=agent-reviewer,project,pr
-            # idempotency review-reflex.sh uses. reviewer-session.sh STEP-0 is the final backstop.
+            # idempotency review-reflex.sh uses. Backstops: reviewer-session.sh's shell guard
+            # (agents/reviewer-optout.sh — the stack's reviewer.enabled knob, fail-CLOSED,
+            # homelab#204) and then the pod prompt's STEP-0 self-guard on review history.
+            # ⚠ The `graduated` deferral below is NOT the optout. It reads a different field for a
+            # different purpose (which reviewer owns the PR, not whether one should run), and it is
+            # exactly why this site looked safe: platform is graduated, so this workflow never
+            # fired for it — but a NON-graduated stack with reviewer.enabled=false would fall
+            # straight through to the dispatch. The knob is enforced in reviewer-session.sh, once,
+            # for all three sites.
             if kubectl get pods -n agent-coordinator -l "app=agent-reviewer,project=${REPO},pr=${PR}" \
                  --field-selector=status.phase!=Succeeded,status.phase!=Failed -o name 2>/dev/null | grep -q .; then
               echo "review: ${REPO}#${PR} already under review — skipping (idempotent)"; exit 0

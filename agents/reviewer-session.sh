@@ -81,6 +81,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# ── THE OPT-OUT GATE (homelab#204) ──────────────────────────────────────────────────────────────
+# Honor the stack's `reviewer.enabled` knob HERE, at the one point ALL THREE dispatch sites pass
+# through: the reflex tick, the `review-perstack` Sensor trigger, and the global `review`
+# WorkflowTemplate (the latter two in agents/coordinator/review-argo.yaml, both `exec bash
+# .../reviewer-session.sh`). The knob shipped inside the reflex tick alone, so on 2026-08-09 08:00Z
+# the Sensor path reviewed, APPROVED and auto-merged agent-runtime#57 for a stack that had opted
+# out — in the same minute the tick logged the correct skip. reviewer-optout.sh is the single read
+# and the single (fail-CLOSED) posture; it prints its own reason to stderr.
+# FIRST, deliberately: before the head-sha probe, before the latch, before the pod. A disabled
+# stack must cost neither a GitHub call nor a subscription session.
+# ⚠ The prompt's STEP 0 cannot stand in for this. That self-guard runs INSIDE the reviewer pod —
+# by then the review the operator disabled has already been dispatched and paid for. This is the
+# shell-level backstop the two Argo comments already claim exists.
+# >>>REPLAY:optout-gate>>>
+if ! bash "$HERE/reviewer-optout.sh" "$PROJECT"; then
+  echo "→ review of ${PROJECT}#${PR} NOT dispatched — reviewer disabled for this stack (homelab#204)"
+  exit 0
+fi
+# <<<REPLAY:optout-gate<<<
+
 # FU-080 perStack (mirror of coordinator-session.sh): --loop-ns runs the reviewer pod in the stack's
 # loop home as agentstack-loop, fetching the review-bot token (loop-reviewer-git-<stack>) per-run
 # from the broker. The reviewer-git secretKeyRef/volume below stay optional:true — inert in that ns;
