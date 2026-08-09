@@ -111,24 +111,38 @@ fi
 
 # 0b. Honor the per-stack `reviewer.enabled` knob — the first CONSUMED slice of FU-080 (found
 #     live 2026-07-17: the oracle claim synced `reviewer: {enabled: false}` but nothing read it,
-#     so reviews kept firing). A stack that opted out drops ALL its repos from this global
-#     reflex. PROBE-FIRST like coordinator-scan: a failed claims read warns + keeps the full
-#     list — never silently change the review set on a flaky read.
-if claims="$("$KUBECTL" get agentstacks.platform.teststuff.net -o json 2>/dev/null)"; then
-  optout="$(printf '%s' "$claims" | jq -r '.items[] | select(.spec.reviewer.enabled == false) | .spec.repos[].name' | sort -u | tr '\n' ' ')"
-  if [ -n "${optout%% }" ]; then
-    kept=""
-    for r in $REPOS; do
-      case " $optout" in
-        *" $r "*) log "[$r] skipped — stack reviewer.enabled=false (AgentStack claim)";;
-        *) kept="$kept $r";;
-      esac
-    done
-    REPOS="$kept"
-  fi
-else
-  log "WARN: agentstacks read PROBE-FAILED — reviewer.enabled knobs not honored this tick"
+#     so reviews kept firing). A stack that opted out drops ALL its repos from this tick.
+#     The read itself lives in agents/reviewer-optout.sh (homelab#204) — this tick is only ONE of
+#     three dispatch sites, and the inline jq that used to sit here was the whole bug: the other
+#     two sites never grew a copy, so the perstack Sensor auto-merged agent-runtime#57 for an
+#     opted-out stack while this line correctly logged the skip. reviewer-session.sh runs the same
+#     helper for every site; filtering here as well is not redundancy, it saves a `gh pr list` and
+#     a whole dispatch decision per opted-out repo.
+#     ⚠ FAIL-CLOSED on a PROBE-FAIL, reversing this branch's original posture (which WARNed and
+#     reviewed everything anyway). The old comment's instinct — "never silently change the review
+#     set on a flaky read" — is right for a knob that ENABLES work and backwards for one that
+#     DISABLES it: an unread claim is not permission to approve and auto-merge. A skipped tick
+#     costs ~5 minutes on a level-triggered path; an un-skippable disabled review costs the gate.
+#     The helper prints the reason (with the repo, the stack, and what to check) to stderr.
+#     ONE invocation — stdout is the kept list, stderr the reasons, replayed through log() so they
+#     keep this tick's timestamps. Calling it twice (once per stream) would double the cluster read
+#     and could straddle a claim edit.
+# >>>REPLAY:optout-filter>>>
+#     `|| true` is load-bearing, not defensive noise: this file runs under `set -euo pipefail`, the
+#     helper exits 1 on a PROBE-FAIL, and pipefail propagates that through the `| tr` into the
+#     assignment — so without it the tick DIES at this line (exit 1, Failed pod) and never prints
+#     the reason it collected. Caught by agents/reviewer-optout-replay.sh §4 before it ever ran.
+#     Standing aside is the intended behaviour, the same as the FU-088 latch above: empty list →
+#     the loud log line → exit 0.
+_optout_err="$(mktemp)"
+REPOS="$(bash "$HERE/reviewer-optout.sh" --filter $REPOS 2>"$_optout_err" | tr '\n' ' ')" || true
+while IFS= read -r l; do [ -n "$l" ] && log "$l"; done < "$_optout_err"
+rm -f "$_optout_err"
+if [ -z "${REPOS// /}" ]; then
+  log "no repo is clear to review this tick (all opted out, or the claims read failed) — nothing to do"
+  exit 0
 fi
+# <<<REPLAY:optout-filter<<<
 
 # 1. Reap finished reviewer pods so the "already under review?" check below stays accurate and the
 #    namespace doesn't fill up (a completed pod's verdict already lives in the PR's state).
