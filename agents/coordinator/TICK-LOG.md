@@ -3155,3 +3155,36 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
 - Lessons re-proven this session: `git push` rejected mid-session by auto-merge master movement
   (fetch-compare caught it, warning held); zsh ate `echo ===` (quote it); the comment stream +
   loop watch armed per operator ask ("keep a closer eye, nudge along" — 4 repos, 2-min poll).
+
+## 2026-08-08 21:00Z → 2026-08-09 00:40Z — the queue drained itself, and the heartbeat caught a reviewer outage
+
+- **Fifteen PRs reviewed+merged in one evening arc** (homelab #169/#170/#171/#174/#176/#177/#178/
+  #181/#184/#185/#186/#187 + deploy #167/#183, agent-runtime #56): the whole #158 rail family
+  end-to-end (latch → alert w/ triage:none → run_reports rail column, mutation-tested → finalize
+  twin → brief RAIL note → model-routing attribution → the sentinel-extracted 63-assertion replay,
+  now a REQUIRED ci gate), #153's offset-pagination root cause (verified live, then confirmed by
+  the ride's own post-hoc boundary observation; acceptance clean 2.5h+), #156's issue-keyed rounds
+  (spot-executed the key-derivation + sibling-match jq before approve), and the FU-145 alert
+  description that had minted two false issues.
+- **Four CI gates added this session** (github-apps declaration fix, responder harness 75/75,
+  py-compile-lint 13 files, rail-degrade replay 63 asserts) — each closed a "manifest-lint can't
+  see this" blind spot named by a worker's honest lint-table disclosure.
+- **Two worker REFUSALS were correct and both fixes landed in this lane**: #134 (FU-145 class —
+  pins bumped 2026.7.8→2026.8.7 at 4 Composition sites, all 4 clones timeout-wrapped, verified
+  in-cluster) and #168 (the-check's-author boundary — extraction/raw-count PROBE-FAIL self-test
+  now runs on every lint invocation).
+- **00:25Z heartbeat found the reviewer DOWN since ~19:00Z 08-08**: c377da9's attribution comment
+  wrote `$103.74` inside the EXPANDING pod-manifest heredoc → set -u → `$1: unbound` → exit 3 on
+  every reviewer create. oracle PR#234/#235 sat ~2h; the Error review pods were the tell (the
+  reflex's own log said only "nothing to review", truthfully — the crash was in the DISPATCHED
+  pod). Fixed (USD spelling + a no-dollar-numbers heredoc rule), expansion verified under set -u,
+  recovery watcher armed. The apostrophe-outage class, third instance.
+- **Post-midnight reset checklist**: the #28 park HELD (zero 429 spam in the operator log vs
+  ~28/min yesterday); deletions draining 15→11; the remainder wedge on a SECOND class — upstream
+  404 on already-gone keys never clears the finalizer — filed+queued or-op#30 with the
+  idempotent-delete ⚖. #228 breaker cleared with audit + re-queued. or-op#27 chart half riding.
+  M11 shadow: first 8 cells banked (subscription/tight, agrees=1), blocked=0.
+- **My own watch clause needed two fixes in one hour** (nix warm-up ≠ repetition; then filter
+  residue ≠ full sample) — the repeating-false-alarm-IS-a-broken-probe rule, self-applied.
+- #180 ruled: the proxy never gets the provisioning key; account-scope facts have ONE owner (the
+  operator's #29 gauge) and the credit leg reads it in-cluster. Native blocked-by edge set.
