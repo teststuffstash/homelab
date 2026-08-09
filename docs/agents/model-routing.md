@@ -525,13 +525,40 @@ its defer with it, and `/metrics` carries `router_openrouter_capacity_down{,_tot
 `router_openrouter_account_credit_usd`.
 
 The **launcher** (`agents/agent-session.sh`) decides — ADR-094: dispatch params are launcher-owned.
-Two triggers, because the fleet runs in two modes: an **authoritative** routed defer whose reason is
-`or-capacity-down:*`, and (for the shadow default) the launcher's own account-credit read, which is
-the FU-088(b) gate's balance hoisted above the harness decision so the same fact can *act* instead of
-only deferring. A shadow-mode routed defer is deliberately NOT a trigger — that would be the
-launcher quietly promoting shadow to authoritative.
+**Three triggers**, because the fleet runs in two modes and the shadow half has to reach the same
+facts without the routed verdict:
 
-That second trigger reads **`GET /router-status` → `.openrouter_capacity.credit_usd`** on the same
+| # | trigger | mode | what it is |
+|---|---|---|---|
+| 1 | routed defer typed `or-capacity-down:*` | **authoritative** only | all three legs at once, already decided by `/route` |
+| 2 | `/router-status` → `.openrouter_capacity.down` | all | the proxy's own latched account verdict (homelab#194) |
+| 3 | `/router-status` → `.openrouter_capacity.credit_usd` under the launcher's floor | all | the FU-088(b) gate's balance hoisted above the harness decision, so the same fact can *act* instead of only deferring |
+
+A shadow-mode routed defer is deliberately NOT a trigger — that would be the launcher quietly
+promoting shadow to authoritative.
+
+**Why 2 exists, and why it outranks 3** (homelab#194, operator ruling 2026-08-09). Trigger 3 alone
+cannot see the outage that produced this whole mechanism: on 2026-08-08 the fleet was RPD-starved
+with a balance the operator had just topped up, and the directive was *OR-capacity-dead ⇒ degrade*,
+not *credit-dead ⇒ degrade*. The hard-402 and cross-model-429 legs reached only authoritative
+stacks via trigger 1 — and every stack that dispatches on OpenRouter today runs shadow. Between 2
+and 3: `.down` is an account-scope **verdict its owner already reached**, while the balance is an
+**input** this launcher applies its own policy to, so the latch wins the trigger string
+(`capacity:rpd` vs `credit:$0.17<$0.25` — same destination, different incident). It is one more
+trigger on the existing path, not new policy: same `class=fix` bound, same `subscriptionFallback` /
+`AGENT_SUBSCRIPTION_FALLBACK` opt-outs, same `modelDeny`, same FU-088(a) latch on the resulting ride.
+
+⚠ **Key on the boolean `.down`, never on `.reason != null`.** The proxy evaluates the hold as it
+serves (`"down": until > now`) but emits `reason` unconditionally, and only an early 2xx un-latch
+clears it — so a healthy account that took one 429 last week still publishes `reason:"rpd"` beside
+`down:false`. A reason-keyed read would degrade the fleet permanently from the first 429 it ever
+takes. That server-side expiry is also why trigger 2 needs **no launcher-side freshness bound**:
+there is no expired-but-set state to see, and `remaining_s` is a diagnostic, not an input. Both
+reads come out of **one** payload — a second fetch could weigh a latch bit against a balance from a
+different instant. Pinned by `agents/rail-degrade-replay.sh` (CAP…CAP6; CAP5 is the stale-`reason`
+trap, CAP4 the lost-payload one).
+
+Trigger 3 reads **`GET /router-status` → `.openrouter_capacity.credit_usd`** on the same
 proxy — unauthenticated, ClusterIP-local, no credential of any shape. It used to call OpenRouter's
 `GET /api/v1/credits` with the pod's opaque `ref:`, which is management-key-only and 403'd every
 time, so the read was empty on every dispatch and **both** consumers were dead while looking healthy
@@ -542,7 +569,11 @@ value across later poll failures — so freshness is judged by `.credit_age_s` a
 `.credit_max_age_s`, and anything that is not a fresh number is *no balance*, never a low one.
 An unavailable balance is **fail-open with one visible line** on the dispatch path naming the URL
 (FU-104: the availability of a gate is worth less than the gate — but silent fail-open is what let
-this rot). Pinned by `agents/rail-degrade-replay.sh` (FAILOPEN/FAILOPEN2/FAILOPEN3/STALE).
+this rot). Since #194 that line also says **which** account-scope fact is missing: a payload that
+never arrived (or has no capacity block) loses the latch bit *as well as* the balance and says so,
+while a dead credit leg behind a live payload loses only the balance. Reporting "no balance" for
+both would be #190's silence one level up — the operator would go look at the wrong leg. Pinned by
+`agents/rail-degrade-replay.sh` (FAILOPEN…FAILOPEN4/STALE/CAP3/CAP4).
 
 Degrading means `claude/haiku` on the subscription (`AGENT_SUBSCRIPTION_FALLBACK_MODEL` overrides).
 It is a constant, not a search: harness, env card, credential shape and capacity gate all follow
