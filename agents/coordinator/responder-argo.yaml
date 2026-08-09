@@ -552,6 +552,35 @@ spec:
                   ;;
               esac
 
+              # ── #228 (a): SNAPSHOT the closed marker-carrying threads BEFORE the session ────
+              # The session below may REOPEN a closed issue on either belt — the FU-133 SUBJECT
+              # match ("this resource has failed before") or the alert-fp flap belt ("this exact
+              # fingerprint has a history"). `gh issue reopen` is the LLM's own verb, so there is
+              # nothing else to observe a reopen BY: the only deterministic signal is which
+              # marker-carrying threads were closed a moment ago and are open a moment later.
+              # Hence a snapshot here and the comparison after the session, both in launcher-owned
+              # shell (ADR-094 — the LLM judges, the shell acts; a strip written into the brief is
+              # an instruction, not a guard).
+              # `gh search` is right HERE and only here: these are OLD issues, so the index lag the
+              # verdict half below deliberately avoids cannot bite, and a REST walk of every closed
+              # issue in every claimed repo is not affordable. Both belts are snapshotted because
+              # both reopen — the live #228 case came in on the subject one.
+              # ⚠ FAIL-OPEN, stated so nobody reads it as a promise: a search that errors or lags
+              # yields no candidates and no strip, and the FU-069 breaker is what catches the
+              # contradiction then — exactly today's behaviour, never worse than it.
+              # >>>REPLAY:responder-reopen-presnap>>>
+              PRECLOSED=""
+              for pq in "subject:$SUBJ" "alert-fp:$FP"; do
+                for pc in $(gh search issues --owner "$ORG" --match body "$pq" --state closed \
+                              --json repository,number --limit 20 2>/dev/null \
+                            | jq -r '.[] | "\(.repository.nameWithOwner)#\(.number)"' 2>/dev/null || true); do
+                  case " $PRECLOSED " in *" $pc "*) continue;; esac
+                  PRECLOSED="$PRECLOSED $pc"
+                done
+              done
+              [ -n "$PRECLOSED" ] && echo "→ $NAME ($FP): closed thread(s) a reopen could restore:$PRECLOSED"
+              # <<<REPLAY:responder-reopen-presnap<<<
+
               echo "── triaging $NAME ($FP) — route default: stack=$ROUTE_STACK repo=$ROUTE_REPO (the named fix surface may move it)"
               claude -p "You are the RESPONDER (homelab docs/agents/roles.md): triage ONE firing Prometheus alert.
 
@@ -592,6 +621,55 @@ spec:
                 --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
+              # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────
+              # Live 2026-08-09. The subject belt reopened closed homelab#103 for a new same-subject
+              # alert (NodeDiskIOSaturation, verdict report-only) and GitHub brought the thread back
+              # wearing its PREVIOUS life's labels: `agent-fix`+`agent/queued` from a CPU fix that
+              # had already merged, plus `agent/done` from its closeout. The next queued-dispatch
+              # unit met `agent/queued ∧ agent/done` on merged work and refused via the FU-069
+              # breaker. Nothing was harmed, and that is exactly the problem: the breaker is the
+              # ANOMALY net, and a reopen-of-a-completed-issue is not an anomaly — it is the
+              # designed behaviour of two belts that will fire again next week. A belt is not a
+              # guard, and the guard belongs at the reopen site, which is here.
+              #
+              # Strip the WHOLE lifecycle set on EVERY reopen, unconditionally, and let the verdict
+              # half below re-derive from the diagnosis this session just recorded — precisely what
+              # it would do for an issue filed today. Unconditional is the operator's pre-decision
+              # (#228): a conditional keep ("this one label is probably still true") is how the
+              # next contradiction ships, and every label here is cheap to re-earn — `agent-fix`
+              # from the verdict line, `agent/queued` from the debouncer's set-pass.
+              #
+              # Compare-then-write: only labels actually present are named in the edit, so a thread
+              # that came back clean draws no call at all. And NO comment is posted — the reopened
+              # thread stays OPEN, so a machine comment here would never be the last word on it and
+              # would repeat once per flap cycle, which is the #148 rule the resolve leg at the top
+              # of this file already turns on. The session's own comment is the record; this line
+              # in the workflow log is the audit trail.
+              # >>>REPLAY:responder-reopen-strip>>>
+              for pc in $PRECLOSED; do
+                prepo="${pc%#*}"; pnum="${pc#*#}"
+                # One read, `state|labels` — a thread still CLOSED was not reopened and is not ours
+                # to touch. A failed read yields an empty state and is skipped for the same reason
+                # the resolve leg never closes on one: acting on an unread issue is the worse error.
+                # This cannot tell OUR session's reopen from a human's in the same minute, and does
+                # not try to: a reopened thread is a record either way, and the labels it needs are
+                # the ones its next verdict earns — not the ones its last life ended with.
+                pmeta="$(gh api "repos/$prepo/issues/$pnum" --jq '.state + "|" + ([.labels[]?.name] | join(","))' 2>/dev/null || true)"
+                [ "${pmeta%%|*}" = open ] || continue
+                plabels=",${pmeta#*|},"
+                pstrip=""
+                for pl in agent/queued agent/in-progress agent/done agent-fix; do
+                  case "$plabels" in *",$pl,"*) pstrip="${pstrip:+$pstrip,}$pl";; esac
+                done
+                if [ -z "$pstrip" ]; then
+                  echo "→ reopened $pc: no stale lifecycle labels — already a clean record"; continue
+                fi
+                gh issue edit "$pnum" --repo "$prepo" --remove-label "$pstrip" >/dev/null 2>&1 \
+                  && echo "→ reopened $pc: stripped stale lifecycle labels ($pstrip) — a RECORD again; only a fresh verdict may re-queue it" \
+                  || echo "→ reopened $pc: strip of ($pstrip) FAILED (non-fatal) — the FU-069 breaker is still behind this"
+              done
+              # <<<REPLAY:responder-reopen-strip<<<
+
               # ── verdict → agent-fix + doorbell (FU-133 dispatch half, 2026-08-07) ───────────
               # Replaces selfQueue (cb4ae5a), which labelled agent-fix+agent/queued per-issue and
               # so dispatched same-cause issues in parallel (iac-lane.md §"one root cause, N alert
@@ -619,6 +697,7 @@ spec:
               # -iac here made those filings inert — oracle-fleet#228 carried 'fix-verdict: fix' and
               # sat unlabelled for ~6h until a human hand-queued it. (The -iac filter on ROUTE_REPO
               # above is a different question and stays: a stack's DEFAULT route is its -iac.)
+              # >>>REPLAY:responder-verdict-dispatch>>>
               VREPOS=""
               for vr in "$ROUTE_REPO" "teststuffstash/homelab" \
                         $(printf '%s' "$CLAIMS" | jq -r '.items[]?.spec.repos[]?.name | "teststuffstash/" + .' 2>/dev/null || true); do
@@ -651,6 +730,7 @@ spec:
                   echo "→ verdict: $VREPO#$VHIT carries no 'fix-verdict: fix' — stays inert (report-only diagnosis)"
                 fi
               fi
+              # <<<REPLAY:responder-verdict-dispatch<<<
             done
         resources:
           requests: { cpu: "100m", memory: "256Mi" }

@@ -49,4 +49,27 @@ case "${STUB_GH:-ok}" in
   garbage) printf 'upstream connect error or disconnect/reset before headers\n'; exit 0 ;;
 esac
 
+# `gh --jq/-q` is EVALUATED here, not ignored. Serving the raw payload to a clause that asked for
+# one field hands it the whole JSON blob, and a clause that then "works" is a fixture pinning
+# nonsense — the responder's verdict half reads an issue NUMBER out of a list this way and would
+# have gone on to fetch `issues/<the entire array>`. Nothing in the tree needed it before because
+# coordinator-scan.sh's standing rule is to pipe to a REAL jq (`gh --jq` takes only an expression);
+# the responder's embedded script does not follow that rule, and pinning it is what surfaced this.
+# gh's own --jq is raw output, hence `jq -r`.
+_rp_jq=''; PREV=''
+for a in "$@"; do
+  case "$PREV" in --jq|-q) _rp_jq="$a" ;; esac
+  case "$a" in --jq=*) _rp_jq="${a#--jq=}" ;; esac
+  PREV="$a"
+done
+if [ -n "$_rp_jq" ]; then
+  command -v jq >/dev/null 2>&1 || _rp_die "a clause passed --jq but jq is not on PATH (run via devbox)"
+  # Served into a variable, NOT piped: `_rp_serve`'s exit 9 for an unrecorded READ would only kill
+  # the left half of a pipeline, and a silently-empty read is the exact lie that whole guard exists
+  # to prevent.
+  _rp_body="$(_rp_serve "$WORDS")" || exit 9
+  printf '%s' "$_rp_body" | jq -r "$_rp_jq"
+  exit $?
+fi
+
 _rp_serve "$WORDS"

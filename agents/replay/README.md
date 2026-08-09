@@ -46,6 +46,28 @@ The seams are ordinary shell functions, declared as seams in the helper's header
 are pinning reaches for I/O with no seam, add one there rather than a `REPLAY_*` branch in
 production code — a test-only backdoor in a clause is a clause with an untested path.
 
+## When the clause lives inside a manifest
+
+`fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file
+at all — it is `agents/coordinator/responder-argo.yaml`, whose `container.args[0]` carries ~300
+lines of shell. Nothing special was needed: `extract` trims leading whitespace before matching, so
+a `# >>>REPLAY:<name>>>>` sentinel sits happily inside the YAML block scalar at whatever column the
+manifest indents to, and the extracted block composes as ordinary shell.
+
+Two things that pair does need, and both live in the harness rather than the fixture:
+
+- **`gh --jq` is evaluated by the stub, not ignored.** `coordinator-scan.sh`'s standing rule is to
+  pipe to a real `jq`, so no fixture had exercised it; the responder's embedded script uses
+  `gh api … --jq` directly, and a stub that served the raw payload would have handed the verdict
+  clause an entire JSON array where it expected an issue number. An unrecorded read still dies
+  loudly through it — the body is served into a variable first, because `exit 9` from the left half
+  of a pipeline is not an exit at all.
+- **The seam for non-`gh` I/O is a shell function in the bridge.** The verdict half rings a doorbell
+  with `curl`; the bridge shadows `curl` and writes a `CALL curl …` line into `$REPLAY_ACTIONS`, so
+  "did this dispatch" is asserted in the same vocabulary as every label write. Adding a third
+  PATH-shim would have worked too and buys nothing — the function is the seam pattern the section
+  above already describes.
+
 ## Reads must be recorded; writes need not be
 
 A READ with no world file DIES (loudly, exit 9) — an empty payload usually parses and the clause

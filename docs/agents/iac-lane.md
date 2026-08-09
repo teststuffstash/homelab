@@ -125,6 +125,12 @@ set-judged debouncer:
   plus the FU-088 latch and the shared claude semaphore.
 - **Re-entry**: if a linked issue's alert refires after the cause-fix merged, the responder's
   fp/subject belts reopen the SAME issue; removing `agent/linked` re-enters it in the pending set.
+  A reopen **restores a record, not a queue** (#228, 2026-08-09): GitHub brings a reopened issue
+  back wearing the labels it was closed with, so the responder strips the whole lifecycle set
+  (`agent/queued`, `agent/in-progress`, `agent/done`, `agent-fix`) on every reopen in
+  launcher-owned shell, and only a fresh `fix-verdict: fix` re-earns `agent-fix`. Unstripped, the
+  live case arrived pre-queued on already-merged work and the FU-069 breaker caught the
+  contradiction — which is a belt doing a guard's job at the wrong end of the lane.
 - **First live ≥2-pending set-pass (2026-08-07): independence RIGHT, queueing WRONG — and the
   coordinator caught it.** The set was homelab#68 + #118; the verdict "independent root causes"
   was correct. But #68 was queued off its BODY — a 07-28 diagnosis whose scope ceiling
