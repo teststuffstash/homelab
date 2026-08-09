@@ -86,6 +86,11 @@ REPO_PR_CAP="${REPO_PR_CAP:-3}"
 # missing hasher yields an empty fingerprint, which can never equal a recorded one, so the clause
 # behaves exactly as it did before this guard existed. The breaker stays as the backstop for
 # fingerprint BUGS (a hash that moves on its own re-arms the churn this guard removes).
+# The five blocks below carry `>>>REPLAY:<name>>>>` sentinels: agents/state-fp-replay.sh EXTRACTS
+# and executes them against fixtures (homelab#201, the rail-degrade-replay pattern) rather than
+# transcribing them, so the pin cannot drift from this code. Moving a block is fine; dropping a
+# sentinel is not — the harness exits 3 and says which one it could not find.
+# >>>REPLAY:state-fp-jq>>>
 STATE_FP_JQ='[ "head=" + (.headRefOid // "")
   , "review=" + (.reviewDecision // "NONE")
   , "checks=" + ([ .statusCheckRollup[]?
@@ -100,10 +105,12 @@ STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-
   | sort_by(.createdAt) | last // {})
   | (((.body // "") | [ scan("state-fp:[0-9a-f]{6,64}") ] | last) // "")
   | sub("^state-fp:"; "")'
+# <<<REPLAY:state-fp-jq<<<
 
 # pr_state_fp_pair <slug> <pr> → "<current>|<recorded>", either side empty when unknown.
 # ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
 # Always exits 0: under `set -e` a probe failure here must skip the guard, never kill the scan.
+# >>>REPLAY:state-fp-pair>>>
 pr_state_fp_pair() {
   # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
   # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
@@ -121,6 +128,7 @@ pr_state_fp_pair() {
   printf '%s|%s\n' "$fp_cur" "$fp_prev"
   return 0
 }
+# <<<REPLAY:state-fp-pair<<<
 
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */10 coordinator-reflex cron
@@ -1026,6 +1034,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # PR#234 churn. The unit is emitted only when the state a ride would read has MOVED since the
     # last arbitrate dispatch (homelab#198, fingerprint helper at the top of this file); unchanged
     # state is a REPORT line, which is what an escalation waiting on a human should look like.
+    # >>>REPLAY:arbitrate-gate>>>
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")))|.number'); do
       afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
       if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
@@ -1034,6 +1043,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
       units="${units}arbitrate|${repo}|pr-${u}\n"
     done
+    # <<<REPLAY:arbitrate-gate<<<
 
     # ci-red (FU-115 / MP-T12, CONTENT-BASED rewrite of the old ci-red-stale time-gate): an ARMED
     # red PR is invisible to the whole merge path (updater + reviewer both skip red). The OLD trigger
@@ -1183,11 +1193,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # dispatch branch only: the no-op→arbitrate leg above must stay level-triggered (it is
           # the anti-livelock), and `continue` before the cap so a debounced PR never spends one of
           # the two dispatch slots a live red PR could use.
+          # >>>REPLAY:ci-red-gate>>>
           rfp="$(pr_state_fp_pair "$slug" "$u")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
           if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
             orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
             continue
           fi
+          # <<<REPLAY:ci-red-gate<<<
           # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
@@ -1433,6 +1445,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # gate — recording afterwards would fingerprint the outcome and debounce the follow-up ride.
     # A refused write only costs the debounce (the clause re-emits next scan, i.e. today's
     # behaviour), so it WARNs and dispatches; it never blocks the ride it is annotating.
+    # >>>REPLAY:dispatch-marker>>>
     case "${uclause}:${uitem}" in
       arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*)
         dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}")"; dfp="${dfp%%|*}"
@@ -1446,6 +1459,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         fi
         ;;
     esac
+    # <<<REPLAY:dispatch-marker<<<
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
