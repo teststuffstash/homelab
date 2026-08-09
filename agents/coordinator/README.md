@@ -46,7 +46,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
-| `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides | review reflex |
+| `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
 | `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
@@ -580,6 +580,21 @@ Read the diff + the whole review thread, then rule — exactly one of:
 - **Escalate**: genuinely ambiguous / policy-level → `agent/blocked` + one comment framing the
   decision for the human. Leave `agent/arbitrate` in place (the label pair records the path).
 
+> **You get ONE ride per state (homelab#198).** Two of those four rulings leave `agent/arbitrate`
+> on the PR on purpose, so the scan's label selector used to re-emit this unit every tick for as
+> long as the escalation stood: oracle-fleet PR#234 drew five rides in ~30 minutes against
+> byte-identical state, each correctly concluding "no change, escalation stands". The scan now
+> records a `state-fp:<hash>` comment on the PR at dispatch — head sha, every check's conclusion,
+> `reviewDecision`, newest verdict timestamp — and while that hash is unchanged the clause reports
+> instead of dispatching. Two consequences for this play. **Your prose is not the record**: the
+> marker is written by `agents/coordinator-scan.sh` before your session starts, so never
+> hand-author, edit or "refresh" a `state-fp:` line — a fingerprint you invent is a debounce you
+> disarmed. And **the ride you are on is the one this state gets**: rule it now rather than
+> deferring to a next tick, which will not come until something on the PR actually moves. Movement
+> re-arms the gate by itself (a pushed fix round, a dismissal, a rerun's verdict, a human review);
+> if you genuinely cannot rule, the terminal is `escalate` above — a state a human reads, not a
+> state that re-dispatches.
+
 Never re-dispatch the reviewer directly from this play — fix rounds re-enter the reviewable path
 on their own once new content lands, and a ruling that lands NO new content exits through the
 dismissal below instead.
@@ -669,6 +684,15 @@ health, not a PR fix round). **When the fix round keeps failing, the SCAN escala
 `RED_ROUNDS_MAX` fix rounds still-red it labels `agent/arbitrate` (the Red→arbitrate edge, MP-T13) →
 your `arbitrate` play rules (re-dispatch with a stronger model / close / escalate) — you never see
 an infinitely-re-dispatching red PR again.
+
+This clause carries the same **one-ride-per-state** marker as `arbitrate` (homelab#198): the scan
+writes `state-fp:<hash>` on the PR at dispatch and will not dispatch again while head, checks,
+`reviewDecision` and the newest verdict are all unchanged. The attempt counters answer "did a round
+complete, and did it push?"; the fingerprint covers the case they cannot see — a dispatched round
+that never RAN posts no stats and pushes no commit, so nothing else stops the same input being
+handed out every tick. Same rule as above: the marker is machine-written, never yours to author.
+If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
+finding is the terminal ride (pod, launcher, budget), not another fix round.
 
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 
