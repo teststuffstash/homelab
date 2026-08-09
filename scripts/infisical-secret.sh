@@ -26,7 +26,18 @@ PROJECT_ID="$(devbox run --quiet -- kubectl "${KC[@]}" -n infisical exec "$PGPOD
 
 devbox run --quiet -- kubectl "${KC[@]}" -n infisical port-forward "$SVC" "$PORT:8080" >/tmp/inf-secret-pf.log 2>&1 &
 PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
-until devbox run --quiet -- curl -sf "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; do sleep 1; done
+# BOUNDED wait + liveness check (2026-08-09): the old bare `until curl` spun FOREVER when the
+# Infisical pod restarted mid-store and took the port-forward with it — the token store hung for
+# hours inside a tofu apply wrapper whose whole design was "Infisical failures WARN, never
+# abort". A wait that cannot fail defeats the caller's degrade path. 30s covers every healthy
+# bring-up; a dead forward or a dead pod now exits loudly with the forward's own log.
+tries=0
+until devbox run --quiet -- curl -sf "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; do
+  kill -0 "$PF" 2>/dev/null || { echo "infisical-secret: port-forward DIED — $(tail -2 /tmp/inf-secret-pf.log 2>/dev/null | tr '\n' ' ')" >&2; exit 1; }
+  tries=$((tries+1))
+  [ "$tries" -ge 30 ] && { echo "infisical-secret: Infisical not reachable through the port-forward after 30s — see /tmp/inf-secret-pf.log" >&2; exit 1; }
+  sleep 1
+done
 
 devbox run --quiet -- infisical secrets set "$@" \
   --projectId "$PROJECT_ID" --token "$TOKEN" \
