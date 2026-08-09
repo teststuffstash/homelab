@@ -61,6 +61,12 @@ jobs:
       - name: Rail-degrade contract replay (devbox run rail-degrade-replay)
         run: devbox run rail-degrade-replay
 
+      # #197: the prose-inside-executing-code class (4 instances in 4 days) gets a mechanical
+      # guard — jq -Rs used as shell quoting, and $<digit> in an expanding manifest heredoc.
+      # Fixtures carry the real pre-fix defects; the self-test runs on every invocation.
+      - name: Prompt transport lint (devbox run prompt-transport-lint)
+        run: devbox run prompt-transport-lint
+
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)

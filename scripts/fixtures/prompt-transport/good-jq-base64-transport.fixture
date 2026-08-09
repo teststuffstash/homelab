@@ -1,0 +1,12 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control: the FIXED shape of #197 instance 4, as it stands in
+# agents/coordinator-session.sh today (51e7f5c). The prompt rides base64 → file → "$(cat FILE)",
+# so nothing prose-shaped ever sits on a line the pod's shell parses; the one remaining jq -Rs is
+# the OUTER transport that builds the ARGS array, which is correct and must never be flagged.
+# EXPECT: clean
+#
+  RUN_B64="$(printf '%s' "$RUN_CMD" | base64 | tr -d '\n')"
+  PREP="${PREP}; printf %s '${RUN_B64}' | base64 -d > /work/coord-run"
+  WRAPPED="${PREP}
+${UPLOAD_FN}
+set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
+  ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
