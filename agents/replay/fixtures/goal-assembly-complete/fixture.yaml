@@ -32,6 +32,9 @@ env:
   - IN_SLUG=teststuffstash/circles
   - IN_REPO=circles
 scrub:
-  # The comment body is prose the block owns; pin that it LANDED and that it says
-  # assembly-complete, not its paragraphs.
-  - s|--body 🤖 \*\*assembly-complete\*\*.*|--body <assembly-complete comment — see agents/coordinator-scan.sh>|
+  # The comment body is prose the block owns, so the paragraphs are scrubbed — EXCEPT the sentence
+  # that names the bucket, which is kept verbatim because it is the one line carrying a computed
+  # value. It read "sub-issue #7777" until this fixture was made to show it: `${x:+A}${x:-B}` looks
+  # like an if/else and is not one (when x is set, the second expansion yields x). A scrub wide
+  # enough to cover a rendered value is a scrub that hides the next one.
+  - s|--body 🤖 \*\*assembly-complete\*\*.*\(\*\*Where post-launch work goes:\*\* [^\\]*\)\\n.*|--body <assembly-complete comment — see agents/coordinator-scan.sh> \1|

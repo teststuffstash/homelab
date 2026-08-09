@@ -793,7 +793,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             # partial pass is simply re-run by the next scan, which is also what makes the per-pass
             # cap below safe rather than a silent truncation.
             gcap="${GOAL_TERMINAL_MAX:-20}"; gdone=0; gleft=0; gswept=""
-            while IFS='|' read -r dn dstate dtitle dlabels; do
+            # TITLE LAST, and that is not cosmetic: `read` with IFS='|' puts every remaining field
+            # into the final variable, so a title containing a pipe (they do) can only widen the
+            # column that already absorbs the rest. Any other position would shift `dlabels` and
+            # silently mis-read the `agent/queued` test one leg down.
+            while IFS='|' read -r dn dstate dlabels dtitle; do
               [ -n "$dn" ] || continue
               [ "$dstate" = "OPEN" ] || continue
               case "$gverdict" in
@@ -850,7 +854,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
               '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
                | [.[] | select(.number as $n | $D | index($n))] | sort_by(.number) | .[]
-               | [(.number | tostring), .state, (.title // ""), ((.labels // []) | map(.name) | join(" "))] | join("|")' 2>/dev/null || true)"
+               | [(.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
             if [ "$gleft" -gt 0 ]; then
               # The goal is NOT closed while work remains — see the resumability contract above.
               orphans="${orphans}[$repo] ⏳ goal #${g} goal/${gverdict}: ${gdone} descendant(s) actioned, ${gleft} still to go (cap ${gcap}/scan) — the goal stays OPEN until the tree is done; the next scan continues\n"
@@ -912,6 +916,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             gbuck="$(gh api "repos/${slug}/issues/${g}/sub_issues" 2>/dev/null \
               | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
             case "$gbuck" in ''|*[!0-9]*) gbuck="" ;; esac
+            # Rendered here, not inline in the body below: `${x:+A}${x:-B}` reads like an if/else
+            # and is not one — when x is SET the second expansion yields x itself, so the sentence
+            # came out "sub-issue #7777". Two branches, one variable.
+            if [ -n "$gbuck" ]; then
+              gbucktxt="sub-issue #${gbuck}"
+            else
+              gbucktxt="the \`post-launch:\` bucket, which the next closeout or review creates under this goal"
+            fi
             # LABEL FIRST, COMMENT SECOND, and the comment only on a label that stuck. The write is
             # not atomic and this leg is level-triggered: a landed comment with a failed label
             # re-comments every tick (the duplicate-bot-comment anomaly the FU-069 breaker watches
@@ -923,7 +935,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
                 "" \
                 "**That is a MIDPOINT, not a verdict** (ADR-102). Assembly-complete measures \"built as specified\"; it says nothing about whether the idea works — circles#17 was machine-ruled met 100 minutes before the operator refuted it, which is why this transition no longer closes anything. The goal is now \`goal/post-launch\` and STAYS OPEN, shipping to production at its own pace against the same \`Budget:\` line." \
                 "" \
-                "**Where post-launch work goes:** ${gbuck:+sub-issue #${gbuck}}${gbuck:-the \`post-launch:\` bucket, created under this goal by the next closeout or review}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-review\`." \
+                "**Where post-launch work goes:** ${gbucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-review\`." \
                 "" \
                 "**It closes only on a VERDICT**, applied here as a label by this goal's verdict authority (\`Verdict-authority:\`, default \`human\`):" \
                 "" \

@@ -40,6 +40,23 @@ The seams are ordinary shell functions, declared as seams in the helper's header
 are pinning reaches for I/O with no seam, add one there rather than a `REPLAY_*` branch in
 production code — a test-only backdoor in a clause is a clause with an untested path.
 
+## Reads must be recorded; writes need not be
+
+A READ with no world file DIES (loudly, exit 9) — an empty payload usually parses and the clause
+then asserts on nothing. A WRITE with no world file SUCCEEDS silently: mutations are the output
+under test, and most clauses never read the reply back.
+
+That second half was documented from the start and did not work until homelab#208. `_rp_serve`'s
+`exit 9` kills the whole stub process from inside a function, so the write path's `|| true` was
+unreachable and every unrecorded mutation came back FAILED — clauses took their `gh write refused?`
+branch and the fixture pinned the error path while looking like it pinned the happy one. Nothing
+caught it because no fixture had yet written without reading back; the `goal-*` terminal fixtures
+(`gh issue edit --add-label`, `gh issue close`) were the first. `_rp_serve <key> optional` now
+returns 1 instead of dying, and the write path passes it.
+
+Record a write anyway when the clause CONSUMES its output — `gh issue create` prints the new
+issue's URL and `harvest-disposition` parses the number out of it.
+
 `fixtures/_selftest-*` are PROBE-FAIL fixtures — deliberately broken, `expect: fail`, one per
 detector the runner owns. They run first (the glob sorts them there) so the harness proves itself
 before it judges anything else. If one of them ever goes green, the run fails loudly: a check
