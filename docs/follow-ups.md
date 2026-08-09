@@ -420,6 +420,8 @@ the block needs pruning, not more headings.
       exprs, replay against fixtures). Next: decide promtool-in-devbox (one tool, real `for:`
       + time-series semantics) vs. extending the self-test pattern per rule file; either becomes
       a CI step. Not urgent — the two files with product-spend/agent-loop rules are covered.
+
+- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
       **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass: independence RIGHT, queueing
