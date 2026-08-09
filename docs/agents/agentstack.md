@@ -135,6 +135,15 @@ catalog problem.
     one-off tick.
   - **`spec.reviewer.enabled`** (bool, default **true** = current behavior) — auto-review this
     stack's PRs. Safe to leave on: reviewing green, unapproved PRs never dispatches new work.
+    Read in exactly ONE place — `agents/reviewer-optout.sh` — because there are THREE reviewer
+    dispatch sites and for three weeks only one of them read it (homelab#204: the perstack Sensor
+    approved + auto-merged agent-runtime#57 on an opted-out stack while the reflex tick logged the
+    correct skip). All three converge on `agents/reviewer-session.sh`, which runs that helper as a
+    shell guard before it creates anything. **Fail-CLOSED**: an unreadable claims read skips
+    dispatch rather than reviewing — for a *disable* knob an unknown is not permission, and the
+    review path is level-triggered, so a skipped tick costs minutes. A fourth dispatch site must
+    route through `reviewer-session.sh`; never copy the read. Pinned by
+    `agents/reviewer-optout-replay.sh`.
 
   These make suspend/unsuspend **per-stack** (delivered via the global reflex honouring the claim
   flags). The agent-loop reflexes are Argo **CronWorkflows** (ADR-093), not CronJobs.

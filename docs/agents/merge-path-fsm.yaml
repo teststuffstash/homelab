@@ -105,8 +105,26 @@ transitions:
         anchor: { file: agents/review-reflex.sh, pattern: "subscription-latch.sh" }
       - desc: "deterministic-name key: reviewer pod = (repo, pr, head-sha8), atomic create — was gap MP-G02 (FU-092, 2026-07-27)"
         anchor: { file: agents/reviewer-session.sh, pattern: "pod name IS the .repo, pr, head-sha8. idempotency key" }
-      - desc: "per-stack reviewer.enabled knob"
-        anchor: { file: agents/review-reflex.sh, pattern: "reviewer.enabled" }
+      - desc: "per-stack reviewer.enabled knob, honored by ALL THREE dispatch sites from ONE shared
+          read — was a silent gap until homelab#204 (2026-08-09): the knob lived as an inline jq in
+          the review-reflex tick, so the `review-perstack` Sensor trigger reviewed, APPROVED and
+          auto-merged agent-runtime#57 on a stack whose claim said `reviewer.enabled: false`, in the
+          same minute the tick logged the correct skip. The three sites converge on
+          reviewer-session.sh, which runs the shared read as a SHELL guard before the head-sha probe,
+          the latch and the pod create — the prompt's STEP-0 cannot serve as this backstop, since it
+          runs inside a pod that should never have been created"
+        anchor: { file: agents/reviewer-optout.sh, pattern: "reviewer.enabled" }
+      - desc: "…and FAIL-CLOSED: an unreadable claims read skips dispatch on every path rather than
+          reviewing the world, reversing the old WARN-and-continue branch. For a DISABLE knob the
+          failures are asymmetric — a skipped tick costs minutes on a level-triggered path, an
+          un-skippable disabled review costs the gate itself. NB `kubectl get -o json` on a Forbidden
+          prints a VALID empty List to stdout and exits 1, so the status is checked as well as the
+          payload; trusting stdout alone reads as 'no stack opted out'"
+        anchor: { file: agents/reviewer-optout.sh, pattern: "fail-CLOSED" }
+      - desc: "the gate is pinned by an executed replay (42 assertions, sentinel-extracted from the
+          shipped scripts, no cluster): with reviewer.enabled=false NEITHER the tick NOR the perstack
+          path dispatches, and a PROBE-FAILed claims read skips rather than proceeds"
+        anchor: { file: agents/reviewer-optout-replay.sh, pattern: "NEITHER PATH DISPATCHES" }
     belts:
       - desc: "reviewer STEP-0 self-guard, PRECONDITION arm (homelab#122 / PR #123, master 11c2045,
           2026-08-08): a premise true when the reviewer was QUEUED and false when it EXECUTED —
