@@ -8,13 +8,21 @@ meant to avoid.)
 
 ## Live state (2026-08-09 ~09:40Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **ADR-102/103 PROGRAM RUNNING** (goal container + platform-discipline): fixer queue #206
-  (replay harness) → #207/#208 (goal clauses, blocked-by 206) + #209 (registry panel) + #210
-  (channel separation 1). Meta owns: the ratchet lint in ci.yaml AFTER #206 lands (tier-3, mine);
-  goal template v3 prose is in issue-authoring.md §Goal container. Monday retro (fires 08-10
-  05:00Z) scores the two ADR-103 KPIs first — CHECK ITS REPORT. Watch #207/#208 reviews like a
-  hawk: they are the exact clause class that produced #198/#204, and their replay fixtures are
-  the acceptance, not the prose.
+- **ADR-102/103 PROGRAM — first tranche mostly LANDED 08-09 morning**: ✓#206 harness (agents/
+  replay/, 12-fixture suite) ✓clause-replay CI gate + RATCHET (v2 — files API; v1 died shallow,
+  see TICK-LOG) ✓#209 panel ✓#207 harvest→post-launch-bucket (PR#216) ✓#212 optout shared read
+  ✓#215. REMAINING: **#208 verdict terminals** (dispatches now #207's footprint freed — review
+  like a hawk, replay fixtures are the acceptance) + **#210 channel separation**. Monday retro
+  (08-10 05:00Z) scores the two ADR-103 KPIs first — CHECK ITS REPORT.
+- **minutark.ee**: zone LIVE on CF (benedict/paris), empty by design, survey → oracle-iac#351
+  (blocked: operator re-mints ingress token host-side — token root already prepped with the
+  two-zone map + account-first policy order; expect a CLEAN apply, the old 4-error flap is
+  fixed). After re-mint: I run #351 bootstrap + first PublicRoute claim (placeholder backend).
+  DNSSEC enable rides the bootstrap; DS hand-back at zone.ee is manual. NO LB (ladder rung 1).
+- **ert-verify-2026089-mpws5**: waiting out riigiteataja's weekly regeneration (LOEMIND.txt
+  sentinel); backoff hourly; monitor armed; completes when upstream publishes. oracle-iac#343
+  corrected+de-queued (wrong premise — do NOT re-queue unless proxy 504s while in-pod curl
+  works AFTER the files return).
 
 - **IN FLIGHT — e2e-outage recovery (root cause: leaked kind clusters → inotify 116/128, fixed
   live + codified; TICK-LOG 2026-08-09)**: master e2e re-run GREEN 07:00Z. Pending, with
