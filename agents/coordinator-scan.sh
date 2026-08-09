@@ -582,11 +582,81 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
     # dispatch a worker against an issue with nothing to build. Its children are the work, and they
     # appear here on their own when they land inert.
+    # ── UNBLOCKED-UNLABELED rides the SAME fetch (homelab#226) ────────────────────────────────
+    # ONE `gh issue list`, two derivations — the App's GraphQL pool is what this loop runs out of
+    # (FU-084), and the two slices want the same page of issues. The sentinel spans BOTH because
+    # the property worth pinning is that an issue lands in exactly ONE class: the sharper line
+    # (its gate resolved) must not also appear as a generic 🌱 row, or the promotion buys nothing.
+    #
+    # WHAT IT CATCHES (the 2026-08-09 miss, homelab#226). oracle-fleet#225 + oracle-iac#322 were
+    # filed unlabelled behind oracle-fleet#215 and sat 12h after #215 closed, because nothing
+    # anywhere watches "the gate cleared and the issue is still inert": the needs-meta
+    # `unlabeled >24h` clause covers PLATFORM repos only, and the 🌱 slice below shows an
+    # unlabelled stack issue exactly the same before and after its blockers close.
+    #
+    # ⚖ REPORT-ONLY, never an auto-queue. The FU-090 human gate is the point (breaker #1); what
+    # was missing is VISIBILITY of a resolved gate, not permission to walk through it.
+    #
+    # NOT AUTHOR-FILTERED, deliberately — and this is the whole lesson of the issue. The 🌱 slice
+    # is bot-only, which is precisely why a JAIL-authored chain was invisible to it; an
+    # author allowlist here (`is_bot or <the operator's login>`) would re-narrow the same way the
+    # 2026-08-08 agent-runtime fix did, and would go silently blind the day a handle changes. The
+    # author rides the LINE instead, where a reader can weigh it. The `blockedBy`-edge requirement
+    # is what keeps this quiet: the permanent unlabelled residents (Renovate's Dependency
+    # Dashboard, the responder's report-only `alert-fp:` records) carry no dependency edges and so
+    # can never match, without this clause needing to know their names.
+    #
+    # `blockedBy` NODES CARRY THEIR OWN `state` on the list read (verified live 2026-08-09 against
+    # this repo's #207/#208), so "all blockers closed" costs zero extra calls. The queued loop
+    # above still probes each dep with `gh issue view` because it needs what the nodes do NOT
+    # carry — `stateReason` (NOT_PLANNED ⇒ stale premise) and the dep's own edges (cycles).
     # >>>REPLAY:sprout-report>>>
-    sprouts="$(gh issue list --repo "$slug" --state open --json number,title,author,labels 2>/dev/null \
-      | jq -r '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
+    inert="$(gh issue list --repo "$slug" --state open \
+      --json number,title,author,labels,createdAt,blockedBy 2>/dev/null)" || inert='[]'
+    jq -e . >/dev/null 2>&1 <<<"$inert" || inert='[]'
+    # Unlabelled = no `agent*` label at all, the same predicate meta-needs-attention.sh clause 3
+    # uses on platform repos (no clause of any kind can reach such an issue). >24h so a chain
+    # filed and labelled inside one working session never flickers through the report.
+    unb="$(printf '%s' "$inert" | jq -c --arg cutoff "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" \
+      '[ .[]
+         | select(([.labels[].name | select(startswith("agent"))] | length) == 0)
+         | select((.createdAt // "") < $cutoff)
+         | select((((.blockedBy.nodes // []) | length) > 0)
+              and (([(.blockedBy.nodes // [])[] | select(.state != "CLOSED")] | length) == 0)) ]' 2>/dev/null)" || unb='[]'
+    jq -e . >/dev/null 2>&1 <<<"$unb" || unb='[]'
+    unblines="$(printf '%s' "$unb" | jq -r '.[]
+      | "  issue #\(.number) — \(.title) (by \(.author.login // "?"); blockers all closed: \([(.blockedBy.nodes // [])[] | "#\(.number)"] | join(", ")))"' 2>/dev/null)" || unblines=""
+    [ -n "$unblines" ] && orphans="${orphans}[$repo] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent-fix[+queued] to adopt, or close it):\n${unblines}\n"
+    unbnums="$(printf '%s' "$unb" | jq -c '[.[].number]' 2>/dev/null)" || unbnums='[]'
+    # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
+    # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
+    # they never rot silently. Anything the clause above already named is EXCLUDED: same issue,
+    # sharper line, reported once.
+    # ⚠ A POST-LAUNCH BUCKET IS NOT A SPROUT (ADR-102, homelab#207). It is bot-authored and carries
+    # no `agent-fix`, so it matches this slice exactly — and it is a CONTAINER, not work. Left in,
+    # every goal would add a permanent line to a report whose whole purpose is "these are rotting,
+    # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
+    # dispatch a worker against an issue with nothing to build. Its children are the work, and they
+    # appear here on their own when they land inert.
+    sprouts="$(printf '%s' "$inert" \
+      | jq -r --argjson skip "$unbnums" '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not) and (.number as $n | ($skip|index($n)) == null))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
     [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
     # <<<REPLAY:sprout-report<<<
+    # ── RETIRED-FORMAT `Depends-on:` lint (homelab#226) ───────────────────────────────────────
+    # FU-111 retired the body-line reader on 2026-08-07; the meta seat wrote one on 2026-08-08
+    # (oracle-fleet#225) and the sequencing it encoded could never fire, because nothing reads that
+    # line any more and nothing said so. Inert prose that LOOKS like a dependency is worse than no
+    # dependency at all — the author stops looking. Report-only and level-triggered: it clears when
+    # the body is rewritten as a native edge.
+    # ⚠ The bullet form is matched on purpose: TICK-LOG 2026-07-30 recorded a markdown-bulleted
+    # `- Depends-on:` slipping a `^[ \t]*depends-on:` regex while reading, to a human, exactly like
+    # a dependency. A lint that misses the shape that already fooled someone is not a lint.
+    # >>>REPLAY:depends-on-retired>>>
+    depold="$(printf '%s' "$openall" | jq -r '[.[]
+      | select((.body // "") | test("(?mi)^[ \\t]*(?:[-*+][ \\t]*)?depends-on:[ \\t]*\\S"))
+      | "  issue #\(.number) — \(.title)"] | .[]' 2>/dev/null)" || depold=""
+    [ -n "$depold" ] && orphans="${orphans}[$repo] ⚠ RETIRED FORMAT: a \`Depends-on:\` body line gates NOTHING (FU-111 retired the reader 2026-08-07 — native blocked-by edges are the only reader). Re-author it: gh api -X POST repos/${slug}/issues/<n>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric id>, then delete the line:\n${depold}\n"
+    # <<<REPLAY:depends-on-retired<<<
     iss=""; qblocked=""; qcycles=""
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's

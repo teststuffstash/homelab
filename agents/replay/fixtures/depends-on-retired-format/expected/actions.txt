@@ -1,0 +1,5 @@
+OUT ORPHAN [oracle-fleet] ⚠ RETIRED FORMAT: a `Depends-on:` body line gates NOTHING (FU-111 retired the reader 2026-08-07 — native blocked-by edges are the only reader). Re-author it: gh api -X POST repos/teststuffstash/oracle-fleet/issues/<n>/dependencies/blocked_by -F issue_id=<the BLOCKER's numeric id>, then delete the line:
+OUT ORPHAN   issue #225 — delta job: land the manifest + the fleet wiring
+OUT ORPHAN   issue #226 — delta job: wire the fleet side
+OUT REACHED: end
+RC 0

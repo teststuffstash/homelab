@@ -1,0 +1,17 @@
+[
+  { "number": 90, "title": "delta job: land the manifest + the fleet wiring",
+    "author": { "login": "RasmusSoot", "is_bot": false }, "labels": [],
+    "createdAt": "2026-08-08T09:14:00Z",
+    "blockedBy": { "totalCount": 2, "nodes": [
+      { "number": 215, "state": "CLOSED", "title": "warm-store: stop re-downloading the base image",
+        "url": "https://github.com/teststuffstash/oracle-fleet/issues/215" },
+      { "number": 216, "state": "OPEN", "title": "pin the base image by digest",
+        "url": "https://github.com/teststuffstash/oracle-fleet/issues/216" } ] } },
+
+  { "number": 91, "title": "harvested: the delta path needs a cold-start fixture",
+    "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [],
+    "createdAt": "2026-08-07T18:02:00Z",
+    "blockedBy": { "totalCount": 1, "nodes": [
+      { "number": 216, "state": "OPEN", "title": "pin the base image by digest",
+        "url": "https://github.com/teststuffstash/oracle-fleet/issues/216" } ] } }
+]

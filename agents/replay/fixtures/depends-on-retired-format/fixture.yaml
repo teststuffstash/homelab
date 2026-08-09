@@ -1,0 +1,31 @@
+# homelab#226 deliverable 2 — a `Depends-on:` body line is a RETIRED format and must be flagged.
+#
+# WHY THIS IS A CHECK AND NOT A DOC LINE. FU-111 retired the body-line reader on 2026-08-07. On
+# 2026-08-08 the meta seat itself wrote one (oracle-fleet#225, sequencing the delta-job chain behind
+# #215) — one day after the reader it was written for stopped existing. The sequencing was therefore
+# inert from the moment it was typed, and nothing said so: the line parses to a human, gates nothing
+# in the machine, and the author stops looking. That is strictly worse than no dependency at all.
+#
+# THE FIVE BODIES:
+#   #225 plain `Depends-on: #215` on its own line            → flagged
+#   #226 MARKDOWN-BULLETED `- Depends-on: oracle-fleet#215`   → flagged. TICK-LOG 2026-07-30 records
+#        a bulleted line slipping a `^[ \t]*depends-on:` regex while reading to a human exactly like
+#        a dependency. A lint that misses the shape that already fooled someone is not a lint.
+#   #227 prose ("This depends on #215 …", "depends-on nothing" mid-line) → NOT flagged. The check is
+#        line-anchored and needs a non-blank value; flagging prose would train people to ignore it.
+#   #228 authored the current way (native edge, no line)      → NOT flagged.
+#   #229 `"body": null`                                       → NOT flagged, and no error. gh omits
+#        an empty body, and a jq that assumed a string here would take out the whole report.
+#
+# No `gh` call appears in the action stream on purpose — the lint rides `openall`, the fetch the
+# repo pass already made.
+name: depends-on-retired-format
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:depends-on-retired
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/oracle-fleet
+  - IN_REPO=oracle-fleet
