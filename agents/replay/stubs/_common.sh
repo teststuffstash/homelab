@@ -61,7 +61,16 @@ _rp_slug() {   # "pr view 234" → "pr-view-234"
 # Serve the most specific recording that exists, shortening the key one word at a time:
 # world/gh/pr-view-234.json → world/gh/pr-view.json → world/gh/pr.json. So a fixture records once
 # per call SHAPE and only pins a positional when it needs two different answers for it.
-_rp_serve() {
+#
+# `_rp_serve <key> optional` returns 1 instead of dying when nothing is recorded — the WRITE path.
+# The stubs always documented a missing write-recording as fine ("its absence is fine, unlike a
+# read's") and it was not: `exit 9` from inside a function kills the whole stub process, so the
+# callers' `|| true` was unreachable and every unrecorded mutation came back FAILED. Clauses then
+# took their write-refused branch and fixtures pinned the error path while looking like they pinned
+# the happy one — found by homelab#208's goal-terminal fixtures, the first to write without reading
+# back (`gh issue edit --add-label`, `gh issue close`). A read with no recording still DIES: that
+# one is load-bearing, because an empty payload usually parses and the clause then asserts nothing.
+_rp_serve() {   # _rp_serve <key> [optional]
   _rp_k="$1"; _rp_orig="$1"; _rp_tried=""
   while [ -n "$_rp_k" ]; do
     for _rp_ext in .json .txt ''; do
@@ -72,6 +81,7 @@ _rp_serve() {
     done
     case "$_rp_k" in *' '*) _rp_k="${_rp_k% *}" ;; *) _rp_k="" ;; esac
   done
+  [ "${2:-}" = optional ] && return 1
   printf 'replay-stub[%s]: no recorded world file for this READ.\n' "$_RP_TOOL" >&2
   printf '  call:  %s %s\n' "$_RP_TOOL" "$_rp_orig" >&2
   printf '  tried:\n%s' "$_rp_tried" >&2

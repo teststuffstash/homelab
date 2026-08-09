@@ -1,0 +1,40 @@
+# ADR-102 / homelab#208 — fixture (a): ASSEMBLY MERGE IS A MIDPOINT.
+#
+# CONDITION UNDER REPLAY. circles #29 is an open `task/goal`. Its assembly PR (#88, HEAD
+# `goal/29-p0-complete`, body trailer `Assembly-for: #29`) has MERGED. Under the old rule that
+# body said `Fixes #29` and GitHub closed the goal on merge — which is how circles#17 was ruled
+# met 100 minutes before the operator refuted it. The contract now:
+#   1. the goal is labelled `goal/post-launch`,
+#   2. the goal STAYS OPEN — the absence of any `gh issue close 29` in the CALL stream is the
+#      single most load-bearing line in `expected/actions.txt`, and diff asserts it for free,
+#   3. the comment that lands says **assembly-complete**, names the post-launch bucket (#77, found
+#      not created — `harvest-disposition` owns creation, IL-T17) and names the three verdict
+#      labels that CAN close this goal later,
+#   4. `goal-review` does NOT also fire: `GACTED post-launch` short-circuits the lane, so there is
+#      no `gh issue view 29 --json comments` in the stream and `UNITS` is empty. A goal drawing a
+#      coordinator ride in the same pass that announced its own launch is the wasteful shape the
+#      state-fp work already paid for once.
+#
+# THE ACCEPTANCE LINE ON #208 IS THIS FIXTURE. Replay goal-174 through it and the goal would have
+# stayed open in post-launch instead of closing on 2026-08-08.
+#
+# LABEL FIRST, COMMENT SECOND is pinned by the call ORDER here, not by prose: the edit is not
+# atomic and this leg is level-triggered, so a landed comment behind a failed label re-comments
+# every tick — the duplicate-bot-comment anomaly the FU-069 breaker exists to catch.
+name: goal-assembly-complete
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+scrub:
+  # The comment body is prose the block owns, so the paragraphs are scrubbed — EXCEPT the sentence
+  # that names the bucket, which is kept verbatim because it is the one line carrying a computed
+  # value. It read "sub-issue #7777" until this fixture was made to show it: `${x:+A}${x:-B}` looks
+  # like an if/else and is not one (when x is set, the second expansion yields x). A scrub wide
+  # enough to cover a rendered value is a scrub that hides the next one.
+  - s|--body 🤖 \*\*assembly-complete\*\*.*\(\*\*Where post-launch work goes:\*\* [^\\]*\)\\n.*|--body <assembly-complete comment — see agents/coordinator-scan.sh> \1|

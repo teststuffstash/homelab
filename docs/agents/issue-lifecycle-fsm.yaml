@@ -34,9 +34,18 @@ diagram: |
           GoalQueued --> GoalTracking: goal-decompose authors+queues children (IL-T11)
           GoalTracking --> GoalTracking: goal-review on any DESCENDANT close (IL-T12)
           GoalTracking --> GoalTracking: post-launch bucket ensured, one per goal (IL-T17)
-          GoalTracking --> AssemblyOpen: goal met → assembly PR armed (IL-T13)
-          AssemblyOpen --> [*]: codeowner + human merge → keyword closes goal (IL-T14)
+          GoalTracking --> AssemblyOpen: assembly-complete → assembly PR armed (IL-T13)
+          AssemblyOpen --> PostLaunch: codeowner + human merge — a MIDPOINT, goal stays OPEN (IL-T14/IL-T18)
+          PostLaunch --> PostLaunch: goal-review on any DESCENDANT close (IL-T12)
+          PostLaunch --> [*]: goal/validated → closed met + close sweep (IL-T19)
+          PostLaunch --> [*]: goal/reverted → closed refuted, descendants close with it (IL-T20)
+          PostLaunch --> [*]: goal/abandoned → closed not-planned, descendants inert (IL-T21)
       }
+      note right of GoalLane
+          the three terminals are HUMAN verdicts (Verdict-authority:);
+          the loop reacts to the label and never rules one — a
+          Bot-applied verdict is refused, fail-closed (IL-T19/20/21)
+      end note
       note right of Inert
           a sprout of a GOAL descendant is filed into that
           goal's post-launch bucket (IL-T17), and skips Inert
@@ -58,8 +67,9 @@ events:
   pr_merged_goal: "the ride's PR merges into its declared goal/** base — keyword INERT"
   worker_terminal: "the ride died with no open PR referencing the issue"
   descendant_closed: "any issue in the goal's sub-issue closure closes"
-  goal_met: "goal-review rules the acceptance satisfied"
-  assembly_merged: "the goal→master PR merges (human codeowner act)"
+  assembly_complete: "goal-review rules the acceptance BUILT AS SPECIFIED (renamed from goal_met, ADR-102 — it never meant 'idea validated')"
+  assembly_merged: "the goal→master PR merges (human codeowner act) — a MIDPOINT, not the end"
+  verdict_applied: "the goal's Verdict-authority applies goal/validated | goal/reverted | goal/abandoned"
 
 transitions:
   - id: IL-T01
@@ -155,8 +165,8 @@ transitions:
     when: "pr_merged_master ∧ the PR body carries Fixes #N"
     status: github-native
     guards:
-      - desc: "the goal-review play writes Fixes #<goal> into the assembly PR body"
-        anchor: { file: agents/coordinator/README.md, pattern: 'Fixes #<goal>' }
+      - desc: "ordinary master-lane PRs close their issue by keyword; the ASSEMBLY PR deliberately does not (ADR-102 — it writes a non-closing Assembly-for: trailer instead)"
+        anchor: { file: agents/coordinator/README.md, pattern: 'NOT .Fixes #<goal>., and this is load-bearing' }
 
   - id: IL-T08
     name: close by goal merge — FU-143 widened C6
@@ -212,39 +222,141 @@ transitions:
         anchor: { file: agents/coordinator-scan.sh, pattern: 'goal-decompose\) cmodel' }
 
   - id: IL-T12
-    name: goal-review on every descendant close
+    name: goal-review on every descendant close (tracking AND post-launch)
     owner: scan goal-review clause → coordinator item session
-    when: "a DESCENDANT (not just direct child — sprouts sit at depth 2) closed after the loop's newest comment on the goal"
+    when: "a DESCENDANT (not just direct child — sprouts sit at depth 2) closed after the loop's newest
+      comment on the goal. Keeps firing after IL-T18: the goal is still open and still shipping, which
+      is what makes the terminal a separate, later transition rather than a merge-time guess."
     status: guarded
+    replay:
+      - agents/replay/fixtures/goal-nonassembly-merge-inert     # the ordinary unit still emits
+      - agents/replay/fixtures/goal-assembly-complete           # …but NOT for a goal the lifecycle just acted on
     guards:
       - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 6: DESCENDANTS" }
-      - desc: "the play: met / children cover / author the missing child / retro checkpoint"
+      - desc: "the play: assembly-complete / children cover / author the missing child / retro checkpoint"
         anchor: { file: agents/coordinator/README.md, pattern: "goal-review. clause" }
+      - desc: "a goal the lifecycle legs just moved does not ALSO draw a review unit this pass (replay: goal-assembly-complete)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "is DONE for this pass" }
+      - desc: "the post-launch leg of the play: burn-down report, retarget stranded Base: children, recommend a verdict — never apply one"
+        anchor: { file: agents/coordinator/README.md, pattern: "Your job in post-launch" }
 
   - id: IL-T13
-    name: goal met → assembly PR opened ARMED
-    owner: goal-review session (App-authored, at goal-met time — never at decompose)
-    when: "goal_met → gh pr create goal→master non-draft + Fixes #<goal> + coverage map body, then armed"
+    name: assembly-complete → assembly PR opened ARMED
+    owner: goal-review session (App-authored, at assembly-complete time — never at decompose)
+    when: "assembly_complete → gh pr create goal→master non-draft + a line-anchored `Assembly-for: #<goal>`
+      trailer + coverage map body, then armed. NOT a closing keyword (ADR-102): the merge is IL-T18's
+      midpoint, and `Fixes` here restores the #17 bug the rename exists to kill."
     status: guarded
     guards:
-      - desc: "the play opens+arms at goal-met; human changes-requested routes as a NEW child"
+      - desc: "the play opens+arms at assembly-complete; human changes-requested routes as a NEW child"
         anchor: { file: agents/coordinator/README.md, pattern: "open the ASSEMBLY PR" }
+      - desc: "the verdict is named assembly-complete — 'built as specified', never 'idea validated' (the #17 lesson)"
+        anchor: { file: agents/coordinator/README.md, pattern: "Assembly-complete.*ADR-102" }
       - desc: "the reflex reviews it on the assembly rubric, model = claim reviewer.goalModel"
         anchor: { file: agents/review-reflex.sh, pattern: "REVIEW_GOAL_MODEL" }
       - desc: "the scan never dispatches a fix round at a goal/** HEAD (protected base — push would be refused)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY PR #" }
 
   - id: IL-T14
-    name: assembly merge — the goal lane's exit gate
+    name: assembly merge — the goal lane's human gate (NO LONGER its exit)
     owner: GitHub (codeowner rule) + the operator (OrgAdmin merge)
-    when: "bot approval satisfies required-approval; /specs/ in the diff trips CODEOWNERS; the human merges; keyword closes the goal"
+    when: "bot approval satisfies required-approval; /specs/ in the diff trips CODEOWNERS; the human
+      merges. Since ADR-102 the merge closes NOTHING — it is IL-T18's midpoint. The gate is unchanged;
+      what changed is what lies on the other side of it."
     status: github-native
     guards:
       - desc: "master ruleset carries the codeowner flag; goal/** twin deliberately does not"
         anchor: { file: tofu/github/repo_rulesets.tf, pattern: "required_approval_goal" }
       - desc: "CODEOWNERS: /specs/ + /.agents/ on the operator"
         anchor: { repo: circles, file: CODEOWNERS, pattern: "/specs/" }
+
+  - id: IL-T18
+    name: assembly-complete → POST-LAUNCH (merge is a midpoint, the goal stays OPEN)
+    owner: coordinator-scan goal lane (deterministic; no LLM in the path)
+    when: "an open task/goal without `goal/post-launch` ∧ a MERGED PR with a `goal/**` HEAD whose body
+      carries a line-anchored `Assembly-for: #<goal>` trailer → add `goal/post-launch`, comment
+      assembly-complete (naming the bucket and the three verdict labels), and LEAVE THE GOAL OPEN."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/goal-assembly-complete           # merged assembly → label + comment, no close
+      - agents/replay/fixtures/goal-nonassembly-merge-inert     # a goal CHILD's merge moves nothing
+    guards:
+      - desc: "the goal is never closed here — assembly-complete measures 'built as specified', and only production knows the rest (replay: goal-assembly-complete asserts the ABSENCE of a close call)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "ASSEMBLY-COMPLETE → POST-LAUNCH" }
+      - desc: "keyed on a goal/** HEAD + the line-anchored Assembly-for: trailer — a goal CHILD has a goal/** BASE and would otherwise announce a launch on its own merge (replay: goal-nonassembly-merge-inert)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "assembly-for" }
+      - desc: "a merged goal/** PR that only MENTIONS the goal is HELD and reported, never assumed (the circles#36 sibling-citation shape, one lane over)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "a mention is not an assembly claim" }
+      - desc: "label FIRST, comment SECOND, comment only on a label that stuck — the write is not atomic and the leg is level-triggered, so the reverse order re-comments every tick"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "LABEL FIRST, COMMENT SECOND" }
+      - desc: "the play must not open a second assembly PR or self-apply the label in post-launch"
+        anchor: { file: agents/coordinator/README.md, pattern: "already carries .goal/post-launch." }
+    incidents:
+      - "2026-08-05 circles#17: machine-ruled 'goal met' and closed 100 minutes before the operator refuted it — nothing at merge time can know whether production agrees, which is why this transition closes nothing"
+
+  - id: IL-T19
+    name: "terminal — goal/validated: closed met + the close sweep"
+    owner: coordinator-scan goal lane, reacting to a HUMAN-applied label
+    when: "an open task/goal carrying `goal/validated` ∧ `Verdict-authority:` is human ∧ the label's
+      newest `labeled` event actor is a User → close `--reason completed` with the audit comment, and
+      SURFACE the close sweep as a report line: every open descendant with a proposed disposition."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/goal-validated                   # closes the goal, touches NO descendant
+    guards:
+      - desc: "the sweep is REPORT-first — batch disposition becomes legal here and stays operator-confirmed until the goal registry panel exists (replay: goal-validated pins zero descendant writes)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "THE CLOSE SWEEP, REPORT-FIRST" }
+      - desc: "the panel already reads the verdict labels — it needed no code change the day they landed"
+        anchor: { file: argocd/resources/github-exporter/github-exporter.py, pattern: "_VERDICT_LABELS" }
+
+  - id: IL-T20
+    name: "terminal — goal/reverted: closed successfully-refuted, the tree dies with it"
+    owner: coordinator-scan goal lane, reacting to a HUMAN-applied label
+    when: "same two gates as IL-T19 → close every OPEN descendant `--reason 'not planned'` with an audit
+      comment, then close the goal `--reason completed` (a refuted idea is a finished experiment, not a
+      failure) quoting the `Revert:` line's pointer — the pin rollback or the revert of the assembly
+      squash, which ADR-102 makes the revert unit."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/goal-reverted                    # descendants close first, goal last
+    guards:
+      - desc: "descendants FIRST, the goal LAST — a closed goal leaves `openall` and the leg never fires again, so a partial pass must leave the goal open to be resumed (replay: goal-reverted pins the call order)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "DESCENDANTS FIRST, THE GOAL LAST" }
+      - desc: "descendants are CLOSED, never deleted — the tree stays readable history (⚖ pre-decided, homelab#208)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the tree stays readable history" }
+      - desc: "the revert pointer is DECLARED on the goal, never guessed; an absent one is said plainly in the audit comment"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "revert POINTER is declared, never guessed" }
+    incidents:
+      - "oracle-fleet goal-174: 19 sprouts, 3 generations, still growing 34h post-close because nothing owned the tree — this leg is what now owns it"
+
+  - id: IL-T21
+    name: "terminal — goal/abandoned: closed not-planned, descendants inert"
+    owner: coordinator-scan goal lane, reacting to a HUMAN-applied label
+    when: "same two gates as IL-T19 → remove `agent/queued` from every OPEN descendant (compare-then-write)
+      with an audit comment, then close the goal `--reason 'not planned'`. Descendants stay OPEN: the work
+      may still be worth doing, it just may not spend a budget that is gone."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/goal-abandoned                   # de-queued but OPEN; goal closed not-planned
+    guards:
+      - desc: "de-queued, not closed — a queued descendant of a dead goal burns a ride per tick to be refused by the launcher pre-flight (replay: goal-abandoned, same tree as goal-reverted, opposite disposition)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "descendants inert" }
+
+  - id: IL-T22
+    name: the verdict authority gate — the loop may not rule its own goal
+    owner: coordinator-scan goal lane (fail-closed, before ANY terminal write)
+    when: "a terminal label is present → refuse unless `Verdict-authority:` (default human) is `human`
+      AND the label's newest `labeled` event actor is a `User`. Bot ⇒ refuse+report. UNREADABLE ⇒
+      refuse+report. `kpi` authority ⇒ refuse+report (a later oracle-side issue, gateway-gated)."
+    status: guarded
+    guards:
+      - desc: "the breaker-#1 actor shape, with more at stake: this transition closes a goal and, on revert, its whole tree — and the App holds issues:write"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "TWO FAIL-CLOSED GATES BEFORE ANY TERMINAL WRITE" }
+      - desc: "an unreadable authorisation is not an authorisation (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "refusing to terminate" }
+      - desc: "the labels are provisioned as code — IssueLabels is AUTHORITATIVE, so a runtime `gh label create` self-destructs on the next sync"
+        anchor: { file: argocd/resources/agentstack/composition.yaml, pattern: 'name. .goal/validated' }
 
   - id: IL-T15
     name: goal-lane sprouts queue at harvest — only while the goal is open AND funded
@@ -343,6 +455,19 @@ gaps:
       labels keep being CREATED and IL-T16 keeps clearing them ≤1 scan interval later — visible as
       a stream of RECONCILED report lines, which is itself the signal for how often the cause fires."
     accepted: "belt-and-cause are separate items by design (homelab#155 vs agent-runtime#36); the report lines are the meter"
+
+  - id: IL-G08
+    name: "the ASSEMBLY PR's own review Follow-ups have no harvester"
+    detail: "IL-T09 harvests `Follow-ups:` bullets when a merged PR's ISSUE reaches merged-closeout.
+      The assembly PR's issue is the GOAL, and since IL-T18 the goal does not close at assembly merge —
+      so nothing schedules a closeout for it and the assembly review's bullets have no owner. The gap
+      predates ADR-102 (a goal carries `agent/blocked`, which C6's selector never matched either), but
+      #208 removes the one path that could have covered it by accident. The post-launch bucket is the
+      obvious target and IL-T18 already resolves its number; what is missing is a clause that fires on
+      the assembly merge itself rather than on an issue close."
+    accepted: "the goal-review post-launch leg reads the merged assembly PR and can raise the bullets in
+      its burn-down report meanwhile; build the clause when a real assembly review actually emits
+      Follow-ups (none has yet), so the fixture can be recorded from a live payload rather than invented"
 
   - id: IL-G05
     name: "master-lane harvest graduation knob unbuilt"

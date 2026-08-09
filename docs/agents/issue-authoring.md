@@ -542,6 +542,21 @@ keeps shipping at its own pace: bunch sprouts into a fix wave or ship singles, d
 budget via the existing launcher pre-flight (Σ child caps ≤ budget, counting closed children,
 now spanning post-launch work).
 
+**The four machine-read lines** (built homelab#208 — `agents/coordinator-scan.sh` §goal lane, and
+each is read by a predicate, so a typo is a transition that silently never fires):
+
+| Line | Where | Read by |
+|---|---|---|
+| `Budget: <n>` | the goal body | launcher pre-flight + the harvest gate (`agents/goal-budget.sh`) |
+| `Verdict-authority: human \| kpi` | the goal body | the terminal gate — only `human` is implemented; `kpi` is refused and reported |
+| `Revert: <pin rollback \| revert commit>` | the goal body, added when you roll back | the `goal/reverted` terminal's audit comment — **never guessed**; an absent line is stated plainly instead of invented |
+| `Assembly-for: #<goal>` | the ASSEMBLY PR body, line-anchored | the post-launch transition. **Not `Fixes`** — a closing keyword would close the goal at the midpoint, which is the #17 bug |
+
+The transition also keys on the assembly PR having a `goal/**` **HEAD**. Children have a `goal/**`
+BASE; the direction is the whole difference, and keying on a bare `#<n>` mention instead would
+announce a launch on the merge of the goal's first child (the circles#36 sibling-citation shape,
+one lane over). A merged `goal/**` PR that only mentions the goal is HELD and reported.
+
 **Terminals** (the only ways a goal closes): `VALIDATED` — the production KPI window (or the
 human verdict-in-lieu) confirms the idea; `REVERTED` — production refutes it; the goal rolls
 back its own changes (pin-rollback first, `git revert` of the assembly squash when master must
@@ -549,6 +564,12 @@ be clean — the squash boundary IS the revert unit) and closes successfully-ref
 descendant tree dies with it**; `ABANDONED` — budget exhausted pre-verdict, operator decides
 refill-or-close. The goal-review clause verdict is renamed **assembly-complete** — it measures
 "built as specified", never "idea validated" (the #17 lesson).
+
+The three verdict LABELS are applied by the goal's verdict authority and the loop only reacts to
+them: it refuses a Bot-applied verdict, and refuses one it cannot attribute at all (fail-closed —
+this transition closes a goal and, on revert, its whole tree, and the App holds `issues:write`).
+Machine authority is deliberately unbuilt here: `Verdict-authority: kpi` is refused with a report
+line until the KPI unit lands as its own gateway-gated oracle-side issue.
 
 **Self-queue**: harvest may self-apply `agent-fix`+`agent/queued` ONLY for sprouts parented
 into an OPEN goal with budget remaining; the right dies with the goal. Bot-authored issues

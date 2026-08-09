@@ -1,0 +1,14 @@
+[
+  {
+    "number": 88,
+    "headRefName": "goal/29-p0-complete",
+    "body": "Coverage map: every acceptance id owned, deferred to a named issue, or evidenced.\n\nAssembly-for: #29\n\nADR-102: merge is a MIDPOINT — this PR does NOT close the goal.\n",
+    "mergedAt": "2026-08-09T10:02:00Z"
+  },
+  {
+    "number": 63,
+    "headRefName": "fix/issue-31-paging-rule",
+    "body": "Implements #31\n\nBase: goal/29-p0-complete\n",
+    "mergedAt": "2026-08-09T09:05:00Z"
+  }
+]

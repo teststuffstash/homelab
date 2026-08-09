@@ -35,7 +35,7 @@ locals {
   # tofu_apply edits every product zone (the cloudflare roots' applier — teststuff.net remote
   # access + the minutark bootstrap, oracle-iac#351). Same map as the ingress token.
   apply_zone_resources = { for name, id in var.ingress_zone_ids : "com.cloudflare.api.account.zone.${id}" => "*" }
-  account_resource = { "com.cloudflare.api.account.${var.account_id}" = "*" }
+  account_resource     = { "com.cloudflare.api.account.${var.account_id}" = "*" }
 }
 
 resource "cloudflare_api_token" "tofu_apply" {

@@ -60,7 +60,18 @@ spec:
                  this list + the repo's labels.extra (IssueLabels is AUTHORITATIVE: anything else
                  gets deleted). Three tiers: GitHub defaults (humans use them), the agent state
                  machine (mirror of tofu/github labels.tf — keep in sync until every repo is
-                 claim-owned and labels.tf dies), the merge-path/Renovate lanes. */}}
+                 claim-owned and labels.tf dies), the merge-path/Renovate lanes.
+                 ⚠ The list below is ONE go-template action: a `{{`-delimited comment placed
+                 between two `(dict …)` entries terminates it. Annotate here, never inline.
+                 The ADR-102 goal-lifecycle block (homelab#208) is the fourth tier —
+                 `goal/post-launch` is written by the scan at assembly merge, the three VERDICTS
+                 are written by a HUMAN and the scan only reacts to them (it refuses a Bot-applied
+                 one). They must be provisioned HERE or neither half works: IssueLabels is
+                 AUTHORITATIVE, so a runtime `gh label create` self-destructs on the next sync,
+                 `gh issue edit --add-label` errors on a label that does not exist, and the verdict
+                 authority cannot apply one from the UI either. github-exporter.py already maps the
+                 three verdicts onto the goal-registry panel's verdict column and says it "needs no
+                 code change the day the labels land" — this is that day. */}}
             {{- $platformLabels := list
                   (dict "name" "bug" "color" "d73a4a" "description" "Something isn't working")
                   (dict "name" "documentation" "color" "0075ca" "description" "Improvements or additions to documentation")
@@ -86,6 +97,10 @@ spec:
                   (dict "name" "task/fix" "color" "bfdadc" "description" "Fixer task class: fix a bug (default recipe .agents/fix.yaml) — FU-114 L3")
                   (dict "name" "task/build" "color" "bfdadc" "description" "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3")
                   (dict "name" "task/goal" "color" "5319e7" "description" "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)")
+                  (dict "name" "goal/post-launch" "color" "d4c5f9" "description" "Assembly merged — built as specified. A MIDPOINT: the goal stays OPEN, shipping to production (ADR-102)")
+                  (dict "name" "goal/validated" "color" "0b6b3a" "description" "Verdict: production confirms the idea — goal closed met + close sweep (ADR-102; human-applied)")
+                  (dict "name" "goal/reverted" "color" "d93f0b" "description" "Verdict: production refutes the idea — goal closed successfully-refuted, descendants close with it (ADR-102; human-applied)")
+                  (dict "name" "goal/abandoned" "color" "6a737d" "description" "Verdict: budget exhausted before a verdict — goal closed not-planned, descendants left open but inert (ADR-102; human-applied)")
                   (dict "name" "merge-conflict" "color" "e11d21" "description" "PR branch conflicts with master — updater can't auto-resolve; needs a worker re-run or rebase")
                   (dict "name" "major" "color" "b60205" "description" "MAJOR dependency bump — human-gated, coordinator-owned (not the review reflex)")
                   (dict "name" "major/awaiting-human" "color" "d93f0b" "description" "Major bump: migration documented, CI green, reviewer-approved — a human merges")

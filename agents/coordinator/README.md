@@ -458,6 +458,13 @@ job, in order (re-read live state first, exit clean if someone already closed it
    remove the `Base:` line; their code landed with the assembly merge). They STAY queued: the
    assembly PR's coverage map named them as deferrals, so the human's merge is the sanction
    for them continuing on the master lane. List each retarget in the closing comment.
+   ⚠ **Since ADR-102 (homelab#208) a goal rarely reaches you this way**: the assembly PR no longer
+   carries a closing keyword, so its merge leaves the goal OPEN in `goal/post-launch` and there is
+   nothing to close out. A `task/goal` arriving here now means a TERMINAL closed it
+   (`goal/validated` / `goal/reverted` / `goal/abandoned` — the scan's goal lane, deterministic).
+   Do the retarget sweep exactly as above if the tree is still live, and nothing else: the terminal
+   already wrote its own audit comment and already disposed of the descendants per the verdict.
+   The retarget duty at assembly-merge time moved to the `goal-review` play's post-launch leg.
    The post-launch bucket itself is NOT yours to create — the scan's `harvest-disposition` block
    creates and links it (idempotently, one per goal) and hands you its number in `bucket=`. If
    your unit resolved a goal and carries no `bucket=`, say so loudly in the closing comment: the
@@ -546,13 +553,25 @@ re-fires the clause forever.
 Re-read the goal's acceptance criteria in full, then look at what actually shipped in the closed
 children — the merged diffs, not the issue titles. Rule exactly one of:
 
-- **Goal met** → open the ASSEMBLY PR and hand the merge to the human (2026-08-06, the #29
-  shape — replaces the #17-era draft dance). Concretely: `gh pr create --base master --head
-  goal/<n>-<slug>` **non-draft**, body = the coverage-map outcome (every id owned /
-  deferred-to-named-issue / evidenced) + `Fixes #<goal>`, then ARM it (`gh pr merge --auto
-  --squash`). Comment on the goal naming which child satisfied which criterion. Do NOT close
-  the goal issue by hand — the assembly PR's merge into master closes it (default-branch
-  keyword), and the closeout + harvest ride on that. The armed PR is SAFE by construction:
+- **Assembly-complete** (ADR-102, homelab#208 — this ruling was called "goal met" until
+  2026-08-09, and the rename is the whole point: it measures **built as specified**, never *idea
+  validated*. circles#17 was ruled met 100 minutes before the operator refuted it, and no reading
+  of a diff could have known better — only production knows). → open the ASSEMBLY PR and hand the
+  merge to the human (2026-08-06, the #29 shape — replaces the #17-era draft dance). Concretely:
+  `gh pr create --base master --head goal/<n>-<slug>` **non-draft**, body = the coverage-map
+  outcome (every id owned / deferred-to-named-issue / evidenced) + a line-anchored
+  `Assembly-for: #<goal>` trailer, then ARM it (`gh pr merge --auto --squash`).
+  > ⚠ **NOT `Fixes #<goal>`, and this is load-bearing.** A closing keyword would close the goal on
+  > merge, and under ADR-102 assembly merge is a **MIDPOINT**: the goal enters `goal/post-launch`
+  > and stays open, shipping to production against the same budget, until a human applies a verdict
+  > (`goal/validated` / `goal/reverted` / `goal/abandoned`). The `Assembly-for:` trailer is not
+  > decoration either — the scan's goal lane keys the post-launch transition on that exact
+  > line-anchored form, on a `goal/**` HEAD. Write anything weaker and the transition never fires;
+  > write `Fixes` and you have restored the bug this replaced.
+  Comment on the goal naming which child satisfied which criterion. Do NOT close
+  the goal issue by hand, and do not label it `goal/post-launch` yourself — the scan does that
+  deterministically when the assembly PR actually merges, and posts the assembly-complete audit
+  comment with it. The armed PR is SAFE by construction:
   the reviewer bot's approval satisfies the approval rule (rubric `.agents/review-goal.md`,
   model `reviewer.goalModel` on the claim), but master's codeowner gate (/specs/ is always in
   the assembly diff) blocks auto-merge on a human — the operator merges via OrgAdmin override
@@ -562,9 +581,10 @@ children — the merged diffs, not the issue titles. Rule exactly one of:
   NEW child on the goal — never a fix round pushed at `goal/**` (protected base).
   Any child still open when the acceptance is already met is a scope question, not a
   formality: say so rather than letting it run.
-- **Goal not met, and the remaining children cover the gap** → comment what is still outstanding
-  and which child owns it. Leave the goal in its tracking state. This is the ordinary case.
-- **Goal not met, and NOTHING open covers the gap** → author the missing child (same rules as
+- **Not yet assembly-complete, and the remaining children cover the gap** → comment what is still
+  outstanding and which child owns it. Leave the goal in its tracking state. This is the ordinary
+  case.
+- **Not yet assembly-complete, and NOTHING open covers the gap** → author the missing child (same rules as
   `goal-decompose`: native sub-issue, narrowed `Touches:`, inherited `Base:`, one deliverable)
   and say why the original decomposition missed it. Watch the budget — the launcher enforces
   Σ(child caps) ≤ the goal's `Budget:` and will REFUSE the dispatch, which is a re-scope
@@ -576,6 +596,28 @@ children — the merged diffs, not the issue titles. Rule exactly one of:
 Two things this play must NOT do: dispatch a worker (you author and label; the queued clause
 dispatches), and silently widen the goal to fit what was built — the goal is the contract, and a
 child that drifted from it is the finding.
+
+### When the goal already carries `goal/post-launch` (ADR-102, homelab#208)
+
+The clause keeps firing after assembly merge — deliberately. The goal is OPEN and still shipping,
+so every post-launch sprout that closes re-asks the question, and that is what makes the terminal a
+separate, later transition instead of a merge-time guess. **The assembly ruling above is spent**:
+do not open a second assembly PR, do not re-rule assembly-complete, and above all **do not decide
+the verdict** — `goal/validated`, `goal/reverted` and `goal/abandoned` are applied by the goal's
+`Verdict-authority:` (a human today), and the scan refuses any of the three that a Bot applied.
+Your job in post-launch is narrower and there are exactly three useful things in it:
+
+1. **Report on the burn-down**: what is left in the post-launch bucket, and is the tree growing
+   faster than it is being fixed. A goal whose sprouts outpace its fixes while its budget drains is
+   diverging, and saying so is the whole value of the ride.
+2. **Retarget stranded children.** The goal branch died at the assembly squash, so any open
+   descendant still carrying a `Base: goal/**` body line is pointed at a branch that no longer
+   exists — edit the body to remove the line (their code landed with the assembly merge). This duty
+   used to sit in the goal's own merged-closeout, which no longer happens now that the assembly
+   merge does not close the goal; it is yours.
+3. **Say when a verdict looks due**, and to whom. If the `Production-leg:` evidence is in — or if
+   the budget is visibly gone — put that in front of the human as a recommendation with the
+   evidence attached. A recommendation, never a label.
 
 ## The `arbitrate` clause (FU-086 / merge-path MP-G04, built 2026-07-27)
 

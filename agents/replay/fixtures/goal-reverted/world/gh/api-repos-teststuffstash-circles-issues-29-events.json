@@ -1,0 +1,5 @@
+[
+  { "event": "labeled", "label": { "name": "agent/queued" }, "actor": { "login": "RasmusSoot", "type": "User" } },
+  { "event": "labeled", "label": { "name": "goal/post-launch" }, "actor": { "login": "homelab-agents-1234[bot]", "type": "Bot" } },
+  { "event": "labeled", "label": { "name": "goal/reverted" }, "actor": { "login": "RasmusSoot", "type": "User" } }
+]

@@ -700,10 +700,20 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # newest_commit_at test: a child closed MORE RECENTLY than the newest bot comment on the goal.
     # Once the session comments, the goal falls out of the clause until the next child closes.
     # Scoped to repos that actually have an open task/goal — no goal, no extra API calls at all.
+    #
+    # THE SENTINEL SPANS THE WHOLE LANE (ADR-103 ratchet, homelab#208), selection included, because
+    # the thing worth pinning is not any one leg but their INTERACTION: that a non-assembly merge
+    # moves nothing, that a goal the lifecycle legs just acted on does not ALSO draw a goal-review
+    # unit, and that a repo with no `task/goal` at all makes zero API calls. Extracting a leg on its
+    # own would let each of those regress with every fixture still green.
+    # >>>REPLAY:goal-lane>>>
     goals="$(printf '%s' "$openall" | jq -r '[.[] | select((.labels|map(.name)|index("task/goal")))] | .[].number' 2>/dev/null || true)"
     if [ -n "$goals" ]; then
-      # one call for the whole repo's issues incl. closed — reused for every goal below
-      kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,state,closedAt,parent 2>/dev/null || echo '[]')"
+      # one call for the whole repo's issues incl. closed — reused for every goal below.
+      # `title,labels` ride along for the ADR-102 terminal legs (homelab#208): the close sweep
+      # names what survives and the abandoned leg compares-then-writes on `agent/queued`. Extra
+      # --json fields are free here (same request) and buying them with a second call would not be.
+      kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
       jq -e . >/dev/null 2>&1 <<<"$kidsall" || kidsall='[]'
       for g in $goals; do
         # FU-143 point 6: DESCENDANTS, not direct children — a sprout harvested from a child sits
@@ -723,6 +733,229 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           done
           gfront="${gnew# }"; gdesc="$gdesc$gnew"
         done
+        # ── ADR-102 goal lifecycle: the midpoint and the three terminals (homelab#208) ──────────
+        # WHAT CHANGED. Until now the goal-review play ruled "goal met" and the assembly PR's
+        # `Fixes #<goal>` closed the goal on merge — one machine act deciding both "built as
+        # specified" and "the idea works". circles#17 was machine-ruled met 100 minutes before the
+        # operator refuted it, and that is not a prompt bug: nothing at merge time can know whether
+        # production agrees. So the verdict is renamed ASSEMBLY-COMPLETE and demoted to a MIDPOINT
+        # (the goal enters `goal/post-launch` and STAYS OPEN), and the goal closes only on a later
+        # VERDICT — `goal/validated`, `goal/reverted`, `goal/abandoned`.
+        #
+        # WHY DETERMINISTIC AND HERE, not a session play. These four transitions are pure state
+        # machine: a label is present, therefore issues close and labels move. ADR-094 says the LLM
+        # never picks what a predicate can decide, and ADR-103 says a clause ships with an executed
+        # replay — both point at shell, in the one place that already walks a goal's descendant
+        # tree. The JUDGMENT stays outside the loop entirely: a human (later the KPI unit) applies
+        # the verdict label, and this block only reacts to it.
+        #
+        # RUNS BEFORE the empty-descendants skip below, on purpose: a goal with no descendants at
+        # all is still terminable, and `goal-review` is the clause that must not see it afterwards.
+        glab="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
+          '[.[] | select(.number == $n) | .labels[].name] | join(" ")' 2>/dev/null || echo "")"
+        gbody="$(printf '%s' "$openall" | jq -r --argjson n "$g" \
+          '[.[] | select(.number == $n) | (.body // "")] | first // ""' 2>/dev/null || echo "")"
+        gverdict=""
+        for gv in validated reverted abandoned; do
+          case " $glab " in *" goal/$gv "*) gverdict="$gv"; break ;; esac
+        done
+        gpl=0; case " $glab " in *" goal/post-launch "*) gpl=1 ;; esac
+        gacted=""
+        if [ -n "$gverdict" ]; then
+          # ── TWO FAIL-CLOSED GATES BEFORE ANY TERMINAL WRITE ───────────────────────────────────
+          # (1) AUTHORITY. `Verdict-authority: human | kpi` is a per-goal template line (ADR-102).
+          # Only `human` is implemented here; the KPI unit is a later oracle-side issue, so a goal
+          # that declares anything else is REPORTED and left alone rather than quietly ruled by the
+          # wrong authority. Absent line ⇒ `human`, which is the safe default (it demands a person).
+          # (2) ACTOR. The same breaker-#1 shape as goal-decompose, for the same reason and with
+          # more at stake: this transition CLOSES a goal and, on revert, its whole tree. The App
+          # holds issues:write, so nothing but this test stops the loop labelling its own goal
+          # `goal/validated` and closing it. Bot ⇒ refuse. UNREADABLE ⇒ refuse (an unreadable
+          # authorisation is not an authorisation — rule #6, never fail INTO a write).
+          # ⚠ pipe to a REAL jq: `gh --jq` takes only an expression, and behind `|| echo ""` a
+          # rejected --arg would yield an empty actor that this test must then treat as refusal.
+          gauth="$(printf '%s\n' "$gbody" | awk '/^[ \t]*[Vv]erdict-authority:/ { v = $0; sub(/^[^:]*:[ \t]*/, "", v); gsub(/[ \t\r]/, "", v); print tolower(v); exit }')"
+          [ -n "$gauth" ] || gauth="human"
+          gactor="$(gh api "repos/${slug}/issues/${g}/events" --paginate 2>/dev/null \
+            | jq -r --arg L "goal/${gverdict}" \
+               '[.[] | select(.event == "labeled" and .label.name == $L)] | last | .actor.type // ""' 2>/dev/null || echo "")"
+          if [ "$gauth" != "human" ]; then
+            orphans="${orphans}[$repo] ⛔ goal #${g} carries goal/${gverdict} but declares \`Verdict-authority: ${gauth}\` — only \`human\` is implemented (ADR-102, homelab#208; the KPI unit is a later oracle-side issue). NOT actioned.\n"
+            gacted="held"
+          elif [ "$gactor" != "User" ]; then
+            orphans="${orphans}[$repo] ⛔ goal #${g}: goal/${gverdict} was applied by ${gactor:-an UNREADABLE actor} — refusing to terminate (fail-closed: the loop may not rule its own goal; a human applies the verdict).\n"
+            gacted="held"
+          else
+            # ── DESCENDANTS FIRST, THE GOAL LAST — the resumability contract ────────────────────
+            # A closed goal drops out of `openall` and this leg never fires for it again. So a pass
+            # that died halfway through the descendants with the goal ALREADY closed would strand
+            # the remainder forever, with nothing reporting it. Closing the goal last means a
+            # partial pass is simply re-run by the next scan, which is also what makes the per-pass
+            # cap below safe rather than a silent truncation.
+            gcap="${GOAL_TERMINAL_MAX:-20}"; gdone=0; gleft=0; gswept=""
+            # TITLE LAST, and that is not cosmetic: `read` with IFS='|' puts every remaining field
+            # into the final variable, so a title containing a pipe (they do) can only widen the
+            # column that already absorbs the rest. Any other position would shift `dlabels` and
+            # silently mis-read the `agent/queued` test one leg down.
+            while IFS='|' read -r dn dstate dlabels dtitle; do
+              [ -n "$dn" ] || continue
+              [ "$dstate" = "OPEN" ] || continue
+              case "$gverdict" in
+                reverted)
+                  # "the tree stays readable history" (ADR-102): CLOSE with an audit comment, never
+                  # delete, and `not planned` because the work is not going to happen — the premise
+                  # died with the goal. The scan's own stale-dep flag reads that reason downstream.
+                  if [ "$gdone" -lt "$gcap" ]; then
+                    if gh issue close "$dn" --repo "$slug" --reason "not planned" --comment "🤖 closed with goal #${g}, which was REVERTED (ADR-102 terminal, applied by a human as \`goal/reverted\`). The idea this work served was refuted in production, so its descendants die with it — this is successful refutation, not failure, and the issue stays as readable history. Reopen only if a new goal adopts the premise. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                      gdone=$((gdone+1))
+                    else
+                      gleft=$((gleft+1))
+                      orphans="${orphans}[$repo] ⚠ goal #${g} revert: could not close descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                    fi
+                  else
+                    gleft=$((gleft+1))
+                  fi ;;
+                abandoned)
+                  # "descendants inert" — NOT closed. An abandoned goal ran out of money before a
+                  # verdict; its work may still be worth doing under a refill or another goal, so
+                  # the issues survive. What must stop is DISPATCH: a queued descendant of a dead
+                  # goal burns a coordinator ride per tick to be refused by the launcher pre-flight,
+                  # which is exactly the goal-174 shape. Compare-then-write (label discipline).
+                  case " $dlabels " in
+                    *" agent/queued "*)
+                      if [ "$gdone" -lt "$gcap" ]; then
+                        if gh issue edit "$dn" --repo "$slug" --remove-label "agent/queued" >/dev/null 2>&1 \
+                           && gh issue comment "$dn" --repo "$slug" --body "🤖 de-queued: goal #${g} was ABANDONED (ADR-102 terminal — budget exhausted before a verdict). The issue is left OPEN and inert on purpose; the work may still be worth doing, but it may not spend a budget that is gone. Re-queue it under a refilled or different goal. Written by \`agents/coordinator-scan.sh\`." >/dev/null 2>&1; then
+                          gdone=$((gdone+1))
+                        else
+                          gleft=$((gleft+1))
+                          orphans="${orphans}[$repo] ⚠ goal #${g} abandon: could not de-queue descendant #${dn} (gh write refused?) — the goal stays OPEN so the next scan retries\n"
+                        fi
+                      else
+                        gleft=$((gleft+1))
+                      fi ;;
+                  esac ;;
+                validated)
+                  # ── THE CLOSE SWEEP, REPORT-FIRST (⚖ pre-decided on homelab#208) ──────────────
+                  # Batch disposition of the bucket's leftovers becomes LEGAL exactly here — and it
+                  # stays a PROPOSAL until the goal registry panel exists, because "close 14 issues"
+                  # is the one batch act nobody can undo by reading a diff. So: no descendant write
+                  # at all on this leg. List what survives, propose a disposition per item from the
+                  # labels already in hand, and let the operator confirm.
+                  case "$dtitle" in
+                    post-launch:*) gswept="${gswept}    #${dn} — ${dtitle} → CONTAINER: close with the goal\n" ;;
+                    *) case " $dlabels " in
+                         *" agent/queued "*|*" agent/in-progress "*|*" agent/review "*)
+                           gswept="${gswept}    #${dn} — ${dtitle} → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep)\n" ;;
+                         *) gswept="${gswept}    #${dn} — ${dtitle} → INERT: close as superseded, or re-home\n" ;;
+                       esac ;;
+                  esac ;;
+              esac
+            done <<<"$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+              '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+               | [.[] | select(.number as $n | $D | index($n))] | sort_by(.number) | .[]
+               | [(.number | tostring), .state, ((.labels // []) | map(.name) | join(" ")), (.title // "")] | join("|")' 2>/dev/null || true)"
+            if [ "$gleft" -gt 0 ]; then
+              # The goal is NOT closed while work remains — see the resumability contract above.
+              orphans="${orphans}[$repo] ⏳ goal #${g} goal/${gverdict}: ${gdone} descendant(s) actioned, ${gleft} still to go (cap ${gcap}/scan) — the goal stays OPEN until the tree is done; the next scan continues\n"
+              gacted="partial"
+            else
+              case "$gverdict" in
+                validated)
+                  greason="completed"
+                  gnote="**VALIDATED** — production (or the operator's verdict-in-lieu) confirms the idea. Closed met."
+                  [ -n "$gswept" ] && orphans="${orphans}[$repo] 📋 close sweep for VALIDATED goal #${g} (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):\n${gswept}" ;;
+                reverted)
+                  # The revert POINTER is declared, never guessed. ADR-102 makes the assembly squash
+                  # the revert unit, so the pointer is a pin-rollback or a revert commit — both
+                  # facts only the person who rolled back holds. A missing line is said plainly.
+                  grev="$(printf '%s\n' "$gbody" | awk '/^[ \t]*[Rr]evert:/ { v = $0; sub(/^[^:]*:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); print v; exit }')"
+                  greason="completed"
+                  gnote="**REVERTED** — production refuted the idea, and a refuted goal is a SUCCESSFULLY closed experiment, not a failure (hence \`completed\`, not \`not planned\`). Revert pointer: ${grev:-⚠ NONE DECLARED — add a \`Revert:\` line naming the pin rollback or the revert commit of the assembly squash; this comment is the audit record and it is incomplete without one}. ${gdone} open descendant(s) closed with the goal." ;;
+                abandoned)
+                  greason="not planned"
+                  gnote="**ABANDONED** — budget exhausted before a verdict. Descendants are left OPEN and inert (${gdone} de-queued); refill or re-home them under another goal." ;;
+              esac
+              if gh issue close "$g" --repo "$slug" --reason "$greason" --comment "$(printf '%s\n' \
+                    "🤖 goal terminal: ${gnote}" \
+                    "" \
+                    "Applied deterministically by \`agents/coordinator-scan.sh\` in reaction to the \`goal/${gverdict}\` label a human placed here — the loop reacts to the verdict, it never rules one (ADR-102, homelab#208)." )" >/dev/null 2>&1; then
+                echo "  [$repo] ADR-102 terminal: goal #${g} → ${gverdict}, closed (${greason}); ${gdone} descendant(s) actioned"
+                gacted="terminal"
+              else
+                orphans="${orphans}[$repo] ⚠ goal #${g}: descendants actioned for goal/${gverdict} but the goal itself could not be CLOSED (gh write refused?) — close it by hand; the next scan is idempotent on the descendants\n"
+                gacted="partial"
+              fi
+            fi
+          fi
+        elif [ "$gpl" = 0 ]; then
+          # ── ASSEMBLY-COMPLETE → POST-LAUNCH (the midpoint) ────────────────────────────────────
+          # The assembly PR is the one with HEAD `goal/**` (its children have `fix/**` heads and a
+          # `goal/**` BASE — the direction is what tells them apart). It is bound to THIS goal by a
+          # line-anchored `Assembly-for: #<n>` trailer, the same strong-link shape `finalize` writes
+          # as `Issue: #N` and for the identical reason (FU-143 / circles#36): a bare `#<n>` cannot
+          # distinguish the PR that ASSEMBLES a goal from one that merely cites it, and here a false
+          # match would announce a launch that never happened. No trailer, no transition — and a
+          # merged goal/** PR that only MENTIONS the goal is reported rather than silently dropped.
+          gmergedpr="$(gh pr list --repo "$slug" --state merged --limit 30 --json number,headRefName,body,mergedAt 2>/dev/null || echo '[]')"
+          jq -e . >/dev/null 2>&1 <<<"$gmergedpr" || gmergedpr='[]'
+          gasm="$(printf '%s' "$gmergedpr" | jq -r --argjson n "$g" \
+            '[.[] | select((.headRefName // "") | startswith("goal/"))
+                  | select((.body // "") | test("(?mi)^[ \\t]*assembly-for:[ \\t]*#\($n)\\b"))]
+             | sort_by(.mergedAt // "") | last // {} | (.number // "") | tostring' 2>/dev/null || echo "")"
+          case "$gasm" in ''|*[!0-9]*) gasm="" ;; esac
+          if [ -z "$gasm" ]; then
+            gasm_m="$(printf '%s' "$gmergedpr" | jq -r --argjson n "$g" \
+              '[.[] | select((.headRefName // "") | startswith("goal/")) | select((.body // "") | test("#\($n)\\b"))] | length' 2>/dev/null || echo 0)"
+            case "$gasm_m" in ''|*[!0-9]*) gasm_m=0 ;; esac
+            [ "$gasm_m" -gt 0 ] && orphans="${orphans}[$repo] ⛔ goal #${g}: a merged goal/** PR MENTIONS it but carries no line-anchored \`Assembly-for: #${g}\` trailer — the post-launch transition is HELD (a mention is not an assembly claim). Add the trailer to the PR body, or label the goal by hand.\n"
+          else
+            # The bucket already exists in the ordinary case — `harvest-disposition` creates it at
+            # the first closeout/review, deliberately earlier than this moment (IL-T17). Named here
+            # so the comment tells a human where post-launch work goes; absence is not fatal.
+            gbuck="$(gh api "repos/${slug}/issues/${g}/sub_issues" 2>/dev/null \
+              | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
+            case "$gbuck" in ''|*[!0-9]*) gbuck="" ;; esac
+            # Rendered here, not inline in the body below: `${x:+A}${x:-B}` reads like an if/else
+            # and is not one — when x is SET the second expansion yields x itself, so the sentence
+            # came out "sub-issue #7777". Two branches, one variable.
+            if [ -n "$gbuck" ]; then
+              gbucktxt="sub-issue #${gbuck}"
+            else
+              gbucktxt="the \`post-launch:\` bucket, which the next closeout or review creates under this goal"
+            fi
+            # LABEL FIRST, COMMENT SECOND, and the comment only on a label that stuck. The write is
+            # not atomic and this leg is level-triggered: a landed comment with a failed label
+            # re-comments every tick (the duplicate-bot-comment anomaly the FU-069 breaker watches
+            # for), while a landed label with a failed comment costs one audit line and stops. Same
+            # ORDER-IS-LOAD-BEARING reasoning as the IL-T16 phantom belt.
+            if gh issue edit "$g" --repo "$slug" --add-label "goal/post-launch" >/dev/null 2>&1; then
+              gh issue comment "$g" --repo "$slug" --body "$(printf '%s\n' \
+                "🤖 **assembly-complete** — assembly PR #${gasm} merged. This goal is built as specified." \
+                "" \
+                "**That is a MIDPOINT, not a verdict** (ADR-102). Assembly-complete measures \"built as specified\"; it says nothing about whether the idea works — circles#17 was machine-ruled met 100 minutes before the operator refuted it, which is why this transition no longer closes anything. The goal is now \`goal/post-launch\` and STAYS OPEN, shipping to production at its own pace against the same \`Budget:\` line." \
+                "" \
+                "**Where post-launch work goes:** ${gbucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-review\`." \
+                "" \
+                "**It closes only on a VERDICT**, applied here as a label by this goal's verdict authority (\`Verdict-authority:\`, default \`human\`):" \
+                "" \
+                "- \`goal/validated\` — production confirms the idea → closed met, and the close sweep lists every surviving descendant with a proposed disposition (report-first; a human confirms the batch)." \
+                "- \`goal/reverted\` — production refutes it → closed successfully-refuted, every open descendant closed with it. Roll back FIRST (the assembly squash is the revert unit) and declare the pointer as a \`Revert:\` line on this issue, or the audit record lands incomplete." \
+                "- \`goal/abandoned\` — budget out before a verdict → closed not-planned; open descendants stay open but go inert." \
+                "" \
+                "Written by \`agents/coordinator-scan.sh\` (deterministic — no session judged this, and none can: the judgment is production's, or yours)." )" >/dev/null 2>&1 \
+                || orphans="${orphans}[$repo] ⚠ goal #${g}: labelled goal/post-launch but the assembly-complete comment did not land (gh write refused?) — the transition HELD, the audit line is missing; add it by hand\n"
+              echo "  [$repo] ADR-102 midpoint: goal #${g} → assembly-complete via PR #${gasm}, labelled goal/post-launch, left OPEN${gbuck:+ (bucket #${gbuck})}"
+              gacted="post-launch"
+            else
+              orphans="${orphans}[$repo] ⚠ goal #${g}: assembly PR #${gasm} merged but \`goal/post-launch\` could not be applied (label missing from the claim taxonomy? gh write refused?) — the goal is stuck pre-launch; the next scan retries\n"
+            fi
+          fi
+        fi
+        # A goal this block moved is DONE for this pass: it is closed (terminal), just announced
+        # (post-launch — that comment is also what retires the stateless goal-review predicate), or
+        # deliberately held for a human. Any of the three makes a goal-review unit noise at best.
+        [ -n "$gacted" ] && continue
         [ -z "${gdesc# }" ] && continue
         newest_close="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
           '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
@@ -747,6 +980,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         fi
       done
     fi
+    # <<<REPLAY:goal-lane<<<
     [ -n "$qblocked" ] && orphans="${orphans}[$repo] ⏳ queued-blocked (FU-087 native blocked-by; closure is seen next scan):\n${qblocked}"
     [ -n "$qcycles" ] && orphans="${orphans}[$repo] ⚠ blocked-by CYCLE (FU-087) — human-first, neither side dispatched:\n${qcycles}"
     swept="$(gh issue list --repo "$slug" --state open --json number,title,labels \
