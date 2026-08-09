@@ -156,7 +156,9 @@ meant to avoid.)
 - Backstop heartbeat: `Monitor` (persistent) `while true; do sleep 7200; echo "META-HEARTBEAT:
   sweep due"; done` — every sweep runs `bash agents/meta-alert-crosscheck.sh` + the board/chain
   check against this file.
-- Handoff watch: `bash agents/meta-handoff-watch.sh` (persistent).
+- Handoff watch is NOT standing (operator 2026-08-09: special case) — arm `bash
+  agents/meta-handoff-watch.sh` only on rollout days / when a stack jail is known active;
+  `/handoff` processes the inbox on demand.
 - Loop watches (`agents/meta-watch-loop.sh` per stack) are OPTIONAL rollout-time tools now —
   expect ~10 routine events per real signal (operator 2026-08-08: "too many monitors").
 - Probe hygiene: probes in SCRIPT FILES, dry-run under the real interpreter; watch the FAILURE

@@ -36,8 +36,18 @@ write_files:
     owner: root:root
     content: |
       {"registry-mirrors": ["http://192.168.40.20"], "insecure-registries": ["192.168.40.20"]}
+  # kind exhausts the Debian-default 128 inotify instances once ≥3 clusters coexist (two runner
+  # slots + one leaked cluster is enough): the freshest cluster's CoreDNS starves and every DNS
+  # lookup fails Errno -3 while pod/node status stays green (measured 116/128 with two leaked
+  # clusters, 2026-08-09, oracle-fleet#228). Applied live the same day; runcmd covers first boot.
+  - path: /etc/sysctl.d/99-kind-inotify.conf
+    permissions: '0644'
+    owner: root:root
+    content: |
+      fs.inotify.max_user_instances=512
 runcmd:
   - systemctl enable --now qemu-guest-agent
+  - sysctl --system
   # Persistent journal so a first-boot kernel panic is debuggable next time (it wasn't).
   - mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/persistent.conf && systemctl restart systemd-journald
   - curl -fsSL https://get.docker.com | sh
