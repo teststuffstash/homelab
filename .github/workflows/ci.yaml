@@ -57,7 +57,7 @@ jobs:
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
       # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
-      # 63 assertions, no network, ~2s.
+      # 100 assertions, no network, ~2s.
       - name: Rail-degrade contract replay (devbox run rail-degrade-replay)
         run: devbox run rail-degrade-replay
 
