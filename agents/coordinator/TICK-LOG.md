@@ -3267,3 +3267,44 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
 - ⚠ Own-probe failures this session: master-CI watch jq null/null fell through to silence
   (dead-probe class, AGAIN); the #58 admin merge jumped pending checks. Both named here so the
   next session inherits the shame.
+
+## 2026-08-09 (~09:40–12:00Z) — the program lands: replay harness, goal clauses, and a domain goes live
+
+- **ADR-102/103 first tranche ~complete in one morning**: #206 replay harness (PR#213 — 3 real
+  fixtures + inverted `expect: fail` self-tests with `expect_detail` honesty; reviewed by
+  execution incl. a corrupted-fixture negative control) → clause-replay CI gate + the RATCHET
+  (changed clause files without replay changes = red) → #209 goal registry/convergence panel
+  (PR#214; budget parse mirrors the launcher byte-for-byte, first-line-wins) → **#207 harvest
+  re-parent MERGED (PR#216, 12/12 replay)**: sprouts → post-launch bucket (sub-issue, found-or-
+  created, native edges), self-queue only while goal OPEN+funded, budget arithmetic extracted to
+  goal-budget.sh with ONE enforcer, depth bound 6 MEASURED on the real circles tree. #215 bonus
+  (exporter self-test gate). Remaining: #208 (terminals), #210 (channels).
+- **The ratchet ate its author first**: v1 shipped from the jail lane UNEXECUTED (pull_request
+  branch never runs on master pushes) and died on its first PR (shallow three-dot, no merge
+  base) — the worker's diagnosis was exact and its REFUSAL to touch .github/** was the
+  CODEOWNER boundary working (an agent editing workflows executes its own code on the runner).
+  v2 reads the PR files API, executed with controls pre-push. Also: homelab ci is PR-only —
+  master pushes trigger nothing; watches on master CI wait forever (learned via a deadline).
+- **#212 optout shared read merged** (42/42 replay, fail-closed 'unknown is not permission') and
+  its reviewer follow-up caught MY needs-meta as the third knob reader same-hour — delegated to
+  the shared read, both directions verified. Two-readers class: now one reader, replay-pinned.
+- **ert-verify saga resolved as UPSTREAM**: riigiteataja's weekly regeneration removes the ET
+  corpus mid-run (LOEMIND.txt = 'generating, please wait' — a machine-readable sentinel for the
+  ingest, routed to #225/#322). My proxy-roll 'fix' was WRONG (fresh DNS = same IPs); #343
+  corrected on-thread + de-queued before a worker built on the false premise. Backoff is
+  handling it correctly; run completes when they publish.
+- **minutark.ee live end-to-end**: zone.ee (DNSSEC was never DS-published — 'active' was a panel
+  flag; authoritative aa-flagged TLD query is the only real signal, my recursive-dig monitor was
+  the dead-probe class AGAIN and the operator caught it) → NS benedict/paris → Active in <1h →
+  CT-log scanners probing /.env within minutes (banked to oracle-iac#351 as the WAF note).
+  Everything IaC-later by operator ruling: #351 carries the full survey (records, TLS 1.2 floor
+  — blocks ~nobody, browsers dropped 1.0/1.1 in 2020; Always-HTTPS; CT monitoring; DNSSEC enable
+  + manual DS hand-back). Blocked on the ingress token re-mint; token root PREPPED: account-first
+  policy order on all three multi-policy tokens (provider 5.19.1 still positional — 5.13.0 fix
+  didn't cover api_token; order-to-match-API kills the perpetual swap + 4 'inconsistent result'
+  errors per apply, which DO apply on the wire — verified via /zones) + ingress_zone_ids map
+  with minutark. Next host-side apply = clean + two-zone ingress token.
+- **OpenRouter send-feedback signature pulled from this jail's MCP** for the oracle give_feedback
+  spec: category enum ×7 + generation_id required + optional comment; the description-as-protocol
+  move (tool description tells the CALLING agent what diagnostics to volunteer) is the part worth
+  stealing. Return shape + annotations need a real invocation — left to the other jail.
