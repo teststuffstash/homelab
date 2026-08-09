@@ -8,6 +8,10 @@
 # OpenRouter account is dead. It was verified by a dev-time replay that was never committed — the
 # replay found two real defects before commit and then evaporated, leaving the invariant pinned by
 # nothing. The nine-case table in PR #162's body is the spec; this file is that table, retained.
+# homelab#190 extends it: when the account balance moved off OpenRouter's management-only
+# /api/v1/credits onto the proxy's /router-status, "the balance is unavailable" gained real,
+# distinguishable failure modes — FAILOPEN..FAILOPEN4 + STALE/STALE2 are those rows, and they
+# assert the fail-open is VISIBLE, which is the defect #190 was filed for.
 #
 # The two defects it must keep re-catching, because both were one-token errors that review passed:
 #   1. `jq`'s `//` fires on FALSE as well as null, so `.subscriptionFallback // true` silently
@@ -26,9 +30,12 @@
 # (`[ -z "${RAIL_DEGRADED:-}" ]`), and without that block scenario E would pass vacuously.
 #
 # THE SEAMS, all of them:
-#   • `curl` is a recorder on $PATH — it never leaves the machine, serves /api/v1/credits from
-#     $STUB_CREDITS, and logs every call so "probed 0 times" is assertable. This is the leg-1
-#     instrument: scenario B asserts the log is EMPTY.
+#   • `curl` is a recorder on $PATH — it never leaves the machine, serves the proxy's
+#     /router-status from $STUB_CREDITS/$STUB_CREDIT_AGE/$STUB_CREDIT_MAX_AGE, and logs every call
+#     so "probed 0 times" is assertable. This is the leg-1 instrument: scenario B asserts the log
+#     is EMPTY. homelab#190: it also FAILS LOUDLY if the launcher ever calls the retired
+#     /api/v1/credits again — that endpoint is management-key-only and 403s in production, so a
+#     stub that served it would keep the dead gate looking green (it did, for weeks).
 #   • `$HERE` points at a stub dir holding a stubbed `subscription-latch.sh` (the FU-088(a) probe,
 #     which would otherwise need the in-cluster egress proxy) and a SYMLINK to the real
 #     `agents/model_id.py` — the harness/model parse under test is the live one.
@@ -36,10 +43,12 @@
 #     $AGENT_OPENROUTER_PROXY. If that ever drifts, the FU-088(b) rows go RED, not quiet.
 # No cluster, no credentials, no network. Runs in a couple of seconds.
 #
-# NOT WIRED INTO CI, and not by preference: that needs a `devbox.json` script plus a step in
-# .github/workflows/ci.yaml, and both are off-limits to the fixer lane precisely because CI runs
-# them from the PR's own branch. Same posture (and same lane split) as
-# agents/coordinator/responder-behaviour-test.sh — see homelab#133 for the operator-side wiring.
+# WIRED INTO CI by the operator lane since (`devbox run rail-degrade-replay`, a step in
+# .github/workflows/ci.yaml) — so this file is now a REQUIRED check, and a fixer-lane PR that
+# changes the launcher blocks above must update the cases here in the same PR. `devbox.json` and
+# .github/** themselves stay off-limits to that lane, because CI runs them from the PR's own
+# branch. Same posture (and same lane split) as agents/coordinator/responder-behaviour-test.sh —
+# see homelab#133 for the operator-side wiring.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,9 +89,30 @@ printf '%s\n' "curl $*" >> "$CALLS"
 _url=""
 for a in "$@"; do case "$a" in http://*|https://*) _url="$a";; esac; done
 case "$_url" in
+  */router-status)
+    # The proxy's capacity view (homelab#180 shape), trimmed to the fields the launcher reads.
+    # $STUB_CREDITS doubles as the failure-mode selector, because every one of these is a way the
+    # balance can be UNAVAILABLE and the launcher must treat them all alike — fail-open, loudly:
+    #   unreachable → the proxy is not answering (-fsS fails; NetworkPolicy gap, pod rolling)
+    #   garbage     → it answered, but not with JSON
+    #   none        → it answered with no usable balance (NaN before the first poll, dead leg)
+    #   oldproxy    → valid JSON with no capacity block at all (a proxy rolled back behind #180)
+    case "${STUB_CREDITS:-}" in
+      unreachable) exit 7;;
+      garbage)     printf 'upstream connect error or disconnect/reset before headers'; exit 0;;
+      oldproxy)    printf '{"subscription":{"limited":false}}'; exit 0;;
+      none)        _credit=null;;
+      *)           _credit="${STUB_CREDITS:-0}";;
+    esac
+    printf '{"subscription":{"limited":false},"openrouter_capacity":{"down":false,"reason":null,"remaining_s":0,"latched_total":0,"credit_usd":%s,"credit_age_s":%s,"credit_source":"http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics","credit_source_age_s":%s,"credit_max_age_s":%s,"credit_poll_failures":0,"min_credit_usd":0.25,"recent_429_models":[]}}' \
+      "$_credit" "${STUB_CREDIT_AGE:-540}" "${STUB_CREDIT_AGE:-540}" "${STUB_CREDIT_MAX_AGE:-1800}"
+    exit 0;;
   */api/v1/credits)
-    [ "${STUB_CREDITS:-}" = "unreachable" ] && exit 7   # -fsS would fail the same way
-    printf '{"data":{"total_credits":%s,"total_usage":0}}' "${STUB_CREDITS:-0}"; exit 0;;
+    # homelab#190: RETIRED. OpenRouter serves this to management keys only — with the pod's
+    # project-scoped `ref:` it 403s, which is exactly how the credit gate died silently. Never
+    # serve a balance here again; a launcher that calls it must fail this harness, not pass it.
+    printf 'rail-degrade-replay: the launcher called the RETIRED /api/v1/credits (homelab#190) — it 403s in production.\n' >&2
+    exit 22;;
 esac
 exit 0
 EOF
@@ -148,9 +178,13 @@ scenario() {
   IN_SROW='{"name":"oracle","workerModel":"xiaomi/mimo-v2.5","workerModelFallbacks":["qwen/qwen3-coder:free"]}'
   IN_ROUTER_MODE="shadow"; IN_ROUTER_DEFER=""; IN_RWHY=""; IN_VERDICT=""; IN_RMODEL=""
   STUB_CREDITS="12.40"; STUB_LATCH="clear"
+  # The freshness pair the launcher honours instead of re-deriving (homelab#190): a balance the
+  # proxy is holding past its own credit_max_age_s is NOT a balance.
+  STUB_CREDIT_AGE="540"; STUB_CREDIT_MAX_AGE="1800"
 }
 go() {
   CALLS="$CALLS" STUB_CREDITS="$STUB_CREDITS" STUB_LATCH="$STUB_LATCH" \
+  STUB_CREDIT_AGE="$STUB_CREDIT_AGE" STUB_CREDIT_MAX_AGE="$STUB_CREDIT_MAX_AGE" \
   REPLAY_STUBHOME="$STUBHOME" \
   IN_PROJECT="$IN_PROJECT" IN_HARNESS="$IN_HARNESS" IN_MODEL="$IN_MODEL" \
   IN_HARNESS_SET="$IN_HARNESS_SET" IN_MODEL_SET="$IN_MODEL_SET" IN_TASK="$IN_TASK" \
@@ -165,8 +199,11 @@ want()     { printf '%s' "$OUT" | grep -qF -- "$2" && ok "$1" || bad "$1" "stdou
 wantnot()  { printf '%s' "$OUT" | grep -qF -- "$2" && bad "$1" "stdout has: $2" || ok "$1"; }
 wanterr()  { printf '%s' "$ERR" | grep -qF -- "$2" && ok "$1" || bad "$1" "stderr lacks: $2"; }
 wantrc()   { [ "$RC" = "$2" ] && ok "$1" || bad "$1" "exit $RC, wanted $2 (stderr: $(printf '%s' "$ERR" | tail -1))"; }
-probes()   { grep -c 'api/v1/credits' "$CALLS" 2>/dev/null || true; }
-wantprobes() { n="$(probes)"; n="${n:-0}"; [ "$n" = "$2" ] && ok "$1" || bad "$1" "OpenRouter probed ${n}×, wanted $2"; }
+# homelab#190: the account-scope probe is the proxy's /router-status, not OpenRouter's
+# management-only /api/v1/credits. Counting the NEW path is what keeps leg 1 pinned — a launcher
+# that reverted to the old endpoint would score 0 here and fail the G/A rows, not pass quietly.
+probes()   { grep -c 'router-status' "$CALLS" 2>/dev/null || true; }
+wantprobes() { n="$(probes)"; n="${n:-0}"; [ "$n" = "$2" ] && ok "$1" || bad "$1" "OpenRouter capacity probed ${n}×, wanted $2"; }
 
 printf '\033[1mrail-degrade-replay\033[0m — homelab#158 leg 1 + the #162 nine-case table, replayed\n'
 printf 'launcher: %s\n' "$LAUNCHER"
@@ -272,9 +309,15 @@ wantnot "G: no capacity verdict"                       "OpenRouter capacity down
 want    "G: stays on the openrouter rail"              "STATE MODEL=xiaomi/mimo-v2.5 HARNESS=opencode RAIL=openrouter"
 want    "G: reaches dispatch"                          "REACHED: dispatch"
 wantprobes "G: probes the account exactly once"        1
-grep -qF -- 'Authorization: Bearer ref:oracle-iac/oracle-iac-openrouter' "$CALLS" \
-  && ok "G: the probe carries an OPAQUE ref, never key material" \
-  || bad "G: the probe carries an OPAQUE ref, never key material" "no 'Bearer ref:<project>/<secret>' in the call log"
+# homelab#190: the probe used to carry the pod's opaque `ref:` to an endpoint that refused it.
+# /router-status is unauthenticated by design, so the invariant is now the stronger one — NO
+# credential of any shape leaves the launcher for an account-scope read.
+grep -qF -- 'Authorization' "$CALLS" \
+  && bad "G: the capacity probe sends NO credential at all" "the call log carries an Authorization header" \
+  || ok "G: the capacity probe sends NO credential at all"
+grep -qF -- '/router-status' "$CALLS" \
+  && ok "G: reads the proxy's capacity view, not OpenRouter" \
+  || bad "G: reads the proxy's capacity view, not OpenRouter" "no /router-status call in the log"
 
 scenario "G2 — SHADOW-mode router defer → not a trigger (shadow must not self-promote)"
 IN_ROUTER_MODE="shadow"; IN_ROUTER_DEFER=""; IN_RWHY="or-capacity-down:rpd"   # shadow never sets _router_defer
@@ -310,14 +353,59 @@ want    "DENY: says the claim beat the fallback"       "in this stack's modelDen
 want    "DENY: model unchanged"                        "STATE MODEL=xiaomi/mimo-v2.5"
 wantrc  "DENY: defers (exit 0)"                        0
 
-# ── FAILOPEN ── an unreachable probe is not an outage verdict ────────────────────────────────────
-scenario "FAILOPEN — credit probe unreachable → fail open, dispatch unchanged"
+# ── FAILOPEN ── an unavailable balance is not an outage verdict — but it must never be SILENT ────
+# homelab#190 is exactly this row. Fail-open is the right default for a dispatch gate (FU-104: the
+# availability of the gate is worth less than the gate), but for weeks it was fail-open BY ACCIDENT
+# and in silence — a 403'd probe and a healthy account produced byte-identical output, while the
+# archived FU-088(b) entry told an operator a floor existed. Every way the balance can be
+# unavailable gets a row, and every row asserts the VISIBLE line, naming the URL that failed.
+_failopen_asserts() {   # $1 = case label prefix, $2 = the bracketed reason the line must carry
+  wantnot "$1: no degrade without a balance"           "RAIL DEGRADE"
+  wantnot "$1: no credit-floor defer either"           "below the \$0.25 floor"
+  want    "$1: SAYS it is fail-open (not silence)"     "FU-088(b) FAIL-OPEN"
+  want    "$1: names the URL it could not use"         "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status"
+  want    "$1: names the reason"                       "$2"
+  want    "$1: dispatch proceeds"                      "REACHED: dispatch"
+  wantrc  "$1: exit 0"                                 0
+}
+
+scenario "FAILOPEN — /router-status unreachable → visibly fail open, dispatch unchanged"
 STUB_CREDITS="unreachable"
 go
-wantnot "FAILOPEN: no degrade on a failed probe"       "RAIL DEGRADE"
-wantnot "FAILOPEN: no credit-floor defer either"       "below the \$0.25 floor"
-want    "FAILOPEN: dispatch proceeds"                  "REACHED: dispatch"
-wantrc  "FAILOPEN: exit 0"                             0
+_failopen_asserts "FAILOPEN" "unreachable or unparseable"
+
+scenario "FAILOPEN2 — /router-status answers with garbage → visibly fail open"
+STUB_CREDITS="garbage"
+go
+_failopen_asserts "FAILOPEN2" "unreachable or unparseable"
+
+scenario "FAILOPEN3 — proxy holds NO balance (credit leg dead / NaN before first poll)"
+STUB_CREDITS="none"
+go
+_failopen_asserts "FAILOPEN3" "no-balance"
+wantprobes "FAILOPEN3: it did ask the proxy"           1
+
+scenario "FAILOPEN4 — proxy answers without a capacity block (rolled back behind homelab#180)"
+STUB_CREDITS="oldproxy"
+go
+_failopen_asserts "FAILOPEN4" "no-capacity-block"
+
+# ── STALE ── the proxy HOLDS its last balance across poll failures, so age is what makes a number
+# unusable. A low-but-stale number must not gate: that is a fact about 2h ago, and acting on it is
+# how a recovered account stays deferred. The bound is the PROXY's (`credit_max_age_s`), read from
+# the payload — never a second copy of the threshold living here.
+scenario "STALE — a LOW balance held past the proxy's own credit_max_age_s → fail open, not a floor hit"
+STUB_CREDITS="0.17"; STUB_CREDIT_AGE="3600"; STUB_CREDIT_MAX_AGE="1800"
+go
+_failopen_asserts "STALE" "stale: 3600s old"
+wantnot "STALE: does not act on a two-hour-old number" "credit:\$0.17"
+
+scenario "STALE2 — the same low balance INSIDE the bound still gates (the bound is not an off switch)"
+STUB_CREDITS="0.17"; STUB_CREDIT_AGE="1799"; STUB_CREDIT_MAX_AGE="1800"
+go
+want    "STALE2: degrades on the fresh low balance"    "RAIL DEGRADE"
+want    "STALE2: names the credit trigger"             'credit:$0.17<$0.25'
+wantnot "STALE2: no fail-open line when it is usable"  "FU-088(b) FAIL-OPEN"
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 section "result"

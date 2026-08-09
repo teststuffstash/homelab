@@ -112,7 +112,15 @@ Two more gates ride the same probe script: the **concurrency semaphore** (≥
 `SUBSCRIPTION_MAX_RUNNING`, default 3, Running pods labelled
 `homelab.teststuff.net/subscription-session=claude` → defer — the proactive half that prevents
 the burst which *causes* a 429) and, for OpenRouter workers, the **account-credit floor** in
-`agent-session.sh` (FU-088b, `OPENROUTER_MIN_CREDIT`). Observability: Grafana
+`agent-session.sh` (FU-088b, `OPENROUTER_MIN_CREDIT`, default $0.25). That floor reads the balance
+from the proxy's `GET /router-status` → `.openrouter_capacity.credit_usd` (unauthenticated,
+in-cluster; sourced operator-gauge → proxy → launcher), **not** from OpenRouter's `/api/v1/credits`,
+which is management-key-only and 403'd every dispatch until homelab#190 — the floor did not exist
+for the whole of 2026-07/08 and nothing said so. It is deliberately **fail-open** when no fresh
+balance is available (unreachable proxy, dead credit leg, or a value held past the proxy's
+`credit_max_age_s`), and since #190 it says so in one line on the dispatch path naming the URL, so
+"no floor right now" is never again indistinguishable from a healthy account. Full mechanism:
+[`model-routing.md`](model-routing.md) §M12. Observability: Grafana
 `claude-subscription` (utilization vs threshold, data age, deferral state) + the
 `SubscriptionDispatchLimited` (deferring >15m) and `SubscriptionWeeklyPoolLow` alerts.
 

@@ -138,9 +138,11 @@ fi
 #     cooldown and a per-KEY budget exhaustion deliberately are not it: a bad model is not a dead
 #     provider, and a spent project budget must not spill onto the subscription. Authoritative
 #     stacks only — a shadow-mode defer changes nothing by definition.
-#   • the launcher's own ACCOUNT-CREDIT probe — the FU-088(b) gate's read, hoisted here so the
+#   • the launcher's own ACCOUNT-CREDIT read — the FU-088(b) gate's balance, hoisted here so the
 #     same fact can DEGRADE instead of only deferring. This is the one that fires for the fleet
-#     today (shadow is the default mode). Probed ONCE: the gate below reuses this value.
+#     today (shadow is the default mode). Read ONCE: the gate below reuses this value. Its source
+#     is the proxy's `/router-status` since homelab#190, NOT OpenRouter's management-only
+#     `/api/v1/credits` — see the probe below for why that mattered.
 #
 # What it degrades TO is a constant, not a search: `claude/haiku` on the subscription, the model
 # the directive names. Harness, env card, credential shape and the FU-088 capacity gate all follow
@@ -178,9 +180,44 @@ case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _sub_rail_ride=1;; esac
 _or_probe_url="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
    && [ -n "$_or_probe_url" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
-  OR_CREDITS="$(curl -fsS --max-time 10 -H "Authorization: Bearer ref:${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}" \
-    "$_or_probe_url/api/v1/credits" 2>/dev/null \
-    | jq -r 'try ((.data.total_credits // empty) - (.data.total_usage // 0)) catch empty' 2>/dev/null)" || OR_CREDITS=""
+  # homelab#190: the balance comes from the PROXY's own capacity view, not from OpenRouter.
+  # This probe used to be `GET /api/v1/credits` with the pod's opaque `ref:` — an endpoint
+  # OpenRouter serves only to a MANAGEMENT key, so it 403'd on every dispatch, `OR_CREDITS` was
+  # empty every time, and both consumers below (the #158 degrade and the FU-088(b) gate) were
+  # dead while looking healthy. `/router-status` is unauthenticated, ClusterIP-local, on the same
+  # host:port this already curled, and its `openrouter_capacity.credit_usd` is the value the
+  # proxy itself gates on — sourced from the openrouter-operator's `openrouter_account_credit_usd`
+  # gauge (homelab#180). One owner for account-scope facts, consumed operator→proxy→launcher;
+  # parsing the operator gauge here instead would put a second, independently-drifting consumer
+  # on the dispatch path and duplicate the NaN/staleness handling in awk.
+  _or_status="$(curl -fsS --max-time 10 "$_or_probe_url/router-status" 2>/dev/null)" || _or_status=""
+  # jq returns the whole verdict so the shell never RE-DERIVES the proxy's freshness bound — it
+  # honours it. `credit_usd` is `null` until the first usable poll, and it is HELD across later
+  # poll failures (the proxy only overwrites it on success), so age is the thing that makes a
+  # number unusable: compare `credit_age_s` against the proxy's OWN `credit_max_age_s`. Anything
+  # that is not a fresh number is "no balance", never a low one.
+  _or_credit_read="$(printf '%s' "$_or_status" | jq -r '
+    .openrouter_capacity as $c
+    | if ($c | type) != "object"                then "no-capacity-block"
+      elif ($c.credit_usd   | type) != "number" then "no-balance (the proxy holds none — leg never polled, or dead)"
+      elif ($c.credit_age_s | type) != "number" then "no-credit-age"
+      elif ($c.credit_max_age_s | type) == "number" and $c.credit_age_s > $c.credit_max_age_s
+        then "stale: \($c.credit_age_s)s old, past the \($c.credit_max_age_s)s bound the proxy advertises"
+      else "ok:\($c.credit_usd)" end' 2>/dev/null)" || _or_credit_read=""
+  case "$_or_credit_read" in
+    ok:*) OR_CREDITS="${_or_credit_read#ok:}";;
+    # FAIL-OPEN, VISIBLY (homelab#190). An unavailable balance must never stop a dispatch — the
+    # availability of the gate is worth less than the gate (FU-104) — but the silence is what
+    # made this bug survive: an empty read looked exactly like a healthy account. One line, on
+    # the dispatch path, naming the URL, so a NetworkPolicy gap in some other namespace is
+    # diagnosable from the ride's own log instead of from an archived tracker entry.
+    *) echo "→ FU-088(b) FAIL-OPEN: no usable OpenRouter balance from ${_or_probe_url}/router-status [${_or_credit_read:-unreachable or unparseable}] — dispatching WITHOUT the \$${OR_MIN} account-credit floor (and without the homelab#158 credit trigger). Check the proxy and its credit leg (.openrouter_capacity.credit_poll_failures).";;
+  esac
+  # The floor stays the LAUNCHER's (`OPENROUTER_MIN_CREDIT`, default $0.25): the proxy owns the
+  # account-scope FACT, this gate owns the dispatch POLICY, and it must stay overridable per run
+  # without touching the proxy's env. Both defaults are $0.25 and the proxy publishes its own as
+  # `.openrouter_capacity.min_credit_usd` — if they ever diverge deliberately, that is the field
+  # to read, not this constant.
   if [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
     OR_CAPACITY_DOWN="credit:\$${OR_CREDITS}<\$${OR_MIN}"
   fi
@@ -1159,11 +1196,13 @@ fi
 
 # FU-088(b): account-level OpenRouter credit gate — credit exhaustion otherwise surfaces only as
 # per-pod 402 retry storms AFTER spawn (agent-runtime#8 hard-stops in-pod; this saves the spawn).
-# The probe itself moved UP to the homelab#158 rail-degrade block (one curl per dispatch, same opaque
-# ref, no key material here either way, still fail-open on any probe failure) — because a fact this
-# gate can only defer on is a fact the degrade can ACT on, and it has to be known before the
-# harness is fixed. What remains here is the gate: everything that did NOT degrade (opted out,
-# non-fix ride, or a stack that strictly waits) defers exactly as it did before.
+# The read itself moved UP to the homelab#158 rail-degrade block (one unauthenticated curl per
+# dispatch against the proxy's /router-status, no key material either way, fail-open — and since
+# homelab#190 fail-open LOUDLY, one line there) — because a fact this gate can only defer on is a
+# fact the degrade can ACT on, and it has to be known before the harness is fixed. What remains
+# here is the gate: everything that did NOT degrade (opted out, non-fix ride, or a stack that
+# strictly waits) defers exactly as it did before. `OR_CREDITS` empty = no usable balance = this
+# gate does not fire; it is never treated as $0.
 if [ "$HARNESS" != "claude" ] && [ -n "$PROXY_URL" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ] \
    && [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
   echo "→ ${PROJECT} dispatch deferred — OpenRouter account credit \$${OR_CREDITS} below the \$${OR_MIN} floor (FU-088b; top up, or OPENROUTER_MIN_CREDIT / AGENT_CREDIT_GATE=0 to override)"

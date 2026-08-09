@@ -25,7 +25,7 @@ Bearer <key>` everywhere; "probed" = verified against our account, with date.
 | `GET /api/v1/models` | catalog + headline prices (the registry cache) | `order=top-weekly` is **ignored** — no rankings REST API exists (2026-08-02) |
 | `GET /api/v1/models/:author/:slug/endpoints` | per-provider price/uptime (effective-price basis) | `uptime_last_5m/_1d` is OpenRouter's routing view — **blind to per-account limits** (laguna: "100% up" while we saw 81% 429) |
 | `GET /api/v1/auth/key` | live headroom: `limit`, `limit_reset: weekly` (2026-07-27) | — |
-| `GET /api/v1/credits` | account balance (breaker floor `OPENROUTER_MIN_CREDIT`) | — |
+| `GET /api/v1/credits` | account balance | **management-key only** — a project-scoped key (and so every in-cluster caller we have) gets `403 "Only management keys can fetch credits for an account"`. Nothing calls it: the balance reaches us via the openrouter-operator's `openrouter_account_credit_usd` gauge → the proxy's capacity latch → `GET /router-status` (homelab#180/#190) |
 | `GET /api/v1/generation?id=` | billed `total_cost` + native tokens + provider per request | same session key works; feeds `router_observed_cache_hit` |
 | `GET /api/v1/activity` | account-wide usage | **management-key only** — not worth holding one in-cluster (FU-095 backfill idea parked) |
 | frontend `/api/frontend/v1/benchmarks` | model quality scores | **session-cookie-gated, API key 401s** (2026-08-02) — see MCP row |
@@ -526,10 +526,23 @@ its defer with it, and `/metrics` carries `router_openrouter_capacity_down{,_tot
 
 The **launcher** (`agents/agent-session.sh`) decides — ADR-094: dispatch params are launcher-owned.
 Two triggers, because the fleet runs in two modes: an **authoritative** routed defer whose reason is
-`or-capacity-down:*`, and (for the shadow default) the launcher's own account-credit probe, which is
-the FU-088(b) gate's read hoisted above the harness decision so the same fact can *act* instead of
+`or-capacity-down:*`, and (for the shadow default) the launcher's own account-credit read, which is
+the FU-088(b) gate's balance hoisted above the harness decision so the same fact can *act* instead of
 only deferring. A shadow-mode routed defer is deliberately NOT a trigger — that would be the
 launcher quietly promoting shadow to authoritative.
+
+That second trigger reads **`GET /router-status` → `.openrouter_capacity.credit_usd`** on the same
+proxy — unauthenticated, ClusterIP-local, no credential of any shape. It used to call OpenRouter's
+`GET /api/v1/credits` with the pod's opaque `ref:`, which is management-key-only and 403'd every
+time, so the read was empty on every dispatch and **both** consumers were dead while looking healthy
+(homelab#190; the proxy's own leg had the identical bug, homelab#180). The chain has one owner per
+fact now: operator gauge → proxy → launcher. Two properties the launcher honours rather than
+re-derives: the balance is `null` until the first usable poll, and the proxy **holds** its last
+value across later poll failures — so freshness is judged by `.credit_age_s` against the proxy's own
+`.credit_max_age_s`, and anything that is not a fresh number is *no balance*, never a low one.
+An unavailable balance is **fail-open with one visible line** on the dispatch path naming the URL
+(FU-104: the availability of a gate is worth less than the gate — but silent fail-open is what let
+this rot). Pinned by `agents/rail-degrade-replay.sh` (FAILOPEN/FAILOPEN2/FAILOPEN3/STALE).
 
 Degrading means `claude/haiku` on the subscription (`AGENT_SUBSCRIPTION_FALLBACK_MODEL` overrides).
 It is a constant, not a search: harness, env card, credential shape and capacity gate all follow
