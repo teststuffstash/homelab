@@ -14,7 +14,9 @@
 #      matched a CODEOWNERS path (specs/ or .agents/) and only the delegated codeowner read
 #      unparks it. The review reflex correctly refuses to re-review an approved head, so NO
 #      machinery announces this state: oracle-fleet#217 sat 17h (2026-08-08) with every reviewer
-#      tick logging "nothing to review". Repos = the require_code_owner_review=true set in
+#      tick logging "nothing to review". ⚠ reviews[], NOT latestReviews[]: a bot that APPROVEs
+#      and then posts a COMMENTED aside makes its latest review non-APPROVED and hid PR#235's
+#      park for ~14h (2026-08-09) — a dismissed approval reads DISMISSED, so reviews[] is safe. Repos = the require_code_owner_review=true set in
 #      tofu/github/variables.tf minus the platform lane (which clauses 1/park cover).
 #   3. An UNLABELED issue on a platform repo older than a day — invisible to every clause (the
 #      loop dispatches on agent-fix∧agent/queued; the debounce rings on responder verdict lines;
@@ -68,14 +70,15 @@ while true; do
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
   # Clause 4: stack-repo codeowner park — approved head + green + rd STILL REVIEW_REQUIRED is the
-  # require_code_owner_review signature (a bot approval never satisfies it). latestReviews (not
-  # reviews) so a dismissed/stale approval doesn't count as parked.
+  # require_code_owner_review signature (a bot approval never satisfies it). reviews[] scanned in
+  # FULL: an approve-then-comment bot sequence makes latestReviews non-APPROVED and hid PR#235's
+  # park ~14h; a dismissed approval reads DISMISSED, so the full scan stays safe.
   for r in $CODEOWNER_REPOS; do
     rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
-             --json number,reviewDecision,latestReviews,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
+             --json number,reviewDecision,reviews,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
            | jq -r --arg r "$r" '.[] | select(.isDraft|not)
                | select(.reviewDecision == "REVIEW_REQUIRED")
-               | select([.latestReviews[]? | select(.state == "APPROVED")] | length > 0)
+               | select([.reviews[]? | select(.state == "APPROVED")] | length > 0)
                | select([.statusCheckRollup[]? | select(.status != "COMPLETED")] | length == 0)
                | select([.statusCheckRollup[]? | select(.conclusion != null
                    and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL"
@@ -84,7 +87,7 @@ while true; do
                | "NEEDS-META codeowner-gate: \($r)#\(.number) bot-approved + green but REVIEW_REQUIRED — a specs/.agents path needs the delegated codeowner read"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
-  blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
+  blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
     | jq -r '.items[]? | "NEEDS-META blocked: \(.repository_url | sub(".*/";""))#\(.number) \(.title[:60])"' 2>/dev/null)
   [ -n "$blocked" ] && out="$out$blocked"$'\n'
   # Clause 3: unlabeled platform-repo issues >24h — no agent-* label at all means no clause can
