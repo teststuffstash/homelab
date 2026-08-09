@@ -13,6 +13,13 @@ data "cloudflare_api_token_permission_groups_list" "ssl_write" {
   scope = "com.cloudflare.api.account.zone"
 }
 
+# Zone Settings Write (2026-08-09, oracle-iac#351): the zone BOOTSTRAP (min TLS floor,
+# always-use-https) is settings, not records — dns/ssl/waf write cover none of it.
+data "cloudflare_api_token_permission_groups_list" "zone_settings_write" {
+  name  = "Zone%20Settings%20Write"
+  scope = "com.cloudflare.api.account.zone"
+}
+
 data "cloudflare_api_token_permission_groups_list" "waf_write" {
   name  = "Zone%20WAF%20Write"
   scope = "com.cloudflare.api.account.zone"
@@ -24,7 +31,10 @@ data "cloudflare_api_token_permission_groups_list" "tunnel_write" {
 }
 
 locals {
-  zone_resource    = { "com.cloudflare.api.account.zone.${var.zone_id}" = "*" }
+  zone_resource = { "com.cloudflare.api.account.zone.${var.zone_id}" = "*" }
+  # tofu_apply edits every product zone (the cloudflare roots' applier — teststuff.net remote
+  # access + the minutark bootstrap, oracle-iac#351). Same map as the ingress token.
+  apply_zone_resources = { for name, id in var.ingress_zone_ids : "com.cloudflare.api.account.zone.${id}" => "*" }
   account_resource = { "com.cloudflare.api.account.${var.account_id}" = "*" }
 }
 
@@ -51,8 +61,9 @@ resource "cloudflare_api_token" "tofu_apply" {
         data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id,
         data.cloudflare_api_token_permission_groups_list.ssl_write.result[0].id,
         data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.zone_settings_write.result[0].id,
       ]) : { id = gid }]
-      resources = jsonencode(local.zone_resource)
+      resources = jsonencode(local.apply_zone_resources)
     },
   ]
 
