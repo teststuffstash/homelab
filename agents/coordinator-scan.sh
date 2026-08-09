@@ -550,9 +550,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
     # they never rot silently.
-    sprouts="$(gh issue list --repo "$slug" --state open --json number,title,author,labels \
-      --jq '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
+    # ⚠ A POST-LAUNCH BUCKET IS NOT A SPROUT (ADR-102, homelab#207). It is bot-authored and carries
+    # no `agent-fix`, so it matches this slice exactly — and it is a CONTAINER, not work. Left in,
+    # every goal would add a permanent line to a report whose whole purpose is "these are rotting,
+    # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
+    # dispatch a worker against an issue with nothing to build. Its children are the work, and they
+    # appear here on their own when they land inert.
+    # >>>REPLAY:sprout-report>>>
+    sprouts="$(gh issue list --repo "$slug" --state open --json number,title,author,labels 2>/dev/null \
+      | jq -r '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
     [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
+    # <<<REPLAY:sprout-report<<<
     iss=""; qblocked=""; qcycles=""
     # ⚠ tab is IFS *whitespace*: POSIX read COLLAPSES consecutive tabs, so an empty middle
     # field shifts every later field left (live 2026-07-27: track-less sleep-iac#25's
@@ -1501,16 +1509,24 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           goal-review) hgoal="${uitem#issue-}" ;;
           # A closeout item is the GOAL itself (the assembly PR's own closeout), a goal CHILD
           # (depth 1), or a sprout of one (depth 2+). Test the item, then climb the native
-          # sub-issue chain, bounded at 4 hops — the reviewer stops emitting Follow-ups at depth
-          # ≥2, so a deeper chain is a data bug, not a tree to keep walking. Testing the ITEM
-          # first is what puts the bucket under a goal whose own closeout is the unit; a walk
-          # that only looks upward would miss exactly the assembly-merge case ADR-102 names.
+          # sub-issue chain. Testing the ITEM first is what puts the bucket under a goal whose own
+          # closeout is the unit; a walk that only looks upward would miss exactly the
+          # assembly-merge case ADR-102 names.
+          #
+          # THE BOUND IS 6, and it is measured, not guessed. The reviewer's depth-≥2 bar says
+          # chains should stop at three, so 4 looked generous — until the #207 dry-run walked the
+          # real circles#29 tree and found #75 → #47 → #18 → #29, which consumes all four. ADR-102's
+          # other case, oracle-fleet goal-174, grew THREE generations post-close. A bound that a
+          # live tree already touches is a bound that silently drops the deepest sprouts back onto
+          # the master lane — the exact class of loss this clause exists to stop — so it sits well
+          # clear of the observed maximum. The cost is two reads per hop, only until the goal
+          # answers; a non-goal item hits the top of its tree and stops long before this bites.
           *) hcur="${uitem#issue-}"; hdepth=0
              case "$hcur" in ''|*[!0-9]*) hcur="";; esac
              # ⚠ PIPE TO A REAL jq, never `gh --jq`, on every read below (the standing rule in this
              # file — `gh --jq` takes only an expression and silently degrades). It is also what
              # lets the replay fixtures record REAL API payloads instead of post-jq scalars.
-             while [ -n "$hcur" ] && [ "$hdepth" -lt 4 ]; do
+             while [ -n "$hcur" ] && [ "$hdepth" -lt 6 ]; do
                if [ "$(gh issue view "$hcur" --repo "$hslug" --json labels 2>/dev/null \
                         | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)" = "true" ]; then
                  hgoal="$hcur"; break

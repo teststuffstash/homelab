@@ -1,0 +1,16 @@
+CALL gh issue view 75 --repo teststuffstash/circles --json labels
+CALL gh api repos/teststuffstash/circles/issues/75/parent
+CALL gh issue view 47 --repo teststuffstash/circles --json labels
+CALL gh api repos/teststuffstash/circles/issues/47/parent
+CALL gh issue view 18 --repo teststuffstash/circles --json labels
+CALL gh api repos/teststuffstash/circles/issues/18/parent
+CALL gh issue view 29 --repo teststuffstash/circles --json labels
+CALL gh issue view 29 --repo teststuffstash/circles --json title,state
+CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
+CALL gh issue create --repo teststuffstash/circles --title post-launch: Goal: P0 complete — bake, page, evidence chain, and the kind system gate, from the harvested contract --body <bucket body — see agents/coordinator-scan.sh>
+CALL gh api repos/teststuffstash/circles/issues/999
+CALL gh api -X POST repos/teststuffstash/circles/issues/29/sub_issues -F sub_issue_id=999999999
+OUT   harvest disposition (ADR-102): circles issue-75 → goal #29, bucket 999, self-queue no — goal #29 is CLOSED — the self-queue right dies with the goal (ADR-102)
+OUT ITEM repo=circles item=issue-75 clause=merged-closeout goal=29 bucket=999 selfqueue=no
+OUT REACHED: end
+RC 0

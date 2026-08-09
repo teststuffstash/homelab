@@ -1,0 +1,20 @@
+{
+  "number": 47,
+  "title": "generate-evidence.py: case-id fallback silently degrades instead of failing when a test lacks a #<row-id> citation",
+  "state": "CLOSED",
+  "labels": [
+    {
+      "id": "LA_kwDOTsulx88AAAACuo4wDw",
+      "name": "agent-fix",
+      "description": "Opt-in: this issue is fair game for the agent fixer",
+      "color": "0e8a16"
+    },
+    {
+      "id": "LA_kwDOTsulx88AAAACuo450A",
+      "name": "agent/done",
+      "description": "Merged",
+      "color": "0b6b3a"
+    }
+  ],
+  "body": "‹elided — the clause reads no body on this path; see the fixture header›"
+}

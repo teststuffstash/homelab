@@ -1,0 +1,20 @@
+{
+  "number": 29,
+  "title": "Goal: P0 complete — bake, page, evidence chain, and the kind system gate, from the harvested contract",
+  "state": "CLOSED",
+  "labels": [
+    {
+      "id": "LA_kwDOTsulx88AAAACuo4wDw",
+      "name": "agent-fix",
+      "description": "Opt-in: this issue is fair game for the agent fixer",
+      "color": "0e8a16"
+    },
+    {
+      "id": "LA_kwDOTsulx88AAAACu52v-Q",
+      "name": "task/goal",
+      "description": "Routes to the coordinator's goal-decompose play, not a worker recipe — FU-090 leg (c)",
+      "color": "5319e7"
+    }
+  ],
+  "body": "‹elided — the clause reads no body on this path; see the fixture header›"
+}
