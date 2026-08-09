@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-160**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-161**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -410,6 +410,16 @@ the block needs pruning, not more headings.
       output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
+
+- [ ] **FU-160** — **Ride phase timings are archaeology, not metrics — a bad cache adding 10 min
+      to every ride would be invisible.** One specimen fully reconstructed 2026-08-09
+      ([spike](spikes/ride-latency-breakdown.md)): 8m46s floor-case ride ≈ 25% dispatch, 60%
+      pod/clone/LLM overhead, ~0% "the work"; whether its image was node-cached is UNKNOWABLE
+      after the fact. Next: emit `agent_run_phase_seconds{phase=…}` from the launcher +
+      agent-finalize (both already hold the timestamps; pushgateway `agent_run_*` precedent),
+      Grafana breakdown panel beside the cost panels, and a baseline-deviation alert (phase p50
+      over 1h vs baseline — cache degradation shows as pod-spinup/gates inflation). Shave
+      candidates (fast-path, pr-open script, image pin) live in the spike, not here.
 
 - [ ] **FU-159** — **Garage's metadata volume rides the `std` bulk tier; heavy S3 request rates
       saturate it.** Measured 2026-08-09: ert-verify's parse (252k ranged GETs, ~15/s, ~4h6m)
