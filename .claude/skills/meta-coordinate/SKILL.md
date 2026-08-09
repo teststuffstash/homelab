@@ -126,6 +126,14 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
   with the ⚖ pre-decided (precedents: normalize-at-parse for display noise; exclude-and-count
   for unrepresentable data — NEVER fabricate; constraint-relaxation when the constraint was a
   fixture assumption). One shape per issue; queue it; the loop does the rest.
+- **RING AFTER QUEUEING** (operator catch 2026-08-09 — the skill said "queue it" and left the
+  dispatch to cron, eating ≤30 min per triage): after ANY label change that makes work
+  dispatchable (queue, un-block, gate-complete), ring the `/coordinate` doorbell for the
+  affected stack — ONE ring, never a poll loop, and skip while the subscription is latched
+  (the circles#31 spin: the ring feeds the constraint it waits on). From the jail:
+  **`devbox run ring <stack> [<stack>…]`** (scripts/coordinate-ring.sh — handles the
+  port-forward, the latch skip, and the POST). The workers/reviewers already ring on terminal
+  states (FU-085) — the meta seat's edits are the same class of event.
 - **Capacity gate deferrals** (FU-088) are level-triggered — never bypass, never poll-loop
   `review-reflex-now` (GraphQL pool!). C4/C5 re-fires deferred claims automatically.
 - **TICK-LOG**: append an entry per arc/incident (what broke, the class fix, the lesson) —

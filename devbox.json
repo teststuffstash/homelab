@@ -110,6 +110,9 @@
       "cloudflare-token-audit": [
         "bash scripts/cloudflare-token-audit.sh"
       ],
+      "ring": [
+        "bash scripts/coordinate-ring.sh \"$@\""
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
