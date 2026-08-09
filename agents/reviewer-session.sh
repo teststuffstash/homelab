@@ -334,8 +334,12 @@ spec:
           value: "${OTLP_ENDPOINT:-http://otel-collector.monitoring.svc.cluster.local:4318}"
         - name: OTEL_RESOURCE_ATTRIBUTES
           # stack derived from the claims mirror (2026-08-08): the reviewer was the ONE role
-          # without it — $103.74 of 7d subscription-equiv sat unattributable as stack="" on the
-          # cost dashboard until the label audit caught it.
+          # without it — USD 103.74 of 7d subscription-equiv sat unattributable as stack="" on
+          # the cost dashboard until the label audit caught it.
+          # ⚠ NO DOLLAR-PREFIXED NUMBERS in this heredoc: it EXPANDS, so "\$103.74" parsed as
+          # positional \${1}03.74 and, under set -u, killed EVERY reviewer dispatch at the pod
+          # create from c377da9 (2026-08-08 ~19:00Z) until 2026-08-09 00:30Z — oracle PR#234/#235
+          # sat unreviewed ~2h. The apostrophe-outage class: prose inside executing code.
           value: "service.name=claude-code,role=reviewer,stack=${STACK_LABEL:-none},project=${PROJECT},pr=${PR}"
         # §A1 transcript capture: write-only key for the agent-transcripts bucket (same-ns Secret,
         # written by the Crossplane Workspace). optional:true → reviews run before it exists.
