@@ -158,20 +158,32 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
 
 1. **List** open `agent-fix` issues; pick one labelled `agent/queued` (level-triggered — just
    re-read the world each pass).
-2. **Claim it FIRST — before investigating.** Relabel and comment a one-line plan, so the work is
+2. **Claim it FIRST — before investigating.** Relabel and record a one-line plan, so the work is
    visible and won't be double-picked:
    ```sh
    gh issue edit <N> --repo teststuffstash/<project> --add-label agent/in-progress --remove-label agent/queued
-   gh issue comment <N> --repo teststuffstash/<project> --body "🤖 picking this up (round <r>): <one-line plan>"
+   bash agents/machine-comment.sh event --repo teststuffstash/<project> --number <N> \
+        --kind dispatch --line "**picking this up (round <r>)** — <one-line plan>"
    ```
+   ⚠ **`gh issue comment` is the wrong call here, and it is the one you will reach for.** Every
+   round used to add its own "🤖 picking this up" comment, which — with the run-stats table — made
+   up the bulk of the ~2/3 machine residue the 2026-08-09 census measured on an issue timeline.
+   ADR-103 sets the bar at ONE machine comment: `machine-comment.sh event` finds the single
+   `<!-- agent-summary -->` comment on the issue and **appends a line to it**, creating it only on
+   the first machine touch. Round 2 edits what round 1 wrote. Nothing is lost — the content is
+   append-only *inside* one comment, and the round's detail lives in the `agent-ride` check-run and
+   the ledger. The same helper serves the PR side from `agent-session.sh`, so both ends of a ride
+   write one shape.
    **One session, one decision**: a session that posts a "not dispatching"/park verdict is DONE —
    it never reconsiders in the same run (the #97 flip-flop, 2026-07-24: park at 12:41:27,
    "picking this up" at 12:42:01 — 34s apart, one session; a reconsideration is the NEXT tick's
    judgment against the re-read world).
-   Post the claim comment **exactly once**. If the comment call errors or the result is
-   ambiguous, `gh issue view <N> --json comments` and CHECK before re-posting — a slow API
-   response is not a missing comment (double claim comments on #45 + #81, 2026-07-22: both were
-   one session re-composing after an ambiguous tool result, ~7–43s apart).
+   Record the claim **exactly once**. The helper is find-or-create, not idempotent — a second
+   invocation appends a second line, which is quieter than the old double comment but still wrong.
+   If the call errors or the result is ambiguous, `gh issue view <N> --json comments` and CHECK the
+   summary comment before re-running — a slow API response is not a missing write (double claim
+   comments on #45 + #81, 2026-07-22: both were one session re-composing after an ambiguous tool
+   result, ~7–43s apart).
 3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
    next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
    estimator:
@@ -299,7 +311,9 @@ the body encodes). Native sub-issues/Projects may mirror this for UI, never repl
 > *(Learned live on sleep-tracking#9: a DIRTY, master-superseded human PR was hand-reviewed instead of
 > closed; the reviewer caught it and recommended close — but a pre-flight would have skipped the run.)*
 
-6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line and a PR stats comment. When a
+6. **Watch.** The run streams logs + drops an `AGENT_RUN_STATS` line; the stats land on the PR as the
+   `agent-ride` **check-run** (the table, the cost line, the transcripts pointer) plus one appended
+   line on the PR's `<!-- agent-summary -->` comment (ADR-103/#210 — not a per-round comment). When a
    PR opens → relabel `agent/review`. Auto-merge is armed by `agent-session.sh` (confirm with `gh pr
    merge <PR> --repo teststuffstash/<project> --auto --squash`; arm it yourself only if the worker
    didn't). You do NOT merge by hand — GitHub auto-merge fires once the gate is satisfied (1 approving

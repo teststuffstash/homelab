@@ -321,6 +321,45 @@ descendant walk, budget parse, verdict precedence and membership emission agains
 (goal-174's 3-generation shape + circles#17), inside the shipped module, the `router-self-test`
 pattern.
 
+## Part A⁗ — channel separation: what belongs on a timeline (ADR-103 rule 2, homelab#210)
+
+The 2026-08-09 census found **~2/3 of issue-timeline comments on oracle-fleet/circles were machine
+residue**, and the two biggest per-PR offenders were the run-stats table and the "picking this up"
+dispatch notice — each posting a *new* comment every round. The bar ADR-103 sets: **a new PR shows
+the review verdict plus at most ONE machine comment.**
+
+Three channels, and which one a fact belongs on is decided by **who reads it**:
+
+| channel | carries | why there |
+|---|---|---|
+| `agent-ride` **check-run** (`neutral`, on the PR head SHA) | the run-stats table, the cost line, the Grafana logs link, the transcripts pointer | markdown output, the checks tab a reviewer already opens, and nothing competing with human conversation. Chosen over a commit status: a status carries no body |
+| ONE `<!-- agent-summary -->` **comment** per issue/PR, edited in place | one appended line per machine event — dispatch, stats, deferral | the index. History is append-only *inside* one comment, so round 2 edits what round 1 wrote |
+| **stores** — `AGENT_STRIKE:` comments, the `state-fp:` debounce marker | load-bearing state other clauses grep | explicitly NOT residue. They move later, replay-first; a line a reader would break on is not residue |
+
+One implementation for the first two: **`agents/machine-comment.sh`** (`mc_event`, `mc_check_run`),
+called by `agent-session.sh`'s fallback bookkeeping and by the coordinator brief's claim step. Two
+copies would drift, and drift here is silent.
+
+**The appended entry carries a machine marker** — `<!-- agent-event kind=<kind> ts=<iso> -->`,
+invisible in rendered markdown. It exists because *"one completed round = one more comment"* was
+load-bearing for three readers in `coordinator-scan.sh` (the no-op predicate, the per-PR `attempts`
+counter, the issue-keyed ceiling) and one in `meta-throughput.sh`. Moving the table without moving
+them would have counted **zero rounds**: the ci-red clause would never reach `RED_ROUNDS_MAX`, never
+escalate to arbitrate, and re-dispatch the same red input forever — the FU-115 livelock, re-opened
+from three files away. That is the standing trap: **enumerate the readers before you move a shape,
+and state the negative for the ones you checked and cleared.**
+
+The scan's `stats_ts` def reads **both** channels — a union, not a replacement — because the
+primary emitter (`agent-finalize`, in-pod) converts in agent-runtime#62 while only the launcher
+fallback converts here, so one PR can legitimately carry rounds in both shapes. Same reason
+`meta-throughput.sh` matches both signature eras, and reads `updated_at`: an edited summary
+comment's `created_at` is frozen at the first machine touch, so the old field would peg every later
+round to the age of round 1 and manufacture a `THROUGHPUT-STALL` on a fleet that is riding fine.
+
+**The gates:** `agents/replay/fixtures/summary-comment-{first-touch,append}` pin the create-vs-edit
+split and the append-only body; `fixtures/ci-red-rounds-two-channels` pins the mixed-channel round
+count (one old-shape comment + two new-shape markers → `attempts=3`, not 1).
+
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
 ### B1. retro-facts reflex (deterministic, per terminal task — P2)

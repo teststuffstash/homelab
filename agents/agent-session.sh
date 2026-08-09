@@ -21,6 +21,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # The goal `Budget:` arithmetic, shared with the scan's harvest-disposition block (ADR-102/#207).
 # This launcher is its ENFORCING caller — see the pre-flight below.
 . "${HERE}/goal-budget.sh"
+# The one machine channel on a timeline (ADR-103 rule 2, #210): the check-run + the single edited
+# summary comment. Shared with the coordinator brief's dispatch notice — one implementation, so the
+# fallback stats emitter below cannot drift from what the rest of the loop writes.
+. "${HERE}/machine-comment.sh"
 # Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall
 # back to the pod's in-cluster ServiceAccount (KUBE empty → kubectl auto-detects in-cluster config).
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
@@ -1454,8 +1458,19 @@ if [ -n "$RUN_CMD" ]; then
       GRAFANA_URL="${GRAFANA_URL:-https://grafana.teststuff.net}"
       PANES="$(jq -cn --arg pod "$POD" '{ag:{datasource:"loki",queries:[{refId:"A",expr:("{pod=\""+$pod+"\"}"),datasource:{type:"loki",uid:"loki"}}],range:{from:"now-6h",to:"now"}}}')"
       LOGS_URL="${GRAFANA_URL}/explore?schemaVersion=1&orgId=1&panes=$(jq -rn --arg p "$PANES" '$p|@uri')"
+      # CHANNEL SEPARATION (ADR-103 rule 2, homelab#210). This table used to be a NEW PR comment
+      # every round — one of the two biggest per-PR residue sources the 2026-08-09 census found. It
+      # is now a check-run (detail, in the checks tab) plus ONE appended line on the single
+      # `<!-- agent-summary -->` comment (index, in the timeline). Nothing is lost: the ledger and
+      # the S3 transcript copy already hold all of it.
+      #
+      # ⚠ THIS IS THE FALLBACK EMITTER, NOT THE ONLY ONE. agent-finalize posts the same thing
+      # in-pod on every ride that reaches it (`stats_comment_by_pod`); this leg runs only for
+      # pre-mount images and in-pod failures. Its channel MUST stay identical to the finalize-side
+      # conversion in agent-runtime#62 — if one moves and the other does not, the old comment shape
+      # returns on every fallback ride, which is the "two emitters, one channel" twin of the trap
+      # #210's reader audit warns about.
       BODY="$(printf '%s' "$STATS" | jq -r --arg logs "$LOGS_URL" --arg task "$TASK" '
-        "🤖 **Agent run stats**\n\n" +
         "| metric | value |\n|---|---|\n" +
         "| model | `\(.model // "?")` (\(.harness // "?")) |\n" +
         "| cost | $\(.cost_usd // 0) |\n" +
@@ -1467,8 +1482,24 @@ if [ -n "$RUN_CMD" ]; then
         "| node / pod | `\(.node // "?")` / `\(.pod // "?")` |\n\n" +
         "[📜 run logs in Grafana](\($logs))\n" +
         "🗂 transcripts: `s3://agent-transcripts/\(.project // "?")/\($task)/` · [viewer](https://transcripts.local.teststuff.net)"')"
-      echo "→ posting stats comment to ${PR_URL}"
-      gh pr comment "$PR_URL" --body "$BODY" 2>&1 | tail -1 || echo "  (comment failed — non-fatal)"
+      LINE="$(printf '%s' "$STATS" | jq -r --arg logs "$LOGS_URL" --arg task "$TASK" '
+        "**run stats** — `\(.model // "?")` · $\(.cost_usd // 0) · \(.duration_s // 0)s · ci=\(.ci_passed // "?") · " +
+        "[logs](\($logs)) · `s3://agent-transcripts/\(.project // "?")/\($task)/`"')"
+      PR_SLUG="$(mc_slug_from_url "$PR_URL")"
+      PR_SHA="$(gh pr view "$PR_URL" --json headRefOid -q '.headRefOid' 2>/dev/null || echo '')"
+      echo "→ posting agent-ride check-run + summary line to ${PR_URL}"
+      if mc_check_run "$PR_SLUG" "$PR_SHA" "agent ride — ${TASK}" "$BODY"; then
+        mc_event "$PR_SLUG" "${PR_URL##*/}" stats "$LINE" || echo "  (summary line failed — non-fatal)"
+      else
+        # Check-runs are an App-only endpoint: a classic PAT cannot create one whatever its scopes,
+        # and this leg runs jail-side where GH_TOKEN may be exactly that. Degrading to a SECOND
+        # comment would undo the whole change, so the table rides into the one summary comment
+        # instead — folded, so the timeline stays quiet.
+        echo "  (check-run refused — folding the table into the summary comment instead)"
+        mc_event "$PR_SLUG" "${PR_URL##*/}" stats \
+          "$(printf '%s\n<details><summary>run stats (check-run unavailable — App-token-only endpoint)</summary>\n\n%s\n</details>' "$LINE" "$BODY")" \
+          || echo "  (summary line failed — non-fatal)"
+      fi
     fi
   fi
 

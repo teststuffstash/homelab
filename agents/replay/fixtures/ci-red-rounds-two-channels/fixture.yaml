@@ -1,0 +1,38 @@
+# ADR-103 / homelab#210 — the reader half of the channel move, pinned.
+#
+# CONDITION UNDER REPLAY. A red PR (#43, branch `fix/issue-19-thing`) that has completed THREE fix
+# rounds, recorded in BOTH channels because the emitters move at different times:
+#   round 1 — a pre-#210 `🤖 Agent run stats` comment (agent-finalize in-pod, agent-runtime#62 not
+#             yet landed, so this shape keeps shipping);
+#   rounds 2 and 3 — two `<!-- agent-event kind=stats … -->` markers inside the ONE
+#             `<!-- agent-summary -->` comment the launcher fallback now appends to.
+#
+# WHY THIS FIXTURE EXISTS. `attempts` used to be `[.comments[]|select(test("Agent run stats"))]
+# |length` — a COUNT OF COMMENTS. Moving the table off the timeline makes that count 1 on this PR
+# instead of 3, and the failure is not cosmetic: under the cap the clause dispatches another
+# identical round, forever, and never escalates to arbitrate. That is the livelock FU-115 built
+# RED_ROUNDS_MAX to bound, re-opened by a channel change three files away. The union `stats_ts`
+# def is the fix; this fixture is what stops a later "tidy-up" from dropping either branch.
+#
+# THE CONTRACT:
+#   1. attempts = 3 — one old-shape comment + two new-shape markers, counted alike. The whole
+#      point: a fixture that saw only one channel would read 1 or 2 here and look green.
+#   2. noop_round = 1 — two of those three stats timestamps post-date the newest NON-MERGE commit,
+#      so the last completed round pushed nothing. The predicate now sorts mixed-channel
+#      timestamps, and the merge commit at 09:00 is still excluded (the nine-review-loop lesson).
+#   3. attempts(3) is NOT < RED_MAX(3), so the issue-keyed ceiling is SKIPPED — no `gh pr list`
+#      in the CALL stream. The fast path is a real path, and its absence is asserted for free.
+#   4. Exactly ONE call, the `gh pr view`. The round counter is a READ-ONLY clause: it labels
+#      nothing and comments nothing, and a future edit that makes it write shows up here.
+name: ci-red-rounds-two-channels
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:round-evidence
+  - file:bridge.sh
+  - block:ci-red-rounds
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+  - IN_PR=43

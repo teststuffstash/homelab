@@ -57,10 +57,36 @@ REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
 # Verified against circles PR#39 real history: final state (r6 pushed) -> no; state after r3 (the
 # real truncation no-op) -> YES; state after r4 (real push) -> no. Merge commits excluded (the
 # updater BEHIND merges are not round output — the nine-review-loop lesson).
-NOOP_ROUND_JQ='([.comments[]|select(.body|test("Agent run stats"))|.createdAt] | max // "") as $newest_stats
-  | ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
-  | ([.comments[]|select(.body|test("Agent run stats"))|.createdAt | select($head == "" or . > $head)] | length) as $after
+#
+# ── THE ROUND EVIDENCE, TWO CHANNELS ────────────────────────────────────────────────────────────
+# Three clauses in this file count completed fix rounds off "one 🤖 Agent run stats comment per
+# round" — the no-op predicate below, the per-PR `attempts` counter, and the issue-keyed ceiling.
+# ADR-103/#210 moves that table off the timeline onto the `agent-ride` check-run plus ONE line
+# appended to a single `<!-- agent-summary -->` comment, so "one round = one more comment" stops
+# being true and a shape-only reader silently counts ZERO. That is not a cosmetic regression: at
+# attempts=0 the ci-red clause never reaches RED_ROUNDS_MAX, never escalates to arbitrate, and
+# re-dispatches the same red input forever — the exact livelock FU-115 built the cap to bound.
+#
+# So this def reads BOTH channels and is the ONLY place either shape is matched:
+#   new — `<!-- agent-event kind=stats ts=… -->` markers inside the summary comment, one per round;
+#   old — a whole comment containing "Agent run stats", timestamped by the comment itself.
+# A UNION, not a replacement, and it stays one for as long as both emitters can post. The primary
+# emitter is agent-finalize in the POD (agent-runtime#62, not yet landed); only the launcher
+# fallback moves in this repo. Until the cross-repo half merges, a single PR can carry rounds in
+# both shapes, and a reader that picked one would under-count either the old rides or the new.
+# Delete the old branch when agent-runtime#62 has shipped AND no open PR still carries the shape —
+# not before, and not by assuming the timeline is clean.
+# >>>REPLAY:round-evidence>>>
+STATS_TS_DEF='def stats_ts: [ .comments[]? | (.body // "") as $b
+  | if ($b | test("<!-- agent-summary -->"))
+    then [ $b | scan("<!-- agent-event kind=stats ts=([^ ]+) -->")[0] ]
+    elif ($b | test("Agent run stats")) then [ .createdAt ]
+    else [] end | .[] ];'
+NOOP_ROUND_JQ="${STATS_TS_DEF}"'
+  ([.commits[]? | select((.messageHeadline // "" | startswith("Merge branch")) | not) | .committedDate] | max // "") as $head
+  | ([ stats_ts[] | select($head == "" or . > $head) ] | length) as $after
   | if $after >= 2 then "1" else "" end'
+# <<<REPLAY:round-evidence<<<
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
 
 # ── PR STATE FINGERPRINT (homelab#198) ────────────────────────────────────────────────────────
@@ -1294,8 +1320,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # loop lacked the review loop's ROUNDS_MAX→arbitrate). NOW keyed on CONTENT + a cap, symmetric
     # with the review path (MP-T11), and woken near-instant by the exporter's red edge (github-exporter
     # maybe_dispatch_cired → /coordinate) instead of only the poll. Per red PR we read the fix-round
-    # history from the durable `Agent run stats` comments plus `headRefOid` (NOT from `🔴 ci-red
-    # round` markers — those were a design that never shipped; stale prose caught by the #198 ride):
+    # history from the durable run-stats evidence in EITHER channel (`stats_ts`, §ROUND EVIDENCE,
+    # TWO CHANNELS) plus `headRefOid` (NOT from `🔴 ci-red round` markers — those were a design
+    # that never shipped; stale prose caught by the #198 ride):
     #   attempts==0                    → DISPATCH (first red)
     #   attempts>=RED_ROUNDS_MAX(3)     → ARBITRATE (exhausted — MP-T11 tie-break). The count is
     #                                    keyed on the ISSUE, summed across every PR that references
@@ -1363,14 +1390,18 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         head8="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefOid[0:8]')"
         u_head="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|.headRefName // ""')"
         # attempts = durable count of completed fix rounds on THIS PR — the fast path under the
-        # issue-keyed ceiling below, and still what the no-op detector needs (the launcher's finalize posts
-        # one `🤖 Agent run stats` comment per round — no extra marker needed, restart-safe: reads
-        # GitHub). Bounds the loop: a no-op round costs at most RED_ROUNDS_MAX attempts before it
-        # escalates, never the old infinite 4h-spaced livelock. (Immediate no-op detection — same
-        # head across a completed round → arbitrate NOW — is the FU-115(b) refinement, needs a
-        # dispatch-time @head marker; the cap is the v1 bound.)
+        # issue-keyed ceiling below, and still what the no-op detector needs. Restart-safe: it reads
+        # GitHub, never launcher memory. Bounds the loop: a no-op round costs at most
+        # RED_ROUNDS_MAX attempts before it escalates, never the old infinite 4h-spaced livelock.
+        # (Immediate no-op detection — same head across a completed round → arbitrate NOW — is the
+        # FU-115(b) refinement below; the cap is the v1 bound.)
+        # ⚠ `stats_ts` — NOT a comment count. One round stopped meaning one comment when ADR-103
+        # moved the table onto the check-run + the appended summary line; the def at the top of this
+        # file reads both channels, and every round-counting site in here goes through it. See the
+        # §ROUND EVIDENCE, TWO CHANNELS block.
+        # >>>REPLAY:ci-red-rounds>>>
         round_probe="$(gh pr view "$u" --repo "$slug" --json comments,commits 2>/dev/null)" || round_probe=''
-        attempts="$(printf '%s' "$round_probe" | jq -r '[.comments[]|select(.body|test("Agent run stats"))]|length' 2>/dev/null)" || attempts=0
+        attempts="$(printf '%s' "$round_probe" | jq -r "${STATS_TS_DEF}"'stats_ts | length' 2>/dev/null)" || attempts=0
         case "$attempts" in ''|*[!0-9]*) attempts=0;; esac
         # FU-115(b) immediate no-op detection (built 2026-08-02, marker-free): if the NEWEST
         # stats comment post-dates the newest NON-MERGE commit, the last completed round pushed
@@ -1404,11 +1435,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         if [ "$attempts" -lt "$RED_MAX" ] && [ -n "$red_key" ]; then
           if red_sib="$(gh pr list --repo "$slug" --state all --limit 100 \
                           --json number,headRefName,body,comments 2>/dev/null)"; then
-            red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" '
+            red_sum="$(printf '%s' "$red_sib" | jq -r --arg n "$red_key" "${STATS_TS_DEF}"'
               def refs($n): ((.headRefName // "") | test("(^|[^0-9])issue-" + $n + "(-|$)"))
                             or ((.body // "") | test("(^|[^0-9])#" + $n + "([^0-9]|$)"));
               [ .[] | select(refs($n)) ]
-              | "\(length) \([ .[] | .comments[]? | select(.body|test("Agent run stats")) ] | length)"
+              | "\(length) \([ .[] | stats_ts[] ] | length)"
             ' 2>/dev/null)" || red_sum=""
             read -r red_sib_prs red_sib_n <<<"${red_sum:-}"
             case "${red_sib_n:-}" in ''|*[!0-9]*) red_sib_n=""; echo "  [$repo] WARN: issue-keyed round sum unreadable for issue #${red_key} — per-PR count stands for PR #${u}" >&2;; esac
@@ -1419,6 +1450,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             echo "  [$repo] WARN: issue-keyed round probe FAILED (gh pr list --state all) — per-PR count stands for PR #${u}" >&2
           fi
         fi
+        # <<<REPLAY:ci-red-rounds<<<
         if [ -n "$noop_round" ]; then
           gh pr edit "$u" --repo "$slug" --add-label agent/arbitrate >/dev/null 2>&1 \
             && gh pr comment "$u" --repo "$slug" --body "ARBITRATE (ci-red no-op round, FU-115b): the last completed fix round left the head unchanged at ${head8} and CI is still red — dispatching more identical rounds cannot converge. The coordinator's arbitrate unit rules per the escalation table." >/dev/null 2>&1 \

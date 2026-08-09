@@ -30,6 +30,12 @@ checkout** (`. "$REPLAY_ROOT/agents/goal-budget.sh"`) and redefines only its two
 `gb_ledger` (the pushgateway scrape) and `gb_cap` (the estimator, which prices against a live
 registry). Everything between them is real arithmetic over the recorded world.
 
+`fixtures/summary-comment-*` (ADR-103, homelab#210) are the second pair, and the simplest shape the
+harness supports: the bridge is the ONLY part. It sources `agents/machine-comment.sh` and redefines
+one seam — `mc_now`, the wall clock, which would otherwise make the fixture red once per second.
+The `gh` calls stay real and go through the PATH-shim, which is exactly what puts the find-or-create
+decision (POST a new comment vs PATCH the existing one) into the asserted action stream.
+
 Do it this way round, not the other. Stubbing the whole helper would pin the clause's *branching*
 and nothing else, and the reason that sum lives in a shared file at all is that a second copy of it
 would drift from the launcher's — so the fixture must be able to see that drift. Copying the helper
