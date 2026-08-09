@@ -407,12 +407,27 @@ floor only policy and scheduling help, which is why the O(N²) options above are
   workers/coordinator = FU-069). A stateless, level-triggered reflex turns ANY predicate bug into
   an infinite dispatcher, and the #13 loop showed nothing watches for that — so no single check is
   trusted; three independent layers, in escalating distance from the bug:
-  1. *In-band circuit breaker (reflex):* the reflex skips any PR labelled **`agent/error`**, and
-     trips that label itself (+ one `AGENT_ERROR:` comment) when its picked PR carries verdict
-     counts no legitimate pick can have — a bot approval at head, ≥2 bot verdicts at head, or
-     ≥`REVIEW_ROUNDS_MAX` (8) verdicts ever (the escalation table's rounds-exhausted row).
-     Deliberately recomputed from raw fields, NOT the pick predicate's defs — shared code is a
-     shared bug.
+  1. *In-band circuit breaker (reflex):* the reflex skips any PR labelled **`agent/error`** (and
+     **`agent/arbitrate`** — both are filtered before the pick, so a trip fires exactly once and
+     cannot re-trip on itself), and trips `agent/error` itself (+ one `AGENT_ERROR:` comment)
+     when its picked PR carries verdict
+     counts no legitimate pick can have — a bot approval at head, or ≥2 bot verdicts at head. Both
+     of those are counted **per PR**, at *this* PR's newest commit: the state they catch is a
+     worker↔reviewer flip-flop on one head, which has no meaning summed across PRs. The third
+     condition — **≥`REVIEW_ROUNDS_MAX` (8) verdicts ever** — is counted **per ISSUE, not per PR**
+     (homelab#156, FU-154): the per-PR count is the fast path, then the reflex sums the same
+     verdict evidence across every PR in the repo whose branch (`issue-<n>-`) or body (`#<n>`)
+     references that issue and takes the larger, so close-and-re-PR — a *designed* play on the
+     conflict/supersede lanes — cannot launder a fresh budget. That sum fails open on a bad read
+     (the per-PR count stands, loud WARN: availability of the gate < the gate), so it can only
+     ever under-count. It also escalates rather than errors: **`agent/arbitrate`** + one
+     `ARBITRATE:` comment, the escalation table's rounds-exhausted row → coordinator tie-break
+     (MP-T11, [`merge-path-fsm.md`](merge-path-fsm.md)) — rounds-exhausted means the *work* did
+     not converge, the two at-head signatures mean the *machinery* misbehaved and are human-first.
+     All three are deliberately recomputed from raw fields, NOT the pick predicate's defs — shared
+     code is a shared bug. That is orthogonal to the counting unit, and the pairing is not an
+     oversight: recomputed-from-raw is about not sharing the predicate's *code*, issue-keyed is
+     about which *rows* get counted, and the rounds ceiling is deliberately both at once.
   2. *Agent self-guard (reviewer prompt STEP 0):* the reviewer re-checks its dispatch premise at
      EXECUTION time and submits no verdict when it no longer holds — but **which terminal that
      refusal picks depends on whether dispatching again would resolve the state** (homelab#122 /
