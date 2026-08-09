@@ -416,32 +416,52 @@ job, in order (re-read live state first, exit clean if someone already closed it
      NOT gate: retry once, and on second failure say so in the closing comment so a human wires it.
    **INERT by loop-safety
    breaker #1: never add `agent-fix` or `agent/queued`** — the scan's 🌱 clause surfaces them
-   for human triage. **EXCEPTION — the goal lane (operator ruling 2026-08-06):** when the
-   ORIGINATING issue carries `Base: goal/**`, queue the harvested issue immediately
-   (`agent-fix` + `agent/queued`) and copy the `Base:` line into it — the goal subtree is
-   bounded by its `Budget:` + the depth gate, and the human gates at the assembly PR instead
-   (issue-authoring.md §The goal lane owns its sprouts). Master-lane harvests stay inert; the
-   responder-lane `selfQueue` knob is unrelated and has no reader here.
+   for human triage.
    Dedup before filing: skip a bullet whose substance already has an open issue (search by the
    spec ID or key phrase); say which you skipped and why in the closing comment.
-   **Then LINK each harvested issue as a native sub-issue of the ORIGINATING issue** (FU-090
-   sprout index, 2026-08-02 — lineage as structure, not prose; the depth-aware harvest gate and
-   the sprout-RATE gauge key off this tree):
+   **Then LINK each harvested issue as a native sub-issue** (FU-090 sprout index, 2026-08-02 —
+   lineage as structure, not prose; the budget walk and the sprout-RATE gauge key off this tree):
    ```sh
    CID="$(gh api repos/<slug>/issues/<harvested-N> --jq .id)"   # numeric id, NOT the number
-   gh api -X POST "repos/<slug>/issues/<originating-M>/sub_issues" -F sub_issue_id="$CID"
+   gh api -X POST "repos/<slug>/issues/<PARENT>/sub_issues" -F sub_issue_id="$CID"
    ```
-   Parent = the ORIGINATING ISSUE (never the PR — PR provenance stays in the body line). A
-   failed link is non-fatal (say so in the closing comment); the body provenance remains the
-   fallback lineage. Depth guardrail until the gauge exists: if the originating issue ITSELF
-   has a `parent` (check `gh api graphql` `issue.parent`), you are harvesting at depth ≥2 —
-   flag `⚠ deep sprout` in the closing comment so a human sees divergence early.
+   Parent = the ORIGINATING ISSUE (never the PR — PR provenance stays in the body line), unless
+   your unit carries `bucket=` (next paragraph), which overrides it. A failed link is non-fatal
+   (say so in the closing comment); the body provenance remains the fallback lineage. Depth
+   guardrail: if the originating issue ITSELF has a `parent` (check `gh api graphql`
+   `issue.parent`) and no `bucket=` was handed to you, you are harvesting at depth ≥2 — flag
+   `⚠ deep sprout` in the closing comment so a human sees divergence early.
+
+   **⚖ THE GOAL LANE IS DECIDED FOR YOU (ADR-102, homelab#207) — read your unit, do not judge.**
+   The `--item` string carries `goal=<n>`, `bucket=<n>` and `selfqueue=yes|no` when the scan's
+   deterministic `harvest-disposition` block resolved a goal ancestor for this item. Those three
+   are ORDERS, not hints (ADR-094 — the session is told, never asked):
+   - `bucket=<n>` present → **every** sprout from this harvest is filed as a sub-issue of **#n**,
+     the goal's post-launch bucket, and NOT of the originating issue. Assembly merge is a
+     midpoint: the goal keeps shipping, and the bucket is the one container that work hangs off.
+     Post-launch children base **master** — carry NO `Base:` line into them, whatever the
+     originating issue says (the goal branch dies at the assembly squash; goal identity is the
+     issue, not the branch).
+   - `selfqueue=yes` → apply `agent-fix` + `agent/queued` to each sprout you file.
+   - `selfqueue=no`, or the field absent → file the sprout **UNLABELLED into the bucket**. The
+     goal is closed, out of budget, or unreadable, and the self-queue right dies with the goal.
+     Do not "help" by queueing anyway and do not raise it on the goal as a blocker; the 🌱 clause
+     surfaces the bucket's inert children for human triage exactly as on the master lane.
+   - **No `goal=` field at all** → this is a master-lane harvest. Inert, breaker #1, unchanged.
+   The old rule ("originating issue carries `Base: goal/**` → queue immediately") is RETIRED: it
+   queued sprouts against goals that had closed and budgets that were gone (the 2026-08-09
+   census; oracle-fleet goal-174 grew three generations 34h post-close). The responder-lane
+   `selfQueue` knob is unrelated and still has no reader here.
 4. **GOAL closeout only (the issue you are closing out IS a `task/goal`)**: the assembly PR
    merged and branch auto-delete killed the goal branch — sweep open DESCENDANTS (walk the
    sub-issue tree) whose `Base:` still names it and retarget them to master (edit the body:
    remove the `Base:` line; their code landed with the assembly merge). They STAY queued: the
    assembly PR's coverage map named them as deferrals, so the human's merge is the sanction
    for them continuing on the master lane. List each retarget in the closing comment.
+   The post-launch bucket itself is NOT yours to create — the scan's `harvest-disposition` block
+   creates and links it (idempotently, one per goal) and hands you its number in `bucket=`. If
+   your unit resolved a goal and carries no `bucket=`, say so loudly in the closing comment: the
+   container could not be resolved, which is why nothing self-queued.
 5. **Close the loop visibly**: one comment on the issue — outcome verified, N follow-ups
    harvested (links), anything skipped.
 

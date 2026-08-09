@@ -1,0 +1,5 @@
+{
+  "id": 5087021638,
+  "number": 47,
+  "title": "generate-evidence.py: case-id fallback silently degrades instead of failing when a test lacks a #<row-id> citation"
+}

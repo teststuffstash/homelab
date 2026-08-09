@@ -33,12 +33,14 @@ diagram: |
           [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
           GoalQueued --> GoalTracking: goal-decompose authors+queues children (IL-T11)
           GoalTracking --> GoalTracking: goal-review on any DESCENDANT close (IL-T12)
+          GoalTracking --> GoalTracking: post-launch bucket ensured, one per goal (IL-T17)
           GoalTracking --> AssemblyOpen: goal met → assembly PR armed (IL-T13)
           AssemblyOpen --> [*]: codeowner + human merge → keyword closes goal (IL-T14)
       }
       note right of Inert
-          harvest from a GOAL child skips Inert —
-          queued at harvest, Base: inherited (IL-T15)
+          a sprout of a GOAL descendant is filed into that
+          goal's post-launch bucket (IL-T17), and skips Inert
+          ONLY while the goal is open AND funded (IL-T15)
       end note
 
 axes:
@@ -200,8 +202,10 @@ transitions:
     guards:
       - desc: "the play (coverage map, seams pinned, Σ budgets fit)"
         anchor: { file: agents/coordinator/README.md, pattern: "goal-decompose" }
-      - desc: "launcher enforces Σ(DESCENDANT caps) ≤ Budget: — sprouts spend the goal's money"
-        anchor: { file: agents/agent-session.sh, pattern: "DESCENDANTS, not direct children" }
+      - desc: "launcher enforces Σ(DESCENDANT spend + reservations) ≤ Budget: — sprouts spend the goal's money"
+        anchor: { file: agents/agent-session.sh, pattern: "PREFLIGHT REFUSED" }
+      - desc: "…over the shared read (extracted for #207's harvest gate; one sum, two callers, one enforcer)"
+        anchor: { file: agents/goal-budget.sh, pattern: "DESCENDANTS, not direct children" }
       - desc: "the worker's slice is BOUNDED — Goal+Acceptance card only, never the spec tree"
         anchor: { file: agents/agent-session.sh, pattern: "GOAL CONTEXT" }
       - desc: "the reasoning-tier model map (launcher-owned, ADR-094)"
@@ -243,15 +247,56 @@ transitions:
         anchor: { repo: circles, file: CODEOWNERS, pattern: "/specs/" }
 
   - id: IL-T15
-    name: goal-lane sprouts queue at harvest
-    owner: merged-closeout play (harvest step, goal-lane exception)
-    when: "originating issue carries Base: goal/** → sprout gets agent-fix+agent/queued + the Base: line, sub-issue lineage as always"
+    name: goal-lane sprouts queue at harvest — only while the goal is open AND funded
+    owner: scan harvest-disposition block (decides) → merged-closeout play (obeys)
+    when: "the scan resolved a task/goal ancestor for the closeout item → the sprout is filed into
+      that goal's post-launch bucket (IL-T17) and gets agent-fix+agent/queued ONLY when the goal is
+      OPEN and the shared Budget: read rules `within`. Closed goal, exhausted or unparseable budget,
+      unresolved bucket, or no goal ancestor at all → filed with NO queue labels."
     status: guarded
+    replay:
+      - agents/replay/fixtures/harvest-goal-open-funded       # open + funded → queued
+      - agents/replay/fixtures/harvest-goal-open-exhausted    # open + out of money → inert
+      - agents/replay/fixtures/harvest-goal-closed            # closed → inert, budget never read
     guards:
-      - desc: "the goal-lane exception in the harvest play (master-lane harvests stay inert)"
-        anchor: { file: agents/coordinator/README.md, pattern: "EXCEPTION — the goal lane" }
+      - desc: "the verdict is DETERMINISTIC and rides --item; the play is ordered, never asked (replay: harvest-goal-open-funded / -exhausted / -closed)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "no grant, no self-queue right" }
+      - desc: "the play obeys selfqueue=; the pre-ADR-102 `Base: goal/**` exception is retired"
+        anchor: { file: agents/coordinator/README.md, pattern: "THE GOAL LANE IS DECIDED FOR YOU" }
+      - desc: "ONE Budget: read, shared with the enforcing launcher pre-flight — never a second sum"
+        anchor: { file: agents/goal-budget.sh, pattern: "goal_budget_read" }
       - desc: "the reviewer emits NO Follow-ups at depth ≥2 — the tree is capped at sprouts-of-children"
         anchor: { file: agents/reviewer-session.sh, pattern: "depth-conditional half of the harvest bar" }
+    incidents:
+      - "2026-08-09 census: #195/#211-shaped sprouts self-queued after their goal had closed and its budget was spent — the `Base: goal/**` body line outlives the goal that authorised it"
+      - "oracle-fleet goal-174: 19 sprouts, 3 generations, still growing 34h post-close because nothing owned the tree (ADR-102's motivating case)"
+
+  - id: IL-T17
+    name: post-launch bucket — merge is a midpoint, the container is a sub-issue
+    owner: scan harvest-disposition block (deterministic; no LLM in the path)
+    when: "a merged-closeout or goal-review unit resolves a task/goal ancestor → find-or-create ONE
+      `post-launch: <goal title>` sub-issue under the goal and link it with the native edge. Created
+      at the first closeout/review rather than strictly at assembly merge: IL-T15 files open-goal
+      sprouts into it, so the container must exist while the goal is still pre-launch. Post-launch
+      children base MASTER — the goal branch dies at the assembly squash; goal identity is the issue."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/harvest-goal-open-funded       # absent → created AND linked
+      - agents/replay/fixtures/harvest-goal-open-exhausted    # present → no create call (idempotent)
+      - agents/replay/fixtures/harvest-master-inert           # no goal → no bucket, breaker #1 intact
+      - agents/replay/fixtures/harvest-deep-sprout            # live circles#29 tree — the walk depth is measured
+      - agents/replay/fixtures/sprout-report-skips-buckets    # the container is not reported as work
+    guards:
+      - desc: "one container per goal — found by title in the goal's own sub-issue list before any create (replay: harvest-goal-open-exhausted)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "post-launch:" }
+      - desc: "a bucket that cannot be LINKED is discarded — its children would sit outside the goal's descendant walk and spend budget the gate cannot see"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "escape the budget walk" }
+      - desc: "the bucket is a goal descendant, so its children already charge the goal's Budget: (no second accounting)"
+        anchor: { file: agents/goal-budget.sh, pattern: "DESCENDANTS, not direct children" }
+      - desc: "the play never creates it — it is handed the number and files into it"
+        anchor: { file: agents/coordinator/README.md, pattern: "NOT yours to create" }
+      - desc: "a bucket is a CONTAINER, not a sprout — excluded from the 🌱 triage slice, whose printed instruction would otherwise dispatch a worker at it (replay: sprout-report-skips-buckets)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "A POST-LAUNCH BUCKET IS NOT A SPROUT" }
 
 gaps:
   - id: IL-G01
@@ -275,9 +320,11 @@ gaps:
     accepted: "design when a goal actually demands one; the codeowner review is the gate meanwhile"
 
   - id: IL-G04
-    name: "sprout-RATE gauge + depth-aware harvest gate"
-    detail: "The exporter does not yet walk the sub-issue lineage into a convergence metric
-      (rate > 1/run = diverging), and the harvest gate does not read remaining budget."
+    name: "sprout-RATE gauge (the harvest-gate half is closed)"
+    detail: "The harvest gate DOES read remaining budget now — IL-T15/IL-T17 (ADR-102, homelab#207)
+      close that half. What remains is the metric: the exporter does not yet walk the sub-issue
+      lineage into a convergence number (inflow rate > fix rate = diverging), which is homelab#209's
+      per-goal panel. ADR-102 supersedes this gap once that lands."
     fu: FU-090
 
   - id: IL-G06

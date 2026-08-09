@@ -1,0 +1,62 @@
+[
+  {
+    "id": 5079122955,
+    "number": 30,
+    "title": "P0 bake I: circles.yaml → the validated config model",
+    "state": "closed"
+  },
+  {
+    "id": 5079123123,
+    "number": 31,
+    "title": "P0 bake II: resolution + the baked artifact (data.json)",
+    "state": "closed"
+  },
+  {
+    "id": 5079123269,
+    "number": 32,
+    "title": "P0 page: the sunburst, inlined into index.html by the same bake run",
+    "state": "closed"
+  },
+  {
+    "id": 5068818965,
+    "number": 18,
+    "title": "P0 evidence chain: spec row → test case → fragment → back into the page",
+    "state": "closed"
+  },
+  {
+    "id": 5068822898,
+    "number": 19,
+    "title": "P0 kind system-testing gate: the real image, chart-installed, page fetched and asserted",
+    "state": "closed"
+  },
+  {
+    "id": 5093753468,
+    "number": 57,
+    "title": "Wire the bake step into the real Docker image build + fix data.json permissions",
+    "state": "closed"
+  },
+  {
+    "id": 5096098408,
+    "number": 59,
+    "title": "Fix two spec-violating bugs found in the assembly review: config source-path escape, single-item ring arc",
+    "state": "closed"
+  },
+  {
+    "id": 5096098475,
+    "number": 60,
+    "title": "Close remaining P0 coverage-map gaps: ~10 requirement ids have no test citation",
+    "state": "closed"
+  },
+  {
+    "id": 5096098526,
+    "number": 61,
+    "title": "Kind system-testing gate must build the real root Dockerfile, not a hand-rolled stub",
+    "state": "closed"
+  },
+  {
+    "id": 5098690223,
+    "number": 73,
+    "title": "Close remaining P0 coverage-map gaps (round 2): CLICK, ADAPT-REFERENCE-DATE, ADAPT-CONTRACT, ONE-SCREEN proxy rows",
+    "state": "closed"
+  }
+]

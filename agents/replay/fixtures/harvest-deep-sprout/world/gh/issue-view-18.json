@@ -1,0 +1,32 @@
+{
+  "number": 18,
+  "title": "P0 evidence chain: spec row → test case → fragment → back into the page",
+  "state": "CLOSED",
+  "labels": [
+    {
+      "id": "LA_kwDOTsulx88AAAACuo4wDw",
+      "name": "agent-fix",
+      "description": "Opt-in: this issue is fair game for the agent fixer",
+      "color": "0e8a16"
+    },
+    {
+      "id": "LA_kwDOTsulx88AAAACuo450A",
+      "name": "agent/done",
+      "description": "Merged",
+      "color": "0b6b3a"
+    },
+    {
+      "id": "LA_kwDOTsulx88AAAACuo5Fvw",
+      "name": "task/build",
+      "description": "Fixer task class: build a deliverable (recipe .agents/build.yaml) — FU-114 L3",
+      "color": "bfdadc"
+    },
+    {
+      "id": "LA_kwDOTsulx88AAAACuo5Kbw",
+      "name": "agent-budget/lg",
+      "description": "Estimator cap-tier override: lg",
+      "color": "c5def5"
+    }
+  ],
+  "body": "‹elided — the clause reads no body on this path; see the fixture header›"
+}

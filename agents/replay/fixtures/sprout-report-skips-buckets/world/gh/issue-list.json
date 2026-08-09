@@ -1,0 +1,9 @@
+[
+  { "number": 80, "title": "post-launch: Goal: P0 complete — bake, page, evidence chain",
+    "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [] },
+  { "number": 81, "title": "generate-evidence.py: case-id fallback silently degrades",
+    "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [] },
+  { "number": 82, "title": "a sprout a human already adopted",
+    "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [ { "name": "agent-fix" } ] },
+  { "number": 83, "title": "an issue a human filed", "author": { "login": "RasmusSoot", "is_bot": false }, "labels": [] }
+]
