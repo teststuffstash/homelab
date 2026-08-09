@@ -1,0 +1,52 @@
+#!/bin/sh
+# Fixture-backed `gh`, installed on $PATH ahead of the real one by agents/replay/run.sh.
+#
+# Reads (`pr view`, `pr list`, `issue view`, `api` without a method) are answered from the fixture's
+# world/gh/ recordings. Writes (`pr comment`, `issue edit`, `api -X POST`, …) are RECORDED and
+# return success — they are the actions the fixture asserts on, so serving them a reply would be
+# testing GitHub instead of the clause.
+#
+# No network, no credentials, no token: every call either hits a committed file or dies.
+set -u
+_RP_TOOL=gh
+. "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
+
+_rp_record "$@"
+WORDS="$(_rp_words "$@")"
+[ -n "$WORDS" ] || _rp_die "bare \`gh\` with no subcommand — nothing to key a world file on."
+
+# `gh api` is read-or-write depending on --method/-X; everything else keys off the verb.
+IS_API_WRITE=0; PREV=''
+[ "${WORDS%% *}" = api ] && for a in "$@"; do
+  case "$PREV" in
+    -X|--method) [ "$a" = GET ] || IS_API_WRITE=1 ;;
+  esac
+  case "$a" in
+    -XGET|--method=GET) ;;
+    -X?*|--method=*)    IS_API_WRITE=1 ;;
+    -f|--field|-F|--raw-field|--input) IS_API_WRITE=1 ;;   # gh api implies POST once a field is set
+  esac
+  PREV="$a"
+done
+
+MUTATING_VERBS="comment edit close reopen merge review ready create delete rename transfer lock
+unlock pin unpin sync develop checkout add remove set"
+
+if [ "${IS_API_WRITE:-0}" = 1 ] || _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
+  # A mutation MAY still have a recording (gh prints the new comment's URL, and a clause that pipes
+  # it somewhere needs one) — but its absence is fine, unlike a read's.
+  _rp_serve "$WORDS" 2>/dev/null || true
+  exit 0
+fi
+
+# $STUB_GH lets a fixture replay the failure modes a guarded probe must survive without recording a
+# separate world: `fail` = non-zero (403/404/network), `body404` = gh's error text on STDOUT with
+# exit 0 (the shape that turns an error string into a fingerprint if the caller skips `jq -e`),
+# `garbage` = a 200 that is not JSON at all.
+case "${STUB_GH:-ok}" in
+  fail)    printf 'gh: Not Found (HTTP 404)\n' >&2; exit 1 ;;
+  body404) printf 'gh: Not Found (HTTP 404)\n';     exit 0 ;;
+  garbage) printf 'upstream connect error or disconnect/reset before headers\n'; exit 0 ;;
+esac
+
+_rp_serve "$WORDS"

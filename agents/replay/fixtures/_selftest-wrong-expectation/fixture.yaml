@@ -1,0 +1,14 @@
+# PROBE-FAIL 1/3 — the diff detector (the check's-author rule, #168).
+#
+# clause.sh emits a KNOWN action; expected/actions.txt says something else, on purpose. If this
+# fixture ever goes green, `diff` is not being consulted and every other fixture's green means
+# nothing — which is exactly the failure a check nobody has watched fail always has.
+#
+# `expect_detail:` is what keeps `expect: fail` honest: red-casing for an unrelated reason (a
+# missing part file, a syntax error) does NOT satisfy this self-test.
+name: _selftest-wrong-expectation
+mode: actions
+expect: fail
+expect_detail: the action stream moved
+parts:
+  - file:clause.sh

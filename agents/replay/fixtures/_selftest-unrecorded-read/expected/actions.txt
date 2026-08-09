@@ -1,0 +1,4 @@
+CALL gh pr view 99 --repo teststuffstash/demo --json headRefOid,reviewDecision
+OUT PAYLOAD {"headRefOid":"deadbeef","reviewDecision":"APPROVED"}
+OUT REACHED: end
+RC 0
