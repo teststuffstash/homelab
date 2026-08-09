@@ -3436,3 +3436,16 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   ING-RT-RECONCILE becomes the only snapshot path.
 - Lesson (again, same day): a stage NAME is not a stage READ — "snapshot" meant verify-and-skip,
   not download. Two of today's three meta corrections were inferred-not-read.
+
+- **Process autopsy (operator question: "why wasn't the delta developed via goal fanout?")**:
+  four stacked causes. (1) The arc predates ADR-102 by ONE DAY — #225/#322 hand-sequenced
+  2026-08-08, goal clauses completed 08-09; nothing migrates in-flight plans into new machinery.
+  (2) THE META SEAT used a `Depends-on:` body line the day after FU-111 retired the reader —
+  the dependency was prose, could never fire on blocker close. (3) "Unlabeled pending a gate"
+  has no re-arm on STACK repos: needs-meta's unlabeled>24h covers platform repos only — the
+  agent-runtime lesson fixed one ring too narrow; #215 closed 04:23Z and the intent to queue
+  lived in nobody's head for 12h. (4) The risk side needed no intent at all: guard-in-comment
+  + suspended cron vs. default=snapshot. Class fixes queued: homelab#226 (UNBLOCKED-UNLABELED
+  scan line + retired-format lint, report-only — FU-090 gate stands), oracle-iac#357 (default
+  flip). The general lesson: when a convention or machinery changes, sweep IN-FLIGHT artifacts
+  written under the old one — retirement without migration leaves live plans in dead formats.
