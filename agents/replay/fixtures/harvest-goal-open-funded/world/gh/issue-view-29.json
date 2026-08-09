@@ -1,0 +1,7 @@
+{
+  "number": 29,
+  "title": "Goal: P0 complete — bake, page, evidence chain",
+  "state": "OPEN",
+  "labels": [ { "name": "task/goal" }, { "name": "agent-fix" }, { "name": "agent/blocked" } ],
+  "body": "## Goal\n\nShip P0 end to end.\n\n## Acceptance\n\n- the bake produces the artifact\n- the page renders it\n\nBudget: 12\nVerdict-authority: human\nProduction-leg: the page, live\n"
+}

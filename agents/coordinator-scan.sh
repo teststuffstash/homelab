@@ -1410,6 +1410,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       fi
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
+    # The stack's WORKER model — not this session's model. It is the sizing input the goal-budget
+    # estimator needs (a cap is per-ride, and the rides a goal funds are worker rides), read here
+    # beside cmodel so the harvest-disposition block below stays free of claim lookups.
+    wmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.workerModel // "claude/haiku"')"
     # ── goal-decompose runs a REASONING tier (operator ruling, 2026-08-05) ─────────────────────
     # The axis is AUTHORING vs CHECKING, not goal vs routine. `goal-decompose` CREATES the work —
     # a mis-scoped child burns rides, mis-narrows `Touches:`, and is expensive to undo once its
@@ -1460,12 +1464,132 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         ;;
     esac
     # <<<REPLAY:dispatch-marker<<<
+    # ── HARVEST DISPOSITION (ADR-102 goal container, homelab#207) ─────────────────────────────
+    # WHAT THIS DECIDES, AND WHY HERE. Until ADR-102 the harvest step of the merged-closeout play
+    # judged two things in prose: where a sprout hangs (under the issue that produced it) and
+    # whether it may self-apply `agent-fix`+`agent/queued` (unconditionally, whenever the
+    # originating issue carried `Base: goal/**`). Both outlive the thing that authorises them —
+    # the 2026-08-09 census caught #195/#211-shaped sprouts self-queueing with no budget left and
+    # the goal already closed, and oracle-fleet goal-174 grew three generations 34h post-close
+    # with nothing owning the tree. Under ADR-102 a sprout belongs to its goal's POST-LAUNCH
+    # bucket and the self-queue right dies with the goal, so both answers are now DETERMINISTIC
+    # and computed here — the session is told, never asked (ADR-094).
+    #
+    # AT DISPATCH, not at emission: exactly one unit is known to be THE dispatched one here (the
+    # same reason the state-fp marker sits directly above), so the ancestry probe + budget read
+    # cost one unit's worth of calls per scan instead of the emission cap's three.
+    #
+    # BUCKET CREATION IS IDEMPOTENT and fires at the goal-review/closeout site, which is where
+    # ADR-102 puts it. It fires EARLIER than "at assembly merge" on purpose: deliverable 2 files
+    # open-goal sprouts into the bucket, so the container must exist while the goal is still
+    # pre-launch. One container per goal either way — the search below is what makes a second call
+    # a no-op, not a second bucket.
+    #
+    # FAIL-CLOSED, EVERY EDGE. No goal ancestor → nothing is emitted and the master-lane harvest
+    # stays inert exactly as breaker #1 has always required. Goal closed, budget exhausted, no
+    # machine-parsed `Budget:` line, unreadable probe, or a bucket that could not be resolved →
+    # `selfqueue=no`. The right to queue is a GRANT from an open funded goal; an unreadable grant
+    # is not a grant, and the cost asymmetry is stark (a missed queue costs one human triage, a
+    # wrong one costs rides against money that is gone).
+    # >>>REPLAY:harvest-disposition>>>
+    uharvest=""
+    case "$uclause" in
+      merged-closeout|goal-review)
+        hslug="${ORG}/${urepo}"; hgoal=""; hbucket=""; hsq=""; hwhy=""
+        case "$uclause" in
+          # A goal-review unit IS the goal. Nothing to walk.
+          goal-review) hgoal="${uitem#issue-}" ;;
+          # A closeout item is the GOAL itself (the assembly PR's own closeout), a goal CHILD
+          # (depth 1), or a sprout of one (depth 2+). Test the item, then climb the native
+          # sub-issue chain, bounded at 4 hops — the reviewer stops emitting Follow-ups at depth
+          # ≥2, so a deeper chain is a data bug, not a tree to keep walking. Testing the ITEM
+          # first is what puts the bucket under a goal whose own closeout is the unit; a walk
+          # that only looks upward would miss exactly the assembly-merge case ADR-102 names.
+          *) hcur="${uitem#issue-}"; hdepth=0
+             case "$hcur" in ''|*[!0-9]*) hcur="";; esac
+             # ⚠ PIPE TO A REAL jq, never `gh --jq`, on every read below (the standing rule in this
+             # file — `gh --jq` takes only an expression and silently degrades). It is also what
+             # lets the replay fixtures record REAL API payloads instead of post-jq scalars.
+             while [ -n "$hcur" ] && [ "$hdepth" -lt 4 ]; do
+               if [ "$(gh issue view "$hcur" --repo "$hslug" --json labels 2>/dev/null \
+                        | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)" = "true" ]; then
+                 hgoal="$hcur"; break
+               fi
+               hp="$(gh api "repos/${hslug}/issues/${hcur}/parent" 2>/dev/null \
+                      | jq -r '.number // ""' 2>/dev/null || true)"
+               case "$hp" in ''|*[!0-9]*) break;; esac
+               hcur="$hp"; hdepth=$((hdepth+1))
+             done ;;
+        esac
+        if [ -n "$hgoal" ]; then
+          hgj="$(gh issue view "$hgoal" --repo "$hslug" --json title,state 2>/dev/null || echo '{}')"
+          jq -e . >/dev/null 2>&1 <<<"$hgj" || hgj='{}'
+          hgtitle="$(printf '%s' "$hgj" | jq -r '.title // ""')"
+          hgstate="$(printf '%s' "$hgj" | jq -r '.state // "PROBE-FAILED"')"
+          # ONE bucket, found by title under the goal's own sub-issue list — the container is a
+          # SUB-ISSUE and not a label (operator ruling 2026-08-09: one container, one burn-down
+          # anchor), so the sub-issue tree is also where you look it up.
+          hbucket="$(gh api "repos/${hslug}/issues/${hgoal}/sub_issues" 2>/dev/null \
+            | jq -r '[.[] | select(.title | startswith("post-launch:")) | .number] | first // ""' 2>/dev/null || true)"
+          case "$hbucket" in ''|*[!0-9]*) hbucket="";; esac
+          if [ -z "$hbucket" ] && [ -n "$hgtitle" ]; then
+            hburl="$(gh issue create --repo "$hslug" --title "post-launch: ${hgtitle}" --body "$(printf '%s\n' \
+              "Post-launch bucket for goal #${hgoal} — created by \`agents/coordinator-scan.sh\`, not by a session (ADR-102, homelab#207)." \
+              "" \
+              "**What lands here.** Every sprout harvested from a review of a PR descended from this goal. Assembly merge is a MIDPOINT, not the end: the goal keeps shipping to production at its own pace, and this issue is the one container that work hangs off — so the burn-down is a query, not archaeology." \
+              "" \
+              "**Children base \`master\`.** The goal branch dies at the assembly squash; goal identity is this issue plus its \`Budget:\` line, never the branch. Children here therefore carry NO \`Base:\` line." \
+              "" \
+              "**They spend the goal's money.** This bucket is a sub-issue of the goal, so its children are goal DESCENDANTS and the launcher pre-flight already counts them against the goal's \`Budget:\` (\`agents/goal-budget.sh\`). A sprout self-queues only while the goal is OPEN and that sum still fits; otherwise it lands here inert for human triage." \
+              "" \
+              "Closing this issue does not close the goal, and closing the goal kills this tree with it (ADR-102 terminals).")" 2>/dev/null || true)"
+            hbucket="${hburl##*/}"
+            case "$hbucket" in ''|*[!0-9]*) hbucket="";; esac
+            if [ -n "$hbucket" ]; then
+              # Native sub-issue edge, the same call the harvest and decompose plays make — the
+              # lineage is read by machinery (the budget walk above all), so prose will not do.
+              hbid="$(gh api "repos/${hslug}/issues/${hbucket}" 2>/dev/null \
+                       | jq -r '.id // ""' 2>/dev/null || true)"
+              if [ -z "$hbid" ] || ! gh api -X POST "repos/${hslug}/issues/${hgoal}/sub_issues" \
+                   -F sub_issue_id="$hbid" >/dev/null 2>&1; then
+                # An UNPARENTED bucket is worse than none: its children would sit outside the
+                # goal's descendant walk and spend money the budget gate cannot see.
+                echo "  ⚠ harvest: bucket #${hbucket} created but NOT linked under goal #${hgoal} (${hslug}) — its children would escape the budget walk; link it by hand" >&2
+                hbucket=""
+              fi
+            fi
+          fi
+          if [ "$uclause" = "merged-closeout" ]; then
+            if [ -z "$hbucket" ]; then
+              hsq="no"; hwhy="no post-launch bucket could be resolved or created under goal #${hgoal} — nowhere to file, so nothing self-queues"
+            elif [ "$hgstate" != "OPEN" ]; then
+              hsq="no"; hwhy="goal #${hgoal} is ${hgstate} — the self-queue right dies with the goal (ADR-102)"
+            else
+              # The SAME arithmetic the launcher pre-flight enforces with — advisory here, per the
+              # ⚖ line on #207: this read may demote a label, the pre-flight is what refuses a
+              # ride. No dispatch issue is passed; the question is "does the goal have room", not
+              # "may this key be minted".
+              command -v goal_budget_read >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+              goal_budget_read "$hslug" "$hgoal" "${wmodel:-claude/haiku}"
+              case "$GB_VERDICT" in
+                within)    hsq="yes"; hwhy="goal #${hgoal} OPEN and Σ(spend + reservations) \$${GB_SUM} ≤ Budget \$${GB_BUDGET}" ;;
+                exhausted) hsq="no";  hwhy="goal #${hgoal} OPEN but Σ(spend + reservations) \$${GB_SUM} > Budget \$${GB_BUDGET} — out of funding" ;;
+                *)         hsq="no";  hwhy="goal #${hgoal} carries no machine-parsed \`Budget:\` line — no grant, no self-queue right (ADR-102 fail-closed)" ;;
+              esac
+            fi
+          fi
+          uharvest=" goal=${hgoal}${hbucket:+ bucket=${hbucket}}${hsq:+ selfqueue=${hsq}}"
+          echo "  harvest disposition (ADR-102): ${urepo} ${uitem} → goal #${hgoal}, bucket ${hbucket:-UNRESOLVED}${hsq:+, self-queue ${hsq}}${hwhy:+ — ${hwhy}}"
+        fi
+        ;;
+    esac
+    # <<<REPLAY:harvest-disposition<<<
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
       --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" \
-      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}"
+      --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}"
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"

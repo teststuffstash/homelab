@@ -1,0 +1,30 @@
+# ADR-102 / homelab#207 — fixture (d): a NON-GOAL closeout. The REGRESSION PIN.
+#
+# CONDITION UNDER REPLAY. circles #50 is an ordinary master-lane issue closed by its merged PR. It
+# has no `task/goal` label and no parent, so the walk terminates and the block emits NOTHING: the
+# `--item` string the coordinator play receives is byte-identical to the pre-#207 one, and the play
+# falls through to loop-safety breaker #1 — harvested sprouts stay inert, awaiting human triage.
+#
+# WHY THIS FIXTURE IS THE MOST IMPORTANT OF THE FOUR. Everything else in #207 widens what the loop
+# may do to itself. Breaker #1 is the thing that must NOT widen: the master lane human-gates per
+# issue precisely because auto-merge lands its code with no human. A change that accidentally gave
+# master-lane harvests a bucket, or a `selfqueue=` field of any value, would go unnoticed in the
+# three goal-lane fixtures and reds here.
+#
+# The recorded parent endpoint answers `null` (no parent). Live GitHub 404s instead; the clause
+# takes the same exit, since the probe is wrapped `2>/dev/null || true` and an empty answer breaks
+# the walk exactly as `null` does.
+name: harvest-master-inert
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:harvest-disposition
+  - file:post.sh
+env:
+  - IN_ORG=teststuffstash
+  - IN_REPO=circles
+  - IN_CLAUSE=merged-closeout
+  - IN_ITEM=issue-50
+  - IN_WMODEL=claude/haiku
+  - IN_CAP=2.0000

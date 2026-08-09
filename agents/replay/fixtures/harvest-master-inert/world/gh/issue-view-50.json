@@ -1,0 +1,7 @@
+{
+  "number": 50,
+  "title": "the exporter drops the run label on retries",
+  "state": "CLOSED",
+  "labels": [ { "name": "agent-fix" }, { "name": "agent/in-progress" } ],
+  "body": "Touches: exporter/**\n"
+}

@@ -18,6 +18,9 @@
 # held in the pod; the egress policy must allow the nix cache for `devbox install`.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# The goal `Budget:` arithmetic, shared with the scan's harvest-disposition block (ADR-102/#207).
+# This launcher is its ENFORCING caller — see the pre-flight below.
+. "${HERE}/goal-budget.sh"
 # Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall
 # back to the pod's in-cluster ServiceAccount (KUBE empty → kubectl auto-detects in-cluster config).
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
@@ -608,131 +611,43 @@ if [ -n "${RECIPE:-}" ]; then
     # "Enforced in the LAUNCHER pre-flight — deterministic, beside WIP=1, NEVER LLM-honored"
     # (docs/agents/issue-authoring.md §Leg (c)). A decomposition that overruns its goal's funding
     # must not be discovered one ride at a time, after the money is gone.
-    # The budget is measured against ACTUAL spend (operator ruling 2026-08-08) — settled children
-    # charge their harvested actuals, only live keys and the ride being dispatched reserve their
-    # `cap_usd` (what a minted key ALLOWS). The original cap-sum charged settled children full
-    # cap and refused circles#29 at ~$2 of $12 actually spent. Per-child rules + fallbacks are at
-    # the charge loop below; with the ledger unreachable the gate degrades to the old cap-sum.
+    #
+    # THE ARITHMETIC MOVED (ADR-102, homelab#207) — agents/goal-budget.sh. It did not change: the
+    # actual-spend accounting, the descendant fixpoint walk, the per-child fallbacks and the ledger
+    # degradation all live there verbatim, with their reasoning. What changed is that a SECOND
+    # caller needed the same number — the harvest's self-queue condition asks "does this goal still
+    # have room" at a point where exiting the process is not an option. Duplicating the sum was the
+    # one thing #207's ⚖ line forbade, so the sum became a function and THIS stayed the enforcer:
+    # the pre-flight is what refuses, comments and exits; the harvest only demotes a label.
     # One `gh issue list` call + one ledger GET, only for a ride that HAS a goal.
     if [ -n "$GOAL_PARENT" ]; then
-      # Currency symbols are stripped, and the NUMBER IS READ AS USD — the estimator prices in USD
-      # (cap_usd) because OpenRouter does. A `Budget: €5` therefore funds $5, not €5. That is a
-      # deliberate, stated approximation rather than a silent one: the alternative is an FX rate
-      # this platform has no business carrying. Write the number you mean in dollars.
-      # (Before this, a € sign parsed to empty and DISABLED the gate — fail-open, found 2026-08-05.)
-      GOAL_BUDGET="$(gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json body \
-        --jq '.body' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 \
-        | sed 's/^[^0-9]*//' | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
-      if [ -n "$GOAL_BUDGET" ]; then
-        # DESCENDANTS, not direct children (2026-08-05). A goal that overruns does it by sprouting
-        # DEEP: the harvest links each review follow-up under the issue that produced it, so a
-        # sprout of a child sits at depth 2 and a direct-children sum misses it entirely. Measured
-        # live on openrouter-operator#10 the moment this was written: direct children [14,15],
-        # actual descendants [14,15,17,18,21] — a gate counting 2 of 5 is not a cap.
-        # The walk is a fixpoint over ONE fetch, cycle-safe by construction (a seen-set), and it
-        # is what makes "an unrealistic goal keeps sprouting" a BOUNDED failure instead of a
-        # silent one: every sprout in the tree spends the goal's money.
-        # NB `gh --jq` takes only an expression — it has NO --argjson (that is a jq flag); the
-        # first cut used it, errored, and behind `|| echo []` made this gate pass everything.
-        _kids="$(gh issue list --repo "${ORG:-teststuffstash}/${PROJECT}" --state all --limit 300 \
-          --json number,body,labels,parent 2>/dev/null \
-          | python3 -c '
-import json,sys
-try: items = json.load(sys.stdin)
-except Exception: print("[]"); sys.exit(0)
-root = int(sys.argv[1])
-par = {i["number"]: ((i.get("parent") or {}).get("number")) for i in items}
-seen, frontier = set(), [root]
-while frontier:
-    cur = frontier.pop()
-    for n, pn in par.items():
-        if pn == cur and n not in seen:
-            seen.add(n); frontier.append(n)
-by = {i["number"]: i for i in items}
-def names(i): return [l["name"] for l in (i.get("labels") or [])]
-out = [{"n": n,
-        "chars": len(by[n].get("body") or ""),
-        "label": next((l for l in names(by[n]) if l.startswith("agent-budget/")), ""),
-        # actual-spend accounting (operator ruling 2026-08-08): a LIVE child holds a minted key
-        # that can still spend up to its cap; a RIDDEN child exposes only its harvested actual.
-        "live": ("agent/in-progress" in names(by[n])),
-        "ridden": (by[n].get("state") == "CLOSED"
-                   or any(l in ("agent/in-progress","agent/review","agent/done","agent/error","agent/blocked")
-                          for l in names(by[n])))}
-       for n in sorted(seen) if n in by]
-print(json.dumps(out))
-' "$GOAL_PARENT" 2>/dev/null || echo '[]')"
-        # A parent that HAS descendants must not silently resolve to none — that is the gate failing open.
-        if [ "$(printf '%s' "$_kids" | jq -r 'length' 2>/dev/null || echo 0)" = "0" ]; then
-          echo "→ Goal budget: no descendants resolved for #${GOAL_PARENT} — nothing to sum (if that is wrong, the query is broken, not the goal)" >&2
+      goal_budget_read "${ORG:-teststuffstash}/${PROJECT}" "$GOAL_PARENT" "$MODEL" "${ISSUE_N:-}"
+      if [ "$GB_VERDICT" = "exhausted" ]; then
+        # SAY IT WHERE A HUMAN LOOKS. Exiting 1 puts the reason in a failed tool call, and whether
+        # it reaches the goal then depends on the coordinator session choosing to relay it — a
+        # prose dependency, which is the failure class this platform keeps paying for. Comment on
+        # the GOAL directly, deduped on the marker so a re-tick cannot spam it: the refusal is
+        # level-triggered and will recur every scan until a human re-scopes or refunds.
+        _mark="AGENT_BUDGET_REFUSED: Σ(spend + reservations) \$${GB_SUM} > Budget \$${GB_BUDGET}"
+        if ! gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json comments \
+               --jq '[.comments[].body] | last // ""' 2>/dev/null | grep -qF "$_mark"; then
+          printf '%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n' \
+            "$_mark" "$GB_ROWS" \
+            | gh issue comment "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --body-file - >/dev/null 2>&1 \
+            && echo "→ Goal budget: refusal posted to #${GOAL_PARENT}" >&2 \
+            || echo "→ Goal budget: refusal comment FAILED to post (token scope?) — the refusal still stands" >&2
         fi
-        # ACTUAL-SPEND accounting (operator ruling 2026-08-08 — supersedes the cap-sum): the budget
-        # is measured against what the subtree actually SPENT, plus real reservations. Charging a
-        # settled child its full cap billed ~$1.90 of nothing per child on circles#29 (Σ caps $26
-        # vs ~$2 measured spend) and refused a goal that was ~$2 into its $12. Per child:
-        #   spent      = Σ agent_run_cost_usd across its rounds (the pushgateway the finalize leg
-        #                pushes to is the ledger; one GET, parsed here)
-        #   + its cap  IF the child is LIVE (a minted key can still spend to cap) or IS this
-        #              dispatch (the key about to be minted)
-        #   = its cap  IF it has ridden but the ledger has nothing (FU-131 harvest gap, killed
-        #              pods — fail-CONSERVATIVE per child, never fail-open)
-        #   = spent($0) for a never-ridden sibling: it gets its own gate when it dispatches.
-        # If the ledger is unreachable (jail dispatch, docker mode) the WHOLE sum falls back to
-        # caps — the pre-ruling behavior, loudly. Worst-case overshoot under this accounting is
-        # one cap per concurrently-live ride, which is the operator's stated model (graduated
-        # per-job tokens; the breaker watches actuals).
-        _pgw="${AGENT_PUSHGATEWAY_URL:-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
-        _ledger="$(curl -m 5 -fsS "${_pgw}/metrics" 2>/dev/null | sort -u \
-          | awk -v proj="$PROJECT" '/^agent_run_cost_usd\{/ && index($0, "project=\"" proj "\"") {
-              if (match($0, /issue="[0-9]+"/)) { iss=substr($0, RSTART+7, RLENGTH-8);
-                sum[iss] += $NF } }
-            END { for (i in sum) printf "%s %.4f\n", i, sum[i] }')" || _ledger=""
-        [ -z "$_ledger" ] && echo "→ Goal budget: spend ledger unreachable at ${_pgw} — falling back to CAP-sum (conservative)" >&2
-        _sum=0; _rows=""
-        for _row in $(printf '%s' "$_kids" | jq -r '.[] | "\(.n):\(.chars):\(.label):\(.live):\(.ridden)"' 2>/dev/null); do
-          _kn="${_row%%:*}"; _rest="${_row#*:}"; _kc="${_rest%%:*}"; _rest="${_rest#*:}"
-          _kl="${_rest%%:*}"; _rest="${_rest#*:}"; _klive="${_rest%%:*}"; _kridden="${_rest#*:}"
-          _cap="$(python3 "$HERE/estimate_budget.py" --issue-chars "${_kc:-0}" --model "$MODEL" \
-                    ${_kl:+--label "$_kl"} 2>/dev/null | jq -r '.cap_usd // 0' 2>/dev/null || echo 0)"
-          _spent="$(printf '%s\n' "$_ledger" | awk -v n="$_kn" '$1==n{print $2; exit}')"
-          if [ -z "$_ledger" ]; then
-            _charge="$_cap"; _why="cap (no ledger)"
-          elif [ "$_kn" = "${ISSUE_N:-}" ] || [ "$_klive" = "true" ]; then
-            _charge="$(python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[2]),4))" "${_spent:-0}" "$_cap")"
-            _why="\$${_spent:-0} spent + \$${_cap} live/dispatch reservation"
-          elif [ -n "$_spent" ]; then
-            _charge="$_spent"; _why="settled, actual spend"
-          elif [ "$_kridden" = "true" ]; then
-            _charge="$_cap"; _why="cap (ridden, no ledger entry — FU-131 gap, conservative)"
-          else
-            _charge="0"; _why="never ridden — gated at its own dispatch"
-          fi
-          _sum="$(python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[2]),4))" "$_sum" "${_charge:-0}")"
-          _rows="${_rows}    #${_kn} → \$${_charge} (${_why})\n"
-        done
-        if [ "$(python3 -c "import sys;print(1 if float(sys.argv[1])>float(sys.argv[2]) else 0)" "$_sum" "$GOAL_BUDGET")" = "1" ]; then
-          # SAY IT WHERE A HUMAN LOOKS. Exiting 1 puts the reason in a failed tool call, and whether
-          # it reaches the goal then depends on the coordinator session choosing to relay it — a
-          # prose dependency, which is the failure class this platform keeps paying for. Comment on
-          # the GOAL directly, deduped on the marker so a re-tick cannot spam it: the refusal is
-          # level-triggered and will recur every scan until a human re-scopes or refunds.
-          _mark="AGENT_BUDGET_REFUSED: Σ(spend + reservations) \$${_sum} > Budget \$${GOAL_BUDGET}"
-          if ! gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json comments \
-                 --jq '[.comments[].body] | last // ""' 2>/dev/null | grep -qF "$_mark"; then
-            printf '%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n' \
-              "$_mark" "$_rows" \
-              | gh issue comment "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --body-file - >/dev/null 2>&1 \
-              && echo "→ Goal budget: refusal posted to #${GOAL_PARENT}" >&2 \
-              || echo "→ Goal budget: refusal comment FAILED to post (token scope?) — the refusal still stands" >&2
-          fi
-          printf 'PREFLIGHT REFUSED: the decomposition of goal #%s overruns its Budget.\n' "$GOAL_PARENT" >&2
-          printf '  Σ(spend + reservations) = $%s  >  Budget: $%s\n' "$_sum" "$GOAL_BUDGET" >&2
-          printf '%b' "$_rows" >&2
-          printf '  This is deterministic and not the ride'"'"'s to argue with: re-scope the children or raise\n  the goal'"'"'s Budget: line — both are human edits. (leg (c), docs/agents/issue-authoring.md)\n' >&2
-          exit 1
-        fi
-        echo "→ Goal budget: Σ(spend + reservations) \$${_sum} ≤ Budget \$${GOAL_BUDGET} on #${GOAL_PARENT} — within funding"
+        printf 'PREFLIGHT REFUSED: the decomposition of goal #%s overruns its Budget.\n' "$GOAL_PARENT" >&2
+        printf '  Σ(spend + reservations) = $%s  >  Budget: $%s\n' "$GB_SUM" "$GB_BUDGET" >&2
+        printf '%b' "$GB_ROWS" >&2
+        printf '  This is deterministic and not the ride'"'"'s to argue with: re-scope the children or raise\n  the goal'"'"'s Budget: line — both are human edits. (leg (c), docs/agents/issue-authoring.md)\n' >&2
+        exit 1
+      elif [ "$GB_VERDICT" = "within" ]; then
+        echo "→ Goal budget: Σ(spend + reservations) \$${GB_SUM} ≤ Budget \$${GB_BUDGET} on #${GOAL_PARENT} — within funding"
       fi
+      # GB_VERDICT=no-budget → the goal carries no machine-parsed `Budget:` line, so there is
+      # nothing to enforce and the ride proceeds, exactly as before ADR-102. ⚠ The HARVEST reads
+      # the same verdict the other way (no grant ⇒ no self-queue right) — see goal-budget.sh.
     fi
     TASK_CLASS="$(gh issue view "$ISSUE_N" --repo "${ORG:-teststuffstash}/${PROJECT}" --json labels \
       --jq '[.labels[].name|select(startswith("task/"))|ltrimstr("task/")]|first // empty' 2>/dev/null || true)"

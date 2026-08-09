@@ -1,0 +1,7 @@
+{
+  "number": 35,
+  "title": "child: the bake produces the fixture artifact with its seven lights",
+  "state": "CLOSED",
+  "labels": [ { "name": "agent-fix" }, { "name": "agent/review" } ],
+  "body": "Base: goal/29-p0-complete\n\nTouches: bake/**\n"
+}
