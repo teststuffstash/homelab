@@ -95,6 +95,9 @@
       "prompt-transport-lint": [
         "python3 scripts/prompt-transport-lint.py \"$@\""
       ],
+      "state-fp-replay": [
+        "bash agents/state-fp-replay.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],

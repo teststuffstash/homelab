@@ -67,6 +67,12 @@ jobs:
       - name: Prompt transport lint (devbox run prompt-transport-lint)
         run: devbox run prompt-transport-lint
 
+      # #198/#201: the state-fingerprint debounce (arbitrate/ci-red dispatch on CHANGE, not
+      # existence) pinned as an executed replay — the five scan blocks sentinel-extracted at run
+      # time, replaying the PR#234 five-rides-on-frozen-state sequence. 88 assertions, ~1s.
+      - name: State-fingerprint debounce replay (devbox run state-fp-replay)
+        run: devbox run state-fp-replay
+
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
