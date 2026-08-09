@@ -1529,10 +1529,11 @@ if [ -n "$RUN_CMD" ]; then
   # unreachable off-cluster (jail runs — the ClusterIP doesn't cross the BGP boundary) is fine.
   if [ -n "$PROXY_URL" ] && { [ -n "$STATS" ] || [ -n "${ERR_CLASS:-}" ]; }; then
     _rstack="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
-    # homelab#158: `rail` rides the report so a degraded ride is attributable in the store, not only in
-    # the pod labels. The router's run_reports has no rail COLUMN yet (router.py — outside this
-    # issue's footprint), so today it lands as a field the ingest ignores; the pod label and the
-    # launcher log are the surfaces that answer the question until that column exists.
+    # homelab#158: `rail` rides the report so a degraded ride is attributable in the store, not only
+    # in the pod labels. Since homelab#164 the store IS that surface: run_reports carries a `rail`
+    # column and record_report() persists this field (router.py), so the 90-day run_reports
+    # retention is what answers "what did the outage cost us". The pod label and the launcher log
+    # were the only surfaces PRE-#164, when the ingest dropped the field for want of a column.
     _report="$(jq -cn --arg session "$POD" --arg task "$TASK" --arg stack "${_rstack:-}" \
       --arg model "$MODEL" --arg round "$ROUND" --arg err "${ERR_CLASS:-}" --arg pr "$PR_URL" \
       --arg rail "${AGENT_RAIL:-}" \
