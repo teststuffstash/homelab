@@ -9,10 +9,12 @@ meant to avoid.)
 ## Live state (2026-08-09 ~12:45Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
 - **ADR-102/103 PROGRAM — clause set COMPLETE** (#206/#207/#208/#209/#212/#215 all merged,
-  replay-gated; ratchet v2 live). REMAINING: **#210 channel separation** (homelab leg
-  in-progress — ride live 12:09Z; agent-runtime#62 twin QUEUED by meta 12:2xZ) + **homelab#217
-  spend belt** (queued). **Monday retro 08-10 05:00Z scores the two ADR-103 KPIs first — CHECK
-  ITS REPORT.**
+  replay-gated; ratchet v2 live). **#210 homelab leg MERGED ~12:50Z (PR#219** — union stats_ts
+  reader + machine-comment.sh; codeowner-reviewed by execution: jq union verified on a mixed
+  world, reader-sweep negative re-proven; spot-check the merged-closeout flip/harvest on #210).
+  REMAINING: **agent-runtime#62** (primary emitter twin, QUEUED) + **homelab#217 spend belt**
+  (queued). Old-shape branch deletes only after #62 ships AND no open PR carries it. **Monday
+  retro 08-10 05:00Z scores the two ADR-103 KPIs first — CHECK ITS REPORT.**
 - **minutark.ee LIVE + SERVING** (verified 12:19Z: http=200 via Cloudflare; a 20m-deadline
   monitor fired http=000 but that was the JAIL's Unbound negative-cache from before the A
   records existed — self-expires, site fine). ONE step remains, OPERATOR: add the DS at zone.ee —
@@ -30,8 +32,10 @@ meant to avoid.)
   UV_PYTHON_PREFERENCE=only-system in agent-session.sh, NOT an extraFQDNs widening; Touches
   repointed. Watch the ride's PR like any platform-lane PR (needs meta read + admin merge).
 - **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 (death-class test
-  self-referential) + #62 queued by meta. or-op#34 SOAKS until first daily-class 429 datum;
-  or-op#25 (proactive key rotation) = backlog, deliberate.
+  self-referential) + #62 queued by meta. or-op#34 SOAKS until first daily-class 429 datum.
+  **or-op#25 QUEUED ~13:00Z** — gating question settled by code (default rail = proxy-resolved
+  `ref:`, 60s cache → rotation reaches live rides); ⚖ on-issue: remaining-carry budget,
+  no-delete old key, threshold > cache TTL.
 - **circles**: PR#21/#25 frozen (unchanged, operator's). **e2e-outage arc CLOSED**: PR#239
   (with the #228 cancel-leak belt) + PR#234 merged; #228/#190/or-op#33 closed.
 - **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
