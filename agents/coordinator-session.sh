@@ -203,9 +203,19 @@ SNIP
 
 if [ -n "$RUN_CMD" ]; then
   # Headless: claude runs to completion, then the pod itself uploads (no exec window afterwards).
+  # ⚠ RUN_CMD rides the SAME base64-file transport as SEED — never inline it. The old
+  # `$(… | jq -Rs .)` pasted a JSON-DOUBLE-QUOTED string into the pod's `bash -lc` line, where
+  # bash re-expands: every BACKTICK in the prompt became command substitution IN THE POD
+  # (the #162 RAIL RULE's \`workerModel\`/\`--harness\` fragments executed as commands and were
+  # STRIPPED from the delivered prompt — caught on the 02:25Z 08-09 heartbeat reading an oracle
+  # arbitrate tick; every headless unit since 2026-08-08 20:30Z ran with those holes). jq escapes
+  # for JSON, not for shell: backticks and $ are not JSON-special and stay live. The
+  # prose-inside-executing-code class, fourth instance.
+  RUN_B64="$(printf '%s' "$RUN_CMD" | base64 | tr -d '\n')"
+  PREP="${PREP}; printf %s '${RUN_B64}' | base64 -d > /work/coord-run"
   WRAPPED="${PREP}
 ${UPLOAD_FN}
-set +e; claude -p ${COMMON_FLAGS} $(printf '%s' "$RUN_CMD" | jq -Rs .); RC=\$?; upload_transcripts; exit \$RC"
+set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
