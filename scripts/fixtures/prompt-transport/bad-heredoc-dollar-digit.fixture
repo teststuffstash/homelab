@@ -1,0 +1,24 @@
+# FIXTURE — NOT LIVE CODE, never sourced or executed. Positive control for #197 instance 2.
+#
+# The pre-fix pod-manifest heredoc of agents/reviewer-session.sh (c377da9, 2026-08-08 ~19:00Z →
+# fixed 2026-08-09 00:30Z). The heredoc is UNQUOTED, therefore expanding, so the dollar amount in
+# a COMMENT parsed as the positional parameter ${1} followed by "03.74"; under `set -u` the pod
+# create died and every reviewer dispatch was dead for ~5.5h (oracle PR#234/#235 sat unreviewed).
+# EXPECT: HEREDOC-DOLLAR-DIGIT@21
+#
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: reviewer
+      env:
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          # stack derived from the claims mirror (2026-08-08): the reviewer was the ONE role
+          # without it — $103.74 of 7d subscription-equiv sat unattributable as stack="" on the
+          # cost dashboard until the label audit caught it.
+          value: "service.name=claude-code,role=reviewer,stack=${STACK_LABEL:-none}"
+EOF

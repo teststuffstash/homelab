@@ -1,0 +1,25 @@
+# FIXTURE — NOT LIVE CODE. NEGATIVE control: the FIXED shape of #197 instance 2, as it stands in
+# agents/reviewer-session.sh today. Two ways past the trap are shown and BOTH must stay clean —
+# rewriting the prose ("USD 103.74"), and escaping the dollar in the maintainer warning that now
+# guards the heredoc. A lint that flags the warning comment would push people to delete it.
+# EXPECT: clean
+#
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${POD}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: reviewer
+      env:
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          # stack derived from the claims mirror (2026-08-08): the reviewer was the ONE role
+          # without it — USD 103.74 of 7d subscription-equiv sat unattributable as stack="" on
+          # the cost dashboard until the label audit caught it.
+          # ⚠ NO DOLLAR-PREFIXED NUMBERS in this heredoc: it EXPANDS, so "\$103.74" parsed as
+          # positional \${1}03.74 and, under set -u, killed EVERY reviewer dispatch at the pod
+          # create for ~5.5h. The apostrophe-outage class: prose inside executing code.
+          value: "service.name=claude-code,role=reviewer,stack=${STACK_LABEL:-none}"
+EOF
