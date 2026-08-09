@@ -8,18 +8,21 @@ meant to avoid.)
 
 ## Live state (2026-08-08 ~21:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **RESET CHECKLIST EXECUTED (00:25–00:55Z 08-09)**: the #28 park HELD (zero 429 spam);
-  deletions drained 15→11, remainder wedged on absent-key 404s → or-op#30 (queued, ⚖
-  idempotent-delete); #228 breaker cleared+re-queued; or-op#27 shipped via the NEW build lane
-  (.agents/build.yaml + review.md lane split, PR#31; first build PR#32 merged — the
-  no-alert-without-a-series constraint is now a chart TEST) and its deploy bump self-merged.
-  REMAINING: verify or-op#30's fix drains the last CRs when it ships; #29 (balance gauge,
-  queued, /credits precondition settled 200) → unblocks homelab#180 (native edge set).
-- **REVIEWER OUTAGE found+fixed 00:30Z**: c377da9 wrote $103.74 into the EXPANDING reviewer pod
-  heredoc → set -u → every reviewer create died since ~19:00Z 08-08 ("nothing to review" logs
-  were truthful; the Error pods were the tell). Fixed (USD wording + heredoc rule), dispatch
-  recovered (reviewer-oracle-fleet-234 pod ran). Watch PR#234/#235 verdicts land; clause 4
-  catches a specs park.
+- **#26 INCIDENT ARC FULLY CLOSED with live acceptance (01:40Z 08-09)**: park held (zero 429
+  storm), BOTH wedge classes fixed+deployed (rpd park #28; idempotent 404-delete #30/PR#36),
+  **drain verified to ZERO pending CRs**. The whole credit chain is instrumented end-to-end and
+  LIVE-verified: operator gauge (#29/PR#35, NaN-not-omit) → proxy latch reading it cross-namespace
+  (#180/PR#191, `router_openrouter_account_credit_usd 20.1672` observed on the proxy) →
+  OpenRouterCapacityDown page (#163) → rail degrade (#158 family). REMAINING queued: homelab#190
+  (launcher gate reads the proxy surface — edge on #180 now satisfied), or-op#33 (balance alert,
+  edge on #29 satisfied), or-op#34 SOAKS until the first daily-class 429 datum.
+- **REVIEWER OUTAGE fixed + RECOVERED**: the $103.74-in-heredoc kill (since ~19:00Z 08-08) fixed
+  00:30Z; dispatch verified (reviewer pod ran) AND verdicts flowing (PR#234 CHANGES_REQUESTED —
+  substantive). The changes-requested lane owns #234's fix round; #235 next tick.
+- **openrouter-operator has a BUILD lane since 01:00Z**: .agents/build.yaml (chart/+tests,
+  render-first TDD) + review.md criterion-5 lane split (PR#31); first build PR#32 shipped the
+  metrics Service/ServiceMonitor/key-ops alert with the no-alert-without-a-series constraint as
+  a chart TEST. task/build label wired.
 - **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
 - **CI-red arc RESOLVED ~20:30Z**: #151 (github-apps declaration drift) fixed on master; ALL five
   blocked homelab PRs landed (#147 deploy, #152→#149, #160→#157, #161→#155, #162→#158). #154
