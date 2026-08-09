@@ -3345,3 +3345,45 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   runtime#62 split). PR#250 codeowner gate: NFKD fold spec approved (foldings executed incl.
   łódź→łodz) after the operator caught the park — clause-4 rewritten: Actions-API run state
   (fine-grained PATs have NO Checks permission, EVER — memory written, road closed).
+
+## 2026-08-09 (~12:15–13:15Z) — fresh meta session: ADR-103 homelab leg lands; a mis-queue the loop caught
+
+- **Bootstrap sweep (fresh /meta-coordinate)**: throughput healthy (ride 9 min prior). The
+  minutark 20m-deadline monitor's http=000 was the JAIL's Unbound negative-cache from before the
+  A records existed — pinned-resolve curl = 200, site fine (the dead-probe class wears many
+  coats: this one was a stale cache, not a dead probe, but the lesson is the same — a local
+  resolver's answer is a claim about the resolver). Four Error pods on the boards all explained
+  residue (2× transient github.com DNS 08-08 16:07Z; broker unreachable during the proxy roll —
+  refused loudly, correct; the already-fixed $103.74 heredoc outage). Killed FOUR orphan
+  watchers from prior sessions incl. the comment-stream one AGAIN and a zombie PR#356
+  checks-watch (merged PRs never satisfy its grep — until-loops need a terminal-state arm).
+- **Triage yield: three clause-invisible issues queued** — agent-runtime#61 (harvested test pin),
+  #62 (coordinator-authored ADR-103 twin, loop-safety says it can't self-queue), homelab#107
+  astral leg with ⚖ + Touches repoint. **#107 was a MIS-QUEUE**: the fix had been on master
+  since e5f568e (08-08 02:52Z) and a 07:09Z comment had fixed the third leg — I triaged from a
+  `head -120` TRUNCATED read of the thread. The read-evidence-IN-FULL rule, again, now with
+  labels. The loop's dispatch session REFUSED the no-op ride at 12:54Z, de-queued, and parked
+  agent/blocked with a clean human call — the 2026-08-08 intake machinery doing exactly its job
+  on its author's error. Ruled CLOSE (all defect legs fixed; the in-ride datum accrues on
+  organic traffic; fingerprint re-fire is the net). #103 stays queued.
+- **PR#219 codeowner-reviewed + merged — ADR-103 #210 homelab leg COMPLETE**: union `stats_ts`
+  reader (old comment shape + new `<!-- agent-event kind=stats -->` markers), machine-comment.sh
+  (find-or-create + oldest-tie-break + fail-closed on unreadable timeline + App-endpoint degrade
+  path), three NOT-on-the-issue's-list round-counters repointed (the FU-115 livelock re-opened
+  from three files away, caught by the worker's own reader audit). Review by execution: ran the
+  union jq on a mixed-channel world (attempts=3, dispatch excluded), re-proved the reader-sweep
+  negative with a positive control. meta-throughput reads updated_at now — created_at on an
+  edited comment would manufacture a THROUGHPUT-STALL on a healthy fleet.
+- **PR#63 merged (#61)**: ast-parse pin of DEATH_EXIT_STATUSES to failure_signature's return
+  literals, set-equality both directions, mutation-proven (oom-kill branch: old test green, new
+  tests red). Both platform merges: auto-merge fired on my approval before the --admin call —
+  the approve IS the merge trigger on armed PRs; the admin error is a race artifact, check
+  state before re-swinging.
+- **or-op#25 unparked**: the gating question ("does rotation reach a live consumer?") settled by
+  CODE — default rail is proxy-resolved `ref:` (REF_CACHE_TTL_S=60), env-baked keys are the
+  opt-out only, so mid-ride rotation lands ≤60s. ⚖ on-issue: remaining-carry budget (skip on
+  unreadable spend), no-delete old key (it's expiring anyway — early delete only risks stale-
+  cache 401s), threshold > cache TTL. Queued. Sleep-tracking#96 reframed: the 401 storm was
+  no-rotation, not rotation-can't-land.
+- Remaining ADR-103 program: agent-runtime#62 (queued) + homelab#217 (queued). Monday retro
+  08-10 05:00Z scores the KPIs first.
