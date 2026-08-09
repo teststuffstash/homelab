@@ -87,10 +87,10 @@ own domain) is a claim migration, not Cloudflare surgery.
 | Token | Scope | Canonical + delivery | Consumer / applier |
 |---|---|---|---|
 | **Account admin** | everything | **KeePass ONLY**, host (`~/Documents/homelab-admin.kdbx`, beside the GitHub org-admin) | the operator, solely to apply `tofu/cloudflare-token` (the mint). Never jail, never cluster. |
-| `homelab-tofu-apply` | teststuff.net DNS/SSL/WAF + account Tunnel, write | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (the ha one-off). **Retires** at the consumer-#2 retrofit. |
+| `homelab-tofu-apply` | **both product zones** DNS/SSL/WAF/**Settings** + account Tunnel, write (Settings = Argo-capable, see §Spend surface) | wallet `cloudflare-write-key`; jail `~/.claude/cloudflare/write-key`; ⚠ **expires 2027-01-01** (FU-156) | jail applies `tofu/cloudflare/` (ha + the minutark zone bootstrap), plan-gated by the operator. **Retires** at the consumer-#2 retrofit. |
 | `homelab-acme-dns` | one zone, DNS write | wallet `cloudflare-acme-token`; OPNsense env (`ACME_CF_TOKEN` when running the ACME playbook) | acme.sh DNS-01 |
 | `homelab-observability-read` | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, **audit logs via `Account Settings Read`** — fixed 2026-08-08, see the gotcha) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL + audit), the CF exporter, responder triage later |
-| `homelab-ingress-write` | DNS + Tunnel write only (no WAF/SSL until the ruleset leg is designed) | KeePass → Infisical `CLOUDFLARE_INGRESS_WRITE` → ESO `crossplane-system/cloudflare-ingress-write` → provider env. Never in claims, never jail. | the PublicRoute composition's Workspaces. **MINTED + ARMED 2026-08-08.** |
+| `homelab-ingress-write` | DNS (both product zones) + Tunnel write only | KeePass → Infisical `CLOUDFLARE_INGRESS_WRITE` → ESO **`cf-api-proxy/cf-api-token`** — the PROXY holds it (2026-08-09 custody move); provider-terraform is TOKENLESS (`base_url` → the proxy). Never in claims, never the reconciler. | **cf-api-proxy** (§below), on behalf of PublicRoute Workspaces. |
 | `homelab-inventory-read` (staged) | token inventory read, for the FU-156 expiry belt | `inventory-read.tf`, gated on `var.user_id` — applies are a no-op until the operator supplies it | the token-expiry exporter (future) |
 
 **Operator-applied tofu = exactly one root, one command**: `devbox run cloudflare-token-tofu
@@ -100,6 +100,50 @@ Infisical for cluster consumers via ESO (the apply prints the store checklist). 
 the write token needs `SSL and Certificates Write` — **not** the `Access: Mutual TLS…` groups
 (that's the Enterprise Access path we deliberately avoided; same trap as the audit-logs group,
 see gotcha 3's lesson: pick permission groups from the ENDPOINT's docs, not by name-similarity).
+
+## cf-api-proxy — the autonomous write path (2026-08-09)
+
+The one Cloudflare consumer that writes WITHOUT a human per action is provider-terraform
+reconciling PublicRoute claims — so that path, and only that path, goes through an allowlisting
+proxy (`argocd/resources/cf-api-proxy/`; third instantiation of the proxy+policy pattern after
+the OpenRouter proxy and oracle's ert-egress-proxy). The jail's `write-key` deliberately does
+NOT route through it: jail applies are operator-plan-gated, and the bootstrap needs paths
+(settings, DNSSEC) that must never enter the autonomous allowlist.
+
+- **The nginx location table IS the permission model** — method+path in git, reviewed like any
+  manifest: `dns_records` CRUD on the two product zones, `cfd_tunnel` under the account,
+  read-only zone lookups + token verify. Everything else 403s in Cloudflare's own error shape,
+  naming the configmap.
+- **Two independent layers**: a request must pass the allowlist AND the token's permission
+  groups (live-verified 2026-08-09: an Argo enable dies at the proxy; a settings READ passes
+  the allowlist and is then 403'd by the token). Cloudflare's undocumented group semantics stop
+  being the only line of defense.
+- **Custody**: the reconciler holds no credential at all — bypassing the proxy would need a
+  token the pod doesn't have. A Cilium egress lockdown on provider-terraform is the deliberate
+  residual (needs the full egress inventory: garage, infisical, k8s API — do it with care, it
+  can brick Garage bucket reconciles fleet-wide).
+- Re-resolution: `resolver <kube-dns> valid=30s` + variable `proxy_pass` (the ert-egress-proxy
+  pin-forever lesson).
+
+## Zone classes + spend surface (2026-08-09)
+
+**Zones** (ADR-101): `teststuff.net` = platform zone (any ns claims in its delegated subtree);
+`minutark.ee` = **product zone, owner `oracle-fleet`** (the owning ns claims anywhere incl. the
+apex; consumer #1 is the minutark placeholder claim in oracle-iac). The zone map is a platform
+constant in the PublicRoute composition; the zone BOOTSTRAP (records, TLS floor, DNSSEC) is
+`tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
+
+**Spend surface**: the account has a payment card attached (eid-demo.com is Pro), and some
+usage-billed features are toggled by ordinary zone Write groups — the proven case: **Argo Smart
+Routing (per-GB) enables via `PATCH /zones/{id}/argo/smart_routing`, gated by Zone Settings
+Write**. Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries —
+verify anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES;
+plans show hex only). Containment: the autonomous path can't reach those endpoints (allowlist);
+the jail token can, so the drift belt (homelab#217) alerts on any usage-toggle/plan change on
+the product zones. Doctrine (the mTLS/audit-logs lesson, generalized): **permission semantics
+come from the target ENDPOINT's "accepted permissions" docs line — the catalog names document
+nothing, the dashboard shows a subset, and any `*Write` group is presumed entitlement-toggling
+until the endpoint list says otherwise.**
 
 ## Observability
 
