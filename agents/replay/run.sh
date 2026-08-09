@@ -28,7 +28,7 @@ STUBS="$HERE/stubs"
 FIXROOT="$HERE/fixtures"
 VERBOSE=0
 
-for t in awk sed diff; do
+for t in awk sed diff jq; do
   command -v "$t" >/dev/null 2>&1 || { echo "clause-replay: needs $t (devbox run -- bash $0)"; exit 2; }
 done
 

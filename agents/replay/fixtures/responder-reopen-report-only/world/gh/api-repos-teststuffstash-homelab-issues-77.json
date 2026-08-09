@@ -1,0 +1,9 @@
+{
+  "number": 77,
+  "state": "closed",
+  "labels": [
+    { "name": "agent-fix" },
+    { "name": "agent/done" }
+  ],
+  "body": "an older thread carrying the same fingerprint; the session did NOT reopen it.\n\nalert-fp:1f3a9c72b0d45e86\nfix-verdict: report-only\n"
+}

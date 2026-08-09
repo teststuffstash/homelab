@@ -1,0 +1,17 @@
+CALL gh search issues --owner teststuffstash --match body subject:node:wk-01 --state closed --json repository,number --limit 20
+CALL gh search issues --owner teststuffstash --match body alert-fp:1f3a9c72b0d45e86 --state closed --json repository,number --limit 20
+CALL gh api repos/teststuffstash/homelab/issues/103 --jq .state + "|" + ([.labels[]?.name] | join(","))
+CALL gh issue edit 103 --repo teststuffstash/homelab --remove-label agent/queued,agent/done,agent-fix
+CALL gh api repos/teststuffstash/homelab/issues/77 --jq .state + "|" + ([.labels[]?.name] | join(","))
+CALL gh api repos/teststuffstash/homelab/issues?state=open&sort=updated&direction=desc&per_page=20 --jq [.[] | select((.body // "") | contains("alert-fp:1f3a9c72b0d45e86"))] | first | .number // empty
+CALL gh api repos/teststuffstash/homelab/issues/103 --jq .body // ""
+CALL gh api -X POST repos/teststuffstash/homelab/issues/103/labels -f labels[]=agent-fix
+CALL curl -fsS -X POST -H Content-Type: application/json -d {"repo":"teststuffstash/homelab","number":103} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/fix-verdict
+OUT → NodeDiskIOSaturation (1f3a9c72b0d45e86): closed thread(s) a reopen could restore: teststuffstash/homelab#103 teststuffstash/homelab#77
+OUT -- session (stubbed): reopened teststuffstash/homelab#103 on the FU-133 subject belt
+OUT → reopened teststuffstash/homelab#103: stripped stale lifecycle labels (agent/queued,agent/done,agent-fix) — a RECORD again; only a fresh verdict may re-queue it
+OUT → verdict: teststuffstash/homelab#103 labelled agent-fix (inert — queueing is the debouncer's)
+OUT → verdict: rang /fix-verdict for teststuffstash/homelab#103 (debounce decides the set)
+OUT PRECLOSED teststuffstash/homelab#103 teststuffstash/homelab#77
+OUT REACHED: end
+RC 0

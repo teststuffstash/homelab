@@ -40,7 +40,8 @@ _rp_record() {
 _RP_VALUE_FLAGS=" -n --namespace -o --output --repo -R --json -q --jq -l --selector -f --filename
  -L --limit -H --header -X --method -F --field --template --kubeconfig --context --body --body-file
  --field-selector -c --container --label --search --state --author --base --head --add-label
- --remove-label --title --raw-field --input --hostname --cache --subresource --type -p --patch "
+ --remove-label --title --raw-field --input --hostname --cache --subresource --type -p --patch
+ --owner --match "
 _rp_words() {
   _rp_w=""; _rp_skip=0
   for _rp_a in "$@"; do
