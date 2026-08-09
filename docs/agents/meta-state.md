@@ -41,6 +41,11 @@ meant to avoid.)
   workflow templates already had requests; live pod check backgrounded, result → #103 comment).
   #61/#62/#25/#217 all DONE same day. or-op#34 SOAKS (needs first daily-429 datum). Possible
   trailing echo: or-op chart deploy bump self-merges via first-party lane (like #222).
+- **TOMORROW (meta, ~30 min): #103 residual leg — Composition podSpecPatch.** PR#225's spread
+  constraint covers agents/coordinator objects only; the per-stack cron CronWorkflows are
+  Crossplane-rendered (AgentStack Composition, argocd/resources/) and their tick pods verified
+  WITHOUT the constraint (15:30Z pod, tsc null). Mirror the merged podSpecPatch shape into the
+  Composition's CronWorkflow template + verify a fresh tick per stack. Composition = meta lane.
 - **TOMORROW (operator, ~5 min): mint `homelab-jail-read-all`** — dashboard "Read all resources"
   template, all accounts/all zones, **plus user-scope API Tokens Read** (lets the jail list the
   permission-group catalog — the admin token can't, it has creation rights only). No IP filter,
