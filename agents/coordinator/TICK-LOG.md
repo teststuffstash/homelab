@@ -3449,3 +3449,14 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   scan line + retired-format lint, report-only — FU-090 gate stands), oracle-iac#357 (default
   flip). The general lesson: when a convention or machinery changes, sweep IN-FLIGHT artifacts
   written under the old one — retirement without migration leaves live plans in dead formats.
+
+- **#322 blocked→re-queued (16:0x–16:20Z)**: the oracle coordinator REFUSED the dispatch citing a
+  body ⚠ "workers do not write oracle-iac — operator/interactive work". Both halves instructive:
+  (a) the ⚠ was MY 08-08 filing session's STALE doctrine — the LIVE claim carries an oracle-iac
+  fixer block (budgetUSD 3, claudeTier; verified against the cluster, not the mirror), so the
+  repo IS the stack fixer's lane (FU-106 pattern, 2026-08-02 directive); corrected in the body,
+  audit comment, re-queued. (b) the coordinator honoring an explicit body ⚠ over its own claim
+  knowledge is CORRECT precedence — the fix was the input, not the judgment. Also: the refusal
+  arrived as the ADR-103 single-summary-comment (kind=dispatch marker) — the channel shipped
+  this morning, in production use by evening. ⚠ Truncated-read strike THREE today: the ⚠ sat at
+  body line 21; my earlier read was `head -20`. Reading a THING means reading to its end.
