@@ -61,6 +61,13 @@ spec:
             # resolved through the same labeled-secret ref rail as session keys.
             - name: ROUTER_ACCOUNT_REF
               value: agent-egress/router-account-key
+            # homelab#180: the capacity latch's `credit` leg reads the openrouter-operator's
+            # account-credit gauge over in-cluster service DNS — that operator owns the
+            # provisioning key this proxy is deliberately NOT given. Set explicitly (not left to
+            # the code default) so the cross-namespace dependency is visible in the manifest;
+            # set it to "" to retire the leg.
+            - name: CREDIT_METRICS_URL
+              value: http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics
           ports:
             - name: http
               containerPort: 8080

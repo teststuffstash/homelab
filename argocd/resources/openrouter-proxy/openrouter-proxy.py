@@ -932,7 +932,9 @@ def _headroom_loop() -> None:
             if bal is not None:
                 log(f"credit: OpenRouter account balance ${bal} (floor ${OR_MIN_CREDIT})")
         except Exception as e:  # noqa: BLE001
-            log(f"credit: poll failed: {e} — capacity latch keeps its data-plane legs")
+            # homelab#180: the read failing is one more way the leg is dead, so it goes through
+            # the SAME counted/named path as an unusable gauge — never a bare log line again.
+            _credit_unavailable(f"{type(e).__name__}: {e}")
         time.sleep(HEADROOM_POLL_S)
 
 
@@ -953,9 +955,15 @@ def _headroom_loop() -> None:
 #                             the haiku subscription rail instead of deferring the fleet
 #                             (agents/agent-session.sh, docs/agents/model-routing.md §M12).
 # Three inputs, all account-scope, all from data this proxy already holds:
-#   credit   — the polled account balance under OPENROUTER_MIN_CREDIT (the same floor the
-#              launcher's FU-088(b) gate uses; GET /api/v1/credits is the probed surface in
-#              model-routing.md's API table). This is what 2026-08-08 actually looked like.
+#   credit   — the account balance under OPENROUTER_MIN_CREDIT (the same floor the launcher's
+#              FU-088(b) gate uses). This is what 2026-08-08 actually looked like. Its SOURCE is
+#              the openrouter-operator's `openrouter_account_credit_usd` gauge, read in-cluster
+#              from CREDIT_METRICS_URL — NOT a direct GET /api/v1/credits, which this proxy's
+#              project-scoped key is not entitled to and which 403'd every tick until homelab#180
+#              (see _credit_tick and router.parse_account_credit for the full ruling). The leg is
+#              therefore only as live as that operator: when the gauge is unreadable, NaN or
+#              stale, the leg reports itself dead via router_openrouter_credit_poll_failures_total
+#              instead of silently never latching.
 #   hard-402 — an upstream 402 on the data plane: "insufficient credits", account-scope by
 #              construction (the signature agent-finalize already classifies as budget-403).
 #   rpd      — 429s from ≥2 DISTINCT models inside OR_RPD_WINDOW_S. ONE model 429ing is a model
@@ -970,7 +978,10 @@ OR_CAPACITY_HOLD_S = int(os.environ.get("OR_CAPACITY_HOLD_S", "900"))
 OR_MIN_CREDIT = float(os.environ.get("OPENROUTER_MIN_CREDIT", "0.25"))
 OR_RPD_WINDOW_S = int(os.environ.get("OR_RPD_WINDOW_S", "300"))
 _or_cap = {"until": 0.0, "reason": "", "since": 0.0, "count": 0,
-           "credit": None, "credit_at": 0.0}
+           # `credit_at` is when WE last read a usable balance; `credit_src_at` is when the
+           # OPERATOR last talked to OpenRouter. They differ, and only the second one says how old
+           # the number actually is (homelab#180).
+           "credit": None, "credit_at": 0.0, "credit_src_at": None}
 _or_cap_lock = threading.Lock()
 _or_429: dict[str, float] = {}  # model -> last 429 epoch (the cross-model rpd detector)
 
@@ -1025,24 +1036,60 @@ def _or_capacity_down(now: float | None = None) -> str | None:
         return _or_cap["reason"] if _or_cap["until"] > (now or time.time()) else None
 
 
-def _credit_tick() -> float | None:
-    """Account balance → the `credit` leg of the latch. Same probe the launcher's FU-088(b) gate
-    makes per dispatch, done once here so /route can TYPE the condition. Hold spans one poll
-    interval (+slack) so a recovered balance un-latches on the next tick rather than by timeout."""
-    resolved = _resolve_ref(ROUTER_ACCOUNT_REF) if ROUTER_ACCOUNT_REF else None
-    if not resolved or resolved.get("kind") != "openrouter":
-        return None  # off-cluster / no account ref — the data-plane legs still latch
-    req = urllib.request.Request(
-        f"{UPSTREAM}/api/v1/credits",
-        headers={"Authorization": "Bearer " + resolved["key"],
-                 "User-Agent": "homelab-openrouter-proxy"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.load(resp).get("data") or {}
-    total, used = data.get("total_credits"), data.get("total_usage")
-    if not isinstance(total, (int, float)) or not isinstance(used, (int, float)):
-        return None
-    balance = round(total - used, 4)
+# homelab#180: where the balance comes from. The operator's metrics Service (PR #32 shipped it as
+# a DEDICATED Service — `openrouter-operator-metrics`, NOT the operator Deployment's own name),
+# reached over in-cluster service DNS per the #138 ruling. ClusterIP→ClusterIP: it does not transit
+# the egress path, so a read failure here is a NetworkPolicy suspect before it is a code suspect —
+# which is exactly what the failure counter below exists to make visible.
+# Set empty to retire the credit leg deliberately (the data-plane legs keep latching).
+CREDIT_METRICS_URL = os.environ.get(
+    "CREDIT_METRICS_URL",
+    "http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics")
+# Staleness bound on the operator's HELD value. The operator polls upstream every
+# METRICS_CREDIT_INTERVAL (default 300s, floored at 60), so 1800s tolerates several missed upstream
+# polls without blinding the leg, while a genuinely wedged operator ages out well inside the 30m
+# `for:` of the OpenRouterCapacityDown alert this leg feeds. 0 disables the staleness refusal.
+CREDIT_MAX_AGE_S = int(os.environ.get("CREDIT_MAX_AGE_S", "1800"))
+_credit_fails = 0  # router_openrouter_credit_poll_failures_total (guarded by _or_cap_lock)
+
+
+def _credit_unavailable(why: str) -> None:
+    """The ONE place a dead credit leg becomes visible outside pod logs (homelab#180). Every way
+    the leg can fail — operator unreachable, gauge absent/NaN, held-stale value — lands here, is
+    counted, and is logged naming the source service. The predecessor of this function was an
+    unlogged `return None` plus a 403 line nobody was watching, and the leg was dead for weeks."""
+    global _credit_fails
     with _or_cap_lock:
+        _credit_fails += 1
+        n = _credit_fails
+    log(f"WARN credit: no usable balance from {CREDIT_METRICS_URL or '(leg disabled)'}: {why} — "
+        f"the capacity latch's credit leg is NOT engaging (failure #{n}); its data-plane legs "
+        "(hard-402 / cross-model 429s) still latch")
+
+
+def _credit_tick() -> float | None:
+    """Account balance → the `credit` leg of the latch, sourced from the openrouter-operator's
+    gauge (see CREDIT_METRICS_URL). Same floor the launcher's FU-088(b) gate uses, evaluated once
+    here so /route can TYPE the condition. Hold spans one poll interval (+slack) so a recovered
+    balance un-latches on the next tick rather than by timeout — the PROXY's HEADROOM_POLL_S=900s
+    tick is still the binding cadence, since the operator refreshes faster (300s) than we read."""
+    if not CREDIT_METRICS_URL:
+        return None  # leg retired by config — deliberate, and not a failure to count
+    # NB no credential and no ROUTER_ACCOUNT_REF guard: the old guard existed because the balance
+    # came from an authenticated upstream call, so 'no account ref' meant 'no credit source'. The
+    # operator's gauge needs neither, and an in-cluster proxy without an account ref DOES have a
+    # credit source now. Off-cluster runs simply fail the read — counted and logged, as they should
+    # be, instead of the silent early-return that let this leg rot.
+    req = urllib.request.Request(CREDIT_METRICS_URL,
+                                 headers={"User-Agent": "homelab-openrouter-proxy"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        text = resp.read().decode("utf-8", "replace")
+    balance, updated_at, why = router.parse_account_credit(text, time.time(), CREDIT_MAX_AGE_S)
+    if balance is None:
+        _credit_unavailable(why)
+        return None
+    with _or_cap_lock:
+        _or_cap["credit_src_at"] = updated_at
         _or_cap["credit"], _or_cap["credit_at"] = balance, time.time()
         latched_on_credit = _or_cap["until"] > time.time() and _or_cap["reason"] == "credit"
     if balance < OR_MIN_CREDIT:
@@ -1373,6 +1420,7 @@ class Proxy(BaseHTTPRequestHandler):
             # i.e. exactly the condition under which class=fix rides degrade to the subscription.
             with _or_cap_lock:
                 or_cap = dict(_or_cap)
+                credit_fails = _credit_fails
             lines += ["# TYPE router_openrouter_capacity_down gauge",
                       "# HELP router_openrouter_capacity_down 1 while the OpenRouter ACCOUNT is capacity-down (credit floor / hard-402 / cross-model 429s) — the homelab#158 degrade signal.",
                       f"router_openrouter_capacity_down {1 if or_cap['until'] > now else 0}",
@@ -1381,8 +1429,19 @@ class Proxy(BaseHTTPRequestHandler):
                       f"router_openrouter_capacity_down_total {or_cap['count']}"]
             if isinstance(or_cap.get("credit"), (int, float)):
                 lines += ["# TYPE router_openrouter_account_credit_usd gauge",
-                          "# HELP router_openrouter_account_credit_usd Polled account balance (total_credits - total_usage); absent = never polled, NOT zero.",
+                          "# HELP router_openrouter_account_credit_usd Account balance as last read from the openrouter-operator's openrouter_account_credit_usd gauge (CREDIT_METRICS_URL); absent = no usable read, NOT zero — and unlike the operator's own gauge this one is never NaN and never held past CREDIT_MAX_AGE_S (homelab#180).",
                           f"router_openrouter_account_credit_usd {or_cap['credit']}"]
+                if or_cap.get("credit_src_at"):
+                    lines += ["# TYPE router_openrouter_account_credit_source_timestamp_seconds gauge",
+                              "# HELP router_openrouter_account_credit_source_timestamp_seconds When the OPERATOR last reached OpenRouter for the balance above — how old the number really is, which our own read time does not tell you.",
+                              f"router_openrouter_account_credit_source_timestamp_seconds {or_cap['credit_src_at']}"]
+            # The dead-leg signal itself (homelab#180). ALWAYS emitted, from 0, so "the credit leg
+            # stopped working" is a series that moves rather than a series that never existed —
+            # the failure mode this whole issue is about was invisible precisely because the only
+            # evidence lived in pod logs.
+            lines += ["# TYPE router_openrouter_credit_poll_failures_total counter",
+                      "# HELP router_openrouter_credit_poll_failures_total Credit reads that yielded no usable balance (operator unreachable / gauge absent / NaN / stale) — the latch's credit leg is not engaging while this climbs. In-memory; resets on roll. Distinct from the operator's own openrouter_account_credit_poll_failures_total, which counts ITS upstream failures.",
+                      f"router_openrouter_credit_poll_failures_total {credit_fails}"]
             # homelab#22: in-flight requests by model/leg + oldest age — the stall-detector's
             # view of a quiet-but-wedged proxy (a handler thread only logs on completion).
             with _inflight_lock:
@@ -1433,11 +1492,19 @@ class Proxy(BaseHTTPRequestHandler):
                 summary["openrouter_headroom"] = {k: dict(v) for k, v in _headroom.items()}
             with _or_cap_lock:
                 or_cap = dict(_or_cap)
+                credit_fails = _credit_fails
             summary["openrouter_capacity"] = {
                 "down": or_cap["until"] > now, "reason": or_cap["reason"] or None,
                 "remaining_s": max(0, round(or_cap["until"] - now)),
                 "latched_total": or_cap["count"], "credit_usd": or_cap["credit"],
                 "credit_age_s": (round(now - or_cap["credit_at"]) if or_cap["credit_at"] else None),
+                # homelab#180: the credit leg's own health, so "is that leg alive?" is answerable
+                # from the probe this alert names instead of from pod logs.
+                "credit_source": CREDIT_METRICS_URL or None,
+                "credit_source_age_s": (round(now - or_cap["credit_src_at"])
+                                        if or_cap.get("credit_src_at") else None),
+                "credit_max_age_s": CREDIT_MAX_AGE_S,
+                "credit_poll_failures": credit_fails,
                 "min_credit_usd": OR_MIN_CREDIT,
                 "recent_429_models": sorted(m for m, ts in list(_or_429.items())
                                             if now - ts <= OR_RPD_WINDOW_S)}

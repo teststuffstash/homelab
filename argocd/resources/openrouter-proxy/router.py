@@ -22,6 +22,7 @@ import needs no packaging). `--self-test` runs the in-memory round-trip; CI runs
 """
 
 import json
+import math
 import os
 import random
 import sqlite3
@@ -492,6 +493,69 @@ def enroll_key_ref(ref: str) -> None:
 
 def key_refs() -> list[str]:
     return [r[0] for r in _read("SELECT ref FROM openrouter_keys ORDER BY last_seen DESC")]
+
+
+# ── homelab#180: reading the openrouter-operator's account-credit gauge ────────────────────────
+# The proxy's `credit` capacity leg used to poll OpenRouter's GET /api/v1/credits directly and got
+# a 403 on EVERY tick from 2026-08 onwards: that endpoint is scoped to the PROVISIONING key, and
+# the proxy holds a project-scoped inference key (openrouterkey.yaml). Operator ruling 2026-08-08:
+# the proxy does NOT get the provisioning key — copying a key-mint credential into agent-egress to
+# read a balance is the wrong trade. One owner for account-scope facts = the openrouter-operator,
+# which holds that key legitimately and exports `openrouter_account_credit_usd` on its own
+# /metrics. The proxy reads THAT, in-cluster.
+#
+# The operator's gauge does NOT share this proxy's honest-absent contract, and the difference is
+# the whole reason this parse lives here instead of inline in the proxy's poll:
+#   • it is emitted from process start as NaN, before any successful upstream poll; and
+#     `float('nan') < OR_MIN_CREDIT` is FALSE, so a naive port of the old comparison would latch
+#     never and reproduce exactly the dead leg this function exists to kill.
+#   • it HOLDS its last known value across upstream failures — "never 0 unless the account really
+#     is empty" — so a present, plausible number can be arbitrarily stale, and a held stale
+#     balance is a lie a capacity latch would act on.
+# Both are refused HERE, and the function is pure (same reason route() is — so the CI self-test
+# can drive it; `devbox run router-self-test`).
+ACCOUNT_CREDIT_GAUGE = "openrouter_account_credit_usd"
+ACCOUNT_CREDIT_TS_GAUGE = "openrouter_account_credit_updated_timestamp_seconds"
+
+
+def _prom_sample(text: str, name: str) -> float | None:
+    """One UNLABELLED gauge out of a Prometheus text exposition (both series above are
+    unlabelled by the operator's contract; a labelled variant is deliberately not matched)."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or not line.startswith(name):
+            continue
+        head, _, rest = line.partition(" ")
+        if head != name:
+            continue
+        try:
+            return float(rest.split()[0])
+        except (ValueError, IndexError):
+            return None
+    return None
+
+
+def parse_account_credit(text: str, now: float,
+                         max_age_s: float) -> tuple[float | None, float | None, str]:
+    """(balance, operator_updated_at, why) from the operator's /metrics body. `balance` is None
+    whenever the number must NOT be trusted, and `why` names which refusal fired so the caller's
+    WARN line says something a human can act on."""
+    value = _prom_sample(text, ACCOUNT_CREDIT_GAUGE)
+    if value is None:
+        return None, None, f"{ACCOUNT_CREDIT_GAUGE} absent from the exposition"
+    if math.isnan(value):
+        return None, None, "gauge is NaN — the operator has never completed an upstream poll"
+    if math.isinf(value):
+        return None, None, f"gauge is {value} — not a balance"
+    updated_at = _prom_sample(text, ACCOUNT_CREDIT_TS_GAUGE)
+    if not updated_at:  # absent, or the operator's 0 = "no poll has ever succeeded"
+        return None, None, f"{ACCOUNT_CREDIT_TS_GAUGE} is absent/0 — no successful operator poll"
+    age = now - updated_at
+    if max_age_s and age > max_age_s:
+        return None, updated_at, (f"balance is {age:.0f}s old (> {max_age_s:.0f}s) — the operator "
+                                  "HOLDS its last value across failures, so this number is stale, "
+                                  "not current")
+    return round(value, 4), updated_at, f"operator polled {max(0.0, age):.0f}s ago"
 
 
 def reliability(days: int = 7, min_n: int = 5) -> list[dict]:
@@ -1292,6 +1356,36 @@ def self_test() -> int:
         "a PROVEN cell lets even tight work start on the free rung (§M11)"
     assert dp["model"] == "inclusionai/ling-3.0-flash:free", "…and the served pick never moved"
     assert status_summary()["ladder_cells"] and status_summary()["shadow_24h"], "soak surfaces"
+    # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
+    # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
+    _OP_TS = 1786237718.460958
+    fresh = (f"# HELP {ACCOUNT_CREDIT_GAUGE} account credit\n"
+             f"# TYPE {ACCOUNT_CREDIT_GAUGE} gauge\n"
+             f"{ACCOUNT_CREDIT_GAUGE} 20.167155\n"
+             f"{ACCOUNT_CREDIT_TS_GAUGE} {_OP_TS}\n"
+             "openrouter_account_credit_poll_failures_total 0\n")
+    bal, at, why = parse_account_credit(fresh, _OP_TS + 60, 1800)
+    assert bal == 20.1672 and at == _OP_TS, (bal, at, why)
+    # The NaN trap, stated as the comparison the caller actually makes: a naive port would leave
+    # the leg silently never latching (`nan < floor` is False), which IS the bug #180 is about.
+    nan_body = fresh.replace("20.167155", "NaN")
+    bal, _, why = parse_account_credit(nan_body, _OP_TS + 60, 1800)
+    assert bal is None and "NaN" in why, why
+    assert not (float("nan") < 0.25), "the trap this refusal exists for"
+    # A HELD stale value must be refused, not trusted — the operator keeps its last number across
+    # upstream failures, so 'present and plausible' is not 'current'.
+    bal, at, why = parse_account_credit(fresh, _OP_TS + 4000, 1800)
+    assert bal is None and at == _OP_TS and "stale" in why, why
+    assert parse_account_credit(fresh, _OP_TS + 4000, 0)[0] == 20.1672, \
+        "max_age_s=0 disables the staleness refusal"
+    # Never-polled operator: gauge present, timestamp 0.
+    never = fresh.replace(str(_OP_TS), "0")
+    assert parse_account_credit(never, _OP_TS, 1800)[0] is None, "ts 0 = no poll has succeeded"
+    # Operator unreachable / wrong endpoint / gauge renamed — an empty-ish body is no value.
+    assert parse_account_credit("# nothing here\n", _OP_TS, 1800)[0] is None
+    assert parse_account_credit("", _OP_TS, 1800)[0] is None
+    # The proxy's OWN same-named-prefix series must never be mistaken for the operator's gauge.
+    assert _prom_sample(f"{ACCOUNT_CREDIT_GAUGE}_bogus 1.0\n", ACCOUNT_CREDIT_GAUGE) is None
     body = "\n".join(metrics_lines())
     assert "router_db_persistent 0" in body, "self-test store is ephemeral by construction"
     assert 'router_strikes_total{error_class="harness-death"} 1' in body
