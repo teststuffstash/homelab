@@ -104,6 +104,9 @@
       "exporter-self-test": [
         "python3 argocd/resources/github-exporter/github-exporter.py --self-test"
       ],
+      "spend-probe-self-test": [
+        "python3 argocd/resources/cloudflare-exporter/spend-probe.py --self-test"
+      ],
       "cloudflare-token-audit": [
         "bash scripts/cloudflare-token-audit.sh"
       ],

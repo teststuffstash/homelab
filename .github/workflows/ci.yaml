@@ -59,6 +59,12 @@ jobs:
       - name: github-exporter self-test (devbox run exporter-self-test)
         run: devbox run exporter-self-test
 
+      # homelab#217 (PR#220's operator finding 1): the spend-probe's rule replay as a gate — it
+      # reads the alert exprs OUT of the committed prometheusrule.yaml, so an expr/metric renamed
+      # on one side only goes red here instead of rotting silently.
+      - name: cloudflare spend-probe self-test (devbox run spend-probe-self-test)
+        run: devbox run spend-probe-self-test
+
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
       # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).

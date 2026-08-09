@@ -411,7 +411,15 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
-- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
+- [ ] **FU-158** — **No PrometheusRule in `argocd/resources/**` has a behaviour gate: every alert
+      expr merges unexecuted.** Surfaced by PR#220's operator findings (2026-08-09): kubeconform
+      SKIPS the kind (schema gap, known — FU archive 2026-08-04 note), and there is no
+      `promtool test rules` (not in devbox.json) or any repo-wide rule replay — so a renamed
+      metric, inverted polarity, or wrong constant in any of the ~27 alerts ships green. Two
+      per-file self-tests now exist as the pattern (exporter, spend-probe: read the COMMITTED
+      exprs, replay against fixtures). Next: decide promtool-in-devbox (one tool, real `for:`
+      + time-series semantics) vs. extending the self-test pattern per rule file; either becomes
+      a CI step. Not urgent — the two files with product-spend/agent-loop rules are covered.
       Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
       (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
       **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass: independence RIGHT, queueing
