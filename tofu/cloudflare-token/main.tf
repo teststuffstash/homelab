@@ -46,11 +46,12 @@ resource "cloudflare_api_token" "tofu_apply" {
     },
     {
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.ssl_write.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id },
-      ]
+      # sort(): API returns permission_groups ascending by id (see observability-read.tf).
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.ssl_write.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id,
+      ]) : { id = gid }]
       resources = jsonencode(local.zone_resource)
     },
   ]

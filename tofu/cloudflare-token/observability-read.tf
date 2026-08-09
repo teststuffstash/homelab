@@ -73,22 +73,25 @@ resource "cloudflare_api_token" "observability_read" {
   policies = [
     {
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.analytics_read_account.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id },
-        { id = local.audit_logs_read_id },
-      ]
+      # sort(): the API returns permission_groups ASCENDING BY ID and the provider compares
+      # positionally (same class as the policy order above, one level down — found on the very
+      # next plan, 2026-08-09). Sorting at plan time matches the API for ANY future group set.
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.analytics_read_account.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id,
+        local.audit_logs_read_id,
+      ]) : { id = gid }]
       resources = jsonencode(local.account_resource)
     },
     {
       # every zone in the account, read-only — includes zones created later
       effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.analytics_read_zone.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.zone_read.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.waf_read.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.zone_settings_read.result[0].id },
-      ]
+      permission_groups = [for gid in sort([
+        data.cloudflare_api_token_permission_groups_list.analytics_read_zone.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.zone_read.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.waf_read.result[0].id,
+        data.cloudflare_api_token_permission_groups_list.zone_settings_read.result[0].id,
+      ]) : { id = gid }]
       resources = jsonencode({ "com.cloudflare.api.account.zone.*" = "*" })
     },
   ]
