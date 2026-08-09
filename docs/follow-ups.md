@@ -562,6 +562,16 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
+- [ ] **FU-157** — **Cloudflare platform tokens are USER tokens; migrate to ACCOUNT tokens
+      opportunistically.** All of tofu/cloudflare-token mints `cloudflare_api_token` (tied to the
+      operator's user). Account tokens (`cloudflare_account_token`) are org-owned, have a coarser
+      catalog (single DNS perm — no DNS vs DNS-Settings split, operator observation 2026-08-09),
+      and the provider's 5.13.0 policy-order fix covers THEM (api_token still needs our sort()
+      workaround). Not urgent for a 1-person org: migrate per-token whenever one next needs a
+      re-mint anyway, never as a big-bang (each migration = mint + store + consumer re-verify).
+      Doctrine reminder while doing any of it: permission SEMANTICS come from the target
+      endpoint's "accepted permissions" docs line, never the catalog name (`devbox run
+      cloudflare-token-audit` renders minted reality readably). Relates FU-156.
 - [ ] **FU-156** — **Credential-expiry BELT (re-scoped 2026-08-08, operator: dates-in-git is the
       wrong system).** One gauge `credential_expiry_timestamp_seconds` + one <30d alert; live-poll
       Cloudflare `/user/tokens` (needs a tiny User:API-Tokens:Read mint), declared expiries for

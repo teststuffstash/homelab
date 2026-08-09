@@ -104,6 +104,9 @@
       "exporter-self-test": [
         "python3 argocd/resources/github-exporter/github-exporter.py --self-test"
       ],
+      "cloudflare-token-audit": [
+        "bash scripts/cloudflare-token-audit.sh"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
