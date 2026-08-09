@@ -1,0 +1,5 @@
+CALL gh issue list --repo teststuffstash/oracle-fleet --state open --json number,title,author,labels,createdAt,blockedBy
+OUT ORPHAN [oracle-fleet] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
+OUT ORPHAN   issue #91 — harvested: the delta path needs a cold-start fixture (by homelab-agents-1234)
+OUT REACHED: end
+RC 0
