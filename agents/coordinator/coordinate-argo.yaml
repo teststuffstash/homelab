@@ -101,6 +101,16 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+                # below. Applies inside <loop_ns>, spreading that stack's perstack scans.
+                podSpecPatch: |
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchExpressions:
+                          - { key: workflows.argoproj.io/workflow, operator: Exists }
                 synchronization:
                   mutexes:
                     - name: coordinator-scan
@@ -162,6 +172,29 @@ spec:
   serviceAccountName: agent-coordinator
   activeDeadlineSeconds: 1800
   ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+  # homelab#103 — soft spread so concurrent coordinator workflow pods stop piling onto one node.
+  # ⚠ THE CANONICAL COPY OF THIS BLOCK. Every other workflow spec in agents/coordinator/*-argo.yaml
+  # repeats it verbatim (YAML anchors don't cross documents) and points back here. Keep in sync.
+  #   - `podSpecPatch`, not a typed field: WorkflowSpec has NO first-class topologySpreadConstraints
+  #     (argo-workflows v4.0.7 — see the Field Reference; nodeSelector/tolerations/affinity are the
+  #     only native scheduling knobs). The patch is a strategic merge onto the generated pod spec.
+  #   - Selector is the built-in per-pod `workflows.argoproj.io/workflow` label with operator
+  #     Exists, so it matches EVERY workflow pod in the namespace and spreads ACROSS runs. Matching
+  #     that label's VALUE (the usual upstream example) would spread only WITHIN one workflow —
+  #     useless here, where a coordinate/review/respond run is a single pod.
+  #   - ScheduleAnyway, never DoNotSchedule: the schedulable pool shrinks when metal nodes sleep, so
+  #     a hard constraint would wedge dispatch rather than merely leave it unbalanced.
+  # Spread is namespace-scoped by design of the API (a TopologySpreadConstraint has no
+  # namespaceSelector), so this balances agent-coordinator's own burst; the per-stack namespaces get
+  # the same block via the inline perstack workflows above.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
   synchronization:
     mutexes:
       - name: coordinator-scan # one scan at a time across cron + Sensor submissions

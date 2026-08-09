@@ -25,6 +25,16 @@ spec:
   startingDeadlineSeconds: 300
   workflowSpec:
     serviceAccountName: agent-coordinator
+    # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+    # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+    podSpecPatch: |
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchExpressions:
+              - { key: workflows.argoproj.io/workflow, operator: Exists }
     activeDeadlineSeconds: 7200 # two rides + harvest; a stuck ride dies with the workflow
     ttlStrategy: { secondsAfterCompletion: 86400, secondsAfterFailure: 259200 }
     entrypoint: main
