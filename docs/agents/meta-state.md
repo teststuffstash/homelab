@@ -6,75 +6,41 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-09 ~09:40Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-09 ~12:45Z consolidation — everything below is CURRENT; history is TICK-LOG's)
 
-- **ADR-102/103 PROGRAM — first tranche mostly LANDED 08-09 morning**: ✓#206 harness (agents/
-  replay/, 12-fixture suite) ✓clause-replay CI gate + RATCHET (v2 — files API; v1 died shallow,
-  see TICK-LOG) ✓#209 panel ✓#207 harvest→post-launch-bucket (PR#216) ✓#212 optout shared read
-  ✓#215. REMAINING: **#208 verdict terminals** (dispatches now #207's footprint freed — review
-  like a hawk, replay fixtures are the acceptance) + **#210 channel separation**. Monday retro
-  (08-10 05:00Z) scores the two ADR-103 KPIs first — CHECK ITS REPORT. ADR-102 clause set
-  COMPLETE (PR#216+#218); remaining program: #210 channels (riding, homelab leg + agent-
-  runtime#62), #217 spend belt (queued).
-- **minutark.ee LIVE + SERVING** (placeholder, 2026-08-09 ~12:45Z) through the full new chain:
-  cf-api-proxy (allowlist = the permission model, reconciler tokenless) + PublicRoute product-
-  zone class + zone bootstrap applied (TLS 1.2 / always-HTTPS / SPF+DMARC / DNSSEC). ONE step
-  remains, OPERATOR: add the DS at zone.ee —
+- **ADR-102/103 PROGRAM — clause set COMPLETE** (#206/#207/#208/#209/#212/#215 all merged,
+  replay-gated; ratchet v2 live). REMAINING: **#210 channel separation** (homelab leg
+  in-progress — ride live 12:09Z; agent-runtime#62 twin QUEUED by meta 12:2xZ) + **homelab#217
+  spend belt** (queued). **Monday retro 08-10 05:00Z scores the two ADR-103 KPIs first — CHECK
+  ITS REPORT.**
+- **minutark.ee LIVE + SERVING** (verified 12:19Z: http=200 via Cloudflare; a 20m-deadline
+  monitor fired http=000 but that was the JAIL's Unbound negative-cache from before the A
+  records existed — self-expires, site fine). ONE step remains, OPERATOR: add the DS at zone.ee —
   `2371 13 2 B6C05FC87C68195F40C98F4A2099E3DFFF02447920A84A0A633CF11DA4B48D79`
   then authoritative-verify (`dig DS minutark.ee @ns.tld.ee +norecurse` shows the digest) and
   close oracle-iac#351. NO LB (ladder rung 1); MCP exposure waits on the gateway (T3c).
-  Design + boundaries: docs/cloudflare.md. Spend belt queued homelab#217; FU-157 account-token
-  migration opportunistic.
-- **ert-verify-2026089-mpws5**: waiting out riigiteataja's weekly regeneration (LOEMIND.txt
-  sentinel); backoff hourly; monitor armed; completes when upstream publishes. oracle-iac#343
-  corrected+de-queued (wrong premise — do NOT re-queue unless proxy 504s while in-pod curl
-  works AFTER the files return).
-
-- **IN FLIGHT — e2e-outage recovery (root cause: leaked kind clusters → inotify 116/128, fixed
-  live + codified; TICK-LOG 2026-08-09)**: master e2e re-run GREEN 07:00Z. Pending, with
-  deadlines: (a) PR#239 + PR#234 CI re-runs (monitor armed; expect green ≤25 min — if red, the
-  diagnosis was incomplete, go back to the VM); then PR#239 → reviewer reflex → auto-merge, and
-  PR#234 → reviewer re-approve → auto-merge (arbitrate ruled it mergeable-quality; its
-  agent/blocked+arbitrate labels clear on merge). (b) `ert-verify-2026089-mpws5` in ns
-  oracle-fleet on pin 2026.8.9-gcbcc2db04aa7 (monitor armed; expect Succeeded ≤40 min) — the
-  #217/#235 fix-cycle verification. (c) LEAK CLASS still open: cancelled e2e jobs leak their kind
-  cluster (PR#224's cancel-in-progress) — flagged with evidence on oracle-fleet#228 for a
-  job-start stale-cluster sweep; verify it lands with PR#239 or gets its own issue.
-
-- **#26 INCIDENT ARC FULLY CLOSED with live acceptance (01:40Z 08-09)**: park held (zero 429
-  storm), BOTH wedge classes fixed+deployed (rpd park #28; idempotent 404-delete #30/PR#36),
-  **drain verified to ZERO pending CRs**. The whole credit chain is instrumented end-to-end and
-  LIVE-verified: operator gauge (#29/PR#35, NaN-not-omit) → proxy latch reading it cross-namespace
-  (#180/PR#191, `router_openrouter_account_credit_usd 20.1672` observed on the proxy) →
-  OpenRouterCapacityDown page (#163) → rail degrade (#158 family). REMAINING queued: homelab#190
-  (launcher gate reads the proxy surface — edge on #180 now satisfied), or-op#33 (balance alert,
-  edge on #29 satisfied), or-op#34 SOAKS until the first daily-class 429 datum.
-- Reviewer outage (heredoc `$103.74`) fixed 00:30Z 08-09 + recovered; verdicts flowing since.
-- **openrouter-operator has a BUILD lane since 01:00Z**: .agents/build.yaml (chart/+tests,
-  render-first TDD) + review.md criterion-5 lane split (PR#31); first build PR#32 shipped the
-  metrics Service/ServiceMonitor/key-ops alert with the no-alert-without-a-series constraint as
-  a chart TEST. task/build label wired.
-- **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
-- CI-red arc resolved 20:30Z 08-08 (#151 root; issue closed with audit 08-09, ditto #133/#173).
-  #153 re-scoped+queued (github-exporter duplicate-emission mechanism); #154 re-queued.
-- **#162's proxy latch verified live post-roll**: router_openrouter_capacity_down{,_total} = 0 on
-  the rolled pod. Alert for the latch = #163 (queued, ⚖ severity-warning note attached).
-- **circles**: PR#54 assembly MERGED 2026-08-08 ~20:47Z via my delegated codeowner approve (specs
-  delta = evidence-blocks only, 205 PASS, contract text untouched); goal #29 CLOSED; #47/#138
-  hand-closed with audits (goal-branch Fixes never fires at the squash boundary). Frozen:
-  PR#21/#25 (unchanged). **oracle**: #217 + #235 MERGED + agent/done flipped; deploy bump #340 +
-  pin-follow landed (machine lane); verification = the ert-verify chain in the IN-FLIGHT bullet.
-- **agent-runtime**: PR#54 reviewed-by-execution + admin-merged 07:02Z 08-09 (#43 closed);
-  4 queued issues (#45/#46/#49/#50) now free to dispatch via wip caps — expect rides.
-  ⚠ reviewer.enabled=false for the WHOLE platform stack (reviewer log 20:45Z) — the earlier
-  "reviewer follows the fixer block" note is NOT what the claim says today: every platform-repo
-  PR needs MY read + admin merge until that's reconciled (needs-meta clause 1/park covers).
+  Design + boundaries: docs/cloudflare.md. FU-157 account-token migration opportunistic.
+  Host-side: next `tofu/cloudflare-token` apply is PREPPED (account-first policy order + two-zone
+  ingress token) — operator runs it outside the jail.
+- **ert-verify-2026089-mpws5**: still Running (5h+), waiting out riigiteataja's weekly
+  regeneration (LOEMIND.txt sentinel); backoff hourly; completes when upstream publishes.
+  oracle-iac#343 corrected+de-queued (do NOT re-queue unless proxy 504s while in-pod curl works
+  AFTER the files return). This is the #217/#235 fix-cycle verification tail.
+- **homelab#107 QUEUED 12:2xZ** (astral-CDN leg only; ghcr leg closed by `1904096`): ⚖ =
+  UV_PYTHON_PREFERENCE=only-system in agent-session.sh, NOT an extraFQDNs widening; Touches
+  repointed. Watch the ride's PR like any platform-lane PR (needs meta read + admin merge).
+- **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 (death-class test
+  self-referential) + #62 queued by meta. or-op#34 SOAKS until first daily-class 429 datum;
+  or-op#25 (proactive key rotation) = backlog, deliberate.
+- **circles**: PR#21/#25 frozen (unchanged, operator's). **e2e-outage arc CLOSED**: PR#239
+  (with the #228 cancel-leak belt) + PR#234 merged; #228/#190/or-op#33 closed.
 - **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
-  94–98°C baseline); wk-metal-02 at 1 Gbps (fixed by the poke).
+  94–98°C baseline); zone.ee DS hand-back (above).
 - **tuya frozen-accepted** (silence c73baef2 → ~08-22 auto re-triage).
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); Monday retro (FU-058);
   FU-149 spot-check; FU-148 acceptance (first organic environmental-red self-retry); first
-  concurrent double-e2e contention glance; M11 shadow lines once #159 lands.
+  concurrent double-e2e contention glance; M11 shadow lines once #159 lands; ~5 stale local
+  branches in the oracle-iac checkout worth a checked sweep.
 
 ## Durable warnings — re-read before touching these files
 
