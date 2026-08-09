@@ -80,6 +80,13 @@ Additionally:
   in-chunk work.
 - **Wins**: if any task landed notably under estimate / first-round-approved, name the
   reusable procedure worth codifying into the recipe (the Devin-playbook move).
+- **Platform KPIs (ADR-103, weekly — score these FIRST, every run)**: (1) **bucket-A count** —
+  platform-logic failure events this week (coordinator/reflex/prompt/scan defects; count distinct
+  events from the responder ledger + platform-repo issues, not comments); (2) **jail
+  $/day-equivalent** — `sum(increase(claude_code_cost_usage_USD_total{stack="jail"}[7d]))/7`.
+  Both should FALL as replay gates land; report the numbers, the trend, and — mandatory — ONE
+  proposed next gate (the highest-recurrence unguarded class this week). Sustained non-fall is
+  the named trigger to revisit label-carried loop state (AgentStack CR status), per ADR-103.
 - **Predecessor score**: if a previous retro's process changes have since merged, open by
   checking the ledger KPIs across them (did rounds/issue actually drop?). If none merged,
   say "no merged predecessor changes" and move on.
@@ -97,6 +104,7 @@ BEGIN-RETRO-REPORT
 ## Proposed process changes (table: change | artifact | expected saving | confidence)
 ## Task granularity (per deep-dive task: chunked-right / should-have-been-one / fan-out — evidence)
 ## Wins to codify (or "none observed")
+## Platform KPIs (bucket-A count · jail $/day · trend · proposed next gate)
 ## Predecessor score (or "no merged predecessor changes")
 ## Evidence confidence (what you could NOT verify and why)
 END-RETRO-REPORT

@@ -3237,3 +3237,33 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   before re-arming (they do NOT die with the session — the comment-stream one even kept emitting).
 - Fix-cycle chain for #217/#235: deploy bump #340 + pin-follow (oracle-iac) landed by the machine
   lane; ArgoCD Synced; ert-verify submitted (`ert-verify-2026089-mpws5`) on the new pin.
+
+## 2026-08-09 (~08:40–09:40Z) — ADR-102/103: the goal container + the platform develops itself like a stack
+
+- **The morning's design session concluded in two ADRs** (operator-driven, validated against
+  circles #17→#29 and goal-174's post-close tree): **ADR-102** — goals are the unit of autonomy:
+  funded (one machine Budget line), merge is a MIDPOINT (post-launch bucket, goal keeps shipping
+  at its own pace), terminals VALIDATED/REVERTED/ABANDONED (descendants die with a revert; the
+  squash boundary is the revert unit), pull-only cross-goal movement (donatable flag transfers
+  NOTHING — the escape hatch pays the escaper nothing). **ADR-103** — replay-gated clause changes
+  (the recurrence audit's verdict: every prose-warned class recurred, every executable gate held),
+  human-only issue timelines (census: ~2/3 of comments are machine residue; bar = verdict + ≤1
+  machine comment), weekly platform KPIs (bucket-A count + jail $/day) scored by the Monday retro.
+- **Execution started same session**: design section in issue-authoring.md §Goal container; retro
+  BRIEF.md scores the two KPIs FIRST from tomorrow's run; five fixer issues filed+queued with ⚖
+  and replay requirements — #206 replay harness (generalize state-fp), #207 harvest→post-launch
+  bucket + self-queue-dies-with-goal, #208 assembly-complete midpoint + verdict terminals, #209
+  goal registry/convergence panel (supersedes IL-G04), #210 channel separation 1 (run-stats →
+  check-run, one edited summary comment). Native blocked-by: 207/208 → 206.
+- **Also this session**: PR#234 meta-read + merged (arbitrate terminal — reflex structurally
+  blind: merge commits excluded from newest_commit_at + dismissed verdict = permanent park);
+  ert-egress-proxy 6-day-old pod pinning dead Cloudflare edges → rolled live, class issue
+  oracle-iac#343 (nginx resolver + variable proxy_pass); review-perstack IGNORES
+  reviewer.enabled=false (homelab#204, two-readers class — agent-runtime#57 merged bot-approved
+  past the disabled gate); agent-runtime queue FULLY drained (#43/#45/#46/#49/#50 in one
+  morning, #58 admin-merged with checks pending — my error, master proved green via #205);
+  needs-meta clause-1 split now derives LIVE from the claim knob (the 10h-PR#54 hole closed);
+  meta-throughput.sh born from the operator's catch and wired into skill+sweeps.
+- ⚠ Own-probe failures this session: master-CI watch jq null/null fell through to silence
+  (dead-probe class, AGAIN); the #58 admin merge jumped pending checks. Both named here so the
+  next session inherits the shame.

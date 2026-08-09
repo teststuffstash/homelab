@@ -1291,3 +1291,46 @@ privilege boundary (Garage-bucket precedent), giving Enterprise-grade delegation
 the Free plan. **Consequences:** zone-phase rulesets (cache, api-no-challenge Skip) cannot be
 per-claim (one entrypoint ruleset per phase per zone) — the aggregation design is the named
 open leg, decided no earlier than the second consumer; mechanism doc: docs/cloudflare.md.
+
+### ADR-102 — Goals are the unit of autonomy: funded, production-terminated, self-reverting
+
+**Status:** Accepted (operator design session 2026-08-09; validated retroactively against circles
+#17→#29 and oracle-fleet goal-174). **Decision:** every dispatchable agent issue belongs to a
+goal, and every goal carries one machine-parsed budget — no budget-unbound issues, ever. The
+assembly merge is a MIDPOINT: the goal enters post-launch, keeps shipping to production at its
+own pace (sprouts park in the goal's post-launch sub-issue, fixed in waves or singly, drawing
+the same budget), and terminates only on a verdict: VALIDATED (production KPIs / operator
+verdict-in-lieu green), REVERTED (idea refuted — the goal rolls back its own changes and closes
+successfully-refuted; descendants die with it), or ABANDONED (budget out). Verdict authority is
+per-stack: machine-KPI on the absorbable tier (oracle first), human elsewhere (IdP always).
+Cross-goal movement mid-flight is PULL-only (`goal/donatable` transfers nothing until the
+recipient pulls with a charter citation; one hop, then human); batch re-homing is legal only at
+the close sweep. Harvest self-queue is legal only inside an open funded goal and dies with it.
+**Considered:** always-inert sprouts behind FU-090 (rejected: puts the operator back per-issue);
+close-time disposition ceremony at merge (rejected: merge is not the end — #17 was machine-ruled
+"met" 100 min before the operator refuted it); per-issue budgets (rejected: bounds nothing
+aggregate). **Why:** the #17→#29 supersession already executed this lifecycle by hand; goal-174's
+19-sprout tree grew 3 generations post-close because nothing owned it. **Consequences:** the
+squash boundary is the revert unit; goal-review clause renamed assembly-complete; IL-G04 and the
+goal-half of FU-090 superseded; design detail: docs/agents/issue-authoring.md §Goal container.
+
+### ADR-103 — The platform develops itself like a stack: replay-gated clauses, human-only timelines, weekly self-KPIs
+
+**Status:** Accepted (operator 2026-08-09, from the 2-day failure census + recurrence audit).
+**Decision:** three standing rules. (1) A changed coordinator clause, prompt-assembly path, or
+reflex ships only with an EXECUTED replay (recorded API state in → expected dispatch/label/
+comment out), enforced by a ratchet lint keyed on the FSM's new `replay:` fields — new/changed
+transitions red without one; backfill follows fix-density, not big-bang. (2) Issue timelines are
+for humans: machine residue (state-fp markers, run-stats, dispatch/deferral notices) moves to
+check-runs/commit statuses/S3/Prometheus; bar = a new PR shows the review verdict plus at most
+ONE machine comment. (3) The Monday retro scores two platform KPIs weekly — bucket-A (platform-
+logic) incident count and jail $/day-equivalent — and proposes the next gate; sustained non-fall
+is the trigger to revisit label-carried loop state (AgentStack CR status instead).
+**Considered:** more durable prose warnings (rejected by the recurrence data: every prose-warned
+class recurred; every executable gate held); big-bang FSM spec-first (rejected: POC-first stands
+— replay a seam when its fix stream shows the shape stopped moving). **Why:** 14 of 31 failure
+events in 2 days were platform-logic; ~2/3 of timeline comments are process residue; the four
+existing exemplars (state-fp replay, responder harness, rail-degrade replay, prompt-transport
+lint) each ended their class. **Consequences:** clause work slows slightly and stays fixed;
+the debounce's comment-store moves last (load-bearing, replay-first); mechanism docs:
+docs/agents/workflow.md (replay ratchet), observability-and-retro.md (channels, KPIs).

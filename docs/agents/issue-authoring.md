@@ -518,3 +518,55 @@ The scheduler consumes **semantics, not decorations** (recorded during the FU-11
 review): blocking = native GitHub dependencies (FU-111); operator preference = the pin; grouping
 and reporting = milestones and **sub-issues** — which is exactly what lineage is. Sub-issues were
 parked "until board scale pays"; the sprout index is what makes them pay.
+
+## The goal container — lifecycle v3 (ADR-102, 2026-08-09)
+
+Supersedes the goal-half of this doc's earlier close semantics (harvest-time queueing after
+close, IL-G04's unbuilt gauge, the retarget-to-master drift). Validated retroactively against
+circles #17→#29 (the machine ruled #17 "goal met" 100 minutes before the operator refuted it and
+rebuilt from the contract — the exact gap this closes) and oracle-fleet goal-174 (19 sprouts,
+3 generations, still growing 34h post-close with nothing owning the tree).
+
+**The invariant: every dispatchable issue belongs to a goal; every goal has ONE machine-parsed
+`Budget:` line.** (One line only — #29 carried `€12` in prose and `$16` in the footer; the
+machine line is the truth, prose references it.) Two new template lines: `Verdict-authority:
+human | kpi` and `Production-leg:` (what "done means deployed" means for THIS goal — a deploy
+surface, an operator live-probe, or an explicit evidence-in-lieu statement; a goal with no
+production leg cannot claim a terminal verdict, only assembly-complete).
+
+**Merge is a midpoint.** At assembly merge the goal enters POST-LAUNCH: a post-launch sub-issue
+is created under the goal and becomes the harvest target for every sprout from the goal's
+descendant PR reviews (never master-limbo). Post-launch children base master (the goal branch
+dies at the squash — goal identity is the issue + budget + KPI watch, not the branch). The goal
+keeps shipping at its own pace: bunch sprouts into a fix wave or ship singles, drawing the SAME
+budget via the existing launcher pre-flight (Σ child caps ≤ budget, counting closed children,
+now spanning post-launch work).
+
+**Terminals** (the only ways a goal closes): `VALIDATED` — the production KPI window (or the
+human verdict-in-lieu) confirms the idea; `REVERTED` — production refutes it; the goal rolls
+back its own changes (pin-rollback first, `git revert` of the assembly squash when master must
+be clean — the squash boundary IS the revert unit) and closes successfully-refuted; **its
+descendant tree dies with it**; `ABANDONED` — budget exhausted pre-verdict, operator decides
+refill-or-close. The goal-review clause verdict is renamed **assembly-complete** — it measures
+"built as specified", never "idea validated" (the #17 lesson).
+
+**Self-queue**: harvest may self-apply `agent-fix`+`agent/queued` ONLY for sprouts parented
+into an OPEN goal with budget remaining; the right dies with the goal. Bot-authored issues
+outside any goal stay inert behind breaker #1 / FU-090 as before.
+
+**Cross-goal movement**: mid-flight is PULL-only. A goal (or its sessions) may label an issue
+`goal/donatable` — the flag transfers NOTHING (the issue stays in the donor's burn-down and
+budget accounting, so flagging buys the flagger no relief). Transfer happens when the RECIPIENT
+goal's coordination pulls it into its own sub-issue list, citing the recipient charter line that
+makes it in-scope; the pull re-estimates against the recipient's budget. One pull per issue
+between human reviews — a second hop needs the close sweep or a human. Batch re-homing is legal
+only at the close sweep (the accountable moment). Between goals, the durable transfer medium
+remains specs/evidence, not issue-moves (#17→#29 moved zero issues and everything of value).
+
+**Convergence is a number** (supersedes IL-G04): per-goal panel — budget spent/remaining, open
+descendants, sprout inflow vs fix rate, verdict state. A goal whose tree grows while its budget
+drains is visibly diverging; the panel doubles as the goal registry ("what goals ran, with what
+verdicts, at what cost" — a query, not archaeology).
+
+Implementation: the harvest/closeout clause changes ship WITH executed replays (ADR-103 —
+they are exactly the clause class that produced homelab#198/#204).
