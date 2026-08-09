@@ -28,10 +28,18 @@ meant to avoid.)
   leg is BLIND (CloudflareSpendProbeBlind firing is EXPECTED + known-cause, don't re-triage) until
   a group is found + added to observability-read.tf; if no group exists, re-scope the argo leg +
   the doctrine's write-vector claim (docs/cloudflare.md §Spend surface has the ⚠).**
-- **ert-verify-2026089-mpws5**: still Running (5h+), waiting out riigiteataja's weekly
-  regeneration (LOEMIND.txt sentinel); backoff hourly; completes when upstream publishes.
-  oracle-iac#343 corrected+de-queued (do NOT re-queue unless proxy 504s while in-pod curl works
-  AFTER the files return). This is the #217/#235 fix-cycle verification tail.
+- **ert verification = `ert-verify-parse-dd2p9`** (start-from=parse, promoted snapshot): the
+  ORIGINAL run was TERMINATED 15:5xZ — its snapshot step was armed to bulk-download on upstream's
+  next publish (start-from default footgun, fixed via oracle-iac#357/PR#358). Parse ≈4h6m (252k
+  members ~15/s; the old "1h50m" note was a smaller corpus) → terminal ~20:50Z; watcher armed.
+  Its S3 load = the wk-01 NodeDiskIOSaturation (garage META, see below). #217/#235 tail.
+- **QUEUED: homelab#228** (subject-reopen strips lifecycle labels — the #103 breaker's class
+  fix; rung). **#103 open label-clean as the subject record** until the disk alert clears
+  (= parse ends); root cause on-thread: parse GETs vs garage META on std tier → **FU-159**
+  (meta → longhorn-fast, operator ⚖). **needs-meta v5 running** (clause-4 jq precedence fixed
+  19:0xZ — green codeowner parks were invisible since the morning rewrite; fixture-executed).
+  **Delta cron SUSPENDED durably** (oracle-iac#361/PR#362; un-suspend = fleet#225's attended
+  first run). oracle-iac#343 stays de-queued (premise note stands).
 - **homelab#107 CLOSED 13:05Z** — the 12:23Z queue was a meta mis-queue (fix already on master
   e5f568e; triaged from a truncated thread read — TICK-LOG has the lesson); dispatch refused the
   no-op, all defect legs fixed, fingerprint re-fire is the net.
