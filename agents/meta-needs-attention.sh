@@ -83,23 +83,37 @@ while true; do
                | "NEEDS-META codeowner-park: \($r)#\(.number) bot-approved, CI green, waiting on the human gate"' 2>/dev/null)
     [ -n "$rows" ] && out="$out$rows"$'\n'
   done
-  # Clause 4: stack-repo codeowner park — approved head + green + rd STILL REVIEW_REQUIRED is the
+  # Clause 4: stack-repo codeowner park — approved head + rd STILL REVIEW_REQUIRED is the
   # require_code_owner_review signature (a bot approval never satisfies it). reviews[] scanned in
   # FULL: an approve-then-comment bot sequence makes latestReviews non-APPROVED and hid PR#235's
   # park ~14h; a dismissed approval reads DISMISSED, so the full scan stays safe.
+  # ⚠ CHECKS ARE READ SEPARATELY, BEST-EFFORT (PR#250 sat unflagged, operator catch 2026-08-09):
+  # requesting statusCheckRollup in the SAME query hard-fails the whole call on oracle-fleet —
+  # the jail PAT 403s on app-created check contexts, gh exits 1 with zero stdout, and the clause
+  # saw NO PRs at all (the 403 read as "no parks": the dead-probe class inside the park-catcher).
+  # The park signature alone is strong enough to emit; the checks state is an ANNOTATION —
+  # "green" when readable-and-green, "checks unreadable (PAT)" when the read fails. A slightly
+  # early flag costs a glance; a suppressed park cost a human catch. (Real fix: grant the PAT
+  # Checks:read — operator-side; this clause stays correct either way.)
   for r in $CODEOWNER_REPOS; do
-    rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
-             --json number,reviewDecision,reviews,statusCheckRollup,isDraft 2>/dev/null | tail -1 \
-           | jq -r --arg r "$r" '.[] | select(.isDraft|not)
+    parks=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
+             --json number,reviewDecision,reviews,isDraft 2>/dev/null | tail -1 \
+           | jq -r '.[] | select(.isDraft|not)
                | select(.reviewDecision == "REVIEW_REQUIRED")
                | select([.reviews[]? | select(.state == "APPROVED")] | length > 0)
-               | select([.statusCheckRollup[]? | select(.status != "COMPLETED")] | length == 0)
-               | select([.statusCheckRollup[]? | select(.conclusion != null
-                   and .conclusion != "SUCCESS" and .conclusion != "NEUTRAL"
-                   and .conclusion != "SKIPPED")] | length == 0)
-               | select((.statusCheckRollup | length) > 0)
-               | "NEEDS-META codeowner-gate: \($r)#\(.number) bot-approved + green but REVIEW_REQUIRED — a specs/.agents path needs the delegated codeowner read"' 2>/dev/null)
-    [ -n "$rows" ] && out="$out$rows"$'\n'
+               | .number' 2>/dev/null)
+    for n in $parks; do
+      cstate="checks unreadable (PAT lacks Checks:read on app contexts)"
+      cj=$(devbox run -- gh pr checks "$n" -R "teststuffstash/$r" --json bucket 2>/dev/null | tail -1)
+      if [ -n "$cj" ] && jq -e . >/dev/null 2>&1 <<<"$cj"; then
+        if jq -e '[.[] | select(.bucket == "fail" or .bucket == "pending")] | length == 0' >/dev/null 2>&1 <<<"$cj"; then
+          cstate="CI green"
+        else
+          continue # genuinely red/pending — auto-merge or the ci-red lane owns it, not a park
+        fi
+      fi
+      out="$out""NEEDS-META codeowner-gate: ${r}#${n} bot-approved + REVIEW_REQUIRED (${cstate}) — a specs/.agents path needs the delegated codeowner read"$'\n'
+    done
   done
   blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
     | jq -r '.items[]? | "NEEDS-META blocked: \(.repository_url | sub(".*/";""))#\(.number) \(.title[:60])"' 2>/dev/null)
