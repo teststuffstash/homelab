@@ -101,6 +101,9 @@
       "clause-replay": [
         "bash agents/replay/run.sh"
       ],
+      "exporter-self-test": [
+        "python3 argocd/resources/github-exporter/github-exporter.py --self-test"
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],

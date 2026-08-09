@@ -54,6 +54,11 @@ jobs:
       - name: Tracked Python parses (devbox run py-compile-lint)
         run: devbox run py-compile-lint
 
+      # homelab#215 (harvested from PR#214's review): the exporter's own logic tests — goal walk,
+      # budget parse, verdict, membership, fallback query — as a gate, not just a deploy-time hope.
+      - name: github-exporter self-test (devbox run exporter-self-test)
+        run: devbox run exporter-self-test
+
       # The #158 rail-degrade contract (leg 1: a subscription-rail dispatch NEVER waits on
       # OpenRouter key state) pinned as an executed replay — launcher blocks extracted from
       # agent-session.sh by sentinel at run time, so the pin cannot drift from the code (#166).
