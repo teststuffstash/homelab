@@ -3460,3 +3460,28 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   arrived as the ADR-103 single-summary-comment (kind=dispatch marker) — the channel shipped
   this morning, in production use by evening. ⚠ Truncated-read strike THREE today: the ⚠ sat at
   body line 21; my earlier read was `head -20`. Reading a THING means reading to its end.
+
+## 2026-08-09 (~18:24–19:15Z) — heartbeat pulls a thread: garage-meta IO, a label contradiction, and clause 4 was born blind
+
+- **NodeDiskIOSaturation (wk-01 sdg) ROOT-CAUSED with node access the responder lacks**: sdg =
+  iSCSI attach of `garage/meta-garage-0` (mapped engine→session→block via talosctl; 14 Longhorn
+  volumes attach on wk-01, hence the 17-device census). Driver = ert-verify-parse's 252k ranged
+  S3 GETs (~15/s, hrs) hammering Garage METADATA on the `std` tier. Self-resolves at parse end;
+  **FU-159** filed (meta → `longhorn-fast` Optane, operator ⚖). Parse revised: ~4h6m total
+  (the July "~1h50m" note was a smaller corpus) → verify terminal ~20:50Z.
+- **#103's breaker (FU-069) cleared with audit**: the subject-reopen protocol restored the
+  CLOSED issue's old lifecycle labels (agent-fix+queued+done) onto a report-only reopen →
+  dispatch met queued∧done and refused correctly. Class fix **homelab#228** filed+queued (+rung):
+  reopen strips lifecycle labels, verdict re-adds; replay fixture both directions. Belt≠guard.
+- **PR#256 (ING-RT-FRESHNESS + spec delta) sat bot-approved 1h45m unseen** — the codeowner park
+  needs-meta clause 4 exists to catch. Delegated codeowner read done (strictly->8 boundary,
+  loud-non-fatal ⚖, served-date=newest-delta — all faithful; merged). Then the WHY: **clause 4
+  was born blind this morning — jq precedence**: `[filtered] | length == 0 and length > 0`
+  tests BOTH lengths on the filtered array → false forever → green parks fell into the red-path
+  `continue`. First live test = first miss. Fixed (`. as $all` capture; zero-runs now emits with
+  annotation, not continue), predicate executed against green/red/pending/empty fixtures,
+  monitor restarted (v5), pushed. ⚠ the morning rewrite validated the ACTIONS-API read but never
+  executed the green branch against a green world — the ratchet exists for scan clauses; watch
+  scripts have no replay harness (candidate, not filed: fold meta-watch probes into
+  agents/replay/).
+- FU counter drift fixed (157→160; two skipped bumps, both mine).
