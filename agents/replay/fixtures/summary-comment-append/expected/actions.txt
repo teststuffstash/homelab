@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/circles/issues/43/comments --paginate
+CALL gh api --method PATCH repos/teststuffstash/circles/issues/comments/5231000042 -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103).\n\n- `2026-08-09T12:09:52Z` · **picking this up (round 1)** — first pass <!-- agent-event kind=dispatch ts=2026-08-09T12:09:52Z -->\n- `2026-08-09T12:20:00Z` · **run stats** — `claude/haiku` · $0 · 411s · ci=false <!-- agent-event kind=stats ts=2026-08-09T12:20:00Z -->\n- `2026-08-09T13:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false <!-- agent-event kind=stats ts=2026-08-09T13:30:00Z -->
+OUT RETURN 0
+OUT REACHED: end
+RC 0

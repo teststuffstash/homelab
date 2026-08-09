@@ -1,0 +1,34 @@
+{
+  "comments": [
+    {
+      "author": { "login": "RasmusSoot" },
+      "createdAt": "2026-08-09T06:30:00Z",
+      "body": "the e2e job is red again — same assertion as yesterday?"
+    },
+    {
+      "author": { "login": "homelab-agents-1234" },
+      "createdAt": "2026-08-09T07:00:00Z",
+      "body": "🤖 **Agent run stats**\n\n| metric | value |\n|---|---|\n| model | `claude/haiku` (claude) |\n| cost | $0 |\n| duration | 411s |\n| ci_passed | false |\n\n[📜 run logs in Grafana](https://grafana.teststuff.net/explore)"
+    },
+    {
+      "author": { "login": "homelab-agents-1234" },
+      "createdAt": "2026-08-09T07:05:00Z",
+      "body": "AGENT_STRIKE: model=deepseek-v4-flash class=timeout task=issue-19\n\nNo PR was opened; the chain walks to the next entry."
+    },
+    {
+      "author": { "login": "homelab-agents-1234" },
+      "createdAt": "2026-08-09T08:29:00Z",
+      "body": "<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T08:29:00Z` · **round 2 dispatched** — retry on the e2e assertion <!-- agent-event kind=dispatch ts=2026-08-09T08:29:00Z -->\n- `2026-08-09T08:30:00Z` · **run stats** — `claude/haiku` · $0 · 402s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T08:30:00Z -->\n- `2026-08-09T10:14:00Z` · **round 3 dispatched** — retry on the e2e assertion <!-- agent-event kind=dispatch ts=2026-08-09T10:14:00Z -->\n- `2026-08-09T10:15:00Z` · **run stats** — `claude/haiku` · $0 · 388s · ci=false · [logs](https://grafana.teststuff.net/explore) <!-- agent-event kind=stats ts=2026-08-09T10:15:00Z -->"
+    }
+  ],
+  "commits": [
+    {
+      "messageHeadline": "e2e: widen the dedup window assertion",
+      "committedDate": "2026-08-09T08:00:00Z"
+    },
+    {
+      "messageHeadline": "Merge branch 'master' into fix/issue-19-thing",
+      "committedDate": "2026-08-09T09:00:00Z"
+    }
+  ]
+}

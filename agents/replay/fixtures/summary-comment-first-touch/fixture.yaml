@@ -1,0 +1,24 @@
+# ADR-103 / homelab#210 — the CREATE half of the one-comment-per-timeline contract.
+#
+# CONDITION UNDER REPLAY. Issue #42 has never been touched by the machine: one human comment, no
+# `<!-- agent-summary -->` marker anywhere. The coordinator claims it (step 2 of the brief) and
+# records the dispatch notice through the same helper the launcher uses.
+#
+# THE CONTRACT:
+#   1. ONE read, then ONE create. The first machine touch is the only one allowed to POST.
+#   2. The created body carries the `<!-- agent-summary -->` marker — no marker, and every later
+#      event fails to find this comment and creates another, which is the residue the whole issue
+#      is about. The marker is asserted verbatim, in the body, in the CALL stream.
+#   3. The entry carries `<!-- agent-event kind=dispatch ts=… -->`. `kind` is load-bearing:
+#      coordinator-scan.sh's round counter matches `kind=stats` only, so a dispatch notice must not
+#      be countable as a completed round (fixtures/ci-red-rounds-two-channels pins the other side).
+#
+# The clock is the bridge's, not the machine's — a wall-clock timestamp in the action stream would
+# make this fixture red once per second.
+name: summary-comment-first-touch
+mode: actions
+parts:
+  - file:bridge.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_NUMBER=42

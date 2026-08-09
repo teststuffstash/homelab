@@ -107,8 +107,10 @@ in them had shipped and been archived while the text still called them open).
 - **Run observability.** Agent pods are Loki-labelled `app=agent-session` + `pod`/`node`. Review any
   run in Grafana Explore: `{app="agent-session", namespace="<project>"}`, narrow by `pod`, `| json`
   to parse the structured final line. Every headless run also drops an `AGENT_RUN_STATS {json}` line
-  (via `agent-finalize`) and the launcher posts a **PR comment** with the stats + a Grafana deep-link
-  to that pod's logs — so a PR review is one click from both the numbers and the full run.
+  (via `agent-finalize`); the stats then land on the PR as the **`agent-ride` check-run** (the table
+  + a Grafana deep-link to that pod's logs + the transcripts pointer) plus one appended line on the
+  PR's single `<!-- agent-summary -->` comment — so a PR review is one click from both the numbers
+  and the full run, without a comment per round (ADR-103/#210; `agents/machine-comment.sh`).
 - **⚠ Cold-start cache hits need *pinned* versions.** The in-cluster
   [nix pull-through cache](../SERVICES.md) + the toolchain baked into `agent-base` cut the first
   `devbox install`, but `@latest` tools (kubectl, uv) drift against the project lock and re-fetch

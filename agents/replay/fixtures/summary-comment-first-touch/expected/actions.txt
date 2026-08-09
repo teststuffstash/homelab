@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/circles/issues/42/comments --paginate
+CALL gh api --method POST repos/teststuffstash/circles/issues/42/comments -f body=<!-- agent-summary -->\n🤖 **Agent activity** — one machine comment per timeline, appended in place (ADR-103). Run detail lives in the `agent-ride` check-run, the ledger and `s3://agent-transcripts/`; this is the index.\n\n- `2026-08-09T12:09:52Z` · **picking this up (round 1)** — split the cross-repo leg, move the launcher fallback <!-- agent-event kind=dispatch ts=2026-08-09T12:09:52Z -->
+OUT RETURN 0
+OUT REACHED: end
+RC 0

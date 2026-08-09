@@ -9,6 +9,15 @@
 # its GitHub comment trail (ride pods/workflows are GC'd in minutes; comments are forever):
 # "picking this up (round" at dispatch, the cost table ("| model |") or AGENT_STRIKE at the end.
 #
+# ⚠ TWO SIGNATURE ERAS, and BOTH must match or this probe reports a stall that is not one
+# (ADR-103/#210). The dispatch notice and the run-stats table no longer add a comment: they append
+# a line to ONE `<!-- agent-summary -->` comment per timeline, so the pre-#210 shapes stop appearing
+# on new rides while the old ones stay valid on everything already in flight. Hence the union below,
+# and hence `updated_at` — an edited summary comment's `created_at` is frozen at the FIRST machine
+# touch, so reading it would peg every subsequent round to the age of round 1 and manufacture a
+# THROUGHPUT-STALL on a fleet that is riding fine. `updated_at` is also what the REST `since=`
+# filter keys on, so the page and the timestamp now agree.
+#
 # Output (level-triggered, no state):
 #   THROUGHPUT: last ride evidence <ISO> (<m> min ago, <repo>#<issue>) | agent/queued=<n> | agent/in-progress=<n>
 #   THROUGHPUT-STALL: ... — emitted when queued+in-progress work exists but no ride evidence for
@@ -40,12 +49,12 @@ for r in $repos; do
     || { echo "PROBE-FAIL: comments read failed for $r"; exit 1; }
   ts=$(printf '%s' "$rows" | jq -r --arg bot "$BOT" '
         [ .[] | select(.user.login == ($bot + "[bot]") or .user.login == $bot)
-              | select(.body | test("picking this up \\(round|\\| model \\||AGENT_STRIKE"))
-              | .created_at ] | max // empty' 2>/dev/null)
+              | select(.body | test("<!-- agent-event |picking this up \\(round|\\| model \\||AGENT_STRIKE"))
+              | .updated_at ] | max // empty' 2>/dev/null)
   if [ -n "$ts" ] && [ "$ts" \> "${newest_ts:-}" ]; then
     newest_ts="$ts"
     newest_where=$(printf '%s' "$rows" | jq -r --arg ts "$ts" --arg r "$r" '
-        [ .[] | select(.created_at == $ts) ][0] | "\($r)#\(.issue_url | sub(".*/";""))"' 2>/dev/null)
+        [ .[] | select(.updated_at == $ts) ][0] | "\($r)#\(.issue_url | sub(".*/";""))"' 2>/dev/null)
   fi
 done
 
