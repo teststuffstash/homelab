@@ -1,0 +1,40 @@
+[
+  {
+    "number": 29,
+    "title": "Goal: P0 complete — bake, page, evidence chain",
+    "labels": [
+      {
+        "name": "task/goal"
+      },
+      {
+        "name": "agent/blocked"
+      },
+      {
+        "name": "goal/post-launch"
+      },
+      {
+        "name": "goal/validated"
+      }
+    ],
+    "body": "The P0 slice, end to end.\n\nBudget: 12\nVerdict-authority: human\nProduction-leg: circles prod deploy + the p0 dashboard is green for 48h\n"
+  },
+  {
+    "number": 77,
+    "title": "post-launch: Goal: P0 complete — bake, page, evidence chain",
+    "labels": [],
+    "body": "Post-launch bucket for goal #29.\n"
+  },
+  {
+    "number": 240,
+    "title": "unrelated master-lane bug",
+    "labels": [
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/queued"
+      }
+    ],
+    "body": "Touches: src/thing.py\n"
+  }
+]

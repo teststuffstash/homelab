@@ -35,7 +35,7 @@ unlock pin unpin sync develop checkout add remove set"
 if [ "${IS_API_WRITE:-0}" = 1 ] || _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
   # A mutation MAY still have a recording (gh prints the new comment's URL, and a clause that pipes
   # it somewhere needs one) — but its absence is fine, unlike a read's.
-  _rp_serve "$WORDS" 2>/dev/null || true
+  _rp_serve "$WORDS" optional || true
   exit 0
 fi
 

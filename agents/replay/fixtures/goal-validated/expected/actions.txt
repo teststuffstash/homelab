@@ -1,0 +1,9 @@
+CALL gh issue list --repo teststuffstash/circles --state all --limit 300 --json number,title,state,closedAt,parent,labels
+CALL gh api repos/teststuffstash/circles/issues/29/events --paginate
+CALL gh issue close 29 --repo teststuffstash/circles --reason completed --comment <goal terminal comment — see agents/coordinator-scan.sh>
+OUT   [circles] ADR-102 terminal: goal #29 → validated, closed (completed); 0 descendant(s) actioned
+OUT GACTED terminal
+OUT UNITS <none>
+OUT ORPHANS [circles] 📋 close sweep for VALIDATED goal #29 (ADR-102 — REPORT-first, the batch action stays operator-confirmed until the goal registry panel exists):     #77 — post-launch: Goal: P0 complete — bake, page, evidence chain → CONTAINER: close with the goal     #95 — p0 sprout: page dedup window is wrong → LIVE: let it finish, or re-home it into another goal (batch re-homing is legal at this sweep) 
+OUT REACHED: end
+RC 0

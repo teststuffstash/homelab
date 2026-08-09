@@ -1,0 +1,34 @@
+# ADR-102 / homelab#208 — fixture (d): THE REGRESSION. A non-goal PR merge never touches any of
+# this.
+#
+# CONDITION UNDER REPLAY. circles #29 is an open goal, still PRE-launch (no `goal/post-launch`, no
+# verdict label) — so the assembly probe is armed and every lifecycle leg is reachable. Two PRs
+# have merged and NEITHER is an assembly:
+#   - #63, HEAD `fix/issue-31-paging-rule`, BASE `goal/29-p0-complete` — a goal CHILD. It is the
+#     near-miss that matters: it lives entirely inside the goal lane and its body names #29. The
+#     direction is what separates it from an assembly (children have a goal/** BASE, the assembly
+#     has a goal/** HEAD), and the probe keys on HEAD for exactly that reason.
+#   - #64, HEAD `fix/issue-240-thing` — ordinary master-lane work that also mentions #29.
+#
+# THE CONTRACT IS AN ABSENCE, and absences are what an action-stream diff is best at:
+#   1. no `gh issue edit --add-label goal/post-launch`, no comment, no `gh issue close` — anywhere;
+#   2. no `gh api .../sub_issues` either: the bucket lookup sits behind the probe, so a fixture
+#      that saw it would have caught a probe that fired;
+#   3. `GACTED <none>` and `ORPHANS <none>` — a mention-only merge is not even reported, because
+#      the mention-but-no-trailer report is scoped to goal/** HEADs. #64 mentioning the goal must
+#      not put a line in front of a human every single tick;
+#   4. and the lane still WORKS: `goal-review` falls through and emits its ordinary unit, so this
+#      fixture proves the new legs are inert rather than proving the lane is dead.
+#
+# Without (d), (a) alone is satisfied by a probe that fires on any merged PR citing the goal —
+# which would announce a launch on the merge of its first child.
+name: goal-nonassembly-merge-inert
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles

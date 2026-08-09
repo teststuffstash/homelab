@@ -1,0 +1,39 @@
+# ADR-102 / homelab#208 — fixture (b): the REVERTED terminal.
+#
+# CONDITION UNDER REPLAY. circles #29 is in post-launch when production refutes the idea and a
+# HUMAN applies `goal/reverted`. Its descendant tree is the goal-174 shape one level down: the
+# post-launch bucket (#77) and a sprout inside it (#95, still `agent/queued`). The contract:
+#   1. the descendant tree dies with the goal — #77 and #95 CLOSE, each with its own audit comment
+#      and `--reason "not planned"` (the premise died; the scan's own stale-dep flag reads that
+#      reason downstream). Never deleted: "the tree stays readable history" (⚖ pre-decided).
+#   2. the goal closes `--reason completed`, NOT `not planned`. A refuted idea is a successfully
+#      finished experiment, and the close reason is the only place that distinction survives a year.
+#   3. the goal's comment carries the REVERT POINTER read from its `Revert:` line — declared by the
+#      person who rolled back, never guessed by the scan. Fixture (b) pins the declared path; the
+#      undeclared path is handled in the same leg by saying so loudly in the audit comment.
+#   4. DESCENDANTS FIRST, GOAL LAST — the call ORDER below is the resumability contract, not
+#      cosmetics. A closed goal leaves `openall` and this leg never fires again, so a pass that
+#      died after closing the goal would strand the rest of the tree forever.
+#   5. #240 is an unrelated open master-lane issue and is untouched: the walk is the goal's
+#      DESCENDANT closure, never "every open issue in the repo".
+#
+# THE ACTOR TEST IS WHY THE EVENTS CALL IS FIRST. `goal/post-launch` in the recorded event stream
+# was applied by the Bot and `goal/reverted` by a User — the leg must read the LAST labeled event
+# for the verdict label specifically. The App holds issues:write, so nothing but that read stops
+# the loop labelling its own goal and closing its own tree.
+name: goal-reverted
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:goal-lane
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
+scrub:
+  - s|--comment 🤖 closed with goal .*|--comment <descendant audit comment — see agents/coordinator-scan.sh>|
+  # The revert POINTER is the one part of the terminal comment worth pinning verbatim — it is the
+  # audit record's whole payload, and the leg reads it from the goal's `Revert:` line rather than
+  # inventing one. The surrounding prose is scrubbed; the pointer is not.
+  - s|--comment 🤖 goal terminal: \*\*REVERTED\*\*.*Revert pointer: \(.*\)\. [0-9]* open descendant.*|--comment <goal terminal — revert pointer: \1>|

@@ -1,0 +1,14 @@
+[
+  {
+    "number": 63,
+    "headRefName": "fix/issue-31-paging-rule",
+    "body": "Implements #31\n\nBase: goal/29-p0-complete\n\nPart of the #29 tree.\n",
+    "mergedAt": "2026-08-09T09:05:00Z"
+  },
+  {
+    "number": 64,
+    "headRefName": "fix/issue-240-thing",
+    "body": "Fixes #240\n\nUnrelated master-lane work. Mentions goal #29 only as context.\n",
+    "mergedAt": "2026-08-09T10:30:00Z"
+  }
+]
