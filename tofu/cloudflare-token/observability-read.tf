@@ -55,7 +55,23 @@ locals {
 resource "cloudflare_api_token" "observability_read" {
   name = "homelab-observability-read"
 
+  # ⚠ POLICY ORDER IS LOAD-BEARING (2026-08-09): the API returns multi-policy tokens with the
+  # ACCOUNT-scoped policy first and the zone-scoped one second, and provider 5.19.1 still compares
+  # policies POSITIONALLY (the 5.13.0 order fix covered account_token, not this shape) — with the
+  # zone policy listed first, EVERY plan shows the two policies swapping and every apply ends in
+  # four "Provider produced inconsistent result" errors while succeeding on the wire (verified:
+  # the mutation lands; /zones through the token confirms). Keep account-first and the plan stays
+  # empty. Upstream refs: cloudflare/terraform-provider-cloudflare#5548, #5710, fix PR#6440.
   policies = [
+    {
+      effect = "allow"
+      permission_groups = [
+        { id = data.cloudflare_api_token_permission_groups_list.analytics_read_account.result[0].id },
+        { id = data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id },
+        { id = local.audit_logs_read_id },
+      ]
+      resources = jsonencode(local.account_resource)
+    },
     {
       # every zone in the account, read-only — includes zones created later
       effect = "allow"
@@ -65,15 +81,6 @@ resource "cloudflare_api_token" "observability_read" {
         { id = data.cloudflare_api_token_permission_groups_list.waf_read.result[0].id },
       ]
       resources = jsonencode({ "com.cloudflare.api.account.zone.*" = "*" })
-    },
-    {
-      effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.analytics_read_account.result[0].id },
-        { id = data.cloudflare_api_token_permission_groups_list.tunnel_read.result[0].id },
-        { id = local.audit_logs_read_id },
-      ]
-      resources = jsonencode(local.account_resource)
     },
   ]
 

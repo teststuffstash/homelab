@@ -7,20 +7,23 @@
 resource "cloudflare_api_token" "ingress_write" {
   name = "homelab-ingress-write"
 
+  # ⚠ POLICY ORDER IS LOAD-BEARING: account-scoped policy FIRST (the API's return order) —
+  # provider 5.19.1 compares policies positionally; zone-first = perpetual swap-diff + four
+  # "inconsistent result" errors per apply (see observability-read.tf for the full record).
   policies = [
-    {
-      effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id },
-      ]
-      resources = jsonencode(local.zone_resource)
-    },
     {
       effect = "allow"
       permission_groups = [
         { id = data.cloudflare_api_token_permission_groups_list.tunnel_write.result[0].id },
       ]
       resources = jsonencode(local.account_resource)
+    },
+    {
+      effect = "allow"
+      permission_groups = [
+        { id = data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id },
+      ]
+      resources = jsonencode(local.zone_resource)
     },
   ]
 

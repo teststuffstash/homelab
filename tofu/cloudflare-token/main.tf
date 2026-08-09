@@ -32,7 +32,18 @@ resource "cloudflare_api_token" "tofu_apply" {
   name = var.token_name
 
   # Zone-scoped: DNS records, client certs / mTLS hostname assoc, WAF custom rule.
+  # ⚠ POLICY ORDER IS LOAD-BEARING: account-scoped policy FIRST (the API's return order) —
+  # provider 5.19.1 compares policies positionally; zone-first = perpetual swap-diff + four
+  # "inconsistent result" errors per apply (see observability-read.tf for the full record).
   policies = [
+    # Account-scoped: the Cloudflare Tunnel + its remote config.
+    {
+      effect = "allow"
+      permission_groups = [
+        { id = data.cloudflare_api_token_permission_groups_list.tunnel_write.result[0].id },
+      ]
+      resources = jsonencode(local.account_resource)
+    },
     {
       effect = "allow"
       permission_groups = [
@@ -41,14 +52,6 @@ resource "cloudflare_api_token" "tofu_apply" {
         { id = data.cloudflare_api_token_permission_groups_list.waf_write.result[0].id },
       ]
       resources = jsonencode(local.zone_resource)
-    },
-    # Account-scoped: the Cloudflare Tunnel + its remote config.
-    {
-      effect = "allow"
-      permission_groups = [
-        { id = data.cloudflare_api_token_permission_groups_list.tunnel_write.result[0].id },
-      ]
-      resources = jsonencode(local.account_resource)
     },
   ]
 
