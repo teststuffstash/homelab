@@ -85,9 +85,15 @@ jobs:
       # clause code moves; loosen ONLY by ADR.
       - name: Changed clauses carry replay changes (ADR-103 ratchet)
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch -q origin "${{ github.base_ref }}" --depth=1
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          # Files via the API, not git: the checkout is SHALLOW (depth 1) and a three-dot diff
+          # against a depth-1 base has no merge base — the first version of this step died there
+          # on its first-ever PR execution (#214; shipped from the jail lane, so the
+          # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
+          # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
+          changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
           clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|coordinator/(reflexes|review|coordinate)[^/]*\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           if [ -n "$clause" ] && [ -z "$replay" ]; then
