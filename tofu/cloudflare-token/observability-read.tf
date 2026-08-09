@@ -25,6 +25,14 @@ data "cloudflare_api_token_permission_groups_list" "waf_read" {
   scope = "com.cloudflare.api.account.zone"
 }
 
+# Zone Settings Read (added 2026-08-09): the #351 acceptance verifies zone settings (min TLS,
+# always-HTTPS) via the API, and the meta jail's settings probes 403'd without it — Zone Read
+# covers metadata, not the settings panel. Read-only, all zones, same posture as the rest.
+data "cloudflare_api_token_permission_groups_list" "zone_settings_read" {
+  name  = "Zone%20Settings%20Read"
+  scope = "com.cloudflare.api.account.zone"
+}
+
 data "cloudflare_api_token_permission_groups_list" "tunnel_read" {
   name  = "Cloudflare%20Tunnel%20Read"
   scope = "com.cloudflare.api.account"
@@ -79,6 +87,7 @@ resource "cloudflare_api_token" "observability_read" {
         { id = data.cloudflare_api_token_permission_groups_list.analytics_read_zone.result[0].id },
         { id = data.cloudflare_api_token_permission_groups_list.zone_read.result[0].id },
         { id = data.cloudflare_api_token_permission_groups_list.waf_read.result[0].id },
+        { id = data.cloudflare_api_token_permission_groups_list.zone_settings_read.result[0].id },
       ]
       resources = jsonencode({ "com.cloudflare.api.account.zone.*" = "*" })
     },
