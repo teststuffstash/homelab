@@ -15,13 +15,12 @@ meant to avoid.)
   REMAINING: **agent-runtime#62** (primary emitter twin, QUEUED) + **homelab#217 spend belt**
   (queued). Old-shape branch deletes only after #62 ships AND no open PR carries it. **Monday
   retro 08-10 05:00Z scores the two ADR-103 KPIs first — CHECK ITS REPORT.**
-- **minutark.ee LIVE + SERVING** (verified 12:19Z: http=200 via Cloudflare; a 20m-deadline
-  monitor fired http=000 but that was the JAIL's Unbound negative-cache from before the A
-  records existed — self-expires, site fine). ONE step remains, OPERATOR: add the DS at zone.ee —
-  `2371 13 2 B6C05FC87C68195F40C98F4A2099E3DFFF02447920A84A0A633CF11DA4B48D79`
-  then authoritative-verify (`dig DS minutark.ee @ns.tld.ee +norecurse` shows the digest) and
-  close oracle-iac#351. NO LB (ladder rung 1); MCP exposure waits on the gateway (T3c).
-  Design + boundaries: docs/cloudflare.md. FU-157 account-token migration opportunistic.
+- **minutark.ee LIVE + DNSSEC COMPLETE** (~17:00Z: DS at the .ee registry, `ad` flag from
+  1.1.1.1 — chain of trust verified; evidence on oracle-iac#351). #351 stays OPEN — its
+  deliverable is the bootstrap AS IaC, still blocked on the host-side ingress-token re-mint;
+  acceptance = drift-free re-plan through the two-zone token. NO LB (rung 1); MCP waits on the
+  gateway (T3c). FU-157 opportunistic. ⚠ probe lesson: `dig +short` WRAPS long DS digests with
+  a space — grep for the unbroken string is a dead probe; `tr -d ' '` first.
   Host-side: next `tofu/cloudflare-token` apply is PREPPED (account-first policy order + two-zone
   ingress token) — operator runs it outside the jail. **ADDED 13:45Z (PR#220 live-verify): with
   the admin token first run `GET /user/tokens/permission_groups | grep -i argo` — the argo/
