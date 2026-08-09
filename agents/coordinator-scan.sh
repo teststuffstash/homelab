@@ -18,7 +18,9 @@
 # `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
 # report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
 # boundary (docs/agents/merge-path.md). red-beyond-T = the ci-red clause (FU-115) (guarded checks
-# probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). The
+# probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). Both
+# of those two are CURRENCY-gated as well as condition-gated (homelab#198): a condition that holds
+# over unchanged PR state is a report line, not a fresh unit — see §PR STATE FINGERPRINT below. The
 # `coordinator-reflex` CronJob (agents/coordinator/coordinator-reflex.yaml, FU-050) runs `--spawn` on a
 # schedule — deployed SUSPENDED until the operator flips it (kubectl patch cronjob coordinator-reflex
 # -n agent-coordinator -p '{"spec":{"suspend":false}}').
@@ -60,6 +62,65 @@ NOOP_ROUND_JQ='([.comments[]|select(.body|test("Agent run stats"))|.createdAt] |
   | ([.comments[]|select(.body|test("Agent run stats"))|.createdAt | select($head == "" or . > $head)] | length) as $after
   | if $after >= 2 then "1" else "" end'
 REPO_PR_CAP="${REPO_PR_CAP:-3}"
+
+# ── PR STATE FINGERPRINT (homelab#198) ────────────────────────────────────────────────────────
+# The arbitrate and ci-red DISPATCH legs are level-triggered off a label / a red rollup, so they
+# re-emit their unit every scan for as long as that condition holds — existence, not currency.
+# Live 2026-08-09 (oracle-fleet PR#234): five coordinator rides in ~30 minutes against BYTE-
+# IDENTICAL state (same head, same red `e2e`, same stale CHANGES_REQUESTED, a `gh run rerun` 403),
+# each correctly ruling "no change, escalation stands" and exiting. The anomaly breaker latched
+# `agent/error` on the 4th — correctly, but a belt is not a guard: four opus rides had already
+# been spent to conclude nothing.
+#
+# So the emission gains CURRENCY, keyed on a fingerprint of the state a ride would actually read:
+#   head sha | reviewDecision | every check's conclusion | newest verdict's submittedAt
+# Nothing else — a comment (including OUR marker and the coordinator's own ruling prose) must not
+# move the hash, or the debounce disarms itself on the very ride it is debouncing. In-flight checks
+# normalize to PENDING so a re-run reads as one state change, not one per polled sample.
+#
+# The marker is a `state-fp:<hash>` line in a PR comment, written at DISPATCH time by the block at
+# the bottom of this script — deliberately NOT at emission time. The scan emits many units and
+# dispatches exactly ONE (the priority loop): marking at emission would silently retire an
+# arbitrate unit that lost the race to a higher-priority clause and never rode at all.
+# FAIL-OPEN throughout, matching this file's guarded-probe posture: an unreadable probe or a
+# missing hasher yields an empty fingerprint, which can never equal a recorded one, so the clause
+# behaves exactly as it did before this guard existed. The breaker stays as the backstop for
+# fingerprint BUGS (a hash that moves on its own re-arms the churn this guard removes).
+STATE_FP_JQ='[ "head=" + (.headRefOid // "")
+  , "review=" + (.reviewDecision // "NONE")
+  , "checks=" + ([ .statusCheckRollup[]?
+                   | ((.name // .context // "?") + "="
+                      + (((.conclusion // .state) // "") | if . == "" then "PENDING" else . end)) ]
+                 | sort | join(","))
+  , "verdict=" + ([ .reviews[]? | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                    | .submittedAt ] | max // "")
+  ] | join("|")'
+# Newest recorded marker, by comment createdAt — `last` on the raw list would trust gh ordering.
+STATE_FP_LAST_JQ='([ .comments[]? | select((.body // "") | test("state-fp:[0-9a-f]{6,64}")) ]
+  | sort_by(.createdAt) | last // {})
+  | (((.body // "") | [ scan("state-fp:[0-9a-f]{6,64}") ] | last) // "")
+  | sub("^state-fp:"; "")'
+
+# pr_state_fp_pair <slug> <pr> → "<current>|<recorded>", either side empty when unknown.
+# ONE probe answers both halves, so the comparison can never straddle two snapshots of the PR.
+# Always exits 0: under `set -e` a probe failure here must skip the guard, never kill the scan.
+pr_state_fp_pair() {
+  # Declared on their own line, never `local x="$(cmd)"` — that form makes `local` the command
+  # whose status is tested, so the `|| fallback` and `set -e` both read the wrong exit code.
+  local fp_probe fp_raw fp_prev fp_cur
+  fp_probe="$(gh pr view "$2" --repo "$1" \
+      --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments 2>/dev/null)" || fp_probe=''
+  if ! jq -e . >/dev/null 2>&1 <<<"$fp_probe"; then printf '%s|%s\n' '' ''; return 0; fi
+  fp_raw="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_JQ" 2>/dev/null)" || fp_raw=''
+  fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
+  fp_cur=''
+  # `sha256sum` is coreutils, which this script already requires (`date -u -d`), but a missing
+  # hasher must degrade to "no fingerprint" rather than abort the stack's whole scan.
+  [ -n "$fp_raw" ] && fp_cur="$(printf '%s' "$fp_raw" | sha256sum 2>/dev/null | cut -c1-12)"
+  case "$fp_cur" in *[!0-9a-f]*|'') fp_cur='';; esac
+  printf '%s|%s\n' "$fp_cur" "$fp_prev"
+  return 0
+}
 
 # homelab#155 belt: how long a phantom `agent/in-progress` (no pod, no PR) must PERSIST before the
 # scan reconciles the label itself. One full scan interval is the */10 coordinator-reflex cron
@@ -960,7 +1021,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # PR `agent/arbitrate` (escalation, NOT anomaly — agent/error stays for impossible states).
     # The coordinator is the designed tie-breaker: one unit per labeled PR; the item session
     # rules per the escalation table (brief §arbitrate).
+    # ⚠ The label is STICKY on two of the four rulings (escalate keeps it deliberately; a human is
+    # the next mover), so selecting on the label ALONE re-emits the unit every scan forever — the
+    # PR#234 churn. The unit is emitted only when the state a ride would read has MOVED since the
+    # last arbitrate dispatch (homelab#198, fingerprint helper at the top of this file); unchanged
+    # state is a REPORT line, which is what an escalation waiting on a human should look like.
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|(.labels|map(.name)) as $L|select((($L|index("agent/error"))|not) and ($L|index("agent/arbitrate")))|.number'); do
+      afp="$(pr_state_fp_pair "$slug" "$u")"; afp_prev="${afp#*|}"; afp_cur="${afp%%|*}"
+      if [ -n "$afp_cur" ] && [ "$afp_cur" = "$afp_prev" ]; then
+        orphans="${orphans}[$repo] ⏳ arbitrate DEBOUNCED — PR #${u}: head, checks, reviewDecision and newest verdict are all unchanged since the last arbitrate dispatch (\`state-fp:${afp_cur}\`, homelab#198). The escalation STANDS and the ruling on the thread is still the current one — a human (or new content) is the next mover, so no ride is spent to re-derive it.\n"
+        continue
+      fi
       units="${units}arbitrate|${repo}|pr-${u}\n"
     done
 
@@ -1101,6 +1172,21 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             && orphans="${orphans}[$repo] ⚠ ci-red NO-OP round → agent/arbitrate NOW: PR #${u} (round ${attempts} pushed nothing, still red @ ${head8})\n" \
             || orphans="${orphans}[$repo] ⚠ ci-red no-op arbitrate FAILED to label PR #${u} — human check\n"
         elif [ "$red_rounds" -lt "$RED_MAX" ]; then
+          # CURRENCY (homelab#198) — the EXTENSION of this clause's existing content key, not a
+          # second mechanism beside it. The markers above answer "did a round complete, and did it
+          # push?"; they say nothing when a dispatched round never RAN (pod never started, session
+          # died pre-finalize, the /coordinate doorbell re-rang on the same red edge): no stats
+          # comment, so `attempts` never moves, no new commit, so `head8` never moves, and the
+          # clause re-dispatches the identical input every scan. The fingerprint covers that hole
+          # from the other side — the state a fix round would READ. Checked here, inside the
+          # dispatch branch only: the no-op→arbitrate leg above must stay level-triggered (it is
+          # the anti-livelock), and `continue` before the cap so a debounced PR never spends one of
+          # the two dispatch slots a live red PR could use.
+          rfp="$(pr_state_fp_pair "$slug" "$u")"; rfp_prev="${rfp#*|}"; rfp_cur="${rfp%%|*}"
+          if [ -n "$rfp_cur" ] && [ "$rfp_cur" = "$rfp_prev" ]; then
+            orphans="${orphans}[$repo] ⏳ ci-red DEBOUNCED — PR #${u}: still red at ${head8} with head, checks, reviewDecision and newest verdict all unchanged since the last ci-red dispatch (\`state-fp:${rfp_cur}\`, homelab#198). A round was already dispatched at this exact input; re-dispatching it cannot read anything new. If no round ever completed here, the ride went terminal — that is the finding, not more dispatches.\n"
+            continue
+          fi
           # DISPATCH a fix round (under the attempt cap — the ISSUE-keyed one, see above)
           if [ "$red_n" -lt 2 ]; then
             # FU-106 (c): a RED deploy/* bump PR in an -iac repo is the typed infra-delta — the
@@ -1339,6 +1425,26 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
     uwip="$(printf '%b' "$wipmap" | awk -v r="$urepo" '$1==r{print $2}' | head -1)"
     case "${uwip:-}" in ''|*[!0-9]*) uwip=1;; esac
+    # homelab#198: RECORD the fingerprint of the state this ride is about to read, for the two
+    # clauses whose emission is gated on it. Here and not at emission because this is the one place
+    # a unit is known to be THE dispatched one; and BEFORE the spawn because the session's own work
+    # (a pushed fix round, a dismissal, a rerun) is exactly the state change that must re-open the
+    # gate — recording afterwards would fingerprint the outcome and debounce the follow-up ride.
+    # A refused write only costs the debounce (the clause re-emits next scan, i.e. today's
+    # behaviour), so it WARNs and dispatches; it never blocks the ride it is annotating.
+    case "${uclause}:${uitem}" in
+      arbitrate:pr-*|ci-red:pr-*|infra-enrich:pr-*)
+        dfp="$(pr_state_fp_pair "${ORG}/${urepo}" "${uitem#pr-}")"; dfp="${dfp%%|*}"
+        if [ -z "$dfp" ]; then
+          echo "  WARN: state fingerprint unreadable for ${urepo} ${uitem} — dispatching anyway; the ${uclause} debounce cannot arm this pass (homelab#198)" >&2
+        elif ! gh pr comment "${uitem#pr-}" --repo "${ORG}/${urepo}" --body "$(printf '%s\n' \
+              "🤖 \`state-fp:${dfp}\` — deterministic scan dispatching a \`${uclause}\` unit at $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+              "" \
+              "Machine-readable debounce marker (homelab#198), written by \`agents/coordinator-scan.sh\`, not by the session that follows. It hashes the state that ride reads — head sha, every check's conclusion, \`reviewDecision\`, and the newest verdict's timestamp. While the hash is unchanged this clause emits a report line instead of another unit, so an escalation waiting on a human costs no further rides; any real movement on this PR changes it and the clause re-arms by itself." )" >/dev/null 2>&1; then
+          echo "  WARN: could not record state-fp on ${urepo} ${uitem} (gh write refused?) — dispatching anyway; the ${uclause} clause will re-emit on unchanged state (homelab#198)" >&2
+        fi
+        ;;
+    esac
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
