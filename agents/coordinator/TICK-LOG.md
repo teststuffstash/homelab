@@ -3188,3 +3188,22 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   residue ≠ full sample) — the repeating-false-alarm-IS-a-broken-probe rule, self-applied.
 - #180 ruled: the proxy never gets the provisioning key; account-scope facts have ONE owner (the
   operator's #29 gauge) and the credit leg reads it in-cluster. Native blocked-by edge set.
+
+## 2026-08-09 (~02:25–02:45Z) — the heartbeat reads a tick log and finds every prompt had holes
+
+- **The 02:25Z sweep read an oracle arbitrate tick's log** (why was the oracle queue quiet?) and
+  found `workerModel: command not found` — the #162 RAIL RULE executing as shell in the pod.
+  Root cause: the headless coordinator path quoted RUN_CMD with `jq -Rs` — JSON escaping, which
+  leaves backticks and `$` LIVE inside the double-quoted string the pod's `bash -lc` re-expands.
+  Every headless item prompt since 2026-08-08 20:30Z was delivered with the backticked fragments
+  EXECUTED (harmless no-such-commands) and STRIPPED from the prompt. Fixed: RUN_CMD rides the
+  same base64-file transport SEED always had; proven by stubbed execution (backticks + $
+  delivered literal). **Prose-inside-executing-code, FOURTH instance** → #197 files the CI guard
+  (the two mechanical signatures, with the real pre-fix lines as failing fixtures) — the durable
+  warnings did not prevent #2 or #4; compliance is the gap, so the class gets a lint.
+- Meanwhile the loop closed the whole #26 aftermath overnight: balance gauge (NaN-not-omit) →
+  proxy credit leg cross-namespace (20.1672 observed) → launcher floor + LOUD fail-open →
+  latch-bit degrade trigger (boolean-not-reason — reason is emitted unconditionally and would
+  have degraded the fleet permanently from its first-ever 429) → both alerts live, replay at
+  100+ assertions, build lane born (or-op .agents/build.yaml + review.md lane split) and
+  validated on its first two PRs.
