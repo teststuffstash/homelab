@@ -38,9 +38,9 @@ meant to avoid.)
   no-op, all defect legs fixed, fingerprint re-fire is the net.
 - **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 DONE (PR#63 merged
   13:1xZ, ast-pin); #62 queued. or-op#34 SOAKS until first daily-class 429 datum.
-  **or-op#25 QUEUED ~13:00Z** — gating question settled by code (default rail = proxy-resolved
-  `ref:`, 60s cache → rotation reaches live rides); ⚖ on-issue: remaining-carry budget,
-  no-delete old key, threshold > cache TTL.
+  **or-op#25 DONE (PR#38 merged ~14:05Z)** — age-renewal with remaining-carry budget chain,
+  window-owns-the-key invariant (no rotate-loop/cap re-inflation), delete-skip on age path.
+  EXPECT a chart/image deploy bump PR onto homelab's platform pin next — meta read + merge.
 - **circles**: PR#21/#25 frozen (unchanged, operator's). **e2e-outage arc CLOSED**: PR#239
   (with the #228 cancel-leak belt) + PR#234 merged; #228/#190/or-op#33 closed.
 - **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
