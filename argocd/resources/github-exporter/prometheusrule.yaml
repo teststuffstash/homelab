@@ -12,6 +12,37 @@ metadata:
     app: github-exporter
 spec:
   groups:
+    # ADR-102 goal registry (#209). `goal_spent_usd` is a JOIN, not a poll: the exporter holds
+    # GitHub tokens only (no bucket credentials — it cannot read the ledger's _ledger.jsonl) and
+    # spend is already a Prometheus fact, pushed per run by the launcher's finalize leg. So the
+    # exporter emits MEMBERSHIP (goal_descendant_info, one series per goal→descendant edge incl.
+    # the goal itself at depth 0) and the money is attributed here.
+    #
+    # Rule order inside the group is evaluation order — goal_spent_usd is recorded before the two
+    # rules that read it.
+    - name: agent-goals
+      rules:
+        # Σ(every run charged to any issue in the goal's descendant tree). The inner
+        # `sum by (project, issue)` collapses the pushgateway's job/role/round/model dimensions
+        # FIRST so the vector match is one-to-many with the MEMBERSHIP side as the "many" — which
+        # is what makes a nested goal (a goal that is itself a sub-issue of another goal) attribute
+        # its spend to BOTH ancestors instead of failing the whole rule on a many-to-many match.
+        # No push_time gating: a goal's burn-down is all-time spend against its `Budget:` line,
+        # unlike the cost dashboard's rolling 24h/7d windows.
+        - record: goal_spent_usd
+          expr: >-
+            sum by (owner, project, stack, goal) (
+              sum by (project, issue) (agent_run_cost_usd)
+              * on (project, issue) group_right () goal_descendant_info
+            )
+        # Both operands carry exactly (owner, project, stack, goal), so the plain match is right.
+        # A goal with no parsable `Budget:` line has NO goal_budget_usd series and therefore no
+        # ratio and no remaining — absent, not a fake 0/∞ (the exporter's rule, kept here).
+        - record: goal_budget_ratio
+          expr: goal_spent_usd / goal_budget_usd
+        - record: goal_budget_remaining_usd
+          expr: goal_budget_usd - goal_spent_usd
+
     - name: github
       rules:
         # FU-098: fires while an App's LIVE permissions differ from docs/github-apps.yaml in

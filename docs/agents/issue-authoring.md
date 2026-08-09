@@ -566,7 +566,10 @@ remains specs/evidence, not issue-moves (#17→#29 moved zero issues and everyth
 **Convergence is a number** (supersedes IL-G04): per-goal panel — budget spent/remaining, open
 descendants, sprout inflow vs fix rate, verdict state. A goal whose tree grows while its budget
 drains is visibly diverging; the panel doubles as the goal registry ("what goals ran, with what
-verdicts, at what cost" — a query, not archaeology).
+verdicts, at what cost" — a query, not archaeology). **Built (homelab#209)**: the `goal_*` series,
+the `goal_spent_usd` join and the Grafana `agent-goals` panel — series list, spend accounting and
+the two read-honesty signals live in
+[observability-and-retro.md](observability-and-retro.md) §Part A‴.
 
 Implementation: the harvest/closeout clause changes ship WITH executed replays (ADR-103 —
 they are exactly the clause class that produced homelab#198/#204).
