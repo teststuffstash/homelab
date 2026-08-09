@@ -36,11 +36,29 @@ meant to avoid.)
 - **homelab#107 CLOSED 13:05Z** — the 12:23Z queue was a meta mis-queue (fix already on master
   e5f568e; triaged from a truncated thread read — TICK-LOG has the lesson); dispatch refused the
   no-op, all defect legs fixed, fingerprint re-fire is the net.
-- **Queued elsewhere**: homelab#103 (wk-01 saturation). agent-runtime#61 DONE (PR#63 merged
-  13:1xZ, ast-pin); #62 queued. or-op#34 SOAKS until first daily-class 429 datum.
-  **or-op#25 DONE (PR#38 merged ~14:05Z)** — age-renewal with remaining-carry budget chain,
-  window-owns-the-key invariant (no rotate-loop/cap re-inflation), delete-skip on age path.
-  EXPECT a chart/image deploy bump PR onto homelab's platform pin next — meta read + merge.
+- **BOARD DRAINED ~15:30Z**: #103 DONE (PR#225 — BestEffort Sensors got requests, soft hostname
+  spread via podSpecPatch/Exists-selector; ride corrected BOTH the issue body and my ⚖ — the
+  workflow templates already had requests; live pod check backgrounded, result → #103 comment).
+  #61/#62/#25/#217 all DONE same day. or-op#34 SOAKS (needs first daily-429 datum). Possible
+  trailing echo: or-op chart deploy bump self-merges via first-party lane (like #222).
+- **TOMORROW (operator, ~5 min): mint `homelab-jail-read-all`** — dashboard "Read all resources"
+  template, all accounts/all zones, **plus user-scope API Tokens Read** (lets the jail list the
+  permission-group catalog — the admin token can't, it has creation rights only). No IP filter,
+  long/no TTL. Hand the value to the jail session once → it stores wallet string +
+  ~/.claude/cloudflare/ cache (wallet-files.sh), adds to docs/cloudflare.md token matrix, then
+  IMMEDIATELY runs `GET /user/tokens/permission_groups | grep -i argo` → either names the group
+  for observability-read.tf in the prepped host-side apply, or proves the argo leg
+  unimplementable → re-scope #223 + the doctrine ⚠. Rationale: strictly below existing
+  write-key privilege; endpoint-first doctrine needs a probe credential (hit the wall twice
+  2026-08-09).
+- **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08 restart. pve +
+  laptop4: devices HEALTHY (jail tinytuya sessions work with devices.json versions) but HA-side
+  wedge survives reload ×2, WS disable/enable AND a core restart (14:48Z, clean) — leading
+  hypothesis: protocol_version mismatch in the tuya_local config entries vs. what the devices
+  now negotiate; next probe = compare entry versions against tinytuya negotiation, fix entries.
+  aquarium: DEVICE-side (refuses jail sessions too, Err 901) — physical cycle cuts aquarium
+  power, operator's call. Most of the 18 'stale' sensors were static-value FALSE POSITIVES
+  (details on the issue); consider a rule-side exclusion later.
 - **circles**: PR#21/#25 frozen (unchanged, operator's). **e2e-outage arc CLOSED**: PR#239
   (with the #228 cancel-leak belt) + PR#234 merged; #228/#190/or-op#33 closed.
 - **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
