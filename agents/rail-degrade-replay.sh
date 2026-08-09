@@ -12,6 +12,11 @@
 # /api/v1/credits onto the proxy's /router-status, "the balance is unavailable" gained real,
 # distinguishable failure modes — FAILOPEN..FAILOPEN4 + STALE/STALE2 are those rows, and they
 # assert the fail-open is VISIBLE, which is the defect #190 was filed for.
+# homelab#194 adds the second fact behind that same URL — the proxy's latched `.openrouter_capacity
+# .down` — as a shadow-mode trigger. CAP..CAP6 pin the TRIGGER PRECEDENCE (the latch outranks the
+# credit read), the two shapes that must NOT fire (a stale non-null `reason` beside `down:false`;
+# a payload that never arrived), and that the fail-open line now says WHICH of the two facts is
+# missing. The operator's ruling on #194 made those rows a condition of taking the change.
 #
 # The two defects it must keep re-catching, because both were one-token errors that review passed:
 #   1. `jq`'s `//` fires on FALSE as well as null, so `.subscriptionFallback // true` silently
@@ -104,7 +109,15 @@ case "$_url" in
       none)        _credit=null;;
       *)           _credit="${STUB_CREDITS:-0}";;
     esac
-    printf '{"subscription":{"limited":false},"openrouter_capacity":{"down":false,"reason":null,"remaining_s":0,"latched_total":0,"credit_usd":%s,"credit_age_s":%s,"credit_source":"http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics","credit_source_age_s":%s,"credit_max_age_s":%s,"credit_poll_failures":0,"min_credit_usd":0.25,"recent_429_models":[]}}' \
+    # homelab#194: the latch bit is a SELECTOR now, not a literal — the launcher reads it, so the
+    # harness has to be able to set it. Defaults are today's healthy values (down:false, no reason,
+    # nothing latched), which is what every pre-#194 row was implicitly asserting against.
+    # $STUB_CAPACITY_REASON is emitted as JSON `null` when empty — and INDEPENDENTLY of `down`, the
+    # way the proxy does it (`"reason": or_cap["reason"] or None` is unconditional, while `"down"`
+    # is `until > now`), so the stale-reason-with-down:false shape is reachable here. It has a row.
+    _reason=null; [ -n "${STUB_CAPACITY_REASON:-}" ] && _reason="\"${STUB_CAPACITY_REASON}\""
+    printf '{"subscription":{"limited":false},"openrouter_capacity":{"down":%s,"reason":%s,"remaining_s":%s,"latched_total":%s,"credit_usd":%s,"credit_age_s":%s,"credit_source":"http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics","credit_source_age_s":%s,"credit_max_age_s":%s,"credit_poll_failures":0,"min_credit_usd":0.25,"recent_429_models":[]}}' \
+      "${STUB_CAPACITY_DOWN:-false}" "$_reason" "${STUB_CAPACITY_REMAINING:-0}" "${STUB_CAPACITY_LATCHED_TOTAL:-0}" \
       "$_credit" "${STUB_CREDIT_AGE:-540}" "${STUB_CREDIT_AGE:-540}" "${STUB_CREDIT_MAX_AGE:-1800}"
     exit 0;;
   */api/v1/credits)
@@ -181,10 +194,16 @@ scenario() {
   # The freshness pair the launcher honours instead of re-deriving (homelab#190): a balance the
   # proxy is holding past its own credit_max_age_s is NOT a balance.
   STUB_CREDIT_AGE="540"; STUB_CREDIT_MAX_AGE="1800"
+  # The proxy's account-scope latch (homelab#194), healthy by default: no hold, nothing latched.
+  STUB_CAPACITY_DOWN="false"; STUB_CAPACITY_REASON=""; STUB_CAPACITY_REMAINING="0"
+  STUB_CAPACITY_LATCHED_TOTAL="0"
 }
 go() {
   CALLS="$CALLS" STUB_CREDITS="$STUB_CREDITS" STUB_LATCH="$STUB_LATCH" \
   STUB_CREDIT_AGE="$STUB_CREDIT_AGE" STUB_CREDIT_MAX_AGE="$STUB_CREDIT_MAX_AGE" \
+  STUB_CAPACITY_DOWN="$STUB_CAPACITY_DOWN" STUB_CAPACITY_REASON="$STUB_CAPACITY_REASON" \
+  STUB_CAPACITY_REMAINING="$STUB_CAPACITY_REMAINING" \
+  STUB_CAPACITY_LATCHED_TOTAL="$STUB_CAPACITY_LATCHED_TOTAL" \
   REPLAY_STUBHOME="$STUBHOME" \
   IN_PROJECT="$IN_PROJECT" IN_HARNESS="$IN_HARNESS" IN_MODEL="$IN_MODEL" \
   IN_HARNESS_SET="$IN_HARNESS_SET" IN_MODEL_SET="$IN_MODEL_SET" IN_TASK="$IN_TASK" \
@@ -359,36 +378,47 @@ wantrc  "DENY: defers (exit 0)"                        0
 # and in silence — a 403'd probe and a healthy account produced byte-identical output, while the
 # archived FU-088(b) entry told an operator a floor existed. Every way the balance can be
 # unavailable gets a row, and every row asserts the VISIBLE line, naming the URL that failed.
-_failopen_asserts() {   # $1 = case label prefix, $2 = the bracketed reason the line must carry
+# homelab#194 makes the third argument load-bearing: ONE URL now carries TWO account-scope facts,
+# and which of them is missing changes what an operator should go look at. A payload that never
+# arrived loses the latch bit as well as the balance; a payload that arrived with a dead credit leg
+# loses only the balance. "no balance" printed for both is the #190 silence one level up.
+_failopen_asserts() {   # $1 = label prefix, $2 = the bracketed reason, $3 = the latch clause
   wantnot "$1: no degrade without a balance"           "RAIL DEGRADE"
   wantnot "$1: no credit-floor defer either"           "below the \$0.25 floor"
   want    "$1: SAYS it is fail-open (not silence)"     "FU-088(b) FAIL-OPEN"
   want    "$1: names the URL it could not use"         "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/router-status"
   want    "$1: names the reason"                       "$2"
+  want    "$1: says what it knows of the LATCH bit"    "$3"
   want    "$1: dispatch proceeds"                      "REACHED: dispatch"
   wantrc  "$1: exit 0"                                 0
 }
+_LATCH_UNKNOWN="the capacity latch bit (.openrouter_capacity.down) is MISSING TOO"
+_LATCH_UP="the capacity latch bit WAS readable and is not down"
 
 scenario "FAILOPEN — /router-status unreachable → visibly fail open, dispatch unchanged"
 STUB_CREDITS="unreachable"
 go
-_failopen_asserts "FAILOPEN" "unreachable or unparseable"
+_failopen_asserts "FAILOPEN" "unreachable or unparseable" "$_LATCH_UNKNOWN"
 
 scenario "FAILOPEN2 — /router-status answers with garbage → visibly fail open"
 STUB_CREDITS="garbage"
 go
-_failopen_asserts "FAILOPEN2" "unreachable or unparseable"
+_failopen_asserts "FAILOPEN2" "unreachable or unparseable" "$_LATCH_UNKNOWN"
 
 scenario "FAILOPEN3 — proxy holds NO balance (credit leg dead / NaN before first poll)"
 STUB_CREDITS="none"
 go
-_failopen_asserts "FAILOPEN3" "no-balance"
+# The payload ARRIVED and its latch bit is readable — only the balance is gone. That is a different
+# thing to go look at (the credit leg) than a proxy that did not answer at all.
+_failopen_asserts "FAILOPEN3" "no-balance" "$_LATCH_UP"
 wantprobes "FAILOPEN3: it did ask the proxy"           1
 
 scenario "FAILOPEN4 — proxy answers without a capacity block (rolled back behind homelab#180)"
 STUB_CREDITS="oldproxy"
 go
-_failopen_asserts "FAILOPEN4" "no-capacity-block"
+# A proxy behind #180 publishes NEITHER fact. It must fail open on both legs — never degrade on a
+# `.down` it cannot see, and never mistake its absence for `down:false`.
+_failopen_asserts "FAILOPEN4" "no-capacity-block" "$_LATCH_UNKNOWN"
 
 # ── STALE ── the proxy HOLDS its last balance across poll failures, so age is what makes a number
 # unusable. A low-but-stale number must not gate: that is a fact about 2h ago, and acting on it is
@@ -397,7 +427,7 @@ _failopen_asserts "FAILOPEN4" "no-capacity-block"
 scenario "STALE — a LOW balance held past the proxy's own credit_max_age_s → fail open, not a floor hit"
 STUB_CREDITS="0.17"; STUB_CREDIT_AGE="3600"; STUB_CREDIT_MAX_AGE="1800"
 go
-_failopen_asserts "STALE" "stale: 3600s old"
+_failopen_asserts "STALE" "stale: 3600s old" "$_LATCH_UP"
 wantnot "STALE: does not act on a two-hour-old number" "credit:\$0.17"
 
 scenario "STALE2 — the same low balance INSIDE the bound still gates (the bound is not an off switch)"
@@ -406,6 +436,93 @@ go
 want    "STALE2: degrades on the fresh low balance"    "RAIL DEGRADE"
 want    "STALE2: names the credit trigger"             'credit:$0.17<$0.25'
 wantnot "STALE2: no fail-open line when it is usable"  "FU-088(b) FAIL-OPEN"
+
+# ── CAP ── the proxy's LATCHED capacity bit as a shadow-mode trigger (homelab#194) ───────────────
+# The credit leg alone could not see the 2026-08-08 outage: the account was RPD-starved with a
+# balance the operator had just topped up. `/route` types all three legs, but only in authoritative
+# mode — and every OpenRouter-dispatching stack is shadow. These rows pin the TRIGGER PRECEDENCE the
+# meta ruling on #194 attached as a condition, and the one shape that must NOT fire (CAP5).
+scenario "CAP — .openrouter_capacity.down=true with a HEALTHY balance → degrades on the latch"
+STUB_CAPACITY_DOWN="true"; STUB_CAPACITY_REASON="rpd"; STUB_CAPACITY_REMAINING="412"
+STUB_CAPACITY_LATCHED_TOTAL="3"     # STUB_CREDITS stays $12.40: the outage shape, exactly
+go
+want    "CAP: degrades on the latch bit alone"         "RAIL DEGRADE"
+want    "CAP: names the leg that fired"                "capacity:rpd"
+want    "CAP: carries the latch's remaining hold"      "(proxy latch, 412s left)"
+wantnot "CAP: the healthy balance is NOT the trigger"  "credit:\$"
+want    "CAP: dispatches on the subscription rail"     "rail=subscription-fallback"
+want    "CAP: MODEL=haiku HARNESS=claude"              "STATE MODEL=haiku HARNESS=claude RAIL=subscription-fallback"
+wantnot "CAP: no fail-open line (the read worked)"     "FU-088(b) FAIL-OPEN"
+want    "CAP: reaches dispatch"                        "REACHED: dispatch"
+wantrc  "CAP: does not exit"                           0
+wantprobes "CAP: one probe, same payload as the balance" 1
+
+# PRECEDENCE. Both legs fire; the trigger string must record the OWNER's verdict, not the number
+# this launcher thresholded itself. Same destination either way — but the string is the record of
+# why the fleet moved, and `capacity:rpd` and `credit:$0.17<$0.25` are different incidents.
+scenario "CAP2 — latch down AND balance under the floor → the latch names the trigger, not credit"
+STUB_CAPACITY_DOWN="true"; STUB_CAPACITY_REASON="402"; STUB_CAPACITY_REMAINING="900"
+STUB_CREDITS="0.17"
+go
+want    "CAP2: degrades"                               "RAIL DEGRADE"
+want    "CAP2: the latch wins the trigger string"      "capacity:402"
+wantnot "CAP2: the credit leg does not overwrite it"   'credit:$0.17<$0.25'
+want    "CAP2: reaches dispatch"                       "REACHED: dispatch"
+
+# The balance can be unusable while the latch bit is perfectly readable — they fail independently.
+# The degrade still happens, and the fail-open line must say the latch was read and was DOWN, or it
+# reads as "the launcher saw nothing" while it in fact acted.
+scenario "CAP3 — latch down + a balance held past credit_max_age_s → still degrades, visibly"
+STUB_CAPACITY_DOWN="true"; STUB_CAPACITY_REASON="rpd"; STUB_CAPACITY_REMAINING="88"
+STUB_CREDITS="0.17"; STUB_CREDIT_AGE="3600"; STUB_CREDIT_MAX_AGE="1800"
+go
+want    "CAP3: degrades on the latch"                  "RAIL DEGRADE"
+want    "CAP3: names the latch leg"                    "capacity:rpd"
+want    "CAP3: still SAYS the balance was unusable"    "FU-088(b) FAIL-OPEN"
+want    "CAP3: names the stale balance"                "stale: 3600s old"
+want    "CAP3: and that the latch bit WAS read, down"  "the capacity latch bit WAS readable and IS down"
+wantnot "CAP3: does not act on the stale number"       'credit:$0.17<$0.25'
+want    "CAP3: reaches dispatch"                       "REACHED: dispatch"
+wantrc  "CAP3: exit 0"                                 0
+
+# No payload, no latch bit. A transport failure cannot be read as `down` — nor as `down:false`.
+scenario "CAP4 — the proxy is unreachable → the latch is UNKNOWN, not down; fail open on both legs"
+STUB_CAPACITY_DOWN="true"      # what the proxy WOULD have said, had it answered at all
+STUB_CAPACITY_REASON="rpd"; STUB_CREDITS="unreachable"
+go
+_failopen_asserts "CAP4" "unreachable or unparseable" "$_LATCH_UNKNOWN"
+wantnot "CAP4: no capacity trigger from a lost payload" "capacity:rpd"
+want    "CAP4: says BOTH facts are unknown"            "BOTH account-scope facts are unknown"
+
+# ⚠ THE TRAP OF THIS ROUND, and the reason the launcher keys on the BOOLEAN. The proxy expires the
+# hold when it serves the payload, but `reason` is emitted unconditionally and is only ever cleared
+# by an early 2xx un-latch — so a healthy account that took one 429 last week still publishes
+# `reason:"rpd"` beside `down:false, remaining_s:0`. A `.reason != null` read would degrade the
+# entire fleet to haiku permanently, from the first 429 the account ever takes, and it would look
+# exactly like a working trigger.
+scenario "CAP5 — down=false with a STALE non-null reason → no degrade (never key on .reason)"
+STUB_CAPACITY_DOWN="false"; STUB_CAPACITY_REASON="rpd"; STUB_CAPACITY_REMAINING="0"
+STUB_CAPACITY_LATCHED_TOTAL="7"    # it HAS latched before — 7 times — and is not latched now
+go
+wantnot "CAP5: does NOT degrade on a stale reason"     "RAIL DEGRADE"
+wantnot "CAP5: no capacity verdict at all"             "OpenRouter capacity down"
+want    "CAP5: stays on the openrouter rail"           "STATE MODEL=xiaomi/mimo-v2.5 HARNESS=opencode RAIL=openrouter"
+want    "CAP5: reaches dispatch"                       "REACHED: dispatch"
+wantrc  "CAP5: exit 0"                                 0
+
+# The opt-out binds the new leg exactly as it binds the credit leg — and the line must not promise
+# a deferral the gates below will not perform: with a healthy balance there is no credit floor to
+# catch this ride, so "strict wait" here means "not moved", and it dispatches onto the latched rail.
+scenario "CAP6 — latch down + subscriptionFallback:false → no degrade, and the line says so honestly"
+IN_SROW='{"name":"oracle","workerModel":"xiaomi/mimo-v2.5","subscriptionFallback":false}'
+STUB_CAPACITY_DOWN="true"; STUB_CAPACITY_REASON="rpd"
+go
+wantnot "CAP6: does NOT degrade"                       "RAIL DEGRADE"
+want    "CAP6: names the opt-out"                      "subscriptionFallback:false on the stack row"
+want    "CAP6: does not claim a deferral it won't do"  "left to the gates below"
+want    "CAP6: model unchanged"                        "STATE MODEL=xiaomi/mimo-v2.5 HARNESS=opencode RAIL=openrouter"
+want    "CAP6: reaches dispatch (healthy balance)"     "REACHED: dispatch"
+wantrc  "CAP6: exit 0"                                 0
 
 # ── result ──────────────────────────────────────────────────────────────────────────────────────
 section "result"

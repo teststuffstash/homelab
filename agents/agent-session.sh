@@ -191,6 +191,40 @@ if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
   # parsing the operator gauge here instead would put a second, independently-drifting consumer
   # on the dispatch path and duplicate the NaN/staleness handling in awk.
   _or_status="$(curl -fsS --max-time 10 "$_or_probe_url/router-status" 2>/dev/null)" || _or_status=""
+  # homelab#194: the proxy's LATCHED capacity bit, read out of the payload ALREADY IN HAND. No
+  # second curl, deliberately — a separate call could observe a different latch state than the
+  # balance it is being weighed against. This is the leg the 2026-08-08 outage needed: the fleet
+  # was RPD-starved with a HEALTHY, topped-up balance, so the credit read below would not have
+  # degraded anything. `/route`'s typed defer already carries all three legs, but it is
+  # authoritative-mode only, and every OpenRouter-dispatching stack today runs SHADOW — for them
+  # this is the only path to the hard-402 and cross-model-429 legs.
+  # ⚠ Key on the BOOLEAN `.down`, NEVER on `.reason != null`. The proxy evaluates the hold when it
+  # serves the payload (`"down": or_cap["until"] > now`) but emits `reason` unconditionally, and
+  # only an early 2xx un-latch ever clears it — so after the first 429 the account takes, `reason`
+  # stays a stale non-null string sitting next to `down:false, remaining_s:0`, and a reason-keyed
+  # read would degrade the whole fleet permanently. That server-side expiry is also the answer to
+  # "should an expired-but-set latch degrade?": there IS no expired-but-set state visible here, so
+  # there is no launcher-side freshness bound to invent for it. `remaining_s` is a diagnostic for
+  # the lines below, not an input to the verdict — unlike the credit leg, whose HELD value really
+  # can be stale and so is judged against the proxy's own `credit_max_age_s`.
+  _or_latch_read="$(printf '%s' "$_or_status" | jq -r '
+    .openrouter_capacity as $c
+    | if ($c | type) != "object" then "unknown"
+      elif ($c.down == true)
+        then "down:\($c.reason // "unnamed")\(if ($c.remaining_s | type) == "number"
+                                              then " (proxy latch, \($c.remaining_s)s left)" else "" end)"
+      elif ($c.down == false) then "up"
+      else "unknown" end' 2>/dev/null)" || _or_latch_read=""
+  # The latch OUTRANKS the credit read, and is set first so the credit trigger below cannot
+  # overwrite it. They are not peers: `.down` is an account-scope VERDICT the owner has already
+  # reached (its own floor, a hard 402, or 429s from ≥2 models), while the balance is an INPUT
+  # this launcher applies its own policy to — and one that can be independently unusable. So a
+  # latched account degrades even on a perfectly healthy balance, which is exactly the outage
+  # shape above. The reason is carried through so a ride's log and a reviewer can tell
+  # `capacity:rpd` from `credit:$0.17<$0.25`, as the routed leg already does.
+  case "$_or_latch_read" in
+    down:*) OR_CAPACITY_DOWN="capacity:${_or_latch_read#down:}";;
+  esac
   # jq returns the whole verdict so the shell never RE-DERIVES the proxy's freshness bound — it
   # honours it. `credit_usd` is `null` until the first usable poll, and it is HELD across later
   # poll failures (the proxy only overwrites it on success), so age is the thing that makes a
@@ -211,14 +245,27 @@ if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
     # made this bug survive: an empty read looked exactly like a healthy account. One line, on
     # the dispatch path, naming the URL, so a NetworkPolicy gap in some other namespace is
     # diagnosable from the ride's own log instead of from an archived tracker entry.
-    *) echo "→ FU-088(b) FAIL-OPEN: no usable OpenRouter balance from ${_or_probe_url}/router-status [${_or_credit_read:-unreachable or unparseable}] — dispatching WITHOUT the \$${OR_MIN} account-credit floor (and without the homelab#158 credit trigger). Check the proxy and its credit leg (.openrouter_capacity.credit_poll_failures).";;
+    # homelab#194: there are now TWO account-scope facts behind this one URL, and the line must
+    # say which of them it is missing. An unreachable or unparseable payload loses the latch bit
+    # as well as the balance — reporting only "no balance" there would be the same silence-shaped
+    # bug #190 fixed, one level up: a ride would read as "gate unavailable" when in truth the
+    # launcher was also blind to whether the account was latched down.
+    *) case "$_or_latch_read" in
+         up)     _or_latch_note="the capacity latch bit WAS readable and is not down, so the balance is the only fact missing";;
+         down:*) _or_latch_note="the capacity latch bit WAS readable and IS down [${OR_CAPACITY_DOWN}] — the homelab#158 capacity trigger fired on it regardless";;
+         *)      _or_latch_note="the capacity latch bit (.openrouter_capacity.down) is MISSING TOO — BOTH account-scope facts are unknown here, so neither the credit trigger nor the homelab#194 capacity trigger can fire";;
+       esac
+       echo "→ FU-088(b) FAIL-OPEN: no usable OpenRouter balance from ${_or_probe_url}/router-status [${_or_credit_read:-unreachable or unparseable}] — dispatching WITHOUT the \$${OR_MIN} account-credit floor (and without the homelab#158 credit trigger); ${_or_latch_note}. Check the proxy and its credit leg (.openrouter_capacity.credit_poll_failures).";;
   esac
   # The floor stays the LAUNCHER's (`OPENROUTER_MIN_CREDIT`, default $0.25): the proxy owns the
   # account-scope FACT, this gate owns the dispatch POLICY, and it must stay overridable per run
   # without touching the proxy's env. Both defaults are $0.25 and the proxy publishes its own as
   # `.openrouter_capacity.min_credit_usd` — if they ever diverge deliberately, that is the field
   # to read, not this constant.
-  if [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
+  # `-z "$OR_CAPACITY_DOWN"`: the latch above already spoke for the account (homelab#194). Both
+  # legs would degrade to the same place, but the TRIGGER STRING is the record of why, and the
+  # owner's verdict is the truer answer than a number this launcher thresholded itself.
+  if [ -z "$OR_CAPACITY_DOWN" ] && [ -n "$OR_CREDITS" ] && awk -v c="$OR_CREDITS" -v m="$OR_MIN" 'BEGIN { exit !(c < m) }'; then
     OR_CAPACITY_DOWN="credit:\$${OR_CREDITS}<\$${OR_MIN}"
   fi
 fi
@@ -257,7 +304,15 @@ elif [ -n "$OR_CAPACITY_DOWN" ]; then
         HARNESS_SET=""
         _router_defer=""
       else
-        echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] but the subscription fallback is OFF here (${_fb_why}) — strict wait, this ride defers as before."
+        # ⚠ Says what THIS block decided, not what the ride will do. Before homelab#194 the only
+        # shadow trigger was the credit floor, so "defers" was always true here — the FU-088(b)
+        # gate below was certain to stop a ride whose balance had just fired the trigger. A
+        # `capacity:*` latch has no such guarantee: the balance can be perfectly healthy while the
+        # account is 429-latched, and an opted-out stack then dispatches onto the latched rail.
+        # That is the opt-out working as written (it means "do not MOVE me", not "block me"), and
+        # the ride's own 429s are what it has chosen to wait on — but the line must not promise a
+        # deferral it does not perform.
+        echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] but the subscription fallback is OFF here (${_fb_why}) — strict wait: no degrade, and this ride is left to the gates below exactly as before the trigger existed."
       fi;;
     *)
       echo "→ homelab#158: OpenRouter capacity down [${OR_CAPACITY_DOWN}] — no degrade for a non-fix ride (task=${TASK:-adhoc}); the existing gates decide this one.";;
