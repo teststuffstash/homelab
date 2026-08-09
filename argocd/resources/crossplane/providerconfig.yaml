@@ -37,7 +37,7 @@ spec:
     # or its Infisical key missing → cloudflare Workspaces fail loudly, Cloudflare untouched.
     provider "cloudflare" {
       base_url  = "http://cf-api-proxy.cf-api-proxy.svc.cluster.local/client/v4"
-      api_token = "routed-via-cf-api-proxy"
+      api_token = "XXXXXXXXXXXXXXroutedviacfapiproxyXXXXXXX" # 40-char dummy — the provider regex/length-validates; the proxy replaces the header
     }
 
     # App Workspaces can publish keys to Infisical. Auth via the crossplane-tf-writer
