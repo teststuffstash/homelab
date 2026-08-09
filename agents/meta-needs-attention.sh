@@ -109,10 +109,16 @@ while true; do
       if [ -n "$hsha" ]; then
         cj=$(devbox run -- gh run list -R "teststuffstash/$r" --commit "$hsha" --json status,conclusion 2>/dev/null | tail -1)
         if [ -n "$cj" ] && jq -e . >/dev/null 2>&1 <<<"$cj"; then
-          if jq -e '[.[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped"))] | length == 0 and length > 0' >/dev/null 2>&1 <<<"$cj"; then
+          # ⚠ jq precedence trap (caught live 2026-08-09, PR#256 park invisible ~1h45m): piping the
+          # FILTERED array into `length == 0 and length > 0` tests BOTH lengths on the filtered
+          # array — false forever, so every green PR fell into the red-path `continue` and clause 4
+          # could never emit when workflows were readable. Keep the original array in $all.
+          if jq -e '. as $all | [ $all[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")) ] | length == 0 and ($all | length) > 0' >/dev/null 2>&1 <<<"$cj"; then
             cstate="workflows green"
-          else
+          elif jq -e 'length > 0' >/dev/null 2>&1 <<<"$cj"; then
             continue # red/pending workflows — auto-merge or the ci-red lane owns it, not a park
+          else
+            cstate="no workflow runs on head" # zero runs ≠ red: the park signature still emits
           fi
         fi
       fi
