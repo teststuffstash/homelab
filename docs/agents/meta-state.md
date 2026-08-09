@@ -160,8 +160,9 @@ meant to avoid.)
   (`ps aux | grep NEEDS-META` for an inline variant, the script name for the script one — an
   absence is a claim about your grep, proven again 2026-08-08 05:00Z).
 - Backstop heartbeat: `Monitor` (persistent) `while true; do sleep 7200; echo "META-HEARTBEAT:
-  sweep due"; done` — every sweep runs `bash agents/meta-alert-crosscheck.sh` + the board/chain
-  check against this file.
+  sweep due"; done` — every sweep runs `bash agents/meta-throughput.sh` FIRST (queue-vs-movement;
+  a THROUGHPUT-STALL line is an incident, not calm — 2026-08-09 operator catch), then
+  `bash agents/meta-alert-crosscheck.sh` + the board/chain check against this file.
 - Handoff watch is NOT standing (operator 2026-08-09: special case) — arm `bash
   agents/meta-handoff-watch.sh` only on rollout days / when a stack jail is known active;
   `/handoff` processes the inbox on demand.

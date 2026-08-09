@@ -29,19 +29,42 @@
 # Poll is 10 min — this watches for HUMAN-latency states, not machine ones.
 cd /workspace/homelab || { echo "PROBE-FAIL: repo missing"; exit 1; }
 PLATFORM_REPOS="${PLATFORM_REPOS:-homelab agent-runtime agent-coordinator openrouter-operator}"
-# Clause-1 split (2026-08-08 ~15:20Z): reviewer coverage FOLLOWS the fixer block, so on
-# fixer-enabled repos a bot review IS coming for REVIEW_REQUIRED PRs (PR#42 false-flagged while
-# its reviewer pod was Running) — there, only the codeowner-park state (bot APPROVED, human
-# pending) is meta's. GATED repos have no bot at all; REVIEW_REQUIRED + CI-green is the PR#123
-# gap. Source of truth for the split: repos[].fixer in agents/fixer/openrouter-operator/
-# agentstack.yaml — update BOTH when a fixer block flips.
-GATED_REPOS="${GATED_REPOS:-homelab agent-coordinator}"
-LANE_REPOS="${LANE_REPOS:-agent-runtime openrouter-operator}"
+# Clause-1 split — DERIVED LIVE from the stack-level `spec.reviewer.enabled` knob (the same
+# source review-reflex honors), re-read every poll. The 2026-08-08 static split ("reviewer
+# coverage follows the fixer block") went stale the same day it was written: reviewer.enabled
+# flipped false for the whole platform stack, no bot was coming for agent-runtime PR#54, and the
+# static LANE list silently exempted it — it sat TEN HOURS with no emission (operator catch,
+# 2026-08-09). A repo in a reviewer-disabled stack is GATED (REVIEW_REQUIRED+green = flag);
+# everything else keeps only the codeowner-park clause (PR#42's false-flag lesson). On a claims
+# probe failure the split falls back to ALL-GATED: a false flag costs a glance, a false exemption
+# cost 10 hours.
+GATED_REPOS=""
+LANE_REPOS=""
+derive_split() {
+  local disabled
+  # NB no `tail -1` here: kubectl -o json is PRETTY-PRINTED (multi-line) unlike gh --json, and
+  # tail-ing it feeds jq a lone "}" — the split silently degrades to all-LANE (caught in dry-run,
+  # 2026-08-09, before it shipped; the exact bug class this file's history warns about).
+  disabled=$(devbox run -- kubectl --kubeconfig tofu/kubeconfig get agentstack -A -o json 2>/dev/null \
+    | jq -r '[.items[] | select(.spec.reviewer.enabled == false) | .spec.repos[].name] | join(" ")' 2>/dev/null)
+  if [ -z "$disabled" ] && ! devbox run -- kubectl --kubeconfig tofu/kubeconfig get agentstack -A >/dev/null 2>&1; then
+    echo "PROBE-FAIL: agentstack claims unreadable — treating ALL platform repos as gated this pass"
+    GATED_REPOS="$PLATFORM_REPOS"; LANE_REPOS=""; return
+  fi
+  GATED_REPOS=""; LANE_REPOS=""
+  for r in $PLATFORM_REPOS; do
+    case " $disabled " in
+      *" $r "*) GATED_REPOS="$GATED_REPOS $r";;
+      *) LANE_REPOS="$LANE_REPOS $r";;
+    esac
+  done
+}
 # require_code_owner_review=true stack repos (tofu/github/variables.tf) — clause 4.
 CODEOWNER_REPOS="${CODEOWNER_REPOS:-oracle-fleet circles}"
 seen=""
 while true; do
   out=""
+  derive_split
   for r in $GATED_REPOS; do
     rows=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
              --json number,reviewDecision,statusCheckRollup,isDraft 2>/dev/null | tail -1 \

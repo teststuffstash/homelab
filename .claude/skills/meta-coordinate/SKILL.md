@@ -67,6 +67,9 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
    existed); (3) APPLY what is host/jail-only (tofu roots, physical actions) and FLAG the
    operator when it is theirs. `for r in $(platform repos); do gh issue list -R teststuffstash/$r
    --state open; done` — sweep before loop work ("alerts clear themselves, issues don't");
+   and run `bash agents/meta-throughput.sh` HERE, before reading any board: it answers "has the
+   fleet actually been working?" in one line, and a THROUGHPUT-STALL at bootstrap re-orders the
+   whole session around finding the cork (2026-08-09: ~9h, one ride, three stacked corks);
    during a BIG ROLLOUT sweep FIRST and often (#55, the founding example).
 3. Live board, per active repo (oracle-fleet, oracle-iac at minimum):
    `gh issue list --repo teststuffstash/<r> --state open --json number,title,labels`
@@ -100,6 +103,15 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
      the board (step 2), not just events to await. The loop watch only fires on CHANGE, and a stalled world produces no
      changes: on 2026-07-23 a red CI on the tail PR matched no filter and the session sat
      silent for ~a day. The heartbeat exists so silence can never exceed 2h unexamined.
+     **Each sweep ALSO runs `bash agents/meta-throughput.sh`** — the fleet-throughput probe
+     (operator catch 2026-08-09: sweeps checked chains and boards all night while the fleet did
+     ONE 18-min ride in ~9h; nothing asked "when did a worker last actually ride?"). It reports
+     the newest ride evidence (the GitHub comment trail — pods are GC'd, comments are durable)
+     against the queued/in-progress label counts, and a `THROUGHPUT-STALL` line (work labeled,
+     no ride ≥2h) is an INCIDENT: root-cause the dispatch chain immediately — coordinator ticks,
+     capacity gate, CI red, reviewer cork, router — never file it under "the loop is quiet".
+     Run it FIRST in the sweep: every other check reads state, this one reads MOVEMENT, and a
+     healthy-looking board with zero movement is the failure mode boards cannot show.
 6. Check in-flight operator chains: `docs/agents/meta-state.md` (if present) lists any pending
    pin-follow / acceptance-run chains with their next step. Update it when starting/finishing one.
 
@@ -138,7 +150,15 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
     clears when convenient and the next /meta-coordinate re-bootstraps from the durable state, losing
     nothing. The goal is FREQUENT + CLEAN clears, not a perfectly-timed one.
 
-## Anti-stall discipline (the meta-9 recurring failure class — FOUR incidents)
+## Anti-stall discipline (the meta-9 recurring failure class — FIVE incidents)
+
+- **Throughput is a first-class signal — check it at bootstrap AND on every heartbeat**
+  (`bash agents/meta-throughput.sh`). The fifth incident (2026-08-09): sweeps ran all night,
+  each one found its chains "waiting" plausibly, and nobody added up that the FLEET had done one
+  18-min ride in ~9h with seven items queued — three independent corks (CI red, an unreviewed
+  platform PR, footprint holds) each looked like ordinary waiting from inside its own chain.
+  Per-chain patience is how a fleet-wide stall hides; the probe's queue-vs-movement line is the
+  only view where it cannot.
 
 - **Every wait has an expected-next-event AND a deadline.** When you start waiting on anything
   (a review, a CI run, a chain step, an acceptance run), know what should happen and by when
