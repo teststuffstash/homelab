@@ -1,0 +1,39 @@
+#!/bin/sh
+# Fixture-backed `kubectl`, installed on $PATH ahead of the real one by agents/replay/run.sh.
+#
+# Reads (`get`, `describe`, `logs`) are answered from world/kubectl/; writes (`apply`, `create`,
+# `delete`, `label`, `patch`, …) are RECORDED. A dispatch is a `kubectl create -f -` of a Job
+# manifest, so the manifest arrives on STDIN — it is captured into the action stream as `STDIN`
+# lines, because the manifest IS the action a dispatch fixture asserts on.
+#
+# No cluster, no kubeconfig, no ServiceAccount: every call either hits a committed file or dies.
+set -u
+_RP_TOOL=kubectl
+. "${REPLAY_STUB_DIR:?agents/replay/run.sh must export REPLAY_STUB_DIR}/_common.sh"
+
+_rp_record "$@"
+WORDS="$(_rp_words "$@")"
+[ -n "$WORDS" ] || _rp_die "bare \`kubectl\` with no verb — nothing to key a world file on."
+
+MUTATING_VERBS="apply create delete patch label annotate replace edit scale rollout cordon
+uncordon drain taint set exec cp run expose autoscale"
+
+if _rp_is_mutation "$MUTATING_VERBS" "$WORDS"; then
+  # `-f -` means the object is on STDIN. Read it whole and record it; a write whose payload the
+  # fixture cannot see is a write the fixture cannot assert.
+  case " $* " in
+    *" -f - "*|*" --filename - "*|*" -f- "*)
+      sed 's/^/STDIN /' >> "$REPLAY_ACTIONS" ;;
+  esac
+  _rp_serve "$WORDS" 2>/dev/null || true
+  exit 0
+fi
+
+# $STUB_KUBECTL replays the failure modes a guarded read must survive — same vocabulary as the gh
+# stub so a fixture author learns it once.
+case "${STUB_KUBECTL:-ok}" in
+  fail)    printf 'error: the server could not find the requested resource\n' >&2; exit 1 ;;
+  garbage) printf 'Unable to connect to the server: dial tcp: i/o timeout\n'; exit 0 ;;
+esac
+
+_rp_serve "$WORDS"

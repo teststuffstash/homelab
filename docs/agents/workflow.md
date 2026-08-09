@@ -244,6 +244,74 @@ predicate gains footprint intersection in place of `lane-free`:
   outside the issue's `Touches:` (a narrow-blocking case, reviewer rubric); TRACKS rule 2 still
   routes shared-file work through its owning concern as a separate issue.
 
+### Replay harness — the ADR-103 ratchet, executed
+
+A changed coordinator clause, prompt-assembly path or reflex ships **only with an executed replay**
+(ADR-103 rule 1): recorded API state in, expected dispatch/label/comment out. Prose warnings were
+tried and every prose-warned class recurred; every executable gate held. The harness that makes
+writing one cheap is [`agents/replay/`](../../agents/replay/README.md) (homelab#206).
+
+```sh
+devbox run -- bash agents/replay/run.sh                            # every fixture
+devbox run -- bash agents/replay/run.sh -v agents/replay/fixtures/state-fp
+```
+
+**Fixture layout.** One directory per replayed condition:
+
+```
+agents/replay/fixtures/<name>/
+  fixture.yaml            name / mode / parts / env / expect
+  world/gh/pr-view.json   RECORDED responses, keyed by the invocation they answer
+  expected/actions.txt    the action stream the clause must emit
+  bridge.sh, post.sh      parts that are not clause code (see below)
+```
+
+`fixture.yaml` is a deliberately tiny YAML subset — `key: value`, and `key:` followed by `- item`
+lines. No nesting, and anything outside the subset is a parse error rather than a silent skip; the
+harness everything else leans on depends on nothing but bash and awk.
+
+- `mode: actions` — the declarative mode. `parts:` composes the clause at run time from
+  `block:<sentinel>` (extracted out of `source:` by its `# >>>REPLAY:<name>>>>` markers) and
+  `file:<name.sh>` (fixture-local bridge and observation-point code). Blocks are **extracted, never
+  transcribed**: a transcribed clause pins a copy and goes green while the original drifts (#166).
+  A bridge may be shared with a sibling fixture by relative path (`file:../other/bridge.sh`).
+- `mode: suite` — an existing self-asserting replay (`entrypoint:`), registered rather than
+  rewritten. `state-fp` is the one today; its file, its devbox script and its required CI status are
+  untouched.
+- `expect: fail` + `expect_detail:` — a PROBE-FAIL fixture (the check's-author rule, #168). It must
+  red, **and for the declared reason**; if it goes green the run fails loudly. There is one per
+  detector the runner owns: the diff, the missing sentinel, the unrecorded read.
+
+**Recording a world.** Capture the real payload once, commit it, and never call out again — CI runs
+offline (the e2e-cold-cache lesson), and a replay that can reach the network is a replay that goes
+green for the wrong reason:
+
+```sh
+gh pr view 234 --repo teststuffstash/oracle-fleet \
+   --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments \
+   | tee agents/replay/fixtures/<name>/world/gh/pr-view-234.json
+```
+
+The key is the invocation's **bare words** — command path plus positionals, flags dropped — tried
+longest-first (`pr-view-234.json` → `pr-view.json` → `pr.json`). So record once per call *shape*,
+and only pin a positional when two different answers are needed for it. A read with no recording is
+**fatal and loud**, never an empty body: an empty payload usually parses, and the clause then
+asserts on nothing. Writes (`pr comment`, `issue edit`, `kubectl create -f -`) are recorded into the
+action stream instead of served — they are the output under test.
+
+**What it asserts on.** The action stream only — the calls a clause makes and the lines it emits —
+never internal variables, so a clause stays refactorable. `expected/actions.txt` is the `CALL`
+stream, then `OUT`, then `ERR`, then `RC`; each in its own order. Interleaving *between* the streams
+is deliberately not asserted (stdio buffering makes it non-deterministic, and no clause's contract
+rests on whether a log line landed before or after the call it describes). Leave
+`expected/actions.txt` out on a first run and the harness prints the stream it observed — review
+that, then commit it.
+
+**The ratchet.** A fixture that reds is the contract talking. If the behaviour change was
+deliberate, the fixture is updated **in the same PR** — a changed clause ships with its replay or it
+does not ship. Backfilling the older hand-rolled replays onto this harness follows fix-density, not
+big-bang (ADR-103).
+
 ### Hazards to bake in from day one
 
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns

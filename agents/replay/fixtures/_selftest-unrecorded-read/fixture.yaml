@@ -1,0 +1,16 @@
+# PROBE-FAIL 3/3 — the unrecorded-read detector.
+#
+# The one that would be quietest. If the `gh` stub answered an unrecorded read with an empty body
+# and exit 0, the clause would parse the empty payload, take its fail-open branch and emit — and
+# the fixture would go green having asserted nothing about the state it meant to replay. So a read
+# with no world file is fatal and loud, and this fixture is that death, pinned.
+#
+# NB `expect: fail` here is about the FIXTURE's expectation being unmeetable, not about a sloppy
+# assertion: expect_detail pins the exact diagnostic, including the recorder hint a fixture author
+# needs at 2am.
+name: _selftest-unrecorded-read
+mode: actions
+expect: fail
+expect_detail: 'replay-stub[gh]: no recorded world file for this READ.'
+parts:
+  - file:clause.sh

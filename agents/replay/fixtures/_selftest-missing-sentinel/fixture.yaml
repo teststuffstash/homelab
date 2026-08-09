@@ -1,0 +1,14 @@
+# PROBE-FAIL 2/3 — the sentinel detector.
+#
+# Blocks are EXTRACTED from the shipped script at run time rather than transcribed, so the failure
+# that matters is a marker that got deleted or moved during a refactor: the extractor returns
+# nothing, the composition is still valid shell, and the fixture goes green while asserting on an
+# empty clause (#166 — a transcribed pin is worse than no pin). This fixture asks for a sentinel
+# that does not exist and must be told so.
+name: _selftest-missing-sentinel
+mode: actions
+expect: fail
+expect_detail: missing from agents/coordinator-scan.sh
+source: agents/coordinator-scan.sh
+parts:
+  - block:no-such-block-exists

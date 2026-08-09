@@ -45,11 +45,17 @@
 #     enclosing loops set, never harness inventions.
 # Runs in about a second.
 #
-# NOT WIRED INTO CI YET — that needs `devbox.json` + `.github/workflows/ci.yaml`, both NEVER-TOUCH
-# from the fixer lane (CI runs them from the PR's own branch), so it follows the merge in the
-# operator lane, the #133 / #184 / #199 pattern. Until then this is a manual gate. Once wired, a
-# PR that changes the fingerprint's inputs must update the rows here in the same PR — same posture
-# as agents/rail-degrade-replay.sh and agents/footprint-test.sh.
+# WIRED INTO CI as the required `state-fp-replay` step (`devbox run state-fp-replay`, ci.yaml) — the
+# operator-lane follow-up the original note here anticipated, landed. A PR that changes the
+# fingerprint's inputs must update the rows here in the same PR, same posture as
+# agents/rail-degrade-replay.sh and agents/footprint-test.sh.
+#
+# ALSO REGISTERED as the first fixture of the clause-replay harness
+# (`agents/replay/fixtures/state-fp/`, homelab#206) — so `bash agents/replay/run.sh` runs it beside
+# every other clause pin. Registration only: this file, its devbox script and its required status
+# are unchanged, and the harness runs it rather than rewriting it. Its own extract()/stub/assertion
+# copies fold onto `agents/replay/stubs/` later, when a fixture in `actions` mode has ridden a few
+# clause changes (ADR-103 — backfill follows fix-density, not big-bang).
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
