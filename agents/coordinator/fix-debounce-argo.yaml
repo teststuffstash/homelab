@@ -45,6 +45,12 @@ spec:
   eventBusName: default
   template:
     serviceAccountName: sensor-review
+    # homelab#103: was BestEffort — no requests at all. Same values as the coordinate/review
+    # Sensors. CPU requests only (no CPU limit), memory limited — this file set's norm.
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
   dependencies:
     - name: verdict-dep
       eventSourceName: agent-loop
@@ -100,6 +106,16 @@ metadata:
 spec:
   entrypoint: debounce
   serviceAccountName: agent-coordinator
+  # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
   ttlStrategy: { secondsAfterCompletion: 86400 }
   arguments:
     parameters:

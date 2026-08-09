@@ -68,4 +68,20 @@ detector the runner owns. They run first (the glob sorts them there) so the harn
 before it judges anything else. If one of them ever goes green, the run fails loudly: a check
 nobody has watched fail is not a check.
 
+## When a clause file changes and no fixture can apply
+
+The ratchet fails any PR touching a clause file without touching `agents/replay/`, and names a note
+here as the alternative. Keep that hatch narrow by answering one question: **can the harness observe
+this diff at all?** It asserts an action stream — the `gh`/`kubectl` calls a clause emits — so the
+answer is no only when the diff emits none. "The branching is unchanged but the payload moved" is
+observable, and there the ratchet is doing its job: extend the fixture.
+
+Log each instance here, so the next author sees a register rather than a precedent:
+
+- **homelab#103** — a soft `topologySpreadConstraints` (via `podSpecPatch`) and Sensor CPU
+  `requests` added to `coordinate-argo.yaml` / `review-argo.yaml`. Pod *placement*, declared to the
+  kube-scheduler: no clause reads it and no branch turns on it. Evidence rather than assertion —
+  the full suite stayed green on the change with every `expected/actions.txt` untouched, which is
+  the harness itself reporting that the streams did not move.
+
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.

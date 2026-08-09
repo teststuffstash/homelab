@@ -80,6 +80,14 @@ spec:
   eventBusName: default
   template:
     serviceAccountName: sensor-review # same submit-only Role as review/coordinate Sensors
+    # homelab#103: was BestEffort — no requests at all, so the scheduler placed this long-lived
+    # Sensor pod as if it were free (and a spinning Sensor is exactly what saturated wk-01). Same
+    # values as the coordinate/review Sensors and the agent-loop EventSource. No CPU limit: this
+    # file set requests CPU and limits memory only (limits throttle, requests schedule).
+    container:
+      resources:
+        requests: { cpu: "25m", memory: "64Mi" }
+        limits: { memory: "128Mi" }
   dependencies:
     - name: alert-dep
       eventSourceName: agent-loop
@@ -121,6 +129,16 @@ spec:
   synchronization:
     semaphores:
       - configMapKeyRef: { name: subscription-capacity, key: claude }
+  # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
   ttlStrategy: { secondsAfterCompletion: 86400 }
   arguments:
     parameters:

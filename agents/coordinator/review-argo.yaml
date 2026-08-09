@@ -165,6 +165,16 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800 # matches the review-<stack> cron's belt
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+                # (coordinate-argo.yaml). Applies inside <loop_ns>.
+                podSpecPatch: |
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchExpressions:
+                          - { key: workflows.argoproj.io/workflow, operator: Exists }
                 arguments:
                   parameters:
                     - { name: repo, value: PLACEHOLDER }
@@ -246,6 +256,16 @@ spec:
   synchronization:
     semaphores:
       - configMapKeyRef: { name: subscription-capacity, key: claude }
+  # homelab#103 soft hostname spread — rationale on the `coordinate` WorkflowTemplate
+  # (coordinate-argo.yaml). Verbatim copy; keep in sync.
+  podSpecPatch: |
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchExpressions:
+            - { key: workflows.argoproj.io/workflow, operator: Exists }
   entrypoint: main
   arguments:
     parameters:
