@@ -481,8 +481,11 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   `agents/subscription-latch.sh` (fail-open off-cluster), which also enforces the proactive
   concurrency semaphore: defer at ≥`SUBSCRIPTION_MAX_RUNNING` (3) Running pods labelled
   `homelab.teststuff.net/subscription-session=claude`. (b) `agent-session.sh` defers OpenRouter
-  dispatch when account credit (probed via the proxy with the pod's opaque ref,
-  `/api/v1/credits`) is under `OPENROUTER_MIN_CREDIT` ($0.25). Acceptance: unit+live tests of
+  dispatch when account credit is under `OPENROUTER_MIN_CREDIT` ($0.25) — ⚠ as shipped here the
+  read was `GET /api/v1/credits` with the pod's opaque ref, which OpenRouter serves to management
+  keys only: it 403'd on every dispatch, so **there was no credit floor at all** until homelab#190
+  re-sourced it from the proxy's `/router-status` (living doc:
+  [`docs/agents/workflow.md`](agents/workflow.md) §Capacity gates). Acceptance: unit+live tests of
   verdicts/metrics; live 19:15Z reflex tick honored the paired `reviewer.enabled` knob; live
   probe seeded 5h=0.24/7d=0.48 through the rolled proxy. Fallback never wired by design: the
   unofficial `oauth/usage` endpoint (claude-code#13585 / ryan-knowone/quota-dashboard).
