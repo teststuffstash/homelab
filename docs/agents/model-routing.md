@@ -558,8 +558,12 @@ log are what answer "what did the outage cost us".
 
 ⚠ **A claudeTier claim never needed any of this** — its rides ride the subscription already. Its bug
 was the mirror image and is fixed as leg 1: a `claude/*` dispatch sends **no `key_ref`** to `/route`
-and probes no OpenRouter state at all, and the coordinator's item prompt says in as many words that
-a failed/deferred key mint must not defer a claude-tier dispatch. The OpenRouter key is that ride's
+and probes no OpenRouter state at all, and the rule that a failed/deferred key mint must not defer a
+claude-tier dispatch is written down in the coordinator **brief** — the `RAIL —` note at the head of
+the per-issue runbook in
+[`../../agents/coordinator/README.md`](../../agents/coordinator/README.md), which also scopes its
+estimate/mint steps to OpenRouter-primary chains — as well as in the per-dispatch **item prompt**
+(the brief is the durable carrier; the item prompt is transient). The OpenRouter key is that ride's
 *fallback* rail; treating it as a prerequisite is what deferred four dispatches into an idle
 subscription. Mint failures are also the one leg with no proxy signal — the provisioning API is the
 openrouter-operator's surface, not this proxy's — which is why leg 1 is an invariant rather than
