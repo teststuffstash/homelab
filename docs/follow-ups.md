@@ -411,6 +411,15 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
+- [ ] **FU-159** — **Garage's metadata volume rides the `std` bulk tier; heavy S3 request rates
+      saturate it.** Measured 2026-08-09: ert-verify's parse (252k ranged GETs, ~15/s, ~4h6m)
+      drove `meta-garage-0`'s iSCSI device (wk-01 `sdg`) to aqu-sq 74, firing NodeDiskIOSaturation
+      for hours and degrading the parse itself (17→14.7/s) — homelab#103 has the full trace. The
+      `longhorn-fast` Optane tier (ADR-070-era, ThinkCentre) exists for exactly this IO shape.
+      Next: operator decides meta→`longhorn-fast` migration (replica=1 node-local trade-off vs
+      replicated-but-slow; Garage meta is rebuildable-ish but load-bearing). Not urgent — full
+      parses are quarterly/attended; the delta job's rate is far lighter.
+
 - [ ] **FU-158** — **No PrometheusRule in `argocd/resources/**` has a behaviour gate: every alert
       expr merges unexecuted.** Surfaced by PR#220's operator findings (2026-08-09): kubeconform
       SKIPS the kind (schema gap, known — FU archive 2026-08-04 note), and there is no
