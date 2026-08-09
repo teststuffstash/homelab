@@ -3207,3 +3207,33 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   have degraded the fleet permanently from its first-ever 429) → both alerts live, replay at
   100+ assertions, build lane born (or-op .agents/build.yaml + review.md lane split) and
   validated on its first two PRs.
+
+## 2026-08-09 (~06:30–07:10Z) — fresh meta session: one worker ride in 9h, and the cork was inotify
+
+- **Operator: "there has not been a worker live for how many hours?" — answer: one 18-min ride
+  since ~22:10Z.** Three corks, found in order: (1) oracle e2e red fleet-wide since 04:23Z;
+  (2) agent-runtime PR#54 waiting ~10h on the meta read (no bot reviewer on the platform stack);
+  (3) footprint holds serialized behind blocked PR#234. The board sweep + the arbitrate ride's own
+  ruling ("master itself is red — platform, not PR") pointed straight at the runner VM.
+- **The e2e outage was LEAKED KIND CLUSTERS EXHAUSTING INOTIFY, not the #228 race and not
+  transient**: two clusters Up 18h/5h on ci-runner-01 (the 5h one from PR#234's 01:42Z CANCELLED
+  run — PR#224's cancel-in-progress opened the leak class: a cancelled job never reaches its
+  `kind delete`). Measured **116/128 fs.inotify.max_user_instances** with just those two; any
+  third (fresh) cluster starves its own CoreDNS → every fetch `Errno -3` while pod/node status
+  stays green. PR#239's own evidence capture (running pod, Ready node, resolver dead) is what
+  made the diagnosis one SSH long — the capture paid for itself on its first outage. Fix: clusters
+  deleted, `fs.inotify.max_user_instances=512` live + codified in the cloud-init template
+  (committed); master's failed run re-run → **green 07:0xZ**; PR#239/#234 reruns + evidence on
+  #228 (incl. the still-open leak class: job-start sweep of stale `oracle-e2e-*` clusters).
+  ⚠ Class note: the runner got TWO slots on 08-08, so 3 concurrent clusters is a SUPPORTED state
+  — the 128 default was always going to blow; the leak just chose the day.
+- **PR#54 reviewed by execution** (fixture kills at line 273 exactly, truncated/full agree,
+  `--signals`≡`--check`, sparse-999 guard survived the awk port, 52k lines 1.5s) → approved,
+  admin-merged; #43 closed; agent-runtime queue (4 issues) uncorked. homelab #151/#133/#173
+  closed with audits (fixes verified on master). C6 spot-check: #188/#215 both flipped — clause
+  healthy.
+- **Operator: handoff watch OUT of the standing set** (special case, not always-on) — stopped,
+  meta-state updated; arm only on rollout days. Old session's orphan monitors killed by process
+  before re-arming (they do NOT die with the session — the comment-stream one even kept emitting).
+- Fix-cycle chain for #217/#235: deploy bump #340 + pin-follow (oracle-iac) landed by the machine
+  lane; ArgoCD Synced; ert-verify submitted (`ert-verify-2026089-mpws5`) on the new pin.

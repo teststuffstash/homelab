@@ -6,7 +6,18 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-08 ~21:00Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-09 ~07:10Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+
+- **IN FLIGHT — e2e-outage recovery (root cause: leaked kind clusters → inotify 116/128, fixed
+  live + codified; TICK-LOG 2026-08-09)**: master e2e re-run GREEN 07:00Z. Pending, with
+  deadlines: (a) PR#239 + PR#234 CI re-runs (monitor armed; expect green ≤25 min — if red, the
+  diagnosis was incomplete, go back to the VM); then PR#239 → reviewer reflex → auto-merge, and
+  PR#234 → reviewer re-approve → auto-merge (arbitrate ruled it mergeable-quality; its
+  agent/blocked+arbitrate labels clear on merge). (b) `ert-verify-2026089-mpws5` in ns
+  oracle-fleet on pin 2026.8.9-gcbcc2db04aa7 (monitor armed; expect Succeeded ≤40 min) — the
+  #217/#235 fix-cycle verification. (c) LEAK CLASS still open: cancelled e2e jobs leak their kind
+  cluster (PR#224's cancel-in-progress) — flagged with evidence on oracle-fleet#228 for a
+  job-start stale-cluster sweep; verify it lands with PR#239 or gets its own issue.
 
 - **#26 INCIDENT ARC FULLY CLOSED with live acceptance (01:40Z 08-09)**: park held (zero 429
   storm), BOTH wedge classes fixed+deployed (rpd park #28; idempotent 404-delete #30/PR#36),
@@ -16,28 +27,23 @@ meant to avoid.)
   OpenRouterCapacityDown page (#163) → rail degrade (#158 family). REMAINING queued: homelab#190
   (launcher gate reads the proxy surface — edge on #180 now satisfied), or-op#33 (balance alert,
   edge on #29 satisfied), or-op#34 SOAKS until the first daily-class 429 datum.
-- **REVIEWER OUTAGE fixed + RECOVERED**: the $103.74-in-heredoc kill (since ~19:00Z 08-08) fixed
-  00:30Z; dispatch verified (reviewer pod ran) AND verdicts flowing (PR#234 CHANGES_REQUESTED —
-  substantive). The changes-requested lane owns #234's fix round; #235 next tick.
+- Reviewer outage (heredoc `$103.74`) fixed 00:30Z 08-09 + recovered; verdicts flowing since.
 - **openrouter-operator has a BUILD lane since 01:00Z**: .agents/build.yaml (chart/+tests,
   render-first TDD) + review.md criterion-5 lane split (PR#31); first build PR#32 shipped the
   metrics Service/ServiceMonitor/key-ops alert with the no-alert-without-a-series constraint as
   a chart TEST. task/build label wired.
 - **Cloudflare/PublicRoute: ARMED, zero consumers** — operator acts: echo claim → ha retrofit.
-- **CI-red arc RESOLVED ~20:30Z**: #151 (github-apps declaration drift) fixed on master; ALL five
-  blocked homelab PRs landed (#147 deploy, #152→#149, #160→#157, #161→#155, #162→#158). #154
-  re-queued (both holds gone). #153 re-scoped: offender is github-exporter (not cloudflare-exp;
-  Prometheus log names it), transient duplicate-emission state cleared by the 20:21Z pod roll —
-  queued with ⚖ (find mechanism + duplicate-proof exposition).
+- CI-red arc resolved 20:30Z 08-08 (#151 root; issue closed with audit 08-09, ditto #133/#173).
+  #153 re-scoped+queued (github-exporter duplicate-emission mechanism); #154 re-queued.
 - **#162's proxy latch verified live post-roll**: router_openrouter_capacity_down{,_total} = 0 on
   the rolled pod. Alert for the latch = #163 (queued, ⚖ severity-warning note attached).
 - **circles**: PR#54 assembly MERGED 2026-08-08 ~20:47Z via my delegated codeowner approve (specs
   delta = evidence-blocks only, 205 PASS, contract text untouched); goal #29 CLOSED; #47/#138
   hand-closed with audits (goal-branch Fixes never fires at the squash boundary). Frozen:
-  PR#21/#25 (unchanged). **oracle**: PR#230 MERGED (codeowner gate); PR#217 approved, ci
-  re-running (concurrency cancel), auto-merge on green — CHECK IT LANDED, then watch for the
-  oracle-iac deploy bump + pin-follow (fix-cycle chain, both are server/chassis code).
-- **agent-runtime**: 5 issues queued (#43 ridden → PR '#54' open, rest follow via wip caps).
+  PR#21/#25 (unchanged). **oracle**: #217 + #235 MERGED + agent/done flipped; deploy bump #340 +
+  pin-follow landed (machine lane); verification = the ert-verify chain in the IN-FLIGHT bullet.
+- **agent-runtime**: PR#54 reviewed-by-execution + admin-merged 07:02Z 08-09 (#43 closed);
+  4 queued issues (#45/#46/#49/#50) now free to dispatch via wip caps — expect rides.
   ⚠ reviewer.enabled=false for the WHOLE platform stack (reviewer log 20:45Z) — the earlier
   "reviewer follows the fixer block" note is NOT what the claim says today: every platform-repo
   PR needs MY read + admin merge until that's reconciled (needs-meta clause 1/park covers).
