@@ -33,8 +33,10 @@ meant to avoid.)
   next publish (start-from default footgun, fixed via oracle-iac#357/PR#358). Parse ≈4h6m (252k
   members ~15/s; the old "1h50m" note was a smaller corpus) → terminal ~20:50Z; watcher armed.
   Its S3 load = the wk-01 NodeDiskIOSaturation (garage META, see below). #217/#235 tail.
-- **QUEUED: homelab#228** (subject-reopen strips lifecycle labels — the #103 breaker's class
-  fix; rung). **#103 open label-clean as the subject record** until the disk alert clears
+- **homelab#228 DONE (PR#229 merged ~19:50Z)** — reopen-strip is launcher-owned shell around the
+  responder session (ADR-094 applied; replay-fixtured both verdict legs). Live acceptance =
+  next same-subject reopen arrives label-clean. (Its PR was briefly red on MY dangling FU-045
+  spike ref — #230, fixed; lint scans TRACKED files only, lint before add is a lie of scope.) **#103 open label-clean as the subject record** until the disk alert clears
   (= parse ends); root cause on-thread: parse GETs vs garage META on std tier → **FU-159**
   (meta → longhorn-fast, operator ⚖). **needs-meta v5 running** (clause-4 jq precedence fixed
   19:0xZ — green codeowner parks were invisible since the morning rewrite; fixture-executed).
