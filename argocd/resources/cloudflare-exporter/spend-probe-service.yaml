@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflare-spend-probe
+  labels: { app: cloudflare-spend-probe }
+spec:
+  selector: { app: cloudflare-spend-probe }
+  ports:
+    - { name: http-metrics, port: 9505, targetPort: http-metrics }

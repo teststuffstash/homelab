@@ -7,6 +7,13 @@
 # free zones out; validated matrix in docs/cloudflare.md §Free-zone GraphQL): eid-demo.com (pro)
 # emits, teststuff.net (free) needs the FU-039 DIY GraphQL leg. The cloudflared PodMonitor is the
 # plan-independent half: local tunnel metrics, no Cloudflare API involved.
+#
+# spend-probe-* (#217) is a SECOND workload in this directory, deliberately: the lablabs binary is
+# third-party and cannot grow gauges of ours, so the spend-toggle drift belt is our own
+# ConfigMap-python poller riding the same namespace, the same ExternalSecret token and the same
+# `cloudflare-edge` rule group — one Cloudflare observability app, two API surfaces (GraphQL
+# analytics vs the zone-settings REST reads). It also covers the zone CF_EXCLUDE_ZONES hides from
+# the exporter above. Design: docs/cloudflare.md §Zone classes + spend surface.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring
@@ -18,3 +25,12 @@ resources:
   - servicemonitor.yaml
   - prometheusrule.yaml
   - podmonitor-cloudflared.yaml
+  - spend-probe-deployment.yaml
+  - spend-probe-service.yaml
+  - spend-probe-servicemonitor.yaml
+
+configMapGenerator:
+  # Hash-named, so an edit to the probe script rolls its pod (the github-exporter pattern).
+  - name: cloudflare-spend-probe-script
+    files:
+      - spend-probe.py
