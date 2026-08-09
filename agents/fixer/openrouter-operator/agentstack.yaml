@@ -124,7 +124,16 @@ spec:
           # prove a pinned chart still renders. I declared kubeconform's host and missed helm's,
           # in the same file that names both lints. If a gate is named in the recipe, its egress
           # belongs here: the ride cannot tell "my manifest is wrong" from "the network said no".
-          extraFQDNs: [raw.githubusercontent.com, ghcr.io]
+          # results-receiver.actions.githubusercontent.com added 2026-08-09 (homelab#107, third
+          # cause on the thread): `gh run view --log` streams Actions log content from this host,
+          # and reading run logs IS play-named work here (the ci-red play's triage; FU-148 even
+          # grants actions:write for its retry terminal). The live drop (~18, ride issue-198-r1)
+          # was masked by a false sense of coverage: Cilium `matchPattern: '*'` spans exactly ONE
+          # DNS label, so `*.githubusercontent.com` reaches raw. but not results-receiver.actions.
+          # (cilium/cilium#22081 — documented behavior). Distinct from the 2026-08-08 #107 ruling
+          # (no widening for a ride's INCIDENTAL supply-chain curiosity): this one is the recipe's
+          # own gate surface.
+          extraFQDNs: [raw.githubusercontent.com, ghcr.io, results-receiver.actions.githubusercontent.com]
           enforce: true # the -iac lane's ring-2 posture; harvest first if a ride trips it
     - name: openrouter-operator
       labels: { extra: [] } # claim-owned label set (FU-068; live diff 2026-07-16: strict taxonomy subset)
