@@ -1,5 +1,8 @@
-# ADR-096: the router's OWN OpenRouter credential — used ONLY to read account-level state
-# (/api/v1/credits for the account floor + the unattributed-spend cross-check; P2). Deliberately
+# ADR-096: the router's OWN OpenRouter credential — used ONLY to read account-level state: the MCP
+# rankings/capability feeds and its own GET /api/v1/auth/key headroom row. NOT the account balance:
+# /api/v1/credits is scoped to the PROVISIONING key and 403s for this project-scoped one, so the
+# capacity latch's credit leg reads the openrouter-operator's gauge instead (homelab#180 — the
+# operator holds that credential legitimately; the proxy deliberately does not). Deliberately
 # the least-privilege shape: a standing operator-minted key, $1 ceiling, only-free guardrail
 # (it never completes anything — the guardrail + cap bound a leak). secretName is explicit so
 # ROUTER_ACCOUNT_REF (deployment.yaml) is stable; the operator labels the Secret
