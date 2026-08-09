@@ -25,6 +25,8 @@ POLL_INTERVAL_SECONDS (120), RUN_WINDOW_HOURS (24 — also bounds series cardina
 
 import json
 import os
+import re
+import sys
 import threading
 import time
 import urllib.error
@@ -41,9 +43,24 @@ _repo_private = {}
 # the only place runner labels live — one request per NEW run in the window, then cached.
 _run_runner = {}
 ORG = os.environ.get("GITHUB_ORG", "teststuffstash")
-TOKEN = os.environ["GITHUB_TOKEN"].strip()
+# Absent token = fatal, but raised in __main__ rather than at import, so `--self-test` (the CI
+# gate for the goal walk, #209) can import this module without inventing a fake credential. The
+# pod behaviour is unchanged: no token, no serving process.
+TOKEN = os.environ.get("GITHUB_TOKEN", "").strip()
 INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
 WINDOW_HOURS = int(os.environ.get("RUN_WINDOW_HOURS", "24"))
+# ADR-102 goal registry (#209). The goal series ride the collect_open_prs GraphQL walk — two extra
+# fields on the repo node, ZERO extra API calls (the FU-108 precedent; graphql is the pool that
+# drained 2026-07-17, so a second walk or a per-goal query loop is not on the table).
+# GOAL_ISSUE_WINDOW bounds the flat per-repo issue read the descendant walk runs over. Ordered
+# UPDATED_AT DESC because a live goal's tree is by definition the recently-touched end of the
+# list; a repo with more issues than this reports goal_tree_truncated=1 rather than quietly
+# under-counting a tree whose older members fell out of the window.
+GOAL_ISSUE_WINDOW = int(os.environ.get("GOAL_ISSUE_WINDOW", "100"))
+GOAL_MAX = int(os.environ.get("GOAL_MAX_PER_REPO", "20"))
+# Closed goals age out of the panel (ADR-102: the registry stays queryable via Prometheus
+# retention, not via an ever-growing default view).
+GOAL_CLOSED_MAX_AGE_DAYS = int(os.environ.get("GOAL_CLOSED_MAX_AGE_DAYS", "30"))
 # ADR-093 review edge-trigger: POST reviewable PRs to the Argo Events webhook so a review Workflow
 # fires without the review-reflex CronJob's */5 GraphQL poll (this poll already knows the reviewable
 # set — reuse it, the one-poller doctrine). Empty = disabled (dispatch stays with the CronJob).
@@ -67,7 +84,11 @@ STACKS_URL = os.environ.get(
     "https://raw.githubusercontent.com/teststuffstash/homelab/master/agents/stacks.json",
 ).strip()
 STACKS_TTL = int(os.environ.get("STACKS_TTL_SECONDS", "600"))
-_stacks_cache = {"at": None, "map": {}}  # repo → {"stack": ..., "loop_ns": "<stack>-agents"}
+# "map": GRADUATED repos only → {"stack", "loop_ns"} (the review/coordinate edge routing).
+# "stack_of": EVERY repo → stack name, from the same one fetch — the goal series carry a `stack`
+# label so the convergence tile is `sum by (stack) (…)` (#209) instead of a label_replace chain
+# duplicating stacks.json inside dashboard JSON.
+_stacks_cache = {"at": None, "map": {}, "stack_of": {}}
 # FU-084: dir of per-installation probe tokens (one file per token identity; rl-tokens.yaml).
 RL_TOKEN_DIR = os.environ.get("RL_TOKEN_DIR", "/var/run/rl-tokens")
 # FU-098: dir of App PRIVATE KEYS for the permission-drift belt (one subdir per declared slug,
@@ -344,10 +365,23 @@ def graduated_loop_ns(repo):
                 if s.get("graduated")
                 for r in s.get("repos", [])
             }
+            _stacks_cache["stack_of"] = {
+                r: s["name"] for s in data.get("stacks", []) for r in s.get("repos", [])
+            }
         except Exception as exc:
             print(f"stacks.json refresh FAILED (per-stack review routing degraded to the "
                   f"global path): {exc}", flush=True)
     return _stacks_cache["map"].get(repo)
+
+
+def stack_of(repo):
+    """repo → stack name for ANY stack in stacks.json, graduated or not ("unknown" if absent).
+
+    Rides graduated_loop_ns' TTL-cached fetch — one stacks.json read serves both. "unknown" is
+    deliberate: a repo the mirror doesn't know is honestly unattributed rather than silently
+    folded into some other stack's convergence number."""
+    graduated_loop_ns(repo)  # refreshes both maps under the shared TTL
+    return _stacks_cache["stack_of"].get(repo, "unknown")
 
 
 def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labels):
@@ -459,8 +493,26 @@ def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, 
         print(f"review dispatch FAILED for {repo}#{number}: {exc}", flush=True)
 
 
+# ADR-102 goal registry (#209): the goal issues themselves (body carries the `Budget:` line) plus a
+# FLAT per-repo issue list with native `parent` edges — the descendant walk is then a fixpoint in
+# python, exactly as coordinator-scan.sh and the launcher's budget gate do it over their one fetch.
+# Deliberately NOT nested subIssues: goals×depth×breadth blows past GraphQL's 500k node ceiling,
+# while flat costs (repos × GOAL_ISSUE_WINDOW) nodes and answers the same question.
+_GOAL_FIELDS = """
+        goalIssues: issues(labels:["task/goal"], states:[OPEN,CLOSED], first:$goals,
+                           orderBy:{field:UPDATED_AT, direction:DESC}) {
+          nodes { number title state stateReason closedAt body
+                  labels(first:20){ nodes { name } } }
+        }
+        issueTree: issues(states:[OPEN,CLOSED], first:$issues,
+                          orderBy:{field:UPDATED_AT, direction:DESC}) {
+          pageInfo { hasNextPage }
+          nodes { number state createdAt closedAt parent { number } }
+        }
+"""
+
 _PR_QUERY = """
-query($org:String!, $cursor:String) {
+query($org:String!, $cursor:String, $goals:Int!, $issues:Int!) {
   organization(login:$org) {
     repositories(first:50, after:$cursor, orderBy:{field:PUSHED_AT, direction:DESC}) {
       pageInfo { hasNextPage endCursor }
@@ -470,6 +522,7 @@ query($org:String!, $cursor:String) {
                             labels:["agent/queued","agent/in-progress","agent/blocked","agent/error"]) {
           nodes { number labels(first:10){ nodes { name } } }
         }
+__GOAL_FIELDS__
         pullRequests(states:OPEN, first:40) {
           nodes {
             number isDraft updatedAt reviewDecision baseRefName headRefName
@@ -485,6 +538,31 @@ query($org:String!, $cursor:String) {
   }
 }
 """
+
+# The goal fields are NEW schema surface on a LOAD-BEARING query: collect_open_prs also drives the
+# review + ci-red edge triggers and the stall detector, and a GraphQL *validation* error fails the
+# WHOLE query (data=None → graphql() raises), not just the new fields. So the extended query is
+# tried once and, if it errors, the walk falls back to the pre-#209 query FOREVER (this process)
+# and says so in `goal_query_supported`. Losing the goal panel is a degradation; losing review
+# dispatch would be an outage.
+_PR_QUERY_GOALS = _PR_QUERY.replace("__GOAL_FIELDS__", _GOAL_FIELDS)
+# The variable DECLARATIONS go too: "all variables used" is a GraphQL validation rule, so a base
+# query still declaring $goals/$issues would be rejected — the fallback has to be clean.
+# (Passing unused variable VALUES in the map is fine; only the document is validated.)
+_PR_QUERY_BASE = _PR_QUERY.replace("__GOAL_FIELDS__", "").replace(", $goals:Int!, $issues:Int!", "")
+_goal_fields_ok = True
+_TRANSIENT_GRAPHQL = ("rate limit", "rate_limit", "ratelimit", "timeout", "timed out",
+                      "temporarily", "try again", "internal error", "service unavailable",
+                      "was submitted too quickly", "loading")
+
+
+def is_transient_graphql_error(exc):
+    """True when a GraphQL error says "not now" rather than "not ever".
+
+    Only the second kind may latch the goal-field fallback: a drained pool (the 2026-07-17 class)
+    or a 502 is not evidence that `parent`/`stateReason` are unreadable, and a process that
+    concluded so would serve an empty goal panel until someone restarted it."""
+    return any(marker in str(exc).lower() for marker in _TRANSIENT_GRAPHQL)
 
 
 def collect_open_prs(lines):
@@ -514,19 +592,40 @@ def collect_open_prs(lines):
         "# TYPE github_pull_request_reviews_recent gauge",
         "# HELP github_pull_request_reviews_recent APPROVED/CHANGES_REQUESTED reviews per author in the trailing hour — a healthy worker↔reviewer iteration tops ~3, a dispatch loop runs 8+.",
     ]
+    global _goal_fields_ok
     cursor = None
     _AGENT_ISSUE_NUMBERS.clear()
+    _GOAL_TREES.clear()
     # NB the repo walk pages a CURSOR over a mutable sort key (PUSHED_AT DESC), the GraphQL cousin
     # of the offset hazard gh_paged documents: a push during the walk can re-present a repo on a
     # later page. Not reachable today — the org has 11 repos and `first:50` ends the walk on page
     # one — but it becomes live at 50+ repos, which is why the counting below is set-based and the
     # exposition is deduped rather than trusting this to stay single-page.
     for _ in range(10):  # hard page cap
-        data = graphql(_PR_QUERY, {"org": ORG, "cursor": cursor})
+        variables = {"org": ORG, "cursor": cursor, "goals": GOAL_MAX, "issues": GOAL_ISSUE_WINDOW}
+        if _goal_fields_ok:
+            try:
+                data = graphql(_PR_QUERY_GOALS, variables)
+            except RuntimeError as exc:
+                # RuntimeError is graphql()'s "GraphQL said no with no usable data" — a schema or
+                # permission rejection of the new fields. Transport failures (URLError, timeouts)
+                # deliberately propagate instead: they say nothing about the query, and latching
+                # the fallback on a network blip would kill the panel until the pod restarts.
+                # A drained pool says the same thing, so it is excluded by name.
+                if is_transient_graphql_error(exc):
+                    raise
+                _goal_fields_ok = False
+                print(f"goal fields rejected by GraphQL ({exc}) — falling back to the pre-#209 "
+                      f"query for this process; goal_query_supported=0, PR/review metrics "
+                      f"unaffected", flush=True)
+                data = graphql(_PR_QUERY_BASE, variables)
+        else:
+            data = graphql(_PR_QUERY_BASE, variables)
         repos = data["organization"]["repositories"]
         for repo in repos["nodes"] or []:
             if not repo:
                 continue
+            ingest_goal_tree(repo["name"], repo)  # #209; a no-op on the fallback query
             # FU-108: per-repo agent-label counts ride THIS walk (the REST Search API silently
             # omits private repos under the fine-grained PAT — github_agent_issue_labels had
             # never emitted for oracle-fleet/sleep-tracking; same silent-success class as FU-063).
@@ -666,6 +765,167 @@ def collect_agent_issues(lines):
     for (repo, label), numbers in sorted(_AGENT_ISSUE_NUMBERS.items()):
         lines.append(metric("github_agent_issue_labels",
                             {"owner": ORG, "repo": repo, "label": label}, len(numbers)))
+
+
+_GOAL_TREES = {}  # repo -> {"goals": [...], "parent": {n: p}, "issue": {n: {...}}, "truncated": bool}
+_BUDGET_RE = re.compile(r"^[ \t]*budget:[ \t]*(.+)$", re.IGNORECASE | re.MULTILINE)
+# ADR-102 terminals as they will be recorded once the claim taxonomy carries them. Read here
+# ALREADY so the panel needs no code change the day the labels land — until then a closed goal
+# reports the GitHub-native close reason, which is what is actually knowable.
+_VERDICT_LABELS = {"goal/validated": "validated", "goal/reverted": "reverted",
+                   "goal/abandoned": "abandoned"}
+
+
+def parse_budget_usd(body):
+    """The goal's `Budget:` line → float USD, or None when there is no machine-parsable one.
+
+    Mirrors the launcher gate byte for byte (agents/agent-session.sh §Σ(spend) ≤ Budget): FIRST
+    `Budget:` line wins (ADR-102: "one line only" — #29 carried €12 in prose and $16 in the
+    footer), any currency symbol is stripped and the number READ AS USD (the estimator and
+    OpenRouter both price in USD; an FX rate is not this platform's business). A line that does
+    not reduce to a bare number yields None — the series is then ABSENT, never 0, because a goal
+    with an unreadable budget is unfunded-unknown, not funded-zero."""
+    m = _BUDGET_RE.search(body or "")
+    if not m:
+        return None
+    raw = re.sub(r"^[^0-9]*", "", m.group(1).strip())
+    raw = re.sub(r"[ \t]", "", raw)
+    m2 = re.match(r"^[0-9]+(\.[0-9]+)?$", raw)
+    return float(m2.group(0)) if m2 else None
+
+
+def descendants_by_depth(parent_of, root):
+    """{issue: depth} for the whole DESCENDANT TREE under `root` — never direct children.
+
+    The same fixpoint the scan's goal-review clause and the launcher's budget gate walk, for the
+    same reason (FU-143 point 6): a sprout harvested from a child sits at depth 2, and ADR-102's
+    post-launch bucket puts every post-merge sprout at depth 2 as well, so a direct-children read
+    would miss exactly the issues that make a goal diverge. Cycle-safe by the seen-set; the depth
+    cap is a second belt against a pathological parent graph (real trees run ~3)."""
+    children = {}
+    for node, parent in parent_of.items():
+        if parent:
+            children.setdefault(parent, []).append(node)
+    out, seen, frontier, depth = {}, {root}, [root], 1
+    while frontier and depth <= 12:
+        nxt = []
+        for cur in frontier:
+            for kid in sorted(children.get(cur, [])):
+                if kid in seen:
+                    continue
+                seen.add(kid)
+                out[kid] = depth
+                nxt.append(kid)
+        frontier, depth = nxt, depth + 1
+    return out
+
+
+def ingest_goal_tree(repo_name, repo_node):
+    """Capture one repo's goal issues + flat parent map from the collect_open_prs walk (#209).
+
+    Pure over the GraphQL node, so the `--self-test` drives it against a recorded tree. Absent
+    fields (the pre-#209 fallback query) simply record nothing: absent ≠ zero, the same rule
+    collect_agent_issues follows when its walk failed."""
+    goals = (repo_node.get("goalIssues") or {}).get("nodes")
+    tree = repo_node.get("issueTree") or {}
+    if goals is None and not tree:
+        return
+    parent_of, issue = {}, {}
+    for node in tree.get("nodes") or []:
+        if not node:
+            continue
+        parent_of[node["number"]] = ((node.get("parent") or {}) or {}).get("number")
+        issue[node["number"]] = {"state": node.get("state") or "",
+                                 "createdAt": node.get("createdAt") or "",
+                                 "closedAt": node.get("closedAt") or ""}
+    _GOAL_TREES[repo_name] = {
+        "goals": [g for g in (goals or []) if g],
+        "parent": parent_of,
+        "issue": issue,
+        "truncated": bool((tree.get("pageInfo") or {}).get("hasNextPage")),
+    }
+
+
+def collect_goals(lines):
+    """ADR-102 §"Convergence is a number" (#209, supersedes IL-G04's unbuilt gauge): per-goal
+    burn-down + sprout inflow, and with it the goal REGISTRY — "what goals ran, with what
+    verdicts, at what cost" as a query instead of archaeology (the operator could not find
+    circles#17 by search).
+
+    What is NOT here, deliberately: `goal_spent_usd`. Spend is already a Prometheus fact
+    (`agent_run_cost_usd{project,issue,…}` on the pushgateway, pushed by the launcher's finalize
+    leg) and this pod holds GitHub tokens only — it has no bucket credentials and must not grow
+    an S3 read of `_ledger.jsonl` to restate a series Prometheus already has. So the exporter
+    emits MEMBERSHIP (`goal_descendant_info`) and `goal_spent_usd` is the recording-rule join in
+    prometheusrule.yaml. The `project` label carries the repo NAME precisely so that join is a
+    plain `on(project, issue)` against the pushed series.
+
+    Runs after collect_open_prs in the collectors tuple; if that walk failed this poll the dict
+    is stale-empty and nothing emits (absent ≠ zero, same rule as collect_agent_issues)."""
+    lines += [
+        "# TYPE goal_query_supported gauge",
+        "# HELP goal_query_supported 1 = the goal GraphQL fields are being read; 0 = this process fell back to the pre-#209 query (goal series are ABSENT, PR/review metrics unaffected).",
+        f"goal_query_supported {1 if _goal_fields_ok else 0}",
+        "# TYPE goal_budget_usd gauge",
+        "# HELP goal_budget_usd The goal's machine-parsed `Budget:` line in USD (ADR-102). ABSENT when no line parses — an unreadable budget is unfunded-unknown, never 0.",
+        "# TYPE goal_descendants_open gauge",
+        "# HELP goal_descendants_open Open issues in the goal's native sub-issue tree at any depth (post-launch bucket and its sprouts included).",
+        "# TYPE goal_descendants_closed gauge",
+        "# HELP goal_descendants_closed Closed issues in the goal's descendant tree. A GAUGE: the 7d fix rate is delta(goal_descendants_closed[7d]), not increase().",
+        "# TYPE goal_sprouts_filed_total counter",
+        "# HELP goal_sprouts_filed_total Descendants at depth>=2 — the harvest sprouts and post-launch bucket children whose inflow is what makes a goal diverge. Recomputed per poll from the read window, so a sprout aging out of GOAL_ISSUE_WINDOW reads as a counter reset (increase() then undercounts; goal_tree_truncated says when that window is biting).",
+        "# TYPE goal_descendant_info gauge",
+        "# HELP goal_descendant_info 1 per (goal, descendant) edge incl. the goal itself at depth 0 — the membership series `goal_spent_usd` joins against agent_run_cost_usd on (project, issue).",
+        "# TYPE goal_verdict gauge",
+        "# HELP goal_verdict 1 per goal, state enum on the `verdict` label: open | validated | reverted | abandoned (ADR-102 terminals, read from goal/* labels once the taxonomy carries them) | completed | not_planned (the GitHub-native close reason, all that is knowable until then).",
+        "# TYPE goal_tree_truncated gauge",
+        "# HELP goal_tree_truncated 1 = this repo has more issues than GOAL_ISSUE_WINDOW, so a descendant that has not been updated recently can be missing from the counts above. Not a silent cap.",
+    ]
+    now = datetime.now(timezone.utc)
+    for repo in sorted(_GOAL_TREES):
+        tree = _GOAL_TREES[repo]
+        ident_repo = {"owner": ORG, "project": repo, "stack": stack_of(repo)}
+        lines.append(metric("goal_tree_truncated", ident_repo, 1 if tree["truncated"] else 0))
+        for goal in tree["goals"]:
+            number, state = goal.get("number"), (goal.get("state") or "").upper()
+            closed_at = goal.get("closedAt") or ""
+            # Closed goals age out of the panel (~30d) — the registry keeps them queryable via
+            # Prometheus retention rather than growing the default view forever.
+            if state == "CLOSED" and closed_at:
+                try:
+                    if (now - datetime.strptime(closed_at, "%Y-%m-%dT%H:%M:%SZ")
+                            .replace(tzinfo=timezone.utc)).days > GOAL_CLOSED_MAX_AGE_DAYS:
+                        continue
+                except ValueError:
+                    pass  # unparseable date → keep it visible rather than hide it
+            ident = {**ident_repo, "goal": number}
+            names = {(lb or {}).get("name") or "" for lb in (goal.get("labels") or {}).get("nodes") or []}
+            verdict = next((v for lb, v in _VERDICT_LABELS.items() if lb in names), None)
+            if verdict is None:
+                verdict = "open" if state == "OPEN" else {
+                    "COMPLETED": "completed", "NOT_PLANNED": "not_planned",
+                }.get((goal.get("stateReason") or "").upper(), "closed")
+            budget = parse_budget_usd(goal.get("body"))
+            if budget is not None:
+                lines.append(metric("goal_budget_usd", ident, budget))
+            depths = descendants_by_depth(tree["parent"], number)
+            states = {n: tree["issue"].get(n, {}).get("state", "") for n in depths}
+            lines.append(metric("goal_descendants_open", ident,
+                                sum(1 for s in states.values() if s == "OPEN")))
+            lines.append(metric("goal_descendants_closed", ident,
+                                sum(1 for s in states.values() if s == "CLOSED")))
+            lines.append(metric("goal_sprouts_filed_total", ident,
+                                sum(1 for d in depths.values() if d >= 2)))
+            # The goal itself is a member (depth 0): its own decompose/coordination rounds spend
+            # the same budget, so leaving it out would understate every burn-down.
+            for issue_number, depth in sorted({number: 0, **depths}.items()):
+                lines.append(metric("goal_descendant_info",
+                                    {**ident, "issue": issue_number, "depth": depth}, 1))
+            # Title rides the info series so the registry panel is readable without a second
+            # lookup — bounded to 80 chars, and only ever one series per goal.
+            lines.append(metric("goal_verdict",
+                                {**ident, "verdict": verdict,
+                                 "title": (goal.get("title") or "")[:80]}, 1))
 
 
 def _app_jwt(app_id, key_path):
@@ -937,8 +1197,9 @@ def poll_forever():
     while True:
         lines = []
         ok = True
-        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_billing,
-                          collect_rate_limits, collect_app_permission_drift, collect_vendor_status):
+        for collector in (collect_workflow_runs, collect_open_prs, collect_agent_issues, collect_goals,
+                          collect_billing, collect_rate_limits, collect_app_permission_drift,
+                          collect_vendor_status):
             try:
                 collector(lines)
             except Exception as exc:  # keep the other collector alive; alert rides the metrics below
@@ -995,6 +1256,127 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+# ── the goal-walk self-test (#209) ───────────────────────────────────────────────────────────────
+# Same shape as the openrouter-proxy's (`python3 …/router.py --self-test`, `devbox run
+# router-self-test`): the test lives INSIDE the shipped module and drives the pure functions
+# against a RECORDED tree, so what CI checks is the code the ConfigMap ships — not a copy.
+# The fixture is the two shapes ADR-102 was validated against: oracle-fleet goal-174 (a tree that
+# kept sprouting 3 generations deep after close) and circles#17 (a goal closed on a machine
+# "goal met" that production refuted).
+_FIXTURE = {
+    "name": "oracle-fleet",
+    "goalIssues": {"nodes": [
+        {"number": 174, "title": "goal-174 — absorbable tier", "state": "OPEN",
+         "stateReason": None, "closedAt": None,
+         "body": "Some prose about a €99 idea.\n\nBudget: $12.50\nVerdict-authority: kpi\n",
+         "labels": {"nodes": [{"name": "task/goal"}]}},
+        {"number": 17, "title": "circles P0 MVP", "state": "CLOSED",
+         "stateReason": "COMPLETED", "closedAt": "2026-08-08T10:00:00Z",
+         "body": "Budget: 16\n", "labels": {"nodes": [{"name": "task/goal"},
+                                                      {"name": "goal/reverted"}]}},
+        {"number": 3, "title": "ancient goal", "state": "CLOSED", "stateReason": "NOT_PLANNED",
+         "closedAt": "2020-01-01T00:00:00Z", "body": "Budget: 5\n", "labels": {"nodes": []}},
+        {"number": 40, "title": "unfunded goal", "state": "OPEN", "stateReason": None,
+         "closedAt": None, "body": "no machine line here\n", "labels": {"nodes": []}},
+    ]},
+    "issueTree": {"pageInfo": {"hasNextPage": True}, "nodes": [
+        {"number": 174, "state": "CLOSED", "createdAt": "2026-08-01T00:00:00Z",
+         "closedAt": "2026-08-07T00:00:00Z", "parent": None},
+        {"number": 175, "state": "CLOSED", "createdAt": "2026-08-01T00:00:00Z",
+         "closedAt": "2026-08-02T00:00:00Z", "parent": {"number": 174}},   # child, depth 1
+        {"number": 176, "state": "OPEN", "createdAt": "2026-08-01T00:00:00Z",
+         "closedAt": None, "parent": {"number": 174}},                      # post-launch, depth 1
+        {"number": 177, "state": "OPEN", "createdAt": "2026-08-03T00:00:00Z",
+         "closedAt": None, "parent": {"number": 175}},                      # sprout, depth 2
+        {"number": 178, "state": "CLOSED", "createdAt": "2026-08-03T00:00:00Z",
+         "closedAt": "2026-08-04T00:00:00Z", "parent": {"number": 176}},    # sprout, depth 2
+        {"number": 179, "state": "OPEN", "createdAt": "2026-08-05T00:00:00Z",
+         "closedAt": None, "parent": {"number": 177}},                      # sprout, depth 3
+        {"number": 17, "state": "CLOSED", "createdAt": "2026-07-01T00:00:00Z",
+         "closedAt": "2026-08-08T10:00:00Z", "parent": None},
+        {"number": 29, "state": "OPEN", "createdAt": "2026-07-20T00:00:00Z",
+         "closedAt": None, "parent": {"number": 17}},
+        {"number": 900, "state": "OPEN", "createdAt": "2026-08-01T00:00:00Z",
+         "closedAt": None, "parent": None},                                 # unrelated to any goal
+    ]},
+}
+
+
+def self_test():
+    """`python3 github-exporter.py --self-test` — the descendant walk against a recorded tree."""
+    assert parse_budget_usd("Budget: $12.50\n") == 12.5
+    assert parse_budget_usd("budget:  €12\n") == 12.0, "currency stripped, number read as USD"
+    assert parse_budget_usd("Budget: 16\nBudget: 99\n") == 16.0, "FIRST line wins (ADR-102)"
+    assert parse_budget_usd("Budget: to be decided\n") is None, "unreadable ⇒ absent, never 0"
+    assert parse_budget_usd(None) is None and parse_budget_usd("") is None
+
+    # Cycle safety: the seen-set must terminate a parent graph that points back at itself.
+    assert descendants_by_depth({1: 2, 2: 1}, 1) == {2: 1}, "cycle must terminate"
+    assert descendants_by_depth({}, 174) == {}
+
+    # Hermetic: seed the stacks.json cache (fresh `at` ⇒ no refresh) so the test never touches the
+    # network, and assert the `stack` label the convergence tile groups by.
+    _stacks_cache.update({"at": time.monotonic(), "map": {},
+                          "stack_of": {"oracle-fleet": "oracle", "circles": "circles"}})
+    assert stack_of("oracle-fleet") == "oracle"
+    assert stack_of("some-unclaimed-repo") == "unknown", "unattributed, not folded into a stack"
+
+    _GOAL_TREES.clear()
+    ingest_goal_tree("oracle-fleet", _FIXTURE)
+    tree = _GOAL_TREES["oracle-fleet"]
+    depths = descendants_by_depth(tree["parent"], 174)
+    assert depths == {175: 1, 176: 1, 177: 2, 178: 2, 179: 3}, depths
+    assert 900 not in depths, "an issue outside the tree is not a descendant"
+
+    lines = []
+    collect_goals(lines)
+    body = "\n".join(dedupe_exposition(lines))
+
+    def has(sample):
+        assert sample in body, f"missing sample: {sample}\n--- exposition ---\n{body}"
+
+    has('goal_budget_usd{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 12.5')
+    has('goal_descendants_open{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
+    has('goal_descendants_closed{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 2')
+    has('goal_sprouts_filed_total{goal="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 3')
+    has('goal_tree_truncated{owner="teststuffstash",project="oracle-fleet",stack="oracle"} 1')
+    # The goal itself is a member at depth 0 — its own rounds spend the same budget.
+    has('goal_descendant_info{depth="0",goal="174",issue="174",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 1')
+    has('goal_descendant_info{depth="3",goal="174",issue="179",owner="teststuffstash",project="oracle-fleet",stack="oracle"} 1')
+    # Verdict: a goal/* terminal label wins over the GitHub close reason; an open goal is "open";
+    # a goal with no parsable Budget: line emits NO budget series at all.
+    has('verdict="reverted"')
+    has('verdict="open"')
+    assert 'goal="40"' in body and 'goal_budget_usd{goal="40"' not in body, \
+        "an unfunded goal must emit no budget series"
+    assert 'goal="3"' not in body, "a goal closed >30d ago ages out of the panel"
+    assert body.count("goal_verdict{") == 3, body.count("goal_verdict{")
+
+    # Whatever the collectors build, the exposition may never carry a series twice (#153).
+    before = _dupes
+    dedupe_exposition(lines)
+    assert _dupes == before, "the goal collector emitted a duplicate series"
+
+    # The fallback query must be a VALID document: "all variables used" means the goal variable
+    # declarations have to disappear with the fields they served.
+    assert "$goals" not in _PR_QUERY_BASE and "$issues" not in _PR_QUERY_BASE
+    assert "goalIssues" not in _PR_QUERY_BASE and "goalIssues" in _PR_QUERY_GOALS
+    assert "__GOAL_FIELDS__" not in _PR_QUERY_GOALS
+    # …and only a permanent rejection may latch it. "API rate limit exceeded" must NOT.
+    assert is_transient_graphql_error(RuntimeError("API rate limit exceeded for installation"))
+    assert is_transient_graphql_error(RuntimeError("Something went wrong, please try again"))
+    assert not is_transient_graphql_error(
+        RuntimeError("Field 'parent' doesn't exist on type 'Issue'"))
+
+    print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
+          "fallback query)")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        sys.exit(self_test())
+    if not TOKEN:
+        sys.exit("github-exporter: GITHUB_TOKEN is empty/unset — refusing to start")
     threading.Thread(target=poll_forever, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", 9504), Handler).serve_forever()

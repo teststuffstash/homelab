@@ -1,0 +1,337 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "title": "Agents — goals (registry + convergence)",
+  "uid": "agent-goals",
+  "tags": ["agents", "adr-102"],
+  "schemaVersion": 39,
+  "time": { "from": "now-30d", "to": "now" },
+  "refresh": "5m",
+  "templating": { "list": [] },
+  "description": "ADR-102 §Convergence is a number (homelab#209, supersedes IL-G04's unbuilt gauge). Series: github-exporter's goal walk (goal_* — one series family per task/goal issue, descendants resolved from the NATIVE sub-issue tree at any depth, never label-derived) joined to the pushgateway's agent_run_cost_usd by the goal_spent_usd recording rule. Doubles as the goal REGISTRY: what goals ran, with what verdicts, at what cost — a query instead of archaeology. Closed goals age out after ~30d; older ones stay queryable in Prometheus, just not on this page.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Open goals",
+      "description": "Goals currently OPEN across every repo the exporter walks. A goal is a task/goal issue with a machine-parsed Budget: line (ADR-102).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "count(goal_verdict{verdict=\"open\"}) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Goal spend in view",
+      "description": "Σ goal_spent_usd — every run charged to any issue in a visible goal's descendant tree (the goal itself included: its decompose/coordination rounds draw the same budget). All-time per goal, NOT a rolling window.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(goal_spent_usd) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Convergence by stack — 7d sprouts filed minus descendants closed",
+      "description": "THE convergence number (one tile per stack). >0 = the trees are growing faster than they are being closed out — a goal whose tree grows while its budget drains is visibly diverging. Both operands are per-goal series that always exist together, so the vector match never drops a stack. Sprouts = descendants at depth>=2 (harvest sprouts + the post-launch bucket's children); fixes = delta() of the closed-descendant gauge, not increase(), because that series is a gauge.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 14, "x": 10, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.001 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "{{stack}}",
+          "expr": "sum by (stack) (increase(goal_sprouts_filed_total[7d])) - sum by (stack) (delta(goal_descendants_closed[7d]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Goal registry — verdict, budget, burn, tree (row → the goal issue)",
+      "description": "The registry ADR-102 asks for: every goal in view with its verdict, its Budget: line, what the tree has actually spent, and how the tree is moving. Verdict is a goal/validated|goal/reverted|goal/abandoned label when the claim taxonomy carries one (ADR-102's three terminals) and otherwise the GitHub-native close reason — completed/not_planned — which is all that is knowable today; an open goal reads `open`. A goal with no parsable Budget: line has an EMPTY budget cell, not a zero: unfunded-unknown is not funded-zero. The `key` column (project#goal) exists only to join the six queries — goal numbers repeat across repos.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
+      "options": { "sortBy": [{ "displayName": "Spent $", "desc": true }] },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "open ${__data.fields.project}#${__data.fields.goal} on GitHub",
+              "url": "https://github.com/${__data.fields.owner}/${__data.fields.project}/issues/${__data.fields.goal}",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Budget $" },
+            "properties": [{ "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 2 }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Spent $" },
+            "properties": [{ "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 2 }]
+          }
+        ]
+      },
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "key", "mode": "outer" } },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value #A": true },
+            "renameByName": {
+              "Value #B": "Budget $",
+              "Value #C": "Spent $",
+              "Value #D": "Open descendants",
+              "Value #E": "Closed descendants",
+              "Value #F": "Sprouts (depth>=2)"
+            },
+            "indexByName": {}
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "label_join(goal_verdict, \"key\", \"#\", \"project\", \"goal\")"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (key) (label_join(goal_budget_usd, \"key\", \"#\", \"project\", \"goal\"))"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (key) (label_join(goal_spent_usd, \"key\", \"#\", \"project\", \"goal\"))"
+        },
+        {
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (key) (label_join(goal_descendants_open, \"key\", \"#\", \"project\", \"goal\"))"
+        },
+        {
+          "refId": "E",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (key) (label_join(goal_descendants_closed, \"key\", \"#\", \"project\", \"goal\"))"
+        },
+        {
+          "refId": "F",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "sum by (key) (label_join(goal_sprouts_filed_total, \"key\", \"#\", \"project\", \"goal\"))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "Budget burn — spent ÷ the goal's Budget: line",
+      "description": "1.0 = the goal has spent its funding. The launcher's pre-flight gate (Σ spend + live reservations ≤ Budget:) refuses the NEXT child dispatch around here, so a bar at 1.0 is a goal that has stopped being able to dispatch — ADR-102's ABANDONED decision point (refill or close). Goals with no parsable Budget: line are absent from this panel by construction.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.75 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "legendFormat": "{{project}}#{{goal}}",
+          "expr": "goal_budget_ratio"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Open descendants per goal (the burn-down that is supposed to fall)",
+      "description": "Open issues anywhere in each goal's native sub-issue tree. Flat-or-rising while spend accrues is the divergence shape goal-174 showed for 34h post-close with nothing owning the tree.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "{{project}}#{{goal}}",
+          "expr": "goal_descendants_open"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Sprout inflow vs fix rate (7d), by stack",
+      "description": "The two curves behind the convergence tile. Inflow = increase(goal_sprouts_filed_total[7d]) — depth>=2 descendants, i.e. review harvests and post-launch bucket children. Fix rate = delta(goal_descendants_closed[7d]). Inflow above fixes for a sustained stretch is a stack filing work faster than its goals absorb it. Caveat: the sprout counter is recomputed each poll from the exporter's issue window, so a sprout aging out of GOAL_ISSUE_WINDOW looks like a counter reset (increase() then undercounts) — goal_tree_truncated says when that window is biting.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "{{stack}} · sprouts filed (7d)",
+          "expr": "sum by (stack) (increase(goal_sprouts_filed_total[7d]))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "{{stack}} · descendants closed (7d)",
+          "expr": "sum by (stack) (delta(goal_descendants_closed[7d]))"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Descendant tree — every issue charged to a goal (row → per-issue $ drill-down)",
+      "description": "The membership series goal_spent_usd joins against, shown raw: one row per (goal, descendant, depth), depth 0 being the goal itself. This is what makes the money attributable — and what to look at first when a burn-down number looks wrong. depth>=2 rows are the sprouts.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "options": { "sortBy": [{ "displayName": "goal", "desc": true }] },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "worker $ for ${__data.fields.project} #${__data.fields.issue}",
+              "url": "/d/agent-issue/agents-e28094-issue-drill-down?var-project=${__data.fields.project}&var-issue=${__data.fields.issue}"
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "owner": true, "Value": true } } }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "instant": true,
+          "format": "table",
+          "expr": "goal_descendant_info"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Read honesty — truncated issue windows / goal query support",
+      "description": "goal_tree_truncated=1 means that repo has more issues than the exporter's GOAL_ISSUE_WINDOW, so a descendant that has not been updated recently can be missing from every count on this page. goal_query_supported=0 means the exporter fell back to its pre-#209 GraphQL query (the goal fields were rejected) and the goal series are ABSENT rather than wrong — PR/review metrics are unaffected either way. A dashboard that hid these would be reporting a partial tree as a whole one.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 29 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "max": 1,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "{{project}} · issue window truncated",
+          "expr": "goal_tree_truncated"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "legendFormat": "goal query supported",
+          "expr": "goal_query_supported"
+        }
+      ]
+    }
+  ]
+}

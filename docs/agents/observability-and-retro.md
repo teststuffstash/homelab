@@ -274,6 +274,53 @@ add a rule forcing decomposers to declare disjoint `Touches:` — on a young rep
 them into declaring footprints narrower than the truth, which is far worse than running one child
 at a time. Revisit if a LATER goal, on a populated tree, plans `∥` and still serializes.
 
+## Part A‴ — the goal registry & convergence panel (ADR-102, homelab#209)
+
+ADR-102's *"convergence is a number"*, built. Supersedes IL-G04's unbuilt gauge. Where Part A′/A″
+measure one ride and one goal's hops, this measures **whether a goal is converging at all** — and
+doubles as the goal REGISTRY, the answer to "what goals ran, with what verdicts, at what cost"
+(the operator could not find circles#17 by search; the panel is a query, not archaeology).
+
+**Series** — emitted by `github-exporter` (`collect_goals`), which is the ONE GitHub poller; the
+goal fields ride the existing `collect_open_prs` GraphQL walk, so the whole family costs **zero
+extra API calls** against the pool that drained on 2026-07-17.
+
+| series | what |
+|---|---|
+| `goal_budget_usd` | the goal's machine-parsed `Budget:` line, parsed exactly as the launcher gate parses it. **Absent** when no line parses — unfunded-unknown is not funded-zero |
+| `goal_descendants_open` / `_closed` | the native sub-issue tree at ANY depth (post-launch bucket included). Never label-derived |
+| `goal_sprouts_filed_total` | descendants at **depth ≥ 2** — review harvests and post-launch children, the inflow that makes a goal diverge |
+| `goal_descendant_info` | one series per (goal, descendant, depth), goal itself at depth 0 — the membership the money joins against |
+| `goal_verdict` | state enum: `open`, ADR-102's `validated`/`reverted`/`abandoned` when a `goal/*` label carries one, else the GitHub-native close reason |
+| `goal_tree_truncated`, `goal_query_supported` | the read-honesty pair (below) |
+
+**Spend is a join, not a poll.** The exporter holds GitHub tokens only — it has no bucket
+credentials and must not grow an S3 read of `_ledger.jsonl` to restate a series Prometheus already
+has. Worker spend is already pushed per run as `agent_run_cost_usd{project,issue,…}`, so
+`goal_spent_usd` is a **recording rule** (`argocd/resources/github-exporter/prometheusrule.yaml`,
+group `agent-goals`) joining cost to membership on `(project, issue)`; `goal_budget_ratio` and
+`goal_budget_remaining_usd` follow from it. The membership side is deliberately the "many" side of
+the match, so a goal nested under another goal attributes its spend to **both** ancestors instead
+of failing the rule.
+
+**Panel:** `agent-goals` (Grafana uid `agent-goals`), shipped as a ConfigMap beside the collector
+in `argocd/resources/github-exporter/` — not in `tofu/dashboards/`, which needs a `for_each` entry
+and an operator `tofu apply` per dashboard. Registry table → the goal issue; tree table → the
+existing per-issue `$` drill-down.
+
+**Two honesty signals, on the panel by design.** `goal_tree_truncated=1` means that repo has more
+issues than the exporter's `GOAL_ISSUE_WINDOW`, so a long-untouched descendant can be missing from
+the counts; `goal_query_supported=0` means the exporter fell back to its pre-#209 GraphQL query and
+the goal series are **absent rather than wrong** (that fallback exists because the goal fields ride
+a load-bearing query — losing the panel is a degradation, losing review dispatch would be an
+outage). A page that hid either would report a partial tree as a whole one, which is the
+FU-125/FU-108 failure class this platform keeps paying for.
+
+**The gate:** `python3 argocd/resources/github-exporter/github-exporter.py --self-test` — the
+descendant walk, budget parse, verdict precedence and membership emission against a recorded tree
+(goal-174's 3-generation shape + circles#17), inside the shipped module, the `router-self-test`
+pattern.
+
 ## Part B — the retro loop (reflex + judgment, per the standing doctrine)
 
 ### B1. retro-facts reflex (deterministic, per terminal task — P2)
