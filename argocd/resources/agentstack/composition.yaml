@@ -272,12 +272,7 @@ spec:
                 pull_requests: write
                 checks: read
                 statuses: read
-                # WRITE since 2026-08-09 (the FU-148 grant, extended to the per-stack loop): the
-                # ci-red/arbitrate play's retry terminal is `gh run rerun --failed`, and the
-                # coordinate pods mint THIS token — a 403 here wedged oracle PR#234 into a 5x
-                # arbitrate re-fire loop (the App-level grant existed; this mint site still
-                # downscoped to read). Workers keep no Actions verb — this block is loop-git only.
-                actions: write
+                actions: read   # the reviewer never reruns workflows — the FU-148 write is COORDINATOR-only (the 2026-08-09 flip here was wrong; github-apps-lint caught it on PR#199)
               repositories:
                 {{- range $rr := $xr.spec.repos }}
                 - {{ $rr.name }}
