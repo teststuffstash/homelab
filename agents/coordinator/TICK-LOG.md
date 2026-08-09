@@ -3308,3 +3308,40 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   spec: category enum ×7 + generation_id required + optional comment; the description-as-protocol
   move (tool description tells the CALLING agent what diagnostics to volunteer) is the part worth
   stealing. Return shape + annotations need a real invocation — left to the other jail.
+
+## 2026-08-09 (~11:00–13:00Z) — minutark.ee ships end-to-end; the credential boundary gets teeth
+
+- **https://minutark.ee IS LIVE** (placeholder; the MCP stays behind the future gateway): zone
+  bootstrap applied from the jail (www/SPF/DMARC + TLS-1.2 floor + always-HTTPS + DNSSEC — DS
+  string minted, zone.ee hand-back = the operator's one manual step) + the FIRST PublicRoute
+  claim (apex, product zone) reconciled through the NEW **cf-api-proxy**. Chain proven at every
+  layer: claim → composition v2 (zone classes: product zone owner=oracle-fleet, apex allowed) →
+  Workspace via the proxy → tunnel + flattened CNAME → cloudflared → page.
+- **cf-api-proxy born** (3rd proxy+policy instantiation; operator design session): the
+  AUTONOMOUS write path holds no credential — provider-terraform is tokenless (base_url → proxy;
+  40-char dummy because the provider format-validates), ESO retargeted, the nginx location table
+  IS the permission model. Live-verified contract: dns_records transit ✓, Argo/settings writes
+  die at the proxy ✓ (the spend vector — card IS attached, eid-demo=Pro), settings READ passes
+  allowlist then 403s at the token = the two-layer model. Jail write-key stays direct (operator
+  ruling: plan-gated lane; bootstrap needs paths the autonomous allowlist must never carry).
+- **Cloudflare permission governance settled** (docs/cloudflare.md §§): endpoint-first doctrine
+  (catalog names document nothing; the dashboard shows a subset and restricts combos the API
+  allows), `cloudflare-token-audit` renders minted policies with NAMES from local state (the
+  hex-blind-plan fix), FU-157 (user→account tokens, opportunistic), homelab#217 spend-drift
+  belt queued. Provider-bug taming: account-first policy order + sort()ed permission_groups —
+  though tofu_apply's post-apply errors show its API order is ZONE-first (per-token, not fixed;
+  the errors stay cosmetic, mutations land). Token rotation + failed store recovered by running
+  cloudflare-token-store.sh FROM THE JAIL (bounded-wait fix proved itself; Infisical pushes
+  clean).
+- **Gotchas that cost time**: claim admitted before the XRD knew `zone` → field PRUNED silently
+  (re-apply after schema); my composition edit initially never left the working tree; Workspace
+  is CLUSTER-scoped (`get workspace` bare resolves elsewhere — use workspaces.tf.upbound.io);
+  oracle-iac checkout sat on a stale branch → my commit landed on it (untangled; branch proved
+  to be residue of ALREADY-MERGED #275 — checkout now parked on master; ~5 more stale local
+  branches worth a checked sweep).
+- **ADR-102 CLAUSE SET COMPLETE** (PR#216 harvest→bucket 12/12 replay; PR#218 terminals 17/17 —
+  composition labels landed with the go-template one-action trap documented; verdict labels
+  human-only, scan refuses Bot-applied). #210 channel separation riding (homelab leg + agent-
+  runtime#62 split). PR#250 codeowner gate: NFKD fold spec approved (foldings executed incl.
+  łódź→łodz) after the operator caught the park — clause-4 rewritten: Actions-API run state
+  (fine-grained PATs have NO Checks permission, EVER — memory written, road closed).
