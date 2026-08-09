@@ -12,6 +12,15 @@ variable "zone_id" {
   default     = "6b63f95592a9e036f8b8f6934511d321"
 }
 
+variable "ingress_zone_ids" {
+  type        = map(string)
+  description = "Zones the INGRESS-WRITE token may edit (PublicRoute/product zones, ADR-101) — name => zone id. The tofu_apply token stays single-zone (var.zone_id); this list is the ingress credential's blast radius, add a line per onboarded product zone."
+  default = {
+    "teststuff.net" = "6b63f95592a9e036f8b8f6934511d321"
+    "minutark.ee"   = "fa1b02951c29ee4828b8948d0dd7baaf"
+  }
+}
+
 variable "token_name" {
   type    = string
   default = "homelab-tofu-apply"

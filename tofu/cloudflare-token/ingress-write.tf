@@ -4,6 +4,11 @@
 # rulesets (cache, api-no-challenge) are the open aggregation leg and get their own decision.
 # Storing this token in Infisical as CLOUDFLARE_INGRESS_WRITE is the ARMING act for the whole
 # capability (the crossplane ExternalSecret stays NotReady until then).
+locals {
+  # name => id map flattened to the API's per-zone resource keys; one entry per product zone.
+  ingress_zone_resources = { for name, id in var.ingress_zone_ids : "com.cloudflare.api.account.zone.${id}" => "*" }
+}
+
 resource "cloudflare_api_token" "ingress_write" {
   name = "homelab-ingress-write"
 
@@ -23,7 +28,7 @@ resource "cloudflare_api_token" "ingress_write" {
       permission_groups = [
         { id = data.cloudflare_api_token_permission_groups_list.dns_write.result[0].id },
       ]
-      resources = jsonencode(local.zone_resource)
+      resources = jsonencode(local.ingress_zone_resources)
     },
   ]
 
