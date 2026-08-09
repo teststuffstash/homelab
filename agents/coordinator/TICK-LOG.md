@@ -3415,3 +3415,24 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   previous entry) and `| tail` masking a lint's exit code — both are the same shape: a
   truncated/filtered read standing in for the evidence. Pipelines around a GATE must preserve
   the gate's rc (`set -o pipefail` or separate the gate from the filter).
+
+## 2026-08-09 (~15:40–16:10Z) — the 42GB question: a near-miss caught by the operator asking "how many times?"
+
+- **Answer to the operator: ZERO bulk downloads in ≥30d of metric retention** — every ert pod
+  ~0GB received; the 8h-"Running" ert-verify was stuck at the CHEAPEST step (SHA256SUMS fetch,
+  504, attempt 14, hourly). My earlier "full re-download + re-ingest" description was WRONG —
+  inferred from stage names without reading the stage. The snapshot job is checksum-first
+  (ETag/sums diff → skip unchanged), spec ING-RT-SNAPSHOT, impl matches.
+- **But the near-miss was real**: workflow-ert-pipeline.yaml's `start-from` DEFAULTS to
+  `snapshot` while its own header calls `parse` "the only sane path" (full run = 42G re-pull;
+  the weekly cron ships SUSPENDED on that exact gate). The verify run was submitted with
+  defaults → armed to bulk-download the moment riigiteataja's weekly regen published (sums diff
+  ⇒ changed ⇒ stream). Terminated it; resubmitted `ert-verify-parse-dd2p9` (start-from=parse,
+  promoted snapshot — all a parse/build fix verification needs); watcher re-armed.
+- **The operator's actual goal is already the spec'd plan**: ING-RT-DELTA active (un-deferred
+  #68), merge/republish core CI-verified, evidence rows green — remaining = DEPLOYMENT.
+  Queued: oracle-iac#322 (delta CronWorkflow), oracle-fleet#225 (fleet acceptance), NEW
+  oracle-iac#357 (default flip parse, ⚖ no code-side gates this pass). Delta live = quarterly
+  ING-RT-RECONCILE becomes the only snapshot path.
+- Lesson (again, same day): a stage NAME is not a stage READ — "snapshot" meant verify-and-skip,
+  not download. Two of today's three meta corrections were inferred-not-read.
