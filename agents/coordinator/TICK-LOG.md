@@ -3485,3 +3485,21 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   scripts have no replay harness (candidate, not filed: fold meta-watch probes into
   agents/replay/).
 - FU counter drift fixed (157→160; two skipped bumps, both mine).
+
+## 2026-08-10 (~01:35Z) — day closed: verification green, board drained, meta stands down (operator-ordered)
+
+- **ert-verify-parse-dd2p9 SUCCEEDED end-to-end** (parse 5h26m → build 4h05m → publish 8m;
+  total 9h40m from the promoted snapshot, upstream untouched) — the #217/#235 fix-cycle
+  verification CLOSES GREEN. Build ran clean at 0.87GB (the old OOM class stayed dead) and
+  ~1450 provisions/s steady once parse's GET storm was off Garage — more FU-159 evidence.
+  Parse marginal-rate analysis (35–40/s baseline → 8/s under garage-meta contention) is on
+  homelab#103; spike + FU-160 carry the metrics follow-up.
+- **Oracle board DRAINED at shutdown**: zero queued/in-progress, zero open PRs, zero ride pods.
+  Parked-on-operator (by design): fleet#225 (attended rebuild + first delta run — the delta
+  cron stays suspended until then), #255 DRAFT (reconcile mechanism, runaway-protection
+  constraint), oracle-iac#351 + homelab#223 (host-side token apply), or-op#34 (soaks for the
+  first daily-429 datum; the unlabeled>24h nag each fresh watch is known).
+- **Meta stands down on operator instruction**: all monitors stopped AND process-reaped
+  (needs-meta v5, 2h heartbeat, parse watcher self-ended; the DS/pod watchers completed
+  earlier). Next session: /meta-coordinate re-bootstraps; the 05:00Z Monday retro fires on its
+  own cron and its report (first ADR-103 KPI scores) is the first thing to read.
