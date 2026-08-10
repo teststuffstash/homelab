@@ -54,6 +54,12 @@ jobs:
       - name: Tracked Python parses (devbox run py-compile-lint)
         run: devbox run py-compile-lint
 
+      # The estimator's assertion suite existed since birth and NOTHING executed it — the
+      # written-is-not-applied class, found in the 2026-08-10 coverage audit. The registry math
+      # (banding, effective price, provider pin) is the budget breaker's input; keep it gated.
+      - name: Budget estimator self-test (devbox run estimate-budget -- --self-test)
+        run: devbox run estimate-budget -- --self-test
+
       # homelab#215 (harvested from PR#214's review): the exporter's own logic tests — goal walk,
       # budget parse, verdict, membership, fallback query — as a gate, not just a deploy-time hope.
       - name: github-exporter self-test (devbox run exporter-self-test)
@@ -105,7 +111,7 @@ jobs:
           # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
           # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
-          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|coordinator/(reflexes|review|coordinate)[^/]*\.ya?ml)$' || true)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           if [ -n "$clause" ] && [ -z "$replay" ]; then
             echo "::error::ADR-103 ratchet: clause files changed with NO replay fixture change:"
