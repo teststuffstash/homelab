@@ -183,7 +183,11 @@ is documented *intent*, which no live probe can recover. The `/design` skill is 
 (founding docs + owning-doc link closure, sediment excluded, grounding named); **if a task is
 design-shaped and the skill wasn't invoked, behave as if it was** — reads are pre-authorized,
 rework is the expensive thing. A design answer names the docs that ground it; "no owning doc
-covers X" is a finding to report, not a license to improvise.
+covers X" is a finding to report, not a license to improvise. **Agent-platform topics route to
+`/design-agents`** — the full-corpus variant (reads ALL of `docs/agents/` + the `agents/`
+READMEs upfront, retros excluded; grounding names only what lies outside that corpus), because
+the subsystem is coupled enough that any major change needs the whole context anyway
+(operator, 2026-08-10).
 
 ## Follow-ups (FU-NNN)
 
