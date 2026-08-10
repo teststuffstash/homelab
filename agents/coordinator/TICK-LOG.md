@@ -3503,3 +3503,28 @@ revisit on the capacity side. ⚠ the proxy restart blanks alert for: windows ~3
   (needs-meta v5, 2h heartbeat, parse watcher self-ended; the DS/pod watchers completed
   earlier). Next session: /meta-coordinate re-bootstraps; the 05:00Z Monday retro fires on its
   own cron and its report (first ADR-103 KPI scores) is the first thing to read.
+
+### 2026-08-10 — operator design session: the model axis outgrows its fixer origin (scout v3, research routing, vocabulary)
+
+**Condition:** Monday morning read (the 05:00Z retro GUARD-REFUSED — agent-session pod running,
+by design; re-fire pending) → digest #234's 22 candidates pulled the thread: 20/22 were a
+platform-wide `:batch` variant rollout of old models, and all 3 canary verdicts were bogus
+`failed`s (#235; ling-3.0-flash benches coding 50.6, above gpt-5.1 — three identical
+UnknownErrors in 6 min are one infra datum). Operator drove the design end-to-end: the canary is
+fixer-era (one cell of harness×role×stack×model read as a model verdict) → research needs a
+top-K POOL, not a best pick (kimi-sized canaries unaffordable; benchmarks are the free
+capability feed, MCP get-model embeds AA indices) → router contract discussion → RELAXED to
+`class`+`slot`+`jitter:false` on scout-curated disjoint pools (mission-aware router REJECTED —
+roles.md leakage) → resilience from SHAPE, not rules (over-provision 7-for-5, two weaves,
+visibility not enforcement — research is an operator lane) → research PRECEDES the Goal (a
+mission ≠ an ADR-102 Goal; the `goal` label collision is real). The circles process was fully
+reconstructed from PR archaeology (fan-out #2-5 → judge×3 + downstream-proxy×4 on mission #6 →
+the claude.ai side-by-side artifact (found UNLINKED from any repo) → weave #16→#25 →
+impl-as-spec-test #17/#21 → harvest #28 discards implementations → Goal #29). Run-1 slips
+recorded: flash-vs-pro roster (hand-applied draw, 08-03), the proxy graded its own arm,
+goal-met-with-weave-unmerged.
+
+**Command:** ADR-104 + model-routing §M7 v3 + new §M13 + `docs/agents/research-and-specs.md`
+(first-pass, explicit Unsettled register — run 2 = idp settles it) + roles.md/README pointers +
+FU-161 (scout v3), FU-162 (draw verb + pools), FU-163 (glossary — goal/lens/canary "stale by
+addition"), FU-126 extended (idp run = research run 2 + FU-162 acceptance). All on master.

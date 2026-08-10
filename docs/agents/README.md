@@ -81,6 +81,7 @@ growing without bound.
 | [`observability-and-retro.md`](observability-and-retro.md) | Session capture, the ledger, the retro loop |
 | [`fixer-context.md`](fixer-context.md) | The three context layers a worker actually receives |
 | [`issue-authoring.md`](issue-authoring.md) | Coordinator-authored issues, harvest, the sprout index |
+| [`research-and-specs.md`](research-and-specs.md) | The research→specs process — fan-out arms, judges, downstream proxy, weave, harvest |
 | [`spec-gate-tiering.md`](spec-gate-tiering.md) | Proposal only — do not implement before the operator re-opens it |
 | [`meta-state.md`](meta-state.md) | Transient: what a fresh meta session must pick up |
 

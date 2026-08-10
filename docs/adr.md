@@ -1334,3 +1334,27 @@ existing exemplars (state-fp replay, responder harness, rail-degrade replay, pro
 lint) each ended their class. **Consequences:** clause work slows slightly and stays fixed;
 the debounce's comment-store moves last (load-bearing, replay-first); mechanism docs:
 docs/agents/workflow.md (replay ratchet), observability-and-retro.md (channels, KPIs).
+
+### ADR-104 — Research routing: deterministic slot draws on curated pools; resilience from shape, not rules
+
+**Status:** Accepted (operator design session 2026-08-10, from the circles run + scout digest #234).
+**Decision:** (1) `/route` gains a deterministic draw form — `class` (selects a curated pool) +
+`slot` (index into its ranking) + `jitter: false`; response carries the pool version; same inputs
+→ same model (idempotent relaunch). (2) Pools are CURATED weekly by the scout (ranked,
+family-deduped, disjoint bands by convention: regular/premium/ultra/instrument) — never computed
+in the request path; diversity is a curation property. (3) The research process carries NO
+enforcement machinery — no roster validation, exclusion invariants, or retry protocol:
+over-provision (ask for 7, need 5) + visible provenance (arm tables, chips) are the resilience,
+because research is operator-driven with a human at every judgment point. (4) The scout canary is
+a RAIL probe (cheap rung-1 for every pool entrant); capability eligibility comes from the
+benchmark feed, never from riding research-sized tasks.
+**Considered:** a mission-aware router (step/roster/exclude server-side) — rejected, leaks
+roles.md internals into the mechanism layer; N independent jittered `/route` calls — rejected,
+non-reproducible and diversity-blind (converges on one cheap band).
+**Why:** fan-out needs N diverse models, not one best; experiments need reproducibility (jitter
+is exploration budget for volume dispatch, corruption inside a ~13-call mission); enforcement
+belongs to autonomous lanes, visibility to operator lanes.
+**Consequences:** scout v3 (FU-161) + draw verb/pools (FU-162); `research-fanout.sh` becomes the
+first consumer (the circles flash/pro roster slip is the draw-over-hand-pick evidence); process
+doc `docs/agents/research-and-specs.md`; mission budget deliberately unsettled until the idp run
+(FU-126).

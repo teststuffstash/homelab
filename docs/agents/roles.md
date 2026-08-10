@@ -98,7 +98,9 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 
 ### scout (model-scout)
 
-- **brief**: scout probe (model-routing.md §M7)
+- **brief**: scout probe (model-routing.md §M7 — v3 redesign 2026-08-10: variant filter,
+  benchmark cross-check, typed cell-keyed canary verdicts, and the §M13 pool-curation duty;
+  FU-161/FU-162)
 - **boundary**: ephemeral only-free capped keys (canary)
 - **machinery**: backstop = weekly `model-scout` cron (reflexes-argo.yaml); no edge; FU-095(b)
   extends its candidate source to a maintained rotation. Documented under the model axis today;
@@ -266,6 +268,10 @@ tier allowed, dual-model worth it) are FU-095's.
   (sleep spec PR #38: 17 ⚖ + 9 suspected bugs, dual-model reviewed, human-gated). The un-armed
   gate is now launcher-owned: `--no-arm` auto-derives from a `research*` recipe →
   `AGENT_ARM_PR=0` (agent-runtime), and the C9 re-arm belt skips `research/*` branches.
+  ⚠ Vocabulary (2026-08-10): the dispatch label is `goal` for historical reasons, but a research
+  MISSION is not an ADR-102 Goal — research PRECEDES the goal (it prepares the contract the Goal
+  then implements). Process home: [`research-and-specs.md`](research-and-specs.md); the rename is
+  FU-163's sweep.
 - **infra-fixer** (FU-106) — **LIVE** — the -iac devops role. Works the **-iac wrapper layer** (charts stay
   target-agnostic); input = `values.schema.json` diff (the typed infra delta), fulfillment =
   enriched **bump PR** (chart pin + claim change in ONE -iac commit — atomic at the deploy
