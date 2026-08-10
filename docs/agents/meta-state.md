@@ -28,11 +28,13 @@ meant to avoid.)
   leg is BLIND (CloudflareSpendProbeBlind firing is EXPECTED + known-cause, don't re-triage) until
   a group is found + added to observability-read.tf; if no group exists, re-scope the argo leg +
   the doctrine's write-vector claim (docs/cloudflare.md §Spend surface has the ⚠).**
-- **ert verification = `ert-verify-parse-dd2p9`** (start-from=parse, promoted snapshot): the
-  ORIGINAL run was TERMINATED 15:5xZ — its snapshot step was armed to bulk-download on upstream's
-  next publish (start-from default footgun, fixed via oracle-iac#357/PR#358). Parse ≈4h6m (252k
-  members ~15/s; the old "1h50m" note was a smaller corpus) → terminal ~20:50Z; watcher armed.
-  Its S3 load = the wk-01 NodeDiskIOSaturation (garage META, see below). #217/#235 tail.
+- **ert verification SUCCEEDED 2026-08-10 01:32Z** (`ert-verify-parse-dd2p9`: parse 5h26m →
+  build 4h05m → publish 8m, from the promoted snapshot) — **#217/#235 fix-cycle CLOSED GREEN.**
+  The wk-01 disk alert should clear now that parse's GET storm ended — homelab#103 (open,
+  label-clean subject record) can close once it does. Marginal-rate evidence → FU-159/FU-160.
+- **META STOOD DOWN 01:40Z on operator instruction** — all monitors stopped + process-reaped;
+  board drained everywhere (0 queued / 0 in-progress / 0 open PRs / 0 rides). Next session
+  re-arms per the skill; FIRST READ = the 05:00Z Monday retro report (ADR-103 KPI scores).
 - **homelab#228 DONE (PR#229 merged ~19:50Z)** — reopen-strip is launcher-owned shell around the
   responder session (ADR-094 applied; replay-fixtured both verdict legs). Live acceptance =
   next same-subject reopen arrives label-clean. (Its PR was briefly red on MY dangling FU-045
