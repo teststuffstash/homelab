@@ -110,6 +110,10 @@ Two platform-wide design rules bound every brief (operator, 2026-07-27):
 
 - **brief/state**: `agents/coordinator/TICK-LOG.md` (practice) + `meta-state.md` (in-flight chains)
 - **boundary**: the operator's jail sessions — full context, human-gated
+- **watch machinery**: the `agents/meta-*.sh` Monitor probes — jail tooling, not platform
+  mechanism (operator ruling 2026-08-10); inventory + duties in
+  [`../runbook.md`](../runbook.md) §Meta-session watch scripts, arming in
+  [`meta-state.md`](meta-state.md) §Re-arm
 - **machinery**: two of the three tracked pieces SHIPPED 2026-07-27 — the `arbitrate` scan
   clause (FU-086) and close-the-loop C6 + Follow-ups harvest (`merged-closeout`, MP-T10 /
   FU-090a) are loop-owned now; the incident lane grew machine belts the same day (blackbox →

@@ -312,6 +312,18 @@ deliberate, the fixture is updated **in the same PR** — a changed clause ships
 does not ship. Backfilling the older hand-rolled replays onto this harness follows fix-density, not
 big-bang (ADR-103).
 
+**Ratchet v2 is file-co-change; the FSM-keyed half is the ORPHAN GATE (landed 2026-08-10).**
+ADR-103's text described a lint "keyed on the FSM's `replay:` fields"; what shipped first was the
+weaker CI co-change check (clause file touched ∧ no replay-tree touch → red — it forces the author
+to look, it does not prove coverage). The promised half now lives in `merge-path-lint`: every
+`guarded` transition in the three FSM YAMLs declares `replay:` (paths must exist) or an explicit
+`unreplayed: "<reason>"`, both rendered in the generated views — coverage is a rendered fact, the
+oracle evidence-lint's "covered or explicitly unverified" rule transposed. One boundary is
+deliberate and permanent: **the LLM-play layer (the coordinator brief's plays) sits outside the
+replay harness** — a play's output is judgment, not an action stream, so its gates are the anchor
+lint (the lint greps play passages), ADR-094's launcher-owned orders shrinking the judgment
+surface, and the one-ride-per-state debounces bounding a bad judgment's cost.
+
 ### Hazards to bake in from day one
 
 - **Bounded rounds** — max review rounds (e.g. 3) then escalate; a flaky reviewer/CI otherwise burns
