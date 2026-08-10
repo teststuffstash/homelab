@@ -173,6 +173,9 @@
       "follow-ups-lint": [
         "sh scripts/follow-ups-lint.sh"
       ],
+      "docs-graph-lint": [
+        "sh scripts/docs-graph-lint.sh"
+      ],
       "flash-irrigation": [
         "export PLATFORMIO_CORE_DIR=$PWD/esphome/.platformio",
         "test -x esphome/.flash-venv/bin/esphome || python3 -m venv esphome/.flash-venv",

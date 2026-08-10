@@ -24,7 +24,13 @@ research kind.
 
 As run on circles (the worked example — PR numbers are circles'):
 
-0. **Mission issue** — the product intent, human-authored, self-contained (#1).
+0. **Mission issue** — the product intent, human-authored, self-contained (#1). **Open the
+   mission log with it**: an append-only `research/mission.md` on the mission branch in the
+   stack repo — TICK-LOG-shaped (condition → action) — recording the roster **as dispatched**
+   (would have caught the run-1 flash/pro slip on day one), mid-run process inventions, judge
+   verdicts, and artifact links. It lands with the harvest PR; run 1 had no log and its process
+   had to be reconstructed from PR metadata + a TICK-LOG parenthesis + operator memory
+   (2026-08-10 session — expensive, and one artifact was memory-only).
 1. **Spec fan-out** — N models author independent `specs/` trees on `research/<mission>-<slug>`
    branches, un-armed (human-gated by construction). Circles: opus #3, kimi-k3 #4,
    deepseek-v4-flash #2, mimo-v2.5-pro #5. Machinery: `agents/research-fanout.sh` (FU-126).
@@ -123,3 +129,6 @@ enforcement.
 - **Harvest cadence** for a longer mission (one harvest at the end vs per-phase).
 - **Two-weave mode**: designed here, never yet run — first mission that hits a genuinely split
   judge verdict should try it.
+- **The mission log** (step 0): first kept log is the idp run — does TICK-LOG-shape fit a
+  mission that spans repos, and does "lands with the harvest PR" survive a mission that never
+  reaches harvest?

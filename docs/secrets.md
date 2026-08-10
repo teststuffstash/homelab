@@ -90,6 +90,29 @@ ESO ClusterSecretStore "infisical" = Ready ──► ExternalSecrets resolve for
 | `devbox run infisical-harden` | re-assert signups off (idempotent) |
 | `bash tofu/infisical/apply.sh apply` | reconcile the Infisical project + ESO identity |
 
+## Minting doctrine — a token's scope is config, not a secret
+
+The three tiers above govern where secret **values** live. Creation is governed separately, and
+the rule is CONTEXT.md principle #1 applied to credentials: **a credential's *value* is data
+(wallet/Infisical); its *existence and scope* are config, minted as code from a tofu root**
+(`tofu/cloudflare-token/`, `tofu/github/`, …) so the credential inventory is recreatable and
+`plan`-reviewable like everything else. Dashboards and web UIs are **read-only surfaces**
+(ADR-001: "web UIs are for viewing") — an existing dashboard-born token is legacy to retire at
+its next review (see the 2026-06 "Read all resources" token below), not a precedent.
+
+Hand-creation is a **closed two-item list**, and nothing else:
+
+1. **The Tier-0 mint-root itself** — the credential that mints credentials (the Cloudflare
+   admin token, the KeePass wallet). The root of a trust chain is manual by construction;
+   its creation/renewal steps are recorded here and in the mint root's README.
+2. **Third-party consoles** we don't operate (registrar NS/DS at zone.ee, …) — principle 1(a)
+   governs systems *we* run; where git can't reach, the click is recorded as a numbered manual
+   step in the owning doc so recovery (principle 1(b)) survives it.
+
+Scope shape follows the framing rule at the top: **one consumer, one token, at its consumer's
+tier** — an in-cluster poller gets its own tiny Infisical-delivered token, never a broad
+jail/wallet credential, even when one token *could* technically serve both.
+
 ## Boundaries
 
 - **Repos are public** — never commit a value. Tofu state in `tofu/infisical/` is local + gitignored
@@ -111,8 +134,9 @@ credentials get the same shape:
 
 - **One gauge**: `credential_expiry_timestamp_seconds{provider, credential}` + one alert rule
   (warning at <30d, escalating <7d), **labeled `triage: none`** — the responder can do NOTHING
-  about admin credentials (the remedy is host-side by construction: admin wallet, dashboard,
-  a host-only apply), and the condition is deterministic, so an LLM triage session would be
+  about admin credentials (the remedy is host-side by construction: admin wallet, a host-only
+  apply — or the dashboard for the Tier-0 mint-root alone, §Minting doctrine), and the
+  condition is deterministic, so an LLM triage session would be
   pure waste. The alert routes to the HUMAN surface (Home Assistant) with its annotation
   naming the renewal runbook (which mint root + the re-store checklist) — the
   `GithubVendorOutage` precedent: machine-unactionable, human-informational. No

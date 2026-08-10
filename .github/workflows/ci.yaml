@@ -157,6 +157,13 @@ jobs:
       - name: FU tracker lint (devbox run follow-ups-lint)
         run: devbox run follow-ups-lint
 
+      # Doc graph: relative .md links resolve + the agents doc table indexes every agents doc
+      # (dangling/orphan FAIL in living docs, WARN in historical ones). The reader-side rule
+      # (CLAUDE.md "Design questions run full-context") enters at the doc table and chases
+      # links — this lint is what keeps that entry point trustworthy between grooms.
+      - name: Docs graph lint (devbox run docs-graph-lint)
+        run: devbox run docs-graph-lint
+
       # Mirror pre-warm (#80): when THIS PR changes the runner-image pin, pull the new image's
       # blobs through the LAN ghcr mirror once while CI gates the merge — the ≤maxRunners node
       # herd after the ArgoCD flip then hits a warm cache (pure reads), instead of N concurrent

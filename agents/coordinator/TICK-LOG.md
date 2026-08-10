@@ -3528,3 +3528,33 @@ goal-met-with-weave-unmerged.
 (first-pass, explicit Unsettled register — run 2 = idp settles it) + roles.md/README pointers +
 FU-161 (scout v3), FU-162 (draw verb + pools), FU-163 (glossary — goal/lens/canary "stale by
 addition"), FU-126 extended (idp run = research run 2 + FU-162 acceptance). All on master.
+
+### 2026-08-10 — operator design session 2: why design answers miss context (the /design codeword, doc-graph lint, minting doctrine)
+
+**Condition:** Post-mortem of the morning session's own failure mode, run against its transcript:
+the canary critique was authored having grepped `model-routing.md` for `:batch|variant` without
+READING it — the owning docs entered context only via operator @-mentions, which traced a link
+chain (model-routing→roles→platform-and-stacks) that already existed in the docs. Same failure
+reproduced LIVE in-session: a secrets proposal quoted FU-156 while not following its link to
+`docs/secrets.md`, then contradicted that doc's "mint it beside it" (caught by operator). Root
+cause ruled: not retrieval (files greppable, one hop away) but a missing trigger — prior-art rule
+covers *filing*, nothing covered *assessing/designing*. Operator: human memory as the safety net
+is ending; mistakes cost rework, worst-case a breach. Also ruled: the 2026-08-09 meta-state
+jail-token bullet failed the click-ops principle (security rationale checked, source-of-truth
+rationale never checked; API Tokens Read is dominated by the Write the admin token carries — "admin
+can't list" is a missing tick-box, not a boundary).
+
+**Command:** `/design` skill (`.claude/skills/design/`) — full-context mode, reads pre-authorized:
+founding docs + owning-doc link closure; sediment (retros/TICK-LOG/incidents/archive) grep-only
+("history is read when history is the subject"); grounding named in the answer. CLAUDE.md: new
+"Design questions run full-context" section (self-trigger fallback), "Link, don't restate — link
+on first use" third table rule, click-ops trigger in Safety, spikes row widened to "investigation
+or experiment". `scripts/docs-graph-lint.sh` + devbox task + CI step (dangling links + agents
+doc-table orphans FAIL in living docs; first run caught issue-lifecycle-fsm.md unindexed — fixed).
+CONTEXT.md: credentials sit on both sides of the data line (value=data, existence/scope=config).
+docs/secrets.md: new §Minting doctrine (closed two-item manual list: Tier-0 mint-root,
+third-party consoles; one consumer one token). meta-state jail-token bullet REWRITTEN to as-code
+(admin token +API-Tokens-Read, mint in the prepped apply, FU-156 inventory token stays separate).
+research-and-specs.md step 0 grows the mission log (append-only research/mission.md in the stack
+repo; run 1 had none — reconstruction cost a session; artifact was memory-only). FU-163 gains its
+consumers (term-closure, lint check #3). All on master.

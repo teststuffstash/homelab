@@ -156,7 +156,7 @@ thought *is*, not by which file you happen to have open:
 | A **loose end** — known, deferred, someone must act | `docs/follow-ups.md` | ≤10-line `FU-NNN` (see below) |
 | A **program** — multi-phase, weeks+, several deliverables | `ROADMAP.md` → Backlog | Prose + phases; an FU tracks only its *next* deliverable |
 | An **incident** — it broke, here's the timeline and root cause | `docs/incidents/YYYY-MM-DD-<slug>.md` | Postmortem; the FU carries only the residual action |
-| An **investigation** with no decision yet | `docs/spikes/` | Findings + what would settle it |
+| An **investigation or experiment** with no decision yet | `docs/spikes/` | Findings + what would settle it |
 | **What happened this session** (condition → command) | `agents/coordinator/TICK-LOG.md` | Append-only journal; never scrubbed |
 | **What a fresh session must pick up** | `docs/agents/meta-state.md` | Tiny, transient, delete when done |
 | **Agent-loop work items** | GitHub issues on the owning repo | `agent/*` labels; never hand-copied into the FU tracker |
@@ -170,6 +170,20 @@ Two rules make the table hold:
   the one someone reads.
 - **Status lives with the pointer; everything else lives with the detail.** The FU line owns "is
   this done, what's next"; the doc owns mechanism, evidence, history.
+- **Link, don't restate — and link on first use.** The first time a doc leans on a term or
+  concept whose home is another doc, it links that doc (this is what makes the reader-side link
+  closure work); a new doc registers in its index (the `docs/agents/README.md` doc table for the
+  agent platform). `devbox run docs-graph-lint` holds the mechanical half (links resolve, no
+  orphan docs).
+
+## Design questions run full-context
+
+**Assessing, critiquing, or designing a subsystem is not triage** — the ground truth for design
+is documented *intent*, which no live probe can recover. The `/design` skill is the procedure
+(founding docs + owning-doc link closure, sediment excluded, grounding named); **if a task is
+design-shaped and the skill wasn't invoked, behave as if it was** — reads are pre-authorized,
+rework is the expensive thing. A design answer names the docs that ground it; "no owning doc
+covers X" is a finding to report, not a license to improvise.
 
 ## Follow-ups (FU-NNN)
 
@@ -209,6 +223,11 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 - Never iterate destructive OPNsense firmware endpoints (`/reboot`, `/poweroff`) to "discover" them
   — they execute.
 - Don't claim "done" without an isolated end-state check.
+- **Before writing any operator-action item that involves a web UI** (meta-state bullets,
+  runbook steps, "please click"): name which of the two sanctioned manual classes admits it —
+  the **Tier-0 mint-root** or a **third-party console** (`docs/secrets.md` §Minting doctrine) —
+  or redesign it as code. A security rationale ("strictly read-only") is not a source-of-truth
+  rationale; the 2026-08-09 jail-token bullet passed the first check and failed the second.
 
 ## How changes land (jail sessions)
 
