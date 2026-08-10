@@ -365,3 +365,25 @@ Unbound DNS, so `*.teststuff.net` resolves like at home. Tunnel subnet `192.168.
   ddclient only writes when the WAN IP differs from its cached `current_ip` — to force/E2E-test a
   write: clear `current_ip` (`accounts/setItem`) then `dyndns/service/reconfigure` and watch the
   record via the Cloudflare API.
+
+## Meta-session watch scripts (jail tooling)
+
+The six `agents/meta-*.sh` scripts are **jail meta-session machinery, not agent-platform
+mechanism** — they run as Monitor probes inside the operator's meta-coordination sessions
+(operator ruling 2026-08-10: the pointer lives in [`agents/roles.md`](agents/roles.md)
+§meta-coordinator, the documentation lives here). When and how to arm them is
+[`agents/meta-state.md`](agents/meta-state.md) §Re-arm (transient, per-session); this table is
+the durable what-each-is:
+
+| script | what it watches | cadence/shape |
+|---|---|---|
+| `meta-needs-attention.sh` | unreviewed platform PRs, `agent/blocked`, unlabeled>24h, stack codeowner parks | persistent Monitor, REQUIRED each meta session |
+| `meta-throughput.sh` | queue-vs-movement per stack (a THROUGHPUT-STALL line is an incident, not calm) | run FIRST on every heartbeat sweep |
+| `meta-alert-crosscheck.sh` | firing Alertmanager alerts vs the board (what fired that no session owns) | each heartbeat sweep, after throughput |
+| `meta-watch-loop.sh` | per-stack loop events (ride opens, verdicts, merges) | OPTIONAL rollout-time tool (~10 routine events per real signal) |
+| `meta-handoff-watch.sh` | the cross-jail handoff inbox | NOT standing — rollout days / active stack jails only |
+| `meta-ride-edge-probe.sh` | doorbell/edge latency on a live ride (work-vs-wait ledger evidence) | ad-hoc, during goal-lane observation |
+
+Probe hygiene rules (script files, dry-run under the real interpreter, PROBE-FAIL over silent
+empty, kill leftovers by process before re-arming) stay in `meta-state.md` §Re-arm — they are
+per-session practice, re-read at bootstrap.

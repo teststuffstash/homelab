@@ -71,7 +71,10 @@ meant to avoid.)
   #223 + the doctrine ⚠; (3) mint `homelab-jail-read-all` as a new .tf beside the staged mints
   (catalog read-groups enumerated sorted + user-scope API Tokens Read; no IP filter, ≤1y TTL)
   — and keep FU-156's tiny in-cluster inventory-read token SEPARATE (one consumer, one token —
-  docs/secrets.md §Minting doctrine). Hand the jail-read-all value to the jail once → wallet
+  docs/secrets.md §Minting doctrine); (4) while in the dashboard: **DELETE the legacy broad
+  "Read all resources" token** (expires 2026-12-14; retire-not-renew per FU-156 — its
+  precondition, homelab-observability-read LIVE, is met; after this exactly ONE dashboard-born
+  token remains: the Tier-0 mint root). Hand the jail-read-all value to the jail once → wallet
   string + ~/.claude/cloudflare/ cache (wallet-files.sh) + docs/cloudflare.md token matrix.
   Rationale unchanged: endpoint-first doctrine needs a probe credential (hit the wall twice
   2026-08-09).

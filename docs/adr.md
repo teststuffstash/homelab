@@ -1333,7 +1333,9 @@ events in 2 days were platform-logic; ~2/3 of timeline comments are process resi
 existing exemplars (state-fp replay, responder harness, rail-degrade replay, prompt-transport
 lint) each ended their class. **Consequences:** clause work slows slightly and stays fixed;
 the debounce's comment-store moves last (load-bearing, replay-first); mechanism docs:
-docs/agents/workflow.md (replay ratchet), observability-and-retro.md (channels, KPIs).
+docs/agents/workflow.md (replay ratchet), observability-and-retro.md (channels); the weekly KPI
+spec lives in docs/agents/retros/BRIEF.md (pointer fixed 2026-08-10 — it never lived in
+observability-and-retro.md).
 
 ### ADR-104 — Research routing: deterministic slot draws on curated pools; resilience from shape, not rules
 
