@@ -11,6 +11,10 @@ description: >
 
 # design — don't hold back on reads
 
+> **Agent-platform topic? Use [`design-agents`](../design-agents/SKILL.md) instead** — the agents
+> subsystem is coupled enough that selective closure kept under-reading; that variant reads the
+> whole corpus upfront and drops the per-file grounding list (operator ruling 2026-08-10).
+
 The failure class this kills: **a confident design opinion formed three hops short of the owning
 doc** (2026-08-10: the canary critique made without `model-routing.md`/`roles.md`; a secrets
 proposal contradicting `docs/secrets.md` §Minting doctrine while quoting an FU that linked it).

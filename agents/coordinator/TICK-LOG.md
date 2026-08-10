@@ -3558,3 +3558,24 @@ third-party consoles; one consumer one token). meta-state jail-token bullet REWR
 research-and-specs.md step 0 grows the mission log (append-only research/mission.md in the stack
 repo; run 1 had none — reconstruction cost a session; artifact was memory-only). FU-163 gains its
 consumers (term-closure, lint check #3). All on master.
+
+### 2026-08-10 — operator ruling: agents design questions read the full corpus (/design-agents)
+
+**Condition:** Session-long test of the /design skill against agent-platform questions (ADR-103
+status, replay-vs-stack-specs comparison, coverage audit). Selective closure under-read twice —
+claims about FSM `replay:` fields made off the generated views without the YAML sources, and
+`model-routing.md` §M1a (the fixture-shape drift class) missed entirely — both caught only by an
+operator-ordered read-everything pass (~144k tokens; 10 of 12 docs changed nothing, the 2 that
+did were exactly the closure violations). Meanwhile the per-file grounding list had grown into an
+audit burden: verifying it required the operator to memorize the subtree. Ruling: the agents
+subsystem is coupled enough that any major change needs full context anyway — fixed cost beats
+itemized honesty there; outside agents the selective skill stays right (measured 12–15k/question
+vs 121k corpus, and the first /design of the day was a Cloudflare question the corpus is noise
+for).
+
+**Command:** `.claude/skills/design-agents/SKILL.md` — reads the ENTIRE agents corpus upfront
+(docs/agents/*.md+*.yaml excl. retros/, + agents/README.md + agents/replay/README.md +
+agents/coordinator/README.md; ~145k tokens once per session, cache-amortized), tracker grep
+unchanged, cross-repo (../teststuff, stack repos) stays operator-pointed; grounding statement
+names ONLY sources outside the corpus. Base /design gains a routing banner; CLAUDE.md §Design
+questions routes agent-platform topics to the variant. All on master.
