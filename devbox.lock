@@ -50,8 +50,8 @@
       }
     },
     "ansible@latest": {
-      "last_modified": "2026-08-01T16:34:20Z",
-      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#ansible",
+      "last_modified": "2026-08-03T00:04:07Z",
+      "resolved": "github:NixOS/nixpkgs/243895692ae2a2fbd08a05141462c0cc0d3ca10f#ansible",
       "source": "devbox-search",
       "version": "2.21.1",
       "systems": {
@@ -59,29 +59,29 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/kpy40gch2mdvqnwhjpy4rlkddimk4gf1-python3.14-ansible-core-2.21.1",
+              "path": "/nix/store/i3z487hsdzhf5cz9qqsvs2a06rx5801c-python3.14-ansible-core-2.21.1",
               "default": true
             },
             {
               "name": "dist",
-              "path": "/nix/store/wp22nbskzpfl5cmcczi2bk072m8jd1vd-python3.14-ansible-core-2.21.1-dist"
+              "path": "/nix/store/acxch3csy0p2hvvc5z41gyjb7hf1995b-python3.14-ansible-core-2.21.1-dist"
             }
           ],
-          "store_path": "/nix/store/kpy40gch2mdvqnwhjpy4rlkddimk4gf1-python3.14-ansible-core-2.21.1"
+          "store_path": "/nix/store/i3z487hsdzhf5cz9qqsvs2a06rx5801c-python3.14-ansible-core-2.21.1"
         },
         "aarch64-linux": {
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/fa5zfvi1by0rv9v14805xdw7nf1szh9n-python3.14-ansible-core-2.21.1",
+              "path": "/nix/store/ydvnq17h1ppxxqc76wqd3qn6ynrzlj16-python3.14-ansible-core-2.21.1",
               "default": true
             },
             {
               "name": "dist",
-              "path": "/nix/store/prgxzf178h0hbq5fcarga9iscfpi6fl6-python3.14-ansible-core-2.21.1-dist"
+              "path": "/nix/store/rgb8s39fqlyd9b3vj3ghxad7nhdv7avm-python3.14-ansible-core-2.21.1-dist"
             }
           ],
-          "store_path": "/nix/store/fa5zfvi1by0rv9v14805xdw7nf1szh9n-python3.14-ansible-core-2.21.1"
+          "store_path": "/nix/store/ydvnq17h1ppxxqc76wqd3qn6ynrzlj16-python3.14-ansible-core-2.21.1"
         },
         "x86_64-darwin": {
           "outputs": [
@@ -101,15 +101,15 @@
           "outputs": [
             {
               "name": "out",
-              "path": "/nix/store/r1bdq9pgygvdiwg9wkn68xw6rhxmhjxb-python3.14-ansible-core-2.21.1",
+              "path": "/nix/store/z23sjj8qxvc4xcr35crdasyiw1z67ycf-python3.14-ansible-core-2.21.1",
               "default": true
             },
             {
               "name": "dist",
-              "path": "/nix/store/dmlajvvm6kwbxkpn464bivi218vj74ny-python3.14-ansible-core-2.21.1-dist"
+              "path": "/nix/store/2sh1kn8zhfk614w1411w0q2pf10ir90s-python3.14-ansible-core-2.21.1-dist"
             }
           ],
-          "store_path": "/nix/store/r1bdq9pgygvdiwg9wkn68xw6rhxmhjxb-python3.14-ansible-core-2.21.1"
+          "store_path": "/nix/store/z23sjj8qxvc4xcr35crdasyiw1z67ycf-python3.14-ansible-core-2.21.1"
         }
       }
     },
@@ -250,8 +250,8 @@
       }
     },
     "bind@latest": {
-      "last_modified": "2026-08-01T16:34:20Z",
-      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#bind",
+      "last_modified": "2026-08-03T00:04:07Z",
+      "resolved": "github:NixOS/nixpkgs/243895692ae2a2fbd08a05141462c0cc0d3ca10f#bind",
       "source": "devbox-search",
       "version": "9.20.26",
       "systems": {
@@ -305,16 +305,16 @@
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/qhswb9zvqzaz43058lfsgq37l8nd8ngq-bind-9.20.26-dev"
-            },
-            {
               "name": "lib",
               "path": "/nix/store/vcb0znsw2fizkjsh37rm4fwrnd24rjrh-bind-9.20.26-lib"
             },
             {
               "name": "man",
               "path": "/nix/store/9innb2wpahd1s2pppx9yjxbsvw7321d5-bind-9.20.26-man"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/qhswb9zvqzaz43058lfsgq37l8nd8ngq-bind-9.20.26-dev"
             }
           ],
           "store_path": "/nix/store/r5bi12dyjq8aw2vrdls7c20gf0qmsqpy-bind-9.20.26"
@@ -337,16 +337,16 @@
               "default": true
             },
             {
-              "name": "man",
-              "path": "/nix/store/ll791yczfsalfyskcwxlkjnv1pflzpkr-bind-9.20.26-man"
-            },
-            {
               "name": "dev",
               "path": "/nix/store/gcagg8qjy8s156j812qmlmn91l5w7aij-bind-9.20.26-dev"
             },
             {
               "name": "lib",
               "path": "/nix/store/dggr4j7vj81qnpwvlkrcp5zvvc3ddjsy-bind-9.20.26-lib"
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/ll791yczfsalfyskcwxlkjnv1pflzpkr-bind-9.20.26-man"
             }
           ],
           "store_path": "/nix/store/hwann0a620j2llh8ascjb7bxcclanh8q-bind-9.20.26"
@@ -592,8 +592,8 @@
       }
     },
     "github:NixOS/nixpkgs/nixpkgs-unstable": {
-      "last_modified": "2026-08-01T16:34:20Z",
-      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e?lastModified=1785602060&narHash=sha256-z7D96eESRM4CPV%2FXtwpwFn8IDdfLAmxz6lVWrGYXvR4%3D"
+      "last_modified": "2026-08-06T00:10:29Z",
+      "resolved": "github:NixOS/nixpkgs/70ce234312134a463ba7728e94da2486a1d237ac?lastModified=1785975029&narHash=sha256-X44cn5rzytELc3NNoQsh0aLkjWA%2FQzPfc6HPQmsG3sU%3D"
     },
     "gitleaks@latest": {
       "last_modified": "2026-08-01T16:34:20Z",
@@ -740,8 +740,8 @@
       }
     },
     "jq@latest": {
-      "last_modified": "2026-08-01T16:34:20Z",
-      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#jq",
+      "last_modified": "2026-08-03T09:05:39Z",
+      "resolved": "github:NixOS/nixpkgs/104240a772428cc2e20d8fd86c9ddbb886bbaff2#jq",
       "source": "devbox-search",
       "version": "1.8.2",
       "systems": {
@@ -812,16 +812,16 @@
               "default": true
             },
             {
-              "name": "dev",
-              "path": "/nix/store/sp8a7n50g32lzzsc7dz09ry2vc9bh4y0-jq-1.8.2-dev"
-            },
-            {
               "name": "doc",
               "path": "/nix/store/dp4rs4vpwp44c7vvgskj1hly0d6xqf2m-jq-1.8.2-doc"
             },
             {
               "name": "out",
               "path": "/nix/store/z438hrlp3j75bpmq87ymzabb8vrda8ps-jq-1.8.2"
+            },
+            {
+              "name": "dev",
+              "path": "/nix/store/sp8a7n50g32lzzsc7dz09ry2vc9bh4y0-jq-1.8.2-dev"
             }
           ],
           "store_path": "/nix/store/4b6f9wb1qak318gk7mxlfkhril6lxpcx-jq-1.8.2-bin"
@@ -1419,8 +1419,8 @@
       }
     },
     "qrencode@latest": {
-      "last_modified": "2026-08-01T16:34:20Z",
-      "resolved": "github:NixOS/nixpkgs/a5cbcfe954791221bfffe2307f7d1a1bf61a871e#qrencode",
+      "last_modified": "2026-08-03T09:05:39Z",
+      "resolved": "github:NixOS/nixpkgs/104240a772428cc2e20d8fd86c9ddbb886bbaff2#qrencode",
       "source": "devbox-search",
       "version": "4.1.1",
       "systems": {
@@ -1437,12 +1437,12 @@
               "default": true
             },
             {
-              "name": "out",
-              "path": "/nix/store/20xqb6sfnkgpzyq9j514a4w7s97mkixw-qrencode-4.1.1"
-            },
-            {
               "name": "dev",
               "path": "/nix/store/1dirlzqgx0h6h0cxfamzrykv90qx4jj5-qrencode-4.1.1-dev"
+            },
+            {
+              "name": "out",
+              "path": "/nix/store/20xqb6sfnkgpzyq9j514a4w7s97mkixw-qrencode-4.1.1"
             }
           ],
           "store_path": "/nix/store/g9216da1llwy3g9qiiq771647djkswdf-qrencode-4.1.1-bin"
