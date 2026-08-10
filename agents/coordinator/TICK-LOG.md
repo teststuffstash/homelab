@@ -3579,3 +3579,23 @@ agents/coordinator/README.md; ~145k tokens once per session, cache-amortized), t
 unchanged, cross-repo (../teststuff, stack repos) stays operator-pointed; grounding statement
 names ONLY sources outside the corpus. Base /design gains a routing banner; CLAUDE.md §Design
 questions routes agent-platform topics to the variant. All on master.
+
+### 2026-08-10 — the coverage-audit findings land (ratchet widen, orphan gate, retro belt)
+
+**Condition:** Operator decisions on the session's audit findings: land the small fixes + the
+orphan gate now; retro KPI scoring waits for 2026-08-17 but gets the absence belt.
+
+**Command:** (1) ci.yaml — ratchet regex gains the six escaped clause files (machine-comment,
+goal-budget, responder/retro/fix-debounce/deploy-revert manifests; verified 10 matches, 0 false
+positives) + a step running estimate_budget.py --self-test (existed since birth, never executed).
+(2) merge-path-lint — the ADR-103 ORPHAN GATE: guarded transitions declare replay: (paths must
+exist, rendered in the status cell) or unreplayed:"<reason>" (rendered ⚠); all 42 transitions
+annotated across the three machines; unreferenced fixtures listed for visibility (the two
+machine-comment pins); negative-tested. (3) Doc fixes: ADR-103's KPI pointer → retros/BRIEF.md;
+workflow.md §Replay records ratchet-v2 delta + the LLM-play boundary; meta-*.sh documented in
+runbook.md (operator: jail tooling, not platform mechanism — roles.md pointer only); meta-state
+jail-token bullet step 4 = delete the legacy Read-all-resources token. (4) The FU-058 belt:
+retro-argo harvest pushes retro_report_last_success_timestamp to the pushgateway on PR-create;
+RetroReportOverdue (>8d or never, warning, for:6h) — expr verified firing live against the
+current true gap; annotation names 2026-08-17 as the first expected datum, triage report-only
+until then. Replay README register carries the retro-argo hatch entry.

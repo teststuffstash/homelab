@@ -483,10 +483,12 @@ the block needs pruning, not more headings.
       Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
-      §B2. **Next:** watch Monday's first unattended fire (= run 3, the swapped-cell
-      cross-review); then the ledger emitter gaps, MCP transcript slices, acting on report
-      candidates (list in §B2). Absorbs FU-057's residue (`key_hash` activity-API backfill).
-      Relates FU-095.
+      §B2. ⚠ 2026-08-10's Monday fire was GUARD-REFUSED (agent-session pod running) and silent —
+      belt shipped same day: `RetroReportOverdue` (harvest pushes a success timestamp; >8d stale
+      or never → warning). **Next:** 2026-08-17's fire is the first unattended run (= run 3, the
+      swapped-cell cross-review) AND the belt's first live datum; then the ledger emitter gaps,
+      MCP transcript slices, acting on report candidates (list in §B2). Absorbs FU-057's residue
+      (`key_hash` activity-API backfill). Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
