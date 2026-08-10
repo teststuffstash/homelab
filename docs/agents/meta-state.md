@@ -61,15 +61,19 @@ meant to avoid.)
   oracle context. Operator constraint captured on it: next bulk download is ATTENDED — no
   scheduling until runaway-download protections exist (no egress volume/bandwidth belts today;
   100-parallel-forever would be allowed). The protections piece likely splits to homelab.
-- **TOMORROW (operator, ~5 min): mint `homelab-jail-read-all`** — dashboard "Read all resources"
-  template, all accounts/all zones, **plus user-scope API Tokens Read** (lets the jail list the
-  permission-group catalog — the admin token can't, it has creation rights only). No IP filter,
-  long/no TTL. Hand the value to the jail session once → it stores wallet string +
-  ~/.claude/cloudflare/ cache (wallet-files.sh), adds to docs/cloudflare.md token matrix, then
-  IMMEDIATELY runs `GET /user/tokens/permission_groups | grep -i argo` → either names the group
-  for observability-read.tf in the prepped host-side apply, or proves the argo leg
-  unimplementable → re-scope #223 + the doctrine ⚠. Rationale: strictly below existing
-  write-key privilege; endpoint-first doctrine needs a probe credential (hit the wall twice
+- **TOMORROW (operator): `homelab-jail-read-all` — AS CODE, not the dashboard** (plan rewritten
+  2026-08-10; the dashboard-mint version failed the click-ops check — CLAUDE.md §Safety, and
+  API Tokens **Read** is strictly dominated by the **Write** the admin token already carries, so
+  "admin can't list" is a missing tick-box, not a boundary). Sequence, all in the ONE prepped
+  host-side session: (1) dashboard-edit the **admin token** (Tier-0 mint-root — the sanctioned
+  manual class) to add user-scope `API Tokens: Read`; (2) `GET /user/tokens/permission_groups`
+  → settle the argo group for observability-read.tf OR prove the leg unimplementable → re-scope
+  #223 + the doctrine ⚠; (3) mint `homelab-jail-read-all` as a new .tf beside the staged mints
+  (catalog read-groups enumerated sorted + user-scope API Tokens Read; no IP filter, ≤1y TTL)
+  — and keep FU-156's tiny in-cluster inventory-read token SEPARATE (one consumer, one token —
+  docs/secrets.md §Minting doctrine). Hand the jail-read-all value to the jail once → wallet
+  string + ~/.claude/cloudflare/ cache (wallet-files.sh) + docs/cloudflare.md token matrix.
+  Rationale unchanged: endpoint-first doctrine needs a probe credential (hit the wall twice
   2026-08-09).
 - **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08 restart. pve +
   laptop4: devices HEALTHY (jail tinytuya sessions work with devices.json versions) but HA-side

@@ -519,6 +519,7 @@ the block needs pruning, not more headings.
       create `docs/glossary.md` (term → one meaning → owning doc; each collision listed with its
       ruled replacement), sweep informal usages, then extend the prior-art rule: a NEW name for
       platform functionality must clear the glossary first — discipline, not just cleanup.
+      **Consumers waiting (2026-08-10)**: `/design` term-closure; `docs-graph-lint` check #3.
       Relates FU-117 (same grow-then-refactor arc).
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
