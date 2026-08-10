@@ -105,5 +105,10 @@ Log each instance here, so the next author sees a register rather than a precede
   kube-scheduler: no clause reads it and no branch turns on it. Evidence rather than assertion —
   the full suite stayed green on the change with every `expected/actions.txt` untouched, which is
   the harness itself reporting that the streams did not move.
+- **FU-058 belt (2026-08-10)** — one appended `printf | curl` in `retro-argo.yaml`'s harvest step
+  (the RetroReportOverdue success-timestamp push). The diff IS observable (a curl in the action
+  stream) but `retro-argo.yaml` has no fixture family yet — its FSM-side declaration is
+  `unreplayed` and the first retro-lane fixture should record this step's world when it is built
+  (jail-lane commit; the ratchet gained the file the same day, so the next PR touch pays properly).
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.

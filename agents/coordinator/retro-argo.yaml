@@ -215,6 +215,14 @@ spec:
               gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
                 --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" \
                 --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report."
+              # ADR-103 rule-3 belt (FU-058, 2026-08-10): a report that LANDED is the only success
+              # signal — the cron trigger counter increments on guard-refused runs too (the 08-10
+              # Monday fired, refused, and nothing said so for 13h). RetroReportOverdue alerts on
+              # this timestamp going stale (argocd/resources/pushgateway/prometheusrule.yaml).
+              printf 'retro_report_last_success_timestamp %s\n' "$(date +%s)" \
+                | curl -s --max-time 10 --data-binary @- \
+                  "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/retro-session/stack/${STACK}" \
+                || echo "WARN: pushgateway push failed — the RetroReportOverdue belt goes stale"
           env:
             - { name: HOME, value: "/home/node" }
           volumeMounts:
