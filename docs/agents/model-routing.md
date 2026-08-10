@@ -231,19 +231,45 @@ assumption) — into its router store (`router_generation_cost_usd_total{model,p
   and it dodges "this free model vanished today" faster than our ledger can. Strong scout/chain
   candidate for xs/sm tasks.
 
-### M7. The model scout (new, small)
+### M7. The model scout — v3: pools + a typed rail-probe canary (redesigned 2026-08-10)
 
 The scout is a **role** (dispatch-on-schedule family — machinery inventory in
-[`roles.md`](roles.md)); its routing content stays here. A weekly reflex (Argo CronWorkflow
-sibling of review-reflex, per ADR-093): diff `/models` against the known set; filter
-tools-capable + (free or ≤ price ceiling); run each newcomer on a **canary task** (a small, closed,
-known-good issue — same pattern as the oracle free-tier canary); write the outcome to the ledger.
-Newcomers graduate into chains with evidence, not vibes. Free scout keys want **FU-024**
-(`guardrail: only-free` actually enforced) so a scout key can't spend. **The FU-095 rotation
-("what's currently good", not just "what's new") is fed since 2026-07-27 by the router pulling
-OpenRouter's documented MCP `list-daily-model-rankings`** (daily popularity by token volume,
-standard API key — ADR-096 addendum 2) into its rotation store; the scout's canary stays the
-safety probe for rotation entrants, and canary verdicts land in the same store (`POST /rotation`).
+[`roles.md`](roles.md)); its routing content stays here. A weekly reflex
+(`agents/model-scout.sh`). v1/v2 (catalog diff + digest + a fixer-shaped canary) served the era
+when the fixer was the only model consumer; the 2026-08-10 redesign (trigger: digest #234 — 20 of
+22 "new" candidates were a platform-wide `:batch` variant rollout of years-old models, and all 3
+canaries posted bogus `failed` verdicts, tripping #235) rescopes it for the grown selection
+surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in build order (FU-161):
+
+1. **Filter variant re-listings.** Diff by BASE id (id minus `:suffix`) — a variant of a known
+   base is not a newcomer (one digest summary line, never N rows). Exclude `:batch` outright:
+   async endpoints cannot serve an interactive session, and their discounted headline price is
+   exactly what slips them under the ceiling.
+2. **Benchmark cross-check, one MCP call per candidate.** `get-model` embeds the AA indices;
+   attach them to the digest row (capability beside price, so the graduation call has both) and
+   mark benchless newcomers `unbenched`. Rank candidates before spending canary slots
+   (free-first, then agentic/coding index) — never `head -N` in diff order.
+3. **The canary is a RAIL probe, not a capability probe.** Capability comes from the benchmark
+   feed (§M8 feed 1, already pulled weekly by the proxy); the canary answers the one question no
+   benchmark can: does this model complete a tool-call loop through OUR stack (harness → egress
+   proxy → pinned provider → guardrailed ephemeral key). Rung 1 = the trivial closed ride —
+   cents on ANY model, expensive ones included, so it covers pool entrants too; rung 2 = a real
+   xs task (FU-095 leg (c)) only for cells a chain actually wants. A canary verdict is evidence
+   about a CELL — (model, harness, class) — never about "the model"; verdicts land cell-keyed in
+   the same store the own-outcomes feed reads, `source=canary`.
+4. **Typed verdicts, two sanity rules.** The verdict carries the launcher's `error_class`, not a
+   binary exit status. *Contradiction rule*: canary-fail ∧ benchmark-capable ⇒ `suspect-infra`,
+   retry once, else `inconclusive` — never `failed` (2026-08-10: ling-3.0-flash, coding 50.6 —
+   above gpt-5.1 — posted `failed` on "echo the README heading"). *Common-cause rule*: N
+   canaries failing identically in one tick = ONE scout-infra datum, zero per-model verdicts.
+5. **Pool curation — the §M13 duty.** The scout maintains the named class pools: ranked,
+   family-deduped, disjoint bands by convention, deeper than any plausible slot ask, refreshed
+   weekly from capability × market (`task_market`) × effective price × rail-compat. Diversity
+   lives HERE, at curation time — never in the request path.
+
+Unchanged: graduation into chains REMAINS a human call; a canary failure never fails the tick;
+free keys ride FU-024 `only-free`. The FU-095 rotation feed stands as built (MCP
+`list-daily-model-rankings` → rotation store since 2026-07-27, ADR-096 addendum 2).
 
 ### M8. The router's class scoring — how "auto" happens without the data problem (ADR-096 /route)
 
@@ -612,6 +638,35 @@ estimate/mint steps to OpenRouter-primary chains — as well as in the per-dispa
 subscription. Mint failures are also the one leg with no proxy signal — the provisioning API is the
 openrouter-operator's surface, not this proxy's — which is why leg 1 is an invariant rather than
 another detector.
+
+### M13. Research routing — deterministic slot draws on curated class pools (ADR-104, 2026-08-10)
+
+The research process ([`research-and-specs.md`](research-and-specs.md)) selects models unlike any
+lane above: it needs **N diverse models, not the best one**, and the experiment must be
+**reproducible** — the jitter band is exploration budget for high-volume dispatch and corruption
+inside a ~13-call mission. The contract is deliberately minimal (the mission-aware alternative —
+step/roster/exclude semantics server-side — was rejected: it leaks roles.md process internals
+into the mechanism layer):
+
+- `/route` consumes three more fields: **`class`** (already in the schema — selects the curated
+  pool), **`slot`** (1-based index into that pool's deterministic ranking), **`jitter: false`**
+  (no jitter-band sampling; ties break stably). The response names the **pool version**. Same
+  `(class, slot, jitter:false, pool-version)` → same model: idempotent, so a dead arm relaunches
+  identically and the mission's roster is reproducible from its calls.
+- **Pools are curated, never computed at request time** (§M7 leg 5, scout duty): ranked,
+  family-deduped, **disjoint bands by convention** — `regular` authors, `premium` judges,
+  `ultra` weaves, `instrument` for fixed-model probes. Disjointness is curation policy, NOT a
+  router invariant: research is an operator-driven lane where visibility (the arm table,
+  provenance chips) is the guard; enforcement machinery belongs to autonomous lanes. Which band
+  a *process step* uses is process policy — the step ladder table lives in
+  [`research-and-specs.md`](research-and-specs.md), not here.
+- **No failure semantics beyond what /route already has.** A dead arm waits, relaunches, or
+  takes `slot=N+1`; the caller over-provisions (ask for 7, need 5) and the pool ranks deeper
+  than any plausible ask. Cooldown/capacity answer as today — a typed defer may pause an
+  experiment, never silently rewrite its design.
+- Callers name **zero models**. First consumer: `agents/research-fanout.sh` (today it takes
+  models hand-picked — the circles flash/pro roster slip is the evidence for draw + record over
+  hand-pick). Build: FU-162.
 
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 
