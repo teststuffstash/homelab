@@ -64,6 +64,7 @@ transitions:
     owner: agent-finalize (in-pod)
     when: "pr_opened by a worker → gh pr merge --auto --squash"
     status: guarded
+    unreplayed: "arm guard is foreign (agent-runtime finalize); the C9/orphan belts backfill by fix-density"
     guards:
       - desc: "pr_url derived from the checked-out branch (goose-only self-report gap closed)"
         anchor: { repo: agent-runtime, file: agent-base/agent-finalize, pattern: "def derive_pr_url" }
@@ -80,6 +81,7 @@ transitions:
     when: "behind ∧ green ∧ armed ∧ ¬conflicted ∧ ¬changes_requested — oldest first, ONE per run"
     emits: branch_updated
     status: guarded
+    unreplayed: "third-party GitHub-hosted action — config pinned by anchors, behavior owned upstream"
     guards:
       - desc: "FIFO + one-per-run + armed-only"
         anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "require_auto_merge_enabled" }
@@ -94,6 +96,8 @@ transitions:
     owner: exporter edge (POST → Sensor → review WorkflowTemplate) + */15 CronWorkflow backstop
     when: "green ∧ current ∧ armed ∧ bot_review_at_head=none ∧ ¬automerge-lane ∧ ¬agent_error ∧ reviewer.enabled ∧ capacity"
     status: guarded
+    replay:
+      - agents/reviewer-optout-replay.sh
     guards:
       - desc: "bot-approval-at-head over NON-MERGE commits (branch_updated ≠ content_pushed)"
         anchor: { file: agents/review-reflex.sh, pattern: "UPDATER MERGE COMMITS ARE NOT NEW CONTENT" }
@@ -155,6 +159,7 @@ transitions:
     owner: review reflex (reviewable_again arm) + exporter edge (same arm since 2026-07-21)
     when: "changes_requested ∧ content_pushed since verdict (BEHIND allowed — the verdict is about the fix, not currency)"
     status: guarded
+    unreplayed: "reviewable_again arm — replayable; fixture on its next touch (fix-density, ADR-103)"
     guards:
       - desc: "new CONTENT since verdict (non-merge commits only, via newest_commit_at)"
         anchor: { file: agents/review-reflex.sh, pattern: "reviewable_again" }
@@ -180,6 +185,7 @@ transitions:
     owner: updater labels merge-conflict → coordinator item unit
     when: "merge_conflict_422"
     status: guarded
+    unreplayed: "one-line scan clause emit — fixture on its next touch"
     guards:
       - desc: "scan emits the merge-conflict clause as a work unit"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merge-conflict\|' }
@@ -189,6 +195,7 @@ transitions:
     owner: coordinator item session → agent-session --work-branch --recipe
     when: "changes_requested (or meta-dispatched red fix) → worker resumes THE PR branch, round N+1"
     status: guarded
+    unreplayed: "launcher dispatch assembly — rail-degrade-replay covers the capacity legs; the rest backfills by fix-density"
     guards:
       - desc: "dispatch idempotency: the pod name IS the (task, round) key — atomic create"
         anchor: { file: agents/agent-session.sh, pattern: "the key IS the pod name" }
@@ -220,6 +227,7 @@ transitions:
     owner: scan merged-closeout clause → coordinator item session
     when: "issue CLOSED by merged PR ∧ still agent/in-progress OR agent/review (21d window)"
     status: guarded
+    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
     guards:
       - desc: "scan emits merged-closeout units (cap 3/repo/scan, agent/error excluded)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
@@ -232,6 +240,10 @@ transitions:
     owner: review reflex labels agent/arbitrate → scan arbitrate unit → coordinator item session
     when: "bot verdicts ≥ ROUNDS_MAX ∧ NOT an impossible-state signature (those stay agent/error)"
     status: guarded
+    replay:
+      - agents/replay/fixtures/arbitrate-first-tick
+      - agents/replay/fixtures/arbitrate-probe-unreadable
+      - agents/replay/fixtures/state-fp
     guards:
       - desc: "reflex splits rounds-exhausted (escalation → agent/arbitrate) from impossible-state (anomaly → agent/error)"
         anchor: { file: agents/review-reflex.sh, pattern: "ROUNDS EXHAUSTED" }
@@ -250,6 +262,8 @@ transitions:
     owner: exporter red edge (/coordinate doorbell) + */10 poll → scan ci-red clause → coordinator item session
     when: "armed ∧ CI-red ∧ no Running worker ∧ fix-round attempts < RED_ROUNDS_MAX"
     status: guarded
+    replay:
+      - agents/replay/fixtures/ci-red-rounds-two-channels
     guards:
       - desc: "content-based: attempts = durable run-stats-comment count (not the old 4h updatedAt timer a no-op comment reset), dispatch cap 2/repo/scan"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red" }
@@ -266,6 +280,7 @@ transitions:
     owner: scan ci-red clause (attempt cap) → agent/arbitrate → MP-T11 tie-break
     when: "armed ∧ CI-red ∧ fix-round attempts ≥ RED_ROUNDS_MAX (the Red→Arbitrate edge the FSM lacked — symmetric with the review loop's ROUNDS_MAX→arbitrate)"
     status: guarded
+    unreplayed: "the RED_ROUNDS_MAX cap leg — extend the ci-red fixtures on next touch"
     guards:
       - desc: "scan labels agent/arbitrate + comments when red attempts hit the cap; the existing arbitrate clause + coordinator tie-break take over (re-dispatch stronger / close / escalate)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "ci-red → agent/arbitrate" }
@@ -279,6 +294,7 @@ transitions:
       transition ONLY from its anomaly class (MP-T03 belt 3); its precondition class stands aside
       without a label, so a state the machinery resolves by re-dispatching never reaches here"
     status: guarded
+    unreplayed: "the exclusion is anchor-grepped per clause; a dedicated breaker-trip fixture awaits its next touch"
     guards:
       - desc: "agent/error excluded from EVERY actionable clause (queued, c4c5, review pick, C9)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/error"\)' }

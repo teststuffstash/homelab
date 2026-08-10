@@ -77,6 +77,12 @@ transitions:
     owner: merged-closeout play (harvest) / janitor tick (spec-gap drafts)
     when: "authored on the MASTER lane → no agent-fix, no agent/queued; 🌱-reported until a human triages"
     status: guarded
+    replay:
+      - agents/replay/fixtures/unblocked-unlabeled-surfaces
+      - agents/replay/fixtures/unblocked-unlabeled-blocker-open
+    replay:
+      - agents/replay/fixtures/unblocked-unlabeled-surfaces
+      - agents/replay/fixtures/unblocked-unlabeled-blocker-open
     guards:
       - desc: "the play forbids self-labeling (loop-safety breaker #1)"
         anchor: { file: agents/coordinator/README.md, pattern: "never add .agent-fix. or .agent/queued." }
@@ -95,6 +101,14 @@ transitions:
     owner: responder-argo shell (not the session)
     when: "alert-filed issue + three fail-closed gates: not self-referential, Touches: declared, no governance path"
     status: guarded
+    replay:
+      - agents/coordinator/responder-behaviour-test.sh
+      - agents/replay/fixtures/responder-reopen-fix-verdict
+      - agents/replay/fixtures/responder-reopen-report-only
+    replay:
+      - agents/coordinator/responder-behaviour-test.sh
+      - agents/replay/fixtures/responder-reopen-fix-verdict
+      - agents/replay/fixtures/responder-reopen-report-only
     guards:
       - desc: "the three deterministic gates label from the SHELL"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "selfQueue" }
@@ -104,6 +118,10 @@ transitions:
     owner: coordinator-scan queued clause
     when: "open Depends-on (native ∪ body line) / footprint intersection / repo WIP ceiling / open-PR cap"
     status: guarded
+    replay:
+      - agents/replay/fixtures/depends-on-retired-format
+    replay:
+      - agents/replay/fixtures/depends-on-retired-format
     guards:
       - desc: "dependency gate (FU-087) — blocked issues report, never dispatch"
         anchor: { file: agents/coordinator-scan.sh, pattern: "queued-blocked" }
@@ -117,6 +135,8 @@ transitions:
     owner: scan (schedules ONE unit) → coordinator item session (judges) → launcher (opens the ride)
     when: "agent-fix ∧ agent/queued ∧ ¬direction-change ∧ ¬agent/error ∧ nothing held"
     status: guarded
+    unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"
+    unreplayed: "scan priority + pod-name key (kubectl-create semantics) — backfill by fix-density"
     guards:
       - desc: "the queued-dispatch unit rides the priority list (in-flight recovery first)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'queued-dispatch\|' }
@@ -130,6 +150,8 @@ transitions:
     owner: scan C4/C5 clause
     when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143) ∧ NOT reconciled by IL-T16 this pass"
     status: guarded
+    unreplayed: "the single C4C5 selector makes this one fixture — on its next touch"
+    unreplayed: "the single C4C5 selector makes this one fixture — on its next touch"
     guards:
       - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
@@ -146,6 +168,8 @@ transitions:
       gone terminal within the window) ∧ no MERGED PR mentions the issue → add agent/queued, remove
       agent/in-progress, comment the audit. Anything held falls through to IL-T06 unchanged."
     status: guarded
+    unreplayed: "belt built pre-harness (homelab#155) — convert on its next touch"
+    unreplayed: "belt built pre-harness (homelab#155) — convert on its next touch"
     guards:
       - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }
@@ -173,6 +197,8 @@ transitions:
     owner: scan detection (Base:-keyed) → merged-closeout play closes the issue
     when: "OPEN ∧ in-progress ∧ Base: goal/** ∧ referencing PR MERGED into exactly that base ∧ no open referencing PR"
     status: guarded
+    unreplayed: "Base:-keyed detection — fixture on next touch; the merge doorbell is foreign"
+    unreplayed: "Base:-keyed detection — fixture on next touch; the merge doorbell is foreign"
     guards:
       - desc: "Base:-keyed detection — goal/** only, never any non-default base (the #32 mirror)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "a goal child cannot self-close" }
@@ -187,6 +213,8 @@ transitions:
     owner: scan merged-closeout clause → coordinator item session
     when: "closed (or IL-T08 open-merged) ∧ still non-terminal agent/* — verify on the branch Base: declares, flip agent/done, harvest Follow-ups"
     status: guarded
+    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
+    unreplayed: "scan emit + LLM play — the play layer is outside the harness by design"
     guards:
       - desc: "scan emits merged-closeout units (goal children first, shared cap 3/repo/scan)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'merged-closeout\|' }
@@ -200,6 +228,8 @@ transitions:
     owner: the operator (breaker #1 moved UP, not away)
     when: "task/goal + Budget: authored AND agent/queued applied by a USER — the goal lane's entry gate"
     status: guarded
+    unreplayed: "defence-in-depth actor check (the boundary is CODEOWNERS) — fixture with the next goal-lane touch"
+    unreplayed: "defence-in-depth actor check (the boundary is CODEOWNERS) — fixture with the next goal-lane touch"
     guards:
       - desc: "the scan refuses a Bot-queued goal, fail-closed (defence in depth; the boundary is CODEOWNERS)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "BREAKER #1, moved UP" }
@@ -209,6 +239,8 @@ transitions:
     owner: coordinator item session (reasoning tier — GOAL_MODEL, default opus)
     when: "queued goal → children authored as native sub-issues (Base: inherited, Touches: narrowed, coverage map) and QUEUED; parent → agent/blocked tracking"
     status: guarded
+    unreplayed: "decompose is an LLM play; the deterministic budget legs are exercised through goal-budget.sh by the harvest fixtures"
+    unreplayed: "decompose is an LLM play; the deterministic budget legs are exercised through goal-budget.sh by the harvest fixtures"
     guards:
       - desc: "the play (coverage map, seams pinned, Σ budgets fit)"
         anchor: { file: agents/coordinator/README.md, pattern: "goal-decompose" }
@@ -248,6 +280,8 @@ transitions:
       trailer + coverage map body, then armed. NOT a closing keyword (ADR-102): the merge is IL-T18's
       midpoint, and `Fixes` here restores the #17 bug the rename exists to kill."
     status: guarded
+    unreplayed: "LLM play (assembly PR open) — anchor-gated"
+    unreplayed: "LLM play (assembly PR open) — anchor-gated"
     guards:
       - desc: "the play opens+arms at assembly-complete; human changes-requested routes as a NEW child"
         anchor: { file: agents/coordinator/README.md, pattern: "open the ASSEMBLY PR" }
@@ -350,6 +384,14 @@ transitions:
       AND the label's newest `labeled` event actor is a `User`. Bot ⇒ refuse+report. UNREADABLE ⇒
       refuse+report. `kpi` authority ⇒ refuse+report (a later oracle-side issue, gateway-gated)."
     status: guarded
+    replay:
+      - agents/replay/fixtures/goal-validated
+      - agents/replay/fixtures/goal-reverted
+      - agents/replay/fixtures/goal-abandoned
+    replay:
+      - agents/replay/fixtures/goal-validated
+      - agents/replay/fixtures/goal-reverted
+      - agents/replay/fixtures/goal-abandoned
     guards:
       - desc: "the breaker-#1 actor shape, with more at stake: this transition closes a goal and, on revert, its whole tree — and the App holds issues:write"
         anchor: { file: agents/coordinator-scan.sh, pattern: "TWO FAIL-CLOSED GATES BEFORE ANY TERMINAL WRITE" }
