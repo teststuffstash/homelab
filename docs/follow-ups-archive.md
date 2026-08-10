@@ -234,7 +234,7 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   credential model and the RBAC/Argo gotchas: [`docs/agents/agentstack.md`](agents/agentstack.md)
   §Decisions + §Operational notes; airlock pattern in `platform-and-stacks.md`. Note carried
   forward: docker-ride dispatch **from the jail** still waits on FU-072; model-scout + ledger stay
-  global by design. Relates FU-045/FU-048/FU-050/FU-066, ADR-093/ADR-094.
+  global by design. Relates FU-048/FU-050/FU-066, ADR-093/ADR-094.
 - **FU-118** *(archived 2026-07-31)* — **Offline rides couldn't `devbox add` a NEW package.** An
   offline add wrote `/nix/store/placeholder-*` into devbox.lock that boot-crashed the NEXT round's
   `devbox install` (#71 r4/r5 died here). Fixed BOTH legs 2026-07-31: **(a)** launcher pre-flight
@@ -776,8 +776,8 @@ living code/docs first (references in the TICK-LOG / `docs/adr.md` are historica
   (proven via helm 3→4, see FU-047).
 - **FU-025** *(archived 2026-07-12)* — Three-layer repo topology + automated deploy pipeline
   (app repo → auto-merging bump PR in `sleep-iac` → ArgoCD). Done 2026-07-04. The durable record
-  is **ADR-084** + `docs/sleep-iac.md`; follow-on scopes: FU-045 (per-stack coordinator), FU-044
-  (post-deploy rollback).
+  is **ADR-084** + `docs/sleep-iac.md`; follow-on scopes: the per-stack coordinator (shipped —
+  ADR-093/ADR-094 era), FU-044 (post-deploy rollback).
 - **FU-035** *(archived 2026-07-12)* — ISC DHCPv4 disabled in the OPNsense UI (the one-time
   click-op for reboot-safety after the dnsmasq migration; no API for it). Operator-confirmed done.
 - **FU-037** *(archived 2026-07-12)* — Standing `kubernetes_deployment.ha` tofu plan drift.

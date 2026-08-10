@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-161**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-164**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -361,6 +361,24 @@ the block needs pruning, not more headings.
 
 ### Models, cost & routing
 
+- [ ] **FU-161** — **Scout v3: variant filter + benchmark cross-check + typed cell-keyed canary
+      verdicts.** Digest #234 (2026-08-10): 20 of 22 "new" candidates were a platform-wide
+      `:batch` variant rollout of old models; all 3 canaries posted bogus `failed` verdicts
+      (ling-3.0-flash benches coding 50.6 — above gpt-5.1 — and three identical UnknownErrors in
+      6 min are ONE infra datum, not three model verdicts) and tripped alert #235. Design + build
+      order: [`docs/agents/model-routing.md`](agents/model-routing.md) §M7 legs 1–5. **Next:**
+      leg 1 (base-id diff + `:batch` exclusion) in `agents/model-scout.sh` — turns this digest
+      22→2; then leg 2 (get-model AA indices in the digest); legs 3–4 ride FU-162's store
+      change. Related: #235's PromQL scout-exclusion belt (machine lane owns it).
+- [ ] **FU-162** — **Router draw verb + curated class pools (ADR-104).** `/route` consumes
+      `class` + `slot` + `jitter:false` deterministically against scout-curated ranked pools
+      (`regular`/`premium`/`ultra`/`instrument`, family-deduped, disjoint by convention);
+      response names the pool version; idempotent relaunch. Contract:
+      [`model-routing.md`](agents/model-routing.md) §M13; process consumer:
+      [`research-and-specs.md`](agents/research-and-specs.md). **Next:** pool table + curation in
+      the scout tick (FU-161 leg 5), then the router.py slot/jitter path, then
+      `research-fanout.sh` reads slots instead of hand-picked models (the circles flash/pro
+      slip). Acceptance = the second research run (FU-126).
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
       2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
@@ -398,16 +416,16 @@ the block needs pruning, not more headings.
       question** (as ADR-097's parallelism was). **Next:** after ~2 weeks of ORDINARY days, read
       `responder_triage_sessions_today` on the "Responder triage budget" dashboard — p95 well under
       12, leave it; `ResponderTriageBudgetExhausted` on non-storm days, raise `RESPONDER_DAILY_MAX`.
-- [ ] **FU-126** — **Multi-model spec-writer fan-out (operator direction 2026-08-02): same goal
-      issue → N researcher rides on N models → N un-armed `research/*` PRs → operator compares
-      and cherry-picks.** **Platform legs BUILT same day:** `agents/research-fanout.sh` (per-model
-      task keys `research-<n>-<slug>` — adhoc to the launcher, no strike/atomic-gate collisions;
-      per-ride ephemeral budget keys; `AGENT_WIP_LIMIT=N`) + model-slug branch rule in both
-      research recipes (oracle-fleet#166, sleep-tracking#110) + oracle research.yaml itself
-      (grow-mode port). **Remaining:** first consumer run (idp-system specs — needs the idp stack
-      bootstrap; goal-issue must package the private teststuff spec doctrine into the repo's
-      specs/conventions.md; upstream FQDNs per goal via the claim's extraFQDNs dial). Reference
-      output = the nemotron jail run in `/workspace/idp`. Relates FU-095, FU-090(c).
+- [ ] **FU-126** — **Multi-model spec-writer fan-out: same mission → N researcher rides on N
+      models → N un-armed `research/*` PRs → operator compares and cherry-picks.** Platform legs
+      BUILT 2026-08-02: `agents/research-fanout.sh` (per-model task keys, ephemeral budget keys,
+      `AGENT_WIP_LIMIT=N`) + model-slug branch rules in both research recipes + oracle
+      research.yaml. Process home: [`research-and-specs.md`](agents/research-and-specs.md).
+      **Remaining:** first consumer run (idp-system specs — needs the idp stack bootstrap; the
+      mission must package the private teststuff spec doctrine into specs/conventions.md;
+      per-goal FQDNs via extraFQDNs). Reference output = the nemotron run in `/workspace/idp`.
+      **The idp run = research run 2** — settles the doc's Unsettled register and is FU-162's
+      acceptance. Relates FU-095, FU-090(c), ADR-104.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
@@ -492,6 +510,16 @@ the block needs pruning, not more headings.
 
 ### Roles & platform capabilities — new lanes, sandboxes, context delivery
 
+- [ ] **FU-163** — **A homelab glossary + vocabulary pruning — the docs are "stale by
+      addition".** Terms coined informally, later reused as TYPES, now ungreppable: **goal**
+      (prose "goal" predates the ADR-102 Goal issue — "goal for research" ≠ a Goal; ~360 hits in
+      docs/agents/ alone, and the researcher's dispatch label is literally `goal`), **lens**
+      (FU-101 reviewer Lens vs prose "lens/viewpoint"), **canary** (scout model-canary vs the
+      FU-102 prober's "agentic canary"), plus class/pool/band arriving with §M13. **Next:**
+      create `docs/glossary.md` (term → one meaning → owning doc; each collision listed with its
+      ruled replacement), sweep informal usages, then extend the prior-art rule: a NEW name for
+      platform functionality must clear the glossary first — discipline, not just cleanup.
+      Relates FU-117 (same grow-then-refactor arc).
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
