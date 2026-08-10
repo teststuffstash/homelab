@@ -9,6 +9,12 @@ docs/agents/iac-lane-fsm.yaml = the -IAC machine, FU-106) and for each:
      transition (the registration-lint pattern applied to the state machine).
   2. Checks every gap carries an fu:/accepted: disposition — known-missing guards are first-class
      records, never prose folklore.
+  2b. THE ORPHAN GATE (ADR-103, landed 2026-08-10): every `guarded` transition must declare
+     either `replay:` (fixture dirs / replay scripts that EXIST — the executed-replay coupling)
+     or `unreplayed: "<reason>"` (an explicit, rendered admission — the oracle evidence-lint's
+     "covered or explicitly unverified" rule, checks C/D, transposed). Coverage becomes a
+     rendered fact instead of an audit; fixtures no transition references are listed for
+     visibility (helper-level pins are legitimate).
   3. GENERATES the sibling .md (--write): the mermaid diagram + the transition/guard/incident
      table + the gap register. The .md is generated output; hand-edits die on the next run by
      design. The diagram + title + narrative link live IN the model YAML.
@@ -69,6 +75,9 @@ def check_anchor(anchor: dict) -> str:
     return f"ANCHOR NOT FOUND: /{anchor['pattern']}/ in {anchor['file']}"
 
 
+REFERENCED_FIXTURES: set[str] = set()
+
+
 def render(model: dict, model_path: Path, failures: list[str]) -> list[str]:
     narrative = model["narrative"]
     lines = [
@@ -118,9 +127,26 @@ def render(model: dict, model_path: Path, failures: list[str]) -> list[str]:
         status = t.get("status", "?")
         if status == "gap":
             failures.append(f"{t['id']} carries status: gap — gaps belong in the gaps: register")
+        # The ADR-103 orphan gate (2b in the docstring): guarded ⇒ replay: or unreplayed:.
+        replay_paths = t.get("replay") or []
+        unreplayed = t.get("unreplayed")
+        replay_note = ""
+        if replay_paths:
+            for rp in replay_paths:
+                if not (ROOT / rp).exists():
+                    failures.append(f"{t['id']}: replay path does not exist: {rp}")
+                if rp.startswith("agents/replay/fixtures/"):
+                    REFERENCED_FIXTURES.add(Path(rp).name)
+            replay_note = f" · replay: {', '.join(Path(rp).name for rp in replay_paths)}"
+        elif unreplayed:
+            replay_note = f" · ⚠ unreplayed: {unreplayed}"
+        elif status == "guarded":
+            failures.append(
+                f"{t['id']}: guarded transition with neither replay: nor unreplayed: — "
+                "declare the fixture or admit the absence (the ADR-103 orphan gate)")
         acc = f" · accepted: {t['accepted']}" if t.get("accepted") else ""
         lines.append(
-            f"| **{t['id']}** | {t['name']} | {t['owner']} | {status}{acc} | "
+            f"| **{t['id']}** | {t['name']} | {t['owner']} | {status}{acc}{replay_note} | "
             f"{'<br>'.join(guard_bits) or '—'} | {'<br>'.join(belt_bits) or '—'} | "
             f"{'; '.join(t.get('incidents', [])) or '—'} |"
         )
@@ -153,6 +179,15 @@ def main() -> int:
             print(f"wrote {out_path.relative_to(ROOT)}")
         elif out_path.exists() and out_path.read_text() != "\n".join(lines):
             failures.append(f"{out_path.name} is stale — run: devbox run merge-path-lint -- --write")
+
+    fixtures_dir = ROOT / "agents/replay/fixtures"
+    if fixtures_dir.is_dir():
+        unref = [p.name for p in sorted(fixtures_dir.iterdir())
+                 if p.is_dir() and not p.name.startswith("_selftest")
+                 and p.name not in REFERENCED_FIXTURES]
+        if unref:
+            print(f"  ℹ fixtures no FSM transition references (helper-level pins — visibility, "
+                  f"not failure): {', '.join(unref)}")
 
     if failures:
         print("merge-path-lint FAILURES:")

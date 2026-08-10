@@ -59,6 +59,8 @@ transitions:
     owner: app-repo deploy.yaml (bump PR, auto-merge armed) + required-checks ruleset
     when: "deploy/* bump PR green → instant merge; NO approval requirement — App bypass can't waive one, so it was dropped, not bypassed"
     status: guarded
+    unreplayed: "guards are tofu/ruleset config anchors; GitHub enforces the gate"
+    unreplayed: "guards are tofu/ruleset config anchors; GitHub enforces the gate"
     guards:
       - desc: "-iac repos opt OUT of required-approval BY DESIGN (CI gates the bump)"
         anchor: { file: tofu/github/variables.tf, pattern: "sleep-iac.*require_approval = false" }
@@ -70,6 +72,8 @@ transitions:
     owner: scan ci-red-stale probe → infra-enrich class → coordinator item unit
     when: "deploy/* bump red in a *-iac repo → values.schema.json diff IS the infra delta; mechanical rides the CI lane, judgment parks"
     status: guarded
+    unreplayed: "infra-schema-diff.sh is deterministic I/O — a good first fixture on its next touch"
+    unreplayed: "infra-schema-diff.sh is deterministic I/O — a good first fixture on its next touch"
     guards:
       - desc: "scan routes RED -iac bump PRs to the distinct infra-enrich class"
         anchor: { file: agents/coordinator-scan.sh, pattern: "infra-enrich" }
@@ -81,6 +85,8 @@ transitions:
     owner: scan queued-dispatch (fixerRepos predicate) → worker → PR
     when: "agent-fix+queued issue in an -iac repo with a fixer block → normal worker ride; the MERGE side of this lane is IAC-G01"
     status: guarded
+    unreplayed: "claim-predicate leg of the scan — backfill by fix-density"
+    unreplayed: "claim-predicate leg of the scan — backfill by fix-density"
     guards:
       - desc: "dispatchability is a claim predicate (fixer block present), never implicit"
         anchor: { file: agents/coordinator-scan.sh, pattern: "fixerRepos" }
@@ -97,6 +103,8 @@ transitions:
     owner: argocd-notifications → /deploy-degraded → auto-revert PR (FU-044 chain)
     when: "app Degraded ≤120m after a deploy/* bump merge → revert PR through the CI-only lane; fix-forward = a NEW issue with the revert evidence"
     status: guarded
+    unreplayed: "predicate exercised on 5 recorded diffs at build (2026-08-04) — not yet a standing fixture; convert on next touch"
+    unreplayed: "predicate exercised on 5 recorded diffs at build (2026-08-04) — not yet a standing fixture; convert on next touch"
     guards:
       - desc: "the revert chain (notification → sensor → revert PR)"
         anchor: { file: agents/coordinator/deploy-revert-argo.yaml, pattern: "revert" }
@@ -106,6 +114,8 @@ transitions:
     owner: scan merged-closeout clause → coordinator item unit
     when: "closed/merged -iac work → verify → agent/done flip → Follow-ups harvest (inert)"
     status: guarded
+    unreplayed: "scan emit + LLM play — backfill by fix-density"
+    unreplayed: "scan emit + LLM play — backfill by fix-density"
     guards:
       - desc: "scan emits merged-closeout units"
         anchor: { file: agents/coordinator-scan.sh, pattern: "merged-closeout" }
@@ -116,6 +126,10 @@ transitions:
     owner: responder v2 (deterministic namespace→claim ownership lookup)
     when: "workload alert in a claimed ns → triage session → issue in the stack's -iac when durable work exists"
     status: guarded
+    replay:
+      - agents/coordinator/responder-behaviour-test.sh
+    replay:
+      - agents/coordinator/responder-behaviour-test.sh
     guards:
       - desc: "responder routes a stack alert to its -iac repo (ownership is a lookup)"
         anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "its -iac repo" }
