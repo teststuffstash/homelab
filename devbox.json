@@ -1,42 +1,110 @@
 {
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.16.0/.schema/devbox.schema.json",
-  "packages": [
-    "opentofu@latest",
-    "kubectl@latest",
-    "talosctl@latest",
-    "kubernetes-helm@latest",
-    "cilium-cli@latest",
-    "hubble@latest",
-    "k9s@latest",
-    "ansible@latest",
-    "sops@latest",
-    "age@latest",
-    "jq@latest",
-    "python3@latest",
-    "nmap@latest",
-    "curl@latest",
-    "cloudflared@latest",
-    "yq-go@latest",
-    "bind@latest",
-    "netcat-gnu@latest",
-    "awscli2@latest",
-    "openssl@latest",
-    "tea@latest",
-    "keepassxc@latest",
-    "kyverno@latest",
-    "gitleaks@latest",
-    "wireguard-tools@latest",
-    "qrencode@latest",
-    "argocd@latest",
-    "argo-workflows@latest",
-    "infisical@latest",
-    "gh@latest",
-    "kubeconform@latest"
-  ],
+  "packages": {
+    "opentofu": {
+      "version": "latest"
+    },
+    "kubectl": {
+      "version": "latest"
+    },
+    "talosctl": {
+      "version": "latest"
+    },
+    "kubernetes-helm": {
+      "version": "latest"
+    },
+    "cilium-cli": {
+      "version": "latest"
+    },
+    "hubble": {
+      "version": "latest"
+    },
+    "k9s": {
+      "version": "latest"
+    },
+    "ansible": {
+      "version": "latest"
+    },
+    "sops": {
+      "version": "latest"
+    },
+    "age": {
+      "version": "latest"
+    },
+    "jq": {
+      "version": "latest"
+    },
+    "python3": {
+      "version": "latest"
+    },
+    "nmap": {
+      "version": "latest"
+    },
+    "curl": {
+      "version": "latest"
+    },
+    "cloudflared": {
+      "version": "latest"
+    },
+    "yq-go": {
+      "version": "latest"
+    },
+    "bind": {
+      "version": "latest"
+    },
+    "netcat-gnu": {
+      "version": "latest"
+    },
+    "awscli2": {
+      "version": "latest"
+    },
+    "openssl": {
+      "version": "latest"
+    },
+    "tea": {
+      "version": "latest"
+    },
+    "keepassxc": {
+      "version": "latest"
+    },
+    "kyverno": {
+      "version": "latest"
+    },
+    "gitleaks": {
+      "version": "latest"
+    },
+    "wireguard-tools": {
+      "version": "latest"
+    },
+    "qrencode": {
+      "version": "latest"
+    },
+    "argocd": {
+      "version": "latest"
+    },
+    "argo-workflows": {
+      "version": "latest"
+    },
+    "infisical": {
+      "version": "latest"
+    },
+    "gh": {
+      "version": "latest"
+    },
+    "kubeconform": {
+      "version": "latest"
+    },
+    "prometheus": {
+      "version": "latest",
+      "outputs": [
+        "cli"
+      ]
+    }
+  },
   "env": {
     "TALOSCONFIG": "$PWD/tofu/talosconfig",
-    "KUBECONFIG":  "$PWD/tofu/kubeconfig",
-    "VENV_DIR":    "$HOME/.cache/devbox-venv/homelab"
+    "KUBECONFIG": "$PWD/tofu/kubeconfig",
+    "VENV_DIR": "$HOME/.cache/devbox-venv/homelab"
   },
   "shell": {
     "init_hook": [],
@@ -82,6 +150,9 @@
       ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
+      ],
+      "prometheus-rules-lint": [
+        "bash scripts/prometheus-rules-lint.sh"
       ],
       "responder-behaviour-test": [
         "bash agents/coordinator/responder-behaviour-test.sh \"$@\""

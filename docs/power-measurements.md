@@ -7,8 +7,8 @@ Max-power (stress) measurements of homelab nodes, taken at the wall via the Tuya
 (`sensor.plug_<box>_power`, see `homeassistant/ha-config/packages/power.yaml`) while all CPU cores
 are maxed. Reproducible.
 
-> ⚠ **The plugs are DEAD as of 2026-08-07 and the method below cannot be run.** Tracked by FU-038
-> (which is where the local-polling fix lives; this section is the evidence). Every Tuya entity
+> ✅ **RESOLVED 2026-08-07 — the plugs are back on LOCAL polling** (`tuya_local`, FU-038 archived;
+> the cutover + verification is below at §tuya_local). Kept for the record of the outage: Every Tuya entity
 > froze between 2026-07-29 and 2026-08-01 — cloud-side `API_QPS_LIMIT_OR_DEGRADE`, so
 > `tuya_sharing`'s MQTT channel never connects. **The entities still report `available=1` and serve
 > their last value**, which is why nine days passed unnoticed and why a "measurement" taken today
@@ -194,8 +194,8 @@ or the HA `/api/states`), record the peak, then `delete pod` + `uncordon`.
 > the phone app — opening the app's device LIST is not enough. A stress test still measures fine
 > unattended (a ~30 W jump crosses the report-on-change threshold), but any **small** delta — a
 > few watts — is invisible unless that device's page is held open for the whole run. **Verify you
-> are seeing DISTINCT values before trusting a mean.** A further argument for FU-038: local
-> polling samples on our schedule, not the vendor's.
+> are seeing DISTINCT values before trusting a mean.** (Local polling — shipped 2026-08-07 —
+> samples on our schedule, not the vendor's.)
 
 ## Results — 2026-06-05 (stress-ng `matrixprod`)
 

@@ -178,7 +178,7 @@ investigation review **directly, while the PR is still red** — the review's jo
 break — which is precisely why a major can't ride the reflex (green-only, decision-free) path. Non-major
 devbox bumps stay armed and ride the reflex like any other PR. **Proven E2E (2026-07-05):** an opus
 coordinator drove sleep-tracking#18 (helm 3→4) through this exact lane — investigate-while-red → worker
-applied `--verify=false` → green → `major/awaiting-human` → human merged (FU-047).
+applied `--verify=false` → green → `major/awaiting-human` → human merged (2026-07-05).
 
 The corollary is **arm-at-open discipline (FU-079)**: any PR opened by an operator or a stacked
 workflow must either be armed immediately (`gh pr merge <N> --auto --squash`) or carry an owning
@@ -474,7 +474,9 @@ floor only policy and scheduling help, which is why the O(N²) options above are
      `workflow.md`'s idempotency key). Create-with-deterministic-name **is** an atomic
      test-and-set at the API server — two racing reflex instances can't both spawn it, and a new
      push (new head SHA) legitimately mints a new name while event re-delivery doesn't.
-  The updater needs neither: Actions `concurrency` groups serialize its runs natively, and
+  The updater needs neither: Actions `concurrency` groups serialize its runs natively (⚠ its
+  sibling `renovate-approve` DID need exactly this — per-PR group + fail-closed dup-check,
+  homelab#114, 2026-08-11), and
   update-branch is idempotent at GitHub (422 "already up to date"). Worst residual race anywhere
   is a duplicate review — wasted tokens, never a bad merge (the merge gate is GitHub's, evaluated
   once).

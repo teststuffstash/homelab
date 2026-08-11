@@ -151,7 +151,9 @@ Removing a `haproxy_proxied_services`/`acme_cert_specs` entry does **not** delet
 (`delServer`), the IP-alias VIP (`interfaces/vip_settings/delItem/<uuid>` — ⚠ triggers the FRR flush,
 cycle FRR after), the Unbound host override (`unbound/settings/delHostOverride/<uuid>` + reconfigure),
 and the ACME cert (`acmeclient/certificates/removeCertificate/<uuid>`). Then reconfigure haproxy.
-(Used at the oracle-specs → specs.oracle cutover, 2026-07-15: 3.20 + `oracle-specs.teststuff.net`.)
+(Used at the oracle-specs → specs.oracle cutover, 2026-07-15 — ⚠ the OLD name/VIP
+(`oracle-specs.teststuff.net` / 3.20) is deliberately KEPT LIVE until the oracle stack migrates
+it — `ansible/group_vars/opnsense.yml` says so, and both names serve 200 as of 2026-08-11.)
 
 ### LAN DHCP / DNS
 
@@ -166,7 +168,8 @@ only LAN DHCP.
 
 `tofu/longhorn.tf` — Helm 1.12.0, `longhorn` is the **default StorageClass** (replica=2, zone
 soft-anti-affinity across wk-02/thinkcentre/hp-01). All stateful services use Longhorn PVCs (not
-node-pinned). A `longhorn-fast` SC (replica=1, node-local) lives on the ThinkCentre's 2×Optane,
+node-pinned). A `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy pods —
+eligibility ruling in `docs/storage-ledger.md`, FU-159) lives on the ThinkCentre's 2×Optane,
 formatted+mounted via `metal.tf` `optane_disks` and registered with
 `scripts/longhorn-register-optane.sh`.
 
@@ -291,7 +294,7 @@ token; `ha-prometheus-token` is the separate tofu-side one).
 - Integrations are scriptable via the config-flow REST API. **The Tuya CLOUD integration is not**
   — it needs the user's Smart Life/Tuya QR login in the UI (and a full delete+re-add when its
   session dies; a config-entry *reload* republishes cached values ONCE and looks like a fix).
-  **`tuya_local` IS scriptable** and is the power source since 2026-08-07 (FU-038):
+  **`tuya_local` IS scriptable** and is the power source since 2026-08-07 (FU-038, archived):
   `bash scripts/ha-tuya-local.sh` installs the pinned custom component onto the /config PV and
   restarts HA; `bash scripts/ha-tuya-local-devices.sh` then creates one config entry per device
   from the wallet material (`tuya-local`/devices.json), idempotently. Both re-runnable.

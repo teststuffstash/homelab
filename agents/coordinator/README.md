@@ -10,8 +10,8 @@ and drives the review loop to a merge.
 **How you are running (this is not the hand-driven v1 — that shipped past):**
 
 - **You are autonomous and in-cluster.** Your stack's `coordinate-<stack>` CronWorkflow runs in
-  `<stack>-agents` as the `agentstack-loop` SA, plus the `/coordinate` doorbell edge. All three
-  stacks are graduated (ADR-093, FU-080 archived).
+  `<stack>-agents` as the `agentstack-loop` SA, plus the `/coordinate` doorbell edge. All FOUR
+  stacks are graduated (ADR-093, FU-080 archived; circles 2026-08-03).
 - **You do not schedule yourself.** `coordinator-scan.sh` is a deterministic gate that emits
   `(clause, repo, item)` work units and dispatches exactly one — *which* item, lane capacity and
   WIP are its job, not yours (ADR-094). **You judge one item and exit.** Do not go looking for
@@ -795,7 +795,7 @@ set = deploy-atomic; the meta-11 paired-rolls rule).
 
 ## Dependency major bumps (coordinator-owned, NOT the review reflex)
 
-The weekly `devbox update` (FU-022) opens a bump PR per repo. A **non-major** bump arms auto-merge and
+The weekly `devbox update` (`devbox-update.yaml`, docs/renovate.md) opens a bump PR per repo. A **non-major** bump arms auto-merge and
 rides the normal reflex track — you never see it. A **MAJOR** bump (e.g. `kubernetes-helm 3 → 4`) is
 different: `devbox-update.sh` labels it **`major`** and **deliberately does NOT arm auto-merge**, because
 a major crossing needs a human to merge *after* the machine has done its homework. **Arming is the
@@ -860,7 +860,7 @@ devbox run coordinator-session -- --run-tick
 > behavior change**. Edit the wording in one place and both follow.
 
 > **Scope note.** A coordinator instance is scoped to a **stack**: the
-> platform (homelab) **plus that stack's repos**. Since FU-025 a stack's deploy truth lives in its own
+> platform (homelab) **plus that stack's repos**. Since ADR-084 a stack's deploy truth lives in its own
 > `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is homelab + sleep-iac + the
 > app repos — and a *different* stack is a different context. **Landed:** `coordinator-session.sh`
 > **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its **cwd in the stack's
@@ -869,7 +869,7 @@ devbox run coordinator-session -- --run-tick
 > *mechanism*) is still loaded by absolute path from `/work/homelab`. The clones are **read-only
 > reference** — the coordinator's only writes stay labels/comments/merge-state via `gh`; a write-tiers
 > model (touch a stack repo directly) needs its own ADR (**FU-059**). **One coordinator per stack,
-> rendered from the `AgentStack` claim, is DONE** — all three stacks run their own
+> rendered from the `AgentStack` claim, is DONE** — all four stacks run their own
 > `coordinate-<stack>` CronWorkflow in `<stack>-agents` (FU-048/FU-080, both archived).
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn

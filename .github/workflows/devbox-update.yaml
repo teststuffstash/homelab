@@ -1,4 +1,4 @@
-# devbox-update.yaml — weekly SYNCHRONIZED devbox.lock bump across all repos (FU-022).
+# devbox-update.yaml — weekly SYNCHRONIZED devbox.lock bump across all repos (docs/renovate.md §devbox).
 #
 # All repos keep `@latest` devbox pins; this one job re-resolves them TOGETHER (same registry state in
 # one pass) so the shared tools (gitleaks/kubectl/uv/gh/jq/python) land on the SAME version everywhere.

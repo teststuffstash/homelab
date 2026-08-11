@@ -33,9 +33,12 @@ Fixed cost beats itemized honesty here: ~145k tokens, pre-authorized, paid ONCE 
      misses it)
    - **EXCLUDED: `docs/agents/retros/`** — sediment, grep-only, "history is read when history is
      the subject" (the base skill's layer 4 stands unchanged).
-3. **Tracker layer** — as in the base skill: grep `docs/follow-ups.md` + archive + `docs/adr.md`
+3. **Glossary** — [`docs/glossary.md`](../../../docs/glossary.md) rules this corpus's vocabulary
+   (Goal/mission, canary vs contract probe, the platform stack) — consult before coining or
+   interpreting a term.
+4. **Tracker layer** — as in the base skill: grep `docs/follow-ups.md` + archive + `docs/adr.md`
    + `docs/spikes/` by topic keywords, read matches in full.
-4. **Outside homelab** — NOT auto-read: `../teststuff` docs, circles/oracle-fleet and other stack
+5. **Outside homelab** — NOT auto-read: `../teststuff` docs, circles/oracle-fleet and other stack
    repos are in scope but operator-pointed (@-mention or named in the question). Say when the
    question leans on one that wasn't provided.
 

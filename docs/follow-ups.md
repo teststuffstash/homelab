@@ -140,18 +140,15 @@ six OVERSIZE items pointer-ized into
 - [ ] **FU-013** — Home Assistant `/config` (and other stateful data) backup → Garage S3 with the
       bucket-id in git — the missing "boot-from-git" DR leg (Longhorn replicates in-cluster, it
       doesn't DR). `tofu/homeassistant.tf`.
-- [ ] **FU-039** — **Next legs of platform self-service (XRD claims).** LAN subdomain opt-in is
-      still a thin homelab PR per stack (HTTPS-names shipped — ADR-092); git repos + ArgoCD
-      AppProject/namespace remain operator PRs; **Public-ingress leg BUILT 2026-08-08 (ADR-101),
-      UNARMED**: PublicRoute XRD+Composition (per-claim tunnel, subtree enforcement) + the
-      cloudflare-exporter + all token mints staged; arming = operator stores
-      CLOUDFLARE_INGRESS_WRITE (mint: `cloudflare-token-tofu apply`; **ARMED 2026-08-08**). Open:
-      zone-phase ruleset aggregation (≥2nd consumer), the ha retrofit (consumer #2), product
-      zones, **teststuff.net edge metrics** (free-plan zone — invisible to the lablabs exporter
-      at v0.2.3 (#132); needs a DIY GraphQL poller, github-exporter pattern). Design:
-      [`docs/cloudflare.md`](cloudflare.md) §Public ingress. Program context:
-      `ROADMAP.md` → Programs in flight → "Platform self-service via Crossplane". Relates ADR-076,
-      ADR-085, ADR-092, FU-068.
+- [ ] **FU-039** — **Platform self-service (XRD claims) — next legs: POINTER.** The
+      public-ingress leg's design, completion-state table (built + ARMED 2026-08-08, zero
+      consumers) and open legs (test claim, ha retrofit = consumer #2, zone-phase rulesets,
+      product zones): [`docs/cloudflare.md`](cloudflare.md) §PublicRoute. Still thin homelab
+      PRs per stack: LAN subdomain opt-in (ADR-092), git repos, AppProject/ns. **Next:** the
+      operator-witnessed test claim; separately the **teststuff.net edge-metrics poller**
+      (free zone invisible to the lablabs exporter #132 — DIY GraphQL, github-exporter
+      pattern). Program: `ROADMAP.md` → "Platform self-service via Crossplane". Relates
+      ADR-076, ADR-085, ADR-092, ADR-101, FU-068.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
@@ -278,36 +275,23 @@ the block needs pruning, not more headings.
       **Load-bearing since 2026-08-08**: close-and-re-PR became a DESIGNED play (#210→#221, #214
       re-queue, #209→#218-v2). **Next:** homelab#156 (queued) builds the issue-keyed count —
       status follows that issue; FU-148's re-run lever landed the same day (App actions:write).
-- [ ] **FU-148** — **The coordinator cannot re-run a flaked CI job, so it close/reopens the PR
-      instead.** Live 2026-08-06, circles PR#44: GitHub Actions failed in job setup
-      (`Failed to resolve action download info: Service Unavailable`) during a real GH incident. The
-      session diagnosed it correctly and dispatched NO worker — good — but `gh run rerun --failed`
-      was refused (`actions:write` absent from the coordinator App), so it closed/reopened the PR to
-      fire a fresh `pull_request` run. **That disarms auto-merge**; the session noticed and re-armed,
-      but nothing guarantees the next one will, and a silently disarmed PR is invisible to the merge
-      path (FU-079 class). **THREE more in ONE day 2026-08-08** (all post-VM-rebuild cold caches or
-      GH blips): oracle PR#218 close/reopened, oracle PR#217 + circles PR#69 needed META's jail
-      token (#69 latched `agent/blocked` — the coordinator's own comment names the 403). The
-      privilege call was made 2026-08-08 (~17:30Z): **operator granted the App `actions: write`**;
-      the coordinator token generator (`git-token.yaml`, coordinator-git ONLY — workers keep no
-      Actions verb) + the ci-red play's retry terminal (retry ONCE, state the diagnosis, second
-      red ≠ environmental) wired the same hour; close/reopen RETIRED in the play text. **Permission chain
-      VERIFIED live ~17:55Z** (the minted coordinator token returned 201 on a real
-      rerun-failed-jobs call — grant → installation → generator → token → write, all proven).
-      **Next:** acceptance = the first live environmental red self-retries through the PLAY
-      (diagnosis comment + one rerun) → then archive. Relates ADR-094,
-      FU-079.
+- [ ] **FU-148** — **Environmental CI red: the retry terminal, awaiting its first organic
+      pass.** Close/reopen (which silently DISARMS auto-merge, FU-079 class) is RETIRED from
+      the ci-red play; the coordinator App holds `actions: write` (operator grant 2026-08-08,
+      coordinator-git generator only — workers keep no Actions verb) and the play retries ONCE
+      with a stated diagnosis (second red ≠ environmental). Permission chain proven live
+      ~17:55Z 2026-08-08 (201 on a real rerun-failed-jobs). Founding incidents: circles#44 +
+      three on 2026-08-08 (oracle#217/#218, circles#69). **Next:** acceptance = the first
+      ORGANIC environmental red self-retries through the play (diagnosis comment + one rerun)
+      → then archive. Relates ADR-094, FU-079.
 - [ ] **FU-151** — **First-party `-iac` deploy bumps skip LLM review by TIMING, not design.**
-      `review-reflex.sh:262` skips `automerge`-labelled PRs (the §2 mechanical lane in
-      [`dependency-upgrades.md`](dependency-upgrades.md)); the app repos open `deploy:`/
-      `specs-pr:` PRs UNLABELLED. They survive only because `-iac` is `require_approval=false`,
-      so auto-merge beats the 15-min tick (sleep-iac#62, circles-iac#31: `reviews=0`) — a slow
-      CI run reverses it. Where the window IS long the same gap cost **5 reviewer sessions on 4
-      one-line pins** (homelab#102/#104/#105). Deferred: the lanes that actually burned sessions
-      are fixed (openrouter-operator#23, agent-coordinator#10), labels already exist on all three
-      `-iac` repos. oracle-fleet ported 2026-08-07 (operator, oracle-fleet#173). **Next:** port
-      `gh pr edit --add-label automerge --add-label dependencies` (OUTSIDE create-if-absent)
-      into sleep-tracking, circles, snore-recorder.
+      `review-reflex.sh` skips `automerge`-labelled PRs, but app repos open `deploy:` PRs
+      UNLABELLED — they survive only because auto-merge beats the 15-min tick; a slow CI
+      reverses it (cost already paid: 5 reviewer sessions on 4 one-line pins,
+      homelab#102/#104/#105). Fixed where it burned (openrouter-operator#23,
+      agent-coordinator#10, oracle-fleet#173); labels exist on all -iac repos. **Next:** port
+      `gh pr edit --add-label automerge --add-label dependencies` into sleep-tracking, circles,
+      snore-recorder deploy workflows. Relates [`dependency-upgrades.md`](dependency-upgrades.md) §2.
 - [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
       The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
       silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
@@ -453,24 +437,15 @@ the block needs pruning, not more headings.
       over 1h vs baseline — cache degradation shows as pod-spinup/gates inflation). Shave
       candidates (fast-path, pr-open script, image pin) live in the spike, not here.
 
-- [ ] **FU-159** — **Garage's metadata volume rides the `std` bulk tier; heavy S3 request rates
-      saturate it.** Measured 2026-08-09: ert-verify's parse (252k ranged GETs, ~15/s, ~4h6m)
-      drove `meta-garage-0`'s iSCSI device (wk-01 `sdg`) to aqu-sq 74, firing NodeDiskIOSaturation
-      for hours and degrading the parse itself (17→14.7/s) — homelab#103 has the full trace. The
-      `longhorn-fast` Optane tier (ADR-070-era, ThinkCentre) exists for exactly this IO shape.
-      Next: operator decides meta→`longhorn-fast` migration (replica=1 node-local trade-off vs
-      replicated-but-slow; Garage meta is rebuildable-ish but load-bearing). Not urgent — full
-      parses are quarterly/attended; the delta job's rate is far lighter.
-
-- [ ] **FU-158** — **No PrometheusRule in `argocd/resources/**` has a behaviour gate: every alert
-      expr merges unexecuted.** Surfaced by PR#220's operator findings (2026-08-09): kubeconform
-      SKIPS the kind (schema gap, known — FU archive 2026-08-04 note), and there is no
-      `promtool test rules` (not in devbox.json) or any repo-wide rule replay — so a renamed
-      metric, inverted polarity, or wrong constant in any of the ~27 alerts ships green. Two
-      per-file self-tests now exist as the pattern (exporter, spend-probe: read the COMMITTED
-      exprs, replay against fixtures). Next: decide promtool-in-devbox (one tool, real `for:`
-      + time-series semantics) vs. extending the self-test pattern per rule file; either becomes
-      a CI step. Not urgent — the two files with product-spend/agent-loop rules are covered.
+- [ ] **FU-158** — **PrometheusRule behaviour gates — promtool RULED + check-half SHIPPED
+      2026-08-11** (operator: promtool over more per-file self-tests; the pattern's third
+      instance — exporter, spend-probe, responder-behaviour-test — settled the ≥2 rule).
+      Shipped: `prometheus` (cli output) in devbox, `devbox run prometheus-rules-lint`
+      (spec.groups → `promtool check rules`, fail-on-nothing-validated; 8 files / 44 rules,
+      all parse) + the ci step. **Remaining:** the BEHAVIOUR half — `promtool test rules`
+      fixtures per rule file (`for:` + time-series semantics; a renamed metric still ships
+      green today), worker-queueable per file; start with the two spend/agent-loop files.
+      Origin: PR#220 findings + the #237 gate-miss (more evidence 2026-08-11).
 
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing:
       POINTER.** Mechanism, corpus audit (19-of-27), the shipped halves (resolve/dedup/dispatch,
@@ -497,10 +472,10 @@ the block needs pruning, not more headings.
       was FALSE — five latent lane bugs (guard read kubectl's stderr as pods; AWS_REGION;
       root-owned artifacts; whole-ledger 146KB brief > argv cap; tee ate cell death), the lane
       had NEVER run end-to-end; all fixed + hand-fired green, **first report DELIVERED**
-      (PR#246 merged; single-cell — cell-b mechanics = homelab#248). The belt caught it (first
-      firing = real). **Next:** 2026-08-17 = first UNATTENDED run; the report's 6 process
-      changes await the operator's filing word; then ledger emitter gaps, MCP slices (§B2).
-      Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      (PR#246 merged; single-cell — cell-b mechanics = homelab#248; belt's first firing = real).
+      **Next:** 2026-08-17 = first UNATTENDED run; process-change batch FILED + QUEUED
+      2026-08-11 (homelab#256-259, circles#77/#78, oracle-fleet#258); then ledger emitter
+      gaps, MCP slices (§B2). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
@@ -611,20 +586,13 @@ the block needs pruning, not more headings.
       flap storm** (`carrier_changes` 2→3778, no reboot, flat plug power) — the thinkcentre
       bad-cable class, NOT battery/power. **Next (operator, physical):** reseat/replace
       wk-metal-02's cable / switch port; evidence + counters on homelab#117.
-- [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes.** The FU-112(b)/FU-139
-      kubelet reservations changed who acts first but "reservations don't tune PSI" (FU-139
-      archive): wk-metal-03 (hardened 07-28) was hit again ~10 days later, wk-02 rebooted/reset
-      2026-08-07 — each burst = one Talos OOMController PSI fire killing 4-5 pods in one second,
-      surfacing as N PodSigkilled alerts + responder sessions (homelab#63/#65/#68/#101, all
-      closed as this class). **⚠ CADENCE PREMISE BROKEN 2026-08-08:** wk-metal-03 flapped ≥4
-      PSI-kill cycles in ~2.5h ONE afternoon (clear-stamps 15:18/16:54/16:59/17:10 across
-      #63/#65/#100) — not ~10-day; and the rate was only visible by hand-auditing comments,
-      smeared across 3 issues (no aggregation view; #148/#149 fix the comment side).
-      **Next:** research LANDED (#157/PR#160, 2026-08-08) → `docs/spikes/talos-psi-thresholds.md`
-      explains the burst mechanism; its ⚖ §5 recommends pinning the ephemeral tier to v1.13.8
-      first, alone, and re-measuring. The operator rules tune-vs-accept; run the spike's §6
+- [ ] **FU-155** — **PSI-stall shared-fate kills RECUR on hardened nodes: POINTER.** Burst
+      mechanism, evidence (incl. the broken ~10-day cadence premise — wk-metal-03 flapped ≥4
+      cycles in ~2.5h on 2026-08-08, only visible by hand-auditing comments across 3 issues)
+      and the ⚖ recommendation (pin the ephemeral tier to Talos v1.13.8 first, alone,
+      re-measure): [`docs/spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md)
+      (#157/PR#160). **Next:** operator rules tune-vs-accept; run the spike's §6
       `talosctl get oomactions` capture BEFORE any upgrade. Relates FU-139/FU-112, ADR-044.
-
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
