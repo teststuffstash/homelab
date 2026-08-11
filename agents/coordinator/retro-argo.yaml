@@ -91,9 +91,15 @@ spec:
               # fixer busy? (both cells hold the stack's WIP slot — refuse, don't contend).
               # Per-ns checks (the coordinator SA has pod-read in stack namespaces, not -A);
               # a FAILED check counts as busy, never as idle (rule #6).
+              # ⚠ stderr must NOT fold into $out: on zero matches kubectl exits 0 and prints
+              # "No resources found in <ns> namespace." to STDERR — a 2>&1 here made every
+              # EMPTY namespace read as busy, so the guard refused every fire since unsuspend
+              # (found 2026-08-11 via the RetroReportOverdue belt, homelab#237).
               BUSY=0
               for ns in $(python3 -c "import json; s=json.load(open('agents/stacks.json')); print(' '.join(r for st in s.get('stacks',[]) if st.get('name')=='${STACK}' for r in st.get('repos',[])))" 2>/dev/null); do
-                out=$(kubectl get pods -n "$ns" -l app=agent-session --no-headers 2>&1) || { echo "GUARD: pod check failed in $ns ($out) — treating as busy"; BUSY=1; }
+                if ! out=$(kubectl get pods -n "$ns" -l app=agent-session --no-headers 2>/tmp/guard-err); then
+                  echo "GUARD: pod check failed in $ns ($(cat /tmp/guard-err)) — treating as busy"; BUSY=1
+                fi
                 [ -n "$out" ] && BUSY=1
               done
               [ "$BUSY" -eq 0 ] || { echo "GUARD REFUSED: agent-session pod(s) running (or unverifiable) — retro would contend for the fixer WIP slot"; exit 1; }
