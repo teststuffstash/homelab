@@ -514,13 +514,14 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-163** — **A homelab glossary + vocabulary pruning — the docs are "stale by
       addition".** Terms coined informally, later reused as TYPES, now ungreppable: **goal**
-      (prose "goal" predates the ADR-102 Goal issue — "goal for research" ≠ a Goal; ~360 hits in
-      docs/agents/ alone, and the researcher's dispatch label is literally `goal`), **lens**
-      (FU-101 reviewer Lens vs prose "lens/viewpoint"), **canary** (scout model-canary vs the
-      FU-102 prober's "agentic canary"), plus class/pool/band arriving with §M13. **Next:**
-      create `docs/glossary.md` (term → one meaning → owning doc; each collision listed with its
-      ruled replacement), sweep informal usages, then extend the prior-art rule: a NEW name for
-      platform functionality must clear the glossary first — discipline, not just cleanup.
+      (prose "goal" predates ADR-102's Goal issue; ~360 hits in docs/agents/ alone, and the
+      researcher's dispatch label is literally `goal`), **lens** (FU-101 reviewer Lens vs prose
+      "lens"), **canary** (scout model-canary vs FU-102's "agentic canary"), class/pool/band
+      arriving with §M13, the **CF mint-root** (ONE credential, FOUR names: "Account admin" /
+      "admin token" / "Create Additional Tokens" / "Tier-0 mint-root" — 2026-08-11), and
+      operator vocabulary ("webservice" — pinned in CONTEXT.md until this lands). **Next:**
+      create `docs/glossary.md` (term → one meaning → owning doc, ruled replacements), sweep
+      informal usages, extend the prior-art rule (a NEW name clears the glossary first).
       **Consumers waiting (2026-08-10)**: `/design` term-closure; `docs-graph-lint` check #3.
       Relates FU-117 (same grow-then-refactor arc).
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
