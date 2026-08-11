@@ -57,6 +57,17 @@ verdicts that flank it — a refusal that names the limit, and a warn band that 
 ride. Over-eagerness is the usual failure of a size check, so "89% still dispatches" is pinned as
 behaviour rather than trusted to prose.
 
+`fixtures/retro-key-*` (homelab#270) shadow **`python3` itself** in the bridge — the seam pattern
+the responder pair uses for `curl`, applied to a helper the clause SHELLS OUT to rather than
+sources. `retro-session.sh` mints its cell's budget key by running `estimate_budget.py --emit-cr`,
+which prices against the live OpenRouter registry; the shadow appends `--price-per-mtok` and calls
+`command python3`, so the real estimator, the real tier choice and the real `emit_cr` rendering all
+stay under assertion and only the network leaves. Prefer this to stubbing the mint: the CR travels
+`kubectl apply -f -`, so its `budgetUSD` lands in the action stream as STDIN, and the thing most
+worth pinning about that clause is the number in it. The one field with no fixed value —
+`expiresAt`, now+4h — is `scrub:`bed to a shape rather than asserted, the same treatment
+`summary-comment-*` gives its clock.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

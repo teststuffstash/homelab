@@ -492,8 +492,15 @@ are freely mixable. Rotating cells run-over-run separates **harness effect from 
 the FU-057 ledger axes — which doubles as FU-095(b) evidence. Repo scope for the retro token = the
 stack jail's REPOS boundary (`tools/stack-jail.sh`: oracle-fleet, oracle-iac,
 allure-behavior-snippets), read-only, App-minted. Standing guardrails: outside the fixer ns / WIP
-slot (the P3 constraint), $0.05 key floor, `GOOSE_MAX_TOKENS=16384`, reports land in
-`docs/agents/retros/` via PR.
+slot (the P3 constraint), `GOOSE_MAX_TOKENS=16384`, reports land in `docs/agents/retros/` via PR,
+and **each OpenRouter cell rides an ephemeral key it mints itself** — `retro-session.sh` applies an
+`xs`/$0.25 `OpenRouterKey` per (run, cell) and refuses the ride if the operator does not stamp it
+(homelab#270). The cap is the lane's own measurement (an audit-tier cell costs $0.02–0.08, table
+above) × the estimator's ×2.0 buffer, not `estimate_budget.py`'s band — that band models a fixer
+round and sizes a retro brief at ~$0.54/tier `lg`, which would cap nothing. The `$0.05 key floor`
+run 1 taught is subsumed: $0.25 is the smallest tier there is. Before #270 the key was an operator
+step with a warning behind it, and the ride fell back to the stack FIXER's standing budget key —
+which is what run 3's dead cell-b spent 8 seconds of a provider retry against (homelab#248).
 
 ## Rollout
 

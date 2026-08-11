@@ -1,0 +1,37 @@
+# homelab#270 — the retro cell mints its OWN capped key, and the fixer's standing key is not a
+# fallback for it.
+#
+# CONDITION UNDER REPLAY. A scheduled `goose` cell, `retroKeySecret` empty (the cron's default), so
+# nothing upstream set RETRO_OPENROUTER_SECRET. Before #270 this branch printed a warning and rode
+# on `oracle-fleet-openrouter` — the stack FIXER's standing budget key — which is how run 3's
+# cell-b (kpg42, 2026-08-11) charged 8 seconds of a dead provider retry against the fixer's cap.
+#
+# THE CONTRACT, in the order the stream asserts it:
+#   1. The CR is DELETED before it is applied. Re-minting an existing name takes the operator's
+#      PATCH path and OpenRouter's PATCH cannot extend a key's real expires_at
+#      (openrouter-operator#6) — a re-fired cell would inherit a key that dies mid-ride.
+#   2. The applied CR is `budgetUSD: 0.25` — the xs tier, forced. This is the assertion that would
+#      catch the estimator's fixer-shaped band (~$0.54 → tier lg/$2.00) silently sizing this lane.
+#      It arrives on STDIN because the clause applies with `-f -`, which is what makes the cap
+#      itself part of the action stream rather than a claim in a comment.
+#   3. `secretName` carries the `-session-` infix and is read out of the CR, never rebuilt from
+#      metadata.name — rebuilding it is the documented way to crash-loop a worker on
+#      "secret not found" (coordinator README §step 5).
+#   4. The clause WAITS on `.status.openrouter.hash` before handing off. The identity has no
+#      Secret-value access, so the CR's status is the only "the key exists" signal there is.
+#   5. The hand-off carries `--openrouter-secret <that Secret>` (post.sh) — the point of all of it.
+#
+# ONE SEAM: `python3`, shadowed in the bridge to pin the PRICE (--price-per-mtok). The real
+# estimate_budget.py still runs, so the CR asserted here is emit_cr's true rendering; what the seam
+# removes is the live registry fetch, which no fixture may depend on.
+name: retro-key-minted
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-session-key
+  - file:post.sh
+scrub:
+  # `expiresAt` is now+4h by construction. The TTL is asserted by its presence and shape, not by a
+  # wall-clock value that would red this fixture one second after it was recorded.
+  - s#^STDIN   expiresAt: ".*"$#STDIN   expiresAt: "<now+4h>"#
