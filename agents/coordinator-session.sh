@@ -228,6 +228,58 @@ if ! SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh"; then
   exit 0
 fi
 
+# ── DISPATCH PHASE TIMINGS — the coordinator's own two rows (FU-160, homelab#319) ───────────────
+# The other half of `agent_dispatch_phase_seconds`; the design note (own metric name, per-stack
+# (project, role) group, why NOT the launcher's family) is in agents/coordinator-scan.sh beside its
+# `>>>REPLAY:dispatch-phase>>>` block and is not restated here. What is specific to this side:
+#
+#   coordinator-spinup    `apply` → `condition=Ready`: schedule + image pull + container start.
+#                         51s in the spike's specimen — the single biggest line in the dispatch
+#                         chain, and the one nobody could attribute after the fact.
+#   coordinator-session   Ready → the log stream ends: the whole headless tick as ONE number.
+#
+# THE FAMILY IS RE-PUSHED WHOLE, for the launcher's reason (homelab#287): the pushgateway replaces
+# per metric NAME within a group, so a push carrying only `coordinator-session` would DELETE the
+# `coordinator-spinup` series pushed a minute earlier and every dispatch would end holding exactly
+# one number. Accumulating also means a tick that dies mid-flight leaves the phase it did complete.
+#
+# A SEPARATE GROUP from the scan's (`role=coordinator` vs `role=coordinator-scan`) — same reason:
+# two processes pushing one metric name into one group means one of them silently wins.
+# >>>REPLAY:dispatch-phase-session>>>
+CS_PHASE_PGW="${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+CS_PHASE_FAMILY=""      # every phase closed so far, in exposition format — re-pushed as one family
+CS_PHASE_WARNED=""
+cs_now() { date -u +%s; }     # replay seam: the wall clock
+CS_PHASE_MARK="$(cs_now)"
+cs_phase_arm() { CS_PHASE_MARK="$(cs_now)"; }   # open the first phase where the pod is asked for
+cs_phase() {   # $1 = coordinator-spinup | coordinator-session — close the open phase and publish
+  local phase="${1:-}" now
+  case "$phase" in
+    coordinator-spinup|coordinator-session) ;;
+    *) echo "cs_phase: unknown phase '${phase}' — nothing pushed" >&2; return 0 ;;
+  esac
+  now="$(cs_now)"
+  CS_PHASE_FAMILY="${CS_PHASE_FAMILY}agent_dispatch_phase_seconds{phase=\"${phase}\"} $(( now - CS_PHASE_MARK ))
+"
+  CS_PHASE_MARK="$now"
+  # No gateway (explicitly disabled) or no project to key on → the clock still advances, nothing is
+  # published. Best-effort by construction: a tick that deferred because a metrics sink was down
+  # would be a strictly worse bug than the invisibility this metric exists to fix.
+  [ -n "$CS_PHASE_PGW" ] && [ -n "$MAIN_REPO" ] || return 0
+  printf '%s\n%s\n%s' \
+    "# TYPE agent_dispatch_phase_seconds gauge" \
+    "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \
+    "$CS_PHASE_FAMILY" \
+    | curl -fsS --max-time 5 --data-binary @- \
+        "${CS_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${MAIN_REPO}/role/coordinator" >/dev/null 2>&1 \
+    || { [ -n "$CS_PHASE_WARNED" ] \
+           || echo "cs_phase: pushgateway unreachable (${CS_PHASE_PGW}) — the tick is unaffected; this dispatch contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)" >&2
+         CS_PHASE_WARNED=1; }
+  return 0
+}
+# <<<REPLAY:dispatch-phase-session<<<
+cs_phase_arm   # spin-up opens HERE: the FU-088 latch above may exit without a pod ever existing
+
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
 apiVersion: v1
 kind: Pod
@@ -345,6 +397,9 @@ EOF
 
 echo "→ waiting for ${POD} (clone)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=180s || true
+# FU-160: `|| true` above is load-bearing for this row too — a pod that never went Ready still
+# spent that time, and a timed-out wait must publish the number rather than lose it.
+cs_phase coordinator-spinup
 
 # Interactive sessions: the pod stays up (sleep infinity), so when THIS launcher exits (user left
 # claude / detached), exec the upload function in the pod. Headless pods upload in-pod instead —
@@ -361,6 +416,9 @@ fi
 
 if [ -n "$RUN_CMD" ]; then
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
+  # FU-160: the headless tick as one number. Only this branch closes it — an interactive session is
+  # driven by a human at a terminal, so "how long did it take" is not a platform latency at all.
+  cs_phase coordinator-session
   echo "→ pass finished. delete with: kubectl -n ${NS} delete pod ${POD}"
   # ── Doorbell on unit completion (2026-08-05) ────────────────────────────────────────────────
   # A finishing RIDE has rung /coordinate since FU-085; a finishing COORDINATOR never did, so every

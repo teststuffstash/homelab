@@ -1,0 +1,43 @@
+CALL kubectl -n circles-agents get workflow coordinate-circles-1 -o json
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="scan"} 30
+CALL kubectl -n circles-agents get workflow coordinate-circles-1 -o json
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="ring-to-scan"} 20
+STDIN agent_dispatch_phase_seconds{phase="scan"} 10
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/oracle-fleet/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="ring-to-scan"} 20
+STDIN agent_dispatch_phase_seconds{phase="scan"} 60
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="ring-to-scan"} 20
+STDIN agent_dispatch_phase_seconds{phase="scan"} 20
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_dispatch_phase/project/circles/role/coordinator-scan
+STDIN # TYPE agent_dispatch_phase_seconds gauge
+STDIN # HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160).
+STDIN agent_dispatch_phase_seconds{phase="ring-to-scan"} 20
+STDIN agent_dispatch_phase_seconds{phase="scan"} 2
+OUT REACHED: the Workflow is unreadable — the ring row is absent, the scan row still ships
+OUT RETURN 0
+OUT REACHED: the ring edge is readable
+OUT RETURN 0
+OUT REACHED: a second dispatch, a different stack
+OUT RETURN 0
+OUT REACHED: no project
+OUT RETURN 0
+OUT REACHED: gateway disabled
+OUT RETURN 0
+OUT REACHED: gateway refuses the push
+OUT RETURN 0
+OUT REACHED: gateway refuses again — latched, no second warning
+OUT RETURN 0
+OUT REACHED: end
+ERR dispatch_phase: pushgateway unreachable (http://prometheus-pushgateway.monitoring.svc.cluster.local:9091) — dispatch unaffected; this scan contributes no agent_dispatch_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)
+RC 0

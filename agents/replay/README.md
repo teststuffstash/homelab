@@ -153,6 +153,31 @@ the reason it is worth reading rather than copied from its twin:
   green on exactly that bug, and it would surface as a dashboard that had quietly only ever shown
   `bookkeeping`.
 
+`fixtures/dispatch-phase-scan` + `fixtures/dispatch-phase-session` (FU-160, homelab#319) are the
+ninth family and the second **pair split across two files**: `agent_dispatch_phase_seconds` is
+emitted by two processes — the scan (`ring-to-scan`, `scan`) and the launcher it invokes
+(`coordinator-spinup`, `coordinator-session`) — and a fixture takes one `source:`, so the two
+halves are two fixtures that must be read together. Three things worth copying:
+
+- **Don't shadow a seam the harness already has a stub for.** The ring edge is read off the scan's
+  own Argo Workflow object, and the bridge leaves `dp_ring` ALONE: the call goes through the
+  PATH-shim `kubectl`, so `get workflow <pod> -o json` lands in the action stream and the
+  `creationTimestamp` → epoch conversion stays real arithmetic over a recorded payload. Shadowing
+  it would have pinned the branching and nothing about which object the clause actually reads.
+  `STUB_KUBECTL=fail` then buys the degenerate leg for free — no RBAC, no Argo, a jail run — and
+  the fixture pins that the ring ROW disappears while the scan row still ships, and that the failed
+  probe is retried at the next dispatch rather than latched off.
+- **Two marks red-case differently, so give them different legs.** `scan` measures from the
+  previous dispatch; `ring-to-scan` measures to the pod's start and therefore repeats unchanged at
+  a second dispatch. Only the third leg (a second dispatch, a different stack) can tell those apart
+  — collapse the two marks into one and every other leg stays green.
+- **A payload the gateway would reject is not a green.** The session bridge resets its accumulator
+  before the two refusal legs so each family carries every phase exactly once: two samples with
+  identical labels in one body is a rejected push (prometheus/pushgateway#232), and the first draft
+  of this fixture asserted one. The same run caught the shipped bug worth having a fixture for at
+  all — a single-shot family that was not newline-TERMINATED, i.e. a body that would have 400'd on
+  every real dispatch while every unit-level reading of the code said it was fine.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

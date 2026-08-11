@@ -121,6 +121,19 @@ spec:
         #   (3) A 60s FLOOR on the recent median. `dispatch-gates` and `bookkeeping` are seconds
         #       long, so a 3s→7s wobble is a 2.3× ratio and means nothing. The floor keeps this
         #       alert about phases that got slow in a way a human would notice.
+        # THE DISPATCH ROWS ABOVE THE LAUNCHER ARE NOT IN HERE, and that is a decision rather than
+        # an omission (FU-160 coordinator half, homelab#319). They are a SEPARATE metric family,
+        # `agent_dispatch_phase_seconds{phase=ring-to-scan|scan|coordinator-spinup|coordinator-
+        # session}` pushed by agents/coordinator-scan.sh and agents/coordinator-session.sh, and
+        # every guard below would misfire on them: their group is keyed (project, role) with one
+        # group per STACK, overwritten at the next dispatch — so there is no older half to be a
+        # baseline and no ≥3 fresh RIDES to count, and three of the four rows are seconds long,
+        # i.e. under the 60s floor by design. Extending this expr to cover them would produce an
+        # alert that is silent for a structural reason while LOOKING like coverage, which is worse
+        # than the honest gap. What they get instead is the `Dispatch phase breakdown` panel on the
+        # `agent-issue` dashboard; alerting them needs a per-dispatch history this deliberately
+        # does not keep (the pushgateway serves every group forever — a per-dispatch key leaks one
+        # group per ride).
         # ⚠ FAILS SILENT BY CONSTRUCTION, and that is the accepted trade: no older half (a fresh
         # pushgateway — the store is an emptyDir + persistence file, so a reschedule empties it)
         # means an empty right-hand vector and no alert until history rebuilds. An observability

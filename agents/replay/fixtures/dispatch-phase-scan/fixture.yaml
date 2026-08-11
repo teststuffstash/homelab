@@ -1,0 +1,43 @@
+# FU-160 / homelab#319 — the SCAN half of the dispatch rows above the launcher.
+#
+# CONDITION UNDER REPLAY. One scan pod (`coordinate-circles-1` in `circles-agents`) reaches a
+# dispatch four times over: with its own Workflow object unreadable, with it readable, a SECOND
+# dispatch in the same scan, and then the paths that must never cost a dispatch — no project to
+# key on, a disabled gateway, and a gateway that refuses the push twice.
+#
+# THE CONTRACT:
+#   1. ITS OWN METRIC NAME AND JOB (`agent_dispatch_phase_seconds`, `job/agent_dispatch_phase`),
+#      grouped `project/<stack main repo>/role/coordinator-scan` — asserted in the URL. The
+#      launcher's family is per-RIDE and keyed (project, issue, round, role); these rows are per
+#      STACK and the scan has no issue yet when it runs. Sharing a name would also mean a third
+#      HELP string for one metric name, and sharing a GROUP with coordinator-session.sh's rows
+#      would mean one emitter's POST silently deleting the other's.
+#   2. THE RING ROW IS OPTIONAL, THE SCAN ROW IS NOT. The ring edge is read off this scan's own
+#      Workflow object (`creationTimestamp`), through the real `dp_ring` and the PATH-shim
+#      `kubectl` — not a shadowed seam, because "which object, read how" is the part worth pinning.
+#      When that read fails (no RBAC, no Argo, a jail run) the row is ABSENT and the push still
+#      happens; a probe that failed once is retried at the next dispatch rather than latched off.
+#   3. TWO MARKS, NOT ONE. `scan` measures from the previous dispatch (or the pod's start), so a
+#      second dispatch cannot bill itself for the first one's streamed session; `ring-to-scan`
+#      measures to T0 — the POD's start — and therefore reports the SAME value at both dispatches.
+#      Collapse them into one mark and leg 3 goes red, which is the only place that bug shows.
+#   4. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED (legs 4 and 5 land between real ones and the
+#      durations stay honest), and every degenerate path RETURNs 0 with the unreachable-gateway
+#      warning LATCHED to one line. A scan that deferred a dispatch because a metrics sink was
+#      down would be a strictly worse bug than the invisibility this metric exists to fix.
+#
+# The clock is the bridge's (`dp_now`) and the transport is the bridge's (`curl`) — the seam
+# pattern of `scan-phase-marker` and `run-phase-metric`. Everything between them is the shipped
+# block. `world/kubectl/get-workflow.json` is trimmed to the one field the clause reads.
+name: dispatch-phase-scan
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:dispatch-phase
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_POD=coordinate-circles-1
+  - SCAN_PHASE_NS=circles-agents
+  - KUBECTL=kubectl
+  - KUBE=
