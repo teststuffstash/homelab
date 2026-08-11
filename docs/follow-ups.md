@@ -292,16 +292,15 @@ the block needs pruning, not more headings.
       agent-coordinator#10, oracle-fleet#173); labels exist on all -iac repos. **Next:** port
       `gh pr edit --add-label automerge --add-label dependencies` into sleep-tracking, circles,
       snore-recorder deploy workflows. Relates [`dependency-upgrades.md`](dependency-upgrades.md) §2.
-- [ ] **FU-152** — **One version file for the agent-coordinator image, so the bump touches ONE path.**
-      The deploy-pin `git grep`s and sweeps **8** manifests under `agents/coordinator/`, so it grows
-      silently as manifests are added and CODEOWNERS must carve out each one. homelab#113 shows both
-      failure modes at once: structurally red (it bumps `reflexes-argo.yaml`, carved out only for
-      arc-runner pins, so `pin-only-lint` rejects the tag) AND unmergeable (7 swept files are owned).
-      **Operator design, better than extending the lint:** hold the tag in ONE file the manifests
-      take it from — mechanically a kustomize `images:` transformer, converting `agents/coordinator`
-      from a plain directory app (no precedent here yet). One file bumped, one carve-out, no regex.
-      ⚠ `argocd/resources/agentstack/composition.yaml` holds the literal too, different app.
-      **Next:** convert the app + move the pin, then drop the extra carve-outs.
+- [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
+      SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
+      `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,
+      the single CODEOWNERS carve-out is in place). **Remaining residue:** the composition
+      (`argocd/resources/agentstack/composition.yaml`, 2 sites) still carries the literal — a
+      different app that kustomize cannot reach, so each coordinator bump sweeps one OWNED file
+      and parks on a codeowner click. Needs a small design (feed the composition the tag) before
+      building — NOT an FU-165 goal child for that reason. **Next:** design the composition-side
+      feed, or accept the one-click cost and archive.
 - [ ] **FU-153** — **in-pod CI and in-CI CI disagree under kind, and no lever says which is right.**
       circles#19 r2 reported `ci_passed: true` from the ride; Actions failed the SAME gate twice
       (`HTTP 000000`, 4 assertions). Not a missing capability — the claim carries
