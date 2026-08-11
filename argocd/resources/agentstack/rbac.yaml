@@ -26,6 +26,12 @@ rules:
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
     verbs: [get, list, watch, create, update, patch, delete] # get/list = loop-Role mirror; write = FU-080 loop transcripts PVC compose
+  # FU-140 crash-net: the Composition composes a per-loop-ns CronJob (PR#294) — every kind the
+  # Composition renders must be granted here (this header's own rule; missed at merge, caught by
+  # the closeout: all four claims Synced=False on "cannot patch cronjobs", homelab#286).
+  - apiGroups: [batch]
+    resources: [cronjobs, cronjobs/status]
+    verbs: [get, list, watch, create, update, patch, delete]
   - apiGroups: [cilium.io]
     resources: [ciliumnetworkpolicies, ciliumnetworkpolicies/status]
     verbs: [get, list, watch, create, update, patch, delete]
