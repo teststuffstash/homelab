@@ -36,12 +36,12 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **THE FU BUILD-OUT BLITZ** (operator directive 2026-08-11: designed-but-unbuilt platform
-   FUs are cheaper to build than running another stack through the gaps). **Run it as the
-   FU-165 pilot Goal**: one `task/goal` issue "platform FU build-out", `Budget:` line,
-   children per cluster (known gap, note on the goal: subscription rides sum $0 in
-   goal-budget). **LAUNCH GATE (2026-08-11 midday): the queued regular lane (#242/#248/#249/
-   #252/#253/#256-259) must drain first — the two mechanisms never fight on the pilot.**
+4. **THE FU BUILD-OUT BLITZ — the goal is AUTHORED: homelab#278** (unqueued, operator reviewing;
+   full decomposition + rulings + the master-lane/no-assembly deviation recorded in its body).
+   **Launch = after operator sign-off AND the queued lane (#268/#269 remaining) drains**: the
+   meta seat authors the children as native sub-issues per the body's list, queues them, puts
+   #278 straight into the tracking state (agent/blocked + comment) — NEVER agent/queued (the
+   cluster decompose clause must not fire).
    **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
    with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
    goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
