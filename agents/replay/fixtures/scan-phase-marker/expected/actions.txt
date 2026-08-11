@@ -1,0 +1,35 @@
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_scan_phase/namespace/circles-agents
+STDIN # TYPE agent_scan_phase_start_timestamp gauge
+STDIN # HELP agent_scan_phase_start_timestamp Unix epoch at which this coordinate scan entered its current phase.
+STDIN agent_scan_phase_start_timestamp{pod="coordinate-circles-1"} 1786464900
+STDIN # TYPE agent_scan_in_deterministic gauge
+STDIN # HELP agent_scan_in_deterministic 1 = running the deterministic pass; 0 = blocked streaming a dispatched session.
+STDIN agent_scan_in_deterministic{pod="coordinate-circles-1"} 0
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_scan_phase/namespace/circles-agents
+STDIN # TYPE agent_scan_phase_start_timestamp gauge
+STDIN # HELP agent_scan_phase_start_timestamp Unix epoch at which this coordinate scan entered its current phase.
+STDIN agent_scan_phase_start_timestamp{pod="coordinate-circles-1"} 1786464900
+STDIN # TYPE agent_scan_in_deterministic gauge
+STDIN # HELP agent_scan_in_deterministic 1 = running the deterministic pass; 0 = blocked streaming a dispatched session.
+STDIN agent_scan_in_deterministic{pod="coordinate-circles-1"} 1
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_scan_phase/namespace/circles-agents
+STDIN # TYPE agent_scan_phase_start_timestamp gauge
+STDIN # HELP agent_scan_phase_start_timestamp Unix epoch at which this coordinate scan entered its current phase.
+STDIN agent_scan_phase_start_timestamp{pod="coordinate-circles-1"} 1786464900
+STDIN # TYPE agent_scan_in_deterministic gauge
+STDIN # HELP agent_scan_in_deterministic 1 = running the deterministic pass; 0 = blocked streaming a dispatched session.
+STDIN agent_scan_in_deterministic{pod="coordinate-circles-1"} 0
+OUT REACHED: dispatch transition
+OUT RETURN 0
+OUT REACHED: back in the deterministic pass
+OUT RETURN 0
+OUT REACHED: unknown phase
+OUT RETURN 0
+OUT REACHED: gateway disabled
+OUT RETURN 0
+OUT REACHED: gateway refuses the push
+OUT RETURN 0
+OUT REACHED: end
+ERR scan_phase: unknown phase 'sideways' — nothing pushed
+ERR scan_phase: pushgateway unreachable (http://prometheus-pushgateway.monitoring.svc.cluster.local:9091) — dispatch unaffected; AgentCoordinateScanWedged falls back to pod lifetime for this scan
+RC 0

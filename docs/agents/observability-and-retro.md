@@ -247,6 +247,18 @@ worker or a reviewer is ⚙ no matter how quiet the logs are — the ⏳ column 
   from the pod's lifetime before the blocking `logs -f` was found, and it is wrong: the cause is
   lane-independent. ⚠ The p99=302s / 1-in-2474 calibration behind `fc7e9fb` measured lifetimes
   from before the alert existed; it is not evidence that long scans are rare.
+  **SHIPPED 2026-08-11 (homelab#283).** `coordinator-scan.sh` publishes the phase it is in —
+  `scan_phase dispatch` immediately before each `coordinator-session.sh` call and
+  `scan_phase deterministic` on the way back — as two pushgateway gauges
+  (`agent_scan_phase_start_timestamp`, `agent_scan_in_deterministic`; job `agent_scan_phase`,
+  grouped by NAMESPACE with the pod as a metric label, so a group cannot leak per scan and the
+  `coordinator-scan` mutex is what keeps one writer per namespace). The alert became two branches:
+  no marker → pod lifetime, which is still exactly right *because* the phase has not ended yet and
+  is the branch that catches a wedge dying before the script runs (the 2026-08-05 clone shape);
+  marker saying deterministic → the clock restarts at the phase, never at the pod. The threshold
+  stays 900s — the subject moved, not the calibration. Behaviour is pinned as an executed replay
+  (`agents/scan-wedge-alert-test.sh` + `agents/replay/fixtures/scan-{wedge-alert,phase-marker}`),
+  which reds on the pre-#283 expr; the two remedies above stayed ruled out.
   **Second symptom of the SAME cause, and the more consequential one (2026-08-06):** the
   `coordinate-<stack>` CronWorkflow is `concurrencyPolicy: Forbid`, so a long-lived scan pod
   SUPPRESSES the cron tick. Measured: `lastScheduled=09:00:00Z` produced no pod, because

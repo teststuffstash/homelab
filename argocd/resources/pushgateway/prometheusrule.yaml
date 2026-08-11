@@ -153,11 +153,51 @@ spec:
         # 1 legitimate run in 2474 exceeds it) and let the 1800s deadline stay the containment behind it.
         # Verified against the incident's own history (fires on coordinate-perstack-lvsmt, 12:48-13:12)
         # and against the preceding 7 days (fires on NOTHING else — zero false positives).
+        #
+        # ── RE-KEYED ON THE SCAN PHASE (FU-145, homelab#283) ────────────────────────────────────
+        # The 900s threshold above is measured and stays; the SUBJECT is what was wrong. Pod lifetime
+        # is not scan duration: the moment the scan dispatches, `coordinator-session.sh` streams the
+        # item session synchronously (verified live inside `coordinator-081840`: PID 512 =
+        # `kubectl logs -f agent-circles-issue-30-r1`), so any healthy ride >15m fired this alert, on
+        # every stack — twice in one hour on 2026-08-06, two false issues minted (#120, #134).
+        # `agents/coordinator-scan.sh` now pushes the phase it is in (`scan_phase`, pushgateway job
+        # `agent_scan_phase`, grouped by namespace with the pod as a metric label), and the two
+        # branches below are the same question asked of a phase instead of a pod:
+        #   (1) NO MARKER — the scan has not reached its first dispatch, so pod lifetime IS the
+        #       deterministic phase's duration. This is the branch that catches the 2026-08-05 shape
+        #       (homelab#103: zero log bytes, stuck in `git clone`, holding the mutex with twins
+        #       Pending) and every wedge that dies before the script can push anything.
+        #   (2) MARKER SAYS DETERMINISTIC — the scan came back from a dispatch and wedged in the
+        #       deterministic pass afterwards. The clock restarts at the phase, never at the pod.
+        # A pod whose marker says `in_deterministic 0` is streaming a ride: that is WORK, and it is
+        # bounded by the workflow's `activeDeadlineSeconds: 1800`, not by this alert.
+        # ⚠ NOT covered, same cause, different defect: a long-lived scan pod also suppresses the
+        # `concurrencyPolicy: Forbid` cron tick, so the level-triggered backstop is disabled exactly
+        # while a ride is in flight. Re-keying the alert does not touch that half — the pod really is
+        # alive (§Part A″, still open).
+        # Behaviour is pinned as an executed test, not as prose: `agents/scan-wedge-alert-test.sh`
+        # (registered as a clause-replay fixture) extracts THIS expr and replays the 2026-08-06
+        # healthy-ride shape against it plus both wedge shapes.
         - alert: AgentCoordinateScanWedged
-          expr: (time() - kube_pod_start_time{pod=~"coordinate-.*"}) > 900 and on(namespace,pod) kube_pod_status_phase{phase="Running"} == 1
+          expr: |
+            (
+                (time() - kube_pod_start_time{pod=~"coordinate-.*"}) > 900
+              and on(namespace,pod)
+                kube_pod_status_phase{phase="Running"} == 1
+              unless on(pod)
+                agent_scan_phase_start_timestamp
+            )
+            or
+            (
+                (time() - agent_scan_phase_start_timestamp) > 900
+              and on(pod)
+                agent_scan_in_deterministic == 1
+              and on(pod)
+                kube_pod_status_phase{phase="Running"} == 1
+            )
           for: 2m
           labels:
             severity: warning
           annotations:
-            summary: "coordinate scan {{ $labels.pod }} has run >15m in {{ $labels.namespace }} (p99 is 5m)"
-            description: "{{ $labels.pod }} has been Running over 15 minutes. ⚠ KNOWN FALSE-POSITIVE CLASS (FU-145, minted #120+#134): the rule keys on POD LIFETIME, and an ITEM-mode coordinate pod runs a buffered `claude -p` session — 15-25m of total log silence IS the healthy signature, so comparing `kubectl logs` over time cannot distinguish wedged from busy. Before anything else read the pod's last log lines: an item unit (e.g. `--item issue-N`, merged-closeout) that reached its clones is almost certainly a healthy ride — wait for its issue comment/PR instead. A real wedge (the 2026-08-05 shape) dies EARLY: zero or near-zero log bytes, stuck before/inside the clone, holding the `coordinator-scan` mutex with twins Pending behind it (`kubectl -n {{ $labels.namespace }} get wf`). Only then: delete the workflow + queued twins so the next cron tick takes the lock; `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). Real fix = re-key on the deterministic scan phase (FU-145)."
+            summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
+            description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last."

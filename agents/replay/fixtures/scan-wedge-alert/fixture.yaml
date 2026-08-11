@@ -1,0 +1,21 @@
+# FU-145 / homelab#283 — the ALERT half of the scan-phase re-key, registered so the one entry
+# point (`bash agents/replay/run.sh`) runs it.
+#
+# mode: suite — the subject is a PromQL expr, not an action stream, so the assertions are
+# `promtool test rules` replays rather than recorded `gh`/`kubectl` calls. The suite reads the expr
+# OUT of argocd/resources/pushgateway/prometheusrule.yaml at run time (never a transcription, #166)
+# and replays four shapes against it: the 2026-08-06 healthy 18m ride that the OLD pod-lifetime key
+# fired on twice, the 2026-08-05 wedge that pushed nothing at all, a wedge that starts AFTER a
+# dispatch comes back, and a marker outliving its pod.
+#
+# Its sibling `scan-phase-marker` pins the other half — that the scan actually pushes the series
+# this expr reads. Neither is sufficient alone: an expr replayed against series nobody emits is a
+# fixture asserting its own fiction, and an emitter with no expr behind it is a metric nobody reads.
+#
+# ⚠ It needs `promtool` and `yq` — present in devbox.json, so `devbox run clause-replay` (CI) has
+# them and a bare `bash agents/replay/run.sh` outside devbox does not. The suite exits 2 with the
+# tool name rather than skipping: a replay that quietly does nothing is the failure class this
+# whole tree exists against.
+name: scan-wedge-alert
+mode: suite
+entrypoint: agents/scan-wedge-alert-test.sh
