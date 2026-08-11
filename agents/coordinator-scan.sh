@@ -342,10 +342,13 @@ dp_ring() {
   raw="$("$KUBECTL" $KUBE -n "$DISPATCH_PHASE_NS" get workflow "$DISPATCH_PHASE_POD" -o json 2>/dev/null)" || return 0
   printf '%s' "$raw" | jq -r '(.metadata.creationTimestamp // "") | select(. != "") | fromdateiso8601' 2>/dev/null || true
 }
-# `SECONDS` is bash's own count since this shell started, so the mark is the SCRIPT's start rather
-# than this line: the janitor and the guarded-set read above are part of the deterministic pass and
-# belong inside the number.
-DISPATCH_PHASE_MARK="$(( $(dp_now) - SECONDS ))"
+# TWO marks, and conflating them is the bug this comment exists to prevent. `SECONDS` is bash's own
+# count since this shell started, so T0 is the SCRIPT's start rather than this line — the janitor
+# and the guarded-set read above are part of the deterministic pass and belong inside the number.
+# T0 is the RIGHT edge of the ring row and never moves; MARK is the left edge of the open `scan`
+# segment and moves at every dispatch (see below).
+DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
+DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
 dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side rows, at a dispatch
   local project="${1:-}" now ring family=""
   now="$(dp_now)"
@@ -359,7 +362,10 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side 
   [ -n "$DISPATCH_PHASE_PGW" ] && [ -n "$project" ] || return 0
   [ -n "$DISPATCH_PHASE_RING" ] || DISPATCH_PHASE_RING="$(dp_ring)"
   if [ -n "$DISPATCH_PHASE_RING" ]; then
-    ring=$(( DISPATCH_PHASE_MARK - DISPATCH_PHASE_RING ))
+    # T0, NOT the moving mark: this row is "how long from the doorbell until the scan pod was
+    # running", a property of the POD. Measuring it to the mark instead would make a second
+    # dispatch report the ring as having happened one whole session earlier than it did.
+    ring=$(( DISPATCH_PHASE_T0 - DISPATCH_PHASE_RING ))
     # A ring AFTER the pod started is a clock disagreement, not a negative duration. Clamp: a
     # gauge that goes negative is the AgentRunNegativeCost class, and it is never informative.
     [ "$ring" -ge 0 ] || ring=0
@@ -368,7 +374,11 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side 
   fi
   # Both rows ride ONE POST, so unlike the launcher's family there is nothing to accumulate — the
   # push that carries `scan` carries `ring-to-scan` beside it or the row does not exist at all.
-  family="${family}agent_dispatch_phase_seconds{phase=\"scan\"} ${scan}"
+  # NEWLINE-TERMINATED, and that is not cosmetic: the exposition format is line-oriented and a body
+  # whose last sample has no trailing newline is a parse error, so the whole push would 400. The
+  # launcher's accumulator gets this for free by appending; a single-shot family has to say it.
+  family="${family}agent_dispatch_phase_seconds{phase=\"scan\"} ${scan}
+"
   printf '%s\n%s\n%s' \
     "# TYPE agent_dispatch_phase_seconds gauge" \
     "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \

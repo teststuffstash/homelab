@@ -1,0 +1,42 @@
+# FU-160 / homelab#319 — the COORDINATOR-SESSION half of the dispatch rows above the launcher.
+#
+# CONDITION UNDER REPLAY. One headless item tick for the `circles` stack walks its two phases in
+# order — `apply` → `condition=Ready`, then Ready → the log stream ending — and then a second
+# launcher process walks the paths that must never cost a dispatch: an unknown phase, no project
+# to key on, a disabled gateway, and a gateway that refuses the push twice.
+#
+# THE CONTRACT:
+#   1. THE FAMILY IS RE-PUSHED WHOLE. The pushgateway replaces per metric NAME within a group, so a
+#      push carrying only `coordinator-session` would DELETE the `coordinator-spinup` series pushed
+#      a minute earlier and every dispatch would end holding exactly one number. The growing STDIN
+#      block below is that rule as an assertion — the launcher half (`run-phase-metric`) pins the
+#      same rule for the same reason, and drop the accumulator and BOTH go red on push #2.
+#   2. A SEPARATE GROUP FROM THE SCAN'S — `…/job/agent_dispatch_phase/project/<main repo>/role/
+#      coordinator`, asserted in the URL, where agents/coordinator-scan.sh pushes
+#      `role=coordinator-scan`. Two processes, two groups: share one and the second POST silently
+#      deletes the first's rows. `project` is the stack's MAIN repo (FU-061's convention), which is
+#      also what makes the scan-side and session-side rows of one dispatch join.
+#   3. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED. The task-less and gateway-less calls land
+#      between real ones and the durations stay honest, so a run with no sink cannot fold two
+#      phases into one number for whoever calls next.
+#   4. Every degenerate path RETURNs 0 and the unreachable-gateway warning is LATCHED to one line.
+#      A tick that deferred because a metrics sink was down would be a strictly worse bug than the
+#      invisibility this metric exists to fix, and a line per dispatch is the noise floor that hid
+#      a spinning Sensor for ~50 minutes (homelab#103).
+#
+# `cs_phase_arm` is composed and called here rather than shadowed: opening the spin-up segment at
+# the `apply` — NOT at the launcher's start, which the FU-088 subscription latch can exit from
+# without any pod ever existing — is behaviour, not setup.
+#
+# The clock is the bridge's (`cs_now`, pinned PER CALL because the clause reads it inside a command
+# substitution) and the transport is the bridge's (`curl`). Everything between them is the shipped
+# block.
+name: dispatch-phase-session
+mode: actions
+source: agents/coordinator-session.sh
+parts:
+  - block:dispatch-phase-session
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - MAIN_REPO=circles
