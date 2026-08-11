@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"data\": {\"id\": \"newco/spark:free\", \"benchmarks\": {\"artificial-analysis\": {\"intelligence_index\": 41, \"coding_index\": 39, \"agentic_index\": 35}}}}"
+      }
+    ]
+  }
+}

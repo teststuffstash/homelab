@@ -1,0 +1,10 @@
+CALL curl GET https://openrouter.ai/api/v1/models
+CALL s5cmd cp s3://agent-transcripts/_model-scout/known-models.json (snapshot read)
+OUT catalog: 8 models
+OUT new ids: 6 — suppressed 1 `:batch` + 2 variant re-listing(s); candidates (new base ∧ tools ∧ (:free ∨ ≤$0.50/M)): 1
+OUT NEW-IDS 6
+OUT CANDIDATE newco/spark:free
+OUT CANDIDATES 1
+OUT SUPPRESSED batch=1 variant=2
+OUT DIGEST-LINE *Suppressed by the base-id diff (§M7 leg 1): 1 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 2 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*
+RC 0

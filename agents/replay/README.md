@@ -84,6 +84,38 @@ worth pinning about that clause is the number in it. The one field with no fixed
 `expiresAt`, now+4h — is `scrub:`bed to a shape rather than asserted, the same treatment
 `summary-comment-*` gives its clock.
 
+`fixtures/scout-*` (FU-161 legs 1–2, homelab#282) are the sixth family and the first whose subject
+is a top-level SCRIPT that runs its work at load time. `model-scout.sh` cannot be sourced the way
+`goal-budget.sh` is — sourcing it *is* the weekly tick — so the seams reach the fixture the other
+way the harness already supports: a `# >>>REPLAY:scout-seams>>>` block holding nothing but the
+function definitions, composed FIRST, with the bridge composed after it and redefining exactly the
+I/O it must. Part order is the whole mechanism, and it is the reverse of the sourced-helper
+families: seams, then bridge, then the clause blocks. Three things worth copying:
+
+- **Compose the seam you are asserting; shadow only the transport underneath it.** The keyless leg
+  (`scout-bench-unkeyed-unbenched`) runs the REAL `scout_get_model` and lets its env gate decide,
+  because "no key ⇒ every candidate `unbenched` ⇒ the tick still posts a digest" is the production
+  path on merge day, not an edge case. Its bridge shadows `curl` as a **tripwire** — record, then
+  `exit 9` — so a gate that leaked reds instead of reaching mcp.openrouter.ai from a cron pod. The
+  benched leg shadows the same `curl` as a recording, and the JSON-RPC frames land in the action
+  stream, which is the only place "one `get-model` per surviving candidate" is checkable at all.
+- **Split the world's provenance and say which half is which.** `scout-variant-batch-rollout` is
+  the acceptance case, and its 22 ids are digest #234's real ones; the price and
+  `supported_parameters` fields around them are reconstructed, because the digest recorded ids
+  rather than catalog rows. `scout-bench-mcp-error` goes further — it pins the degrade for an
+  upstream envelope this platform has never probed. A fabricated world is legitimate for pinning
+  OUR side of a contract; it must not be presented as a recording of THEIRS.
+- **A synthetic sibling earns its place when the real world conflates two rules.** In #234's world
+  every suppressed id was `:batch` AND had a known base, so one rule could have been doing all the
+  work with the fixture none the wiser. `scout-variant-known-base` separates them on a six-id
+  catalog — including a `:batch` id whose base is NEW (still dropped: exclusion is outright) and
+  two within-tick variants of one new base (collapsed to the cheaper listing).
+
+⚠ `model-scout.sh` is **not** in the ADR-103 ratchet's clause-file regex, so nothing forced these
+fixtures and nothing will force the next author's. Adding it means editing `.github/workflows/`,
+which the fixer lane may not touch (`.agents/fix.yaml`, the CI-runs-your-branch rule) — so it is
+noted here and on #282's PR for a seat that can.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file
