@@ -353,14 +353,15 @@ the block needs pruning, not more headings.
 ### Models, cost & routing
 
 - [ ] **FU-161** — **Scout v3: variant filter + benchmark cross-check + typed cell-keyed canary
-      verdicts.** Digest #234 (2026-08-10): 20 of 22 "new" candidates were a platform-wide
-      `:batch` variant rollout of old models; all 3 canaries posted bogus `failed` verdicts
-      (ling-3.0-flash benches coding 50.6 — above gpt-5.1 — and three identical UnknownErrors in
-      6 min are ONE infra datum, not three model verdicts) and tripped alert #235. Design + build
-      order: [`docs/agents/model-routing.md`](agents/model-routing.md) §M7 legs 1–5. **Next:**
-      leg 1 (base-id diff + `:batch` exclusion) in `agents/model-scout.sh` — turns this digest
-      22→2; then leg 2 (get-model AA indices in the digest); legs 3–4 ride FU-162's store
-      change. Related: #235's PromQL scout-exclusion belt (machine lane owns it).
+      verdicts.** Trigger, design and build order:
+      [`docs/agents/model-routing.md`](agents/model-routing.md) §M7 legs 1–5 (digest #234's
+      `:batch` rollout and the three bogus canary verdicts that tripped #235). Legs 1–2 SHIPPED
+      2026-08-11 (homelab#282): the base-id diff replays #234's own world 22→2 and the digest
+      carries AA columns + a rank (`agents/replay/fixtures/scout-*`). **Next:** (a) an OpenRouter
+      account key in the scout CronWorkflow env as `SCOUT_MCP_KEY` — without it leg 2 degrades to
+      all-`unbenched` by design; (b) hand-fire the scout once and link the digest (settles
+      `get-model`'s unprobed `arguments` envelope); legs 3–4 then ride FU-162's store change.
+      Related: #235's PromQL scout-exclusion belt (machine lane owns it).
 - [ ] **FU-162** — **Router draw verb + curated class pools (ADR-104).** `/route` consumes
       `class` + `slot` + `jitter:false` deterministically against scout-curated ranked pools
       (`regular`/`premium`/`ultra`/`instrument`, family-deduped, disjoint by convention);
