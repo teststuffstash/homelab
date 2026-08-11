@@ -524,12 +524,10 @@ the block needs pruning, not more headings.
       (2026-08-11): [`docs/glossary.md`](glossary.md) — ruled terms + collision inventory +
       the "a NEW name clears the glossary first" rule (also in CLAUDE.md prior-art); `/design`
       term-closure consumes it as the term→home index. **Next:** the informal-usage sweep —
-      MEASURED SMALL 2026-08-11: the dense "goal" files are correct TYPE vocabulary
-      (issue-authoring 163, lifecycle-fsm 113 = generated) and the ambiguity hot-spots carry
-      ⚠ notes; only ambiguous prose rewords, riding docs-cleanup; the researcher `goal`
-      dispatch-label rename
-      (machinery touch: scan/Sensors/recipes read it — never ad hoc); check #3 **v1 SHADOW
-      BUILT 2026-08-11** (⚓-anchored terms, warn-only; first run: 3 warnings, 0 FPs, all
+      MEASURED SMALL 2026-08-11 (dense "goal" files are correct TYPE vocabulary; hot-spots
+      carry ⚠ notes) — ambiguous-prose rewords only, riding docs-cleanup; the researcher
+      `goal` dispatch-label rename (machinery: scan/Sensors/recipes read it — never ad hoc);
+      check #3 **v1 SHADOW BUILT 2026-08-11** (⚓ terms, warn-only; run 1: 3 warnings, 0 FPs,
       cleared) — flip to fail + widen anchors after a clean pipeline pass. Relates FU-117.
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
