@@ -25,6 +25,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # summary comment. Shared with the coordinator brief's dispatch notice — one implementation, so the
 # fallback stats emitter below cannot drift from what the rest of the loop writes.
 . "${HERE}/machine-comment.sh"
+# The 128KiB per-argv-element ceiling the base64 recipe carry rides into (homelab#242). Shared with
+# retro-session.sh, whose brief travels the same channel one hop earlier — measured just before the
+# pod command is frozen into `args:` below.
+. "${HERE}/argv-guard.sh"
 # Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall
 # back to the pod's in-cluster ServiceAccount (KUBE empty → kubectl auto-detects in-cluster config).
 if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
@@ -987,6 +991,17 @@ if [ -n "$RUN_CMD" ]; then
   # /opt/agent/.devbox), so this guards that anomaly, not a missing dep. `\$PATH` expands in-pod.
   FINALIZE="HARNESS_EXIT=\${PIPESTATUS[0]} PATH=/opt/agent/.devbox/nix/profile/default/bin:\$PATH agent-finalize /tmp/run.log"
   WRAPPED="${OC_SETUP}set +e; { ${RUN_CMD} ; } 2>&1 | tee /tmp/run.log; ${FINALIZE}"
+  # ── the payload ceiling (homelab#242) ─────────────────────────────────────────────────────────
+  # `args: ["bash","-c","<WRAPPED>"]` is ONE argv string when the kubelet execs the container, and
+  # the card-spliced recipe rides inside it as base64. Measure it HERE: this is the last point at
+  # which the string is final AND no pod exists — past the ceiling the exec dies E2BIG inside a pod
+  # that already cost a mint and a schedule, with `Argument list too long` as its whole diagnosis.
+  # >>>REPLAY:argv-payload-ceiling>>>
+  if ! argv_guard "the pod command for ${POD}" "$WRAPPED"; then
+    printf '  REFUSED before pod create — no pod, no minted git token, no spend. Harness %s.\n' "$HARNESS" >&2
+    exit 2
+  fi
+  # <<<REPLAY:argv-payload-ceiling<<<
   ARGS="[\"bash\",\"-c\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 elif [ -n "$OC_SETUP" ]; then
   # Interactive opencode session: write the pin config, then idle for the exec below.

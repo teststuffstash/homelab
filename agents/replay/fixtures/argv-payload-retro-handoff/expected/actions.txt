@@ -1,0 +1,9 @@
+ERR FATAL: the retro --run payload for oracle r4 (brief /tmp/retro-brief-8rvhd.md) is 648 bytes — at/over the Linux per-argument ceiling MAX_ARG_STRLEN (512 bytes).
+ERR   execve() fails E2BIG here and the only symptom is `Argument list too long` — no payload, no limit, no channel named.
+ERR   This channel carries the whole recipe/brief as base64 (~4/3 of its source bytes) inside ONE argv element.
+ERR   Fix: bound what goes in (the retro lane bounds its ledger to a worst-K slice — the worked example), or
+ERR   move the payload to a file channel: ConfigMap mount / chunked env reassembled in-pod (homelab#242 option b).
+ERR   REFUSED before the hand-off to agent-session.sh — no pod was created.
+ERR   Shrink the brief: the ledger slice is bounded worst-K (retro-argo.yaml), so the growable inputs are
+ERR   --deep-dive-k, the HARNESS_SRC excerpts, and (on a cross-review leg) the report being reviewed.
+RC 1
