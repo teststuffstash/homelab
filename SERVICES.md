@@ -22,7 +22,7 @@ truth.
 | **Longhorn** | 🟢 LIVE | Replicated block storage, four tiers (ADR-089 + its 2026-08-07 addendum): `longhorn` (default, **std** 2-replica across THREE zones since wk-02 rejoined the tier — ≈80Gi of new 2-replica volumes available, up from ≈10Gi), `longhorn-bulk` (**bulk** 2-replica across wk-metal-01 + wk-metal-04 — 706G allocatable but ≈90% committed: Garage data 150Gi and the deliberately-oversized registry mirrors take most of it, so **a new bulk grant is a capacity decision, ask first**), `longhorn-fast` (Optane scratch, replica=1, ≈4Gi), `longhorn-scratch` (per-ride throwaway, replica=1 on the bulk disks — the docker-ride dind block PVCs, FU-081; transient ≤20Gi×3 per docker repo, now quota-capped) | StorageClasses `longhorn`, `longhorn-bulk`, `longhorn-fast`, `longhorn-scratch` | PVCs, capped per namespace by the AgentStack claim's `storage` block; ADR-030/089 |
 | **Home Assistant** | 🟢 LIVE | Home automation + state/metrics API | `192.168.40.10:8123` · `homeassistant.teststuff.net` · remote `ha.teststuff.net` (mTLS) | ADR-040; `docs/cloudflare.md` |
 | **Grafana** | 🟢 LIVE | Dashboards | `192.168.40.11` · `grafana.teststuff.net` | ADR-042 |
-| **Prometheus** | 🟢 LIVE | Metrics TSDB — the HA scrape job + every cluster ServiceMonitor/PodMonitor/PrometheusRule (selectors are cluster-wide) | `192.168.40.13:9090` · `prometheus.teststuff.net` | ADR-042 origin (HA-only then); `argocd/platform/kube-prometheus-stack.yaml` (+ `values/`) — migrated off tofu 2026-08-04, so **alert rules are an ordinary GitOps PR now** |
+| **Prometheus** | 🟢 LIVE | Metrics TSDB — the HA scrape job + every cluster ServiceMonitor/PodMonitor/PrometheusRule (selectors are cluster-wide) | `192.168.40.13:9090` · `prometheus.teststuff.net` | ADR-042 origin (HA-only then); `argocd/platform/kube-prometheus-stack.yaml` (+ `values/`) — migrated off tofu 2026-08-04, so **alert rules are an ordinary GitOps PR now** — every expr promtool-parsed in `ci` (`devbox run prometheus-rules-lint`, 2026-08-11) |
 | **Alertmanager** | 🟢 LIVE | Alerting | `192.168.40.14:9093` · `alertmanager.teststuff.net` | ADR-042 |
 | **Loki + Alloy (logs)** | 🟢 LIVE | Log aggregation — Alloy DaemonSet → Loki on Garage S3, **7-day** retention | in-cluster `loki.loki.svc:3100` · query in **Grafana** (Explore → Loki datasource) | ADR-083 (raw manifests); `argocd/resources/loki/` — covers all pods incl. ephemeral/deleted |
 | **Forgejo** | 🟢 LIVE | Self-hosted Git | `forgejo.teststuff.net` (HTTPS + SSH :22) · `192.168.40.15:3000` | no ADR; `argocd/platform/forgejo.yaml` (CNPG-backed; migrated off tofu 2026-08-04); cutover plan FU-007 |
@@ -55,7 +55,7 @@ truth.
   and consume the key. Full recipe: [`docs/patterns/app-owned-resources.md`](docs/patterns/app-owned-resources.md).
   Reach data at `https://s3.teststuff.net` (region `garage`, path-style) with your key.
 - **Storage (Longhorn):** request a PVC with `storageClassName: longhorn` (small, replicated),
-  `longhorn-bulk` (large volumes: S3 data, backups, datasets) or `longhorn-fast` (Optane scratch).
+  `longhorn-bulk` (large volumes: S3 data, backups, datasets) or `longhorn-fast` (Optane SCRATCH: single-node replica-1, modest speed — intent is disk-write-heavy pods (CI builds), NEVER load-bearing data/metadata; FU-159 ruling 2026-08-11).
   **Your cap comes from your stack's AgentStack claim** (`spec.repos[].storage`, ADR-089) — an
   over-cap PVC fails at creation with a quota error; ask for a bigger grant via the claim, checked
   against the advertised tier ceilings above. Buckets: state `max_size` on every `garage_bucket`.
@@ -82,6 +82,6 @@ and are now 🟢 LIVE — the sleep-tracking ingester's Postgres steps are unblo
 ## Maintenance
 
 Update this file **as part of deploying or removing a service** — flip the status, add the endpoint
-and the consume-recipe link. A new `helm_release`/Service in `tofu/` that isn't reflected here is a
+and the consume-recipe link. A new `helm_release`/Service in `tofu/` **or `argocd/`** that isn't reflected here is a
 bug in this catalog. (Live cross-check, when you really need it: `kubectl get svc -A -l bgp=advertise`
 for the advertised VIPs — but the catalog, not that output, is what apps read.)

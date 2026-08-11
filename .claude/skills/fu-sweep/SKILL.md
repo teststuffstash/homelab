@@ -41,7 +41,8 @@ FU-050→100 and 4.4/day over FU-100→153**, the Agents block reached **34 of 5
   that is the "written is not applied" class this repo keeps rediscovering.
 - **Do NOT re-file what you resolve.** If the sweep does the work, the item is archived with the
   fix in the same commit (the tracker's own resolve rule), not rewritten as "done, verify later".
-- **Never invent an id.** Prior-art grep before proposing anything new; the sweep may only add an
+- **Never invent an id.** Prior-art grep before proposing anything new (a NEW name for
+  platform functionality additionally clears `docs/glossary.md`); the sweep may only add an
   item if it is genuinely new deferred work, and the §THE BAR tests in `docs/follow-ups.md` apply
   to the sweep exactly as to anyone else.
 - **The operator's list is short or it will not be read.** Cap it; if everything needs a decision,

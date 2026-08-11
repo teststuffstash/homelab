@@ -34,8 +34,8 @@ operator; rework and breaches are the expensive thing, not reads.
    routing table and the doc tables (`docs/agents/README.md` for the agent platform;
    `SERVICES.md` if service-shaped). Read it IN FULL — never keyword-grep a design doc for the
    symptom of the day. Then chase its links: follow a link whenever the answer will lean on a
-   term or concept whose home is the linked doc (once `docs/glossary.md` exists — FU-163 — the
-   glossary is the term→home index; until then, chase every load-bearing term). Cross-repo
+   term or concept whose home is the linked doc ([`docs/glossary.md`](../../../docs/glossary.md) is the
+   term→home index — consult it first; chase any load-bearing term it doesn't rule). Cross-repo
    topics: the sibling repos under `/workspace/` and the private `../teststuff` docs are in
    scope.
 3. **Decision/tracker layer — grep, then read matches**: `docs/follow-ups.md`,

@@ -128,6 +128,8 @@ _Fig. 4: Observability Plane — small agents collect, one central brain visuali
   `grafana`/`prometheus`/`alertmanager.teststuff.net`; Alertmanager notifies via the Home
   Assistant webhook (ADR-042).
 - ✅ Log aggregation: Loki + Alloy, 7-day retention, queried in Grafana (ADR-083).
+- ✅ OTel collector (OTLP sink) → Prometheus + Loki — the claude-code agent roles' telemetry
+  rail, incl. the LAN jail door (`docs/agents/observability-and-retro.md` §A0).
 - 🔜 Civo cost/FinOps (no Civo footprint yet).
 
 ## 5 · Security Plane _(cross-cutting)_

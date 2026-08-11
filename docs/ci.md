@@ -24,7 +24,10 @@ privileged ns) so CI noise/privilege stays off the service nodes.
 **Workflows stay thin — they call `devbox run <task>` and nothing else.** All build/test/scan logic
 + tool versions live in the repo's `devbox.json` (+ `scripts/`), not in CI YAML. Consequences:
 
-- The same gate runs **locally and in CI**, identically (`devbox run ci`).
+- The same gate runs **locally and in CI**, identically (`devbox run ci` in the STACK repos —
+  homelab itself is the deliberate exception: no aggregate `ci` task, ~22 named lint tasks run
+  by `.github/workflows/ci.yaml`, which also carries three inline blocks (ratchet, pin-only,
+  pre-warm) that gate the workflow rather than the code.
 - Tier-A and Tier-B run the *same* logic under different forges — only `runs-on` + the registry differ.
 - Swapping the runner later (ARC → **Blacksmith**/**Chainguard**) is a `runs-on`/host change with
   **zero logic change**.

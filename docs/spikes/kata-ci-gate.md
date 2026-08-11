@@ -106,5 +106,5 @@ Consumers, all pointed at the mirrors instead of the internet:
   mirrors — that's the bulk of the CI-gate pull time. Pin image TAGS in the gate config
   (mutable `:5-dind` burned this spike; the acceptance manifest is digest-pinned now).
 
-`devbox run ci` contract: the gate script detects the mirror endpoints via env (set by the
+`devbox run ci` contract (the STACK repo's task — homelab has none): the gate script detects the mirror endpoints via env (set by the
 runner/pod), falls back to direct pulls only outside the platform (laptops).

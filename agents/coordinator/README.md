@@ -10,8 +10,8 @@ and drives the review loop to a merge.
 **How you are running (this is not the hand-driven v1 — that shipped past):**
 
 - **You are autonomous and in-cluster.** Your stack's `coordinate-<stack>` CronWorkflow runs in
-  `<stack>-agents` as the `agentstack-loop` SA, plus the `/coordinate` doorbell edge. All three
-  stacks are graduated (ADR-093, FU-080 archived).
+  `<stack>-agents` as the `agentstack-loop` SA, plus the `/coordinate` doorbell edge. All FOUR
+  stacks are graduated (ADR-093, FU-080 archived; circles 2026-08-03).
 - **You do not schedule yourself.** `coordinator-scan.sh` is a deterministic gate that emits
   `(clause, repo, item)` work units and dispatches exactly one — *which* item, lane capacity and
   WIP are its job, not yours (ADR-094). **You judge one item and exit.** Do not go looking for
@@ -869,7 +869,7 @@ devbox run coordinator-session -- --run-tick
 > *mechanism*) is still loaded by absolute path from `/work/homelab`. The clones are **read-only
 > reference** — the coordinator's only writes stay labels/comments/merge-state via `gh`; a write-tiers
 > model (touch a stack repo directly) needs its own ADR (**FU-059**). **One coordinator per stack,
-> rendered from the `AgentStack` claim, is DONE** — all three stacks run their own
+> rendered from the `AgentStack` claim, is DONE** — all four stacks run their own
 > `coordinate-<stack>` CronWorkflow in `<stack>-agents` (FU-048/FU-080, both archived).
 
 The pod gets the homelab repo cloned in, a ServiceAccount scoped by [`rbac.yaml`](rbac.yaml) (spawn

@@ -20,6 +20,10 @@ jointly blow the tier — which is exactly what happened.
 | `bulk` | wk-metal-01, **wk-metal-04** | 975.1G | 706.7G | 633.5G (90%) | 384.9G (39%) |
 | `fast` | thinkcentre Optane ×2 | 28.7G | 28.7G | 5.4G | 1.3G |
 
+**`fast` eligibility (operator ruling 2026-08-11, FU-159):** SCRATCH for disk-write-heavy pods
+(CI builds and the like) — single-node replica-1 Optane of modest speed; NEVER load-bearing
+data/metadata (Garage-meta migration onto it was proposed and REJECTED).
+
 Two things to read off it. **`bulk`'s 90% is deliberate, not drift** — the registry mirrors were
 oversized on purpose (see homelab#116 below), which spends nominal headroom to buy the thing that
 actually matters, and physical sits at 39%. **`std`'s comfort is new**: it had two zones and
@@ -130,7 +134,7 @@ slot is permanently occupied: the box **refuses to POST without the GPU** (a GeF
 So growth means **replacing the 500G NVMe with a larger one**, or freeing the x1 slot by swapping
 the GPU for a single-slot card.
 
-### Where the physical bytes actually are (measured 2026-08-04, post-raise; superseded by the table at the top)
+### History — where the physical bytes were (2026-08-04, post-raise; SUPERSEDED by the table at the top — kept as the pre-fence record)
 
 | tier | physical used | committed | committed as % of physical |
 |---|---|---|---|
@@ -177,7 +181,9 @@ and "the setting is in the chart" is not evidence that it applies to anything al
 
 `--delete-untagged` was the bulk tier's largest single consumer of *reclamation*, and it had to go:
 in a pull-through cache it deletes exactly the digest-pinned images we pin, leaving a layer link
-whose blob is gone, so the mirror serves `200` with **0 bytes** forever. Its replacement valve is a
+whose blob is gone, so the mirror serves `200` with **0 bytes** forever. ⚠ A SECOND path to the
+same symptom needs no wipe at all: the registry's in-memory blob-descriptor cache serving a GC'd
+blob until restart (homelab#240/#241, 2026-08-11) — the valve below does not cover it. Its replacement valve is a
 **full store wipe** at 90% (ADR-080 — a pull-through cache is rebuildable by definition, and a wipe
 cannot dangle a link).
 

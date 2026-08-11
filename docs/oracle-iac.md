@@ -27,7 +27,8 @@ of this repo._
   + the `oracle-fleet → garage-s3` `ReferenceGrant` in `argocd/platform/`. Stack side (oracle-iac):
   `oracle-fleet/infra/{gateway.yaml,httproute-specs.yaml}`. The spec site moved
   `oracle-specs.teststuff.net` → `specs.oracle.teststuff.net` (HTTPRoute `URLRewrite` keeps the Garage
-  bucket alias `oracle-specs`, so no bucket/publish change). New oracle hostnames = an HTTPRoute PR in
+  bucket alias `oracle-specs`, so no bucket/publish change; ⚠ the OLD name/VIP 3.20 is KEPT LIVE
+  until this stack migrates it — both serve as of 2026-08-11). New oracle hostnames = an HTTPRoute PR in
   oracle-iac, no homelab change.
 - **Seeded skeleton**: `apps/` is empty (root app syncs clean with zero resources). The first child
   Application, `values/`, and the deploy-bump pipeline (app-repo `deploy.yaml` + `deploy-pin.sh` +

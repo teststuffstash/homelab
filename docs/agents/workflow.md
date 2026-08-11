@@ -6,7 +6,7 @@ coordinator that executes it is [`../../agents/coordinator/README.md`](../../age
 its per-role machinery is [`roles.md`](roles.md); pivotal choices are thin ADRs in
 [`../adr.md`](../adr.md).
 
-The end-to-end goal (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged
+The end-to-end target (from [`README.md`](README.md)): a triaged issue becomes a tested, auto-merged
 fix. This doc is the *control flow* that gets it there — who runs the agent, when, and how review and
 CI feed back. The last leg — how an approved green PR deterministically lands on master (branch
 updates, review dispatch, auto-merge; no LLM in the mechanics) — is designed **and built** separately
@@ -314,7 +314,9 @@ big-bang (ADR-103).
 
 **Ratchet v2 is file-co-change; the FSM-keyed half is the ORPHAN GATE (landed 2026-08-10).**
 ADR-103's text described a lint "keyed on the FSM's `replay:` fields"; what shipped first was the
-weaker CI co-change check (clause file touched ∧ no replay-tree touch → red — it forces the author
+weaker CI co-change check (clause file touched ∧ no replay-tree touch → red; since 2026-08-11 a
+pin-only diff to a pin-guarded clause file is EXEMPT — regexes eval'd from `pin-only-lint.sh`,
+one home, PR#236's collision — it forces the author
 to look, it does not prove coverage). The promised half now lives in `merge-path-lint`: every
 `guarded` transition in the three FSM YAMLs declares `replay:` (paths must exist) or an explicit
 `unreplayed: "<reason>"`, both rendered in the generated views — coverage is a rendered fact, the
