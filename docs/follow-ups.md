@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-165**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-166**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -628,6 +628,16 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
+- [ ] **FU-165** — **The platform stack does not dogfood the Goal lane** (operator observation
+      2026-08-11, from the #237→#245 chain): ADR-102's invariant — *every dispatchable issue
+      belongs to a goal* — is unmet on platform repos; fixes have no lineage/budget/convergence
+      trail and finding-sprouts were filed flat until hand-linked. Two machinery gaps block
+      blind adoption: (a) goal-budget sums OpenRouterKey caps — subscription rides mint none,
+      so Σ(child caps)=0 (relates model-routing §M11 rail costs); (b) REACTIVE alert chains
+      belong to FU-133's subject/root-cause containers, not Goals — only PROACTIVE
+      multi-deliverable efforts (e.g. today's retro-lane rebuild) are Goal-shaped.
+      **Next:** pilot ONE platform Goal on the next proactive effort; meanwhile finding-sprouts
+      always get native sub-issue lineage (started: #244/#245 → #238). Relates FU-090, FU-133.
 - [ ] **FU-157** — **Cloudflare platform tokens are USER tokens; migrate to ACCOUNT tokens
       opportunistically.** All of tofu/cloudflare-token mints `cloudflare_api_token` (tied to the
       operator's user). Account tokens (`cloudflare_account_token`) are org-owned, have a coarser
