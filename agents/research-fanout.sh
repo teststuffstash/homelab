@@ -60,6 +60,7 @@ done
 case "$ARMS" in ''|*[!0-9]*) echo "$USAGE" >&2; exit 2;; esac
 [ "$ARMS" -ge 1 ] || { echo "--arms must be ≥ 1" >&2; exit 2; }
 case "$START_SLOT" in ''|*[!0-9]*) echo "--start-slot must be a positive integer" >&2; exit 2;; esac
+[ "$START_SLOT" -ge 1 ] || { echo "--start-slot must be a positive integer (got 0)" >&2; exit 2; } # PR#320 review finding: the pattern alone admitted 0
 
 RECIPE="${RESEARCH_RECIPE:-/workspace/${PROJECT}/.agents/research.yaml}"
 if [ "$DRY" = 0 ] && [ ! -f "$RECIPE" ]; then
