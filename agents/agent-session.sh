@@ -1346,7 +1346,7 @@ ${UV_ENV}
         # goose blocks forever. The pod is the isolation boundary, so autonomy here is the point.
         - name: GOOSE_MODE
           value: "auto"
-        # Second belt behind the runtime storm watchdog (agent-runtime#8, FU-021 — both proven
+        # Second belt behind the runtime storm watchdog (agent-runtime#8 + the goose storm watchdog, docs/agents/model-routing.md §The bundle — both proven
         # live on sleep-tracking#20): on a dead key goose's final-output continuation loops fresh
         # requests until max_turns (default 1000). 200 clears every legit run measured (owl 72,
         # the pathological qwen loop 187) and bounds anything the watchdog somehow misses.
@@ -1392,7 +1392,7 @@ if [ -n "$RUN_CMD" ]; then
   # Follow logs to termination — resiliently. `logs -f` FAILS while the container is still
   # ContainerCreating (slow image pull), and under set -e + pipefail that used to kill the launcher
   # before ANY post-run bookkeeping — i.e. exactly the runs the strike path exists for died
-  # untracked (found live: the FU-021 acceptance run, 2026-07-09). Retry while the pod is
+  # untracked (found live: the storm-watchdog acceptance run, 2026-07-09). Retry while the pod is
   # Pending/Running; a clean `logs -f` exit means the container terminated. Each attempt restreams
   # from the start, so plain tee keeps RUNLOG = one complete copy.
   RUNLOG="$(mktemp)"
@@ -1444,7 +1444,7 @@ if [ -n "$RUN_CMD" ]; then
       PR_BOOKKEEPING_DONE=""
     fi
     if [ -n "$PR_URL" ] && [ -z "$PR_BOOKKEEPING_DONE" ] && [ -n "${GH_TOKEN:-}" ]; then
-      # ARM AUTO-MERGE — mandatory post-PR step (FU-041, docs/agents/merge-path.md §Chosen design ▸1).
+      # ARM AUTO-MERGE — mandatory post-PR step (docs/agents/merge-path.md §Chosen design ▸1).
       # The deterministic merge path only ever touches auto-merge-armed PRs: the updater keeps armed PRs
       # current, the review reflex only reviews armed PRs, and GitHub completes an armed PR the moment
       # approval + CI land. An un-armed PR is invisible to all of it and stalls. Squash keeps master linear

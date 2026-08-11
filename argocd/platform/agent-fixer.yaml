@@ -2,7 +2,7 @@
 # budget key + agent-git-token ESO GithubAccessToken + worker NetworkPolicies) from ONE templated set
 # (the "yaml way", FU-052). Two dir shapes feed it:
 #   homelab  agents/fixer/<repo>/   (platform-side repos)       → repo = path basename
-#   <stack>-iac  <repo>/agent/      (stack policy in the stack — ADR-084/FU-025; GitOps-orphaned
+#   <stack>-iac  <repo>/agent/      (stack policy in the stack — ADR-084; GitOps-orphaned
 #                                    until 2026-07-10, TICK-LOG meta-3) → repo = path segment 0
 # ⚠ Generator-level template overrides do NOT reliably beat the spec template (duplicate-name
 # incident, meta-5) — so ONE uniform spec template derives repo/namespace from the dir shape, and

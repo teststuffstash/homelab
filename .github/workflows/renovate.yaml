@@ -1,4 +1,4 @@
-# renovate.yaml — SELF-HOSTED Renovate runner (FU-014). Runs on the homelab ARC tier as the
+# renovate.yaml — SELF-HOSTED Renovate runner (docs/renovate.md). Runs on the homelab ARC tier as the
 # `homelab-renovate` App and AUTODISCOVERS the repos that App is installed on (start: sleep-tracking),
 # reading each repo's own renovate.json. "Add a repo to Renovate" == install the App on it — no change
 # here. Not the Mend hosted App: keeps the supply chain self-hosted (slsa-supply-chain direction).
