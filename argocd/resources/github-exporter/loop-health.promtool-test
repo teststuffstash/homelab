@@ -5,20 +5,22 @@
 #
 # Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
 # CLOCK: promtool's test clock starts at 0, so a "last successful poll at epoch 0" simply means
-# "never since the test began" and `time() - it` is the age. Not wired into CI yet — the hook is
-# a `scripts/` + `.github/` change, outside the fixer lane's tier (codeowner's follow-on).
+# "never since the test began" and `time() - it` is the age. CI-enforced since 2026-08-11:
+# .github/workflows/ci.yaml runs `devbox run prometheus-rules-lint`, which runs `promtool test
+# rules` over every *.promtool-test under argocd/.
 #
-# ⚠ THE HEADLINE OF THIS FILE IS A FINDING, not a pass: AgentQueueStalled (FU-091) CANNOT FIRE in
-# production. Both of its "zero" conjuncts are `sum(...) == 0` over metrics that are emitted
-# PER OBJECT — one series per live worker pod, one per OPEN PR (github-exporter.py:771, "1 per
-# open PR"). Zero open PRs therefore means zero series, and `sum()` over no series is EMPTY, not
-# 0, so the `and` chain has nothing to match: the state the alert was built for is precisely the
-# state in which it evaluates to nothing. Live confirmation, 2026-08-11: the worker-pod aggregate
-# was present at only 343 of 865 five-minute steps over three days — absent 60% of the time, and
-# absent exactly when the loop is idle. The tests below pin all three shapes so the finding is
-# executed rather than argued. FIXING it (the `or vector(0)` idiom RetroReportOverdue already
-# uses) is an expr change on an alert homelab#288 was not scoped to touch — raised in that PR's
-# body for its own issue.
+# ✅ THE HEADLINE FINDING OF THIS FILE IS RESOLVED (homelab#312): AgentQueueStalled (FU-091) used
+# to be unable to fire in production. Both of its "zero" conjuncts are aggregates over metrics
+# emitted PER OBJECT — one series per live worker pod, one per OPEN PR (github-exporter.py, "1 per
+# open PR") — so an idle loop means zero series, and `sum()` over no series is EMPTY, not 0: the
+# bare `sum(...) == 0` form left the `and` chain nothing to match, precisely in the state the
+# alert was built for. Live confirmation, 2026-08-11: the worker-pod aggregate was present at only
+# 343 of 865 five-minute steps over three days — absent 60% of the time, and absent exactly when
+# the loop is idle. The fix is the `or vector(0)` idiom RetroReportOverdue already uses
+# (argocd/resources/pushgateway/prometheusrule.yaml); `or vector(0)` collapses labels, but both
+# conjuncts were already label-less `sum()`s, so the `and` chain still matches. Tests 1/3 and 2/3
+# below are the regression pins: they assert the two production shapes now FIRE, and they fail if
+# the defaults are ever dropped again.
 rule_files:
   - loop-health.promtool-rules
 
@@ -27,29 +29,48 @@ evaluation_interval: 1m
 tests:
   # ── AgentQueueStalled 1/3 — the real idle-loop shape: queued work, nothing running ───────────
   # 5 queued issues, no worker pods in existence, no open PRs. This IS the 2026-07-21 wedge
-  # (a sidecar zombie held project-WIP for three days) and the alert stays silent through it,
-  # because two of its three conjuncts have no series to aggregate.
+  # (a sidecar zombie held project-WIP for three days), and it is the shape that used to be
+  # invisible: neither zero-conjunct has any series to aggregate, so both rest entirely on their
+  # `or vector(0)` default. THE regression pin for homelab#312 — drop either default and this
+  # test goes silent again.
   - interval: 1m
-    name: "FINDING: queued issues + a genuinely idle loop never fires (both zero-conjuncts are absent, not 0)"
+    name: "queued issues + a genuinely idle loop fires (both zero-conjuncts default via `or vector(0)`)"
     input_series:
       - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
         values: "3+0x400"
       - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="circles"}'
         values: "2+0x400"
     alert_rule_test:
+      # `for: 2h` honoured — silent before it elapses
+      - eval_time: 1h59m
+        alertname: AgentQueueStalled
+        exp_alerts: []
       - eval_time: 2h1m
         alertname: AgentQueueStalled
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
+      # …and stays firing while the wedge lasts (the 2026-07-21 wedge ran for days)
       - eval_time: 6h
         alertname: AgentQueueStalled
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
-  # ── AgentQueueStalled 2/3 — isolate which conjunct kills it ──────────────────────────────────
+  # ── AgentQueueStalled 2/3 — the mixed shape: one conjunct real, one defaulted ────────────────
   # Lingering Succeeded pod objects DO give the pod-phase conjunct its series (kube-state-metrics
-  # emits every phase for every existing pod, so Running/Pending read 0). That half is fine. The
-  # PR conjunct is the one that can never be satisfied: no open PR ⇒ no series ⇒ empty.
+  # emits every phase for every existing pod, so Running/Pending read 0) — that half aggregates
+  # to a real 0. The PR conjunct still has no series and rides `or vector(0)`. Firing here proves
+  # the two paths compose: a real label-less `sum()` of 0 and a synthetic `vector(0)` match each
+  # other in the `and` chain (both have an empty label set, which is why the idiom is safe here).
   - interval: 1m
-    name: "FINDING: even with pod objects present and reading 0, the open-PR conjunct is unsatisfiable"
+    name: "pod objects present and reading 0, open-PR conjunct defaulted — still fires"
     input_series:
       - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
         values: "5+0x400"
@@ -60,18 +81,31 @@ tests:
     alert_rule_test:
       - eval_time: 2h1m
         alertname: AgentQueueStalled
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
       - eval_time: 6h
         alertname: AgentQueueStalled
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
-  # ── AgentQueueStalled 3/3 — the ONLY shape that fires, and production cannot produce it ──────
-  # A `github_pull_request_open` series valued 0 makes the whole chain work. The exporter never
-  # emits one: it appends `github_pull_request_open{...} 1` per open PR and nothing otherwise.
-  # So this test is not "the alert works" — it is the proof that the alert's firing condition
-  # requires a series shape that does not exist, which is what makes 1/3 and 2/3 conclusive.
+  # ── AgentQueueStalled 3/3 — every conjunct backed by a real series, and the recovery edge ────
+  # Before #312 this was the only shape that could fire, because it is the one where the PR
+  # conjunct has a series to aggregate: a `github_pull_request_open` valued 0. The exporter never
+  # emits that (it appends `github_pull_request_open{...} 1` per open PR and nothing otherwise),
+  # which is exactly why 1/3 and 2/3 were dead — but the shape is still worth keeping: it pins
+  # that adding the `or vector(0)` defaults did not change behaviour when the series ARE present,
+  # and it is the only fixture here that exercises the way DOWN (a worker pod goes Running at
+  # 2h4m and the alert clears immediately — there is no `for:` on the falling edge).
   - interval: 1m
-    name: "the rule DOES work — against a zero-valued PR series github-exporter never emits"
+    name: "unchanged with real series on every conjunct, and one live worker pod clears it"
     input_series:
       - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
         values: "5+0x400"
