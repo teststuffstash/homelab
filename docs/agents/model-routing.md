@@ -438,7 +438,8 @@ designated larger checkpoint once the initial child set completes (a batched re-
 accumulated authoring judgment in one context), with the trickle in between handled mechanically
 or queued for the checkpoint. Do NOT wire a per-stack goal-model knob before this is designed —
 it would harden the wrong axis. Home for the design when it happens: this section + the
-goal-review play (issue-authoring.md §Leg (c)).
+goal-review play (issue-authoring.md §Leg (c)). **Tracked by:** FU-090 (its Operator-deferred
+line holds the status; this block is the design).
 
 **The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
 routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
