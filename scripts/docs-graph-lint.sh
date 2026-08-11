@@ -13,9 +13,10 @@
 # Links resolving OUTSIDE the repo (e.g. ../teststuff) are skipped — not ours to hold,
 # and absent on CI runners.
 #
-# Check #3 — a doc leaning on a term without linking the term's home — is DEFERRED
-# until docs/glossary.md exists (FU-163): the glossary is the term→owning-doc map that
-# makes it mechanical.
+# Check #3 — a doc leaning on a ⚓-anchored glossary term without linking the term's home —
+# is LIVE in SHADOW (warn-only) since 2026-08-11: the glossary's ⚓ rows are the term list
+# (one home — never duplicate terms here), linking the home OR the glossary satisfies it.
+# Flip to fail after the docs-cleanup pipeline clears the initial warning set (FU-163).
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -62,6 +63,29 @@ for f in docs/agents/*.md; do
     status=1
   fi
 done
+
+# --- 3) glossary ⚓ terms: a living doc using an anchored term links its home or the glossary
+# WARN-ONLY (shadow rollout, the sentinel/router pattern) — see the header note.
+GLOSS=docs/glossary.md
+if [ -f "$GLOSS" ]; then
+  grep '^| \*\*⚓' "$GLOSS" | while IFS= read -r row; do
+    term=$(printf '%s' "$row" | awk -F'|' '{print $2}' | sed 's/\*\*//g; s/⚓//g; s/^ *//; s/ *(.*//; s/ *$//')
+    homerel=$(printf '%s' "$row" | awk -F'|' '{print $4}' | grep -oE '\]\([^)#]*\.md' | head -1 | sed 's/^](//')
+    [ -n "$term" ] || continue
+    [ -n "$homerel" ] || continue
+    home=$(realpath -m "$ROOT/docs/$homerel"); home=${home#"$ROOT"/}
+    hbase=$(basename "$home")
+    for f in $(git ls-files '*.md'); do
+      [ "$f" = "$GLOSS" ] && continue
+      [ "$f" = "$home" ] && continue
+      if is_historical "$f"; then continue; fi
+      grep -qiF "$term" "$f" || continue
+      grep -qF "$hbase" "$f" && continue
+      grep -qF "glossary.md" "$f" && continue
+      echo "WARN term-unlinked (check #3 shadow): $f uses \"$term\" without linking $home or the glossary"
+    done
+  done
+fi
 
 [ "$status" -eq 0 ] && echo "docs-graph: links resolve, agents doc table complete"
 exit "$status"

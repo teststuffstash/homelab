@@ -528,8 +528,9 @@ the block needs pruning, not more headings.
       (issue-authoring 163, lifecycle-fsm 113 = generated) and the ambiguity hot-spots carry
       ⚠ notes; only ambiguous prose rewords, riding docs-cleanup; the researcher `goal`
       dispatch-label rename
-      (machinery touch: scan/Sensors/recipes read it — never ad hoc); build `docs-graph-lint`
-      check #3 (a doc leaning on a term without linking its glossary home). Relates FU-117.
+      (machinery touch: scan/Sensors/recipes read it — never ad hoc); check #3 **v1 SHADOW
+      BUILT 2026-08-11** (⚓-anchored terms, warn-only; first run: 3 warnings, 0 FPs, all
+      cleared) — flip to fail + widen anchors after a clean pipeline pass. Relates FU-117.
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).

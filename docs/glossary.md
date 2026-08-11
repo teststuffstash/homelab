@@ -13,6 +13,11 @@ that coins the name.
 
 Meanings are one line and a pointer — the owning doc keeps the mechanism (one home per fact).
 
+**⚓ = mechanically linted** (docs-graph-lint check #3, warn-only shadow for now): a living doc
+using a ⚓ term must link the term's owning doc — or this glossary — somewhere in the file.
+Only distinctive terms carry the anchor; common words (goal, lens, canary, class, pool, band,
+mission) would drown the check in false positives and stay judgment-lint territory.
+
 ## Ruled terms
 
 | Term | Meaning | Owning doc |
@@ -22,18 +27,18 @@ Meanings are one line and a pointer — the owning doc keeps the mechanism (one 
 | *goal (prose)* | ⛔ retired in agents docs — say **Goal** (the type), **mission** (research), or "intent/target" in plain prose | — |
 | **lens** | the reviewer machinery × a brief sourced from an EXTERNALLY MAINTAINED standard, selected by a deterministic artifact-class predicate. Not a role; not a prose "viewpoint" | [`agents/roles.md`](agents/roles.md) §Lenses |
 | **canary** (unqualified) | the scout's **rail probe** — does a model complete a tool-call loop through OUR stack; a verdict about a (model, harness, class) CELL | [`agents/model-routing.md`](agents/model-routing.md) §M7 |
-| **contract probe** | the FU-102 prober's live product-contract check (was informally "agentic canary" — say contract probe) | [`agents/roles.md`](agents/roles.md) §prober |
+| **⚓ contract probe** | the FU-102 prober's live product-contract check (was informally "agentic canary" — say contract probe) | [`agents/roles.md`](agents/roles.md) §prober |
 | **class** (routing) | a task class — deterministic label/role lookup selecting a pool + floors; never inferred in the data plane | [`agents/model-routing.md`](agents/model-routing.md) §M8 |
 | **pool** | a scout-curated, ranked, family-deduped model list per class, versioned; drawn by `slot`, never computed at request time | [`agents/model-routing.md`](agents/model-routing.md) §M13 |
 | **band** | a disjoint-by-convention curation tier across pools: `regular` / `premium` / `ultra` / `instrument` | [`agents/model-routing.md`](agents/model-routing.md) §M13 |
-| **the Cloudflare admin token** (Tier-0 mint-root) | ONE credential, four aliases: matrix row "Account admin", CF template name "Create Additional Tokens", doctrine name "Tier-0 mint-root". Scope = user `API Tokens: Write` + zone/account read — *transitively* everything | [`cloudflare.md`](cloudflare.md) §Token matrix; creation/renewal: `tofu/cloudflare-token/README.md` |
+| **⚓ the Cloudflare admin token** (Tier-0 mint-root) | ONE credential, four aliases: matrix row "Account admin", CF template name "Create Additional Tokens", doctrine name "Tier-0 mint-root". Scope = user `API Tokens: Write` + zone/account read — *transitively* everything | [`cloudflare.md`](cloudflare.md) §Token matrix; creation/renewal: `tofu/cloudflare-token/README.md` |
 | **webservice** (operator term) | the delivery contract ONLY — browser-rendered, valid TLS, bookmarkable `<name>.teststuff.net`. No live-vs-static claim; implementation defaults to a generated static page (Garage web endpoint + LAN HTTPS name) | `CONTEXT.md` §Standing constraints (the pin); serving seam: [`garage.md`](garage.md) §Static-website serving |
 | **homelab (repo)** | `teststuffstash/homelab` — this repository | `README.md` |
-| **the platform stack** | the AgentStack claim named `platform`: {homelab, agent-runtime, agent-coordinator, openrouter-operator}. ⛔ never "homelab" — sense-1 scoping of a sense-2 duty left 5 agent-runtime issues unswept a month (2026-08-08). Duties scope by the CLAIM's repo list | [`agents/agentstack.md`](agents/agentstack.md); mirror `agents/stacks.json` |
+| **⚓ the platform stack** | the AgentStack claim named `platform`: {homelab, agent-runtime, agent-coordinator, openrouter-operator}. ⛔ never "homelab" — sense-1 scoping of a sense-2 duty left 5 agent-runtime issues unswept a month (2026-08-08). Duties scope by the CLAIM's repo list | [`agents/agentstack.md`](agents/agentstack.md); mirror `agents/stacks.json` |
 | **the homelab** | the physical lab / the cluster+network as a whole | `CONTEXT.md`, `ARCHITECTURE.md` |
 | **retro** (cluster) | the platform's batched self-improvement role — ledger worst-K → transcript slices → report + process PRs, Mondays | [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2 |
 | **skill-retro** (jail) | the jail twin of the retro for `.claude/skills/`: dialogue-only transcript slices → GAPS ledger sightings (ADR-105) | `.claude/skills/skill-retro/SKILL.md` |
-| **system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
+| **⚓ system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
 | **e2e** | reserved for the ACTUAL target environment (synthetic production traffic) — not the kind gate | same ruling |
 
 ## Pending renames (recorded here, executed by the FU-163 sweep)
