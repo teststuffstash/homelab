@@ -68,7 +68,13 @@ tracker.
   shortfalls go to the governing repo's `specs/` as id-free `⚑ gap` flags (ADR-086, oracle-fleet
   ADR-OF-003); coordinator session findings go to the TICK-LOG.
 
-_Last updated: 2026-08-07 (fu-sweep over the Dispatch + Merge-path subsections: **FU-111
+_Last updated: 2026-08-11 (fu-sweep over the Observability & evidence subsection, after the
+first board-sweep: **FU-058 corrected** — the 08-10 "guard-refused" reading was false, five
+latent retro-lane bugs fixed + first report DELIVERED (PR#246); **FU-133 pointer-ized** —
+remaining legs (a)/(c) queued as homelab#252/#253 (#253 blocked-by #244); FU-159 + FU-158 to
+the operator (FU-158's self-test pattern hit its third instance); FU-164/140/160/102/067 still
+valid; out-of-scope flags for the next pass: FU-147, FU-144 (Merge-path/Dispatch). Previous
+pass 2026-08-07 (fu-sweep over the Dispatch + Merge-path subsections: **FU-111
 archived** — body-line dep reader retired after native edges proven flowing, oracle-fleet#84
 migrated first; FU-133's set-pass watch VERIFIED on the first live ≥2 set (#68 vs #118, correct);
 FU-143 UNBLOCKED (#34 in the pinned image) — re-soak gated on homelab#118; FU-146 2-of-3 clauses
@@ -466,19 +472,15 @@ the block needs pruning, not more headings.
       + time-series semantics) vs. extending the self-test pattern per rule file; either becomes
       a CI step. Not urgent — the two files with product-spend/agent-loop rules are covered.
 
-- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing: POINTER.**
-      Corpus audit 2026-08-04: **~19 of 27 issues were 5 root causes**. Resolve half shipped
-      (be7b62e), `subject:` key + IAC-G10 after it, subject DEDUP 2026-08-06 (`6affc63`).
-      **DISPATCH half BUILT 2026-08-07**; first live ≥2 set-pass: independence RIGHT, queueing
-      WRONG (stale body, alert already resolved — coordinator refused the unit). Autopsy:
-      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues" (BUILT block).
-      **Resolve leg VERDICT-KEYED 2026-08-08** (PR#129, from responder-filed #124): `fix`-verdict
-      issues no longer close/comment on alert clear (alert-state ≠ defect-state — the #107
-      13-comment churn class), first live closure by-the-doctrine on #107 itself. **Remaining:**
-      (a) FILING-side correlation (`group_by = ["alertname"]`); (c) queue-time CURRENCY gate —
-      `sq_decide` skips resolved/stale-bodied issues (detail in the autopsy; PR#129's resolve
-      change is NOT this — (c) is the debounce/queue side).
-      Class postmortem: [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
+- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing:
+      POINTER.** Mechanism, corpus audit (19-of-27), the shipped halves (resolve/dedup/dispatch,
+      verdict-keyed resolve PR#129) and the first-live-set-pass lessons:
+      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues"; class postmortem:
+      [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
+      **Remaining, BOTH QUEUED to the loop 2026-08-11:** (a) filing-side `group_by` correlation
+      = homelab#252; (c) queue-time currency gate in `sq_decide` = homelab#253 (blocked-by #244,
+      same file/fixture family). Lifecycle-exclusion siblings #243 merged / #244 queued.
+      Relates IAC-G10, FU-158.
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
       coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
@@ -491,12 +493,14 @@ the block needs pruning, not more headings.
       Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
-      §B2. ⚠ 2026-08-10's Monday fire was GUARD-REFUSED (agent-session pod running) and silent —
-      belt shipped same day: `RetroReportOverdue` (harvest pushes a success timestamp; >8d stale
-      or never → warning). **Next:** 2026-08-17's fire is the first unattended run (= run 3, the
-      swapped-cell cross-review) AND the belt's first live datum; then the ledger emitter gaps,
-      MCP transcript slices, acting on report candidates (list in §B2). Absorbs FU-057's residue
-      (`key_hash` activity-API backfill). Relates FU-095, ADR-103 (rule 3).
+      §B2. ⚠ CORRECTED 2026-08-11: the "guard-refused, pod running" reading of the 08-10 fire
+      was FALSE — five latent lane bugs (guard read kubectl's stderr as pods; AWS_REGION;
+      root-owned artifacts; whole-ledger 146KB brief > argv cap; tee ate cell death), the lane
+      had NEVER run end-to-end; all fixed + hand-fired green, **first report DELIVERED**
+      (PR#246 merged; single-cell — cell-b mechanics = homelab#248). The belt caught it (first
+      firing = real). **Next:** 2026-08-17 = first UNATTENDED run; the report's 6 process
+      changes await the operator's filing word; then ledger emitter gaps, MCP slices (§B2).
+      Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
