@@ -112,6 +112,12 @@ when a decision trades one of them away:
   fixed hypervisor, still not a GPU-less plug-in. The general fleet rule stands: GPU-less
   plug-in nodes need iGPU or BMC video.
 - Single-operator lab: optimize for low day-2 toil and easy rebuild over high availability.
+- **Vocabulary — "webservice"**: when I say *webservice* I mean the delivery contract only —
+  browser-rendered at a bookmarkable HTTPS `<name>.teststuff.net` — never an architectural
+  claim about live vs static. Default the implementation to a **generated static page**
+  (devbox script → Garage web endpoint + LAN HTTPS name, the `oracle-specs.teststuff.net`
+  pattern); a live process must earn its keep (real interactivity), per principles #1 and #8.
+  (Term moves to `docs/glossary.md` when FU-163 lands.)
 
 ## How to use this file
 
