@@ -12,7 +12,9 @@ description: >
 > **Glance first**: [`../GAPS.md`](../GAPS.md) §onboard-metal-node — unpromoted sightings
 > apply until closed (contract: [`../README.md`](../README.md)).
 
-Full reference: `docs/provisioning.md`. Nodes are defined in `tofu/metal.tf` (`metal_nodes`).
+Full reference: `docs/provisioning.md`. Nodes are declared in `machines/machines.yaml`
+(`talos_metal_node: true` + `install_disk`); `tofu/locals.tf` derives `local.metal_nodes` from it
+and `tofu/metal.tf` consumes that — there is no `var.metal_nodes` map any more.
 The flow is flag → reserve IP → boot to maintenance → read disk → install → **unflag**.
 
 ## Steps
@@ -33,9 +35,11 @@ The flow is flag → reserve IP → boot to maintenance → read disk → instal
 3. **PXE-boot it** (or `devbox run talos-usb` for a USB ISO if PXE firmware is flaky). It comes up
    in Talos maintenance at the reserved IP.
 
-4. **Read the disk** and set `install_disk` in `metal.tf` (pick the real SSD, not loop/USB/Optane):
+4. **Read the disk** and set `install_disk` on the node's `machines/machines.yaml` entry (pick the
+   real SSD, not loop/USB/Optane), then regenerate the doc tables:
    ```bash
    devbox run -- talosctl -n <ip> get disks --insecure
+   devbox run -- python3 machines/generate.py    # after ANY machines.yaml edit; commit the diff
    ```
 
 5. **Install** (needs the two TF_VAR secrets — see tofu-apply skill):
@@ -49,11 +53,12 @@ The flow is flag → reserve IP → boot to maintenance → read disk → instal
    ```
    Remove the group from `matchbox.tf` too (committed file holds no per-node groups).
 
-7. **Taint** laptop/compute-tier nodes ephemeral — but only AFTER the node is Ready (transient
-   cilium/not-ready taints cause a `kube-controller-manager` field conflict otherwise):
+7. **Taint** laptop/compute-tier nodes ephemeral — set `ephemeral: true` on the YAML entry
+   (`local.ephemeral_nodes`), but apply only AFTER the node is Ready (transient cilium/not-ready
+   taints cause a `kube-controller-manager` field conflict otherwise):
    ```bash
    devbox run -- kubectl --kubeconfig tofu/kubeconfig wait --for=condition=Ready node/<name>
-   devbox run -- tofu -chdir=tofu apply -target=kubernetes_node_taint.<x>
+   devbox run -- tofu -chdir=tofu apply -target='kubernetes_node_taint.ephemeral["<name>"]'
    ```
 
 8. **Add the node as a BGP neighbor in OPNsense** — Cilium's BGP nodeSelector is all-nodes, so a
