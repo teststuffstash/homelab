@@ -17,6 +17,8 @@ homelab/.github/renovate-global.json      the SUPPLY-CHAIN BASELINE enforced on 
    ▼
 reviewer-approve reflex (per repo)        homelab-reviewer bot approves `automerge`-labelled PRs →
                                           satisfies required-approval → GitHub merges on CI-green
+                                          (idempotent since 2026-08-11: per-PR concurrency group +
+                                          fail-closed APPROVED-at-head dup check — homelab#114)
 ```
 
 "Add a repo to Renovate" = install the `homelab-renovate` App on it (autodiscover does the rest).

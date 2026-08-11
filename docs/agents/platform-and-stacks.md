@@ -41,7 +41,7 @@ must be launchable ("an opencode ride, idp stack, coordinator role, kimi model")
 |---|---|---|---|
 | **harness** | goose, opencode (agent-base) · claude (coordinator image) | hermes, … | agent-runtime (one image per harness family, **stack-agnostic**) |
 | **role** | fixer, coordinator, reviewer(+lenses), retro, scout, responder, researcher, infra-fixer | prober, meta-coordinator, large-job | **[`roles.md`](roles.md)** — recipes/briefs + the role's ns/credential boundary + its **activation machinery** (see the boundaries bullet below) |
-| **stack** | sleep, oracle, idp | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
+| **stack** | sleep, oracle, platform, circles | … | AgentStack claim (ns, keys, repos) + the stack repo itself |
 | **model / billing** | Claude subscription · OpenRouter API (registry + chains) | opencode subscription, … | model-routing registry + the ADR-081 proxy |
 
 Known constraint couplings (encode them, don't fight them):
@@ -199,8 +199,8 @@ that and multiplies LLM sessions; global couples unrelated stacks and bloats con
   **Superseded 2026-07-18 (FU-080 per-stack build):** the Composition now renders a
   `coordinate-<stack>` CronWorkflow into `<stack>-agents` (claim `loop.perStack`), running as the
   namespaced `agentstack-loop` SA with broker-fetched, stack-scoped git tokens (TokenReview'd
-  `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. **COMPLETE 2026-07-27:
-  all three stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global scan/reflex
+  `/loop-git-token`); oracle graduated 2026-07-18 and runs per-stack since. **COMPLETE 2026-07-27 (circles joined 2026-08-03 — four):
+  all stacks graduated (coordinate + review loops in-ns, 2026-07-26); the global scan/reflex
   skips graduated stacks; the per-stack review EDGE shipped as FU-100 (2026-07-27).** model-scout +
   ledger stay global. [`agentstack.md`](agentstack.md) §Decisions.
 

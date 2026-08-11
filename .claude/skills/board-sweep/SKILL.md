@@ -56,7 +56,7 @@ deliberately deferred (§Graduation).
    | **HANDLED** | machine closed it end-to-end — verified by SUBSTANCE (diff/closure vs the item's text), never by its own label | record; feeds fu-sweep's reconcile |
    | **CORRECTLY-WAITING** | a NAMED human/operator gate holds it (blocked-on-session, attended-first-run, digest awaiting review) | report age; silence is correct |
    | **ESCALATED-UNSEEN** | terminal human-surface state nobody has read: `agent/error`, stale `agent/blocked` whose gate resolved, 🌱 piles, unread digests | the headline list — act on what is meta-lane, hand the operator the rest |
-   | **STUCK-MACHINE** | behavior contradicting corpus intent: dispatch loops, contradictory labels, report-only leaks, gate misses | root-cause, then file (prior-art grep + state the negative) or fix under the 5-min rule |
+   | **STUCK-MACHINE** | behavior contradicting corpus intent: dispatch loops, contradictory labels, report-only leaks, gate misses | root-cause, then file (prior-art grep + state the negative; a NEW name clears `docs/glossary.md` first) or fix under the 5-min rule |
    | **SILENT** | alert fired, no triage anywhere (the crosscheck's UNTRIAGED class) | the responder MACHINERY is broken — investigate the chain first, never hand-triage the alert |
 
 4. **Act**: do-nows with end-state checks; filings through existing seams (issues on the owning
@@ -77,5 +77,6 @@ Run by hand ≥2–3 times, then decide the reflex shape from what the reports a
 (contracts emerge from patterns): (a) a board slice added to the Monday retro brief
 (observability-and-retro.md §B2), or (b) a durable escalation digest — ESCALATED-UNSEEN as one
 dated issue / Home Assistant notification, making the human surface survive stand-downs.
-The 2026-08-11 evidence leans (b): the retro was itself the broken component that week, and a
-belt whose only consumer is the thing it watches is the FU-108 class.
+The founding-day evidence (2026-08-11) leaned (b) — the retro was broken that morning (it ran
+green the same day, so re-weigh (a) at graduation); a belt whose only consumer is the thing it
+watches remains the FU-108 class either way.

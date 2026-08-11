@@ -60,7 +60,7 @@ machines:
       (Talos ships no ethtool) and moot for this box.
 
   - name: wk-metal-01
-    role: k8s worker (ephemeral / compute tier, tainted)
+    role: k8s worker (ephemeral / compute tier, tainted; KATA node + Longhorn BULK tier)
     hardware: Lenovo ThinkPad X240
     cpu_cores: 4         # 2C / 4T
     memory_gb: 8
@@ -73,7 +73,7 @@ machines:
     notes: Most power-efficient tested. AC draw is battery-buffered + power-capped (~29 W flat).
 
   - name: wk-metal-02
-    role: k8s worker (ephemeral / compute tier, tainted)
+    role: k8s worker (ephemeral / compute tier, tainted; KATA node)
     hardware: Lenovo ThinkPad X250
     cpu_cores: 4
     memory_gb: 8

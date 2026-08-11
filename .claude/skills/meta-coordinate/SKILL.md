@@ -201,6 +201,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 ## Hard lines (unchanged from the platform rules)
 
 - plan/review before apply; never `talosctl upgrade` nocloud VMs; prior-art grep (FU/ADR/TICK-LOG)
-  before filing/creating ANYTHING named; next steps reported to the operator carry FU/issue ids;
+  before filing/creating ANYTHING named — a NEW name additionally clears `docs/glossary.md`
+  (the coining commit adds its row); next steps reported to the operator carry FU/issue ids;
   alert descriptions are symptoms; probes fail loudly; a belt is not a guard — predictable events
   get guards at the source, the anomaly breaker stays for anomalies.

@@ -137,7 +137,8 @@ These are pure UI toggles — the source of several "queued forever / 403" myste
    future repos are auto-covered). For the agentic gate: add the repo to `var.protected_repos` (with its
    PR `ci` check) and a per-repo `pull_request` approval rule in `repo_rulesets.tf`, then
    `tofu -chdir=tofu/github apply` outside the jail. Per-repo **auto-merge + auto-delete-branch** and the
-   agent **labels** are now code too (`repos.tf` import blocks, `labels.tf`) — same apply.
+   agent **labels** are claim-owned (AgentStack `labels:` → IssueLabels; `labels.tf` retired
+   2026-08-04, FU-068).
 9. Per package pulled by an **offline device**: flip its **visibility → Public** (private by default,
    even under a public repo).
 

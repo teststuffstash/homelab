@@ -45,5 +45,5 @@ mission) would drown the check in false positives and stay judgment-lint territo
 
 - The researcher's dispatch label `goal` → a mission-shaped label (machinery touch: scan +
   Sensors + recipes — do NOT rename the label ad hoc; it is read by predicates).
-- Prose "goal" in agents docs (~360 hits) → Goal / mission / plain wording, at docs-cleanup
-  pace (grooming, not big-bang).
+- Prose "goal" rewording — scope re-measured SMALL 2026-08-11 (FU-163: the dense files are
+  correct TYPE vocabulary); ambiguous-prose rewords only, at docs-cleanup pace.

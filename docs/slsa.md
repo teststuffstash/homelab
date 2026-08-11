@@ -33,7 +33,7 @@ There are three SLSA tracks worth tracking, and we already touch all three:
 
 | Track | What it covers | Where it lives for us |
 |---|---|---|
-| **Source** | how source is controlled (review, retention, signed history) | **Forgejo** branch protection + signed commits + protected file patterns (see `forgejo.tf`; the "git is the real RBAC" discussion) |
+| **Source** | how source is controlled (review, retention, signed history) | **Forgejo** branch protection + signed commits + protected file patterns (chart/values in `argocd/platform/forgejo.yaml` since 2026-08-04 — FU-136; `tofu/forgejo.tf` keeps the non-chart residue; the "git is the real RBAC" discussion) |
 | **Build** | build integrity + provenance | the bulk of this doc |
 | **(beyond)** | hermetic / reproducible / confidential | melange/apko + Nix; EPYC confidential compute |
 

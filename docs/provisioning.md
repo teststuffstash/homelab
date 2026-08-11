@@ -54,7 +54,8 @@ Bare-metal nodes are defined in `tofu/metal.tf` (`metal_nodes` map). Steps:
 ## Known-good examples (in `metal.tf`)
 
 - `wk-metal-01` — ThinkPad X240, .182, `/dev/sda` (500GB MX500), ephemeral tier, BIOS/legacy PXE.
-- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE.
+  ⚠ kata node AND a **Longhorn BULK zone** (ADR-089) — a wipe destroys bulk replicas; drain first.
+- `wk-metal-02` — ThinkPad X250, .183, `/dev/sda` (128GB SanDisk), ephemeral tier, legacy PXE; kata node.
 - `wk-metal-03` — laptop i5-6200U, .184, `/dev/sda`, ephemeral tier, **kata node** (`kata = true`
   → the `metal_kata` install image + `homelab.io/kata` label).
 - `wk-metal-04` — desktop i5-3570K/16GB, .186, `/dev/sda`, ephemeral tier, **kata node**. The roomy

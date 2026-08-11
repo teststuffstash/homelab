@@ -171,7 +171,9 @@ A project can already IaC its S3 buckets/keys (ADR-076 Workspaces), OpenRouter k
 (`tofu/github/`, admin PAT deliberately outside the jail), or its own ArgoCD AppProject/namespace.
 Decide per resource: a Crossplane provider vs a thin homelab PR seam.
 
-**Delivered:** the HTTPS-names leg (ADR-092, 2026-07-15) — per-stack subdomain delegation. homelab
+**Delivered:** the HTTPS-names leg (ADR-092, 2026-07-15) — per-stack subdomain delegation; the
+public-ingress leg (PublicRoute XRD, ADR-101) BUILT + ARMED 2026-08-08 — zero consumers, open
+legs in FU-039. homelab
 wires `*.<stack>.teststuff.net` **once** (wildcard cert + one `3.0/24` VIP + a dumb HAProxy TLS
 terminator → the stack's in-cluster Cilium Gateway; `stack_gateways` in `group_vars/opnsense.yml`,
 opt-in), then the stack adds hostnames as HTTPRoutes in its own `-iac` repo with zero homelab
@@ -237,7 +239,9 @@ stack-lint's REPO-03/04/05 already verify the result.
 
 **Onboarded:** sleep-tracking (reference), openrouter-operator, **homelab** (fixer lane
 FU-068/FU-142, live since 2026-08), **agent-runtime** (PR#37, 2026-08-07), **sleep-iac**
-(FU-106). **To onboard:** snore-recorder, agent-coordinator.
+(FU-106). **To onboard:** snore-recorder + agent-coordinator — both already carry AgentStack-claim k8s
+infra (sleep/platform claims); the missing layer is the REPO side (`.agents/` recipes +
+GitHub-side callers), not cluster infra.
 
 ### The platform lane sheds the meta crutch (direction, operator 2026-08-08)
 
@@ -266,7 +270,8 @@ Two boundaries are DELIBERATE and stay:
 
 Next legs when commissioned (not yet FU'd — the operator shapes the order): per-platform-repo
 review rubrics (`.agents/review.md`) + fixer-facing context files; the detector-per-catch
-intake doctrine written into the meta skill; retro/ledger harvest as issue sources.
+intake doctrine written into the meta skill. Retro/ledger harvest as issue sources DELIVERED
+2026-08-11 — retro r3's batch = 7 queued issues across 3 repos (FU-058).
 
 ## Caching tier (nix + images LIVE)
 

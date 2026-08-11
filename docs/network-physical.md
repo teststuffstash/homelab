@@ -23,6 +23,9 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03.
                 │  TP-Link 10-port  (UNMANAGED) │   ← core LAN switch
                 └──┬────┬───────────┬─────────┬──┘
                    │    │           │         │
+   ⚠ Captured 2026-06-03 — missing since then: ci-runner-01 (VM, ADR-082) + the wk-metal fleet;
+   re-capture pending.
+
    Proxmox "pve" ◄─┘    │           │         └─► TP-Link PoE switch
    (X99, .3)            │           │               └─► Basement AP (U6Lite, .63)
    └ vmbr0:             │           │

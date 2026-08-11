@@ -31,7 +31,9 @@ diff plainly does not touch its surface.
 ## Judge these carefully rather than by rule
 
 - **`manifest-lint` SKIPS CRs it has no schema for** (Applications, AgentStacks,
-  CiliumNetworkPolicies, PrometheusRules). A PR whose whole diff is one of those kinds passed a
+  CiliumNetworkPolicies). PrometheusRules left this class 2026-08-11: `devbox run
+  prometheus-rules-lint` (promtool, in `ci`) parses every expr — demand that check green
+  instead. A PR whose whole diff is one of those kinds passed a
   validator that checked *nothing*. That is acceptable if the author SAYS so and describes what
   they did instead; it is not acceptable dressed up as "CI green".
 - **Documentation is load-bearing here.** `docs/` carries the FU tracker, the ADRs and the incident

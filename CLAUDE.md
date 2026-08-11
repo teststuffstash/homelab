@@ -26,7 +26,7 @@ devbox run k9s          # cluster TUI on tofu/kubeconfig
 
 Toolchain: opentofu, kubectl, talosctl, kubernetes-helm, cilium-cli, k9s, ansible, sops, age, jq,
 yq, python3, openssl, awscli2, gh, argocd, argo (workflows), infisical, keepassxc, gitleaks,
-kyverno, **dig/host (bind), nmap, curl, nc/ncat, cloudflared**. `nix` commands need
+kyverno, **dig/host (bind), nmap, curl, nc/ncat, cloudflared, kubeconform, hubble, promtool (prometheus), wireguard-tools**. `nix` commands need
 `export NIX_CONFIG="experimental-features = nix-command flakes"`. `devbox run` executes from the
 repo root and runs scripts under **dash** — keep them simple, use absolute paths / `tofu -chdir=`,
 avoid `bash -c '<multiline>'` (it mangles).
@@ -112,7 +112,10 @@ as if at home; recipe in `docs/runbook.md`.
   `github-exporter-pat-bootstrap.sh` (PAT for the GitHub→Prometheus poller),
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
-  `coordinator-logs.sh`/`render-transcript.py`, `follow-ups-lint.sh`, `aws-*.sh` (one-shot audit/cleanup).
+  `coordinator-logs.sh`/`render-transcript.py` (+ `--dialogue`), `follow-ups-lint.sh`,
+  `prometheus-rules-lint.sh`, `skill-retro-scan.sh`, `doc-heat.py`, `aws-*.sh` (one-shot audit/cleanup).
+- `.claude/skills/` — the jail skills, the GAPS ledger + improvement contract (ADR-105):
+  [`.claude/skills/README.md`](.claude/skills/README.md).
 - `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
 - `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
   decision history in `docs/adr.md`, postmortems in `docs/incidents/`, open investigations in
@@ -162,6 +165,7 @@ thought *is*, not by which file you happen to have open:
 | **Agent-loop work items** | GitHub issues on the owning repo | `agent/*` labels; never hand-copied into the FU tracker |
 | A **spec shortfall** found by an agent | `specs/` ⚑ gap flag in the stack repo | ADR-086 — never the FU tracker |
 | A **service** that exists and can be consumed | `SERVICES.md` | The catalog other repos grep |
+| A **skill shortcoming** (operator correction, improvised step) | `.claude/skills/GAPS.md` | FU-shaped sighting; extend-on-resight; ≥2 dates → promote (ADR-105) |
 
 Two rules make the table hold:
 

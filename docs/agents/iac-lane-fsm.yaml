@@ -157,7 +157,7 @@ gaps:
     fu: FU-044
   - id: IAC-G10
     name: alert lane vs observation window — ownership undefined
-    detail: "Two entry points reach the same post-merge machinery: change-triggered (merge opens a window, IAC-T04/T05) and symptom-triggered (responder, IAC-T07) — and they already overlap, since the responder's quick-fix outcome lands on this lane's revert path. Nothing says who owns a symptom that fires INSIDE an open window, so a deterministic revert can race an LLM fix at the same symptom. Rule to encode: inside a window the -iac lane owns it (alert lane attaches evidence, dispatches nothing); outside, the alert lane owns it. Correlation half (one issue per root cause via a subject: key) is FU-133."
+    detail: "Two entry points reach the same post-merge machinery: change-triggered (merge opens a window, IAC-T04/T05) and symptom-triggered (responder, IAC-T07) — and they already overlap, since the responder's quick-fix outcome lands on this lane's revert path. Nothing says who owns a symptom that fires INSIDE an open window, so a deterministic revert can race an LLM fix at the same symptom. Rule to encode: inside a window the -iac lane owns it (alert lane attaches evidence, dispatches nothing); outside, the alert lane owns it. Correlation half is FU-133 leg (a) — filing-side group_by, queued as homelab#252; the queue-side currency gate is leg (c), homelab#253."
     fu: FU-133
   - id: IAC-G06
     name: advisory review lens absent
