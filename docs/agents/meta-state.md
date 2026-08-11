@@ -36,11 +36,20 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **THE FU BUILD-OUT GOAL IS LIVE: homelab#278, LAUNCHED 2026-08-11 ~15:30Z** (operator signed
-   off as-authored). Children #282–#291 (native sub-issues; nine queued, #289/FU-102 unqueued —
-   parked with oracle). #278 sits in the tracking state (agent/blocked), never agent/queued.
-   FU-151 meta-delivered for sleep-tracking (`5b8c384`); circles at unpark, snore via its #15.
-   The jail seat holds the quiet-goal backstop + the closing sweep (per-child live re-probe).
+4. **THE FU BUILD-OUT GOAL IS LIVE: homelab#278** (launched 2026-08-11 ~15:30Z). **5 of 10
+   children MERGED+verified by ~18:30Z**: #282 (scout legs), #286 (crash-net — incl. the
+   batch/cronjobs RBAC grant the closeout caught missing, all claims re-verified Synced),
+   #291 (inventory-yaml — generated blocks live in README/CLAUDE), #284 (CiDispatchStalled
+   queued-age), #283 (FU-145 re-key). Queued: #285/#287/#288/#290; #289 parked with oracle.
+   FU-151 meta-delivered for sleep-tracking (`5b8c384`). Jail seat: quiet-goal backstop +
+   closing sweep (per-child live re-probe + the two authoring lessons → issue-authoring §Touches:
+   ratchet-clause files bring agents/replay/** [done]; Composition-new-kind brings rbac.yaml [at
+   sweep]).
+4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
+   `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
+   wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
+   taint (`kubernetes_node_taint.ephemeral["wk-metal-04"]`) was never applied. Neither is
+   today's work; operator decides the apply window.
    **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
    with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
    goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
