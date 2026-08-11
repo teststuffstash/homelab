@@ -18,9 +18,21 @@
 # 343 of 865 five-minute steps over three days — absent 60% of the time, and absent exactly when
 # the loop is idle. The fix is the `or vector(0)` idiom RetroReportOverdue already uses
 # (argocd/resources/pushgateway/prometheusrule.yaml); `or vector(0)` collapses labels, but both
-# conjuncts were already label-less `sum()`s, so the `and` chain still matches. Tests 1/3 and 2/3
+# conjuncts were already label-less `sum()`s, so the `and` chain still matches. Tests 1/5 and 2/5
 # below are the regression pins: they assert the two production shapes now FIRE, and they fail if
 # the defaults are ever dropped again.
+#
+# ✅ …AND ITS RESIDUAL IS RESOLVED TOO (homelab#330): `or vector(0)` fixed the two IDLE conjuncts
+# but structurally could not reach the first one, which is `> 0` — defaulting it would evaluate
+# `0 > 0`, the same silence by another route. And that conjunct's family really does vanish: on an
+# upstream GraphQL 5xx the exporter emits no `github_agent_issue_labels` / `github_pull_request_open`
+# at all (absent ≠ zero, github-exporter.py collect_agent_issues) while
+# `github_exporter_last_success_timestamp` stays fresh — measured twice inside one hour on
+# 2026-08-11. An empty conjunct 1 empties the whole `and` chain, an empty expr is a resolved alert,
+# and a resolved alert restarts `for: 2h`, the longest window in this repo. Fixed by bridging THAT
+# conjunct only, with #288's `max_over_time([10m])`; the last three tests are the gap case, the
+# ceiling, and the contrast against the post-#312/pre-#330 expr kept as AgentQueueStalledPre330
+# (loop-health.promtool-rules §regression-witness-pre-330).
 #
 # ✅ THE FILE'S SECOND FINDING IS ALSO RESOLVED (homelab#313): GithubExporterStale carried the #288
 # restart-gap class — a scraped, single-replica gauge under a `for:` window, so a poller roll
@@ -35,7 +47,7 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # ── AgentQueueStalled 1/3 — the real idle-loop shape: queued work, nothing running ───────────
+  # ── AgentQueueStalled 1/5 — the real idle-loop shape: queued work, nothing running ───────────
   # 5 queued issues, no worker pods in existence, no open PRs. This IS the 2026-07-21 wedge
   # (a sidecar zombie held project-WIP for three days), and it is the shape that used to be
   # invisible: neither zero-conjunct has any series to aggregate, so both rest entirely on their
@@ -71,7 +83,7 @@ tests:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
-  # ── AgentQueueStalled 2/3 — the mixed shape: one conjunct real, one defaulted ────────────────
+  # ── AgentQueueStalled 2/5 — the mixed shape: one conjunct real, one defaulted ────────────────
   # Lingering Succeeded pod objects DO give the pod-phase conjunct its series (kube-state-metrics
   # emits every phase for every existing pod, so Running/Pending read 0) — that half aggregates
   # to a real 0. The PR conjunct still has no series and rides `or vector(0)`. Firing here proves
@@ -104,11 +116,11 @@ tests:
               summary: "Agent queue stalled — queued issues but a fully idle loop"
               description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
-  # ── AgentQueueStalled 3/3 — every conjunct backed by a real series, and the recovery edge ────
+  # ── AgentQueueStalled 3/5 — every conjunct backed by a real series, and the recovery edge ────
   # Before #312 this was the only shape that could fire, because it is the one where the PR
   # conjunct has a series to aggregate: a `github_pull_request_open` valued 0. The exporter never
   # emits that (it appends `github_pull_request_open{...} 1` per open PR and nothing otherwise),
-  # which is exactly why 1/3 and 2/3 were dead — but the shape is still worth keeping: it pins
+  # which is exactly why 1/5 and 2/5 were dead — but the shape is still worth keeping: it pins
   # that adding the `or vector(0)` defaults did not change behaviour when the series ARE present,
   # and it is the only fixture here that exercises the way DOWN (a worker pod goes Running at
   # 2h4m and the alert clears immediately — there is no `for:` on the falling edge).
@@ -139,6 +151,122 @@ tests:
       - eval_time: 2h5m
         alertname: AgentQueueStalled
         exp_alerts: []
+
+  # ── AgentQueueStalled 4/5 — ✅ the measured GraphQL-5xx gap, FIXED here (homelab#330) ─────────
+  # The shape measured live on 2026-08-11, twice inside one hour: an upstream 502/504 on the
+  # GraphQL walk, so `github_agent_issue_labels` emits NOTHING for a scrape or three (absent ≠
+  # zero, github-exporter.py collect_agent_issues) and Prometheus staleness-marks the family —
+  # while the exporter itself is perfectly healthy. `stale` in the input below IS that marker, and
+  # the `github_exporter_last_success_timestamp` series tracking the clock is the "otherwise
+  # healthy" half: GithubExporterStale is asserted silent at the same moment, so nothing else in
+  # this file would have caught the gap either.
+  # Two holes, 3 minutes each: one at 60m INSIDE the pending window (the expensive one — it used
+  # to throw away an hour of accumulated `for:` time) and one at 150m while the alert is already
+  # FIRING (which used to resolve it, re-page later and reset the clock again).
+  # The contrast is executed, not claimed: AgentQueueStalledPre330 carries the post-#312/pre-#330
+  # expr and is checked at the same eval times — silent when the shipped alert pages at 2h, still
+  # silent an hour later, and finally paging at 4h33m. Two three-minute holes cost 2h33m.
+  - interval: 1m
+    name: "a GraphQL 5xx that empties the queued conjunct no longer restarts the `for: 2h` window"
+    input_series:
+      # the whole GraphQL-derived family drops out together: t=60..62 and t=150..152
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "3+0x59 stale _x2 3+0x86 stale _x2 3+0x300"
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="circles"}'
+        values: "2+0x59 stale _x2 2+0x86 stale _x2 2+0x300"
+      # …and the poller keeps succeeding right through both (60s per sample = age ~0)
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0+60x460"
+    alert_rule_test:
+      # `for: 2h` still honoured — the bridge does not make it fire early
+      - eval_time: 1h59m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      # on time at 2h despite the 60m hole: max_over_time([10m]) held the conjunct true across it
+      - eval_time: 2h1m
+        alertname: AgentQueueStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
+      # …and mid-hole while FIRING it neither resolves nor loses `{{ $value }}` (the bridge holds
+      # the last count, which is the 10m high-water reading the manifest comment prices in)
+      - eval_time: 2h32m
+        alertname: AgentQueueStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
+      # the exporter was healthy throughout — no other alert here sees this
+      - eval_time: 2h32m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      # THE WITNESS: the pre-#330 expr went empty at the first hole, so its window restarted at
+      # 63m and restarted AGAIN at 153m — silent at 2h1m…
+      - eval_time: 2h1m
+        alertname: AgentQueueStalledPre330
+        exp_alerts: []
+      # …still silent an hour after the shipped alert paged…
+      - eval_time: 3h3m
+        alertname: AgentQueueStalledPre330
+        exp_alerts: []
+      # …and only paging at 153m + 2h = 4h33m, i.e. 2h33m late off two three-minute gaps
+      - eval_time: 4h35m
+        alertname: AgentQueueStalledPre330
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+
+  # ── AgentQueueStalled 5/5 — THE CEILING, asserted rather than assumed ────────────────────────
+  # [10m] is a bridge, not immunity — the same accepted limit #288 and #313 wrote down, carried
+  # here unchanged because the sizing that measured it (ten pod generations) did not change.
+  # A hole longer than the range empties the conjunct for real and costs the full 2h again: a
+  # GitHub incident rather than a 5xx blip, or a poller that stops walking GraphQL entirely.
+  # The exact boundary is pinned by the two promql assertions: range selectors are LEFT-OPEN in
+  # Prometheus 3.x, so `[10m]` at t sees (t-10m, t] and the last real sample (t=59m) is in range
+  # up to and including t=68m — nine gapped one-minute scrapes survive, the tenth does not.
+  # Widening it would not be free: the range is also how long a drained queue keeps being
+  # believed, and `{{ $value }}` reports that window's high-water count.
+  - interval: 1m
+    name: a 13m hole DOES reset the window — the accepted limit of [10m]
+    input_series:
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "5+0x59 stale _x12 5+0x300"
+    promql_expr_test:
+      # the last sample before the hole is t=59m; at 68m it is still inside (58m, 68m]
+      - expr: sum(max_over_time(github_agent_issue_labels{label="agent/queued"}[10m]))
+        eval_time: 68m
+        exp_samples:
+          - labels: "{}"
+            value: 5
+      # …and at 69m the range is (59m, 69m], which holds nothing: the conjunct is empty, the `and`
+      # chain has no LHS, and the alert resolves
+      - expr: sum(max_over_time(github_agent_issue_labels{label="agent/queued"}[10m]))
+        eval_time: 69m
+        exp_samples: []
+    alert_rule_test:
+      # the window it had built up is gone — nothing at 2h, exactly as the pre-#330 form behaved
+      - eval_time: 2h1m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      # …and it re-pages 2h after the family comes back at 73m (= 3h13m), not before
+      - eval_time: 3h12m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      - eval_time: 3h15m
+        alertname: AgentQueueStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
 
   # ── GithubExporterDown — scrape liveness, `for: 15m` ─────────────────────────────────────────
   # The companion to GithubExporterStale: a dead pod has no last_success gauge to age, so only
