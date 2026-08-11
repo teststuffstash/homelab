@@ -1,0 +1,28 @@
+# homelab#238 — leg B: the SAME world with the block lifted, and the ordinary queue path still runs
+# end to end.
+#
+# CONDITION UNDER REPLAY. `fix-debounce-blocked-inert`'s world with exactly one label removed —
+# homelab#237 no longer carries `agent/blocked` (its body line is reworded to say so; nothing else
+# moves). Holding the world constant across the pair is the point: an exclusion that also silenced
+# the happy path would pass leg A and be a worse bug than the one it fixed, and the only way to see
+# that is to change one label and nothing else.
+#
+# THE CONTRACT:
+#   1. #237 is now the whole pending set — one issue — so the deterministic fast path runs: no
+#      set-pass session, no subscription latch, no LLM. `sq_decide` reads its body, finds a
+#      `Touches:` line outside the ❌ table, and it is QUEUED.
+#   2. #229 (`agent/error`) is STILL excluded, and here that exclusion is load-bearing rather than
+#      cosmetic: without it N would be 2, and this leg would take the ≥2 set-pass branch instead of
+#      the fast path. Leg A proves the error label is not queued; this leg proves it is not
+#      COUNTED either.
+#   3. #226 stays in SELFREF — the `self-referential: true` marker keeps it human-queued no matter
+#      what the label predicate says, and it witnesses that the list read was served (see leg A).
+#   4. The doorbell rings once, for the repo that was queued, carrying `{repo, unit}` only —
+#      platform is not a graduated stack, so no `{stack, loop_ns}` pair rides along (FU-144).
+name: fix-debounce-unblocked-queues
+mode: actions
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:../fix-debounce-blocked-inert/bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates
