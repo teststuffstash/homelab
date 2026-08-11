@@ -19,6 +19,9 @@
 #        select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or
 #               .alert == "GithubExporterStale")]}]}' \
 #     argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#
+# …that command regenerates the `github` group ONLY. The `regression-witness-pre-313` group at the
+# bottom is not in the CR and must survive the re-copy — re-append it (see its own header).
 groups:
   - name: github
     rules:
@@ -31,7 +34,7 @@ groups:
           summary: github-exporter is not being scraped
           description: The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed.
       - alert: GithubExporterStale
-        expr: time() - github_exporter_last_success_timestamp > 1800
+        expr: time() - max by (job) (max_over_time(github_exporter_last_success_timestamp[10m])) > 1800
         for: 30m
         labels:
           severity: warning
@@ -46,3 +49,24 @@ groups:
         annotations:
           summary: Agent queue stalled — queued issues but a fully idle loop
           description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
+
+  # ── REGRESSION WITNESS — NOT a deployed rule, and deliberately not in prometheusrule.yaml ─────
+  # The pre-#313 GithubExporterStale expr, kept verbatim so the fixture can assert the FAILURE it
+  # fixes instead of merely asserting the fix. The roll cases in loop-health.promtool-test check
+  # both alerts at the same eval times: this one goes silent across the roll and re-pages 12m late
+  # under the new pod's identity, the shipped one never notices. Same device #288 used
+  # (openrouter-proxy/subscription.promtool-rules §regression-witness-pre-288), and for the same
+  # reason: it makes the contrast executed rather than claimed.
+  # If GithubExporterStale's expr is revisited, this stays as it is — it is a fossil of what must
+  # not come back, not a copy of the live rule. It is also why a STALE hand copy of the group above
+  # cannot pass vacuously: with the old expr in both places the two alerts would agree, and every
+  # roll assertion below fails.
+  - name: regression-witness-pre-313
+    rules:
+      - alert: GithubExporterStalePre313
+        expr: time() - github_exporter_last_success_timestamp > 1800
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: github-exporter polls are failing

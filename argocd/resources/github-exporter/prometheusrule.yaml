@@ -217,8 +217,33 @@ spec:
 
         # Fine-grained PATs expire (≤1y) — this is the rotation reminder. Also catches a
         # revoked token or a GitHub API outage while the pod itself stays healthy.
+        #
+        # ⚠ RESTART-GAP HARDENED (homelab#313, the #288 class in its second alert). The plain
+        #   `time() - github_exporter_last_success_timestamp > 1800`
+        # form restarted its 30m window every time the poller rolled mid-staleness, because the
+        # gauge is SCRAPED: `pod`/`instance` sit on the series and therefore on the alert. Same two
+        # mechanisms, same two halves — either alone still resets the window (#288 proved that at
+        # one replica):
+        #   (1) IDENTITY CHURN → `max by (job)`. A new pod was a new alert instance with its own
+        #       `for:` clock. `job` is the one label here that does not churn.
+        #   (2) A REAL HOLE → `max_over_time([10m])`. This Deployment is `replicas: 1`
+        #       (deployment.yaml), so during a roll the vector is genuinely EMPTY — nothing left to
+        #       aggregate over — and the staleness marker makes that instant rather than
+        #       lookback-cushioned.
+        # [10m] is #288's measured size (its 10 pod generations gapped 69-116s of raw samples,
+        # ~5x margin); a roll longer than 10m still resets the window, which is the accepted
+        # ceiling, asserted in the fixture rather than assumed. Unlike #288 the range costs
+        # nothing on the way down: this gauge only changes value when a poll SUCCEEDS, and any
+        # success inside the last 10m already puts the age under the 1800s threshold — so
+        # `max_over_time` can neither delay a page nor keep one ringing after recovery.
+        # ACCEPTED, and the reverse face of the same coin: aggregating means one healthy instance
+        # masks a stuck one. Unreachable at `replicas: 1`, and it is exactly what makes a roll
+        # safe (a fresh pod publishes `..._last_success_timestamp 0` until its first successful
+        # poll, and the outgoing pod's real value outranks it). Revisit if this ever scales out.
+        # Both halves and the ceiling are pinned as executed tests in loop-health.promtool-test,
+        # against the pre-#313 expr kept as a regression witness in loop-health.promtool-rules.
         - alert: GithubExporterStale
-          expr: time() - github_exporter_last_success_timestamp > 1800
+          expr: time() - max by (job) (max_over_time(github_exporter_last_success_timestamp[10m])) > 1800
           for: 30m
           labels:
             severity: warning
