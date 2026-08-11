@@ -1,0 +1,16 @@
+[
+  {
+    "number": 66,
+    "title": "CI: add the required `ci` workflow to this repo",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "The entire deliverable is `.github/workflows/ci.yaml`.\n\nTouches: .github/\n",
+    "updatedAt": "2026-08-11T09:00:00Z"
+  },
+  {
+    "number": 70,
+    "title": "scan: the janitor tick drops its exit code",
+    "labels": [{"name": "agent-fix"}, {"name": "agent/in-progress"}, {"name": "task/fix"}],
+    "body": "Touches: agents/coordinator-scan.sh\n",
+    "updatedAt": "2026-08-11T09:05:00Z"
+  }
+]

@@ -1,0 +1,6 @@
+CALL gh api repos/teststuffstash/homelab/issues/66/comments?per_page=100
+OUT INFEAS <empty>
+OUT UNIT c4c5-redispatch|homelab|issue-66|fix
+OUT V2   issue #66 — AGENT_INFEASIBLE: a first-class terminal for not-implementable-as-written [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

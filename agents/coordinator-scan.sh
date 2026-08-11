@@ -1199,7 +1199,8 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # v2 (FU-050, C4/C5): an `agent/in-progress` issue whose worker went TERMINAL is a silent stall
     # until someone re-ticks — this was meta-only work all through meta-session 2. actionable =
     # in-progress ∧ no Running worker pod in the project ns ∧ no OPEN PR referencing the issue (an
-    # open PR means the merge-path reflexes own it, and blocked issues never carry in-progress).
+    # open PR means the merge-path reflexes own it; `agent/blocked` is excluded by the selector
+    # below rather than assumed away — see the note on it there).
     # A kubectl probe failure is reported and SKIPS the clause — it never fails INTO a wake
     # (rule #6); the launcher pre-flight is the double-dispatch belt either way.
     v2=""
@@ -1208,8 +1209,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             --field-selector=status.phase!=Succeeded,status.phase!=Failed --no-headers 2>/dev/null)"; then
         if [ -z "$PODS" ]; then
           BODIES="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body]' 2>/dev/null || echo '[]')"
-          # ONE selector, THREE derivations (the belt, the report line, the unit) — this is
-          # conditions (a)+(b) of the abandoned-ride predicate and the copies MUST NOT drift.
+          # ONE selector, FOUR derivations (the infeasible terminal, the belt, the report line,
+          # the unit) — this is conditions (a)+(b) of the abandoned-ride predicate and the copies
+          # MUST NOT drift.
           # FU-143 point 2: the merged-into-goal set is NOT abandoned — excluded here (and so in
           # every derivation) or c4c5-redispatch, which outranks merged-closeout, re-rides merged
           # work every tick while the closeout unit starves. Detection block above.
@@ -1217,10 +1219,93 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # double-quoted jq program would eat one backslash and turn the `\\b` word boundary into
           # jq's `\b` BACKSPACE — the reference test would then match nothing and every
           # in-progress issue would read as abandoned. Variable expansion does no such thing.
-          C4C5_SEL='.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
+          # `agent/blocked` is excluded for the same reason `agent/error` is, and the old comment
+          # four lines up ("blocked issues never carry in-progress") is exactly the assumption that
+          # made it unnecessary — an assumption, not a guard. A human (or the infeasible terminal
+          # below, mid-write) can hold BOTH labels for a tick, and re-dispatching a human-gated
+          # issue is the one thing C4/C5 must never do (retro r3 F4, homelab#257).
+          # >>>REPLAY:c4c5-selector>>>
+          C4C5_SEL='.[] | (.labels|map(.name)) as $L
+             | select((($L|index("agent/error"))|not) and (($L|index("agent/blocked"))|not))
+             | .number as $n
              | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
+          # <<<REPLAY:c4c5-selector<<<
+          # ── THE INFEASIBLE TERMINAL (retro r3 F4, homelab#257) ────────────────────────────────
+          # A worker that correctly rules the deliverable NOT IMPLEMENTABLE AS WRITTEN — a path in
+          # its recipe's ban list, a resource outside the pod (cluster, live API creds, a
+          # sibling-repo checkout) — ends without pushing. That honest answer used to be
+          # INDISTINGUISHABLE FROM A CRASH: no branch, no PR, `agent/in-progress` still on, so the
+          # C4/C5 predicate below read it as an abandoned ride and either the belt re-queued it or
+          # the unit spent an LLM tick to re-dispatch the same impossible task. oracle-fleet#66 is
+          # the worked case: `AGENT_STRIKE … error_class=unknown`, and the coordinator had to
+          # override the mechanical c4c5-redispatch clause BY HAND.
+          # The marker makes it first-class: one comment whose FIRST characters are exactly
+          # `AGENT_INFEASIBLE: <path/resource>` (the producer half is the recipe paragraph in each
+          # repo's `.agents/fix.yaml`), and the scan parks the issue on `agent/blocked` — a human
+          # gate — instead of re-riding it.
+          # Three properties are load-bearing:
+          #   • ANCHORED at the start of a comment body, never a substring. This issue's own title
+          #     contains the marker, and a human quoting it writes `> AGENT_INFEASIBLE: …`; an
+          #     unanchored read would make "talks about the terminal" mean "IS the terminal" — the
+          #     same defect the fix-debounce lane's `alert-fp:` test was fixed for (homelab#244).
+          #   • ISSUE COMMENTS ONLY, never the body: the body is written by the human who filed it.
+          #   • THE MARKER ALONE SUPPRESSES THE REDISPATCH, whether or not the label write lands.
+          #     A failed/half-applied write is reported loudly and the issue still leaves the unit
+          #     list: re-riding a task a worker has already proven impossible costs a paid session
+          #     to re-derive a known answer, which is strictly worse than a report line. An
+          #     UNREADABLE probe is the other way round (rule #6, never fail INTO a write): the
+          #     issue keeps today's behaviour, belt and unit included.
+          # >>>REPLAY:infeasible-terminal>>>
+          infeas_done=""
+          for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
+              --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+            icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
+            if ! jq -e . >/dev/null 2>&1 <<<"${icmt:-}"; then
+              orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading issue #${icand}'s comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)\n"
+              continue
+            fi
+            # `first // ""` — a worker posts the marker once; if a second one exists the first is
+            # the one that ended the ride. jq's `^` is string-start (no "m" flag), which IS the
+            # anchor this wants: the marker opens the comment or it does not count.
+            imark="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_INFEASIBLE:"))] | first // ""' <<<"$icmt")"
+            [ -n "$imark" ] || continue
+            # The payload is the REST of the marker line. Empty is still a terminal — the worker
+            # declared infeasibility and simply did not name the thing — so it parks and the
+            # report says the name is missing, rather than falling through to a re-ride.
+            ipay="$(jq -rn --arg m "$imark" '$m | split("\n")[0] | ltrimstr("AGENT_INFEASIBLE:")
+                    | sub("^[ \t]+"; "") | .[0:200]')"
+            [ -n "$ipay" ] || ipay="(no path/resource named — ask the worker's transcript)"
+            infeas_done="${infeas_done}${icand} "
+            # ⚠ Same non-atomic write as the belt below, same order for the same reason: ADD the
+            # new lifecycle label FIRST, remove `agent/in-progress` SECOND, then RE-READ and prove
+            # the end state. With neither label the issue is invisible to every clause.
+            if gh issue edit "$icand" --repo "$slug" --add-label agent/blocked >/dev/null 2>&1; then
+              gh issue edit "$icand" --repo "$slug" --remove-label agent/in-progress >/dev/null 2>&1 || true
+            fi
+            iend="$(gh issue view "$icand" --repo "$slug" --json labels --jq '[.labels[].name]|join(",")' 2>/dev/null || echo "PROBE_FAILED")"
+            iok=""
+            case ",${iend}," in
+              *",agent/blocked,"*) case ",${iend}," in *",agent/in-progress,"*) : ;; *) iok=1;; esac;;
+            esac
+            if [ -n "$iok" ]; then
+              gh issue comment "$icand" --repo "$slug" --body "$(printf '%s\n' \
+                "🤖 **\`AGENT_INFEASIBLE\` — parked \`agent/blocked\` for a human** (deterministic scan, retro r3 F4 / homelab#257)." \
+                "" \
+                "The worker ruled this **not implementable as written** and ended without pushing, naming:" \
+                "" \
+                "> ${ipay}" \
+                "" \
+                "That is a VERDICT, not a crash, so it does not go back through \`c4c5-redispatch\`: re-riding it would spend another paid session to re-derive an answer the loop already has. Labels moved \`agent/in-progress\` → \`agent/blocked\`, which also frees the repo WIP slot and releases every sibling this issue's \`Touches:\` footprint was holding (ADR-097)." \
+                "" \
+                "**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove \`agent/blocked\` and re-queue. Re-queueing it unchanged will simply reach the same verdict." )" >/dev/null 2>&1 || true
+              orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} parked \`agent/blocked\` (worker: ${ipay}). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).\n"
+            else
+              orphans="${orphans}[$repo] ⛔ INFEASIBLE — issue #${icand} declared \`AGENT_INFEASIBLE: ${ipay}\`, but the label write FAILED or landed HALF-APPLIED — labels are now [${iend}]. Fix by hand: it wants \`agent/blocked\` and NOT \`agent/in-progress\`. The redispatch is suppressed either way (a proven-impossible task is not re-ridden on the strength of a label write).\n"
+            fi
+          done
+          # <<<REPLAY:infeasible-terminal<<<
           # ── THE BELT (homelab#155): RECONCILE the phantom label, do not only report it ────────
           # A phantom `agent/in-progress` starves far more than its own issue: it counts against
           # REPO_MAX_WIP and holds every SIBLING through the ADR-097 footprint intersection
@@ -1251,9 +1336,15 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           # WIP and PR-cap gates) owns it on the next pass — no LLM tick spent to say "re-run it".
           c4c5_cleared=""
           c4c5_cands=""
+          # An issue the infeasible terminal already parked is NOT a phantom label: the belt would
+          # re-queue it to `agent/queued` and hand it straight back to dispatch, undoing the human
+          # gate it was just given. Excluded here, and from both derivations below, via the same
+          # `$done` list the belt's own clears use.
           [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
             | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
-              "$C4C5_SEL"' | "\($n)|\(.updatedAt // "")"')"
+              --arg done "${infeas_done:-}" \
+              "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+               | "\($n)|\(.updatedAt // "")"')"
           if [ -n "$c4c5_cands" ]; then
             now_s="$(date -u +%s)"
             # A SECOND pod probe on purpose: the live one above is the tested condition-(a)
@@ -1335,8 +1426,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
               done
             fi
           fi
+          # >>>REPLAY:c4c5-derivations>>>
           v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
-            --arg done "${c4c5_cleared:-}" \
+            --arg done "${c4c5_cleared:-}${infeas_done:-}" \
             "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
           # The held goal children get their OWN report line — silence here is what let the first
@@ -1350,14 +1442,17 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           [ -n "$ambig" ] && orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
           if [ -n "$dispatchable" ]; then
             # An issue the belt RE-QUEUED is deliberately excluded: it is a plain queued item now,
-            # and emitting the unit too would race the queued lane onto the same issue.
+            # and emitting the unit too would race the queued lane onto the same issue. An issue
+            # the INFEASIBLE terminal parked is excluded for the opposite reason — it is human-
+            # gated, and the whole point of the marker is that this unit must never carry it.
             for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
-                --arg done "${c4c5_cleared:-}" \
+                --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
               units="${units}c4c5-redispatch|${repo}|issue-${u%%|*}|${u#*|}\n"
             done
           fi
+          # <<<REPLAY:c4c5-derivations<<<
         fi
       else
         echo "  [$repo] PROBE_FAILED reading worker pods — C4/C5 clause skipped this tick (fail-loud, rule #6)" >&2

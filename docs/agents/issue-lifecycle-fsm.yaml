@@ -30,6 +30,8 @@ diagram: |
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
       InProgress --> Queued: phantom label, persisted → scan reconciles it (IL-T16)
+      InProgress --> Blocked: worker ruled it NOT IMPLEMENTABLE → AGENT_INFEASIBLE parks it (IL-T26)
+      Blocked --> Queued: a human re-scopes it and strips agent/blocked (IL-T26)
       InProgress --> ClosedByMerge: PR merges into MASTER — keyword fires (IL-T07)
       InProgress --> MergedIntoGoal: PR merges into goal/** — keyword INERT (IL-T08)
       MergedIntoGoal --> ClosedByMerge: FU-143 widened C6 closes it (IL-T08)
@@ -80,6 +82,7 @@ events:
   pr_merged_master: "the ride's PR merges into master — GitHub closing keyword fires"
   pr_merged_goal: "the ride's PR merges into its declared goal/** base — keyword INERT"
   worker_terminal: "the ride died with no open PR referencing the issue"
+  worker_infeasible: "the ride ENDED ON PURPOSE with no open PR: the deliverable needs a path its recipe bans or a resource outside the pod, and the worker said so in one `AGENT_INFEASIBLE: <path/resource>` comment (retro r3 F4)"
   descendant_closed: "any issue in the goal's sub-issue closure closes"
   assembly_complete: "goal-review rules the acceptance BUILT AS SPECIFIED (renamed from goal_met, ADR-102 — it never meant 'idea validated')"
   assembly_merged: "the goal→master PR merges (human codeowner act) — a MIDPOINT, not the end"
@@ -245,16 +248,19 @@ transitions:
   - id: IL-T06
     name: abandoned in-progress → c4c5 re-dispatch
     owner: scan C4/C5 clause
-    when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143) ∧ NOT reconciled by IL-T16 this pass"
+    when: "agent/in-progress ∧ no Running worker ∧ no OPEN PR referencing ∧ NOT merged-into-goal (FU-143) ∧ NOT reconciled by IL-T16 this pass ∧ NOT parked by IL-T26 this pass"
     status: guarded
-    unreplayed: "the single C4C5 selector makes this one fixture — on its next touch"
-    unreplayed: "the single C4C5 selector makes this one fixture — on its next touch"
+    replay:
+      - agents/replay/fixtures/c4c5-infeasible-quoted-inert   # the ordinary abandoned ride — unit + report line, unchanged by IL-T26
+      - agents/replay/fixtures/c4c5-infeasible-parks          # a no-marker issue beside a parked one still gets its unit
     guards:
       - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
       - desc: "agent/error invisible to the clause (FU-069 breaker)"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/error"\)' }
-      - desc: "ONE selector for the abandoned predicate — the unit, the report and the IL-T16 belt cannot drift apart"
+      - desc: "agent/blocked invisible to the clause — a human gate is never re-dispatched (homelab#257; was an ASSUMPTION in a comment before)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'index\("agent/blocked"\)' }
+      - desc: "ONE selector for the abandoned predicate — the unit, the report, the IL-T16 belt and the IL-T26 terminal cannot drift apart"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_SEL=" }
     incidents: ["2026-08-05 circles#22: pre-FU-143, C4/C5 re-rode a merged child — breakage #1 of three"]
 
@@ -279,6 +285,33 @@ transitions:
     incidents:
       - "2026-08-08 oracle#193 + circles#42/#46/#49: six phantom labels, zero worker pods — ~3h of two stacks idle. WIP caps counted ghosts and ADR-097 footprint holds refused SIBLING issues against dead work; found only because the operator asked why nothing was running, cleared by hand"
       - "2026-08-08 oracle#193 again: the hand-clear removed agent/in-progress and FORGOT agent/queued — the issue went invisible a second time. That is why the belt writes queued first and verifies the end state"
+
+  - id: IL-T26
+    name: infeasible scope → parked agent/blocked (the terminal)
+    owner: coordinator-scan, deterministically — no LLM tick in the path
+    when: "IL-T06's predicate ∧ one issue COMMENT whose first characters are `AGENT_INFEASIBLE:` →
+      add agent/blocked, remove agent/in-progress, comment the audit quoting the named
+      path/resource. Runs BEFORE the IL-T16 belt and removes the issue from every C4/C5
+      derivation, so a verdict is never re-queued and never re-dispatched. A human re-scopes it
+      (or does the named part by hand) and strips agent/blocked to send it back to Queued."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/c4c5-infeasible-parks           # the verdict: read → blocked → in-progress off → re-read → audit; no unit
+      - agents/replay/fixtures/c4c5-infeasible-quoted-inert    # the near-miss: a QUOTED marker latches nothing, and a human-blocked issue is not even read
+    guards:
+      - desc: "the marker is ANCHORED at the start of a COMMENT — talking about the terminal is not the terminal"
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_INFEASIBLE:"\)' }
+      - desc: "add agent/blocked FIRST, remove agent/in-progress SECOND, then re-read and prove the end state (the edit is not atomic — IL-T16's lesson)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "Same non-atomic write as the belt" }
+      - desc: "the MARKER suppresses the redispatch, not the label write — a failed/half-applied write reports loudly and the issue still leaves the unit list"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "The redispatch is suppressed either way" }
+      - desc: "an unreadable comments probe keeps today's behaviour, belt and unit included (rule #6 — never fail INTO a write)"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "the infeasible-terminal check was SKIPPED" }
+      - desc: "PRODUCER HALF — each repo's `.agents/fix.yaml` must tell a worker to emit the marker; until it does, this transition is unreachable in that repo"
+        anchor: { file: agents/coordinator/README.md, pattern: "AGENT_INFEASIBLE" }
+    incidents:
+      - "2026-08-11 oracle-fleet#66: the whole deliverable was .github/workflows/ci.yaml, banned by .agents/fix.yaml. The worker correctly self-reported 'not implementable as written' — with no terminal for it, that landed as AGENT_STRIKE error_class=unknown, and the coordinator had to override the mechanical c4c5-redispatch clause BY HAND (retro r3 F4)"
+      - "2026-08-11 oracle-fleet#225: 'none of that is executable by a fix-class worker (no cluster/infra access, no live-API credentials, no oracle-iac checkout)' — the worker RESCOPED itself instead, and its PR's `Fixes #225` then wrongly auto-closed the issue (reopened 19:03:31Z). Self-rescoping is what an agent does when the honest answer has no exit"
 
   - id: IL-T07
     name: close by master merge
