@@ -117,6 +117,10 @@ spec:
               [ "$NEW" -ge "{{workflow.parameters.minNewTasks}}" ] || { echo "GUARD REFUSED: only $NEW new terminal tasks (< {{workflow.parameters.minNewTasks}}) — nothing worth two rides"; exit 1; }
           env: &tsenv
             - { name: HOME, value: "/home/node" }
+            # s5cmd region auto-detect 400s against Garage — every s5cmd caller pins this
+            # (transcripts-sync/-viewer do); latent here until the guard's busy-probe fix
+            # (2026-08-11) let the ledger step run for the first time.
+            - { name: AWS_REGION, value: "garage" }
             - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
             - { name: AGENT_TS_BUCKET, value: "agent-transcripts" }
             - name: AGENT_TS_READER_ID
