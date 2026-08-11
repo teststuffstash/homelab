@@ -1,0 +1,46 @@
+# homelab#309 — the pre-dispatch GUARDED intersection, both directions in one action stream.
+#
+# WHAT IT PINS. `scripts/pin-only-lint.sh` lets a PR write nothing but a pin line into three
+# carved-out files, so a queued issue whose declared `Touches:` lands on one of them is
+# undeliverable by any PR — its route is an operator push to master. Before this check the scan
+# dispatched it anyway and the constraint was discovered by burning a round (#299, PR#306).
+#
+# THE EIGHT CASES, and what each one exists to stop a later edit from breaking:
+#   #299  `agents/coordinator/`            → HELD. The worked example: the issue that paid for this
+#         check. Its footprint is a DIRECTORY and the guarded entry is a file inside it.
+#   #309  `agents/coordinator-scan.sh, agents/replay/` → DISPATCHED. This very issue. A substring
+#         grep would hit `agents/coordinator/reflexes-argo.yaml` here and hold the fix for the bug
+#         forever; `fp_conflict` is path-boundary aware, which is why it is reused rather than
+#         re-implemented.
+#   #400  `argocd/platform/openrouter-operator.yaml` → HELD, exact-file form. Deliberately NOT a
+#         pin bump: pins move through the deploy lane's own bump PRs (ADR-084), never through a
+#         queued fixer issue, so nothing this check holds is work the automated lane needed.
+#   #401  `argocd/resources/loki/`         → DISPATCHED. The main lane is untouched by this check.
+#   #402  `*`                              → DISPATCHED. The no-`Touches:` sentinel conflicts with
+#         everything by design (agents/footprint.sh); reading it as guarded would stop dispatching
+#         every unfootprinted issue in the repo — the acceptance criterion states it explicitly.
+#   #403  `**/*.yaml`                      → DISPATCHED. The sentinel's glob cousin: it normalizes
+#         to the empty prefix exactly like `*`, so it is dropped by the same rule rather than by a
+#         string comparison against `*` that would miss it.
+#   #404  `agents/coordinator/` in oracle-fleet → DISPATCHED. The GUARDED set is THIS repo's CI's.
+#         A stack repo that happens to own a same-named path is not touching this repo's file.
+#   #405  `argocd/platform/`               → HELD, and the line names BOTH guarded files under it,
+#         because a human re-scoping the issue needs the whole overlap, not the first hit.
+#
+# NO LABEL WRITE IS ASSERTED FOR FREE: the action stream carries no `gh` call at all. This clause
+# is a router, not a gate — `agent/blocked` is a human gate, and a guarded overlap may be only part
+# of an issue's scope. A future edit that "helpfully" parks the issue shows up here as a new call.
+#
+# The GUARDED set is read from the REAL `scripts/pin-only-lint.sh` in the checkout, not recorded
+# into `world/`: the acceptance criterion is that exactly ONE definition exists, so a fixture
+# holding a second copy would defeat the change it is pinning. (Same reason the harness extracts
+# the clause from the shipped script instead of transcribing it — #166.) Offline either way.
+name: scan-guarded-pre-dispatch
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:guarded-set
+  - file:cases.sh
+  - block:guarded-hold
+  - file:post.sh
