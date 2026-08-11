@@ -1,0 +1,5 @@
+OUT DISPATCH #404 (oracle-fleet, declared: argocd/resources/loki/)
+OUT ORPHAN [homelab] ⛔ GUARDED-SET PROBE-FAILED — no `GUARDED=` line readable at /no/such/scripts/pin-only-lint.sh (homelab#309). Holding rather than dispatching blind:
+OUT ORPHAN   issue #401 — loki: raise the retention window
+OUT REACHED: end
+RC 0

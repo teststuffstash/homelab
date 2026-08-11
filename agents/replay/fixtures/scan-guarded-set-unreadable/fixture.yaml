@@ -1,0 +1,31 @@
+# homelab#309 — the GUARDED set could not be read. Rule #6: never fail INTO a dispatch.
+#
+# WHY THIS BRANCH GETS ITS OWN FIXTURE. The check reads its set out of `scripts/pin-only-lint.sh`
+# instead of re-declaring it, so it inherits a failure mode the re-declared copy would not have:
+# the file moves, or its `GUARDED=` line changes shape, and the reader comes back EMPTY. Empty must
+# mean "unknown", never "nothing is guarded" — the second reading turns a routing check into a
+# silent re-opening of the exact hole it was built to close, and it would go unnoticed because
+# everything keeps dispatching. That is the failure class this repo keeps paying for (the same one
+# `pin-only-lint` itself refuses to green-light through), so it is pinned as behaviour.
+#
+# THE TWO CASES:
+#   #401 homelab, `argocd/resources/loki/` — a plainly UNGUARDED footprint, and it is HELD anyway.
+#        The strongest statement of the branch: with the set unreadable the scan cannot tell, so it
+#        defers (a deferral is absorbed by the next scan; a wrong dispatch burns a round). The
+#        report line names the unreadable path so the one-line fix is in the report itself.
+#   #404 oracle-fleet, same footprint — DISPATCHED. The blast radius is bounded to the repo the
+#        set belongs to: a broken read in this checkout must not wedge every stack's fixer lane.
+#
+# `PIN_ONLY_LINT` is pointed at a path that does not exist, via the same env override the scan
+# already offers. No `world/` and no `gh` call: an unreadable file needs no recording.
+name: scan-guarded-set-unreadable
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:guarded-set
+  - file:cases.sh
+  - block:guarded-hold
+  - file:post.sh
+env:
+  - PIN_ONLY_LINT=/no/such/scripts/pin-only-lint.sh
