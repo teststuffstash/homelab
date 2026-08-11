@@ -35,24 +35,32 @@ avoid `bash -c '<multiline>'` (it mangles).
 
 A Talos Linux Kubernetes cluster, hybrid Proxmox VMs + bare-metal, with OPNsense managed as code.
 
+<!-- BEGIN GENERATED hosts — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
 | Host | IP | Role |
 |---|---|---|
 | OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
 | Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
-| `wk-01` / `wk-02` (VMs) | .61 / .62 | workers (wk-02 in Longhorn) |
-| `thinkcentre` (metal, PXE) | 192.168.2.53 | worker + Longhorn (+ 2×Optane fast tier) |
-| `hp-01` (metal, PXE) | 192.168.2.54 | worker + Longhorn (WoL-capable) |
-| `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | worker, ephemeral/compute tier (tainted; kata node, 8GB) |
-| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | worker, ephemeral/compute tier (tainted; kata node, 8GB) |
-| `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | worker, ephemeral/compute tier (tainted; kata node) |
-| `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | worker, ephemeral/compute tier (tainted; kata node, no AVX2) |
+| `wk-01` (VM) | 192.168.2.61 | k8s worker |
+| `wk-02` (VM) | 192.168.2.62 | k8s worker + Longhorn (bulk tier) |
+| `thinkcentre` (metal, PXE) | 192.168.2.53 | k8s worker + Longhorn (+ 2×Optane fast tier) |
+| `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
+| `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier |
+| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) |
+| `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
+| `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
 | `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
 | pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
+<!-- END GENERATED hosts -->
 
+<!-- BEGIN GENERATED versions — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
 Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
+<!-- END GENERATED versions -->
+
+(Both blocks above are generated — `machines/machines.yaml` + the `tofu/variables.tf` version
+defaults, rendered by `machines/generate.py`. Edit the source, re-run the generator.)
 
 ### Service exposure
 
@@ -116,7 +124,11 @@ as if at home; recipe in `docs/runbook.md`.
   `prometheus-rules-lint.sh`, `skill-retro-scan.sh`, `doc-heat.py`, `aws-*.sh` (one-shot audit/cleanup).
 - `.claude/skills/` — the jail skills, the GAPS ledger + improvement contract (ADR-105):
   [`.claude/skills/README.md`](.claude/skills/README.md).
-- `machines/` — machine inventory (`machines.yaml`) + table generator (`generate.py` → `README.md`).
+- `machines/` — **the one machine inventory** (`machines.yaml`): consumed by `tofu/locals.tf`
+  (`yamldecode` → the metal-node flags, the avx2 label, the ephemeral taint) AND by `generate.py`,
+  which regenerates `machines/README.md` + `machines.html` and the marker-delimited host table +
+  version line in `README.md`/`CLAUDE.md`. Edit the YAML, then `devbox run -- python3
+  machines/generate.py`; never hand-edit a generated block.
 - `docs/` — operations & design docs + per-service docs (entrypoint: `docs/office-plants/`);
   decision history in `docs/adr.md`, postmortems in `docs/incidents/`, open investigations in
   `docs/spikes/`. Which record gets what: the routing table below.
