@@ -1,0 +1,2 @@
+OUT RUN_CMD: printf '%s' 'UkVDSVBF' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns 200 --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=19. End your final message with the JSON object its response schema describes (single line, all required keys).'
+RC 0

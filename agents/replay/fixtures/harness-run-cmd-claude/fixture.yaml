@@ -1,0 +1,17 @@
+# homelab#256 (retro r3 F1), the other half — the subscription rail is UNCHANGED by the goose fix.
+#
+# CONDITION UNDER REPLAY. Identical to `harness-run-cmd-goose` except the harness: a recipe
+# dispatch on claude, the rail that runs off the operator's subscription token.
+#
+# THE CONTRACT: no `GOOSE_MAX_TOKENS` reaches this arm. The var is goose's own client-side emit
+# ceiling and means nothing to claude; a fix applied one level too high (an export in the launcher
+# shell, or a prefix on the shared front of RUN_CMD) would land here too and look harmless — this
+# fixture is what makes that shape red instead of invisible. `--max-turns` stays the claude arm's
+# only ceiling knob.
+name: harness-run-cmd-claude
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:post.sh
