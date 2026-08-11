@@ -1,0 +1,8 @@
+→ oracle r3 cell goose:deepseek/deepseek-v4-pro — brief /tmp/retro-brief-Kpg4.md (18342 bytes)
+→ harvest: report goes to docs/agents/retros/2026-08-11-oracle-r3-<model>.md via PR
+→ pod agent-oracle-fleet-retro-r3-r1 created in ns oracle-fleet
+→ streaming pod log
+starting session | provider: openrouter model: deepseek/deepseek-v4-pro
+Error: Server error: Please retry
+AGENT_RUN_STATS {"task":"retro-r3","exit_status":"clean","wall_time_s":8,"rounds":1,"total_cost_usd":0}
+→ run finished. delete with: kubectl -n oracle-fleet delete pod agent-oracle-fleet-retro-r3-r1

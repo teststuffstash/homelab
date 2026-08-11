@@ -131,5 +131,12 @@ Log each instance here, so the next author sees a register rather than a precede
   to a split-stream read, both legs verified live from the jail (empty ns → idle, failing probe →
   busy). Observable (a kubectl call + refusal line) — the debt above stands: the first retro-lane
   fixture should pin BOTH the refusal legs and this empty-is-idle case (jail-lane commit).
+- **retro-lane debt, PARTLY PAID (homelab#248)** — `fixtures/retro-cell-report-*` and
+  `fixtures/retro-harvest-*` are the first retro-lane family: the cell's report-marker self-check
+  (both verdicts) and the harvest's cell→filename slug plus its partial-run notice. They do NOT
+  discharge the standing entry above — the **guard** (busy-probe legs, ledger delta) and the
+  harvest's git/gh half are still unpinned, and `retro-argo.yaml`'s FSM-side declaration stays
+  `unreplayed`. The next touch of either extends this family rather than opening a fourth
+  register line.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
