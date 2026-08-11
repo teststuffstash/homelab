@@ -170,8 +170,8 @@ only LAN DHCP.
 soft-anti-affinity across wk-02/thinkcentre/hp-01). All stateful services use Longhorn PVCs (not
 node-pinned). A `longhorn-fast` SC (replica=1, node-local; SCRATCH for disk-write-heavy pods —
 eligibility ruling in `docs/storage-ledger.md`, FU-159) lives on the ThinkCentre's 2×Optane,
-formatted+mounted via `metal.tf` `optane_disks` and registered with
-`scripts/longhorn-register-optane.sh`.
+formatted+mounted via the ThinkCentre entry's `optane_disks` field in `machines/machines.yaml`
+(`tofu/metal.tf` only consumes it) and registered with `scripts/longhorn-register-optane.sh`.
 
 - ⚠️ **Never `talosctl upgrade` a Proxmox *nocloud* VM** — the reboot loses the cloud-init static
   IP/hostname and it rejoins as a DHCP/default-name ghost. Add extensions by baking them into the
@@ -259,11 +259,11 @@ sat as a broken replica for 2.5 days unnoticed (2026-06).
 Historically, after a **simultaneous cold power-cycle** (whole lab loses power), metal Talos nodes
 could rejoin under generated `talos-xxx` hostnames — they DHCP-discover before OPNsense's dnsmasq
 is back up, so Talos can't get its reserved hostname and makes one up. **Metal hostnames are now
-pinned** via an install-time `HostnameConfig` patch (`tofu/metal.tf` `pin_hostname`, default on),
-so this shouldn't recur. If a ghost still appears (e.g. a node was reinstalled without the patch):
-symptoms are `kubectl get nodes` showing `talos-xxx` ghosts next to (or instead of) the real metal
-names, and volumes failing to attach (Multi-Attach / "driver.longhorn.io not found"). Recover with
-reboots:
+pinned** via an install-time `HostnameConfig` patch (the node's `pin_hostname` field in
+`machines/machines.yaml`, default on; `tofu/metal.tf` only consumes it), so this shouldn't recur.
+If a ghost still appears (e.g. a node was reinstalled without the patch): symptoms are `kubectl get
+nodes` showing `talos-xxx` ghosts next to (or instead of) the real metal names, and volumes failing
+to attach (Multi-Attach / "driver.longhorn.io not found"). Recover with reboots:
 
 1. **Reboot each ghosted metal node** to reclaim its reserved hostname (dnsmasq is healthy now):
    `devbox run -- talosctl --talosconfig tofu/talosconfig -n <ip> reboot`. Do storage nodes
