@@ -227,8 +227,13 @@ the block needs pruning, not more headings.
       already fetches `reviewDecision` on its existing GraphQL walk — emit a park series (green ∧
       bot-approved-at-head ∧ REVIEW_REQUIRED), panel it, add a `CodeownerParkWaiting` warning
       (>30m — the belt OUTSIDE the session), then `meta-needs-attention.sh` clause 4 reads
-      Prometheus instead of `gh`. Post-goal-#278 work (exporter is mid-goal traffic). Relates
-      FU-150, FU-084, ADR-093.
+      Prometheus instead of `gh`. **Widen (operator, 2026-08-11): survey ALL the meta-session
+      watches + their cadences** (`agents/meta-*.sh` — needs-attention 600s gh-poll, heartbeat
+      7200s, alert-crosscheck on-sweep, throughput on-sweep) and make them **event-driven/streamed
+      where a source exists** rather than polled — the platform's own edge+level doctrine applied
+      to the jail's watches: Alertmanager webhooks, the exporter's Prometheus series, Argo Events
+      — polls remain only as level-triggered backstops. Post-goal-#278 work (exporter is mid-goal
+      traffic). Relates FU-150, FU-084, ADR-093.
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
