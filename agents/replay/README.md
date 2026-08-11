@@ -106,6 +106,19 @@ Two things that pair does need, and both live in the harness rather than the fix
   PATH-shim would have worked too and buys nothing — the function is the seam pattern the section
   above already describes.
 
+`fixtures/retro-harvest-cell-errored` (homelab#268) is the first fixture whose subject is partly a
+**declaration** rather than a clause. Argo — not any shell — decides that an OOMKilled cell is
+`Error` and not `Failed`, and `continueOn` is the DAG field that says whether the sibling and the
+harvest survive it; no clause reads that field, and kubeconform SKIPs the CronWorkflow kind, so
+nothing was checking it. The bridge therefore `awk`s the two cell tasks' `continueOn` lines out of
+the shipped manifest and prints them as OUT lines, and the block replays what the harvest does with
+the world an errored cell leaves behind (no ride log at all — `tee` never ran, so the output
+artifact is unresolvable and `optional: true` stages nothing). Both halves are needed and neither is
+sufficient: the consequence replay passes on a manifest whose widening was reverted, and the
+declaration alone would pin a string nobody has watched work. The rule this generalizes: read the
+declaration OUT of the file (never transcribe it), and only reach for this when the field genuinely
+has no clause behind it — a value the shell branches on belongs in the action stream instead.
+
 ## Reads must be recorded; writes need not be
 
 A READ with no world file DIES (loudly, exit 9) — an empty payload usually parses and the clause
@@ -164,6 +177,9 @@ Log each instance here, so the next author sees a register rather than a precede
   discharge the standing entry above — the **guard** (busy-probe legs, ledger delta) and the
   harvest's git/gh half are still unpinned, and `retro-argo.yaml`'s FSM-side declaration stays
   `unreplayed`. The next touch of either extends this family rather than opening a fourth
-  register line.
+  register line. **Extended 2026-08-11 (homelab#268)** — `fixtures/retro-harvest-cell-errored`
+  joins the family for the DAG's Error phase (see the declaration note above). Still unpaid, and
+  still this entry's debt: the **guard** (busy-probe legs, ledger delta) and the harvest's git/gh
+  half.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.

@@ -64,10 +64,22 @@ spec:
             # Failed, cell-b and the harvest still run, and a surviving report still lands via PR.
             # The DEAD-cell notice in that PR's body is the belt that does not depend on Argo's
             # continueOn status roll-up: the PR is the surface a human is guaranteed to read.
+            #
+            # BOTH phases, not just failed (homelab#268, harvested from PR#267's review). Argo
+            # splits a dead node in two: a step whose CONTAINER exits non-zero is Failed, while a
+            # step whose POD never got to report one — OOMKilled, evicted, node lost, image pull
+            # gone — is Error. `continueOn` matches them separately, so `failed: true` alone left
+            # the exact silent-loss shape #248 closed, reachable through the other door: an
+            # OOMKilled cell-a still held cell-b and the harvest on this edge, and the surviving
+            # report died with the DAG. These two cells ride ephemeral TAINTED metal nodes
+            # (wk-metal-0*, 8GB, evictable), where Error is not the exotic branch — it is the one
+            # the hardware picks. Widened rather than made unconditional: `dependencies` on a
+            # SKIPPED/omitted node keeps its normal meaning, and the guard's refusal must still
+            # stop the run (it has no continueOn, by design).
             - name: cell-a
               template: retro-cell
               dependencies: [guard]
-              continueOn: { failed: true }
+              continueOn: { failed: true, error: true }
               arguments:
                 parameters:
                   - { name: cell, value: "{{workflow.parameters.cellA}}" }
@@ -75,7 +87,7 @@ spec:
             - name: cell-b
               template: retro-cell
               dependencies: [cell-a]
-              continueOn: { failed: true }
+              continueOn: { failed: true, error: true }
               arguments:
                 parameters:
                   - { name: cell, value: "{{workflow.parameters.cellB}}" }
@@ -88,6 +100,9 @@ spec:
                 # with continueOn above the harvest now runs anyway — an unresolvable artifact must
                 # not wedge it. The step's own loop already handles a missing/markerless log (WARN,
                 # then the N=0 refusal), which is the honest place for that decision.
+                # An ERRORED cell (homelab#268) is the strongest form of that case: the pod died
+                # before writing anything, so the artifact is not merely markerless — the path is
+                # never staged into this step at all. Pinned by fixtures/retro-harvest-cell-errored.
                 artifacts:
                   - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}", optional: true }
                   - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}", optional: true }
