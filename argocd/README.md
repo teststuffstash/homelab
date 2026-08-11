@@ -12,13 +12,14 @@ there it reconciles this directory from git. Decision background: `docs/secrets.
 ```
 tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infisical-db, infisical-pg-app,
        │                     repo-homelab-github, repo-oracle-iac-github (full set: `tofu/argocd.tf`)
-       └──applies──► THREE root Applications (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
+       └──applies──► FOUR root Applications (platform, sleep, oracle, circles — circles bootstrap 2026-08-03:
+`argocd/platform/circles-{project,namespaces}.yaml`) (helm: argocd-apps), source = GitHub (FU-007: Forgejo later)
                           │
           "platform" ─► argocd/platform/*.yaml  (child Applications, ordered by sync-wave)
              Sync waves 0→6 — authoritative list = the `argocd.argoproj.io/sync-wave`
              annotations in `argocd/platform/*.yaml`.
-             agent-fixer = an ApplicationSet with three generators (homelab `agents/fixer/*`,
-             sleep-iac `*/agent`, oracle-iac `*/agent`)
+             agent-fixer = an ApplicationSet with four generators (homelab `agents/fixer/*`,
+             sleep-iac `*/agent`, oracle-iac `*/agent`, circles-iac `*/agent`)
           "sleep" ──► github.com/teststuffstash/sleep-iac//apps  (the sleep stack, EXTRACTED to its
                       own public IaC repo — app infra Workspaces/ESO + the OCI-chart ingester, each
                       project: sleep. ADR-084. The `sleep` AppProject + its namespaces live here in

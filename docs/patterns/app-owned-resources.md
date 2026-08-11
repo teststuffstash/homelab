@@ -29,8 +29,9 @@ Worked examples: `snore-recorder/infra/` (bucket created fresh + write-only key 
 
 - **Git repos + branch protection + labels** — `tofu/github/`, applied outside the jail with an
   admin PAT. A new repo is a homelab-side step today.
-- **HTTPS names / DNS** (`<name>.teststuff.net`) — the OPNsense ansible path (`/opnsense-as-code`),
-  run from the homelab repo.
+- **HTTPS names / DNS** — only a NEW top-level name for a non-delegated stack needs the OPNsense
+  path from homelab; a delegated stack adds names as HTTPRoutes in its own `-iac` (ADR-092), and
+  public ingress is a claim (PublicRoute, ADR-101).
 - **ArgoCD Application / AppProject + namespace** — a PR to homelab's `argocd/` today.
 
 Until those close, "provision it yourself" sometimes means "open a small homelab PR" — fine, but
@@ -43,7 +44,7 @@ The target shape is **three layers**, so app repos know *nothing* about homelab:
 ```
 app repo (sleep-tracking, snore-recorder)      code + chart. Publishes image + OCI chart to ghcr.
         ▼   version bump = a PR here ↓          Standard k8s all the way; no homelab knowledge.
-stack-iac repo (sleep-iac — to be created)     the ArgoCD AppProject + app-of-apps for one stack:
+stack-iac repo (sleep-iac — LIVE, extracted)     the ArgoCD AppProject + app-of-apps for one stack:
         ▼                                       Application manifests + values + the apps' infra CRs
                                                 + pinned versions. Own CI gates; a deploy is a
                                                 version-bump PR here (Renovate/agent P2 territory).
@@ -60,8 +61,9 @@ tenancy boundary: the iac repo can only deploy into its own (platform-precreated
 ## Conventions
 
 - **Every bucket claim states its size cap** (ADR-089 quota-as-contract): set `max_size` (bytes)
-  on the `garage_bucket` resource in your Workspace. The platform advertises the S3 pool ceiling
-  in `SERVICES.md`; a granted cap is a real promise, so caps are checked against it. Over-cap
+  on the `garage_bucket` resource in your Workspace. The SUM ownership + the check live in
+  [`storage-ledger.md`](../storage-ledger.md) (`devbox run storage-ledger`); a granted cap is a
+  real promise. Over-cap
   writes fail at the S3 API with a quota error — legible, at the consumer. (`max_objects` is
   also available for object-count-shaped risks.)
 - **Scope keys tightly, per access method.** A device that only `put_object`s gets a **write-only**

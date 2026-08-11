@@ -6,7 +6,7 @@ scripts sitting next to it. It spawns and attaches per-project agent sessions on
 needs `../tofu/kubeconfig` and knows the per-project namespaces/secrets, so it lives here in homelab
 rather than with the image.
 
-The same launcher serves the autonomous loop: `coordinator-session.sh` and `reviewer-session.sh`
+The same launcher serves the autonomous loop: `coordinator-session.sh`, `reviewer-session.sh` and `retro-session.sh`
 delegate to `agent-session.sh`, so an in-cluster dispatch and a hand-run session take the same path.
 The coordinator's own brief is [`coordinator/README.md`](coordinator/README.md).
 

@@ -108,13 +108,14 @@ stack name; a PROBE-FAILED read warns and falls back to the file alone. The refl
 the in-cluster path was **verified 2026-07-12** (report-only Job, same SA/image/clone as
 coordinator-reflex: all three stacks listed from claims, no fallback warning).
 
-**All three stacks are on claims (2026-07-12):**
+**All FOUR stacks are on claims (2026-07-12; circles joined 2026-08-03):**
 
 | Stack | Claim |
 |---|---|
 | oracle | `oracle-iac//oracle-fleet/agent/agentstack.yaml` (reference; egress ENFORCED) |
 | sleep | `sleep-iac//sleep-tracking/agent/agentstack.yaml` (egress MONITOR) |
 | platform | `agents/fixer/openrouter-operator/agentstack.yaml` (no `-iac` repo — homelab IS its deployment truth; egress MONITOR) |
+| circles | `circles-iac//circles/agent/agentstack.yaml` (bootstrap 2026-08-03) |
 
 **stacks.json is NOT deleted — it is the committed MIRROR of the claims.** Two consumers a
 cluster claim cannot serve keep it alive: the registration lint's repo universe in CI (no cluster
@@ -161,8 +162,8 @@ catalog problem.
   trigger plumbing is dumb pipe, and a per-stack JetStream bus is 3×1Gi of state for near-zero
   event volume; the global Sensors route graduated events INTO `<stack>-agents` data-driven
   (`body.loop_ns` — coordinate doorbell, and the review edge since FU-100, 2026-07-27). Oracle
-  graduated first (oracle-iac claim, 2026-07-18); sleep + platform followed 2026-07-26 —
-  **all three per-stack since**. Per-role machinery inventory: [`roles.md`](roles.md).
+  graduated first (oracle-iac claim, 2026-07-18); sleep + platform followed 2026-07-26, circles 2026-08-03 —
+  **all four per-stack since**. Per-role machinery inventory: [`roles.md`](roles.md).
 - **GitHub-side + `.agents/` recipes stay OUTSIDE the claim (deferred, shape decided) — refined
   same day by the permission-tier split below (FU-068):** the *Issues-tier* slice (labels) has a
   designed in-cluster path via `provider-upjet-github`; the *Administration-tier* slice

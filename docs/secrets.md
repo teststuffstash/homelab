@@ -103,7 +103,7 @@ its next review (see the 2026-06 "Read all resources" token below), not a preced
 Hand-creation is a **closed two-item list**, and nothing else:
 
 1. **The Tier-0 mint-root itself** — the credential that mints credentials (the Cloudflare
-   admin token, the KeePass wallet). The root of a trust chain is manual by construction;
+   admin token — [`cloudflare.md`](cloudflare.md) §Token matrix — and the KeePass wallet). The root of a trust chain is manual by construction;
    its creation/renewal steps are recorded here and in the mint root's README.
 2. **Third-party consoles** we don't operate (registrar NS/DS at zone.ee, …) — principle 1(a)
    governs systems *we* run; where git can't reach, the click is recorded as a numbered manual
@@ -154,6 +154,7 @@ credentials get the same shape:
   2026-06 "Read all resources" token once `homelab-observability-read` exists) is DELETED at its
   review, not renewed on autopilot.
 
-First inventory (Cloudflare, dashboard-read 2026-08-08): `homelab-acme-dns` + `homelab-tofu-apply`
-(both → 2027-01-01), the mint credential "Create Additional Tokens" (→ 2027-01-09, admin-wallet,
-manual renewal — root of trust), "Read all resources" (→ **2026-12-14**, retire-not-renew).
+Token inventory + expiries: [`cloudflare.md`](cloudflare.md) §Token matrix — the ONE table (a
+dated copy lived here and had already drifted from it; collapsed 2026-08-11). The one fact that
+is THIS doc's: the mint credential itself ("Create Additional Tokens", → 2027-01-09) renews
+manually in the admin wallet — root of trust.

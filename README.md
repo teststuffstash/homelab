@@ -23,7 +23,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | Matchbox LXC | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | `cp-01` / `wk-01` / `wk-02` | .51 / .61 / .62 | Talos cluster VMs (control plane + workers) |
 | `thinkcentre` / `hp-01` | .53 / .54 | bare-metal workers (+ Longhorn) |
-| `wk-metal-01` / `wk-metal-02` | .182 / .183 | bare-metal workers (ThinkPad X240/X250, ephemeral tier) |
+| `wk-metal-01` / `wk-metal-02` | .182 / .183 | bare-metal workers (ThinkPad X240/X250, ephemeral tier; kata nodes) |
 | `wk-metal-03` / `wk-metal-04` | .184 / .186 | bare-metal workers (i5-6200U laptop / i5-3570K desktop, ephemeral tier; kata nodes) |
 | `ci-runner-01` (VM) | 192.168.2.55 | self-hosted GitHub Actions runner (Docker/binfmt builds) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |

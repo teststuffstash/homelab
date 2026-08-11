@@ -238,7 +238,8 @@ The scout is a **role** (dispatch-on-schedule family — machinery inventory in
 (`agents/model-scout.sh`). v1/v2 (catalog diff + digest + a fixer-shaped canary) served the era
 when the fixer was the only model consumer; the 2026-08-10 redesign (trigger: digest #234 — 20 of
 22 "new" candidates were a platform-wide `:batch` variant rollout of years-old models, and all 3
-canaries posted bogus `failed` verdicts, tripping #235) rescopes it for the grown selection
+canaries posted bogus `failed` verdicts, tripping #235; #234 CLOSED as a dud 2026-08-11 — legs
+1–2 are the PRECONDITION for the next scout run, and #235's premise dies with leg 1) rescopes it for the grown selection
 surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in build order (FU-161):
 
 1. **Filter variant re-listings.** Diff by BASE id (id minus `:suffix`) — a variant of a known
