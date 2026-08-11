@@ -145,6 +145,8 @@ transitions:
       - agents/replay/fixtures/fix-debounce-blocked-inert      # blocked ∧ error stay OUT — set 0, not one write in the stream
       - agents/replay/fixtures/fix-debounce-unblocked-queues   # same world, block lifted — the set is 1, and error is not COUNTED either
       - agents/replay/fixtures/fix-debounce-in-progress-inert  # in-flight pair excluded too (PR#250 — the whole agent/* namespace test)
+      - agents/replay/fixtures/fix-debounce-quoted-marker-inert   # a body QUOTING alert-fp: mid-line is not lane-member (PR#271 anchor)
+      - agents/replay/fixtures/fix-debounce-anchored-marker-queues # same world, marker on its own line — set 1, one bell (PR#271)
     guards:
       - desc: "ALERT-LANE ONLY (`alert-fp:` in the body) — a stack loop's own agent-fix-without-queued hold is not this lane's to queue (the 2026-08-07 dry run swept circles#42, an issue meta-state recorded as held)"
         anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "ALERT-LANE ONLY" }

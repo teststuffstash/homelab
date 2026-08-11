@@ -142,7 +142,7 @@ while true; do
               '.[] | select([.labels[].name | select(startswith("agent"))] | length == 0)
                    | select(.createdAt < $cutoff)
                    | select(.title != "Dependency Dashboard")
-                   | select(.body | contains("alert-fp:") | not)
+                   | select(.body // "" | test("(^|\\n)alert-fp:") | not)
                    | "NEEDS-META triage: \($r)#\(.number) unlabeled >24h — invisible to every clause"' 2>/dev/null)
     [ -n "$unl" ] && out="$out$unl"$'\n'
   done
