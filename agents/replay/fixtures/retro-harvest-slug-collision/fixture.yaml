@@ -1,0 +1,38 @@
+# homelab#269 — two cells on ONE model must not resolve to one filename.
+#
+# CONDITION UNDER REPLAY. A harness A/B: `claude:opus` vs `goose:opus`, both cells delivering a
+# report. #248 made the slug a derivation from the cell's own `--cell` param and dropped the
+# harness prefix doing it, so this dispatch — the natural shape of a harness comparison, and the
+# only configuration that reaches the collision — derived `opus` twice. Two `cp`s to one path: the
+# second report overwrote the first, nothing failed, and the PR carried one report labelled as the
+# cross-checked pair. Its sibling `retro-harvest-slug` is the ordinary path and pins that this
+# guard did NOT move it.
+#
+# THE CONTRACT:
+#   1. Both reports land, under DISTINCT paths — `…-r3-claude-opus.md` and `…-r3-goose-opus.md`.
+#      Two `cp` lines to two different destinations is the whole assertion; one line, or two lines
+#      naming the same file, is the bug.
+#   2. The disambiguation is the HARNESS, and it is applied ON COLLISION ONLY. The bare-slug
+#      convention is fixture-pinned to the r1/r2 reports, so an unconditional prefix would rename
+#      the whole corpus for a case that does not occur under today's `cellA`/`cellB` defaults;
+#      `retro-harvest-slug` holds that half and must stay green with its `expected/` untouched.
+#   3. The harvest SUCCEEDS (RC 0). Failing loudly on a duplicate slug was the other candidate
+#      guard and was rejected: it throws away both good reports of a run that worked, and a landed
+#      report is this lane's only success signal (`retro_report_last_success_timestamp`, the
+#      RetroReportOverdue belt). Naming the files correctly is strictly better than refusing to.
+#   4. `DEAD_NOTE` stays empty. Both cells delivered, so the partial-run warning must not appear —
+#      a collision is not a partial run, and the two are independent (post.sh, same predicate as
+#      the sibling).
+#
+# The pairing is asserted by ORDER, as in the sibling: leg A is harvested first, so cellA's
+# filename is the first `cp` in the stream. With one model on both legs the harness prefix is the
+# only thing that distinguishes the two reports at all — get it backwards and the retro corpus
+# attributes each harness's run to the other, which is precisely the evidence a comparison run
+# exists to produce.
+name: retro-harvest-slug-collision
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-harvest-slug
+  - file:post.sh

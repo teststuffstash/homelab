@@ -1,0 +1,11 @@
+→ oracle r3 cell goose:opus — brief /tmp/retro-brief-Kpg4.md (18342 bytes)
+→ harvest: report goes to docs/agents/retros/2026-08-11-oracle-r3-<model>.md via PR
+→ pod agent-oracle-fleet-retro-r3-r2 created in ns oracle-fleet
+→ streaming pod log
+BEGIN-RETRO-REPORT
+# oracle loop retro r3 — goose harness, same model as cell-a
+
+## Summary (≤5 lines)
+- Same brief, different harness: the round cost differs, the ranking mostly does not.
+END-RETRO-REPORT
+AGENT_RUN_STATS {"task":"retro-r3","exit_status":"clean","wall_time_s":771,"rounds":1}
