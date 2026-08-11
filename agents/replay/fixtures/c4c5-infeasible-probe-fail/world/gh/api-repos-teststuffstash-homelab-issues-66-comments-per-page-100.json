@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "user": {"login": "an-operator"},
+    "body": "> AGENT_INFEASIBLE: .github/workflows/ci.yaml\n\nThat is the shape we want the worker to emit — quoting last week's oracle-fleet#66 exit here so the wording is on the thread."
+  },
+  {
+    "id": 2,
+    "user": {"login": "homelab-agents-1234"},
+    "body": "<!-- agent-summary -->\n🤖 **Agent activity** — picking this up (round 1) — add the `AGENT_INFEASIBLE:` marker paragraph and route it to `agent/blocked`."
+  },
+  {
+    "id": 3,
+    "user": {"login": "an-operator"},
+    "body": "Note the marker must be anchored: a comment that merely says AGENT_INFEASIBLE: somewhere mid-sentence is discussion, not a verdict."
+  }
+]

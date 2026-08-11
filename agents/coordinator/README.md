@@ -840,7 +840,7 @@ issue.
 | consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
 
 Three properties are load-bearing, and each is pinned by
-`agents/replay/fixtures/c4c5-infeasible-{parks,quoted-inert}`:
+`agents/replay/fixtures/c4c5-infeasible-{parks,quoted-inert,probe-fail}`:
 
 - **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
   issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the

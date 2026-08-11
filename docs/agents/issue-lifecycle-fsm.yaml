@@ -253,6 +253,7 @@ transitions:
     replay:
       - agents/replay/fixtures/c4c5-infeasible-quoted-inert   # the ordinary abandoned ride — unit + report line, unchanged by IL-T26
       - agents/replay/fixtures/c4c5-infeasible-parks          # a no-marker issue beside a parked one still gets its unit
+      - agents/replay/fixtures/c4c5-infeasible-probe-fail     # and it still gets it when the terminal's own probe is down
     guards:
       - desc: "the FU-143 exclusion — merged-into-goal is finished work, not abandonment"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 2" }
@@ -298,6 +299,7 @@ transitions:
     replay:
       - agents/replay/fixtures/c4c5-infeasible-parks           # the verdict: read → blocked → in-progress off → re-read → audit; no unit
       - agents/replay/fixtures/c4c5-infeasible-quoted-inert    # the near-miss: a QUOTED marker latches nothing, and a human-blocked issue is not even read
+      - agents/replay/fixtures/c4c5-infeasible-probe-fail      # rule #6: an unreadable probe writes nothing, reports, and leaves today's behaviour whole
     guards:
       - desc: "the marker is ANCHORED at the start of a COMMENT — talking about the terminal is not the terminal"
         anchor: { file: agents/coordinator-scan.sh, pattern: 'test\("\^AGENT_INFEASIBLE:"\)' }

@@ -1262,7 +1262,11 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
           for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
               --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
             icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
-            if ! jq -e . >/dev/null 2>&1 <<<"${icmt:-}"; then
+            # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
+            # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
+            # `set -euo pipefail` that aborts the ENTIRE scan mid-repo, starving every later clause
+            # and every other stack. The same shape the belt's `if`/`|| true` exist for.
+            if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-}"; then
               orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading issue #${icand}'s comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)\n"
               continue
             fi
@@ -1270,7 +1274,16 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
             # the one that ended the ride. jq's `^` is string-start (no "m" flag), which IS the
             # anchor this wants: the marker opens the comment or it does not count.
             imark="$(jq -r '[.[] | (.body // "") | select(test("^AGENT_INFEASIBLE:"))] | first // ""' <<<"$icmt")"
-            [ -n "$imark" ] || continue
+            if [ -z "$imark" ]; then
+              # The read window is ONE page. A marker past comment 100 is invisible, and this
+              # clause's whole value is that it is not guessed at — so the bound is REPORTED rather
+              # than left to look like "no marker". Fall-through is today's behaviour, not a new
+              # failure: the issue keeps its belt and its unit.
+              if [ "$(jq -r 'length' <<<"$icmt" 2>/dev/null || echo 0)" -ge 100 ]; then
+                orphans="${orphans}[$repo] ⚠ issue #${icand} has ≥100 comments — the infeasible-terminal read is one page, so a marker beyond it was NOT seen. Unchanged C4/C5 handling below; check the thread's tail by hand before acting on it.\n"
+              fi
+              continue
+            fi
             # The payload is the REST of the marker line. Empty is still a terminal — the worker
             # declared infeasibility and simply did not name the thing — so it parks and the
             # report says the name is missing, rather than falling through to a re-ride.
