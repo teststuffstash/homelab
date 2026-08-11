@@ -154,6 +154,13 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
 
+      # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
+      # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
+      # form gate the ~44 alert rules have. Behaviour tests (promtool test rules) = the
+      # remaining FU-158 leg.
+      - name: PrometheusRule exprs parse (devbox run prometheus-rules-lint)
+        run: devbox run prometheus-rules-lint
+
       # tofu paths are CODEOWNERS-gated (a human reads the diff), so CI buys the cheap half only:
       # fmt is free, while `tofu validate` needs a provider download per PR (the FU-130 WAN class).
       # `devbox run tf-validate` stays the local/manual gate.

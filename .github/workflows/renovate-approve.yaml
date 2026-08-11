@@ -1,4 +1,4 @@
-# renovate-approve.yaml — homelab's own caller of the org reusable it hosts (FU-014/FU-041).
+# renovate-approve.yaml — homelab's own caller of the org reusable it hosts (docs/renovate.md; docs/agents/merge-path.md).
 #
 # homelab implements `renovate-approve.reusable.yml` for every agent repo and, until now, was the one
 # repo that never CALLED it — invisible while homelab sat outside the stack claims. It joined the
