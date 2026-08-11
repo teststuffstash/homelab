@@ -3599,3 +3599,29 @@ retro-argo harvest pushes retro_report_last_success_timestamp to the pushgateway
 RetroReportOverdue (>8d or never, warning, for:6h) — expr verified firing live against the
 current true gap; annotation names 2026-08-17 as the first expected datum, triage report-only
 until then. Replay README register carries the retro-argo hatch entry.
+
+### 2026-08-11 — first /board-sweep (skill run 1): the escalation surfaces drained, two gate collisions fixed
+
+**Condition:** First run of the board-sweep skill (built this session, ADR-105-adjacent; corpus
+pre-read). Window = the 2026-08-10 01:40Z stand-down → now, universe = the four claims' 12 repos.
+Crosscheck: belts healthy (SILENT bucket empty). Terminal labels: zero `agent/error`, two
+`agent/blocked` both correctly-waiting (homelab#223 host-side session, oracle-fleet#225 attended
+first run).
+
+**Command:** HANDLED (verified by substance, feeds fu-sweep): #237 chain closed (retro lane's
+five latent bugs fixed + kpg42 green end-to-end, report PR#246 open on the operator gate);
+#238→PR#243 merged + C6 flipped done; #239→PR#247 (platform_machinery third gate key,
+fixture-gated) meta-reviewed + merged; PR#236 auto-merged after THIS pass fixed its
+STUCK-MACHINE cause — the 08-10 ratchet widening collided with the 08-04 pin-only carve-out on
+reflexes-argo.yaml (ci.yaml `738b9ac`: pin-only diffs exempt, regexes eval'd from
+pin-only-lint.sh, smuggled-line control refused); #241 responder report-only (the #116 sweep
+repaired the link half; descriptor half = #240, cross-linked). Queued for the loop: #240 #244
+#245 + bot-found #249 (unanchored alert-fp lane test — triaged from 🌱, queued). Unqueued by
+intent: #242 (argv cliff, latent), #248 (retro-cell mechanics). OPERATOR (5): read+merge PR#246;
+own PR snore-recorder#15 CHANGES_REQUESTED since 08-10 (no machine owner by design); #234 scout
+digest graduation calls (#235 rides behind FU-161); #114 renovate-approve re-approve loop is
+`.github/**` = operator lane; oracle-fleet's ~14-item inert evidence pile (08-08/09) awaits 🌱
+triage. Lessons folded: meta-coordinate gained the findings-harvester rule (GAPS
+meta-coordinate-G1, promoted same commit); FU-165 filed (platform stack does not dogfood the
+Goal lane — #244/#245 hand-linked as #238 sub-issues as the interim practice). This entry is the
+next sweep's watermark.
