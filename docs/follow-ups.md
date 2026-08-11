@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-164**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-165**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -429,6 +429,14 @@ the block needs pruning, not more headings.
 
 ### Observability & evidence — alerts, transcripts, retro, the prober
 
+- [ ] **FU-164** — **doc-heat: transcript-derived read heat over repo markdown — POINTER.**
+      Question, heat doctrine (heat × class × age; blind spots; approximate lines), v0 (jail
+      parser + static report, `devbox run doc-heat`) and the serving plan:
+      [`docs/spikes/doc-heat.md`](spikes/doc-heat.md) (opened 2026-08-11). **Next:** run a
+      docs-cleanup pass WITH the report (the spike's settle test); then the v1 cluster leg
+      (`s3://agent-transcripts`, path normalization, jail/cluster separate + combined views —
+      operator requirement), which also delivers context-repos.md's measurement sweep.
+      Relates FU-117, FU-163, FU-058, FU-140.
 - [ ] **FU-160** — **Ride phase timings are archaeology, not metrics — a bad cache adding 10 min
       to every ride would be invisible.** One specimen fully reconstructed 2026-08-09
       ([spike](spikes/ride-latency-breakdown.md)): 8m46s floor-case ride ≈ 25% dispatch, 60%

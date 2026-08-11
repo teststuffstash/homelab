@@ -176,6 +176,9 @@
       "skill-retro-scan": [
         "sh scripts/skill-retro-scan.sh"
       ],
+      "doc-heat": [
+        "python3 scripts/doc-heat.py"
+      ],
       "docs-graph-lint": [
         "sh scripts/docs-graph-lint.sh"
       ],
