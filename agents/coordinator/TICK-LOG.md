@@ -3652,3 +3652,9 @@ enforcement layer), openrouter-operator had no CODEOWNERS at all. Fix staged: cl
 agent-coordinator (6ae966a); require_code_owner_review=true for all three in variables.tf.
 ⚠ HOST-SIDE STEP OWED: `devbox run github-tofu apply` (org-admin wallet) — until it lands, an
 or-op/agent-runtime fixer PR could bot-approve+auto-merge on any path (window accepted, lane quiet).
+↳ carve-out refinement (operator: "renovate breaks — carve out; we have the hashes-only script
+pattern"): or-op CODEOWNERS un-owns devbox.{json,lock} (731e0e7) + agent-runtime un-owns
+agent-base/devbox.{json,lock} (84f3a42); BOTH replaced by scripts/deps-pin-guard.sh in the
+required ci check (pure version/hash diff, nothing else — pin-only-lint doctrine, regexes
+executed against evil/benign lines pre-push). agent-coordinator keeps whole-repo (no dep lane
+observed; carve on first park). Host-side github-tofu apply still owed.
