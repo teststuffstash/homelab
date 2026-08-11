@@ -13,6 +13,13 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       rules). Fix: closure gains "proposing doc changes ⇒ read §Conventions + Hard rules".
       Sighted 2026-08-11.
 
+## meta-coordinate
+
+- [x] meta-coordinate-G1 — platform-lane PR review read the diff but truncated the BODY; the
+      worker's "Findings" section (no machine harvester on this lane) was merged past unread —
+      one finding was live on the PR's own issue. Sighted 2026-08-11 (operator catch).
+      **promoted→** the skill's review duty gains the you-are-the-harvester rule, same commit.
+
 ## design-agents
 
 - [ ] design-agents-G1 — a STATUS read from `meta-state.md`/tracker was repeated in the answer
