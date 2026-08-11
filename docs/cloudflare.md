@@ -64,6 +64,13 @@ that convergence is the acceptance test that the XRD generalizes.
 
 ### Zone classes: two kinds + a delegation verb (operator design, 2026-08-08)
 
+> ⚑ **STRUCTURAL DEBT (operator, 2026-08-11):** zone classes are defined TWICE in this doc —
+> here and in §"Zone classes + spend surface" below — and the merge is deliberately parked for
+> the **minutark.ee onboarding**: that work adds enough new knobs that this doc needs a rethink
+> (likely a split: edge capability/PublicRoute vs tokens/custody vs zones/spend) rather than a
+> line-level merge. Until then: THIS section is the class definitions; the one below owns the
+> spend surface. Don't sync them — merge them when the onboarding lands.
+
 **The Cloudflare zone is the real tenancy boundary** (tokens, WAF baseline, rulesets, cache
 config are zone-scoped; Free/Pro has no finer grain), so a zone has exactly ONE owner:
 
