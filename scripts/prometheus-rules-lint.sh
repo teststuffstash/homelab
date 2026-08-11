@@ -34,4 +34,23 @@ for f in $files; do
 done
 [ "$checked" -gt 0 ] || { echo "prometheus-rules-lint: FAIL — validated nothing" >&2; exit 2; }
 echo "prometheus-rules-lint: $checked file(s), $rules rule(s) checked$( [ $rc -eq 0 ] && echo ' — all parse' )"
+
+# FU-158 behaviour half (PR#310's deferred codeowner hook): run every promtool BEHAVIOUR fixture.
+# Fixture pairs live beside their PrometheusRule as <name>.promtool-{rules,test} (deliberately not
+# *.yaml — manifest-lint kubeconforms every yaml under argocd/resources/). `promtool test rules`
+# resolves rule_files relative to the test file's directory, so run each in place.
+tests=0
+while IFS= read -r tf; do
+  [ -n "$tf" ] || continue
+  if out=$(cd "$(dirname "$tf")" && promtool test rules "$(basename "$tf")" 2>&1); then
+    echo "  ok  $tf (behaviour)"
+  else
+    echo "  FAIL $tf:"; printf '%s\n' "$out" | sed 's/^/    /'
+    rc=1
+  fi
+  tests=$((tests+1))
+done << EOF
+$(find argocd -name '*.promtool-test' 2>/dev/null | sort)
+EOF
+[ "$tests" -gt 0 ] && echo "prometheus-rules-lint: $tests behaviour fixture(s) run"
 exit $rc
