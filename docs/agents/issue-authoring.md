@@ -287,6 +287,13 @@ guaranteed scope escape and cannot converge (homelab#270/PR#275, 2026-08-11 — 
 arbitration proved no green conforming shape existed and escalated; the human sanctioned the
 wider diff). The ratchet's file list lives in `.github/workflows/ci.yaml` (the `clause=` grep).
 
+⚠ **A `Touches:` landing on a `pin-only-lint` GUARDED file is undeliverable by a PR at all** — those
+files take only a pin line, so the scan reports the issue instead of dispatching it
+([workflow.md](workflow.md) §Footprint hold, the static intersection). Author around it: keep the
+guarded edit out of the issue and hand that part to the operator (a push to master, CODEOWNERS
+§Carve-outs), or split it into its own issue that says so. #299 is what it costs otherwise — a full
+round to discover it, and the deliverable still needed a human.
+
 ## Base: the declared base branch (2026-08-05)
 
 An issue whose work must be built on an **unmerged branch** carries a `Base:` body line, same

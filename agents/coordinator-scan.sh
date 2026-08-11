@@ -16,8 +16,10 @@
 #          the ADR-097 footprint intersection. Everything it holds still rides as a unit.
 # Deliberately EXCLUDES (so the LLM never wakes for a no-op): human-waiting states (`agent/blocked`,
 # `major/awaiting-human`), the `agent/error` anomaly-breaker items (FU-069 — human-first,
-# report-only), done/merged, and everything on the review-reflex's ARMED track — arming is the
-# boundary (docs/agents/merge-path.md). red-beyond-T = the ci-red clause (FU-115) (guarded checks
+# report-only), done/merged, everything on the review-reflex's ARMED track — arming is the
+# boundary (docs/agents/merge-path.md) — and queued issues whose declared `Touches:` footprint
+# lands on a pin-only-lint GUARDED file (homelab#309, §PIN-ONLY GUARDED PATHS below: report-only,
+# no label written, because no PR can deliver them). red-beyond-T = the ci-red clause (FU-115) (guarded checks
 # probe — a 403 skips it loudly); rounds-exhausted = the arbitrate clause (both 2026-07-27). Both
 # of those two are CURRENCY-gated as well as condition-gated (homelab#198): a condition that holds
 # over unchanged PR state is a report line, not a fresh unit — see §PR STATE FINGERPRINT below. The
@@ -43,6 +45,43 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+
+# ── PIN-ONLY GUARDED PATHS — a pre-dispatch routing check (homelab#309) ─────────────────────────
+# `scripts/pin-only-lint.sh` refuses any PR that writes anything but a pin line into its carved-out
+# files. So a queued issue whose DECLARED footprint lands on one of them cannot be delivered by a
+# PR at all: the required `ci` check is structurally red before the worker writes a line, and the
+# documented route past it is the operator's direct-to-master push (CODEOWNERS §Carve-outs).
+# #299 spent a whole ROUND discovering that. The worker did everything right — shipped the landable
+# half as PR#306, posted `AGENT_INFEASIBLE` for the `reflexes-argo.yaml` edit, named the exact line
+# for the operator — and every fact needed to know it in advance was on disk at dispatch time. The
+# scan already reads each issue's footprint and already HOLDS units on it (ADR-097); this is the
+# same predicate against a second, static set, so the routing decision costs a report line instead
+# of a session.
+#
+# READ THE SET, NEVER RE-DECLARE IT. A second copy is the drift bug in the direction that hurts:
+# the lint widens, the scan keeps dispatching into the widened set. This is the same one-home read
+# the ADR-103 ratchet step already makes in `.github/workflows/ci.yaml` — grep the one line, eval
+# it — so there is exactly one definition of GUARDED in the repo and two readers of it.
+# >>>REPLAY:guarded-set>>>
+PIN_ONLY_LINT="${PIN_ONLY_LINT:-${HERE}/../scripts/pin-only-lint.sh}"
+# The set is THIS repo's CI's. A stack repo's `argocd/platform/` footprint is not touching this
+# repo's `arc-runners.yaml`, and holding it would be a category error — so the check is scoped to
+# the repo the checkout is, overridable for the same reason STACKS_FILE is.
+GUARDED_REPO="${GUARDED_REPO:-homelab}"
+guarded_paths() {   # → one guarded PATH per line. NO output = could not read (never "none guarded")
+  local line="" GUARDED=""
+  [ -r "$PIN_ONLY_LINT" ] && line="$(grep -m1 '^GUARDED=' "$PIN_ONLY_LINT" || true)"
+  [ -n "$line" ] || return 1
+  eval "$line" || return 1
+  [ -n "$GUARDED" ] || return 1
+  # The lint holds its set as a grep alternation (`a\.yaml|b\.yaml`); the footprint predicate wants
+  # plain paths, so split on `|` and drop the regex escapes.
+  printf '%s\n' "$GUARDED" | tr '|' '\n' | sed 's/\\\(.\)/\1/g' | grep -v '^[[:space:]]*$'
+}
+# Read ONCE per scan; the empty-vs-unreadable distinction is made at the use site, where it holds
+# work rather than releasing it (rule #6 — never fail INTO a dispatch).
+GUARDED_PATHS="$(guarded_paths || true)"
+# <<<REPLAY:guarded-set<<<
 
 # ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
 # `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
@@ -765,6 +804,51 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
         orphans="${orphans}[$repo] ⚠ queued but NOT dispatchable (no fixer block — context-only repo; jail work):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
+      # ── PIN-ONLY GUARDED PATH (homelab#309) — report, never dispatch ────────────────────────
+      # Tested BEFORE the transient holds (footprint / WIP / PR budget) on purpose: this one is
+      # STRUCTURAL. A guarded issue must read as "route this to the operator" on every scan, not
+      # as "come back later" whenever a sibling happens to be in flight.
+      # REPORT-ONLY, NO LABEL WRITE. `agent/blocked` is a human gate, and the guarded overlap may
+      # be only PART of the issue's scope (#299: one manifest was landable, one env line was not)
+      # — so the line names the file and the route, and a human re-scopes or splits it.
+      # >>>REPLAY:guarded-hold>>>
+      if [ "$repo" = "$GUARDED_REPO" ]; then
+        if [ -z "$GUARDED_PATHS" ]; then
+          # Rule #6: never fail INTO a dispatch. The set could not be read (file moved, or its
+          # `GUARDED=` line changed shape), so "not guarded" is unknown, not false. Loud and
+          # level-triggered — it clears itself on the scan after the read works again.
+          orphans="${orphans}[$repo] ⛔ GUARDED-SET PROBE-FAILED — no \`GUARDED=\` line readable at ${PIN_ONLY_LINT} (homelab#309). Holding rather than dispatching blind:\n  issue #${qnum} — ${qtitle}\n"
+          continue
+        fi
+        # The `*` sentinel (no `Touches:` line) conflicts with EVERYTHING by design
+        # (agents/footprint.sh), as does any entry whose glob defeats prefix reasoning. Both
+        # normalize to the empty prefix and are dropped here: reading them as guarded would stop
+        # dispatching every unfootprinted issue in the repo — a far worse loop than the one round
+        # this check exists to save. Dropping them costs nothing the ADR-097 hold does not already
+        # cover, since an undeclared footprint is exclusive there anyway.
+        qdecl=""; ghit=""
+        while IFS= read -r fpe; do
+          [ -n "$fpe" ] || continue
+          if [ -n "$(fp_norm_entry "$fpe")" ]; then qdecl="${qdecl}${fpe},"; fi
+        done <<EOF_QDECL
+$(printf '%s' "$qtouches" | tr ',' '\n' | tr -d ' \t')
+EOF_QDECL
+        if [ -n "$qdecl" ]; then
+          # fp_conflict, not a grep: the boundary reasoning is the whole point. THIS issue's own
+          # `agents/coordinator-scan.sh` must NOT hit `agents/coordinator/reflexes-argo.yaml`.
+          while IFS= read -r gpath; do
+            [ -n "$gpath" ] || continue
+            if fp_conflict "$qdecl" "$gpath"; then ghit="${ghit} ${gpath}"; fi
+          done <<EOF_GUARDED
+$GUARDED_PATHS
+EOF_GUARDED
+        fi
+        if [ -n "$ghit" ]; then
+          orphans="${orphans}[$repo] ⛔ pin-only GUARDED path — NOT dispatched (a PR may write only a pin line there, so \`ci\` is structurally red; the route is an operator push to master — CODEOWNERS §Carve-outs). Re-scope or split the issue, or hand it to the operator:\n  issue #${qnum} — ${qtitle} (declared: ${qtouches} → guarded:${ghit})\n"
+          continue
+        fi
+      fi
+      # <<<REPLAY:guarded-hold<<<
       # ADR-097 footprint hold (supersedes the track-label lane hold): a queued unit is held iff
       # its declared footprint intersects ANY in-progress issue's footprint. Undeclared (`*`)
       # conflicts with everything, so a repo with any in-progress work keeps WIP=1 for legacy

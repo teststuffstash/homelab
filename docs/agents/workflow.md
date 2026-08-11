@@ -259,6 +259,16 @@ predicate gains footprint intersection in place of `lane-free`:
 - **Residual risk**: a worker escaping its declaration. Belt: the reviewer flags diff paths
   outside the issue's `Touches:` (a narrow-blocking case, reviewer rubric); TRACKS rule 2 still
   routes shared-file work through its owning concern as a separate issue.
+- **Second, static intersection — the pin-only GUARDED set** (homelab#309, BUILT 2026-08-11): the
+  same predicate run against the files `scripts/pin-only-lint.sh` guards, which a PR may write
+  nothing but a pin line into. A hit is **undeliverable by any PR** (the required `ci` check is red
+  before the worker starts) and its route is an operator push to master, so the scan reports
+  `⛔ pin-only GUARDED path` and does not dispatch — report-only, no label, because the overlap may
+  be only part of the issue's scope. The set is READ from the lint (one definition, two readers —
+  the other is the ADR-103 ratchet step); an unreadable set holds rather than dispatching blind,
+  scoped to the repo the set belongs to. The `*` sentinel is not a hit: it conflicts with
+  everything by construction, and reading it as guarded would stop dispatching every unfootprinted
+  issue in the repo. Cost before the check: one burned round per hit (#299).
 
 ### Replay harness — the ADR-103 ratchet, executed
 
