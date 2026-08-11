@@ -316,9 +316,10 @@ the block needs pruning, not more headings.
       runs with every belt green — full analysis:
       [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
       Vendor half SHIPPED 2026-08-07 (`72c3a42`: githubstatus.com poll → `GithubVendorOutage`).
-      **Next (the OURS-side half):** an alert on the throughput signal — prefer zero
-      `AutoscalingListener` while an AutoscalingRunnerSet exists (cluster-local, no new poller);
-      alternatives: listener crashloop, queued-age.
+      **Next (the OURS-side half):** an alert on the throughput signal — **queued-age** now
+      preferred over listener-zero: the 2026-08-11 wk-metal-02 route-loss incident starved the
+      queue with the listener alive and scaling (listener-zero blind), while queued-age catches
+      every cannot-dispatch cause ([incident](incidents/2026-08-11-wk-metal-02-default-route-loss.md)).
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
       review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
@@ -330,15 +331,15 @@ the block needs pruning, not more headings.
       Keep open until one flies. **P3 (later):** a longer cooldown on majors so a human CAN opt into
       an interactive session for the riskiest. Relates FU-041, FU-044, FU-014.
 - [ ] **FU-130** — **CI-gate WAN fetches: FIXED, all three merged 2026-08-05.** helm-unittest now comes
-      from devbox (`kubernetes-helmPlugins.helm-unittest`, nix installs it as a dir, `$HELM_PLUGINS`
-      finds it) instead of a 23 MB unverified GitHub-release pull per run — circles#15 (the
-      `new-stack --from` donor) + sleep-tracking#115, both verified locally against the profile's
-      plugin. agent-runtime#30 switches the ride's nix `extra-substituters` → `substituters`, so a
+      from devbox (`kubernetes-helmPlugins.helm-unittest`, `$HELM_PLUGINS`) instead of a 23 MB
+      GitHub-release pull per run — circles#15 (the `new-stack --from` donor) + sleep-tracking#115,
+      both verified locally. agent-runtime#30 switches the ride's nix `extra-substituters` → `substituters`, so a
       LAN miss no longer reaches cache.nixos.org (28 lookups in one harvest; a hang once egress
       enforces). homelab side landed: `stack-lint` CACHE-01 probes what the LAUNCHER probes
       (anonymous ghcr pull of `<repo>/devbox-cache:latest`) + `new-stack` step E2. **Next:** confirm
-      on a post-merge ride that no WAN fetch remains, then archive. (The one known residue is
-      `tofu validate`'s provider download, deliberately outside `ci` — `dependency-upgrades.md`.)
+      on a post-merge ride that no WAN fetch remains, then archive. Residues: `tofu validate`
+      (`dependency-upgrades.md`); ARC stale-warm-store —
+      [incident 2026-08-11](incidents/2026-08-11-wk-metal-02-default-route-loss.md).
 - [ ] **FU-044** — **Roll-FORWARD on a broken deploy — the remaining LLM half.** Deterministic
       rollback shipped 2026-07-27 (argocd-notifications → `/deploy-degraded` → `deploy-revert`,
       no LLM); what's left is dispatching a worker against the APP repo, in-cluster off ArgoCD
@@ -514,10 +515,12 @@ the block needs pruning, not more headings.
       Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
       (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
       reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
-      advisory lens, then extend the G04 sentinel to **homelab** — one step owning two residues:
-      tier 1 (`argocd/resources/**`) back to unowned, and the 87-of-154 kinds `manifest-lint`
+      advisory lens, then extend the G04 sentinel to **homelab** — one step owning three residues:
+      tier 1 (`argocd/resources/**`) back to unowned, the 87-of-154 kinds `manifest-lint`
       can't schema-check (operator 2026-08-06: the sentinel's, no separate id — doc §The platform
-      lane). Relates FU-087/FU-093, ADR-084, ADR-076.
+      lane), and the `agents/coordinator/*.yaml` PATH gap — manifest-lint globs only
+      `argocd/{resources,platform}`, so the loop's own Sensors/CronWorkflows are schema-checked by
+      nobody (PR#250's finding, 2026-08-11). Relates FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref

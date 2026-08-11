@@ -3625,3 +3625,19 @@ triage. Lessons folded: meta-coordinate gained the findings-harvester rule (GAPS
 meta-coordinate-G1, promoted same commit); FU-165 filed (platform stack does not dogfood the
 Goal lane — #244/#245 hand-linked as #238 sub-issues as the interim practice). This entry is the
 next sweep's watermark.
+
+### 2026-08-11 — meta (midday): the drain, the route loss, the clean board
+Operator directives executed: (1) drain the open-PR lane before the Goal; (2) queue/fix/close
+every agents/infra issue (HA may remain); (3) circles/oracle parked. The lane's "FU-130 WAN
+class" reds root-caused as **wk-metal-02 silently losing its IPv4 default route** (DHCP ACKs
+healthy throughout — OS-level route loss, cause unrecoverable post-reboot; postmortem
+`docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md`). All 4 ARC runners were
+binpacked there → 100% CI starvation read as vendor flake; githubstatus green the whole time.
+Fixed: cordon → evict runners+listener (stale MissingKey broker assignments) → reboot →
+verify → uncordon; ARC pods gained memory requests + soft hostname spread (operator-approved).
+Queue drained: #250/#251/#254/#255/#260 merged (findings-harvester residues in this commit:
+IL-T01/IL-T04 dup replay keys, fix-debounce-in-progress-inert registered in IL-T23, FU-106
+third residue). Board: closed #107/#131/#223(→#231)/#241 (+#235/#240/#244/#245 via merges);
+queued #242/#248. ERT alert (25h unfiled) was responder-subjdup'd into oracle-fleet#225 —
+evidence recorded there, terminal pod cleared. FU-150 re-pointed at queued-age (listener-zero
+proven blind today). Goal launch gated on the queued lane draining.

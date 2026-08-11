@@ -22,36 +22,34 @@ meant to avoid.)
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
   ONE approval per head; check-#3 shadow warnings stay zero.
 
-## NEXT SESSION — the worklog (written 2026-08-11)
+## NEXT SESSION — the worklog (updated 2026-08-11 midday)
 
-1. **Platform-lane PR queue** (the loop rides tonight): expect PRs for #240 #244 #245 #249
-   #252 #253 #256-259 (+ circles#77/#78, oracle-fleet#258 on their stacks' own gates). Meta
-   read + OrgAdmin merge each; the findings-harvester rule applies (meta-coordinate skill —
-   the WHOLE body, every finding fixed/filed/dismissed pre-merge).
-   ⚠ **FIRST ACT of the session (operator directive 2026-08-11, before ANYTHING else incl. the
-   Goal): drain the existing open-PR/issue lane.** As of end-of-session, homelab has 5 open PRs
-   all red — CI runs cancelled by the day's master pushes, or dead on the FU-130 WAN class
-   (`argocd-validate-pins` → cache.nixos.org narinfo deadline — the SAME failure as
-   snore-recorder#15; not diagnosed, deliberately). Re-run/update-branch each, review + merge
-   the queue, and only THEN open the FU-165 Goal — **the regular-issue lane must be EMPTY
-   before the goal lane starts, so the two mechanisms never fight on the pilot run.**
-2. **Platform board residue**: #103 + #153 CLOSED 2026-08-11 (alerts cleared). Remaining:
-   #221 (above), #223 (host session below), #235 queued, #241 (record + TTL-vs-crossrefs soak
-   note), #242/#248 unqueued by intent — queue them during the blitz.
-3. **snore-recorder#15** (operator PR: CHANGES_REQUESTED + environmental red): `scan-secrets`
-   died on a cache.nixos.org narinfo deadline (FU-130 WAN class). (a) `gh run rerun --failed`
-   (jail PAT has Actions RW; read CI via `gh run list --commit` — no Checks perm); (b) on
-   repeat: check snore ci.yaml wires the in-cluster nix-cache substituter like the other
-   Tier-A repos; (c) then address the review verdict (FU-051 deploy-pin enablement).
+1. **PR queue DRAINED 2026-08-11 (~11:30Z)**: #250/#251/#254/#255/#260 all merged (findings
+   harvested; residues: FSM dup keys + fixture registration + FU-106 third residue — all in the
+   same-day jail batch). The day's "FU-130 WAN class" reds were actually **wk-metal-02 losing
+   its IPv4 default route** — postmortem
+   [`docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md`](../incidents/2026-08-11-wk-metal-02-default-route-loss.md);
+   node rebooted + verified, ARC runner spread/requests shipped (arc-runners.yaml).
+2. **Board CLEAN per operator directive** (queue/fix/close all agents/infra issues; HA may
+   remain): closed #107/#131/#223(→#231)/#241; #235/#240/#244/#245 closed by merges; QUEUED
+   #242/#248 (+ already-queued #249/#252/#253/#256-259) — the loop drains them. Remaining open
+   by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
+3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
+   loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
 4. **THE FU BUILD-OUT BLITZ** (operator directive 2026-08-11: designed-but-unbuilt platform
    FUs are cheaper to build than running another stack through the gaps). **Run it as the
    FU-165 pilot Goal**: one `task/goal` issue "platform FU build-out", `Budget:` line,
    children per cluster (known gap, note on the goal: subscription rides sum $0 in
-   goal-budget). **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
+   goal-budget). **LAUNCH GATE (2026-08-11 midday): the queued regular lane (#242/#248/#249/
+   #252/#253/#256-259) must drain first — the two mechanisms never fight on the pilot.**
+   **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
    with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
    goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
    seat is FABLE (the meta seat authors+queues children, holds goal-review's quiet-goal
-   backstop; `GOAL_MODEL=fable` if the cluster clause ever re-decomposes).** Design-complete children, roughly ascending effort:
+   backstop; `GOAL_MODEL=fable` if the cluster clause ever re-decomposes).** Extra child noted
+   2026-08-11: fold the `SubscriptionWeeklyPoolLow` restart-silence fix (`max_over_time` —
+   the durable warning below, no FU of its own) into the FU-158 behaviour-half child.
+   Design-complete children, roughly ascending effort:
    FU-161 legs 1–2 (scout filter + benchmark columns → hand-fire, retire #235's premise) ·
    FU-151 next (automerge labels → 3 repos) · FU-145 (ScanWedged re-key on scan phase) ·
    FU-150 OURS half (AutoscalingListener-zero alert) · FU-144 (emitter {stack,loop_ns}
@@ -73,7 +71,10 @@ meant to avoid.)
    functional proxy change (a comment-only sync restarts the proxy and resets every for:
    window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
    scrub pass or a ruling that foundational shorthand keeps its archive residue.
-6. **Standing from 08-10**: Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
+6. **Standing from 08-10** (⚠ circles/oracle PARKED by operator 2026-08-11 — leave their
+   gates/parks alone until re-opened; incl. circles#77 ci-red park + oracle-fleet#259
+   codeowner park + oracle-fleet#225 ERT snapshot re-run, upstream healthy again):
+   Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
    oracle-fleet#255 rework (attended-download constraint stands) · **HOST-SIDE session**:
    the 4-step jail-read-all sequence (admin-token edit → argo-group probe →
    homelab-jail-read-all as .tf → DELETE the legacy "Read all resources" token) — also

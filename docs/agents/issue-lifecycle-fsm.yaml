@@ -94,9 +94,6 @@ transitions:
     replay:
       - agents/replay/fixtures/unblocked-unlabeled-surfaces
       - agents/replay/fixtures/unblocked-unlabeled-blocker-open
-    replay:
-      - agents/replay/fixtures/unblocked-unlabeled-surfaces
-      - agents/replay/fixtures/unblocked-unlabeled-blocker-open
     guards:
       - desc: "the play forbids self-labeling (loop-safety breaker #1)"
         anchor: { file: agents/coordinator/README.md, pattern: "never add .agent-fix. or .agent/queued." }
@@ -147,6 +144,7 @@ transitions:
     replay:
       - agents/replay/fixtures/fix-debounce-blocked-inert      # blocked ∧ error stay OUT — set 0, not one write in the stream
       - agents/replay/fixtures/fix-debounce-unblocked-queues   # same world, block lifted — the set is 1, and error is not COUNTED either
+      - agents/replay/fixtures/fix-debounce-in-progress-inert  # in-flight pair excluded too (PR#250 — the whole agent/* namespace test)
     guards:
       - desc: "ALERT-LANE ONLY (`alert-fp:` in the body) — a stack loop's own agent-fix-without-queued hold is not this lane's to queue (the 2026-08-07 dry run swept circles#42, an issue meta-state recorded as held)"
         anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "ALERT-LANE ONLY" }
@@ -217,8 +215,6 @@ transitions:
     owner: coordinator-scan queued clause
     when: "open Depends-on (native ∪ body line) / footprint intersection / repo WIP ceiling / open-PR cap"
     status: guarded
-    replay:
-      - agents/replay/fixtures/depends-on-retired-format
     replay:
       - agents/replay/fixtures/depends-on-retired-format
     guards:
