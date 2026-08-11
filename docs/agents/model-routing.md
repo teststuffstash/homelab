@@ -239,17 +239,34 @@ The scout is a **role** (dispatch-on-schedule family — machinery inventory in
 when the fixer was the only model consumer; the 2026-08-10 redesign (trigger: digest #234 — 20 of
 22 "new" candidates were a platform-wide `:batch` variant rollout of years-old models, and all 3
 canaries posted bogus `failed` verdicts, tripping #235; #234 CLOSED as a dud 2026-08-11 — legs
-1–2 are the PRECONDITION for the next scout run, and #235's premise dies with leg 1) rescopes it for the grown selection
+1–2 were the PRECONDITION for the next scout run and shipped 2026-08-11 in homelab#282, and #235's
+premise dies with leg 1) rescopes it for the grown selection
 surface (§M8 classes, §M9 chainless stacks, §M13 research pools). Legs, in build order (FU-161):
 
-1. **Filter variant re-listings.** Diff by BASE id (id minus `:suffix`) — a variant of a known
-   base is not a newcomer (one digest summary line, never N rows). Exclude `:batch` outright:
-   async endpoints cannot serve an interactive session, and their discounted headline price is
-   exactly what slips them under the ceiling.
-2. **Benchmark cross-check, one MCP call per candidate.** `get-model` embeds the AA indices;
-   attach them to the digest row (capability beside price, so the graduation call has both) and
-   mark benchless newcomers `unbenched`. Rank candidates before spending canary slots
-   (free-first, then agentic/coding index) — never `head -N` in diff order.
+1. **Filter variant re-listings.** ✅ **BUILT** (homelab#282, 2026-08-11). Diff by BASE id (id
+   minus `:suffix`) — a variant of a known base is not a newcomer (one digest summary line, never
+   N rows). Exclude `:batch` outright: async endpoints cannot serve an interactive session, and
+   their discounted headline price is exactly what slips them under the ceiling. Two rules, and
+   the order matters: `:batch` goes first and unconditionally, so a `:batch` listing of a
+   genuinely new base is still dropped. Within-tick siblings collapse too (two variants of one new
+   base = one candidate, represented by the cheapest listing). The snapshot keeps storing FULL
+   ids — bases are derived at diff time, so the live snapshot survived the change. Replayed
+   against #234's own world in `agents/replay/fixtures/scout-variant-batch-rollout`: 22 → 2.
+2. **Benchmark cross-check, one MCP call per candidate.** ✅ **BUILT** (homelab#282, 2026-08-11),
+   with one live unknown named below. `get-model` embeds the AA indices; attach them to the digest
+   row (capability beside price, so the graduation call has both) and mark benchless newcomers
+   `unbenched`. Rank candidates before spending canary slots (free-first, then agentic/coding
+   index) — never `head -N` in diff order. Built as `scout_get_model`, the same `_mcp_call` wire
+   shape and the same standard-account-key assumption the proxy's capability feed rides, and
+   **env-gated on `$SCOUT_MCP_KEY`**: the scout's CronWorkflow env carries no OpenRouter account
+   key today, so until that manifest change lands the honest production path is *every candidate
+   `unbenched`, digest still posted* — pinned as such
+   (`fixtures/scout-bench-unkeyed-unbenched`), because a capability feed that cannot run must
+   degrade the digest, never cancel it. ⚠ **Unverified upstream detail:** `get-model`'s
+   `arguments` envelope was never probed (the 2026-08-03 probe covered `list-benchmarks` /
+   `list-task-classifications`); the call sends the `{request: {…}}` shape its siblings take, and
+   a wrong guess returns a JSON-RPC error that is logged verbatim and downgraded to `unbenched`
+   (`fixtures/scout-bench-mcp-error`). The first keyed hand-fire settles it in one round.
 3. **The canary is a RAIL probe, not a capability probe.** Capability comes from the benchmark
    feed (§M8 feed 1, already pulled weekly by the proxy); the canary answers the one question no
    benchmark can: does this model complete a tool-call loop through OUR stack (harness → egress
