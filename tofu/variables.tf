@@ -113,10 +113,21 @@ variable "nodes" {
     cores     = number
     memory_mb = number
     disk_gb   = number
-    longhorn  = optional(bool, false) # storage-tier VM -> boot the iscsi/util-linux image
+    # Boot the iscsi/util-linux image (image.tf `longhorn` schematic). The flag means "this VM
+    # TOUCHES Longhorn volumes", NOT "this VM serves replicas" — mounting a volume needs
+    # iscsiadm + nsenter on the node just as much as hosting one does. See the wk-01 note below.
+    longhorn = optional(bool, false)
   }))
   default = {
     cp-01 = { role = "controlplane", vm_id = 8101, ip_cidr = "192.168.2.51/24", cores = 4, memory_mb = 8192, disk_gb = 40 }
+    # wk-01 keeps longhorn=true although it is in NEITHER longhorn.tf zone map (no
+    # create-default-disk label, no disk on its nodes.longhorn.io CR, no replica). That looks
+    # stale and is not: wk-01 is the untainted general-purpose worker, so it is the busiest
+    # volume CONSUMER in the cluster — 15 Longhorn volumes were attached with
+    # currentNodeID=wk-01 (2026-08-11), more than any other node. Mounting needs the same
+    # iscsi-tools + util-linux-tools as serving, so dropping the flag would repoint `file_id`
+    # in proxmox.tf, REPLACE the VM, and bring it back unable to mount any Longhorn PVC.
+    # Asked and settled twice now (#296 round 2, #302) — leave it alone.
     wk-01 = { role = "worker", vm_id = 8111, ip_cidr = "192.168.2.61/24", cores = 4, memory_mb = 16384, disk_gb = 80, longhorn = true }
     # disk 80→240 (ADR-089 bulk tier): pairs with wk-metal-01's 500G MX500 for longhorn-bulk
     # 2-replica volumes. pve thin pool had 244G free at resize (2026-07-13). Grow-only in place;

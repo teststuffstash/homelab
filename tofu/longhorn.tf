@@ -6,8 +6,10 @@
 # replica=2 + zone soft-anti-affinity => the two copies always land in different zones,
 # with the third zone free to rebuild onto.
 #
-# Talos: needs the iscsi-tools + util-linux-tools extensions on every storage node
-# (baked into the metal install image + the wk-02 'longhorn' VM image). The namespace
+# Talos: needs the iscsi-tools + util-linux-tools extensions on every node that MOUNTS a
+# Longhorn volume, not merely on the ones that serve replicas — so the set is wider than the
+# zone maps below (baked into both metal install images for every metal node, and into the
+# 'longhorn' VM image for the wk-01/wk-02 VMs via var.nodes.*.longhorn). The namespace
 # must be PodSecurity=privileged (Talos enforces baseline; Longhorn's instance-managers
 # are privileged), same as monitoring.tf.
 #

@@ -23,7 +23,9 @@ resource "proxmox_virtual_environment_vm" "node" {
 
   disk {
     datastore_id = var.datastore_vms
-    # storage-tier VMs (longhorn=true) boot the iscsi/util-linux image; others the base one
+    # VMs that touch Longhorn volumes (longhorn=true — mount OR serve, see variables.tf) boot
+    # the iscsi/util-linux image; others the base one. Flipping this flag on a live VM changes
+    # file_id, i.e. plans a REPLACE of the node, not an in-place edit.
     file_id     = each.value.longhorn ? proxmox_download_file.talos_longhorn.id : proxmox_download_file.talos.id
     interface   = "scsi0"
     size        = each.value.disk_gb
