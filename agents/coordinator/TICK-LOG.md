@@ -3641,3 +3641,14 @@ third residue). Board: closed #107/#131/#223(→#231)/#241 (+#235/#240/#244/#245
 queued #242/#248. ERT alert (25h unfiled) was responder-subjdup'd into oracle-fleet#225 —
 evidence recorded there, terminal pod cleared. FU-150 re-pointed at queued-age (listener-zero
 proven blind today). Goal launch gated on the queued lane draining.
+
+### 2026-08-11 — meta (afternoon): bot reviewer ON for the platform stack + the codeowner-flag retrace
+Operator: platform PRs get the bot read BEFORE the codeowner read (asked why #265 drew no reflex
+review — answer: live claim carried an imperative reviewer.enabled=false patch, SSA-owned outside
+git). Retrace finding: all three sibling repos ran require_code_owner_review=FALSE — agent-runtime's
+CODEOWNERS was decorative since PR#37 (the 08-08 "governor paths are gated" record wrong at the
+enforcement layer), openrouter-operator had no CODEOWNERS at all. Fix staged: claim reviewer.enabled
+:true explicit in git; whole-repo CODEOWNERS pushed to openrouter-operator (d84d694) +
+agent-coordinator (6ae966a); require_code_owner_review=true for all three in variables.tf.
+⚠ HOST-SIDE STEP OWED: `devbox run github-tofu apply` (org-admin wallet) — until it lands, an
+or-op/agent-runtime fixer PR could bot-approve+auto-merge on any path (window accepted, lane quiet).
