@@ -66,10 +66,26 @@ spec:
         # exactly "does not START with scout-". It also fails OPEN: a series with no `issue` label at
         # all is retained (empty ≠ `scout-.*`), so a push-path change cannot silently mute this alert.
         # ⚠ Nothing else now watches canary deaths — re-typing those verdicts is FU-161 legs 3–4.
+        # `blocked-deliberate` joins the exclusion (homelab#314, found by the #288 fixtures with 4
+        # such series live in the gateway): it is a HUMAN GATE APPLIED ON PURPOSE — the worker read
+        # the issue, judged it unworkable, emitted its structured stop report and exited 0
+        # (agent-finalize `classify()`: "That is a DECISION, not a death"). Three of them on one
+        # project in an hour raised an infra-death page with no infra death.
+        # It is the ONLY deliberate terminal, and that is checked, not assumed: the emitter's closed
+        # set is clean | ci-failed | no-artifact | harness-death | auth-storm | budget-403 | timeout
+        # | blocked-deliberate | failed, of which DEATH_EXIT_STATUSES = harness-death, auth-storm,
+        # budget-403, timeout. `no-artifact` (green in-pod, no PR — dead token / unpushed branch)
+        # and `failed` (nonzero exit / no output) are neither deliberate nor healthy, so they STAY
+        # counted; the description names `no-artifact` for exactly that reason.
+        # DENYLIST, not an allowlist, deliberately — same doctrine as `issue!~"scout-.*"` above: a
+        # new terminal the emitter grows is counted by default, so a push-path change cannot
+        # silently mute this alert. `exit_status=~"harness-death|auth-storm|budget-403|timeout"`
+        # would be tighter and fails CLOSED — a new infra terminal would go unwatched until someone
+        # remembered this file. Widening the exclusion by one named value keeps the fail-open.
         - alert: AgentRunInfraDeathBurst
           expr: |
             count by (project) (
-                agent_run_total{exit_status!~"clean|ci-failed", issue!~"scout-.*"}
+                agent_run_total{exit_status!~"clean|ci-failed|blocked-deliberate", issue!~"scout-.*"}
               and on (project, issue, role, round)
                 (time() - push_time_seconds{job="agent_run"}) < 3600
             ) >= 3
@@ -77,7 +93,7 @@ spec:
             severity: warning
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
-            description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+            description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
         # FU-160 (homelab#287; spike: docs/spikes/ride-latency-breakdown.md): ride phase timings
         # stopped being archaeology. `agents/agent-session.sh` pushes
         # `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}` per ride,

@@ -47,7 +47,7 @@ groups:
       - alert: AgentRunInfraDeathBurst
         expr: |
           count by (project) (
-              agent_run_total{exit_status!~"clean|ci-failed", issue!~"scout-.*"}
+              agent_run_total{exit_status!~"clean|ci-failed|blocked-deliberate", issue!~"scout-.*"}
             and on (project, issue, role, round)
               (time() - push_time_seconds{job="agent_run"}) < 3600
           ) >= 3
@@ -55,7 +55,7 @@ groups:
           severity: warning
         annotations:
           summary: 3+ non-clean agent runs in 1h on {{ $labels.project }}
-          description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
+          description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
       - alert: AgentRunPhaseSlow
         expr: |
           (
