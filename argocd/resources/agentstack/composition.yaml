@@ -365,6 +365,142 @@ spec:
                 requests:
                   storage: 2Gi
             ---
+            # FU-140 crash-net for the PVC above: the nightly sweep that covers what the exit trap
+            # never saw. The tick/item pods write their Claude JSONL onto coordinator-transcripts
+            # (coordinator-session.sh mounts it at ~/.claude/projects) and the launcher's exit trap
+            # uploads the session's files at the end — so a tick that dies BEFORE the trap (OOM
+            # kill, node reboot, activeDeadlineSeconds) leaves the ONLY copy of its transcript on
+            # this volume, and for an exec-run session that transcript IS the log. agent-coordinator
+            # has had this net since §A1 (agents/coordinator/transcripts-sync.yaml); the four
+            # <stack>-agents PVCs had nothing. This is that job, rendered per loop ns.
+            #
+            # ⚠ WHY IT IS NOT A COPY OF THAT JOB: the loop-ns S3 key is WRITE-ONLY (the
+            # ExternalSecret above mirrors writer_* only — that a leak here cannot READ the bucket
+            # is what makes the one Secret exception in this namespace acceptable). So there is no
+            # list-then-diff, and `s5cmd sync` is out too because sync LISTS the destination. Two
+            # things stand in for the read the coordinator's copy does:
+            #   1. the S3 key carries the file's MTIME, so re-uploading a file writes the SAME
+            #      path — the PUT is idempotent, never a second copy; and
+            #   2. a marker file per (basename, mtime) on the PVC skips the re-upload entirely.
+            # (2) is the optimisation, (1) is the correctness: if the marker dir is unwritable the
+            # job says so and degrades to unconditional PUT rather than silently skipping work.
+            #
+            # Key layout stays in the exit trap's family (<mainRepo>/_ticks/coordinator-r1-…) so a
+            # recovered file joins the SAME viewer group as trap-uploaded ones — the FU-061 sync
+            # keys on the manifest's project+task and writes by basename, so a file the trap also
+            # got resolves to one entry instead of forking a second tree. Files younger than 60min
+            # are left alone: that is a live session whose trap has not run yet, and the trap is the
+            # better record (it knows model/pod/task attribution this job cannot recover).
+            apiVersion: batch/v1
+            kind: CronJob
+            metadata:
+              name: transcripts-crashnet
+              namespace: {{ $loopns }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: {{ $stack }}-loop-transcripts-crashnet
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              # Nightly, offset from the agent-coordinator sweep (40 3) and the janitor tick (47 5).
+              schedule: "23 4 * * *"
+              concurrencyPolicy: Forbid
+              startingDeadlineSeconds: 3600
+              successfulJobsHistoryLimit: 1
+              failedJobsHistoryLimit: 3
+              jobTemplate:
+                spec:
+                  backoffLimit: 1
+                  activeDeadlineSeconds: 900
+                  template:
+                    metadata:
+                      labels: { app: transcripts-crashnet }
+                    spec:
+                      restartPolicy: Never
+                      terminationGracePeriodSeconds: 5
+                      # No apiserver call in this job — the only credentials it needs are the two
+                      # writer keys below.
+                      automountServiceAccountToken: false
+                      securityContext:
+                        fsGroup: 1000
+                      containers:
+                        - name: crashnet
+                          # The coordinator image (bash + jq + s5cmd), same pin as the loop
+                          # CronWorkflows above — the deploy-pin sweep bumps them together.
+                          image: ghcr.io/teststuffstash/agent-coordinator:2026.8.7-gd6dc9ced82f2
+                          command: ["bash", "-lc"]
+                          args:
+                            - |
+                              set -u
+                              command -v s5cmd >/dev/null 2>&1 || { echo "FATAL: s5cmd not in this image — bump AGENT_COORDINATOR_IMAGE"; exit 1; }
+                              export AWS_ACCESS_KEY_ID="$WRITER_ID" AWS_SECRET_ACCESS_KEY="$WRITER_SECRET" AWS_REGION=garage
+                              MARKS=/transcripts/.crashnet
+                              if mkdir -p "$MARKS" 2>/dev/null; then
+                                USE_MARKS=1
+                              else
+                                USE_MARKS=0
+                                echo "WARN: $MARKS not writable — no skip rail this run; every file is re-PUT to its"
+                                echo "  mtime-derived path (idempotent, so correct — just more bytes than needed)."
+                              fi
+                              N=0 SKIP=0 FAIL=0
+                              while read -r f; do
+                                [ -n "$f" ] || continue
+                                B=$(basename "$f")
+                                MT=$(date -u -r "$f" +%Y%m%dT%H%M%SZ)
+                                M="$MARKS/${B%.jsonl}.${MT}"
+                                if [ "$USE_MARKS" = 1 ] && [ -e "$M" ]; then SKIP=$((SKIP+1)); continue; fi
+                                # Same tree as the trap; -crashnet-<8> keeps two same-mtime files
+                                # from sharing a run dir (and so a manifest).
+                                P="s3://agent-transcripts/${MAIN_REPO}/_ticks/coordinator-r1-${MT}-crashnet-$(printf %s "$B" | cut -c1-8)"
+                                jq -n --arg project "$MAIN_REPO" --arg stack "$STACK" --arg f "$B" --arg mt "$MT" \
+                                  '{role:"coordinator", project:$project, task:"_ticks", stack:$stack, round:1,
+                                    source:"pvc-crashnet", session_key:"claude-session", mtime:$mt, files:[$f]}' > /tmp/manifest.json
+                                if s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "$f" "${P}/${B}"; then
+                                  s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp /tmp/manifest.json "${P}/manifest.json" \
+                                    || echo "manifest upload FAILED for ${B} (the jsonl landed; the viewer will not group it)"
+                                  if [ "$USE_MARKS" = 1 ]; then : > "$M" || echo "marker write FAILED for ${B} — it re-uploads next run"; fi
+                                  echo "crash-net: ${B} → ${P}/"
+                                  N=$((N+1))
+                                else
+                                  echo "upload FAILED: $f"
+                                  FAIL=$((FAIL+1))
+                                fi
+                              done < <(find /transcripts -name '*.jsonl' -mmin +60 2>/dev/null)
+                              echo "transcripts-crashnet: ${N} uploaded, ${SKIP} already marked, ${FAIL} failed"
+                              # Fail the Job on a real upload failure — a crash-net that reports
+                              # green while dropping files is the FU-125 class this repo keeps paying for.
+                              [ "$FAIL" = 0 ]
+                          env:
+                            - { name: HOME, value: "/home/node" }
+                            - { name: AGENT_TS_ENDPOINT, value: "http://garage.garage.svc.cluster.local:3900" }
+                            - { name: MAIN_REPO, value: {{ $xr.spec.mainRepo | quote }} }
+                            - { name: STACK, value: {{ $stack | quote }} }
+                            # WRITE-ONLY pair — there is no reader key in this namespace, by design.
+                            # Not optional: the pod parks in CreateContainerConfigError until ESO has
+                            # reconciled the Secret (same pattern as the coordinator's sweep).
+                            - name: WRITER_ID
+                              valueFrom:
+                                secretKeyRef: { name: agent-transcripts-s3, key: writer_access_key_id }
+                            - name: WRITER_SECRET
+                              valueFrom:
+                                secretKeyRef: { name: agent-transcripts-s3, key: writer_secret_access_key }
+                          volumeMounts:
+                            # READ-WRITE, unlike the coordinator's copy: the marker rail is the
+                            # write-only key's substitute for listing the bucket, and it lives here.
+                            # Markers go in a dot-dir the `find` above never matches.
+                            - { name: transcripts, mountPath: /transcripts }
+                          securityContext:
+                            runAsNonRoot: true
+                            runAsUser: 1000
+                            runAsGroup: 1000
+                            allowPrivilegeEscalation: false
+                            capabilities: { drop: ["ALL"] }
+                            seccompProfile: { type: RuntimeDefault }
+                          resources:
+                            requests: { cpu: "50m", memory: "128Mi" }
+                            limits:   { cpu: "1",   memory: "512Mi" }
+                      volumes:
+                        - name: transcripts
+                          persistentVolumeClaim: { claimName: coordinator-transcripts }
+            ---
             # Launch RBAC IN the loop home itself — the item/tick coordinator pods run here
             # (found live on the first dispatching tick: the SA could reach the fixer namespaces
             # but not its own).
