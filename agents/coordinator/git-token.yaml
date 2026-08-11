@@ -63,7 +63,7 @@ spec:
                                    #     close/reopen workaround (which silently disarms auto-merge)
                                    #     retires. COORDINATOR token only; workers keep no Actions verb.
   repositories:                    # ALL stack repos the coordinator lists/labels/merges/clones
-    - sleep-tracking               # (stack clones + FU-060; the homelab-agents App installation
+    - sleep-tracking               # (stack clones; the homelab-agents App installation
     - snore-recorder               #  must cover each — verify the App covers it BEFORE adding (the SERVED live Apps page: github-exporter /apps (in-cluster http://github-exporter.monitoring.svc:9504/apps; humans: kubectl -n monitoring port-forward svc/github-exporter 9504)),
     - sleep-iac                    #  or ESO token generation 422s and breaks the live token)
     - openrouter-operator

@@ -21,7 +21,7 @@ tofu/argocd.tf ──installs──► ArgoCD  +  seeds: infisical-secrets, infi
              sleep-iac `*/agent`, oracle-iac `*/agent`)
           "sleep" ──► github.com/teststuffstash/sleep-iac//apps  (the sleep stack, EXTRACTED to its
                       own public IaC repo — app infra Workspaces/ESO + the OCI-chart ingester, each
-                      project: sleep. FU-025. The `sleep` AppProject + its namespaces live here in
+                      project: sleep. ADR-084. The `sleep` AppProject + its namespaces live here in
                       argocd/platform/{sleep-project,sleep-namespaces}.yaml.)
           "oracle" ─► github.com/teststuffstash/oracle-iac//apps  (the oracle stack, sleep-shaped
                       from day one — docs/oracle-iac.md. PRIVATE repo → read via the

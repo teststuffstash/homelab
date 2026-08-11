@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes are FU-014/FU-041/FU-046/FU-047.",
+  "description": "GLOBAL Renovate policy (RENOVATE_CONFIG_FILE in .github/workflows/renovate.yaml) — the supply-chain baseline AND the shared classification enforced on EVERY repo the homelab-renovate App autodiscovers. This is the platform's Renovate policy; a repo needs NO renovate.json to be correctly classified (onboarding:false + requireConfig:optional). A per-repo renovate.json is only for genuine overrides. Implements the S2C2F (consumer) leg of docs/slsa.md; the agentic lanes: docs/renovate.md + docs/agents/merge-path.md (FU-046 open).",
 
   "extends": ["config:recommended", ":dependencyDashboard", ":enablePreCommit", "helpers:pinGitHubActionDigests"],
 
@@ -69,12 +69,12 @@
       "automerge": true
     },
     {
-      "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (FU-022).",
+      "description": "Devbox/Nix tools — DISABLED everywhere: the `@latest` pins have no trackable version, so Renovate mis-resolves them (downgrades gitleaks to a dead 5-yr-old release — sleep-tracking#15). Devbox updates ride the weekly synchronized `devbox-update.yaml` instead (docs/renovate.md).",
       "matchManagers": ["nix", "devbox"],
       "enabled": false
     },
     {
-      "description": "EVERY major bump (all repos, all managers) → the HUMAN-GATED coordinator lane: `major` label + NOT armed. The coordinator investigates the migration (dispatch reviewer while red), a worker adapts if in-budget, a human merges — same lane as devbox majors (FU-047). Un-armed = invisible to the review reflex (arming is the boundary); coordinator-scan owns it. Placed LAST so it overrides any manager rule's automerge for a major.",
+      "description": "EVERY major bump (all repos, all managers) → the HUMAN-GATED coordinator lane: `major` label + NOT armed. The coordinator investigates the migration (dispatch reviewer while red), a worker adapts if in-budget, a human merges — same lane as devbox majors (docs/agents/merge-path.md §Reflexes vs judgment). Un-armed = invisible to the review reflex (arming is the boundary); coordinator-scan owns it. Placed LAST so it overrides any manager rule's automerge for a major.",
       "matchUpdateTypes": ["major"],
       "addLabels": ["major"],
       "automerge": false
