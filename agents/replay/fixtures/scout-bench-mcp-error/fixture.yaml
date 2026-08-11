@@ -1,0 +1,32 @@
+# FU-161 leg 2 / homelab#282 — the one thing this leg could not verify offline, pinned as the
+# behaviour it degrades to.
+#
+# CONDITION UNDER REPLAY. A key IS present, the MCP server answers, and it rejects the call: the
+# `arguments` envelope `scout_get_model` sends follows the `{request: {…}}` shape its sibling tools
+# were probed with on 2026-08-03, but `get-model`'s own signature has never been probed from a seat
+# that had an account key. If that guess is wrong, this is the reply.
+#
+# THE CONTRACT:
+#   1. A JSON-RPC `.error` is NOT bench data and is NOT a crash. Each candidate falls back to
+#      `unbenched` and the tick carries on to the digest — same rule as the keyless path.
+#   2. It is LOUD, on the tick log, naming the model and quoting the server's own message. This is
+#      the entire reason the fixture exists: a wrong envelope and a genuinely benchless newcomer
+#      produce the identical digest, so without this line the first live hand-fire would report
+#      "every candidate unbenched" and look like a working leg. The operator reads the message and
+#      fixes the arguments in one round.
+#   3. The error text reaches the log VERBATIM. A summarized error is a error you have to reproduce
+#      to act on.
+name: scout-bench-mcp-error
+mode: actions
+source: agents/model-scout.sh
+env:
+  - SCOUT_MCP_KEY=sk-or-v1-FIXTURE-NOT-A-KEY
+  - MCP_UPSTREAM=https://mcp.openrouter.ai/mcp
+scrub:
+  - s/(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])/(<today>)/
+parts:
+  - block:scout-seams
+  - file:../scout-bench-ranked-columns/bridge.sh
+  - block:scout-bench
+  - block:scout-digest
+  - file:../scout-bench-ranked-columns/observe.sh

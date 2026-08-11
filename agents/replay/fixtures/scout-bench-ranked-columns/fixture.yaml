@@ -1,0 +1,53 @@
+# FU-161 leg 2 / homelab#282 — the benchmark cross-check, the digest columns, and the rank.
+#
+# CONDITION UNDER REPLAY. Four candidates have survived leg 1 and been enriched; $SCOUT_MCP_KEY is
+# present, so the get-model leg runs. The four are chosen to cover every state a newcomer can be in
+# against the Artificial-Analysis feed:
+#   inclusionai/ling-3.0-flash  benched on all three axes (int 55 / coding 50.6 / agentic 48 — the
+#                               real 2026-08-10 datum: this is the model whose canary posted a bogus
+#                               `failed` while benching ABOVE gpt-5.1, which is what leg 2 is for)
+#   newco/spark:free            benched, and `:free`
+#   midco/partial               benched on ONE axis
+#   bigco/heavy                 in the catalog, absent from the feed → `unbenched`, and ALSO absent
+#                               from the enrichment (its --lookup failed) → the price columns fall
+#                               back to "—" and its paste-line class is "?" rather than a guess
+#
+# THE CONTRACT:
+#   1. ONE get-model per surviving candidate — four models, four tools/call frames (each preceded by
+#      the `initialize` frame the MCP transport requires, mirroring the proxy's `_mcp_call`). The
+#      CALL stream is where "one per candidate" is checkable at all.
+#   2. `unbenched` is a VERDICT, not a drop. bigco/heavy stays in the digest, in the rank, and in
+#      the canary-slot order. A newcomer no benchmark has heard of is the normal case, and it is
+#      precisely what the canary rung answers — dropping it would delete the question.
+#   3. Rank: `:free` first, then the agentic index, falling back to coding then intelligence, then
+#      the headline price. `midco/partial` (coding 44, no agentic) must therefore outrank
+#      `bigco/heavy` and be outranked by ling-3.0-flash — a fallback that stopped falling back
+#      would silently sort a one-axis model to the bottom with the unbenched ones.
+#   4. The AA indices reach the digest as a column beside the price, with `—` per MISSING axis and
+#      `unbenched` for a model with none. Capability and cost in one row is the whole point: the
+#      graduation call is a human's, and it is made off this table.
+#   5. The rank order IS the table order IS the canary-slot order. One list, so the digest cannot
+#      disagree with what was spent.
+#
+# The MCP replies are hand-built to the field names the platform has PROBED (`intelligence_index`
+# /`coding_index`/`agentic_index`, list-benchmarks AA source — model-routing.md §The OpenRouter API
+# surface); `get-model`'s own envelope has never been probed from this seat, so ling-3.0-flash's
+# reply nests the indices two levels deeper than midco/partial's. That difference is deliberate and
+# is the point of the recursive extractor: the fixture pins the field names, never a path.
+name: scout-bench-ranked-columns
+mode: actions
+source: agents/model-scout.sh
+env:
+  - SCOUT_MCP_KEY=sk-or-v1-FIXTURE-NOT-A-KEY
+  - MCP_UPSTREAM=https://mcp.openrouter.ai/mcp
+# The digest title carries `date -u +%F`; the run date is not the subject of any assertion here.
+# Anchored on the title's parentheses so the PROSE dates in the body (which are content, and have
+# gone stale before) stay asserted.
+scrub:
+  - s/(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])/(<today>)/
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-bench
+  - block:scout-digest
+  - file:observe.sh

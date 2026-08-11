@@ -1,0 +1,34 @@
+# FU-161 leg 2 / homelab#282 — the DEFAULT production path, not an edge case.
+#
+# CONDITION UNDER REPLAY. The `model-scout` CronWorkflow's env carries GH_TOKEN and the transcript
+# S3 reader/writer, and no OpenRouter account key — wiring one in is a manifest change on goal #278
+# and deliberately outside this issue's `Touches:`. So on the day leg 2 merges, THIS is what the
+# weekly tick does: `scout_get_model` (composed real, from the shipped script) finds no
+# $SCOUT_MCP_KEY and returns non-zero for every candidate.
+#
+# THE CONTRACT:
+#   1. NOT ONE network call. `curl` is shadowed by a tripwire that records and dies, so a gate that
+#      leaked would red here instead of quietly reaching mcp.openrouter.ai from a cron pod.
+#   2. The tick does not fail, and the digest still posts. "A benchmark lookup that cannot run must
+#      never fail the tick or block the digest" is the rule this pins — an unavailable capability
+#      feed must degrade to a less-informed digest, never to no digest.
+#   3. Every candidate is `unbenched`, and it SAYS SO on stderr once per candidate. A silent
+#      degrade is the failure mode that matters here: a digest full of `unbenched` rows looks
+#      exactly like a tick where the feed genuinely knows nothing about four newcomers.
+#   4. Ranking still happens and is still deterministic: with every score equal, `:free` first and
+#      then the headline price. Rank order does not collapse into diff order just because the
+#      benchmark axis went away — leg 2's rank is what canary slots are spent on either way.
+name: scout-bench-unkeyed-unbenched
+mode: actions
+source: agents/model-scout.sh
+env:
+  - SCOUT_MCP_KEY=
+scrub:
+  - s/(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])/(<today>)/
+parts:
+  - block:scout-seams
+  - file:../scout-bench-ranked-columns/bridge.sh
+  - file:no-network.sh
+  - block:scout-bench
+  - block:scout-digest
+  - file:../scout-bench-ranked-columns/observe.sh

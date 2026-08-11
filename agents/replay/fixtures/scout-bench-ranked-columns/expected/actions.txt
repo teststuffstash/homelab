@@ -1,0 +1,16 @@
+CALL curl POST https://mcp.openrouter.ai/mcp initialize
+CALL curl POST https://mcp.openrouter.ai/mcp tools/call get-model model=bigco/heavy
+CALL curl POST https://mcp.openrouter.ai/mcp initialize
+CALL curl POST https://mcp.openrouter.ai/mcp tools/call get-model model=inclusionai/ling-3.0-flash
+CALL curl POST https://mcp.openrouter.ai/mcp initialize
+CALL curl POST https://mcp.openrouter.ai/mcp tools/call get-model model=midco/partial
+CALL curl POST https://mcp.openrouter.ai/mcp initialize
+CALL curl POST https://mcp.openrouter.ai/mcp tools/call get-model model=newco/spark:free
+CALL gh issue create --repo teststuffstash/homelab --title 🔭 model scout: 4 new candidate model(s) (<today>) --body Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $0.50/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers |\n|---|---|---|---|---|---|---|---|\n| 1 | `newco/spark:free` | 41 / 39 / 35 | $0.0 | free tier | `newco` | 95.1% | 1 |\n| 2 | `inclusionai/ling-3.0-flash` | 55 / 50.6 / 48 | $0.15 | — | `inclusion-ai` | 99.3% | 2 |\n| 3 | `midco/partial` | — / 44 / — | $0.2 | cache-blended | `midco` | 97.4% | 1 |\n| 4 | `bigco/heavy` | `unbenched` | — | — | `—` | — | — |\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider = the tools-capable session pin `--lookup` would choose (§M4). AA indices = MCP `get-model` (§M7 leg 2); `unbenched` = not in the Artificial-Analysis feed, which is the normal state of a genuine newcomer — the canary rung, not the benchmark, is what speaks for those.*\n\n**Graduation is a human call**: add worthy entries to `agents/stacks.json` `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers line (router-self-test enforces chain ⊆ tiers since 2026-08-03) — ready to paste:\n\n`"newco/spark:free": "free"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)\n`"inclusionai/ling-3.0-flash": "cheap"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)\n`"midco/partial": "cheap"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)\n`"bigco/heavy": "?"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)\n\n*Suppressed by the base-id diff (§M7 leg 1): 3 `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and 1 other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*
+OUT ranked: newco/spark:free, inclusionai/ling-3.0-flash, midco/partial, bigco/heavy (unbenched)
+OUT → posting digest issue on teststuffstash/homelab
+OUT RANK 1 newco/spark:free free=true benched=true score=35
+OUT RANK 2 inclusionai/ling-3.0-flash free=false benched=true score=48
+OUT RANK 3 midco/partial free=false benched=true score=44
+OUT RANK 4 bigco/heavy free=false benched=false score=-1
+RC 0
