@@ -98,9 +98,15 @@ spec:
         # its default route). Age of the oldest run still waiting for a runner catches both, and
         # anything else that stops dispatch, without naming a cause.
         #
-        # 900s: measured pickup on `homelab-ephemeral` is ~20s (p50 19s, p99 ~30s over the runs
-        # sampled 2026-08-11) — 15 minutes is ~30x that, and both incidents sat queued for HOURS
-        # (08-07: 01:05→03:25; 08-11: ~09:02→11:00), so the margin costs nothing in detection.
+        # 1800s, measured rather than guessed (474 self-hosted jobs, 2026-08-04→11, the two
+        # incident windows EXCLUDED because their waits are the signal, not the baseline):
+        # p50 18s, p90 64s, p95 186s, p99 830s, max 1134s. The legitimate tail is scheduled-cron
+        # pileup against maxRunners=4 (four repos firing at 12:00), so a threshold near p99 would
+        # ring on a busy Saturday: 30 minutes is 2.2x p99 and 1.6x the worst honest wait in a
+        # week, and with `for: 10m` a run must sit queued ~40 min (2.9x p99) before this fires.
+        # It still catches both incidents by a mile — inside their windows 9 samples exceeded
+        # 25 minutes and the longest wait was 10.9h — and fires ~40 min in against the 2h (08-11,
+        # ~09:02→11:00) and 5h (08-07, 01:05→03:25) the humans took.
         # `for: 10m` is not padding: the apparent age keeps climbing after the run is actually
         # picked up, because the exporter serves a CACHED exposition between its 120s polls (so a
         # run reads as queued for up to 2 minutes after it starts) — and, absent a staleness
@@ -120,7 +126,7 @@ spec:
         # the listener, cordon/reboot a node) — not a manifest a fixer can PR. Fires in ns
         # `monitoring` with a non-`Agent*` name, so both older gate keys miss it.
         - alert: CiDispatchStalled
-          expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 900
+          expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 1800
           for: 10m
           labels:
             severity: warning

@@ -282,7 +282,13 @@ def run_series(labels, run):
     statuses are deliberately excluded: `waiting`/`requested` are approval gates and `pending` is
     a concurrency group (docs/ci.md §Concurrency — homelab's own master runs queue serially by
     design). Those are policy waits, not "CI cannot dispatch", and alerting on them would ring on
-    a healthy queue."""
+    a healthy queue.
+
+    Bounded by RUN_WINDOW_HOURS like every other run series: a run queued longer than the window
+    (24h) falls out of the poll, its series disappears, and the alert RESOLVES while CI is still
+    dead. Left that way deliberately — it will have been ringing for a day by then, and widening
+    the window multiplies the cardinality of every run family to cover a case neither incident
+    came near (the longest recorded wait is ~11h, 2026-08-06)."""
     updated = epoch(run["updated_at"])
     out = [metric("github_workflow_run_updated_timestamp", labels, updated)]
     started = run.get("run_started_at")

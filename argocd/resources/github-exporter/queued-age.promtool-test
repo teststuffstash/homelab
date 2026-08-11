@@ -39,17 +39,18 @@ tests:
       - eval_time: 5m
         alertname: CiDispatchStalled
         exp_alerts: []
-      # 14m of queue is still under the threshold — the alert does not ring on slow, it rings on stuck.
-      - eval_time: 14m
+      # Half an hour of queue is still under the threshold — the alert does not ring on slow,
+      # it rings on stuck. p99 pickup is 830s and the worst honest wait in the sampled week 1134s.
+      - eval_time: 29m
         alertname: CiDispatchStalled
         exp_alerts: []
-      # Threshold crossed at 15m, so `for: 10m` still holds it here — pending, not firing.
-      - eval_time: 25m
+      # Threshold crossed at 31m, so `for: 10m` still holds it here — pending, not firing.
+      - eval_time: 40m
         alertname: CiDispatchStalled
         exp_alerts: []
-      # 26m: fired. THREE runs stuck across TWO repos produce exactly ONE alert — the
+      # 41m: fired. THREE runs stuck across TWO repos produce exactly ONE alert — the
       # max by (owner, runner) collapse, so one root cause files one issue (the FU-133 class).
-      - eval_time: 26m
+      - eval_time: 41m
         alertname: CiDispatchStalled
         exp_alerts:
           - exp_labels:
@@ -58,8 +59,8 @@ tests:
               owner: teststuffstash
               runner: self-hosted
             exp_annotations:
-              summary: "CI cannot dispatch: self-hosted runs queued 26m 0s"
-              description: 'The oldest self-hosted workflow run in teststuffstash has waited 26m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+              summary: "CI cannot dispatch: self-hosted runs queued 41m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 41m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
       # …and it keeps ringing for as long as the queue is dead (the real one ran 2h20m).
       - eval_time: 150m
         alertname: CiDispatchStalled
@@ -90,16 +91,16 @@ tests:
       - series: 'github_workflow_run_queued_since_timestamp{owner="teststuffstash",repo="circles",workflow="CI",branch="fix/issue-79-z",event="pull_request",number="79",attempt="1",id="31433333333",status="mixed",conclusion="",runner="mixed"}'
         values: "_x29 1740+0x89"
     alert_rule_test:
-      # Still inside threshold + `for:` — the first ~26 minutes of a stall are indistinguishable
+      # Still inside threshold + `for:` — the first ~41 minutes of a stall are indistinguishable
       # from a busy queue, and that is deliberate.
       - eval_time: 10m
         alertname: CiDispatchStalled
         exp_alerts: []
-      # Fires ~26m in, i.e. ~09:28Z against the recorded 09:02Z start — the incident was
-      # diagnosed at 10:5xZ and resolved ~11:00Z, so this is ~90 minutes earlier than the human.
-      # `runner="mixed"` is a SECOND alert series: not hosted, so not the vendor's, and a
-      # mixed-runner run that cannot start is still our dispatch failing.
-      - eval_time: 30m
+      # Fires ~41m in, i.e. ~09:43Z against the recorded 09:02Z start — the incident was
+      # diagnosed at 10:5xZ and resolved ~11:00Z, so this is ~70 minutes earlier than the human.
+      # Only the self-hosted series is old enough here; the mixed-runner run entered the queue
+      # 29 minutes in and rings on its own clock below.
+      - eval_time: 45m
         alertname: CiDispatchStalled
         exp_alerts:
           - exp_labels:
@@ -108,8 +109,31 @@ tests:
               owner: teststuffstash
               runner: self-hosted
             exp_annotations:
-              summary: "CI cannot dispatch: self-hosted runs queued 30m 0s"
-              description: 'The oldest self-hosted workflow run in teststuffstash has waited 30m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+              summary: "CI cannot dispatch: self-hosted runs queued 45m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 45m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+      # A SECOND alert series once the mixed-runner run (queued 29m in) crosses the same
+      # threshold — `runner!="hosted"` keeps it: a mixed run that cannot start is still our
+      # dispatch failing, and it is aggregated separately because a different runner class is a
+      # genuinely different lane, not a duplicate of the same root cause.
+      - eval_time: 75m
+        alertname: CiDispatchStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              runner: mixed
+            exp_annotations:
+              summary: "CI cannot dispatch: mixed runs queued 46m 0s"
+              description: 'The oldest mixed workflow run in teststuffstash has waited 46m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 1h 15m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 1h 15m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
       # The remediation (cordon → drop the runner pods and the listener → queue drains) removes
       # the series, and the alert resolves on its own — no staleness handling anywhere.
       - eval_time: 130m
@@ -136,35 +160,35 @@ tests:
   # ── Guard 2 — a slow-but-healthy pickup never rings, INCLUDING its phantom tail ──────────────
   # This is the false positive the design has to make impossible rather than merely unlikely: the
   # apparent queue age keeps climbing for a while AFTER the run is actually picked up, and it can
-  # cross 900s without anything being wrong.
+  # cross the 1800s threshold without anything being wrong.
   #
   # Two tails stack up, and this case models the longer of them. In production the exporter
   # republishes its exposition every POLL_INTERVAL (120s) and serves the cached body in between,
-  # so a run picked up at 12m50s is still advertised as queued until 14m50s — then the series
+  # so a run picked up at 27m50s is still advertised as queued until 29m50s — then the series
   # leaves the exposition, Prometheus writes a staleness marker, and the age stops dead. promtool
   # has no staleness marker: a series that simply ends stays readable for the full 5m PromQL
-  # lookback, so this fixture keeps aging the run to 19m50s. That is a STRICTLY LONGER tail than
+  # lookback, so this fixture keeps aging the run to 34m50s. That is a STRICTLY LONGER tail than
   # production can produce, which is what makes passing it meaningful.
   # On the rule's own 1m evaluation grid that leaves at most four consecutive pending evaluations
-  # (16m…19m; at 20m the lookback is spent), so any `for:` above 5m is structurally safe and
+  # (31m…34m; at 35m the lookback is spent), so any `for:` above 5m is structurally safe and
   # `for: 10m` has margin. `for: 3m` fires here — that is the assertion below doing its job.
   - interval: 10s
-    name: a pickup at 12m50s (worst-case phantom tail) never fires
+    name: a pickup at 27m50s (worst-case phantom tail) never fires
     input_series:
       - series: 'github_workflow_run_queued_since_timestamp{owner="teststuffstash",repo="homelab",workflow="CI",branch="renovate/actions-checkout",event="pull_request",number="88",attempt="1",id="31600000000",status="queued",conclusion="",runner="self-hosted"}'
-        values: "0+0x89"
+        values: "0+0x179"
     alert_rule_test:
-      - eval_time: 14m50s
+      - eval_time: 29m50s
         alertname: CiDispatchStalled
         exp_alerts: []
       # the last evaluation the phantom survives to — pending at its longest, still not firing
-      - eval_time: 19m
+      - eval_time: 34m
         alertname: CiDispatchStalled
         exp_alerts: []
       # lookback spent: the alert is gone without ever having fired
-      - eval_time: 20m
+      - eval_time: 35m
         alertname: CiDispatchStalled
         exp_alerts: []
-      - eval_time: 30m
+      - eval_time: 45m
         alertname: CiDispatchStalled
         exp_alerts: []

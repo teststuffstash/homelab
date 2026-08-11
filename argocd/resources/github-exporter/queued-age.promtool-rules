@@ -17,7 +17,7 @@ groups:
   - name: github
     rules:
       - alert: CiDispatchStalled
-        expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 900
+        expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 1800
         for: 10m
         labels:
           severity: warning
