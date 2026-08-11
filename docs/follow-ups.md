@@ -289,9 +289,10 @@ the block needs pruning, not more headings.
       UNLABELLED — they survive only because auto-merge beats the 15-min tick; a slow CI
       reverses it (cost already paid: 5 reviewer sessions on 4 one-line pins,
       homelab#102/#104/#105). Fixed where it burned (openrouter-operator#23,
-      agent-coordinator#10, oracle-fleet#173); labels exist on all -iac repos. **Next:** port
-      `gh pr edit --add-label automerge --add-label dependencies` into sleep-tracking, circles,
-      snore-recorder deploy workflows. Relates [`dependency-upgrades.md`](dependency-upgrades.md) §2.
+      agent-coordinator#10, oracle-fleet#173); labels exist on all -iac repos; sleep-tracking
+      DONE 2026-08-11 (`5b8c384`, meta-delivered beside goal #278). **Next:** circles at unpark;
+      snore-recorder rides its #15 (the deploy-pin is BORN there — label at birth).
+      Relates [`dependency-upgrades.md`](dependency-upgrades.md) §2.
 - [ ] **FU-152** — **One version file for the agent-coordinator image: the kustomize conversion
       SHIPPED** (landed with #113's arc, verified 2026-08-11: `agents/coordinator/kustomization.yaml`
       `images:` transformer holds the tag, ZERO literal tags left in the coordinator manifests,

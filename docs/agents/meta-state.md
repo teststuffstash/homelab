@@ -36,12 +36,11 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **THE FU BUILD-OUT BLITZ — the goal is AUTHORED: homelab#278** (unqueued, operator reviewing;
-   full decomposition + rulings + the master-lane/no-assembly deviation recorded in its body).
-   **Launch = after operator sign-off AND the queued lane (#268/#269 remaining) drains**: the
-   meta seat authors the children as native sub-issues per the body's list, queues them, puts
-   #278 straight into the tracking state (agent/blocked + comment) — NEVER agent/queued (the
-   cluster decompose clause must not fire).
+4. **THE FU BUILD-OUT GOAL IS LIVE: homelab#278, LAUNCHED 2026-08-11 ~15:30Z** (operator signed
+   off as-authored). Children #282–#291 (native sub-issues; nine queued, #289/FU-102 unqueued —
+   parked with oracle). #278 sits in the tracking state (agent/blocked), never agent/queued.
+   FU-151 meta-delivered for sleep-tracking (`5b8c384`); circles at unpark, snore via its #15.
+   The jail seat holds the quiet-goal backstop + the closing sweep (per-child live re-probe).
    **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
    with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
    goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
