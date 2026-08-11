@@ -40,7 +40,11 @@ meant to avoid.)
    FUs are cheaper to build than running another stack through the gaps). **Run it as the
    FU-165 pilot Goal**: one `task/goal` issue "platform FU build-out", `Budget:` line,
    children per cluster (known gap, note on the goal: subscription rides sum $0 in
-   goal-budget). Design-complete children, roughly ascending effort:
+   goal-budget). **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
+   with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
+   goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
+   seat is FABLE (the meta seat authors+queues children, holds goal-review's quiet-goal
+   backstop; `GOAL_MODEL=fable` if the cluster clause ever re-decomposes).** Design-complete children, roughly ascending effort:
    FU-161 legs 1–2 (scout filter + benchmark columns → hand-fire, retire #235's premise) ·
    FU-151 next (automerge labels → 3 repos) · FU-145 (ScanWedged re-key on scan phase) ·
    FU-150 OURS half (AutoscalingListener-zero alert) · FU-144 (emitter {stack,loop_ns}
@@ -50,8 +54,13 @@ meant to avoid.)
    (oracle probe.md from UC-1 + flip prober.enabled) · FU-162 (draw verb + pools, ADR-104).
    Judge at decompose (bigger): FU-095 legs, FU-090(b), FU-106 G01 flip post-soak + G06 lens,
    FU-104 teeth, FU-101 ASVS/e-ITS.
-5. **docs-cleanup residue**: three comb agents' findings (docs/, docs/agents/, root+misc) —
-   apply centrally + the FU-164 settle-test report (doc-heat cold-living × decisions).
+5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
+   (a) cloudflare.md's two zone-classes sections merge (structural, one home); (b) the
+   network-physical re-capture (banner placed); (c) FU-001 ref scrubs when its archive entry
+   expires (~08-13); (d) the openrouter-proxy.py FU-021 comment repoint — rides the NEXT
+   functional proxy change (a comment-only sync restarts the proxy and resets every for:
+   window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
+   scrub pass or a ruling that foundational shorthand keeps its archive residue.
 6. **Standing from 08-10**: Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
    oracle-fleet#255 rework (attended-download constraint stands) · **HOST-SIDE session**:
    the 4-step jail-read-all sequence (admin-token edit → argo-group probe →
