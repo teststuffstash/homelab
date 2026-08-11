@@ -1,0 +1,27 @@
+# CiDispatchStalled, lifted VERBATIM out of prometheusrule.yaml — the rules file that
+# queued-age.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
+# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
+# there would fail it.
+#
+# THE COPY CANNOT DRIFT SILENTLY: `devbox run exporter-self-test` (gated in CI) reads the alert
+# out of both files and asserts expr/for/labels are identical. homelab#288 (FU-158) owns the
+# harness that will extract `.spec.groups` at run time and delete the copy altogether; this file
+# is what makes the fixture runnable in the meantime.
+#
+# Regenerate after editing the alert in prometheusrule.yaml:
+#   yq '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "CiDispatchStalled")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml
+groups:
+  - name: github
+    rules:
+      - alert: CiDispatchStalled
+        expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 900
+        for: 10m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: "CI cannot dispatch: {{ $labels.runner }} runs queued {{ $value | humanizeDuration }}"
+          description: 'The oldest {{ $labels.runner }} workflow run in {{ $labels.owner }} has waited {{ $value | humanizeDuration }} for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'

@@ -90,6 +90,45 @@ spec:
             summary: "GitHub-side outage: {{ $labels.component }}"
             description: "githubstatus.com reports {{ $labels.component }} at status index {{ $value }} (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com"
 
+        # FU-150 (the OURS half, homelab#284): "CI cannot dispatch" as QUEUED-AGE — the throughput
+        # signal, deliberately CAUSE-AGNOSTIC. GithubWorkflowRunFailed needs a run to FAIL and a
+        # queued run never does, which is why 2026-08-07 ran five hours with every belt green; the
+        # `AutoscalingListener`-zero signal first proposed for this half was dropped because
+        # 2026-08-11 starved the same queue with the listener ALIVE and scaling (a node had lost
+        # its default route). Age of the oldest run still waiting for a runner catches both, and
+        # anything else that stops dispatch, without naming a cause.
+        #
+        # 900s: measured pickup on `homelab-ephemeral` is ~20s (p50 19s, p99 ~30s over the runs
+        # sampled 2026-08-11) — 15 minutes is ~30x that, and both incidents sat queued for HOURS
+        # (08-07: 01:05→03:25; 08-11: ~09:02→11:00), so the margin costs nothing in detection.
+        # `for: 10m` is not padding: the apparent age keeps climbing after the run is actually
+        # picked up, because the exporter serves a CACHED exposition between its 120s polls (so a
+        # run reads as queued for up to 2 minutes after it starts) — and, absent a staleness
+        # marker, PromQL's 5m lookback would extend that further still. On the 1m evaluation grid
+        # the longest phantom a healthy pickup can produce is four consecutive pending
+        # evaluations, so any window above 5m makes that false positive unrepresentable rather
+        # than unlikely. The promtool fixture beside this file pins exactly that boundary: it
+        # models the longer (no-staleness-marker) tail and goes red at `for: 3m`.
+        # runner!="hosted" — not `="self-hosted"`: an unclassifiable run that cannot get a runner
+        # is precisely this alert's blind spot (`unknown` is what _runner_class returns when the
+        # jobs probe fails), and hosted queueing is GitHub's, i.e. GithubVendorOutage's.
+        # max by (owner, runner) — ONE alert for a stalled fleet, not one per stuck run: a wedged
+        # dispatcher stalls every repo at once, and per-run series would file N issues for one
+        # root cause (the FU-133 class). The drill-down query rides the description.
+        # platform_machinery (homelab#239): a dispatched worker's own PR would sit in the very
+        # queue this alert says is dead, and the remedies are imperative cluster surgery (rebuild
+        # the listener, cordon/reboot a node) — not a manifest a fixer can PR. Fires in ns
+        # `monitoring` with a non-`Agent*` name, so both older gate keys miss it.
+        - alert: CiDispatchStalled
+          expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 900
+          for: 10m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "CI cannot dispatch: {{ $labels.runner }} runs queued {{ $value | humanizeDuration }}"
+            description: 'The oldest {{ $labels.runner }} workflow run in {{ $labels.owner }} has waited {{ $value | humanizeDuration }} for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+
         # METERED usage only — the Team-plan seat license ($4/mo) is a subscription and never
         # shows in the usage API. Metered spend should stay $0 inside included usage (hosted
         # minutes discounted to $0, self-hosted runners and public ghcr free; the org's 2026-07
