@@ -12,9 +12,13 @@ meant to avoid.)
   replay-gated; ratchet v2 live). **#210 homelab leg MERGED ~12:50Z (PR#219** — union stats_ts
   reader + machine-comment.sh; codeowner-reviewed by execution: jq union verified on a mixed
   world, reader-sweep negative re-proven; spot-check the merged-closeout flip/harvest on #210).
-  REMAINING: **agent-runtime#62** (primary emitter twin, QUEUED) + **homelab#217 spend belt**
-  (queued). Old-shape branch deletes only after #62 ships AND no open PR carries it. **Monday
-  retro 08-10 05:00Z scores the two ADR-103 KPIs first — CHECK ITS REPORT.**
+  REMAINING: none — **agent-runtime#62 SHIPPED 2026-08-09 13:16Z (PR#64)**, ~30 min after this
+  consolidation stamped it QUEUED (the stale read was repeated once, GAPS design-agents-G1);
+  old-shape cleanup is now unblocked (no open PR carries the old shape). **The 08-10 Monday
+  retro FAILED at guard — two latent guard bugs (busy-probe stderr fold `d4ad8c8`, missing
+  AWS_REGION `f791937`), BOTH fixed + hand-refired 2026-08-11 (`retro-session-xkj88`, guard
+  passed: 172 new ledger rows) — READ ITS REPORT PR when harvest opens it** (homelab#237 is the
+  label-clean subject record; defects filed #238 debounce-loop / #239 gate-miss / #240 mirror).
 - **minutark.ee LIVE + DNSSEC COMPLETE** (~17:00Z: DS at the .ee registry, `ad` flag from
   1.1.1.1 — chain of trust verified; evidence on oracle-iac#351). #351 stays OPEN — its
   deliverable is the bootstrap AS IaC, still blocked on the host-side ingress-token re-mint;
