@@ -79,9 +79,16 @@ tokens while growing in leverage, so unit cost may rise:
 | weave assist / synthesis | smallest | `ultra` — top tier, subscription |
 
 Callers name **zero models** — `class` + `slot` + `jitter:false` against the scout-curated pools
-(§M13; the draw verb + pools build is tracked by FU-162). The bands are disjoint *by curation
-convention*, which structurally prevents run-1's two selection slips (below) without router
-enforcement.
+(§M13; the draw verb + pools build is tracked by FU-162, shipped 2026-08-11 in homelab#290). The
+bands are disjoint *by curation convention*, which structurally prevents run-1's two selection
+slips (below) without router enforcement.
+
+In practice, for step 1: `bash agents/research-fanout.sh <project> <goal-issue> --arms 7`
+(`--dry-run` draws the roster and stops). A slot whose model is unavailable comes back a typed
+defer and stays EMPTY — over-provision covers it; nothing is substituted. Record the arm table it
+prints, `pool-version` included: that triple is what re-draws the mission. ⚠ The hand-seeded
+`regular` band is 6 deep today, so a 7-arm ask visibly defers its last slot until the scout's
+weekly refresh (§M7 leg 5) deepens it.
 
 ## Principles (rulings, 2026-08-10)
 

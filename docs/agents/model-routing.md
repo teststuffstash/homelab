@@ -687,6 +687,14 @@ into the mechanism layer):
   (no jitter-band sampling; ties break stably). The response names the **pool version**. Same
   `(class, slot, jitter:false, pool-version)` → same model: idempotent, so a dead arm relaunches
   identically and the mission's roster is reproducible from its calls.
+  ✅ **BUILT** (homelab#290, 2026-08-11). The draw is a pure lookup into the band
+  (`router.draw_slot`) whose result then rides the ORDINARY filters as a one-entry chain — so a
+  drawn-but-unusable slot answers with its usual typed defer (cooldown, capacity, deny) carrying
+  `pool`/`pool_version`/`slot`, and never slides to the next model down. That last property is
+  the one worth stating twice: the caller walks to `slot=N+1` itself, in the open, where the arm
+  table records it. `jitter: false` zeroes the band *and* replaces the uniform pick with a stable
+  tie-break, on the served decision and the §M11 shadow ladder alike. Response also echoes
+  `jitter`, and the proxy log carries `draw=<pool>#<slot>@<version>`.
 - **Pools are curated, never computed at request time** (§M7 leg 5, scout duty): ranked,
   family-deduped, **disjoint bands by convention** — `regular` authors, `premium` judges,
   `ultra` weaves, `instrument` for fixed-model probes. Disjointness is curation policy, NOT a
@@ -694,13 +702,25 @@ into the mechanism layer):
   provenance chips) is the guard; enforcement machinery belongs to autonomous lanes. Which band
   a *process step* uses is process policy — the step ladder table lives in
   [`research-and-specs.md`](research-and-specs.md), not here.
+  ✅ **SEEDED BY HAND** (homelab#290): `pools` in `model-classes.json` (`version` + four bands,
+  one class per band). Curation policy is unenforced *at request time* exactly as ruled — the
+  enforcement point is **edit time**: `devbox run router-self-test` refuses a table whose bands
+  overlap, whose entries are outside `model_tiers` (the human-approved universe — no invented
+  ids), whose band repeats a vendor family, or whose model rides a rail its class does not list.
+  Two known depth shortfalls, both the scout refresh's job and neither a mechanism gap:
+  `regular` is 6 deep against the doc's 7-arm over-provision (a 7-arm ask defers at slot 7
+  today, visibly), and `instrument` shares the deepseek *family* with `regular`'s #2 — the run-1
+  hazard was the same *model* grading its own arm, which disjointness already forbids.
 - **No failure semantics beyond what /route already has.** A dead arm waits, relaunches, or
   takes `slot=N+1`; the caller over-provisions (ask for 7, need 5) and the pool ranks deeper
   than any plausible ask. Cooldown/capacity answer as today — a typed defer may pause an
   experiment, never silently rewrite its design.
-- Callers name **zero models**. First consumer: `agents/research-fanout.sh` (today it takes
-  models hand-picked — the circles flash/pro roster slip is the evidence for draw + record over
-  hand-pick). Build: FU-162.
+- Callers name **zero models**. First consumer: `agents/research-fanout.sh` — ✅ **CONVERTED**
+  (homelab#290): `--arms N [--class regular] [--dry-run]`, one `/route` draw per slot, hand-picked
+  model ids refused by name rather than mis-parsed. Deferred slots stay empty in the arm table
+  with their reason; the roster + pool version print before any dispatch, and `--dry-run` stops
+  there. Pinned by `agents/replay/fixtures/research-draw-roster` (recorded from `router.route()`
+  against the shipped pool table). Build: FU-162.
 
 ## The sleep-stack pilots — task-class routing + multi-harness evidence (FU-095)
 

@@ -26,7 +26,14 @@
 #          price, marks benchless newcomers `unbenched`, and RANKS candidates (free first, then
 #          agentic/coding) before any canary slot is spent. Env-gated on $SCOUT_MCP_KEY: no key ⇒
 #          every candidate `unbenched` and the tick carries on (see the seam's own header).
-# Legs 3–5 (typed cell-keyed verdicts, pool curation) wait on FU-162's store — NOT built here.
+# Legs 3–4 (typed cell-keyed verdicts) are NOT built here.
+#   leg 5  pool curation (§M13, ADR-104) — the table this leg will maintain now EXISTS and is
+#          hand-seeded: `pools` in argocd/resources/openrouter-proxy/model-classes.json, drawn by
+#          `/route` via class+slot (homelab#290). What is missing is exactly the weekly refresh:
+#          re-rank each band by capability × task_market × effective price × rail-compat, keep the
+#          bands disjoint and family-deduped, deepen `regular` past the 7-arm ask, bump
+#          `pools.version`. It moves by PR until then — and the router self-test enforces the
+#          curation invariants at edit time, so a refresh that breaks a band reds in CI.
 #
 # v2 (FU-062 canary leg, 2026-07-17): candidates get a CANARY RIDE before the digest — a tiny
 # closed task (read README, echo its first heading — forces one real tool call) dispatched via
