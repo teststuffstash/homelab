@@ -256,18 +256,60 @@ spec:
         # nobody reads). Different code + token than the scan — fires even when the scan IS the
         # wedged layer. Worker-pod regex: deterministic task keys + legacy timestamp names;
         # eventsource/sensor infra pods deliberately don't match.
-        # ⚠ The `or vector(0)` on BOTH zero-conjuncts is load-bearing (#312): they aggregate
-        # metrics emitted PER OBJECT — one series per live worker pod, one per OPEN PR — so the
-        # idle state this alert exists to catch produces ZERO series, and sum() over no series is
-        # EMPTY, not 0. Without the default the `and` chain has nothing to match and the alert
-        # could not fire in production at all (measured 2026-08-11: the worker-pod aggregate was
-        # present at only 343 of 865 5m steps over three days, absent exactly while idle). Same
-        # idiom as RetroReportOverdue in argocd/resources/pushgateway/prometheusrule.yaml. The
-        # parens are required — `or` binds looser than `==`. `{{ $value }}` still reads the queued
-        # count: `and` returns its LHS. Pinned by loop-health.promtool-test 1/3 + 2/3.
+        # ⚠ The three conjuncts do TWO different jobs and needed TWO different repairs (#312, then
+        # #330). Read them separately — the second repair deliberately does NOT generalise to all
+        # three, and porting it wholesale would weaken the alert.
+        #
+        # (1) THE EVIDENCE conjunct, `... > 0`, and the ONLY one whose absence can empty the whole
+        #     chain: `and` yields nothing when its LHS is empty, an empty expr is a RESOLVED alert,
+        #     and a resolved alert restarts `for: 2h` — the longest window in this repo, so the one
+        #     that most needs to survive a hole. #312's `or vector(0)` cannot reach it (#330): the
+        #     default would make it evaluate `0 > 0`, i.e. the same silence by another route.
+        #     The hole is ordinary, not a rare roll: when the GraphQL walk fails this exporter
+        #     emits NO series for the family rather than a zero (github-exporter.py
+        #     collect_agent_issues, "absent ≠ zero" — the same honesty rule as the subscription
+        #     gauges), so a plain upstream 502/504 drops it for a scrape and Prometheus writes
+        #     staleness markers. Measured live 2026-08-11, TWICE inside one hour, with
+        #     `github_exporter_last_success_timestamp` staying fresh throughout — so
+        #     GithubExporterStale cannot cover for it and `up` is 1 the whole time.
+        #     Repair = the #288/#313 bridge, `max_over_time(...[10m])`, and ONLY that half of it:
+        #     the `max by (<a label that does not churn>)` half exists to stop pod/instance
+        #     identity from splitting the `for:` clock, and `sum()` already drops every label here,
+        #     so this alert's identity is `{severity}` with or without it. [10m] is #288's measured
+        #     size, carried unchanged; the ceiling (a longer hole DOES still reset the window) is
+        #     asserted in the fixture, not assumed.
+        #     What bridging MEANS here: "queued work seen in the last 10m counts as queued now",
+        #     which is the intended reading. Its price is the mirror image — for up to 10m after
+        #     the queue genuinely drains, the alert still believes it, and because the range is
+        #     per-series-then-summed `{{ $value }}` reports the 10m HIGH-WATER count, so a partial
+        #     drain over-reads for one range window. Both are ≤10m of slack on a 2h condition.
+        # (2)/(3) THE IDLE conjuncts, `(sum(...) or vector(0)) == 0` — deliberately NOT bridged.
+        #     They aggregate metrics emitted PER OBJECT (one series per live worker pod, one per
+        #     OPEN PR), so the idle state this alert exists to catch produces ZERO series and
+        #     `sum()` over no series is EMPTY, not 0. #312's default is what makes them firable at
+        #     all (measured 2026-08-11: the worker-pod aggregate was present at only 343 of 865 5m
+        #     steps over three days, absent exactly while idle); same idiom as RetroReportOverdue
+        #     in argocd/resources/pushgateway/prometheusrule.yaml, and the parens are required —
+        #     `or` binds looser than `==`.
+        #     That default is also why a hole here is NOT the #330 defect: absence resolves to 0,
+        #     the conjunct stays TRUE, the chain still matches and the window keeps running. A gap
+        #     can only make a BUSY loop read idle for a few scrapes, and that direction cannot
+        #     produce a false page — firing needs all ~120 evaluations in the window to read idle,
+        #     so any single scrape carrying the real series resets the clock.
+        #     Suppression-by-recent-activity is defensible on (2) — a worker pod alive 5m ago IS
+        #     evidence the loop is not wedged — but it repairs nothing and blunts the alert: it
+        #     would restate "idle continuously for 2h" as "idle for 2h bar a 10m grace" and delay
+        #     by 10m the moment the loop becomes eligible after the last worker exits. On (3) it is
+        #     weaker still: an open PR is a work-in-flight SUPPRESSOR, not activity — one can sit
+        #     open and untouched for days, which is itself a wedge shape — so widening its reach
+        #     buys silence, not signal. Bridge the conjunct that loses the window; leave the ones
+        #     that only ever hold it.
+        # `{{ $value }}` reads the queued count: `and` returns its LHS. Every claim above is
+        # executed in loop-health.promtool-test (1/5 + 2/5 pin #312; the gap, ceiling and
+        # pre-#330 regression witness pin this).
         - alert: AgentQueueStalled
           expr: >-
-            sum(github_agent_issue_labels{label="agent/queued"}) > 0
+            sum(max_over_time(github_agent_issue_labels{label="agent/queued"}[10m])) > 0
             and (sum(kube_pod_status_phase{phase=~"Running|Pending", pod=~"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}"}) or vector(0)) == 0
             and (sum(github_pull_request_open) or vector(0)) == 0
           for: 2h
