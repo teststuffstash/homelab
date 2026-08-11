@@ -1,0 +1,27 @@
+# homelab#256 (retro r3 F1) — the WORKER's goose arm carries the `-32602` truncation cure.
+#
+# CONDITION UNDER REPLAY. A recipe dispatch on the goose harness: the card-spliced recipe is
+# already base64'd, the context-repos prelude is built, the issue number is known. What is left is
+# the one `case "$HARNESS"` that freezes the pod command — the string that reaches `args:` as one
+# argv element a few dozen lines later.
+#
+# THE CONTRACT:
+#   1. `GOOSE_MAX_TOKENS=16384` is present. The cure has been known since 2026-07-25 ("mimo
+#      proven") and lived on the retro path ONLY; 8 worker rounds died `goose-32602-truncation`
+#      in the r3 window with no branch salvaged. Prose said "known cure"; nothing executed it.
+#   2. It is a COMMAND PREFIX on `goose run`, not a launcher-shell export and not a prefix on the
+#      whole RUN_CMD. Both wrong shapes are silent: an export sets it in the LAUNCHER's shell
+#      (the pod never sees it), and a front-of-string prefix would attach it to the context-repo
+#      `git clone` instead — which is why this fixture keeps a non-empty CTX_PRELUDE in the
+#      payload rather than the empty one that would make either mistake look identical.
+#   3. The rest of the pod command is unmoved: prelude, then the base64 decode to
+#      /tmp/fix-recipe.yaml, then `goose run --recipe … --params issue=<n>`.
+#
+# Paired with `harness-run-cmd-claude`, which pins that the subscription rail did NOT inherit it.
+name: harness-run-cmd-goose
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:harness-run-cmd
+  - file:post.sh
