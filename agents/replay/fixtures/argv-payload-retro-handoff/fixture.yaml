@@ -1,0 +1,24 @@
+# homelab#242 — the OTHER call site, and the one that failed live: retro-session.sh's hand-off.
+#
+# CONDITION UNDER REPLAY. The brief is assembled and base64'd into `$RUN`; the next statement is
+# `exec bash agent-session.sh … --run "$RUN"`. That exec is the first execve() large enough to
+# fail, and when it did (retro-session-8rvhd, 2026-08-11, a 146KB brief → ~195KB of base64) the
+# operator's entire diagnosis was `retro-session.sh: line 107: /usr/bin/bash: Argument list too
+# long` — one shell line naming neither the brief nor the limit.
+#
+# THE CONTRACT:
+#   1. The refusal happens BEFORE the exec: `REACHED:` is absent, RC 1. This is why the guard is
+#      duplicated across the two launchers rather than left to agent-session.sh alone — the
+#      launcher never gets to run its own check, because passing it the payload is the failure.
+#   2. The message names the stack, the run id and the brief PATH, and then names the three inputs
+#      that can actually grow. "Shrink it" without saying which knob is prose; this is the ops
+#      instruction the 8rvhd operator did not have.
+#
+# Same single seam (`ag_limit` → 512), same reason as the agent-session pair.
+name: argv-payload-retro-handoff
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-payload-ceiling
+  - file:post.sh

@@ -1,0 +1,7 @@
+ERR FATAL: the pod command for agent-oracle-fleet-issue-77-r1 is 520 bytes — at/over the Linux per-argument ceiling MAX_ARG_STRLEN (512 bytes).
+ERR   execve() fails E2BIG here and the only symptom is `Argument list too long` — no payload, no limit, no channel named.
+ERR   This channel carries the whole recipe/brief as base64 (~4/3 of its source bytes) inside ONE argv element.
+ERR   Fix: bound what goes in (the retro lane bounds its ledger to a worst-K slice — the worked example), or
+ERR   move the payload to a file channel: ConfigMap mount / chunked env reassembled in-pod (homelab#242 option b).
+ERR   REFUSED before pod create — no pod, no minted git token, no spend. Harness claude.
+RC 2

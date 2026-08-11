@@ -46,6 +46,17 @@ The seams are ordinary shell functions, declared as seams in the helper's header
 are pinning reaches for I/O with no seam, add one there rather than a `REPLAY_*` branch in
 production code — a test-only backdoor in a clause is a clause with an untested path.
 
+`fixtures/argv-payload-*` (homelab#242) are the third family, and the first whose seam is not I/O
+at all: `ag_limit` in `agents/argv-guard.sh` returns the kernel's 128KiB `MAX_ARG_STRLEN`, and the
+fixtures shrink it to 512 bytes. Same rule, different reason — a fixture that asserted the real
+ceiling would have to commit a 128KiB payload to assert arithmetic that does not change with
+scale. Bound the *magnitude* through a seam, never the branching. The boundary itself is not left
+to the fixture's word: the guard refuses at exactly the size `execve()` does (verified against
+`env true` at 131071 → OK / 131072 → E2BIG on the PR that added it), and the pair pins the two
+verdicts that flank it — a refusal that names the limit, and a warn band that does *not* stop the
+ride. Over-eagerness is the usual failure of a size check, so "89% still dispatches" is pinned as
+behaviour rather than trusted to prose.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file
