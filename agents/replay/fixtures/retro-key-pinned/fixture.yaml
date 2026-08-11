@@ -1,0 +1,19 @@
+# homelab#270 — an operator-pinned key is used verbatim and nothing is minted over it.
+#
+# CONDITION UNDER REPLAY. The cron's `retroKeySecret` param is set, so the retro-cell step exported
+# RETRO_OPENROUTER_SECRET before calling the launcher. This is the override path and the ONLY way
+# back to a hand-chosen key — including, deliberately, the stack's standing fixer key, which is
+# what the FATAL messages in the mint branch name as the explicit opt-in.
+#
+# THE CONTRACT: no kubectl calls, and the hand-off carries the operator's Secret UNCHANGED. A mint
+# here would be worse than wasteful — it would silently override an operator's explicit choice with
+# a $0.25 cap they did not ask for.
+name: retro-key-pinned
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-session-key
+  - file:post.sh
+env:
+  - RETRO_OPENROUTER_SECRET=oracle-fleet-retro-hand-minted-openrouter

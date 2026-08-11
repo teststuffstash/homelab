@@ -1,0 +1,3 @@
+OUT → key: none — claude rides the subscription (no OpenRouter key in play)
+OUT HANDOFF: agent-session.sh oracle-fleet --harness claude --model opus (no key — falls back to oracle-fleet-openrouter)
+RC 0
