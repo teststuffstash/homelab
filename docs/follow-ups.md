@@ -522,14 +522,14 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-163** — **A homelab glossary + vocabulary pruning — the docs are "stale by
       addition".** Terms coined informally, later reused as TYPES, now ungreppable: **goal**
-      (prose "goal" predates ADR-102's Goal issue; ~360 hits in docs/agents/), **lens** (FU-101
-      Lens vs prose "lens"), **canary** (scout model-canary vs FU-102's "agentic canary"),
-      class/pool/band (§M13), the **CF mint-root** (ONE credential, FOUR names: "Account
-      admin"/"admin token"/"Create Additional Tokens"/"Tier-0 mint-root", 2026-08-11), operator
-      vocabulary ("webservice", pinned in CONTEXT.md until this lands). **Next:** create
-      `docs/glossary.md` (term → one meaning → owning doc, ruled replacements), sweep informal
-      usages, extend the prior-art rule (a NEW name clears the glossary first). **Consumers
-      waiting (2026-08-10)**: `/design` term-closure; `docs-graph-lint` check #3. Relates FU-117.
+      (prose vs ADR-102's Goal issue), **lens** (FU-101 Lens vs prose), **canary** (scout vs
+      FU-102's agentic), class/pool/band (§M13), **CF mint-root** (ONE credential, FOUR names,
+      2026-08-11), **homelab** (the repo vs the PLATFORM stack {homelab, agent-runtime,
+      agent-coordinator, openrouter-operator} vs the physical lab — sense-1 scoping of a
+      sense-2 duty left 5 agent-runtime issues unswept, 2026-08-08), "webservice" (CONTEXT.md
+      pin). **Next:** create `docs/glossary.md` (term → meaning → owning doc, ruled
+      replacements), sweep informal usages, extend the prior-art rule (a NEW name clears the
+      glossary first). **Consumers**: `/design` term-closure; check #3. Relates FU-117.
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
       IAC-G01..G10 gap register with per-gap status, assurance layers and the sentinel:
       [`docs/agents/iac-lane.md`](agents/iac-lane.md) (+ `iac-lane-fsm.yaml`, lint-checked).
