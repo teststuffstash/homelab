@@ -69,9 +69,17 @@ variable "protected_repos" {
     #   • Renovate's Actions SHA-pinning PRs touch .github/workflows/ — OWNED, likewise. Arguably
     #     the single change you most want eyes on (the Trivy-class mitigation, renovate.md).
     homelab             = { required_checks = ["ci"], require_approval = true, require_code_owner_review = true }
-    agent-coordinator   = { required_checks = ["ci"] }
-    agent-runtime       = { required_checks = ["ci"] }
-    openrouter-operator = { required_checks = ["ci"] }
+    # The three below flipped require_code_owner_review=true 2026-08-11 (the reviewer-enable
+    # retrace): with the platform stack's bot reviewer ON, require_approval alone lets a bot
+    # approval auto-merge — the codeowner flag is what turns the bot review into input-only on
+    # owned paths. agent-runtime's CODEOWNERS (its PR#37) had been DECORATIVE without this flag
+    # — the 2026-08-08 "codeowner gate guards the governor paths" record was wrong at the
+    # enforcement layer; this flip makes it true. openrouter-operator + agent-coordinator got
+    # whole-repo CODEOWNERS the same day (their gate = human on everything, bot review as input;
+    # relax per-path later via carve-outs, never by dropping the flag).
+    agent-coordinator   = { required_checks = ["ci"], require_code_owner_review = true }
+    agent-runtime       = { required_checks = ["ci"], require_code_owner_review = true }
+    openrouter-operator = { required_checks = ["ci"], require_code_owner_review = true }
     oracle-fleet        = { required_checks = ["ci"], require_code_owner_review = true } # CODEOWNERS gates /specs/ + /.agents/ on Rasmus
     oracle-iac          = { required_checks = ["ci"], require_approval = false }         # same shape as sleep-iac: deploy-bump PRs gate on CI only
     sleep-iac           = { required_checks = ["ci"], require_approval = false }
