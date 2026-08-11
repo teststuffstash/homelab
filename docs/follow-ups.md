@@ -491,8 +491,7 @@ the block needs pruning, not more headings.
       (PR#246 merged; single-cell — cell-b mechanics = homelab#248; belt's first firing = real).
       **Next:** 2026-08-17 = first UNATTENDED run; process-change batch FILED + QUEUED
       2026-08-11 (homelab#256-259, circles#77/#78, oracle-fleet#258); then ledger emitter
-      gaps, MCP slices (§B2).
-      Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      gaps, MCP slices (§B2). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
