@@ -18,11 +18,13 @@
 #
 # Concurrency: suspends run in PARALLEL (each bell guarantees a decision ≥WAIT after it), only
 # `decide` serializes (mutex) — so a burst wakes together, the first decide sweeps the whole set,
-# the rest exit empty in seconds. State lives in GitHub labels, nowhere else: agent-fix ∧
-# ¬agent/queued ∧ ¬agent/linked ∧ ¬agent/blocked ∧ ¬agent/error IS the pending set; a killed
-# workflow loses nothing. The two human-waiting exclusions are homelab#238's: without them a
-# coordinator's BLOCK re-enters the issue into the pending set, and the debouncer re-queues it —
-# the block is what makes the issue eligible again (see the query's own note).
+# the rest exit empty in seconds. State lives in GitHub labels, nowhere else: agent-fix ∧ NO
+# `agent/*` label IS the pending set; a killed workflow loses nothing. The exclusion is the whole
+# LIFECYCLE namespace, not a list (homelab#238 → #244): every lifecycle label is applied by
+# REMOVING `agent/queued`, so each one re-admits its issue to the pending set and the debouncer
+# re-queues it — mid-block for `agent/blocked`, mid-RIDE for `agent/in-progress` (see the query's
+# own note). `agent-fix` is spelled with a DASH exactly so the diagnosis survives the test that
+# eats the states.
 # Un-linking on refire: the responder's fp/subject belts REOPEN the same issue when its alert
 # refires after the cause-fix merged — the reopen comment is a human/meta cue; the linked label
 # is stripped by hand if the downstream issue turns out to be independent after all.
@@ -198,19 +200,34 @@ spec:
               # an issue meta-state records as held — into "would queue". The fingerprint
               # marker is what makes an issue the RESPONDER's; everything else is not ours.
               #
-              # ⚠ `agent/blocked` and `agent/error` are HUMAN-WAITING states and are excluded for
-              # the same reason `agent/queued` is: without them the pending set is re-entered BY
-              # VIRTUE OF the block. A coordinator rules an alert-lane issue blocked (which removes
-              # `agent/queued`) → the next bell re-derives it as pending → it is re-queued with no
-              # coordinator in the path → dispatch re-discovers the same blocker. One coordinator
-              # ride per debounce period, forever, with the human gate erased each turn. Live on
-              # homelab#237 (block 01:53Z → silent re-queue 02:17Z, 2026-08-11) until the FU-069
-              # breaker latched `agent/error` — which the old predicate did not exclude either, so
-              # the breaker's own output would have re-entered the set as soon as a human cleared
-              # anything else. homelab#238. The scan holds the same rule on its side
-              # (coordinator-scan.sh:17 — human-waiting states never wake the LLM).
+              # ⚠ EVERY `agent/*` label excludes — the namespace, not a list. `agent/*` is the
+              # LIFECYCLE (agents/coordinator/README.md §State machine); `agent-fix` is the
+              # DIAGNOSIS and is spelled with a dash, so the prefix test keeps the opt-in and eats
+              # only the states. Every one of those states is applied by REMOVING `agent/queued`,
+              # so each is a hole of the same shape: the label that means "somebody/something has
+              # this" is exactly what re-admits the issue to the pending set, and the next bell
+              # re-queues it with nothing in the path.
+              #   · human-waiting (`agent/blocked`, `agent/error`) — live on homelab#237: block
+              #     01:53Z → silent re-queue 02:17Z (2026-08-11), dispatch re-discovering the same
+              #     blocker once per debounce period with the human gate erased each turn, until
+              #     the FU-069 breaker latched `agent/error` — which the old predicate ALSO did
+              #     not exclude, so the breaker's own output would have re-entered the set as soon
+              #     as a human cleared anything else. homelab#238 fixed that pair only.
+              #   · IN-FLIGHT (`agent/in-progress`, `agent/review`) — the same hole one lane over
+              #     and the reason this is a namespace test now: dispatch does `--add-label
+              #     agent/in-progress --remove-label agent/queued`, so a RIDING issue re-entered
+              #     the set and was re-queued MID-RIDE. Live on homelab#238's own timeline
+              #     (dispatch 08:08:14Z → `agent/queued` back on at 08:17:21Z). Only the
+              #     launcher's pre-flight (open-PR / running-pod refusal) and the pod-name
+              #     idempotency key held it to label churn — belts doing a guard's job. #244.
+              #   · terminal (`agent/done`, `agent/linked`) — finished work never re-queues.
+              # This does NOT weaken the IL-T16 phantom belt or C4/C5 re-dispatch: both are the
+              # SCAN's, they re-add `agent/queued` themselves, and an issue wearing `agent/queued`
+              # was already out of the pending set under the old predicate too. The debouncer's
+              # re-queue was never load-bearing for either — it was the bug. The scan holds the
+              # same rule on its side (coordinator-scan.sh:17 — the LLM never wakes for these).
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\") or index(\"agent/blocked\") or index(\"agent/error\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | any(startswith(\"agent/\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
                 2>/dev/null >> /tmp/pending.jsonl || true
             done < /tmp/repos.txt
 

@@ -108,13 +108,29 @@ set-judged debouncer:
   a decision ≥ wait after *it*; only `decide` serializes (mutex). A burst wakes together; the
   first decide sweeps the whole set, the rest exit empty.
 - **State is GitHub, nowhere else**: the pending set IS the live label query
-  `agent-fix ∧ ¬agent/queued ∧ ¬agent/linked ∧ ¬agent/blocked ∧ ¬agent/error` over the claims'
-  repos (REST only — the search index lags and the GraphQL pool is the one the reflex drained,
-  FU-084). A killed workflow loses nothing. ⚠ The two human-waiting exclusions are load-bearing
-  (homelab#238, live on homelab#237 on 2026-08-11): a coordinator's BLOCK removes `agent/queued`,
-  so without them the block itself is what re-admits the issue to the pending set — the debouncer
-  re-queues it, dispatch re-discovers the same blocker, and the human gate is erased once per
-  debounce period. Same rule the scan holds on its side (`coordinator-scan.sh:17`).
+  `agent-fix ∧ no agent/* label` over the claims' repos (REST only — the search index lags and the
+  GraphQL pool is the one the reflex drained, FU-084). A killed workflow loses nothing. ⚠ The
+  exclusion is the whole **lifecycle namespace**, not a list, and that is load-bearing
+  (homelab#238 → #244): `agent/*` is lifecycle state, `agent-fix` is the *diagnosis* and carries a
+  dash precisely so the prefix test eats only the former. Every lifecycle label is applied by
+  **removing `agent/queued`**, so each one is the same hole — the label that says somebody has
+  this issue is exactly what re-admits it to the pending set:
+  - human-waiting (`agent/blocked`, `agent/error`) — live on homelab#237, 2026-08-11: block
+    01:53Z → silent re-queue 02:17Z, dispatch re-discovering the same blocker once per debounce
+    period with the human gate erased each turn. Fixed by #238 — for that pair only.
+  - **in-flight** (`agent/in-progress`, `agent/review`) — dispatch does `--add-label
+    agent/in-progress --remove-label agent/queued`, so a RIDING issue re-entered the set and was
+    re-queued mid-ride: live on homelab#238's own timeline (dispatch 08:08:14Z → `agent/queued`
+    back on 08:17:21Z). Only the launcher's pre-flight (open-PR / running-pod refusal) and the
+    pod-name idempotency key held that to label churn — belts doing a guard's job. #244 is why
+    this became a namespace test rather than a longer list.
+  - terminal (`agent/done`, `agent/linked`) — finished work never re-queues.
+
+  The re-queue was never a belt for the [IL-T16 phantom-label
+  reconcile](issue-lifecycle-fsm.md) or C4/C5 re-dispatch: both are the *scan's*, both re-add
+  `agent/queued` themselves (IL-T16 queued-first, in-progress-second), and an issue wearing
+  `agent/queued` was outside the pending set under the old predicate too — so nothing downstream
+  loses a trigger. Same rule the scan holds on its side (`coordinator-scan.sh:17`).
 - **Decide**: 0 pending → exit. 1 → deterministic gates, queue. ≥2 → ONE sonnet set-pass
   (latch-gated, subscription-semaphore held only across decide) emits cause/downstream/
   independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned

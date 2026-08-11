@@ -10,6 +10,10 @@
 # the one label the old predicate happened to exclude, and only by accident of the scan's list.
 # Closed cycle, one ride per debounce period, human gate erased each turn.
 #
+# The predicate this leg now pins is the NAMESPACE test (`any(startswith("agent/"))`, homelab#244)
+# rather than #238's enumerated four: every lifecycle label is applied by removing `agent/queued`,
+# so an enumeration is a list of holes already found. Leg C holds the in-flight half.
+#
 # THE CONTRACT:
 #   1. #237 (`agent/blocked`) draws NO write. Not a comment, not a label, not a doorbell. A block
 #      is a human gate, and the only thing that may re-open the queue path is a human removing it.
