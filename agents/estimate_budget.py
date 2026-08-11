@@ -51,7 +51,14 @@ CHARS_PER_TOKEN = 4  # rough English/code average; we only need order-of-magnitu
 DEFAULT_CONTEXT_TOKENS = 20_000  # context re-sent each request (autopsy saw ~27K); the cache lever
 DEFAULT_ROUNDS = 3  # max review rounds before escalating to a human (workflow.md hazard)
 DEFAULT_CACHE_HIT = 0.0  # size for the WORST case (no caching) — the cap is a safety bound
-BUFFER = 1.5  # headroom over the point estimate before choosing a tier
+# Headroom over the point estimate before choosing a tier. Raised 1.5 → 2.0 (retro r3 F5,
+# docs/agents/retros/2026-08-11-oracle-r3-context.md): the headroom lands on the ESTIMATE while the
+# CAP is the circuit breaker, so a run near a tier edge got a cap barely above its true spend —
+# oracle-fleet#1 attempt 3 estimated $0.3024, ×1.5 = $0.4536 → tier sm ($0.50), then died at $0.5086
+# on `403 Key limit exceeded` after 65 min with zero artifact. At 2.0 it lands in md ($1.00) and
+# finishes. Consistent with this module's stated intent above: over-sizing beats throttling a legit
+# fix, and an unspent cap costs $0.
+BUFFER = 2.0
 
 # Requests per round, banded by issue size. Grounded loosely in the autopsy: owl solved an issue in
 # 72 requests; the looping qwen run hit 187. A bigger issue = more tool turns = more requests.
