@@ -135,6 +135,24 @@ prose) and replays series through `promtool test rules`. Two rules worth copying
   ride the old rule fired on twice. `promtool` and `yq` come from devbox, so the suite exits 2
   naming the missing tool rather than skipping when run outside it.
 
+`fixtures/run-phase-metric` (FU-160, homelab#287) is the eighth family and the launcher-side twin
+of `scan-phase-marker` — the same emitter shape (a `>>>REPLAY:run-phase-metric>>>` block, clock and
+transport shadowed in the bridge), pinning `agent_run_phase_seconds{phase=…}`. Two differences are
+the reason it is worth reading rather than copied from its twin:
+
+- **The clock is pinned PER CALL, not advanced by the seam.** `run_phase` reads `rp_now` inside a
+  command substitution, and a subshell cannot write back — a self-advancing clock would hand out
+  its first tick forever and every phase would measure 0 with the fixture green. So the bridge sets
+  `RP_NOW` before each call and `rp_now` only reads it, `:?`-guarded. Any seam a clause consumes
+  through `$( )` has this property; reach for the fix-debounce family's loud-clock rule, not for
+  state inside the seam.
+- **The assertion is the ACCUMULATION, not one push.** The pushgateway replaces per metric NAME
+  within a group, so an emitter that pushed only the phase that just closed would delete every
+  earlier one and each ride would end holding a single number. The growing STDIN block in
+  `expected/actions.txt` is that rule under assertion — a fixture pinning only the URL would go
+  green on exactly that bug, and it would surface as a dashboard that had quietly only ever shown
+  `bookkeeping`.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

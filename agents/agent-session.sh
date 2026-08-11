@@ -65,6 +65,72 @@ while [ $# -gt 0 ]; do
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+
+# ── RIDE PHASE TIMINGS (FU-160, homelab#287; spike: docs/spikes/ride-latency-breakdown.md) ──────
+# One ride was reconstructed by hand on 2026-08-09, and the single most useful fact in it — whether
+# that pod's image was node-cached — turned out to be UNKNOWABLE after the event: the pod events
+# had aged out and nothing had emitted the timing while it was happening. A degraded cache adding
+# minutes to every ride would present as "the loop feels slow" and nothing in the platform would
+# say otherwise. So the launcher publishes the phases IT owns, as each one closes:
+#
+#   agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}
+#
+# ⚠ THIS IS THE LAUNCHER HALF ONLY. clone, `devbox install`, the LLM loop, the in-pod gates and
+# pr-open all happen inside the pod, and their timestamps belong to `agent-finalize` — a different
+# repo (agent-runtime). `ride` here is the ENVELOPE around all of them: one number, not a
+# breakdown. Splitting it is FU-160's other half and it has no sibling issue yet, so a `ride` bar
+# that grows tells you WHERE to look, not what happened.
+#
+# THE FAMILY IS RE-PUSHED WHOLE, every time, and that is not redundancy. The pushgateway replaces
+# per METRIC NAME within a group, so a push carrying only `phase="pod-spinup"` would DELETE the
+# `phase="dispatch-gates"` series pushed a minute earlier — every ride would end holding exactly
+# one phase, the last one. Accumulating and re-pushing also means a ride that dies mid-flight
+# leaves the phases it did complete, which is the case the metric exists for.
+#
+# ITS OWN JOB, never `agent_run`: agent-finalize PUTs the run group at end-of-ride, and a PUT
+# replaces the group WHOLESALE. Phases pushed into that group would be alive for the length of the
+# ride and then vanish at the moment the ride became interesting. Group key is the same
+# (project, issue, round, role) tuple the run ledger uses, so this adds one group and four series
+# per ride alongside the group `agent_run_*` already leaves — same cardinality class, bounded the
+# same way (emptyDir + persistence file: the store resets on a pushgateway reschedule).
+#
+# Best-effort, exactly like `scan_phase` and the router report: a dead gateway is an observability
+# fault and must never change what gets dispatched. A jail run has no route to the ClusterIP at
+# all (it does not cross the BGP boundary), so the warning is latched to one line per run.
+# >>>REPLAY:run-phase-metric>>>
+RUN_PHASE_PGW="${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+RUN_PHASE_FAMILY=""      # every phase closed so far, in exposition format — re-pushed as one family
+RUN_PHASE_WARNED=""
+rp_now() { date -u +%s; }     # replay seam: the wall clock
+RUN_PHASE_MARK="$(rp_now)"    # start of the OPEN phase; every close moves it forward
+run_phase() {   # $1 = dispatch-gates | pod-spinup | ride | bookkeeping — close the open phase, publish, open the next
+  local phase="${1:-}" now rp_issue
+  case "$phase" in
+    dispatch-gates|pod-spinup|ride|bookkeeping) ;;
+    *) echo "run_phase: unknown phase '${phase}' — nothing pushed" >&2; return 0 ;;
+  esac
+  now="$(rp_now)"
+  RUN_PHASE_FAMILY="${RUN_PHASE_FAMILY}agent_run_phase_seconds{phase=\"${phase}\"} $(( now - RUN_PHASE_MARK ))
+"
+  RUN_PHASE_MARK="$now"
+  # No gateway (explicitly disabled) or no task key (an interactive/ad-hoc session) → the clock
+  # still advances, nothing is published. `issue` is the run ledger's own convention: AGENT_TASK
+  # with a leading `issue-` stripped, so `pr-12` stays `pr-12` and the two families join.
+  [ -n "$RUN_PHASE_PGW" ] && [ -n "$TASK" ] || return 0
+  rp_issue="${TASK#issue-}"
+  printf '%s\n%s\n%s' \
+    "# TYPE agent_run_phase_seconds gauge" \
+    "# HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160)." \
+    "$RUN_PHASE_FAMILY" \
+    | curl -fsS --max-time 5 --data-binary @- \
+        "${RUN_PHASE_PGW}/metrics/job/agent_run_phase/project/${PROJECT}/issue/${rp_issue}/round/${ROUND}/role/worker" >/dev/null 2>&1 \
+    || { [ -n "$RUN_PHASE_WARNED" ] \
+           || echo "run_phase: pushgateway unreachable (${RUN_PHASE_PGW}) — ride unaffected; this ride contributes no agent_run_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)" >&2
+         RUN_PHASE_WARNED=1; }
+  return 0
+}
+# <<<REPLAY:run-phase-metric<<<
+
 # ── ADR-096 P3/P4: consult the router at the model-decision seam (POST /route) ──
 # AGENT_ROUTER=shadow (default): consult + log the divergence, dispatch unchanged — the ≥1wk
 # soak that gates the flip. =authoritative: the decision REPLACES the model — but an explicit
@@ -1218,6 +1284,11 @@ case "$TASK" in issue-[0-9]*|pr-[0-9]*)
       exit 3;;
   esac
 ;; esac
+# FU-160 phase 1 of 4. Everything above this line is the launcher's DETERMINISTIC dispatch cost —
+# the router consult, the rail probe, the card + recipe build, the pre-flight guards, the
+# subscription latch, the credit gate, the stack-cache probe, the argv ceiling. It closes here
+# because past this point a pod exists and the cost stops being ours.
+run_phase dispatch-gates
 cat <<EOF | "$KUBECTL" $KUBE -n "$NS" create -f - \
   || { echo "PREFLIGHT REFUSED (atomic): create of ${POD} failed — a racing dispatcher won the (task, round) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
@@ -1407,6 +1478,12 @@ EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=600s || true
+# FU-160 phase 2 of 4, and the one the spike was written for: schedule + image pull + container
+# start. `|| true` above means a pod that never became Ready closes this phase at the 600s timeout
+# rather than never closing it — a 600s bar is itself the finding, so the value is kept, not
+# suppressed. This is the number that makes "was the image node-cached?" answerable while it is
+# still true, instead of after the events have aged out.
+run_phase pod-spinup
 
 if [ -n "$RUN_CMD" ]; then
   # Follow logs to termination — resiliently. `logs -f` FAILS while the container is still
@@ -1434,6 +1511,11 @@ if [ -n "$RUN_CMD" ]; then
   # classification below has something to read.
   [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
+  # FU-160 phase 3 of 4 — the in-pod ENVELOPE, deliberately unsplit here (see the emitter's header:
+  # clone / devbox / LLM loop / gates / pr-open are agent-finalize's timestamps, in agent-runtime).
+  # A ride that outran AGENT_LOG_DEADLINE_S closes this phase at the give-up, not at the pod's real
+  # end — the launcher stopped watching, and the metric says what the launcher saw.
+  run_phase ride
 
   # End-of-session stats: agent-finalize emitted one AGENT_RUN_STATS json line into the logs (cost,
   # duration, model, and the recipe's outcome). Echo it, and if a PR was opened, post it as a PR
@@ -1637,6 +1719,11 @@ if [ -n "$RUN_CMD" ]; then
       "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
       >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
   fi
+  # FU-160 phase 4 of 4: the launcher's exit path — stats parse, the arm/comment fallback, the
+  # strike classification and comment, the router report, the doorbell. Small when everything
+  # works and a GitHub API stall is exactly the kind of thing it exists to make visible. Last
+  # push of the run, so it is also the one that carries the complete family.
+  run_phase bookkeeping
   rm -f "$RUNLOG"
 else
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"

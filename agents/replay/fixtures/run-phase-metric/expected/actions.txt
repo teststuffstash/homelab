@@ -1,0 +1,55 @@
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 7
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 7
+STDIN agent_run_phase_seconds{phase="pod-spinup"} 34
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 7
+STDIN agent_run_phase_seconds{phase="pod-spinup"} 34
+STDIN agent_run_phase_seconds{phase="ride"} 360
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 7
+STDIN agent_run_phase_seconds{phase="pod-spinup"} 34
+STDIN agent_run_phase_seconds{phase="ride"} 360
+STDIN agent_run_phase_seconds{phase="bookkeeping"} 12
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 5
+STDIN agent_run_phase_seconds{phase="pod-spinup"} 6
+STDIN agent_run_phase_seconds{phase="ride"} 20
+CALL curl -fsS --max-time 5 --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/agent_run_phase/project/openrouter-operator/issue/42/round/2/role/worker
+STDIN # TYPE agent_run_phase_seconds gauge
+STDIN # HELP agent_run_phase_seconds Seconds this ride spent in one LAUNCHER-owned phase; the in-pod breakdown belongs to agent-finalize (FU-160).
+STDIN agent_run_phase_seconds{phase="dispatch-gates"} 5
+STDIN agent_run_phase_seconds{phase="pod-spinup"} 6
+STDIN agent_run_phase_seconds{phase="ride"} 20
+STDIN agent_run_phase_seconds{phase="bookkeeping"} 2
+OUT REACHED: a whole ride, four phases in order
+OUT RETURN 0
+OUT RETURN 0
+OUT RETURN 0
+OUT RETURN 0
+OUT REACHED: a second run — the degenerate paths
+OUT REACHED: unknown phase
+OUT RETURN 0
+OUT REACHED: no task key
+OUT RETURN 0
+OUT REACHED: gateway disabled
+OUT RETURN 0
+OUT REACHED: gateway refuses the push
+OUT RETURN 0
+OUT REACHED: gateway refuses again — latched, no second warning
+OUT RETURN 0
+OUT REACHED: end
+ERR run_phase: unknown phase 'sideways' — nothing pushed
+ERR run_phase: pushgateway unreachable (http://prometheus-pushgateway.monitoring.svc.cluster.local:9091) — ride unaffected; this ride contributes no agent_run_phase_seconds (a jail run lands here: the ClusterIP does not cross the BGP boundary)
+RC 0

@@ -118,12 +118,50 @@
       ]
     },
     {
+      "id": 13,
+      "type": "bargauge",
+      "title": "Ride phase breakdown (launcher-owned)",
+      "description": "FU-160 — where THIS issue's wall-clock went, per round, from agents/agent-session.sh. dispatch-gates = the launcher's deterministic pre-flight; pod-spinup = schedule + image pull + container start (the number the 2026-08-09 spike could not recover after the fact); bookkeeping = the exit path. ⚠ `ride` is the WHOLE in-pod session as ONE bar and is deliberately not broken down here — clone, devbox, the LLM loop, the gates and pr-open are agent-finalize's timestamps and live in agent-runtime (FU-160's other half, no sibling issue yet). Absent bars mean the launcher could not reach the pushgateway (a jail-run dispatch), not a zero-length phase.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "options": { "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (round, phase) (agent_run_phase_seconds{project=\"$project\", issue=\"$issue\"})", "instant": true, "legendFormat": "round {{round}} · {{phase}}" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Ride phase p50 — FLEET, last hour vs baseline (what AgentRunPhaseSlow reads)",
+      "description": "The two halves of the AgentRunPhaseSlow expr, side by side, so the alert can be triaged without re-typing its PromQL. Fleet-wide and NOT scoped to $project/$issue — a degraded image cache is a node fact, not an issue's. `last hour` counts each ride once (an INSTANT quantile over the groups whose push is <1h old); `baseline` is every older group still held in the gateway. The alert fires at last-hour > 2× baseline, with a 60s floor and ≥3 fresh rides. An empty baseline column means the pushgateway was rescheduled (emptyDir) and the alert is silent until an hour of history rebuilds.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "quantile by (phase) (0.5, agent_run_phase_seconds and on (project, issue, round, role) (time() - push_time_seconds{job=\"agent_run_phase\"}) < 3600)", "instant": true, "format": "table", "refId": "A" },
+        { "expr": "quantile by (phase) (0.5, agent_run_phase_seconds and on (project, issue, round, role) (time() - push_time_seconds{job=\"agent_run_phase\"}) >= 3600)", "instant": true, "format": "table", "refId": "B" },
+        { "expr": "count by (phase) (agent_run_phase_seconds and on (project, issue, round, role) (time() - push_time_seconds{job=\"agent_run_phase\"}) < 3600)", "instant": true, "format": "table", "refId": "C" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": { "Value #A": "p50 last 1h", "Value #B": "p50 baseline", "Value #C": "rides in 1h" }
+          }
+        },
+        { "id": "sortBy", "options": { "sort": [ { "field": "p50 last 1h", "desc": true } ] } }
+      ]
+    },
+    {
       "id": 7,
       "type": "bargauge",
       "title": "Control-plane cost by role — $project (OTLP, ALL issues)",
       "description": "claude_code_* metrics (coordinator/reviewer via the A0 OTLP rail) carry project and pr but NO issue label — this panel is project-scoped, not issue-scoped.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 12 },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 19 },
       "options": { "orientation": "horizontal" },
       "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
       "targets": [
@@ -135,7 +173,7 @@
       "type": "bargauge",
       "title": "Control-plane tokens by model — $project (ALL issues)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 12 },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 19 },
       "options": { "orientation": "horizontal" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [
@@ -147,7 +185,7 @@
       "type": "timeseries",
       "title": "Worker pods running in $project",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 12 },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 19 },
       "targets": [
         { "expr": "sum(kube_pod_status_phase{phase=\"Running\", namespace=\"$project\", pod=~\"agent-.*\"}) or vector(0)", "legendFormat": "workers" }
       ]
@@ -158,7 +196,7 @@
       "title": "DENIED destinations from $project (dashboard range)",
       "description": "What the netpol is blocking, by name: hubble drop metric runs destinationContext=dns|ip, so the DNS-proxy-known FQDN (or raw IP) labels every POLICY_DENIED drop. A legit destination goes into the claim's egress.extraFQDNs; openrouter.ai here = the policy doing its job.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
       "targets": [
         { "expr": "topk(15, sum by (destination) (increase(hubble_drop_total{reason=\"POLICY_DENIED\", source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
       ],
@@ -173,7 +211,7 @@
       "title": "DNS queries from $project (dashboard range)",
       "description": "Everything the namespace TRIED to resolve (hubble dns metric, query names per source namespace) — the intent signal that pairs with the denied-destinations table.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
       "targets": [
         { "expr": "topk(20, sum by (query) (increase(hubble_dns_queries_total{source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
       ],
@@ -187,7 +225,7 @@
       "type": "logs",
       "title": "Worker pod logs — $project (all issues; grep the AGENT_RUN_STATS line for issue/pod mapping)",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 27 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
       "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [
         { "expr": "{namespace=\"$project\", pod=~\"agent-.*\"}", "refId": "A" }

@@ -154,6 +154,16 @@ first. Ranked reality:
 *invisible* (stalls) and *dispatched to a weak model*. Both are monitoring/model problems, not
 caching problems.
 
+**Both measurements above are ARCHAEOLOGY**, reconstructed after the fact from Loki timestamps and
+pod lifetimes, and the second one ([`spikes/ride-latency-breakdown.md`](../spikes/ride-latency-breakdown.md),
+2026-08-09) hit the wall that shape always hits: its most useful question — was that pod's image
+node-cached? — was unanswerable, because the events had aged out. Since 2026-08-11 the launcher
+emits `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}` per ride to the
+same pushgateway as `agent_run_*` (FU-160, homelab#287), with a breakdown panel on the
+`agent-issue` dashboard and the `AgentRunPhaseSlow` deviation alert behind it. Phase list, what
+each one covers and what it deliberately does not (the in-pod breakdown is `agent-finalize`'s, in
+agent-runtime) live in the spike; this paragraph is the pointer.
+
 ## Part A″ — the goal-lane ledger: WORK vs PLATFORM WAIT (circles#29, 2026-08-06)
 
 Operator direction, 2026-08-06: *"keep a log of work vs platform wait time … ring doorbells if the

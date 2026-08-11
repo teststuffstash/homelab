@@ -78,6 +78,71 @@ spec:
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+        # FU-160 (homelab#287; spike: docs/spikes/ride-latency-breakdown.md): ride phase timings
+        # stopped being archaeology. `agents/agent-session.sh` pushes
+        # `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}` per ride,
+        # and this is the belt over them: a degraded image cache adding minutes to every dispatch
+        # otherwise presents only as "the loop feels slow", which is exactly what happened to the
+        # 2026-08-09 specimen — by the time anyone asked whether its image was node-cached, the
+        # pod events had aged out and the question was unanswerable.
+        #
+        # THE BASELINE IS THE GATEWAY'S OWN HISTORY, not a number someone guessed. There is no
+        # measured baseline to hard-code: this alert ships in the same PR as the emitter, so every
+        # threshold would be a fiction on merge day. Instead the expr splits the SAME metric on
+        # push freshness — the last hour of rides against everything older still held in the
+        # gateway — and fires when the recent median doubles. Rewrite it as a fixed seconds
+        # threshold only once real data says what the phases cost.
+        #
+        # Three guards, each answering a way this shape goes wrong:
+        #   (1) THE FRESHNESS SPLIT, not a range selector. Pushgateway groups are served FOREVER
+        #       and re-scraped every 30s, so `quantile_over_time(...[1h])` would weight a ride by
+        #       how long its value sat there — the residue class that kept AgentRunInfraDeathBurst
+        #       ringing for two days (FU-021). An INSTANT quantile counts each group exactly once,
+        #       which is per-ride, which is what "p50 over 1h" has to mean.
+        #   (2) `>= 3` FRESH RIDES. With one ride in the window the p50 IS that ride, and a single
+        #       cold-node dispatch would fire this every time. Three is the same "a wall, not bad
+        #       luck" line AgentRunInfraDeathBurst draws.
+        #   (3) A 60s FLOOR on the recent median. `dispatch-gates` and `bookkeeping` are seconds
+        #       long, so a 3s→7s wobble is a 2.3× ratio and means nothing. The floor keeps this
+        #       alert about phases that got slow in a way a human would notice.
+        # ⚠ FAILS SILENT BY CONSTRUCTION, and that is the accepted trade: no older half (a fresh
+        # pushgateway — the store is an emptyDir + persistence file, so a reschedule empties it)
+        # means an empty right-hand vector and no alert until history rebuilds. An observability
+        # belt that invents a baseline is worse than one that waits for it. `platform_machinery`
+        # for the homelab#239 reason: the subject IS the launcher, so a responder may author a PR
+        # here and must never auto-merge one.
+        - alert: AgentRunPhaseSlow
+          expr: |
+            (
+              (
+                quantile by (phase) (0.5,
+                    agent_run_phase_seconds
+                  and on (project, issue, round, role)
+                    (time() - push_time_seconds{job="agent_run_phase"}) < 3600
+                ) > 60
+              )
+              >
+              2 * quantile by (phase) (0.5,
+                  agent_run_phase_seconds
+                and on (project, issue, round, role)
+                  (time() - push_time_seconds{job="agent_run_phase"}) >= 3600
+              )
+            )
+            and on (phase)
+            (
+              count by (phase) (
+                  agent_run_phase_seconds
+                and on (project, issue, round, role)
+                  (time() - push_time_seconds{job="agent_run_phase"}) < 3600
+              ) >= 3
+            )
+          for: 30m
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline"
+            description: "SYMPTOM ONLY, and deliberately so — this says a launcher-owned phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls; `bookkeeping` = the exit path (stats, arm, strike comment, router report); `ride` is the WHOLE in-pod session and its breakdown is NOT here (agent-finalize's timestamps, agent-runtime — FU-160's other half), so a `ride` bar says where to look, not what happened. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
         # FU-020 enforcement made loud: a worker egress miss under deny-all manifests as a HANG
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is

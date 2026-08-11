@@ -67,3 +67,30 @@ Phase timings as standing metrics, not archaeology: emit per-ride
 the existing `agent_run_*` cost panels, and a degradation alert — e.g. p50 of a phase over 1h
 exceeding its baseline by minutes (a cold/bad cache shows up as pod-spinup/gates inflation long
 before anyone notices rides "feel slow"). One specimen is a spike; a time series is a belt.
+
+### The launcher half, shipped 2026-08-11 (homelab#287)
+
+`agents/agent-session.sh` now pushes `agent_run_phase_seconds{phase=…}` per ride for the four
+phases the LAUNCHER's own timestamps cover, keyed like the run ledger (project, issue, round,
+role) under its own pushgateway job `agent_run_phase`:
+
+| phase | what it measures | the specimen above |
+|---|---|---|
+| `dispatch-gates` | router consult, rail probe, card + recipe build, pre-flight guards, subscription latch, credit gate, cache probe, argv ceiling — everything deterministic before a pod exists | part of the 47s "coordinator session" row |
+| `pod-spinup` | `create` → `condition=Ready`: schedule + image pull + container start | 34s (worker) / 51s (coordinator) |
+| `ride` | Ready → the log stream ends — the whole in-pod session as ONE number | ~5m18s |
+| `bookkeeping` | stats parse, arm/comment fallback, strike, router report, doorbell | part of the 72s to merge |
+
+Read them on the `agent-issue` dashboard (`Ride phase breakdown` + `Ride phase p50 — FLEET`);
+`AgentRunPhaseSlow` (argocd/resources/pushgateway/prometheusrule.yaml) fires when a phase's
+last-hour p50 doubles against its own older history, with a 60s floor and a ≥3-ride minimum.
+
+**The rows this does NOT cover, and why.** Everything inside the pod — clone, `devbox install`,
+the LLM loop, the in-pod gates, pr-open — has its timestamps in `agent-finalize`, which lives in
+**agent-runtime**, a different repo; `ride` is the envelope around all of it, so a `ride` bar that
+grows says where to look and nothing more. The dispatch rows ABOVE the launcher (ring → scan pod,
+scan pod, coordinator pod spin-up, coordinator session) are the coordinator's, not the launcher's,
+and are likewise unmeasured. Both are FU-160's remaining halves and neither has a sibling issue
+yet. Also unchanged by this: **whether the image was node-cached** is still not a fact anyone
+emits — `pod-spinup` makes a cold pull VISIBLE as a number, which is what the alert keys on, but
+attributing it still means reading pod events while they exist.
