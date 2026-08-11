@@ -41,7 +41,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `agent/queued` | ready to dispatch | human or coordinator — **or the scan itself**, restoring it when it reconciles a phantom `agent/in-progress` (homelab#155, IL-T16) |
 | `agent/in-progress` | a worker pod is running this round | coordinator; the deterministic scan REMOVES it when the state is a phantom — no live pod, no open PR, no merged PR mentioning it, persisted past `C4C5_PERSIST_S` — because the stale label also holds every sibling through the ADR-097 footprint intersection (IL-T16) |
 | `agent/review` | PR open, awaiting review (human or agent) | coordinator |
-| `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) | coordinator |
+| `agent/blocked` | needs a human (budget escalate / max rounds / ambiguous) — **or the scan itself**, parking an issue whose worker ruled the deliverable not implementable as written (one `AGENT_INFEASIBLE: <path/resource>` comment → IL-T26, §The infeasible terminal). Excluded from the C4/C5 predicate by the selector, not by assumption: a human gate is never re-dispatched | coordinator — **or the deterministic scan** |
 | `agent/done` | merged | coordinator |
 | `agent-budget/{xs,sm,md,lg}` | optional cap-tier override for the estimator | human |
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
@@ -818,6 +818,67 @@ Two conditions, both load-bearing:
 
 Master itself being red stays the neighbouring case with its own terminal: a platform incident for
 the responder/operator lane, stated and stopped, not an `AGENT_ERROR` of yours.
+
+## The infeasible terminal — `AGENT_INFEASIBLE` (retro r3 F4, homelab#257)
+
+**"Not implementable as written" is a VERDICT, not a crash, and it now has an exit.** A worker whose
+deliverable needs a path its recipe bans (`.github/**`, `.agents/**`, the repo's own CI scripts) or
+a resource its pod does not have (cluster access, live API credentials, a sibling-repo checkout)
+cannot produce the diff. Before this terminal existed, the honest answer was **indistinguishable
+from a crash**: no branch, no PR, `agent/in-progress` still on, so the scan's C4/C5 predicate read
+an abandoned ride. oracle-fleet#66 landed as `AGENT_STRIKE … error_class=unknown` and a coordinator
+had to override the mechanical `c4c5-redispatch` clause by hand; oracle-fleet#225 is the same
+pressure with the other outcome — the worker silently **rescoped itself**, which is what an agent
+does when the honest answer has no exit, and its PR's `Fixes #225` then wrongly auto-closed the
+issue.
+
+**The contract, both halves:**
+
+| half | who | what |
+|---|---|---|
+| producer | the **worker**, via its repo's `.agents/fix.yaml` | ONE issue comment whose first characters are exactly `AGENT_INFEASIBLE: <path or resource>`, then END the run **without pushing** |
+| consumer | the **deterministic scan** (C4/C5, IL-T26) | park the issue `agent/blocked`, remove `agent/in-progress`, comment the audit quoting the named resource — and take it out of every C4/C5 derivation, so it is never re-queued and never re-dispatched |
+
+Three properties are load-bearing, and each is pinned by
+`agents/replay/fixtures/c4c5-infeasible-{parks,quoted-inert,probe-fail}`:
+
+- **The marker is ANCHORED at the start of a comment**, never a substring, and never read from the
+  issue BODY. Talking about the terminal is not the terminal — homelab#257's own title contains the
+  string, and a human quoting a past exit writes `> AGENT_INFEASIBLE: …`. This is the fix-debounce
+  lane's `alert-fp:` lesson (homelab#244) one lane over.
+- **The marker alone suppresses the redispatch**, whether or not the label write lands. A
+  failed/half-applied write reports loudly and the issue *still* leaves the unit list: re-riding a
+  task a worker already proved impossible spends a paid session to re-derive a known answer, which
+  is strictly worse than a report line. An **unreadable** comments probe is the other way round —
+  rule #6, never fail INTO a write — and the issue keeps today's behaviour.
+- **`agent/blocked` is now excluded by the C4/C5 selector itself**, alongside `agent/error`. It used
+  to rest on an assumption written in a comment ("blocked issues never carry in-progress"); a human
+  blocking a live ride, or this terminal caught between its two non-atomic label writes, both break
+  it, and re-dispatching a human gate is the one thing C4/C5 must never do.
+
+**What YOU do with one.** Nothing automatic — that is the point. The issue sits `agent/blocked` with
+the resource named on the thread. Either re-scope it so the deliverable is inside a fix-class
+worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
+it unchanged reaches the same verdict** — and unlike a strike, this one is free.
+
+> ⚠ **The producer half is per-repo and NOT yet installed anywhere.** The paragraph below belongs in
+> each repo's `.agents/fix.yaml` `instructions:`, beside the existing `AGENT_ERROR:` breaker; every
+> repo whose recipe lacks it simply never reaches IL-T26. `.agents/**` is a banned path for the
+> fixer lane in this repo (a fix round resumes on the PR's own branch, so a worker editing its own
+> recipe loosens its own ceiling mid-PR), so it is a **human paste**, here and in the stacks — the
+> stacks pick it up at their next recipe touch:
+>
+> ```
+> Infeasible scope (retro r3 F4): if the deliverable REQUIRES a path in the Hard-rules ban list
+> above, or a resource this pod does not have (cluster access, live API credentials, a sibling-repo
+> checkout), it is not implementable as written. Do NOT rescope it yourself and do NOT half-build
+> it: post ONE comment starting exactly `AGENT_INFEASIBLE: <the path or resource>` — first
+> characters of the comment, nothing before it — say in a sentence what the deliverable needed and
+> why the pod cannot supply it, and END the run without pushing. The coordinator's scan reads that
+> marker and parks the issue `agent/blocked` for a human instead of re-dispatching it, so this
+> costs one sub-minute exit rather than a re-ridden session. Do everything you CAN deliver first
+> if part of the issue is inside your reach — then the marker names only the part that is not.
+> ```
 
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 

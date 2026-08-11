@@ -1,0 +1,12 @@
+CALL gh api repos/teststuffstash/homelab/issues/66/comments?per_page=100
+CALL gh issue edit 66 --repo teststuffstash/homelab --add-label agent/blocked
+CALL gh issue edit 66 --repo teststuffstash/homelab --remove-label agent/in-progress
+CALL gh issue view 66 --repo teststuffstash/homelab --json labels --jq [.labels[].name]|join(",")
+CALL gh issue comment 66 --repo teststuffstash/homelab --body 🤖 **`AGENT_INFEASIBLE` — parked `agent/blocked` for a human** (deterministic scan, retro r3 F4 / homelab#257).\n\nThe worker ruled this **not implementable as written** and ended without pushing, naming:\n\n> .github/workflows/ci.yaml\n\nThat is a VERDICT, not a crash, so it does not go back through `c4c5-redispatch`: re-riding it would spend another paid session to re-derive an answer the loop already has. Labels moved `agent/in-progress` → `agent/blocked`, which also frees the repo WIP slot and releases every sibling this issue's `Touches:` footprint was holding (ADR-097).\n\n**A human is the next mover.** Either re-scope the issue so the deliverable is inside a fix-class worker's reach (recipe path tiers + what the pod can actually see), or do the named part by hand — then remove `agent/blocked` and re-queue. Re-queueing it unchanged will simply reach the same verdict.
+CALL gh api repos/teststuffstash/homelab/issues/70/comments?per_page=100
+OUT INFEAS 66 
+OUT UNIT c4c5-redispatch|homelab|issue-70|fix
+OUT ORPHAN [homelab] ⛔ INFEASIBLE — issue #66 parked `agent/blocked` (worker: .github/workflows/ci.yaml). NOT re-dispatched: a human must re-scope it or do that part by hand (retro r3 F4).
+OUT V2   issue #70 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

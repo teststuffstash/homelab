@@ -1,0 +1,34 @@
+# homelab#257 (retro r3 F4) — leg C: an UNREADABLE comments probe never fails INTO a write.
+#
+# CONDITION UNDER REPLAY. Leg B's world exactly, with `STUB_GH=fail`: every read comes back 403/404
+# /network-error. This is the direction the terminal must be asymmetric in, and it is the OPPOSITE
+# of the asymmetry the other two legs pin — a marker the scan CAN read suppresses the redispatch
+# even if the label write fails (`c4c5-infeasible-parks`), because re-riding a proven-impossible
+# task is worse than a report line. A marker it CANNOT read is not a marker: guessing at one would
+# park a live abandoned ride on a human gate and stall it silently, which is worse than the
+# re-dispatch. Rule #6, from the scan's own header: never fail INTO a write.
+#
+# THE CONTRACT:
+#   1. The probe is ATTEMPTED and lands in the stream — a check that silently stopped checking is a
+#      check that silently stopped guarding, and an unattempted read leaves this leg looking
+#      identical to a pass.
+#   2. NOT ONE WRITE. No label, no comment. `INFEAS` stays empty.
+#   3. The failure is REPORTED, naming the issue: this is the one path where the terminal knows it
+#      does not know, and silence there is how a human never learns the marker was missed.
+#   4. #66 keeps today's behaviour COMPLETELY — its unit and its `v2` report line, byte-identical
+#      to leg B. A degraded probe must cost the loop nothing but a report line.
+#
+# `STUB_GH=fail` is the harness's own failure-mode seam (agents/replay/stubs/gh) rather than a
+# missing world file: an absent recording dies with exit 9, which is a FIXTURE error, not the
+# 403-shaped production failure this clause has to survive.
+name: c4c5-infeasible-probe-fail
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:c4c5-selector
+  - file:bridge.sh
+  - block:infeasible-terminal
+  - block:c4c5-derivations
+  - file:post.sh
+env:
+  - STUB_GH=fail
