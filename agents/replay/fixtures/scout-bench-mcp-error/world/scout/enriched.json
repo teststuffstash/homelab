@@ -1,0 +1,30 @@
+[
+  {
+    "model": "inclusionai/ling-3.0-flash",
+    "price_per_mtok": 0.15,
+    "price_source": "registry",
+    "price_note": "",
+    "cache_hit": 0.8,
+    "tools": true,
+    "provider_count": 2,
+    "market_providers": 2,
+    "pinned_provider": {
+      "provider": "inclusion-ai",
+      "uptime": 99.31
+    }
+  },
+  {
+    "model": "newco/spark:free",
+    "price_per_mtok": 0.0,
+    "price_source": "registry",
+    "price_note": "free tier",
+    "cache_hit": 0.8,
+    "tools": true,
+    "provider_count": 1,
+    "market_providers": 1,
+    "pinned_provider": {
+      "provider": "newco",
+      "uptime": 95.06
+    }
+  }
+]
