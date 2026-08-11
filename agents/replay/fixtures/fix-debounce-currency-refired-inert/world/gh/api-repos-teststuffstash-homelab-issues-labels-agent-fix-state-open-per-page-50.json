@@ -1,0 +1,44 @@
+[
+  {
+    "number": 237,
+    "title": "RetroReportOverdue: no retro report has landed in >8 days",
+    "labels": [
+      {
+        "name": "alert"
+      },
+      {
+        "name": "agent-fix"
+      }
+    ],
+    "body": "Responder evidence bundle for the overdue retro report.\n\nalert-fp:9c41d70e5ab28f13\nTouches: agents/coordinator/retro-argo.yaml\n\nThe coordinator that had ruled this blocked lifted the block; the thread carries no lifecycle label and is awaiting a queue decision.\nlast-cleared: 2026-08-11T09:12:07Z — RetroReportOverdue stopped firing (alert-fp:9c41d70e5ab28f13). The DEFECT closes this issue, not the alert.\n"
+  },
+  {
+    "number": 229,
+    "title": "AgentRunInfraDeathBurst: canary rides trip the infra-death-burst alert",
+    "labels": [
+      {
+        "name": "alert"
+      },
+      {
+        "name": "agent-fix"
+      },
+      {
+        "name": "agent/error"
+      }
+    ],
+    "body": "Responder evidence bundle for the infra-death burst.\n\nalert-fp:4b8e1f0c96d7a352\nTouches: argocd/resources/openrouter-proxy/deployment.yaml\n\nThe FU-069 anomaly breaker latched `agent/error` on this thread: a worker found the dispatch contradicted the labels and stood down without pushing.\n"
+  },
+  {
+    "number": 226,
+    "title": "ResponderSelfReferential: the alert lane's own namespace is degraded",
+    "labels": [
+      {
+        "name": "alert"
+      },
+      {
+        "name": "agent-fix"
+      }
+    ],
+    "body": "Responder evidence bundle for a degradation inside the agent platform's own namespace.\n\nalert-fp:2d5904ea7cb31f68\nself-referential: true\nTouches: argocd/resources/agent-coordinator/deployment.yaml\n"
+  }
+]

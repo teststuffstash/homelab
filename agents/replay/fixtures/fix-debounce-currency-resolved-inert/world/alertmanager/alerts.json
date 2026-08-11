@@ -1,0 +1,16 @@
+[
+  {
+    "fingerprint": "9c41d70e5ab28f13",
+    "labels": { "alertname": "RetroReportOverdue" },
+    "status": { "state": "active" },
+    "startsAt": "2026-08-03T09:14:02.317Z",
+    "endsAt": "2026-08-11T13:49:00.000Z"
+  },
+  {
+    "fingerprint": "4b8e1f0c96d7a352",
+    "labels": { "alertname": "AgentRunInfraDeathBurst" },
+    "status": { "state": "active" },
+    "startsAt": "2026-08-11T12:02:41.005Z",
+    "endsAt": "2026-08-11T14:07:41.005Z"
+  }
+]

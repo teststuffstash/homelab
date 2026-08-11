@@ -40,6 +40,19 @@
 # devbox.json|lock + scripts/ (CI executes them from the branch; in homelab the scripts ARE the
 # checks). Everything else queues freely — CODEOWNERS gates the MERGE, which is the real gate;
 # the fixer authors the diff at 2am and the owner reads it in the morning (50b8418).
+#
+# Queue-time CURRENCY (FU-133 leg c, homelab#253): the footprint gate above asks "may this be
+# worked", the currency gate asks "is this still TRUE". Everything upstream of dispatch reads
+# BODIES — the set-pass judges from them, `sq_decide` reads one — and a body is a diagnosis with a
+# date on it. homelab#68 is the founding case (iac-lane.md §"one root cause, N alert issues",
+# first-live set-pass): a 07-28 diagnosis whose scope ceiling had already shipped, queued ELEVEN
+# MINUTES after the responder's resolve leg recorded the alert clearing, because it was
+# human-engaged and so sat ripe in the pending set. The 21:00Z coordinator refused the unit and
+# parked it `agent/blocked` — a belt doing a guard's job, at the wrong end of the lane. So the
+# gate reads LIVE alert state at queue time and skips two shapes: the alert has RESOLVED, or the
+# body predates the subject's last recorded state change (a refire after a `last-cleared:` line).
+# A skip is NOT a close and moves no label: alert-state is not defect-state, and whether the
+# defect outlives its alert is a human's call. The issue stays inert with one note saying so.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -158,6 +171,11 @@ spec:
           - { name: ORG, value: "teststuffstash" }
           - { name: PAYLOAD, value: "{{workflow.parameters.payload}}" }
           - { name: DRY_RUN, value: "{{workflow.parameters.dryRun}}" }
+          # The currency gate's live-state surface (FU-133 leg c). In-cluster service DNS, NOT the
+          # `192.168.40.14` LAN VIP: a LoadBalancer IP is a 'world' destination and is not a route
+          # to depend on from a pod (the same rule the responder's Prometheus query states).
+          # Reachability verified from an agent pod on 2026-08-11 (HTTP 200 on /api/v2/status).
+          - { name: AM_URL, value: "http://kube-prometheus-stack-alertmanager.monitoring.svc:9093" }
           - { name: ANTHROPIC_BASE_URL, value: "http://openrouter-proxy.agent-egress.svc.cluster.local:8080/anthropic" }
           - { name: ANTHROPIC_AUTH_TOKEN, value: "ref:agent-coordinator/coordinator-claude" }
           - { name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, value: "1" }
@@ -253,11 +271,29 @@ spec:
             [ "$N" -eq 0 ] && { echo "nothing to decide"; exit 0; }
             # <<<REPLAY:fix-debounce-pending-set<<<
 
+            # ── currency seams (FU-133 leg c) ────────────────────────────────────────────────
+            # The gate's two I/O points and the comment helper it writes through, factored out so
+            # the fixture family can serve a RECORDED Alertmanager and a fixed clock while the
+            # arithmetic below stays under replay (agents/replay/README.md — shadow the I/O and the
+            # magnitude, never the branching). They sit OUTSIDE the replay blocks on purpose: a
+            # fixture composes bridge-first, so a definition inside the block would override the
+            # fixture's rather than the other way round.
+            #
+            # `active|silenced|inhibited|unprocessed=true` is the WHOLE store, deliberately not the
+            # default active filter: a silenced alert is still FIRING (a human muted the
+            # notification, not the defect), and firing-vs-resolved is decided by `endsAt` in
+            # sq_decide rather than by Alertmanager's state word.
+            fc_am_alerts() { curl -m 5 -fsS "$AM_URL/api/v2/alerts?active=true&silenced=true&inhibited=true&unprocessed=true" 2>/dev/null; }
+            fc_now() { date -u +%s; }
+            # ADR-103 rule 2: a skip note is machine residue, so it appends to the ONE
+            # `<!-- agent-summary -->` comment instead of starting a thread of its own.
+            . /work/homelab/agents/machine-comment.sh
+
             # >>>REPLAY:fix-debounce-gates>>>
             # ── deterministic gates (fail-closed; the ❌ table, NOT the old governance list) ──
             SQ_DENY='^(\.github/|\.agents/|devbox\.json|devbox\.lock|scripts/)'
-            sq_decide() { # <repo> <number> — 0 = may queue
-              local body touches p
+            sq_decide() { # <repo> <number> — 0 = may queue, 1 = inert (log only), 2 = inert + a currency note
+              local body touches p fp alerts cleared verdict v since
               body="$(gh api "repos/$1/issues/$2" --jq '.body // ""' 2>/dev/null || true)"
               touches="$(printf '%s' "$body" | sed -n 's/^[Tt]ouches:[[:space:]]*//p' | head -1)"
               [ -n "$touches" ] || { echo "no Touches: line (undeclared = exclusive, waits for a human)"; return 1; }
@@ -266,7 +302,43 @@ spec:
                 printf '%s' "$p" | grep -qE "$SQ_DENY" \
                   && { echo "footprint takes effect pre-merge: $p (iac-lane ❌ table)"; return 1; }
               done
-              return 0
+              # ── CURRENCY (FU-133 leg c) ────────────────────────────────────────────────────
+              # Cheapest-first: the footprint tests above cost nothing beyond the body read this
+              # gate needs anyway, so an issue that can never be worked never costs a probe.
+              # The marker is read LINE-ANCHORED, the same way the pending set's lane test and the
+              # responder's own resolve leg (`^alert-fp:`) read it — an unanchored read made
+              # "mentions the alert lane" mean "belongs to it" once already (homelab#249).
+              fp="$(printf '%s' "$body" | sed -n 's/^alert-fp:[[:space:]]*//p' | head -1)"
+              [ -n "$fp" ] || { echo "no alert-fp: marker — currency unjudgeable (the pending set's own lane test requires one, so this is a contradiction, not a stale body)"; return 1; }
+              alerts="$(fc_am_alerts)" || alerts=""
+              printf '%s' "$alerts" | jq -e 'type == "array"' >/dev/null 2>&1 \
+                || { echo "Alertmanager unreadable at $AM_URL — currency unjudgeable, so INERT (fail-closed, no comment: the 2h backstop re-derives, an alert store that cannot be read is itself the incident, and nothing new can be filed while it is down anyway)"; return 1; }
+              # Membership is NOT the test — `endsAt` is. Alertmanager keeps a resolved alert in the
+              # store for a while after it clears (endsAt moves into the past), and #68's queue
+              # landed inside exactly that window: "the fingerprint is still listed" would have
+              # answered FIRING eleven minutes after the clear, which is the bug verbatim.
+              cleared="$(printf '%s' "$body" | sed -n 's/^last-cleared:[[:space:]]*\([^ ]*\).*/\1/p' | head -1)"
+              verdict="$(printf '%s' "$alerts" | jq -r --arg fp "$fp" --arg cleared "$cleared" --argjson now "$(fc_now)" '
+                def ep: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601? // 0;
+                [ .[] | select(.fingerprint == $fp) | select((.endsAt // "" | ep) > $now) ] as $live
+                | ($live[0].startsAt // "") as $since
+                | (if ($live | length) == 0 then "resolved"
+                   elif ($cleared != "" and (($since | ep) > ($cleared | ep))) then "refired"
+                   else "current" end) + "\t" + $since' 2>/dev/null)" || verdict=""
+              v="$(printf '%s' "$verdict" | cut -f1)"; since="$(printf '%s' "$verdict" | cut -f2)"
+              case "$v" in
+                current) return 0;;
+                # The `last-cleared:` line is the resolve leg's own record (responder-argo.yaml,
+                # #148): one line, rewritten in place, written exactly where a clear that does not
+                # close the issue belongs. A firing episode that STARTED after it is a refire, and
+                # the body's evidence bundle — the thing the fixer is told to treat as ground truth
+                # — describes the previous one. Narrow in practice: an issue queued on the bell it
+                # was filed by has no clear to predate, so only a body that outlived a whole flap
+                # cycle unqueued reaches this branch, which is #68's shape exactly.
+                refired) echo "the body predates its subject's last state change — recorded clear at $cleared, firing again since $since, so its evidence describes the PREVIOUS episode"; return 2;;
+                resolved) echo "alert-fp:$fp is not firing — it resolved, and the body is all a fixer would have to work from"; return 2;;
+                *) echo "currency verdict unparseable from the Alertmanager read — INERT (fail-closed)"; return 1;;
+              esac
             }
             ensure_label() { # <repo> <label> <color> <desc>
               gh api "repos/$1/labels/$(printf '%s' "$2" | jq -sRr @uri)" >/dev/null 2>&1 && return 0
@@ -284,19 +356,39 @@ spec:
                 && echo "rang /coordinate for $1 (${lns:-global})" \
                 || echo "coordinate bell failed for $1 (non-fatal — the */30 cron catches it)"
             }
+            sq_note_currency() { # <repo> <number> <why> — at most ONE currency note per timeline
+              # Idempotence is load-bearing, not decoration: a currency skip changes NOTHING about
+              # the issue (no label, no close — that is the point), so every bell and every 2h
+              # backstop re-derives the same verdict forever. An unguarded comment here would be
+              # the #148 disease exactly — the responder's resolve leg was cured of posting one
+              # notice per flap cycle (27 of one 2026-08-08 day's 80 homelab comments). The guard
+              # reads the timeline for this note's own `kind=` marker and writes at most once.
+              local seen
+              if [ "$DRY_RUN" = "1" ]; then echo "DRY: would note the currency skip on $1#$2"; return 0; fi
+              seen="$(mc_gh_comments "$1" "$2" | jq -r '[.[]? | select((.body // "") | contains("kind=currency-skip"))] | length' 2>/dev/null || echo 0)"
+              [ "${seen:-0}" -eq 0 ] || { echo "currency note already on $1#$2 — not repeating"; return 0; }
+              mc_event "$1" "$2" currency-skip "**not queued — queue-time currency gate** (FU-133 leg c): $3. Nothing was closed and no label moved: alert-state is not defect-state. If the defect outlives its alert, say so here and queue it by hand." \
+                && echo "noted the currency skip on $1#$2" \
+                || echo "WARN: currency note failed on $1#$2 (non-fatal — the issue is inert either way)"
+            }
             queue_one() { # <repo> <number>
-              local why
-              if why="$(sq_decide "$1" "$2")"; then
-                if [ "$DRY_RUN" = "1" ]; then echo "DRY: would queue $1#$2 (+ring /coordinate)"; return 0; fi
-                if gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/queued" >/dev/null 2>&1; then
-                  echo "QUEUED $1#$2"
-                  ring_coordinate "$1"
-                else
-                  echo "WARN: queue label failed on $1#$2 — stays inert, backstop retries"
-                fi
-              else
-                echo "inert $1#$2 — $why"
-              fi
+              local why rc=0
+              why="$(sq_decide "$1" "$2")" || rc=$?
+              case "$rc" in
+                0)
+                  if [ "$DRY_RUN" = "1" ]; then echo "DRY: would queue $1#$2 (+ring /coordinate)"; return 0; fi
+                  if gh api -X POST "repos/$1/issues/$2/labels" -f "labels[]=agent/queued" >/dev/null 2>&1; then
+                    echo "QUEUED $1#$2"
+                    ring_coordinate "$1"
+                  else
+                    echo "WARN: queue label failed on $1#$2 — stays inert, backstop retries"
+                  fi ;;
+                # 2 = a currency verdict, which is the one deny a human is expected to read. The
+                # footprint denies (rc 1) stay log-only: they are a standing property of the
+                # issue's own Touches: line, not news about the world.
+                2) echo "inert $1#$2 — $why"; sq_note_currency "$1" "$2" "$why" ;;
+                *) echo "inert $1#$2 — $why" ;;
+              esac
             }
             link_one() { # <repo> <number> <cause-repo> <cause-number> <why>
               if [ "$DRY_RUN" = "1" ]; then echo "DRY: would link $1#$2 → downstream of $3#$4 ($5)"; return 0; fi

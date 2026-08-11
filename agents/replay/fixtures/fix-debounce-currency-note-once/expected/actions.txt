@@ -1,12 +1,11 @@
 CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select(.body // "" | test("(^|\n)alert-fp:")) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
-CALL gh api repos/teststuffstash/homelab/issues/249 --jq .body // ""
+CALL gh api repos/teststuffstash/homelab/issues/237 --jq .body // ""
 CALL alertmanager GET /api/v2/alerts (currency probe)
-CALL gh api -X POST repos/teststuffstash/homelab/issues/249/labels -f labels[]=agent/queued
-CALL curl -m 5 -fsS -X POST -H Content-Type: application/json -d {"repo":"homelab","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
+CALL gh api repos/teststuffstash/homelab/issues/237/comments --paginate
 OUT self-referential, left for a human to queue:
 OUT   teststuffstash/homelab#226 ResponderSelfReferential: the alert lane's own namespace is degraded
 OUT pending set: 1 issue(s)
 OUT single pending issue — deterministic fast path
-OUT QUEUED teststuffstash/homelab#249
-OUT rang /coordinate for teststuffstash/homelab (global)
+OUT inert teststuffstash/homelab#237 — alert-fp:9c41d70e5ab28f13 is not firing — it resolved, and the body is all a fixer would have to work from
+OUT currency note already on teststuffstash/homelab#237 — not repeating
 RC 0
