@@ -57,7 +57,7 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
 2. **The PLATFORM work queue first — open issues on EVERY platform-claim repo** (homelab,
    agent-runtime, agent-coordinator, openrouter-operator — read the list from the platform
    stack in `agents/stacks.json`, not from memory). ⚠ Premise UPDATED 2026-08-08 (twice):
-   homelab HAS a fixer lane (FU-068/FU-142) and the platform stack runs its own coordinate loop —
+   homelab HAS a fixer lane (FU-068/FU-142) and [the platform stack](../../../docs/glossary.md) runs its own coordinate loop —
    queued issues dispatch without you. And the sweep is NOT homelab-only: five agent-runtime
    issues sat unlabeled up to a month because only homelab's board got read (operator catch,
    2026-08-08) — an unlabeled issue is invisible to every clause, and only this sweep (plus the

@@ -154,15 +154,22 @@ spec:
           command: ["bash", "-lc"]
           args:
             - |
-              set -e
+              set -eo pipefail
+              # pipefail is load-bearing: retro-session.sh pipes through tee, and without it a
+              # cell whose session DIED (8rvhd: exec E2BIG at 146KB brief) still exited 0 and
+              # the DAG called it Succeeded — the harvest then failed on empty logs.
               rm -rf /work/homelab
               git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
               cd /work/homelab
-              # pain-rank the ledger → the brief's input (blocked first, then rounds/cost/wall)
+              # pain-rank the ledger → the brief's input (blocked first, then rounds/cost/wall).
+              # BOUNDED slice, not the whole ledger (B2: pick the worst-K): the full 203-row dump
+              # made a 146KB brief whose base64 blew Linux's 128KiB per-argv-element cap (E2BIG)
+              # in the launcher hand-off — and the whole ledger was never the contract.
               export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
               s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
               python3 - <<'PY'
               import json
+              KEEP = 40  # deep-dive K rides on top of this; context rows beyond it are waste
               rows = [json.loads(l) for l in open('/tmp/ledger.jsonl') if l.strip()]
               rows.sort(key=lambda r: (r.get("terminal_label") != "agent/blocked",
                                        -(r.get("rounds") or 0),
@@ -170,7 +177,8 @@ spec:
                                        -(r.get("wall_time_s") or 0)))
               for i, r in enumerate(rows):
                   r["rank"] = i + 1
-              json.dump(rows, open('/tmp/ledger-ranked.json', 'w'), indent=1)
+              json.dump(rows[:KEEP], open('/tmp/ledger-ranked.json', 'w'), indent=1)
+              print(f"ledger: {len(rows)} rows ranked, top {min(KEEP, len(rows))} into the brief (no silent caps)")
               PY
               if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
                 export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"

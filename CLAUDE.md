@@ -199,7 +199,9 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
   **by topic keywords** (`PAT|credential`, not just the id header). Assume any loose end you
   "discover" is already tracked until a grep says otherwise, and state the negative ("no FU/ADR
   matches <keywords>") before creating. If a related item exists, extend it — never file a
-  parallel one. A user question like "is this a follow-up?" usually means they half-remember an
+  parallel one. A NEW name for platform functionality additionally clears
+  [`docs/glossary.md`](docs/glossary.md) first — if the concept exists use its term, if the
+  term is taken pick another, and add the row in the coining commit (FU-163). A user question like "is this a follow-up?" usually means they half-remember an
   existing item — it's a retrieval cue, not a decision handed to you: grep first, answer with ids.
 - **Next steps reported to the user must carry FU ids** — a proposed next step that hasn't been
   checked against the tracker is how duplicates start.

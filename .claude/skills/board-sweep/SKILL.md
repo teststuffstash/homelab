@@ -34,7 +34,7 @@ deliberately deferred (§Graduation).
   prevent staleness errors; this sweep needs both.
 - **The repo universe is CLAIM-DERIVED**: `stacks_json()` semantics — cluster AgentStack claims
   merged over `agents/stacks.json` — enumerating every stack's repos including context-only
-  entries. Never a hand list, never "homelab" (FU-163: the repo ≠ the platform stack ≠ the
+  entries. Never a hand list, never "homelab" (the repo ≠ [the platform stack](../../../docs/glossary.md) ≠ the
   lab). "Platform-lane" always resolves through the platform claim's repo list.
 - **Classify first, act second.** Every item leaves the pass in exactly one bucket with a
   reason; only then act on do-nows (≲5-min rule, each with its own end-state check —

@@ -354,7 +354,7 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | ArgoCD app health / sync status | ✅ | shallow — see above |
 | Prometheus + Alertmanager → responder triage | ✅ | one bounded LLM session per new fingerprint (FU-103) |
 | Blackbox probes on service endpoints | ✅ | FU-099 — seconds-grade, dumb |
-| Deep contract probe post-deploy | ❌ | the **prober** role, FU-102 — the real acceptance signal |
+| Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
 | Storage-cap breach visibility | ❌ | Garage exports **no** metrics at all; Longhorn per-disk unwatched ([`storage-ledger.md`](storage-ledger.md), FU-093) |
 | **Renovate liveness** | ❌ | **nothing watches whether Renovate did anything** — the finding at the top of this doc |
 | Drift between tofu applies | ❌ | FU-097 |
