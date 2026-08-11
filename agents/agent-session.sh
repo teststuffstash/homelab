@@ -715,10 +715,19 @@ if [ -n "${RECIPE:-}" ]; then
       CTX_PRELUDE="${CTX_PRELUDE}git clone --depth 1 --quiet ${_CTXU} /work/context/${_CTXN} || echo \"WARN: context clone failed: ${_CTXU}\"; "
     done
   fi
+  # GOOSE_MAX_TOKENS as a COMMAND-PREFIX env — it must exist in the POD, not this shell, exactly as
+  # agents/retro-session.sh does it. The 16384 ceiling cures the `-32602` truncation class (proven
+  # on mimo, 2026-07-25); the cure was wired into the retro path only and the worker's goose arm
+  # never had it, which is 8 dead worker rounds with no branch salvaged in the r3 window
+  # (homelab#256, docs/agents/retros/2026-08-11-oracle-r3-context.md F1). The proxy's completion
+  # floor cannot stand in for it: that rewrites the UPSTREAM request and cannot govern goose's own
+  # client-side emit ceiling. The claude arm stays untouched — the var is goose's.
+  # >>>REPLAY:harness-run-cmd>>>
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
-    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
+    goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
   esac
+  # <<<REPLAY:harness-run-cmd<<<
 fi
 
 [ -f "$HERE/images.env" ] && . "$HERE/images.env" # pinned agent image versions (no :latest)

@@ -1,0 +1,2 @@
+OUT RUN_CMD: mkdir -p /work/context; git clone --depth 1 --quiet https://github.com/teststuffstash/circles.git /work/context/circles || echo "WARN: context clone failed: https://github.com/teststuffstash/circles.git"; printf '%s' 'UkVDSVBF' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=19
+RC 0
