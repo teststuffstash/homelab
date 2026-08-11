@@ -16,8 +16,9 @@
 #      machinery announces this state: oracle-fleet#217 sat 17h (2026-08-08) with every reviewer
 #      tick logging "nothing to review". ⚠ reviews[], NOT latestReviews[]: a bot that APPROVEs
 #      and then posts a COMMENTED aside makes its latest review non-APPROVED and hid PR#235's
-#      park for ~14h (2026-08-09) — a dismissed approval reads DISMISSED, so reviews[] is safe. Repos = the require_code_owner_review=true set in
-#      tofu/github/variables.tf minus the platform lane (which clauses 1/park cover).
+#      park for ~14h (2026-08-09) — a dismissed approval reads DISMISSED, so reviews[] is safe.
+#      Repos = the FULL require_code_owner_review=true set in tofu/github/variables.tf —
+#      platform lane included since the 2026-08-11 bot-reviewer enable (see CODEOWNER_REPOS).
 #   3. An UNLABELED issue on a platform repo older than a day — invisible to every clause (the
 #      loop dispatches on agent-fix∧agent/queued; the debounce rings on responder verdict lines;
 #      neither ever sees it). Five agent-runtime issues sat this way for up to a MONTH
@@ -50,8 +51,12 @@ derive_split() {
     esac
   done
 }
-# require_code_owner_review=true stack repos (tofu/github/variables.tf) — clause 4.
-CODEOWNER_REPOS="${CODEOWNER_REPOS:-oracle-fleet circles}"
+# require_code_owner_review=true repos (tofu/github/variables.tf) — clause 4. Since 2026-08-11
+# this INCLUDES the platform lane: the bot reviewer is ON there (platform claim), so a homelab/
+# agent-runtime/openrouter-operator/agent-coordinator PR now reaches bot-approved+REVIEW_REQUIRED
+# — the park state clause 1 (no-review) can no longer see. The old "minus the platform lane"
+# note assumed platform PRs never got a bot review; that assumption died with the enable.
+CODEOWNER_REPOS="${CODEOWNER_REPOS:-oracle-fleet circles homelab agent-runtime openrouter-operator agent-coordinator}"
 seen=""
 while true; do
   out=""
