@@ -14,6 +14,38 @@ def _clip(s: object, n: int) -> str:
     return " ".join(str(s).split())[:n]
 
 
+def dialogue() -> None:
+    """--dialogue: user + assistant TEXT only — no tool calls, no tool results, no
+    system-reminders. The skill-retro slice format (ADR-105): tool output may carry secrets
+    and the analysis only needs the conversation (corrections live in the operator's words).
+    Skill invocations keep a one-line marker so the analyzer can anchor them."""
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            o = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = o.get("type")
+        msg = o.get("message") or {}
+        content = msg.get("content")
+        if kind == "assistant" and isinstance(content, list):
+            for c in content:
+                if c.get("type") == "text" and c.get("text", "").strip():
+                    print(f"🤖 {_clip(c['text'], 2500)}")
+                elif c.get("type") == "tool_use" and c.get("name") == "Skill":
+                    print(f"[skill invoked: {_clip(json.dumps(c.get('input', {})), 200)}]")
+        elif kind == "user":
+            texts = [content] if isinstance(content, str) else [
+                c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"
+            ] if isinstance(content, list) else []
+            for t in texts:
+                t = t.strip()
+                if t and not t.startswith("<system-reminder"):
+                    print(f"👤 {_clip(t, 2500)}")
+
+
 def main() -> None:
     for line in sys.stdin:
         line = line.strip()
@@ -46,4 +78,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    dialogue() if "--dialogue" in sys.argv[1:] else main()

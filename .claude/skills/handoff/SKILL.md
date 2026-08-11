@@ -5,6 +5,9 @@ description: Process the cross-jail handoff queue — claim the oldest task a ST
 
 # handoff — the stack-jail → mono-jail work channel
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §handoff — unpromoted sightings apply until
+> closed (contract: [`../README.md`](../README.md)).
+
 A stack jail (circles, oracle, …) can file a task for this jail when it needs homelab-side work
 **fast** and the issue → coordinator path would kill the feedback loop. The protocol, the topology
 and the boundaries are in [`/workspace/tools/handoff.md`](../../../../tools/handoff.md) — read it once

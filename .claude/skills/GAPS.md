@@ -1,0 +1,19 @@
+# GAPS — the skill gap ledger (ADR-105)
+
+Sightings of skill shortcomings, FU-shaped. The contract lives in [`README.md`](README.md)
+§Improvement contract: file on sighting · extend with a date on re-sighting (never a duplicate
+line) · close in the same commit that edits the skill · ≲5-min factual fixes skip the ledger
+and edit the skill directly · ≥2 dates on one entry = a class → propose promotion. This file
+is in a PUBLIC repo — dialogue-level facts only, never tool output.
+
+## design
+
+- [ ] design-G1 — the read plan is reader-side only: an answer that proposes DOC EDITS never
+      pulls in the writer-side rules (`docs/README.md` §Conventions, the docs-cleanup Hard
+      rules). Fix: closure gains "proposing doc changes ⇒ read §Conventions + Hard rules".
+      Sighted 2026-08-11.
+- [ ] design-G2 — "multiple passes gave different answers to the same question" wasn't
+      recognized as a design-shaped trigger; the first pass ran as grep-triage and missed
+      tracker-held facts (FU-157's user-token nature; the live legacy token outside the
+      matrix). Fix: add the inconsistent-answers cue to the skill's trigger list.
+      Sighted 2026-08-11.

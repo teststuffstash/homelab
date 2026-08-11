@@ -1360,3 +1360,24 @@ belongs to autonomous lanes, visibility to operator lanes.
 first consumer (the circles flash/pro roster slip is the draw-over-hand-pick evidence); process
 doc `docs/agents/research-and-specs.md`; mission budget deliberately unsettled until the idp run
 (FU-126).
+
+### ADR-105 — Jail skills: a gap ledger + batched transcript retro, not self-editing skills
+
+**Status:** Accepted (2026-08-11, operator design session).
+**Decision:** skill shortcomings are FU-shaped sightings in `.claude/skills/GAPS.md` — file on
+sighting, extend with a date on re-sighting, ≥2 dates = a class → promotion moves the rule into
+the skill with dated provenance (operator-gated) and closes the entry in the same commit.
+Detection is batched: the `skill-retro` skill (the jail twin of the cluster retro,
+`docs/agents/observability-and-retro.md` §B2) sweeps dialogue-only slices of FINISHED jail
+transcripts (`scripts/skill-retro-scan.sh` + `render-transcript.py --dialogue`); every skill
+opens with a GAPS glance-step (delivery). Contract: `.claude/skills/README.md`.
+**Considered:** per-skill log files (fragments cross-skill classes — the dead-probe class spans
+three skills); a trailing "improve this skill" line in every skill (N copies of one fact, fires
+at peak confidence); Stop/SessionEnd hook injection (Stop = every turn, wrong timing; SessionEnd
+cannot reach the model); correction-time logging alone (attribution is a second-order reflection
+— unreliable).
+**Why:** transcripts record everything with zero session cooperation; hindsight makes
+attribution easy; the corpus view is where classes emerge; single-sighting codification is the
+G05 failure mode (contracts emerge from patterns).
+**Consequences:** GAPS.md is public (dialogue-level facts only); TICK-LOG keeps narrative; skill
+doctrine changes stay operator-gated except plain factual wrongness.

@@ -11,6 +11,9 @@ description: >
 
 # design-agents — read the whole damn thing first
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §design-agents — unpromoted sightings apply
+> until closed (contract: [`../README.md`](../README.md)).
+
 The sibling of [`../design/SKILL.md`](../design/SKILL.md), specialized for the agent platform.
 Why it exists (operator ruling, 2026-08-10): the agents subsystem is so tightly coupled that any
 major change requires the full context anyway — selective closure kept under-reading (the FSM
