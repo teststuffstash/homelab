@@ -16,23 +16,37 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 
 ## Topology
 
+<!-- BEGIN GENERATED hosts — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
 | Host | IP | Role |
 |---|---|---|
-| OPNsense ("Big Data") | 192.168.2.1 | Router/FW, DHCP (dnsmasq), DNS (Unbound), FRR/BGP, HAProxy, ACME |
-| Proxmox `pve` | 192.168.2.3 | Hypervisor (Talos VMs + Matchbox LXC) |
-| Matchbox LXC | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
-| `cp-01` / `wk-01` / `wk-02` | .51 / .61 / .62 | Talos cluster VMs (control plane + workers) |
-| `thinkcentre` / `hp-01` | .53 / .54 | bare-metal workers (+ Longhorn) |
-| `wk-metal-01` / `wk-metal-02` | .182 / .183 | bare-metal workers (ThinkPad X240/X250, ephemeral tier; kata nodes) |
-| `wk-metal-03` / `wk-metal-04` | .184 / .186 | bare-metal workers (i5-6200U laptop / i5-3570K desktop, ephemeral tier; kata nodes) |
-| `ci-runner-01` (VM) | 192.168.2.55 | self-hosted GitHub Actions runner (Docker/binfmt builds) |
+| OPNsense ("Big Data", HP desktop) | 192.168.2.1 | Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME |
+| Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
+| Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
+| `cp-01` (VM) | 192.168.2.51 | k8s control plane |
+| `wk-01` (VM) | 192.168.2.61 | k8s worker |
+| `wk-02` (VM) | 192.168.2.62 | k8s worker + Longhorn (bulk tier) |
+| `thinkcentre` (metal, PXE) | 192.168.2.53 | k8s worker + Longhorn (+ 2×Optane fast tier) |
+| `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |
+| `wk-metal-01` (ThinkPad X240, PXE) | 192.168.2.182 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier |
+| `wk-metal-02` (ThinkPad X250, PXE) | 192.168.2.183 | k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) |
+| `wk-metal-03` (laptop i5-6200U, PXE) | 192.168.2.184 | k8s worker, ephemeral/compute tier (tainted; kata node) |
+| `wk-metal-04` (desktop i5-3570K 16GB, PXE) | 192.168.2.186 | k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier |
+| `ci-runner-01` (VM) | 192.168.2.55 | GitHub Actions runner VM — Docker/binfmt builds (ADR-082) |
 | Droplet (ESP32) | 192.168.2.245 | ESPHome plant-irrigation node |
+| pop-os | 192.168.2.10 / .57 | the Docker host running this jail |
+<!-- END GENERATED hosts -->
 
-Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** (kube-proxy-free), **Longhorn**
-storage. In-cluster Services get LoadBalancer VIPs from `192.168.40.0/24` (Cilium BGP ↔ OPNsense
-FRR) and a trusted HTTPS name via OPNsense HAProxy. **The service catalog — what's running, every
-endpoint, how to consume it — is [`SERVICES.md`](SERVICES.md)** (Home Assistant, Grafana/Prometheus,
-UniFi, Garage S3, Forgejo, ArgoCD, Infisical/ESO, Postgres/CNPG, CI runners, …).
+<!-- BEGIN GENERATED versions — do not edit; edit machines/machines.yaml and run `devbox run -- python3 machines/generate.py` -->
+Cluster: **Talos v1.13.2 / Kubernetes v1.36.1**, **Cilium 1.19.1** CNI (kube-proxy-free).
+<!-- END GENERATED versions -->
+
+(Host table + version line above are generated from [`machines/machines.yaml`](machines/machines.yaml)
+— see [`machines/`](machines/README.md).)
+
+Storage is **Longhorn**. In-cluster Services get LoadBalancer VIPs from `192.168.40.0/24` (Cilium
+BGP ↔ OPNsense FRR) and a trusted HTTPS name via OPNsense HAProxy. **The service catalog — what's
+running, every endpoint, how to consume it — is [`SERVICES.md`](SERVICES.md)** (Home Assistant,
+Grafana/Prometheus, UniFi, Garage S3, Forgejo, ArgoCD, Infisical/ESO, Postgres/CNPG, CI runners, …).
 
 **Remote access:** Home Assistant is reachable from anywhere at `https://ha.teststuff.net` via a
 **Cloudflare Tunnel** + client-certificate **mTLS** (the `teststuff.net` zone now lives on Cloudflare;

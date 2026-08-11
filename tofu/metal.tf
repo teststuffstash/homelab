@@ -12,64 +12,16 @@ locals {
   talos_install_image = data.talos_image_factory_urls.metal.urls.installer
 }
 
-variable "metal_nodes" {
-  description = "Bare-metal Talos worker nodes keyed by hostname."
-  type = map(object({
-    ip           = string # DHCP-reserved IP (maintenance-mode + ongoing node address)
-    install_disk = string # target disk for the Talos install (NOT the optane cache)
-    # Extra block devices to format+mount as Longhorn "fast" disks. Mounted UNDER
-    # /var/lib/longhorn/ on purpose: longhorn-manager only host-mounts that path (with
-    # Bidirectional propagation), so a disk anywhere else is invisible to it. Each becomes
-    # /var/lib/longhorn/optane<N>; registered into Longhorn with tag "fast" (see
-    # scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass in longhorn.tf).
-    optane_disks = optional(list(string), [])
-    # Pin the hostname via a HostnameConfig patch (see below). Default true. Set false for a node
-    # that has NOT yet been reinstalled with the pinned config — otherwise a plain `tofu apply`
-    # would push the hostname change to the *running* node and ghost it (install-time only).
-    pin_hostname = optional(bool, true)
-    # Install the metal_kata image (Kata Containers runtime — SLSA Phase-3 / agent-CI microVMs,
-    # image.tf) and label the node kata-capable (the `kata` RuntimeClass in kata.tf selects on
-    # it). Requires VT-x enabled in BIOS. Install-time only, like everything in install.image.
-    kata = optional(bool, false)
-  }))
-  default = {
-    # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`).
-    # kata=true 2026-07-14 (docker-capable agent workers on all 3 laptops): the flag's
-    # install.image only matters at (re)install; the RUNNING node was moved to the kata image
-    # via `talosctl upgrade` (safe on metal), which is the same end state.
-    wk-metal-01 = { ip = "192.168.2.182", install_disk = "/dev/sda", kata = true }
-    # ThinkPad X250 — 128GB SanDisk SDSSDHP1 SATA SSD (confirmed via `talosctl get disks`).
-    # Laptop/compute tier like the X240: tainted ephemeral below, no Longhorn disk.
-    # kata=true 2026-07-14, same talosctl-upgrade path as wk-metal-01.
-    wk-metal-02 = { ip = "192.168.2.183", install_disk = "/dev/sda", kata = true }
-    # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
-    # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
-    # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
-    # since the NIC cable was fixed (2026-06-11) — was "flaky PXE" purely because the marginal
-    # link timed out netboot. (A diskSelector by serial/wwid would be more robust than /dev/sdX.)
-    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
-    thinkcentre = { ip = "192.168.2.53", install_disk = "/dev/sdb", optane_disks = ["/dev/nvme0n1", "/dev/nvme1n1"], pin_hostname = true }
-    # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (install.image
-    # above), so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
-    hp-01 = { ip = "192.168.2.54", install_disk = "/dev/sda" }
-    # Laptop (i5-6200U Skylake: VT-x + AVX2) — 256GB Samsung MZ7LN256 SATA SSD (confirmed via
-    # maintenance-mode `get disks`). The FIRST kata node (kata=true → metal_kata install image +
-    # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs) — all 3 laptops carry it since
-    # 2026-07-14. Compute tier: tainted ephemeral.
-    wk-metal-03 = { ip = "192.168.2.184", install_disk = "/dev/sda", kata = true }
-    # Desktop i5-3570K (Ivy Bridge: VT-x + EPT → kata OK; VT-d absent on the K SKU but not needed
-    # for microVMs; NO AVX2 → intentionally kept OUT of local.avx2_nodes, so goose rides schedule
-    # here but opencode (Bun SIGILLs) does not). 16GB RAM = the roomy kata node: unlike the 8GB
-    # laptops a ~5Gi ride fits with ~7Gi to spare (the Playwright/Chrome gate's home — sleep#48).
-    # 500GB SATA SSD → /dev/sda (⚠ CONFIRM via `talosctl -n 192.168.2.186 get disks --insecure` at
-    # maintenance before install). kata=true → metal_kata install image + homelab.io/kata label +
-    # the FU-112b kubelet reservation (conservative on 16GB). Compute tier: tainted ephemeral below.
-    wk-metal-04 = { ip = "192.168.2.186", install_disk = "/dev/sda", kata = true }
-  }
-}
+# The node set + its per-node flags (install_disk / optane_disks / pin_hostname / kata) live in
+# **machines/machines.yaml** — the one inventory, also read by machines/generate.py for the doc
+# tables. `local.metal_nodes` (tofu/locals.tf) reduces it to the entries flagged
+# `talos_metal_node: true`; the field semantics are documented there and in the YAML header.
+# To add a node: add it to machines.yaml (docs/provisioning.md's onboarding recipe), regenerate
+# the tables, apply. There is deliberately no `var.metal_nodes` override any more — a var that
+# shadows the YAML would re-create the two-copies drift this indirection exists to remove.
 
 data "talos_machine_configuration" "metal" {
-  for_each = var.metal_nodes
+  for_each = local.metal_nodes
 
   cluster_name       = var.cluster_name
   cluster_endpoint   = local.cluster_endpoint
@@ -160,11 +112,16 @@ data "talos_machine_configuration" "metal" {
   )
 }
 
-# The ThinkPad X240 is the ephemeral/compute tier — not always-on, vanilla install (no
-# Longhorn disk / iscsi). Taint it so stateful services (which tolerate nothing special)
-# never schedule there; explicitly-tolerating workloads (e.g. future CI runners) still can.
-resource "kubernetes_node_taint" "laptop" {
-  metadata { name = "wk-metal-01" }
+# The compute/ephemeral tier (the laptops + the i5-3570K desktop) — not always-on, vanilla
+# install (no Longhorn disk / iscsi). Taint them so stateful services (which tolerate nothing
+# special) never schedule there; explicitly-tolerating workloads (e.g. CI runners) still can.
+# Membership is the `ephemeral: true` flag in machines/machines.yaml (local.ephemeral_nodes) —
+# it used to be four near-identical hand-written resources, one per node.
+# Applied AFTER the node joins the cluster (docs/provisioning.md step 7).
+resource "kubernetes_node_taint" "ephemeral" {
+  for_each = local.ephemeral_nodes
+
+  metadata { name = each.key }
   taint {
     key    = "homelab.io/ephemeral"
     value  = "true"
@@ -172,38 +129,31 @@ resource "kubernetes_node_taint" "laptop" {
   }
 }
 
-# wk-metal-03 — same ephemeral/compute tier. Applied after the node joins (step 7).
-resource "kubernetes_node_taint" "laptop_kata" {
-  metadata { name = "wk-metal-03" }
-  taint {
-    key    = "homelab.io/ephemeral"
-    value  = "true"
-    effect = "NoSchedule"
-  }
+# State moves for the four resources the for_each above replaces (same node, same taint, same
+# provider id) — so this refactor plans as a pure no-op instead of destroy+create, which would
+# briefly untaint a live node and let stateful pods land on it.
+moved {
+  from = kubernetes_node_taint.laptop
+  to   = kubernetes_node_taint.ephemeral["wk-metal-01"]
 }
 
-# ThinkPad X250 — same ephemeral/compute tier as the X240. Applied after the node joins.
-resource "kubernetes_node_taint" "laptop_x250" {
-  metadata { name = "wk-metal-02" }
-  taint {
-    key    = "homelab.io/ephemeral"
-    value  = "true"
-    effect = "NoSchedule"
-  }
+moved {
+  from = kubernetes_node_taint.laptop_x250
+  to   = kubernetes_node_taint.ephemeral["wk-metal-02"]
 }
 
-# Desktop i5-3570K/16GB — same ephemeral/compute (kata) tier. Applied after the node joins (step 7).
-resource "kubernetes_node_taint" "desktop_kata" {
-  metadata { name = "wk-metal-04" }
-  taint {
-    key    = "homelab.io/ephemeral"
-    value  = "true"
-    effect = "NoSchedule"
-  }
+moved {
+  from = kubernetes_node_taint.laptop_kata
+  to   = kubernetes_node_taint.ephemeral["wk-metal-03"]
+}
+
+moved {
+  from = kubernetes_node_taint.desktop_kata
+  to   = kubernetes_node_taint.ephemeral["wk-metal-04"]
 }
 
 resource "talos_machine_configuration_apply" "metal" {
-  for_each = var.metal_nodes
+  for_each = local.metal_nodes
 
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.metal[each.key].machine_configuration
