@@ -47,11 +47,12 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
-| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) | any role |
+| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
 verdicts; infra failures are **strikes** that swap the model instead of consuming a round, see the
-MODEL note in the runbook); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
+MODEL note in the runbook; a **no-op round** — stats posted, HEAD unmoved — is not a logic round
+either, §arbitrate play); idempotency key `(issue, base-sha, round)` so a re-list/redelivery never
 double-spawns.
 
 **Dependencies are native GitHub `blockedBy` edges, not labels or body lines (FU-087 → FU-111).**
@@ -644,6 +645,14 @@ Read the diff + the whole review thread, then rule — exactly one of:
   name. Remove `agent/arbitrate`, comment your ruling + the clarification, dispatch the fix
   round yourself (agent-session `--work-branch` on the PR's branch) with the clarification fed
   into the worker's context. This RESETS nothing — if it comes back a third time, escalate.
+  **The directive carries the reviewer's suggested fix VERBATIM** (retro r3 win-2): the literal
+  file, the literal current line, the literal replacement, quoted out of the review — not your
+  summary of the verdict, and not "address the reviewer's finding". circles#57 round 4 flipped
+  `CHANGES_REQUESTED` → `APPROVED` on the first try, $0.0476/798s, off a ruling that named the
+  edit outright (*"in `Dockerfile`, the bake stage currently does `COPY pyproject.toml uv.lock
+  ./` … reorder to copy `bake/`/`fixtures/` before `uv sync --frozen --no-dev`"*). If the review
+  gave no concrete edit, YOU write one — a directive whose only content is the verdict is the
+  round that comes back unchanged.
 - **Rule the finding follow-up-class**: the blocking finding is real, but it does not have to
   land in THIS PR (the step-7 policy test — pre-prod repo, PR better than master, findings are
   edge semantics / spec ambiguity / new-code corners). File the fix as its own issue, comment
@@ -655,6 +664,18 @@ Read the diff + the whole review thread, then rule — exactly one of:
   (edit the issue first), else `agent/blocked` + why.
 - **Escalate**: genuinely ambiguous / policy-level → `agent/blocked` + one comment framing the
   decision for the human. Leave `agent/arbitrate` in place (the label pair records the path).
+
+**A round that posts stats without moving HEAD is a no-op round, not a consumed logic round**
+(retro r3 win-2). The scan hands you these already labelled — `ARBITRATE (changes-requested no-op
+round, FU-147)`, and the FU-115b equivalent on the red path — a completed round whose stats comment
+has no commit behind it. Rule it for what it is: the loop did not fail to converge, it did not
+*run*, so the default ruling is the first bullet (re-dispatch, with the suggested fix verbatim) and
+the round it never spent goes back to the bound. circles#57 measured both halves on one PR: round 3
+posted clean stats at $0.0291/625s and pushed nothing, round 4 carried the literal edit and flipped
+`CHANGES_REQUESTED` → `APPROVED` first try at $0.0476/798s — charging round 3 to the 3-round budget
+would have bought nothing and cost the round that worked. Confirm against the commits, never the
+stats comment (`gh pr view <n> --json commits`). A SECOND consecutive no-op is not a third
+re-dispatch: that is a terminal-ride finding (pod, launcher, budget), exactly as on the red path.
 
 > **You get ONE ride per state (homelab#198).** Two of those four rulings leave `agent/arbitrate`
 > on the PR on purpose, so the scan's label selector used to re-emit this unit every tick for as
@@ -769,6 +790,34 @@ that never RAN posts no stats and pushes no commit, so nothing else stops the sa
 handed out every tick. Same rule as above: the marker is machine-written, never yours to author.
 If you find a red PR whose report line says DEBOUNCED and no round ever completed on it, the
 finding is the terminal ride (pod, launcher, budget), not another fix round.
+
+### One fleet fault, not N parks (retro r3 F3)
+
+The environmental ruling above is per PR, which is exactly how a fault that every PR in the repo is
+hitting gets re-diagnosed from scratch and parked N times. So: **when your environmental diagnosis
+names the same failing step a `ci-red` ride already ruled environmental on a DIFFERENT PR within
+24h, stop parking per PR** — emit ONE `AGENT_ERROR: infra-class CI red on N PRs — <check>/<step>`
+listing the PRs (the fleet trigger in the `agent/error` row), and say on each other affected PR
+that it is covered by that one signal instead of giving each its own `agent/blocked` + human ask.
+The `agent/error` LABEL still goes on each affected PR — it is the reflex-side breaker and the
+breaker is per item — but the *comment*, and therefore the human ask, is one. circles#19 is the
+receipt: four `ci-red` dispatches and three human interventions over ~4h across PRs #50/#51, all of
+it one corrupt registry-cache entry serving HTTP 200 / 0 bytes.
+
+Two conditions, both load-bearing:
+
+- **The step identifier must be STABLE or this rule does not fire.** Match on the check-run's job +
+  step name (`gh run view <run-id> --json jobs`), never on a log excerpt — shas, timestamps and
+  paths make two instances of one fault look like two faults, and a false match freezes a PR
+  human-first whose red really is its own code. If you cannot name the step the same way twice,
+  handle this PR as usual and say in the comment that you could not.
+- **`≥2 in 24h` is proposed from the evidence, not a measured optimum** (the retro's own caveat):
+  what the evidence establishes is that cross-PR memory is missing, not that 2 is the right number.
+  The asymmetry is the guide — an over-eager fleet signal still lands in front of a human, a missed
+  one costs N dispatches and N humans.
+
+Master itself being red stays the neighbouring case with its own terminal: a platform incident for
+the responder/operator lane, stated and stopped, not an `AGENT_ERROR` of yours.
 
 ## The `infra-enrich` clause (FU-106 — the -iac wrapper devops play, built 2026-07-27)
 
