@@ -220,13 +220,17 @@ jq --slurpfile known "$WORK/known.json" \
    '[.[] | select(.id as $i | ($known[0] | index($i)) | not)]' \
    "$WORK/current.json" > "$WORK/new.json"
 jq '[.[] | select(.id | endswith(":batch"))]' "$WORK/new.json" > "$WORK/sup-batch.json"
+#    (`index()` evaluates its argument against ITS OWN input, so the base is bound to $b first —
+#    `$kb | index(.id | base)` would look up `.id` on $kb, the array.)
 jq "$BASEDEF"'
    ($known[0] | map(base) | unique) as $kb
-   | [.[] | select(.id | endswith(":batch") | not) | select(($kb | index(.id | base)) != null)]' \
+   | [.[] | select(.id | endswith(":batch") | not)
+          | (.id | base) as $b | select(($kb | index($b)) != null)]' \
    --slurpfile known "$WORK/known.json" "$WORK/new.json" > "$WORK/sup-variant.json"
 jq "$BASEDEF"'
    ($known[0] | map(base) | unique) as $kb
-   | [.[] | select(.id | endswith(":batch") | not) | select(($kb | index(.id | base)) == null)]' \
+   | [.[] | select(.id | endswith(":batch") | not)
+          | (.id | base) as $b | select(($kb | index($b)) == null)]' \
    --slurpfile known "$WORK/known.json" "$WORK/new.json" > "$WORK/fresh.json"
 
 jq --argjson c "$CEILING" \
@@ -248,7 +252,7 @@ log "new ids: $(jq length "$WORK/new.json") — suppressed ${SUP_BATCH} \`:batch
 # One line for the whole suppressed set — §M7 leg 1's "one digest summary line, never N rows".
 SUPPRESSED_LINE=""
 if [ "$SUP_BATCH" -gt 0 ] || [ "$SUP_VARIANT" -gt 0 ]; then
-  SUPPRESSED_LINE=$'\n\n*Suppressed by the base-id diff (§M7 leg 1): '"${SUP_BATCH}"' `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and '"${SUP_VARIANT}"' other suffix variant(s) of bases already known. A variant of a known base is not a newcomer.*'
+  SUPPRESSED_LINE=$'\n\n*Suppressed by the base-id diff (§M7 leg 1): '"${SUP_BATCH}"' `:batch` re-listing(s) — an async endpoint cannot serve an interactive session — and '"${SUP_VARIANT}"' other suffix variant(s) of a base already known or already listed above. A variant is not a newcomer.*'
 fi
 # <<<REPLAY:scout-diff<<<
 
