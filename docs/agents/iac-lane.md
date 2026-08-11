@@ -237,7 +237,10 @@ are what judge whether they are *permitted*, and they run cluster-side off maste
 cannot rewrite them. So extending the G04 sentinel to homelab (already FU-106's next-action, for the
 tier-1 CODEOWNERS residue) is also what closes this gap — vendor a schema only where a kind turns
 out to need form-checking the policies don't give. `tofu validate` stays separately out (a provider
-download per PR, the FU-130 WAN class).
+download per PR, the FU-130 WAN class). A third residue joined 2026-08-11 (PR#250's finding):
+`manifest-lint` globs only `argocd/{resources,platform}`, so **`agents/coordinator/*.yaml`** — the
+loop's own Sensors/CronWorkflows/WorkflowTemplates — is schema-checked by nobody; same owner, same
+step (the sentinel covering homelab), not a separate errand.
 
 **The fixer block landed the same day** (`agents/fixer/openrouter-operator/agentstack.yaml`:
 budget $5/week, `guardrail: none` — the stack chain is a paid model, `claudeTier: false` per the
