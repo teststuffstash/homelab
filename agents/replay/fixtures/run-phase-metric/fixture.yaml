@@ -1,0 +1,38 @@
+# FU-160 / homelab#287 — the LAUNCHER half of the ride phase metrics.
+#
+# CONDITION UNDER REPLAY. One dispatch of `openrouter-operator` issue #42 round 2 walks all four
+# phases in order, then the degenerate calls that must never cost a dispatch: an unknown phase, a
+# task-less (interactive) session, a disabled gateway, and a gateway that refuses the push twice.
+#
+# THE CONTRACT:
+#   1. THE FAMILY IS RE-PUSHED WHOLE. The pushgateway replaces per metric NAME within a group, so
+#      a push carrying only the phase that just closed would delete every earlier phase and each
+#      ride would end holding exactly one number. The growing STDIN block below is that rule as an
+#      assertion — drop the accumulator and the fixture reds on push #2, not in six weeks on a
+#      dashboard that quietly only ever shows `bookkeeping`.
+#   2. ITS OWN JOB (`agent_run_phase`), keyed (project, issue, round, role) — asserted in the URL.
+#      agent-finalize PUTs the `agent_run` group at end-of-ride and a PUT replaces a group
+#      wholesale, so phases pushed there would vanish at the exact moment the ride got
+#      interesting. `issue` drops a leading `issue-` and nothing else, so a `pr-<n>` task keeps its
+#      prefix and joins the run ledger's own label.
+#   3. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED. A task-less session publishes no series but
+#      must not fold two phases into one for whoever calls it next — pinned here by the
+#      task-less/gateway-less calls landing between real ones and the durations staying honest.
+#   4. Every degenerate path RETURNs 0 and the unreachable-gateway warning is LATCHED to one line.
+#      A launcher that refused to dispatch because a metrics sink was down would be a strictly
+#      worse bug than the invisibility this metric exists to fix, and four warnings per jail run
+#      is the noise floor that hides real lines (homelab#103).
+#
+# The clock is the bridge's (`rp_now`) and the transport is the bridge's (`curl`) — the seam
+# pattern the scan-phase-marker pair uses. Everything between them is the shipped block.
+name: run-phase-metric
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - block:run-phase-metric
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - PROJECT=openrouter-operator
+  - TASK=issue-42
+  - ROUND=2
