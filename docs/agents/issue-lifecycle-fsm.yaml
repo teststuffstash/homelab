@@ -273,7 +273,6 @@ transitions:
       agent/in-progress, comment the audit. Anything held falls through to IL-T06 unchanged."
     status: guarded
     unreplayed: "belt built pre-harness (homelab#155) — convert on its next touch"
-    unreplayed: "belt built pre-harness (homelab#155) — convert on its next touch"
     guards:
       - desc: "persistence guard — never actuate on the same instant of state the scan first saw (dispatch + finalize races)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "C4C5_PERSIST_S" }

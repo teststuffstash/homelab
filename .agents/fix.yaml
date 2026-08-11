@@ -101,6 +101,16 @@ instructions: |
   `gh issue edit {{ issue }} --add-label agent/error`, ONE comment starting `AGENT_ERROR: <what>`,
   end the run without pushing.
 
+  Infeasible scope (retro r3 F4): if the deliverable REQUIRES a path in the Hard-rules ban list
+  above, or a resource this pod does not have (cluster access, live API credentials, a sibling-repo
+  checkout), it is not implementable as written. Do NOT rescope it yourself and do NOT half-build
+  it: post ONE comment starting exactly `AGENT_INFEASIBLE: <the path or resource>` — first
+  characters of the comment, nothing before it — say in a sentence what the deliverable needed and
+  why the pod cannot supply it, and END the run without pushing. The coordinator's scan reads that
+  marker and parks the issue `agent/blocked` for a human instead of re-dispatching it, so this
+  costs one sub-minute exit rather than a re-ridden session. Do everything you CAN deliver first
+  if part of the issue is inside your reach — then the marker names only the part that is not.
+
 prompt: |
   Work platform issue #{{ issue }} in the homelab repo per the instructions. Report: what you
   changed, which path tier it sits in, WHICH lints you ran and their results, whether anything was
