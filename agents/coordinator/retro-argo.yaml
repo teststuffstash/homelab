@@ -46,8 +46,10 @@ spec:
         - { name: stack, value: "oracle" }
         - { name: cellA, value: "claude:opus" }
         - { name: cellB, value: "goose:deepseek/deepseek-v4-pro" }
-        # Ephemeral capped OpenRouterKey Secret for the API cell ($0.05 floor); empty = the
-        # stack's fixer budget key (retro-session.sh warns).
+        # A PRE-MINTED OpenRouterKey Secret to pin for the API cell. Empty (the default) no longer
+        # means "spend the stack's fixer budget key" — since homelab#270 retro-session.sh mints the
+        # cell its OWN ephemeral xs/$0.25 key and refuses the ride if it can't. Set this only to
+        # override that (e.g. a hand-minted key with a different cap).
         - { name: retroKeySecret, value: "" }
         - { name: minNewTasks, value: "8" } # level-trigger: skip when the ledger grew less than this
     templates:
@@ -198,6 +200,9 @@ spec:
               json.dump(rows[:KEEP], open('/tmp/ledger-ranked.json', 'w'), indent=1)
               print(f"ledger: {len(rows)} rows ranked, top {min(KEEP, len(rows))} into the brief (no silent caps)")
               PY
+              # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
+              # capped key (homelab#270) — the empty default used to mean the ride quietly fell
+              # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
               if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
                 export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"
               fi

@@ -1,0 +1,20 @@
+# homelab#270 — the claude cell mints NOTHING, and that is not an oversight.
+#
+# CONDITION UNDER REPLAY. Cell A of the standing run-3 shape: `claude:opus`, riding the operator's
+# subscription through the ADR-081 proxy. There is no OpenRouter key in play at all, so a mint here
+# would create a capped key nobody spends and a CR nobody deletes — the RAIL rule (homelab#158),
+# which the launcher's own `--openrouter-secret`/expiry pre-flight already skips for this harness.
+#
+# THE CONTRACT: an EMPTY kubectl stream. The mint branch is guarded on the harness, not on the
+# absence of a Secret name, so the assertion is that no call is made — the strongest form the
+# harness has, and the one that catches "the guard moved to the wrong branch of the if".
+# The ride still hands off (post.sh) with no `--openrouter-secret`: for a subscription cell that
+# resolves to a standing key it never authenticates with, and the turn cap + FU-088 headroom gate
+# are what ration it.
+name: retro-key-subscription
+mode: actions
+source: agents/retro-session.sh
+parts:
+  - file:bridge.sh
+  - block:retro-session-key
+  - file:post.sh

@@ -29,14 +29,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # retro-session.sh, whose brief travels the same channel one hop earlier — measured just before the
 # pod command is frozen into `args:` below.
 . "${HERE}/argv-guard.sh"
-# Jail (cockpit) uses tofu/kubeconfig; inside the coordinator pod there is no such file, so fall
-# back to the pod's in-cluster ServiceAccount (KUBE empty → kubectl auto-detects in-cluster config).
-if [ -f "${HERE}/../tofu/kubeconfig" ]; then KUBE="--kubeconfig ${HERE}/../tofu/kubeconfig"; else KUBE=""; fi
-# kubectl isn't on the bare jail PATH (it's a devbox/nix tool); fall back to the devbox profile, then
-# to a PATH kubectl (the coordinator image ships one).
-KUBECTL="$(command -v kubectl || true)"
-[ -n "$KUBECTL" ] || KUBECTL="${HERE}/../.devbox/nix/profile/default/bin/kubectl"
-[ -x "$KUBECTL" ] || KUBECTL="kubectl"
+# $KUBECTL + $KUBE — the jail-vs-pod kubectl resolution, shared with retro-session.sh, which mints
+# its cell's own budget key through the same two variables (homelab#270). Moved out verbatim; the
+# reasoning that used to sit here lives in the helper's header.
+. "${HERE}/kube.sh"
 
 PROJECT="${1:?usage: agent-session <project> [--run \"<cmd>\"] [--ref <branch>] [--repo <url>] [--harness goose|opencode|claude] [--model provider/model]}"
 case "$PROJECT" in --help|-h)  # a bare --help used to be swallowed as the PROJECT name (junk /route + ref-resolve rows, seen live 2026-08-02)

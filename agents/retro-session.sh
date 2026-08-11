@@ -14,9 +14,9 @@
 # axis composition; ADR-094 — the launcher owns dispatch, the LLM never assembles it).
 #
 # Hand-supervised by design (first runs doctrine). Guardrails the OPERATOR still owns:
-#   - key: goose cells want an EPHEMERAL capped key ($0.05 floor — $0.01 403'd mid-finalize
-#     in run 1): declare an OpenRouterKey CR, then export RETRO_OPENROUTER_SECRET=<secret
-#     name> before launching; else the ride uses the project's fixer budget key (warned).
+#   - key: HANDLED HERE since homelab#270 — an OpenRouter cell mints its OWN ephemeral capped
+#     OpenRouterKey below and rides that. Set RETRO_OPENROUTER_SECRET=<secret name> only to pin
+#     a pre-minted key (that is also how you deliberately re-select the fixer's standing key).
 #   - WIP: the pod runs in the stack's fixer namespace and MAY hold its WIP slot
 #     (FU-058 P3 wants retro outside the fixer ns — not built yet): launch when the queue
 #     is idle, or accept delaying a queued fix.
@@ -29,6 +29,10 @@ RETROS="$HERE/../docs/agents/retros"
 # (8rvhd, 2026-08-11): the brief travels base64'd inside the single `--run` string handed to
 # agent-session.sh, so the exec below is the first execve() big enough to fail.
 . "$HERE/argv-guard.sh"
+# $KUBECTL + $KUBE, shared with agent-session.sh: this script now mints the cell's budget key
+# itself, and it does that from BOTH environments the launchers run in (the jail, with
+# tofu/kubeconfig; the coordinator image, with the pod's ServiceAccount).
+. "$HERE/kube.sh"
 
 STACK="${1:?usage: retro-session <stack> --cell <harness>:<model> (--ledger <json> | --review <report.md>) [--deep-dive-k N]}"
 shift
@@ -89,9 +93,6 @@ fi
 rm -f "$HARNESS_SRC"
 grep -q '{{' "$BRIEF" && { echo "FATAL: unsubstituted placeholder in $BRIEF" >&2; exit 1; }
 
-[ -n "${RETRO_OPENROUTER_SECRET:-}" ] || [ "$HARNESS" = claude ] || \
-  echo "⚠ RETRO_OPENROUTER_SECRET not set — the ride will spend the ${PROJECT} fixer budget key (mint an ephemeral capped OpenRouterKey and pass its Secret name; \$0.05 floor — \$0.01 403'd mid-finalize in run 1)" >&2
-
 # The brief travels the proven in-pod materialization path (agent-session.sh's own recipe
 # pattern): base64 into the run command, decoded to /tmp/retro-brief.md inside the pod.
 BRIEF_B64=$(base64 -w0 <"$BRIEF")
@@ -118,6 +119,80 @@ fi
 
 echo "→ ${STACK} ${RUN_ID} cell ${HARNESS}:${MODEL} — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
 echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${STACK}-${RUN_ID}-<model>.md via PR"
+
+# ── The cell's OWN capped key (homelab#270, the second half of #248 finding 1) ──────────────────
+# A retro ride is not a fixer round and must not draw on the fixer's cap. The empty default used to
+# do exactly that: run 3's cell-b died in 8s on a provider "Please retry" and the dead ride still
+# spent oracle-fleet's standing budget key. The per-session ephemeral key is the platform's spend
+# breaker everywhere else in the loop (coordinator brief §step 4); the retro lane is no longer the
+# exception. There is deliberately NO fallback — a mint that fails ends the ride, because "fell back
+# to the fixer's key" is the outcome this block exists to prevent, not a degraded mode of it.
+# Placed AFTER the argv guard, immediately before the hand-off: a key is minted with a fresh
+# `expiresAt` each time (coordinator README §step 4), so a refusal downstream of it would leave a
+# live key behind for a ride that never happened.
+# >>>REPLAY:retro-session-key>>>
+if [ "$HARNESS" = claude ]; then
+  # Subscription ride: mints nothing, by RAIL rule (homelab#158). Its spend bound is the turn cap,
+  # and the FU-088 headroom gate is what rations it — an OpenRouterKey here would bound nothing.
+  echo "→ key: none — ${HARNESS} rides the subscription (no OpenRouter key in play)"
+elif [ -n "${RETRO_OPENROUTER_SECRET:-}" ]; then
+  echo "→ key: RETRO_OPENROUTER_SECRET=${RETRO_OPENROUTER_SECRET} — operator-pinned, nothing minted"
+else
+  # One key per (run, cell): two OpenRouter cells in the same run must not share one cap, or the
+  # first to spend it strands the second. Lowercased + punctuation-stripped because this becomes a
+  # k8s object name — the same slug rule the harvest applies to the report filename.
+  SESSION="retro-${RUN_ID}${REVIEW:+-xrev}-$(printf '%s' "${MODEL##*/}" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9.-')"
+  KEY_CR="$(mktemp /tmp/retro-key-XXXX.yaml)"
+  # THE TIER IS FORCED, and that is the deliberate part. estimate_budget.py's band models a FIXER
+  # round — requests_per_round × context × rounds — and on a real brief it returns ~$0.54 → tier lg
+  # ($2.00), which caps nothing on a lane whose measured spend is $0.02–0.08 per cell (runs 1+2
+  # over 9 models, observability-and-retro.md §B2). The retro lane has direct measurement where the
+  # estimator has a heuristic, so the sizing comes from the measurement: $0.08 × the estimator's own
+  # ×2.0 buffer = $0.16 → the smallest tier, xs/$0.25 (#248 finding 1's arithmetic, verbatim). That
+  # also clears the $0.05 floor run 1 taught by 5×. The estimate is still computed and still lands
+  # in the ride log next to the cap: the day a cell's true cost approaches $0.25, the log says so
+  # before the 403 does. --rounds 1 because a cell is one ride and there are no fix rounds.
+  if ! python3 "$HERE/estimate_budget.py" --model "$MODEL" --rounds 1 --issue-file "$BRIEF" \
+       --label agent-budget/xs --project "$PROJECT" --session "$SESSION" --emit-cr > "$KEY_CR"; then
+    echo "FATAL: budget estimate failed for ${MODEL} — no capped key, no ride (the ${PROJECT} fixer key is NOT the fallback)" >&2
+    exit 1
+  fi
+  # Read the CR's OWN fields rather than reconstructing either name: metadata.name and secretName
+  # differ by a `-session-` infix, and reconstructing the Secret from the CR name is precisely what
+  # crash-loops a worker on "secret not found" (coordinator README §step 5).
+  KEY_NAME="$(sed -n 's/^metadata: *{ *name: *\([^,]*\),.*/\1/p' "$KEY_CR")"
+  KEY_SECRET="$(sed -n 's/^  secretName: *//p' "$KEY_CR")"
+  if [ -z "$KEY_NAME" ] || [ -z "$KEY_SECRET" ]; then
+    echo "FATAL: could not read name/secretName out of the emitted CR ($KEY_CR) — estimate_budget.py's emit_cr shape moved" >&2
+    exit 1
+  fi
+  # DELETE, then apply: re-minting an existing CR name takes the operator's PATCH path, and
+  # OpenRouter's PATCH cannot extend a key's real expires_at (openrouter-operator#6, proven live
+  # 2026-07-09 — the key died at its ORIGINAL deadline mid-run). A created CR POSTs a fresh key
+  # with its full TTL window, which is what a re-fired cell needs.
+  "$KUBECTL" $KUBE -n "$PROJECT" delete openrouterkey "$KEY_NAME" --ignore-not-found >/dev/null 2>&1 || true
+  if ! "$KUBECTL" $KUBE -n "$PROJECT" apply -f - < "$KEY_CR" >&2; then
+    echo "FATAL: could not apply ${KEY_NAME} in ${PROJECT} — refusing to ride on the fixer's standing key. Deliberate override: RETRO_OPENROUTER_SECRET=${PROJECT}-openrouter" >&2
+    exit 1
+  fi
+  # Wait on the CR's status, never on the Secret: this identity mints and observes keys and has no
+  # Secret-VALUE access (agents/coordinator/rbac.yaml). Dispatching before the operator stamps the
+  # hash is dispatching into a Secret that does not exist yet.
+  KEY_HASH=""; WAITED=0
+  while [ "$WAITED" -lt 120 ]; do
+    KEY_HASH="$("$KUBECTL" $KUBE -n "$PROJECT" get openrouterkey "$KEY_NAME" \
+      -o jsonpath='{.status.openrouter.hash}' 2>/dev/null || true)"
+    if [ -n "$KEY_HASH" ]; then break; fi
+    sleep 2; WAITED=$((WAITED + 2))
+  done
+  if [ -z "$KEY_HASH" ]; then
+    echo "FATAL: ${KEY_NAME} applied, but the openrouter-operator stamped no .status.openrouter.hash within 120s — no key, no ride. Check the operator: kubectl -n ${PROJECT} describe openrouterkey ${KEY_NAME}" >&2
+    exit 1
+  fi
+  export RETRO_OPENROUTER_SECRET="$KEY_SECRET"
+  echo "→ key: minted ${KEY_NAME} (ns ${PROJECT}) → Secret ${KEY_SECRET}"
+fi
+# <<<REPLAY:retro-session-key<<<
 EXTRA=()
 [ -n "${RETRO_OPENROUTER_SECRET:-}" ] && EXTRA+=(--openrouter-secret "$RETRO_OPENROUTER_SECRET")
 exec bash "$HERE/agent-session.sh" "$PROJECT" \

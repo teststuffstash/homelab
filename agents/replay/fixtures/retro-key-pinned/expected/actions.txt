@@ -1,0 +1,3 @@
+OUT → key: RETRO_OPENROUTER_SECRET=oracle-fleet-retro-hand-minted-openrouter — operator-pinned, nothing minted
+OUT HANDOFF: agent-session.sh oracle-fleet --harness goose --model deepseek/deepseek-v4-pro --openrouter-secret oracle-fleet-retro-hand-minted-openrouter
+RC 0
