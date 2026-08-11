@@ -241,6 +241,8 @@ def collect_workflow_runs(lines):
         "# TYPE github_workflow_run_updated_timestamp gauge",
         "# HELP github_workflow_run_updated_timestamp Last update (epoch s) of each workflow run in the window; conclusion/status ride as labels.",
         "# TYPE github_workflow_run_duration_seconds gauge",
+        "# TYPE github_workflow_run_queued_since_timestamp gauge",
+        "# HELP github_workflow_run_queued_since_timestamp Creation epoch of a run still waiting for a runner (status=queued ONLY) — queued-age = time() - this. Absent once the run starts, so the alert self-resolves (FU-150).",
     ]
     for repo in repos:
         # created=>=<ts> — GitHub search qualifier, URL-encoded
@@ -259,11 +261,46 @@ def collect_workflow_runs(lines):
                 "conclusion": run.get("conclusion") or "",
                 "runner": _runner_class(repo, run),
             }
-            updated = epoch(run["updated_at"])
-            lines.append(metric("github_workflow_run_updated_timestamp", labels, updated))
-            started = run.get("run_started_at")
-            if started:
-                lines.append(metric("github_workflow_run_duration_seconds", labels, updated - epoch(started)))
+            lines += run_series(labels, run)
+
+
+def run_series(labels, run):
+    """Every metric line for ONE workflow run — pure over the API object, so `--self-test` drives
+    the queued-age arm against recorded runs instead of the network.
+
+    The queued-age series (FU-150, the OURS half) exists because a run that cannot get a runner
+    never FAILS: `GithubWorkflowRunFailed` needs a conclusion, so five hours of `queued` on
+    2026-08-07 produced no alert at all, and on 2026-08-11 a node's route loss starved the same
+    queue with the ARC listener alive and scaling (which is why the listener-zero signal FU-150
+    originally proposed was dropped for this one — see the two incidents under docs/incidents/).
+    It is a TIMESTAMP, not a precomputed age, so PromQL's `time() - x` stays correct between the
+    120s polls instead of aging in 2-minute steps; and it is emitted only while the run is
+    waiting, so the series simply disappears at pickup and the alert self-resolves — the same
+    shape as github_pull_request_reviews_recent.
+
+    `status` is matched EXACTLY against "queued" = waiting for a runner. The other pre-start
+    statuses are deliberately excluded: `waiting`/`requested` are approval gates and `pending` is
+    a concurrency group (docs/ci.md §Concurrency — homelab's own master runs queue serially by
+    design). Those are policy waits, not "CI cannot dispatch", and alerting on them would ring on
+    a healthy queue.
+
+    Bounded by RUN_WINDOW_HOURS like every other run series: a run queued longer than the window
+    (24h) falls out of the poll, its series disappears, and the alert RESOLVES while CI is still
+    dead. Left that way deliberately — it will have been ringing for a day by then, and widening
+    the window multiplies the cardinality of every run family to cover a case neither incident
+    came near (the longest recorded wait is ~11h, 2026-08-06)."""
+    updated = epoch(run["updated_at"])
+    out = [metric("github_workflow_run_updated_timestamp", labels, updated)]
+    started = run.get("run_started_at")
+    if started:
+        out.append(metric("github_workflow_run_duration_seconds", labels, updated - epoch(started)))
+    if (run.get("status") or "") == "queued" and run.get("created_at"):
+        # created_at, never run_started_at: GitHub sets run_started_at = created_at on every run
+        # in this org (verified over 100 runs, 2026-08-11 — all deltas 0), so it says nothing
+        # about pickup. The queue starts when the run is created.
+        out.append(metric("github_workflow_run_queued_since_timestamp", labels,
+                          epoch(run["created_at"])))
+    return out
 
 
 def _runner_class(repo, run):
@@ -1302,6 +1339,48 @@ _FIXTURE = {
 }
 
 
+# ── the queued-age pins (FU-150 OURS half, #284) ─────────────────────────────────────────────────
+# The alert that consumes github_workflow_run_queued_since_timestamp lives in the PrometheusRule
+# beside this file, and `promtool test rules` cannot read a CR (its rules sit under .spec), so the
+# behaviour fixture loads a COPY of the rule. Both halves are pinned here rather than trusted:
+# a renamed series, an edited threshold or a fixture left behind fails CI (devbox run
+# exporter-self-test) instead of rotting into a fixture that tests something nobody ships.
+# The line-scan-not-YAML-parse choice is spend-probe.py's, for its reason: this pod image is
+# stdlib-only, and a two-key lookup does not justify vendoring a parser.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+RULE_FILE = os.path.join(_HERE, "prometheusrule.yaml")
+FIXTURE_RULES = os.path.join(_HERE, "queued-age.promtool-rules")
+QUEUED_AGE_METRIC = "github_workflow_run_queued_since_timestamp"
+_ALERT_RE = re.compile(r"^\s*-\s*alert:\s*(\S+)\s*$")
+
+
+def alert_rule(path, name):
+    """One alert's rule block, dedented so the CR and the promtool copy compare as equals.
+
+    Comments and blank lines are dropped (the CR carries the reasoning, the fixture carries the
+    runnable copy); everything the rule MEANS — expr, for, labels, annotations — must match."""
+    out, indent, capturing = [], 0, False
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            match = _ALERT_RE.match(line)
+            if match:
+                if capturing:
+                    break              # the next alert starts: this block is complete
+                if match.group(1) != name:
+                    continue
+                capturing, indent = True, len(line) - len(line.lstrip())
+                out.append(line.strip())
+                continue
+            if not capturing:
+                continue
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if len(line) - len(line.lstrip()) <= indent:
+                break                  # dedented out of the rule
+            out.append(line[indent:].rstrip())
+    return out
+
+
 def self_test():
     """`python3 github-exporter.py --self-test` — the descendant walk against a recorded tree."""
     assert parse_budget_usd("Budget: $12.50\n") == 12.5
@@ -1368,8 +1447,52 @@ def self_test():
     assert not is_transient_graphql_error(
         RuntimeError("Field 'parent' doesn't exist on type 'Issue'"))
 
+    # ── FU-150 OURS half (#284): the queued-age series and the alert that consumes it ────────────
+    ident = {"owner": ORG, "repo": "homelab", "workflow": "CI", "branch": "master",
+             "event": "push", "number": 42, "attempt": 1, "id": 30122222222, "conclusion": "",
+             "runner": "self-hosted"}
+
+    def emitted(status):
+        run = {"status": status, "created_at": "2026-08-07T01:05:00Z",
+               # GitHub sets run_started_at = created_at on a run that has not started, which is
+               # exactly why the queue clock has to be read off created_at.
+               "run_started_at": "2026-08-07T01:05:00Z", "updated_at": "2026-08-07T01:05:30Z"}
+        return {line.split("{")[0]: line.rsplit(" ", 1)[1]
+                for line in run_series({**ident, "status": status}, run)}
+
+    assert QUEUED_AGE_METRIC in emitted("queued"), "a run waiting for a runner must publish its age"
+    assert emitted("queued")[QUEUED_AGE_METRIC] == str(epoch("2026-08-07T01:05:00Z"))
+    # The two existing families are untouched by the new arm.
+    assert "github_workflow_run_updated_timestamp" in emitted("queued")
+    assert "github_workflow_run_duration_seconds" in emitted("completed")
+    # A started or finished run is not queued, and the POLICY waits are not dispatch failures:
+    # waiting/requested are approval gates, pending is a concurrency group (homelab's own master
+    # runs queue serially by design, docs/ci.md §Concurrency). Alerting on those would ring on a
+    # healthy queue, so only the exact "waiting for a runner" status may emit.
+    for status in ("in_progress", "completed", "waiting", "requested", "pending", ""):
+        assert QUEUED_AGE_METRIC not in emitted(status), f"status={status!r} must not read as queued"
+
+    # The alert is only as good as its wiring: it must select the series this collector emits…
+    shipped = alert_rule(RULE_FILE, "CiDispatchStalled")
+    fixture = alert_rule(FIXTURE_RULES, "CiDispatchStalled")
+    assert shipped, f"the queued-age alert is gone from {RULE_FILE}"
+    expr = next((line.split("expr:", 1)[1].strip() for line in shipped
+                 if line.strip().startswith("expr:")), "")
+    assert QUEUED_AGE_METRIC in expr, \
+        f"CiDispatchStalled no longer reads {QUEUED_AGE_METRIC}: {expr!r}"
+    # …and the promtool fixture must be testing the rule that actually ships. This is the whole
+    # reason the copy is allowed to exist: homelab#288 (FU-158) owns the harness that will extract
+    # .spec.groups at run time and delete it, and until then a drifted copy would be a green
+    # behaviour test of a rule nobody deployed.
+    assert fixture, f"CiDispatchStalled not found in {FIXTURE_RULES}"
+    assert shipped == fixture, (
+        "the promtool fixture's copy of CiDispatchStalled has drifted from prometheusrule.yaml — "
+        "re-extract it (the yq one-liner is in queued-age.promtool-rules) and re-run "
+        "`promtool test rules argocd/resources/github-exporter/queued-age.promtool-test`\n"
+        f"  shipped: {shipped}\n  fixture: {fixture}")
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
-          "fallback query)")
+          "fallback query, queued-age series + alert wiring)")
     return 0
 
 
