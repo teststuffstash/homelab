@@ -35,6 +35,7 @@ resources:
   - retro-argo.yaml
   - review-argo.yaml
   - reviewer-git.yaml
+  - scout-account-key.yaml
   - transcripts-pvc.yaml
   - transcripts-sync-script.yaml
   - transcripts-sync.yaml
