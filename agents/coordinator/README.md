@@ -861,12 +861,13 @@ the resource named on the thread. Either re-scope it so the deliverable is insid
 worker's reach, or do the named part by hand; then strip `agent/blocked` and re-queue. **Re-queueing
 it unchanged reaches the same verdict** — and unlike a strike, this one is free.
 
-> ⚠ **The producer half is per-repo and NOT yet installed anywhere.** The paragraph below belongs in
-> each repo's `.agents/fix.yaml` `instructions:`, beside the existing `AGENT_ERROR:` breaker; every
-> repo whose recipe lacks it simply never reaches IL-T26. `.agents/**` is a banned path for the
-> fixer lane in this repo (a fix round resumes on the PR's own branch, so a worker editing its own
-> recipe loosens its own ceiling mid-PR), so it is a **human paste**, here and in the stacks — the
-> stacks pick it up at their next recipe touch:
+> ⚠ **The producer half is per-repo — installed: homelab ✅ (`566fe38`, 2026-08-11); outstanding:
+> every stack repo** (oracle-fleet, sleep-tracking, circles, snore-recorder — each picks it up at
+> its next `.agents/fix.yaml` touch; this banner is the tracking list, update it per install). The
+> paragraph below belongs in each repo's `.agents/fix.yaml` `instructions:`, beside the existing
+> `AGENT_ERROR:` breaker; a repo whose recipe lacks it simply never reaches IL-T26. `.agents/**` is
+> a banned path for the fixer lane (a fix round resumes on the PR's own branch, so a worker editing
+> its own recipe loosens its own ceiling mid-PR), so it is a **human paste** everywhere:
 >
 > ```
 > Infeasible scope (retro r3 F4): if the deliverable REQUIRES a path in the Hard-rules ban list

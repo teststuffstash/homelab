@@ -225,9 +225,11 @@ the block needs pruning, not more headings.
       `ci-red` `f0169f1` (which had to add `body` to its probe); each predicate executed against
       real data. Loki 2026-08-07 (ns circles-agents): `changes-requested held` on #18 ×8 +
       `ci-red held` on #19 ×3 — real rounds, dispatch suppressed. The doorbell fast-path clause
-      ran same day but fell through pre-hold — no eligible traffic yet. **Next:** one live
-      doorbell-path hold; audit any later clause for the same omission (new clauses copy the
-      project-wide `wip_busy` check, not the per-item one).
+      ran same day but fell through pre-hold — no eligible traffic yet. Audit DONE 2026-08-11
+      (clean: changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch
+      carry state-fp, post-08-07 clauses emit no dispatch units). **Next:** SOAK ONLY — the
+      first live doorbell-path hold, then archive. Deliberately not an FU-165 goal child
+      (built-not-unbuilt; nothing to ride).
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
