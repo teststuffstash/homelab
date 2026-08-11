@@ -19,6 +19,10 @@ is in a PUBLIC repo — dialogue-level facts only, never tool output.
       worker's "Findings" section (no machine harvester on this lane) was merged past unread —
       one finding was live on the PR's own issue. Sighted 2026-08-11 (operator catch).
       **promoted→** the skill's review duty gains the you-are-the-harvester rule, same commit.
+      **RESIGHT 2026-08-11 (operator catch, same day)** — the promoted rule under-covered: it
+      named the PR body, and the seat then read bot REVIEW bodies at a 200-char head (PR#311's
+      approve posted on the summary alone; no finding lost, by luck). Rule widened same commit:
+      the read is the body AND every review's FULL body, no truncated slices.
 
 ## design-agents
 

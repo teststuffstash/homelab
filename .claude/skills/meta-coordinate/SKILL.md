@@ -67,11 +67,14 @@ Everything it needs is DURABLE — never rely on prior-session memory; re-read t
    resolved — the label outlives the gate, nothing clears it but you); (2) REVIEW + MERGE
    platform-lane PRs — platform repos have NO bot approver by design, so every fixer PR there
    waits on your read and an OrgAdmin merge (PR#123 sat 1.5h unseen before the needs-meta watch
-   existed). ⚠ The read is the WHOLE PR, body included: on this lane the worker's "Findings"
-   section has no machine harvester (C6 harvests Follow-ups from REVIEWS, and the only review
-   here is yours) — so YOU are the harvester: every finding is fixed, filed (prior-art grep),
+   existed). ⚠ The read is the WHOLE PR — the body AND **every review's FULL body** (never a
+   truncated head/`[0:200]` slice): on this lane the worker's "Findings" section has no machine
+   harvester (C6 harvests Follow-ups from REVIEWS, and the only reviews here are the bot's and
+   yours) — so YOU are the harvester: every finding is fixed, filed (prior-art grep),
    or dismissed with a stated reason BEFORE the merge (operator catch 2026-08-11: PR#243 was
-   merged past two live findings, one of them firing on the PR's own issue); (3) APPLY what is host/jail-only (tofu roots, physical actions) and FLAG the
+   merged past two live findings, one of them firing on the PR's own issue; RESIGHT same day
+   one artifact over — PR#311's bot review was read at 200 chars, the codeowner approve posted
+   on the summary alone); (3) APPLY what is host/jail-only (tofu roots, physical actions) and FLAG the
    operator when it is theirs. `for r in $(platform repos); do gh issue list -R teststuffstash/$r
    --state open; done` — sweep before loop work ("alerts clear themselves, issues don't");
    and run `bash agents/meta-throughput.sh` HERE, before reading any board: it answers "has the
