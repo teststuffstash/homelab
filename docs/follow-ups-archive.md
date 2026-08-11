@@ -8,6 +8,12 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-159** *(archived 2026-08-11)* — Garage meta on the `std` tier saturates under heavy S3
+  GET storms (ert-verify parse, homelab#103 trace). **Migration to `longhorn-fast` REJECTED**
+  (operator): the tier is single-node Optane of modest speed whose INTENT is scratch for
+  disk-write-heavy pods (CI builds), never load-bearing metadata. Accepted as-is — full parses
+  are quarterly/attended, the delta job's rate is far lighter; revisit only if a routine
+  workload saturates it.
 - **FU-143** *(archived 2026-08-07)* — **A goal's child cannot close itself — SHIPPED and
   soak-PROVEN both paths.** The 7-point contract landed 2026-08-06; the first soak failed on its
   input (a PR that never cited its issue → agent-runtime#32, fixed by #34, carried by

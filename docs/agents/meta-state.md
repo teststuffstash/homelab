@@ -35,7 +35,7 @@ meant to avoid.)
 - **ert verification SUCCEEDED 2026-08-10 01:32Z** (`ert-verify-parse-dd2p9`: parse 5h26m →
   build 4h05m → publish 8m, from the promoted snapshot) — **#217/#235 fix-cycle CLOSED GREEN.**
   The wk-01 disk alert should clear now that parse's GET storm ended — homelab#103 (open,
-  label-clean subject record) can close once it does. Marginal-rate evidence → FU-159/FU-160.
+  label-clean subject record) can close once it does. Marginal-rate evidence → FU-160 (FU-159 ruled + archived 2026-08-11).
 - **META STOOD DOWN 01:40Z on operator instruction** — all monitors stopped + process-reaped;
   board drained everywhere (0 queued / 0 in-progress / 0 open PRs / 0 rides). Next session
   re-arms per the skill; FIRST READ = the 05:00Z Monday retro report (ADR-103 KPI scores).
@@ -43,8 +43,8 @@ meant to avoid.)
   responder session (ADR-094 applied; replay-fixtured both verdict legs). Live acceptance =
   next same-subject reopen arrives label-clean. (Its PR was briefly red on my dangling spike ref
   to an expired FU — #230, fixed; lint scans TRACKED files only, lint before add is a lie of scope.) **#103 open label-clean as the subject record** until the disk alert clears
-  (= parse ends); root cause on-thread: parse GETs vs garage META on std tier → **FU-159**
-  (meta → longhorn-fast, operator ⚖). **needs-meta v5 running** (clause-4 jq precedence fixed
+  (= parse ends); root cause on-thread: parse GETs vs garage META on std tier → FU-159
+  (RULED 2026-08-11: longhorn-fast rejected — scratch-intent single-node tier; archived). **needs-meta v5 running** (clause-4 jq precedence fixed
   19:0xZ — green codeowner parks were invisible since the morning rewrite; fixture-executed).
   **Delta cron SUSPENDED durably** (oracle-iac#361/PR#362; un-suspend = fleet#225's attended
   first run). oracle-iac#343 stays de-queued (premise note stands).
