@@ -19,7 +19,13 @@ narrative: issue-authoring.md   # the design-narrative doc this machine models
 diagram: |
   stateDiagram-v2
       [*] --> Inert: authored — harvest / janitor / responder (IL-T01)
-      Inert --> Queued: human triage (IL-T02) | responder selfQueue (IL-T03)
+      Inert --> Queued: human triage (IL-T02)
+      Inert --> AlertPending: responder fix-verdict → agent-fix, INERT + /fix-verdict bell (IL-T03)
+      AlertPending --> AlertPending: bell → debounce → the SET re-derived — any agent/* lifecycle label leaves it (IL-T23)
+      AlertPending --> Queued: 1 pending → deterministic gates → agent/queued + doorbell (IL-T24)
+      AlertPending --> Queued: ≥2 → set-pass queues the CAUSE (IL-T25)
+      AlertPending --> Linked: ≥2 → set-pass links the DOWNSTREAM symptoms — agent/linked, inert (IL-T25)
+      Linked --> AlertPending: the cause's fix did not clear it → a human strips agent/linked (IL-T25)
       Queued --> Queued: held — deps / footprint / WIP / PR-cap (IL-T04)
       Queued --> InProgress: queued-dispatch → ride opens PR (IL-T05)
       InProgress --> InProgress: worker died → c4c5-redispatch (IL-T06)
@@ -46,6 +52,12 @@ diagram: |
           the loop reacts to the label and never rules one — a
           Bot-applied verdict is refused, fail-closed (IL-T19/20/21)
       end note
+      note right of AlertPending
+          the alert lane's verdict/queue SPLIT (FU-133): agent-fix is the
+          DIAGNOSIS the responder shell records, agent/queued is granted
+          only by the set-judged debouncer — one root cause must not draw
+          N parallel fixers at N symptoms (IL-T23/IL-T24/IL-T25)
+      end note
       note right of Inert
           a sprout of a GOAL descendant is filed into that
           goal's post-launch bucket (IL-T17), and skips Inert
@@ -53,7 +65,7 @@ diagram: |
       end note
 
 axes:
-  labels: [inert, queued, in_progress, review, done, error, blocked_tracking]  # agent/* + agent-fix
+  labels: [inert, queued, in_progress, review, done, error, blocked_tracking, linked]  # agent/* + agent-fix
   lane: [master, goal_child, goal_parent, responder]        # decided by Base:/task-goal, not provenance
   base: [master, goal_branch]                                # the Base: body line — the close key
   lineage_depth: [0, 1, 2]                                   # native sub-issue chain; reviewer stops Follow-ups at ≥2
@@ -61,6 +73,8 @@ axes:
 
 events:
   authored: "a play files an issue (harvest bullet / janitor draft / responder alert / goal decompose)"
+  fix_verdict: "an alert-triage session ends its issue with `fix-verdict: fix` — the responder shell applies agent-fix (INERT) and rings /fix-verdict"
+  debounce_elapsed: "the debounce suspend expires (or the backstop cron fires) and one `decide` re-derives the pending SET live"
   human_triage: "a human applies agent-fix + agent/queued (or closes as noise)"
   dispatched: "the scan emits a unit; the launcher opens a ride (WIP=1, pod-name key)"
   pr_merged_master: "the ride's PR merges into master — GitHub closing keyword fires"
@@ -97,21 +111,106 @@ transitions:
     status: report-only
 
   - id: IL-T03
-    name: responder selfQueue (alert lane)
-    owner: responder-argo shell (not the session)
-    when: "alert-filed issue + three fail-closed gates: not self-referential, Touches: declared, no governance path"
+    name: responder fix-verdict → agent-fix, INERT (alert lane)
+    owner: "responder-argo shell (not the session — breaker #1)"
+    when: "an alert-triage session ends its issue with `fix-verdict: fix` → the SHELL applies
+      `agent-fix`, which is inert by the scan's own predicate (dispatch needs agent-fix ∧
+      agent/queued), and rings `POST /fix-verdict`. `report-only`, or no open issue carrying the
+      fingerprint, moves nothing; inside an app observation window the label lands with NO bell and
+      a refire re-rings. The three fail-closed gates this transition used to carry moved WITH the
+      queueing act into the debouncer (IL-T23/IL-T24) when selfQueue was retired."
     status: guarded
     replay:
       - agents/coordinator/responder-behaviour-test.sh
       - agents/replay/fixtures/responder-reopen-fix-verdict
       - agents/replay/fixtures/responder-reopen-report-only
-    replay:
-      - agents/coordinator/responder-behaviour-test.sh
-      - agents/replay/fixtures/responder-reopen-fix-verdict
-      - agents/replay/fixtures/responder-reopen-report-only
     guards:
-      - desc: "the three deterministic gates label from the SHELL"
-        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "selfQueue" }
+      - desc: "the label is applied by the SHELL and is a DIAGNOSIS, not a dispatch — queueing is the debouncer's"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "queueing is the debouncer" }
+      - desc: "the bell hands the verdict to the set-judged debouncer; a lost bell is re-derived by ITS backstop, never re-rung here"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "debounce decides the set" }
+      - desc: "the per-issue `selfQueue` knob is RETIRED (cb4ae5a) — it labelled agent-fix+agent/queued one issue at a time and so dispatched same-cause issues in parallel"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "Replaces selfQueue" }
+      - desc: "a REOPENED thread is stripped back to a record — only a fresh verdict may re-earn the labels (replay: responder-reopen-fix-verdict / -report-only)"
+        anchor: { file: agents/coordinator/responder-argo.yaml, pattern: "only a fresh verdict may re-queue it" }
+
+  - id: IL-T23
+    name: "fix-verdict bell → debounce → the pending SET (state is GitHub labels, nowhere else)"
+    owner: fix-debounce Sensor + WorkflowTemplate — shell only, no LLM in this leg
+    when: "the bell submits ONE `fix-debounce` workflow → suspend `wait` (10m; the backstop cron
+      re-derives at 10s whatever a lost bell dropped) → `decide` takes the mutex and derives the set
+      LIVE, per claim repo: open ∧ agent-fix ∧ `alert-fp:` in the body ∧ no lifecycle label ∧ not
+      self-referential. 0 pending → `nothing to decide`, exit before any gate runs. Suspends run in
+      PARALLEL and only `decide` serializes, so a burst wakes together, the first decide sweeps the
+      whole set and the rest exit empty."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/fix-debounce-blocked-inert      # blocked ∧ error stay OUT — set 0, not one write in the stream
+      - agents/replay/fixtures/fix-debounce-unblocked-queues   # same world, block lifted — the set is 1, and error is not COUNTED either
+    guards:
+      - desc: "ALERT-LANE ONLY (`alert-fp:` in the body) — a stack loop's own agent-fix-without-queued hold is not this lane's to queue (the 2026-08-07 dry run swept circles#42, an issue meta-state recorded as held)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "ALERT-LANE ONLY" }
+      - desc: "a lifecycle label EXCLUDES: each one is applied by REMOVING `agent/queued`, so the label meaning somebody already has this issue is exactly what would re-admit it (homelab#238 enumerated the human-waiting pair; homelab#244 widens the same test to the whole `agent/*` namespace — this anchor accepts either form, and neither's deletion)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: 'index\(\\"agent/blocked\\"\)|any\(startswith\(\\"agent/\\"\)\)' }
+      - desc: "the scan holds the same rule on its side — a human-waiting state never wakes the LLM"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "coordinator-scan.sh:17" }
+      - desc: "`self-referential: true` bodies are skipped at wake and named for a human — dispatch onto broken substrate is not the debouncer's call (both fixtures use the SELFREF line as their WITNESS that the list read was served at all)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "self-referential: true" }
+      - desc: "derived LIVE from per-repo REST — the search index lags a just-filed issue, and GraphQL is the pool the reflex drained (FU-084)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "no search-index lag" }
+      - desc: "decides serialize on one mutex, and the set is re-derived rather than carried — a killed workflow loses nothing"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "fix-debounce-decide" }
+      - desc: "level-triggered backstop re-derives the set a lost bell left behind (search lag, webhook drop, responder crash post-label)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "fix-debounce-backstop" }
+    incidents:
+      - "2026-08-11 homelab#237: a coordinator BLOCK at 01:53Z re-admitted the issue to the pending set (blocking removes `agent/queued`) and the debouncer re-queued it at 02:17Z — one ride per debounce period, the human gate erased each turn, until the FU-069 breaker latched `agent/error`, which the predicate of the day did not exclude either. homelab#238"
+
+  - id: IL-T24
+    name: "1 pending → deterministic gates → agent/queued + the /coordinate doorbell"
+    owner: fix-debounce `decide` shell (ADR-094 — dispatch acts are launcher-owned)
+    when: "exactly one issue pending → `sq_decide` re-reads its body: a `Touches:` line must be
+      declared, and none of its paths may match the queue-time deny table (`.github/`, `.agents/`,
+      `devbox.json|lock`, `scripts/` — the paths where authoring takes effect BEFORE a human
+      approves). Pass → `agent/queued`, then ring `/coordinate` so dispatch is edge-driven rather
+      than cron-bound. Fail, or a refused label write → the issue stays inert and says why."
+    status: guarded
+    replay:
+      - agents/replay/fixtures/fix-debounce-unblocked-queues   # the whole leg: body read → agent/queued → exactly one doorbell
+      - agents/replay/fixtures/fix-debounce-blocked-inert      # the same block composed but UNREACHED — the ABSENCE of the POST is the assertion
+    guards:
+      - desc: "queue-time deny is the ❌ table ONLY — authoring is not effect, CODEOWNERS gates the merge (operator correction 2026-08-07)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "SQ_DENY=" }
+      - desc: "an UNDECLARED footprint is exclusive and waits for a human — never queued wide on a guess"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "undeclared = exclusive" }
+      - desc: "the doorbell carries {stack, loop_ns} for a GRADUATED stack — a bare {repo} POST fires only the global trigger, whose scan skips graduated stacks (FU-144)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "FU-144" }
+      - desc: "fail-closed on the write: a refused label leaves the issue inert for the backstop, never a queued-but-unrung half state"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "stays inert, backstop retries" }
+      - desc: "ADR-100 binds it: queue-time denial anywhere may use ONLY the ❌ table — the deny line is does-it-take-effect-pre-merge, never is-it-governance"
+        anchor: { file: docs/adr.md, pattern: "queue-time denial anywhere" }
+
+  - id: IL-T25
+    name: "≥2 pending → ONE set-pass: queue the CAUSE, link the downstream, leave the unsure"
+    owner: sonnet set-pass session (judges) → the same `decide` shell (acts — ADR-094)
+    when: "two or more pending → the FU-088 subscription latch, then ONE session ranks the whole set
+      as fenced JSON: `queue` (the cause, through IL-T24's same gates), `link` (downstream symptoms
+      → `agent/linked` + a comment naming the cause, inert), `unsure` (waits). A failed session or
+      unparseable output labels NOTHING and the set stays pending for the next bell. Re-entry from
+      Linked is deliberate hand-work: the responder's reopen belt strips the lifecycle labels but
+      not `agent/linked`, so a symptom the cause-fix did not clear is a human/meta cue."
+    status: guarded
+    unreplayed: "no fixture records a ≥2 world — the apply legs are the ones IL-T24 pins, and the JUDGEMENT is an LLM play with one dry run and one live datapoint (homelab#68 vs #118 judged INDEPENDENT, TICK-LOG 2026-08-07); record from the next live set-pass rather than inventing a set"
+    guards:
+      - desc: "the LLM judges and the SHELL acts — the session may not label, comment, file, close or reopen anything (ADR-094, breaker #1's shape)"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "the shell applies your JSON deterministically" }
+      - desc: "fail-safe is NOT to label: unparseable output queues nobody, and `unsure` waits — an un-queued issue waits safely, three fixers on one cause spend budget and produce conflicting PRs"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "fail-safe: nothing labelled" }
+      - desc: "latch-gated like every spawn, and the shared claude semaphore is held only across `decide` — a suspended debounce never parks a subscription slot"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "SUBSCRIPTION_TIER=dispatch" }
+      - desc: "a linked issue is TOLD what it was judged downstream of and how to re-enter the pending set — the judgement is legible and reversible"
+        anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "judged downstream of a queued cause by fix-debounce" }
+    incidents:
+      - "2026-08-04 corpus audit (FU-133): ~19 of 27 alert issues were 5 root causes, one PVC producing 8 across 8 days — the SET, not the next issue, is the unit of triage"
 
   - id: IL-T04
     name: queued but held
