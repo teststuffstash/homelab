@@ -1,0 +1,19 @@
+{
+ "basis": null,
+ "class": "regular",
+ "decision": "dispatch",
+ "half_open": false,
+ "jitter": false,
+ "jitter_pool": [
+  "xiaomi/mimo-v2.5"
+ ],
+ "model": "xiaomi/mimo-v2.5",
+ "pool": "regular",
+ "pool_version": "2026-08-11.1",
+ "price_per_mtok": null,
+ "rail": "openrouter",
+ "skipped": [],
+ "slot": 3,
+ "source": "pool",
+ "tier": "heavy"
+}

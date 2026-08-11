@@ -1775,10 +1775,16 @@ class Proxy(BaseHTTPRequestHandler):
                 pin = pin_for(str(decision["model"]))
                 if pin:
                     decision["pin"] = pin["provider"]
+            # ADR-104: a DRAW logs its provenance — pool#slot@version is what makes a research
+            # mission's arm table re-drawable from the proxy log alone, and the log is the only
+            # place a deferred slot is visible to whoever is watching the fan-out land.
+            draw_note = (f" draw={decision['pool']}#{decision.get('slot')}"
+                         f"@{decision.get('pool_version') or '?'}") if decision.get("pool") else ""
             log(f"POST /route stack={req_body.get('stack')} task={req_body.get('task')} "
                 f"role={req_body.get('role')} → {decision['decision']} "
                 f"{decision.get('model') or decision.get('reason')} "
-                f"[{decision.get('basis') or ''}{'+half-open' if decision.get('half_open') else ''}]")
+                f"[{decision.get('basis') or ''}{'+half-open' if decision.get('half_open') else ''}]"
+                f"{draw_note}")
             # THE M11 SHADOW LINE (homelab#159) — what the cross-rail ladder WOULD have picked,
             # beside what was actually served. Nothing acts on it: this line, the shadow_decisions
             # table and the router_shadow_* series ARE the deliverable, and the P4 flip happens

@@ -1,0 +1,15 @@
+CALL route class=regular slot=1 jitter=false session=research-210-slot-1
+CALL route class=regular slot=2 jitter=false session=research-210-slot-2
+CALL route class=regular slot=3 jitter=false session=research-210-slot-3
+CALL route class=regular slot=4 jitter=false session=research-210-slot-4
+OUT   slot 1: moonshotai/kimi-k3
+OUT   slot 2: deepseek/deepseek-v4-pro
+OUT   slot 3: xiaomi/mimo-v2.5
+OUT   slot 4: — (defer: cooldown, retry 300s) — NOT substituted (ADR-104)
+OUT → arm table: 3/4 arm(s) drawn, class=regular pool-version=2026-08-11.1
+OUT ARM slot=1 model=moonshotai/kimi-k3
+OUT ARM slot=2 model=deepseek/deepseek-v4-pro
+OUT ARM slot=3 model=xiaomi/mimo-v2.5
+OUT ROSTER drawn=3 asked=4 pool_version=2026-08-11.1
+OUT REACHED: end
+RC 0

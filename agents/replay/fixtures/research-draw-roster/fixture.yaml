@@ -1,0 +1,28 @@
+# ADR-104 / FU-162 (homelab#290) — the research fan-out draws its roster; it never names a model.
+#
+# CONDITION UNDER REPLAY. An operator asks for 4 arms of a research mission (oracle-fleet#210).
+# The `regular` pool's slot-4 model is in a 429 cooldown. The contract this pins is the one the
+# circles run-1 slips paid for:
+#   1. every arm comes from `POST /route` with class+slot+jitter:false — the CALL lines are the
+#      proof that the roster is drawn and that nothing in this script knows a model id,
+#   2. the deferred slot stays EMPTY and says why: 3 of 4 arms, not "4 arms" with a quietly
+#      shifted model in the hole (a substituted arm is a corrupted experiment, ADR-104),
+#   3. the pool VERSION rides the arm table, which is what makes the mission re-drawable.
+#
+# THE WORLD IS A RECORDING OF THE SHIPPED DECISION CORE, not a hand-written fixture: each
+# world/route/slot-N.json was produced by driving `router.route()` (argocd/resources/
+# openrouter-proxy/router.py) against the shipped model-classes.json on 2026-08-11, with the
+# slot-4 cooldown tripped by real 429 provider events. The M11 `shadow` block is stripped — it is
+# proxy-side soak data the fan-out never reads. Re-record by the same route when the pool moves.
+name: research-draw-roster
+mode: actions
+source: agents/research-fanout.sh
+parts:
+  - file:bridge.sh
+  - block:draw-roster
+  - file:post.sh
+env:
+  - IN_ISSUE=210
+  - IN_CLASS=regular
+  - IN_ARMS=4
+  - IN_START_SLOT=1
