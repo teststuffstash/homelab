@@ -113,6 +113,29 @@ jobs:
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
           clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
+          # Pin-bump carve-out (found on PR#236, 2026-08-11): reflexes-argo.yaml is BOTH a ratchet
+          # clause file AND a pin-only-lint guarded file — a pin-only diff changes no action stream
+          # (the canonical "no fixture can apply" case) and pin-only-lint is already its gate.
+          # Exempt a clause file iff its ENTIRE patch is pin lines; regexes come from
+          # scripts/pin-only-lint.sh itself (one home — a second copy here would drift).
+          eval "$(grep -m1 '^GUARDED=' scripts/pin-only-lint.sh)"
+          eval "$(grep -m1 '^PIN_LINE=' scripts/pin-only-lint.sh)"
+          if [ -n "$clause" ]; then
+            kept=""
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              if printf '%s\n' "$f" | grep -qE "^($GUARDED)$"; then
+                patch=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq ".[] | select(.filename==\"$f\") | .patch // \"\"")
+                nonpin=$(printf '%s\n' "$patch" | grep -E '^[-+][^-+]' | grep -Ev "$PIN_LINE" || true)
+                if [ -n "$patch" ] && [ -z "$nonpin" ]; then
+                  echo "ratchet: $f exempt — pin-only diff (pin-only-lint is its gate)"
+                  continue
+                fi
+              fi
+              kept="${kept}${f}"$'\n'
+            done <<< "$clause"
+            clause=$(printf '%s' "$kept")
+          fi
           if [ -n "$clause" ] && [ -z "$replay" ]; then
             echo "::error::ADR-103 ratchet: clause files changed with NO replay fixture change:"
             printf '%s\n' "$clause"
