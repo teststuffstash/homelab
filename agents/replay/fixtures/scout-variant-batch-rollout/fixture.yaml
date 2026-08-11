@@ -1,0 +1,37 @@
+# FU-161 leg 1 / homelab#282 — THE ACCEPTANCE CASE: digest #234's world, replayed through the
+# base-id diff.
+#
+# CONDITION UNDER REPLAY. The 2026-08-10 tick that produced digest #234 (CLOSED as a dud
+# 2026-08-11): 22 ids were new against the snapshot and all 22 cleared the v2 filter — tool-capable
+# and under the $0.50/M ceiling. 20 of them were one platform-wide `:batch` rollout of models the
+# platform has known for years, and the batch DISCOUNT is what put several of them under the
+# ceiling in the first place. The snapshot therefore already contains every one of those 20 bases.
+#
+# THE CONTRACT:
+#   1. 22 new ids reduce to exactly 2 candidates — `inclusionai/ling-3.0-flash` and
+#      `inclusionai/ling-3.0-tiny:free`, the only two whose BASE id the platform had not seen.
+#      This is the number FU-161's Next action is written against.
+#   2. The 20 `:batch` ids are suppressed as `:batch`, not as known-base variants. The order of the
+#      two rules is load-bearing: `:batch` is excluded OUTRIGHT (an async endpoint cannot serve an
+#      interactive session at any price), so a `:batch` re-listing of a genuinely NEW base would
+#      still be dropped — which the variant rule alone would let through.
+#   3. `inclusionai/ling-3.0` IS in the snapshot, and neither survivor is treated as its variant.
+#      base() strips a `:suffix` tag; it is not a prefix match, and a fixture that let it become
+#      one would suppress every model whose name extends a known one.
+#   4. The suppressed set is ONE digest line carrying both counts — never N rows. That line is the
+#      whole visible residue of 20 suppressions, and it is asserted verbatim.
+#   5. `:free` still means candidate: the survivor at $0 rides on the `:free` arm of the filter,
+#      not on the price arm.
+#
+# The world is a RECORDING in shape and in id list (the 22 are #234's, transcribed from the
+# coordinator's triage on #282, which read them out of the closed digest); the per-model price and
+# `supported_parameters` fields are reconstructed to the values that produced #234's verdict, since
+# the digest itself records the ids rather than the raw catalog rows.
+name: scout-variant-batch-rollout
+mode: actions
+source: agents/model-scout.sh
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-diff
+  - file:observe.sh

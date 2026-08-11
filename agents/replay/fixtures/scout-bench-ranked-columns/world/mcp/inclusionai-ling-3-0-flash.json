@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"data\": {\"id\": \"inclusionai/ling-3.0-flash\", \"benchmarks\": {\"artificial-analysis\": {\"intelligence_index\": 55, \"coding_index\": 50.6, \"agentic_index\": 48}}}}"
+      }
+    ]
+  }
+}

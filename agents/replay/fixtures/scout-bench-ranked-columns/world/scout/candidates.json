@@ -1,0 +1,22 @@
+[
+  {
+    "id": "bigco/heavy",
+    "tools": true,
+    "prompt": 0.4
+  },
+  {
+    "id": "inclusionai/ling-3.0-flash",
+    "tools": true,
+    "prompt": 0.15
+  },
+  {
+    "id": "midco/partial",
+    "tools": true,
+    "prompt": 0.2
+  },
+  {
+    "id": "newco/spark:free",
+    "tools": true,
+    "prompt": 0.0
+  }
+]

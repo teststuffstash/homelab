@@ -1,0 +1,12 @@
+[
+  {
+    "id": "inclusionai/ling-3.0-flash",
+    "tools": true,
+    "prompt": 0.15
+  },
+  {
+    "id": "newco/spark:free",
+    "tools": true,
+    "prompt": 0.0
+  }
+]

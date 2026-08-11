@@ -1,0 +1,99 @@
+{
+  "data": [
+    {
+      "id": "newco/dear",
+      "name": "dear",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0.000002",
+        "completion": "0.000002"
+      }
+    },
+    {
+      "id": "newco/loud:batch",
+      "name": "loud:batch",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0.00000005",
+        "completion": "0.00000005"
+      }
+    },
+    {
+      "id": "newco/quiet",
+      "name": "quiet",
+      "supported_parameters": [
+        "temperature"
+      ],
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000001"
+      }
+    },
+    {
+      "id": "newco/spark",
+      "name": "spark",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0.0000002",
+        "completion": "0.0000002"
+      }
+    },
+    {
+      "id": "newco/spark:free",
+      "name": "spark:free",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "openai/gpt-5-mini",
+      "name": "gpt-5-mini",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0.000000125",
+        "completion": "0.000000125"
+      }
+    },
+    {
+      "id": "openai/gpt-5-mini:free",
+      "name": "gpt-5-mini:free",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0",
+        "completion": "0"
+      }
+    },
+    {
+      "id": "vendor/oldie",
+      "name": "oldie",
+      "supported_parameters": [
+        "temperature",
+        "tools"
+      ],
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000001"
+      }
+    }
+  ]
+}
