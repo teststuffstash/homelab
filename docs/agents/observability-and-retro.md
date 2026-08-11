@@ -10,7 +10,8 @@ CronJob), the viewer (`transcripts.local.teststuff.net`,
 `agents/coordinator/transcripts-viewer.yaml`), the exit_status/error_class classifier +
 pushgateway `agent_run_*` metrics + dashboards, and the `ledger-reflex` Argo CronWorkflow
 (30-min cadence, `agents/coordinator/reflexes-argo.yaml`). The retro session itself is a
-CronWorkflow that self-fires Mondays 05:00 UTC (unsuspended 2026-08-03 — see Part B). Companion to
+CronWorkflow that self-fires Mondays 05:00 UTC (unsuspended 2026-08-03; first END-TO-END run
+2026-08-11 — see Part B). Companion to
 [`workflow.md`](workflow.md) (control flow) and
 [`../../agents/README.md`](../../agents/README.md) (launcher + stats).
 
@@ -428,11 +429,18 @@ reports move stack-side — the standard mechanism/policy split (platform-and-st
 teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
 is needed for this.
 
-**Cadence status: UNSUSPENDED 2026-08-03 (operator, FU-058(5))** — `retro-argo.yaml` self-fires
-Mondays 05:00 UTC (born-suspended hand-fired era over); the first unattended fire doubles as
-run 3 (the swapped-cell cross-review). Remaining FU-058 legs: the ledger emitter gaps
-brief-v2(b) named (the real cause of "could not verify" report lines), MCP transcript slices,
-and acting on the reports' queued-issue candidates.
+**Cadence status (corrected 2026-08-11):** unsuspended 2026-08-03 — but the lane had NEVER run
+end-to-end until 2026-08-11: five latent bugs (guard busy-probe read kubectl's stderr as pods;
+missing `AWS_REGION` in tsenv; harvest artifacts root-owned; a whole-ledger 146KB brief blew the
+128KiB per-argv cap; `tee` ate cell death), each one step deeper, each invisible until the prior
+one fell — the "unsuspended ≠ ever ran" class, caught by the FU-058 belt's first firing. Run 3
+delivered 2026-08-11 (hand-fired, SINGLE cell — cell-b died pre-ride misclassified clean,
+homelab#248; report merged: `retros/2026-08-11-oracle-r3-context.md`; its process-change batch
+filed+queued: homelab#256-259, circles#77/#78, oracle-fleet#258). **2026-08-17 = the first
+unattended fire**; the swapped-cell cross-review is still unrun. Standing lane bounds from the
+first real pass: the brief is a bounded worst-K ledger slice (never the whole ledger), and the
+cell pipeline runs `pipefail`. Remaining FU-058 legs: ledger emitter gaps (brief-v2(b)), MCP
+transcript slices.
 
 #### The multi-model pilot — runs 1+2 (2026-07-25) and what they taught
 
@@ -473,7 +481,8 @@ cross-review landed with a deepseek-v4-pro critic. Routing data harvested for FU
 
 Prometheus/Grafana access is **not** needed yet — no report was blocked on metrics.
 
-**Run-3 shape (operator direction, composition-axes frame):** two retro rides off the SAME
+**Run-3 shape (operator direction, composition-axes frame — AS DESIGNED; as-run 2026-08-11 only
+cell A executed, homelab#248):** two retro rides off the SAME
 agent-base image and the SAME committed `BRIEF.md` — **A** = claude harness + opus (subscription
 via the ADR-081 proxy, FU-088-gated), **B** = goose harness + deepseek-v4-pro (ephemeral capped
 key, provider-pinned) — then cross-review with the **cells swapped** (A reviews B's report, B

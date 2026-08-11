@@ -30,7 +30,9 @@ breaker #1 for that stack.
 
 **Two surfaces queue without that knob, and both are deliberate — know which is which:**
 
-- The **alert lane** (below): the responder's shell labels, gated by three fail-closed checks.
+- The **alert lane** (below): the responder's shell applies `agent-fix` (a diagnosis, inert);
+  `agent/queued` is granted by the set-judged fix-debounce (2026-08-07 —
+  [iac-lane.md](iac-lane.md) §"one root cause, N alert issues").
 - **Leg (c)**: a goal's children are queued by the coordinator, authorised by the fact that a
   HUMAN queued the GOAL — breaker #1 moved UP, not away. That was PROSE until 2026-08-05 (the
   operator asked why circles queues issues with no knob enabled); the scan now **checks it,
@@ -42,11 +44,13 @@ breaker #1 for that stack.
   (operator, 2026-08-05). The test blocks THE LOOP from authorising its own goal, which is the
   risk worth blocking.
 
-⚠ **The ALERT lane already crossed this line** (2026-08-04, `agents/coordinator/responder-argo.yaml`
-§selfQueue): a responder-filed issue is labelled `agent-fix`+`agent/queued` by the *shell*, not the
-session, when three deterministic fail-closed gates pass — not self-referential, a `Touches:`
-footprint is declared, and that footprint hits no governance path. No claim knob gates it. So
-"bot-authored ⇒ inert" is the rule for the surfaces below, **not** for the alert lane.
+⚠ **The ALERT lane crossed this line differently** (superseded 2026-08-07 — the 2026-08-04
+shell-selfQueue was replaced by the verdict/queue split): the responder's shell applies only
+`agent-fix` (inert diagnosis); `agent/queued` is granted by the set-judged **fix-debounce**
+(deterministic gates + a set-pass at ≥2 pending; pending set excludes every human-waiting label
+since PR#243/#244). Mechanism: [iac-lane.md](iac-lane.md) §"one root cause, N alert issues". So
+"bot-authored ⇒ inert" holds for the surfaces below; the alert lane queues through the debounce,
+never the session.
 
 ## Gate the merge, not the launch — operator ruling, 2026-08-05
 

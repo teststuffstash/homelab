@@ -123,7 +123,8 @@ devbox run -- kubectl --kubeconfig tofu/kubeconfig -n argocd \
 ```
 
 > **Chart version.** `arc-controller.yaml` and `arc-runners.yaml` pin `targetRevision: 0.14.2`
-> (runner v2.334.0). Controller + scale-set versions **must match**; bump both together to the same
+> (⚠ what RUNS is the custom warm image `ghcr.io/…/arc-runner:<calver>` since 2026-07-25 — FU-015,
+> `ci.md` §ARC — not upstream's runner build). Controller + scale-set versions **must match**; bump both together to the same
 > current release (github.com/actions/actions-runner-controller/releases).
 
 ## 7. Verify

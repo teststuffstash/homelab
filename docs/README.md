@@ -10,7 +10,8 @@ Several long-lived records live here and they are **not** interchangeable — th
 [`../CLAUDE.md`](../CLAUDE.md) ("Where things get written down") is the authority. In short:
 **decision** → `adr.md` · **design** → a doc here · **loose end** → `follow-ups.md` (≤10 lines,
 detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `incidents/` ·
-**unsettled investigation** → `spikes/`.
+**unsettled investigation** → `spikes/` · **vocabulary** → `glossary.md` (a NEW name clears it
+first) · **skill shortcoming** → `.claude/skills/GAPS.md` (ADR-105).
 
 ## Operations & design
 
@@ -24,7 +25,7 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | [follow-ups-archive.md](follow-ups-archive.md) | Resolved-FU residue — rolling buffer (≈a month) of archived items, trimmed to the grep residue |
 | [incidents/](incidents/README.md) | **Postmortems** — one file per incident: timeline, root cause, collateral, fixes, probe lesson. The FU carries only the residual work |
 | [spikes/](spikes/) | Investigations with no decision yet — findings + what would settle it |
-| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps, and why a breach is currently invisible until a workload fails (FU-093) |
+| [storage-ledger.md](storage-ledger.md) | Who owns the SUM of each storage tier's caps + tier eligibility rulings; Longhorn metering built 2026-08-04, quota armed 2026-08-07 — the Garage half still exports no metrics (FU-093) |
 | [provisioning.md](provisioning.md) | Matchbox PXE pipeline + the bare-metal Talos node onboarding recipe |
 | [secrets.md](secrets.md) | Secrets platform how-to — KeePass Tier-0 → Infisical → ESO; bootstrap order, day-2 recipes (ADR-062) |
 | [ci.md](ci.md) | CI / forges two-tier model (GitHub ARC vs Forgejo act_runner), the `devbox run` seam, nix-in-CI |
@@ -36,7 +37,7 @@ detail goes in a doc) · **program** → `../ROADMAP.md` · **it broke** → `in
 | [slsa.md](slsa.md) | Self-hosted supply-chain (SLSA) plan — parked; Phase-1 cosign/SBOM = FU-016 |
 | [sleep-iac.md](sleep-iac.md) | The live three-layer sleep stack + deploy pipeline (ADR-084) — AppProject tenancy, what moves, prune-safe migration |
 | [oracle-iac.md](oracle-iac.md) | The oracle stack — sleep-shaped three-layer topology; records only the deltas from the sleep reference design |
-| [cloudflare.md](cloudflare.md) | Remote-access design + build (Cloudflare Tunnel + app-security mTLS, **live**) + scoped-token RBAC |
+| [cloudflare.md](cloudflare.md) | The public edge: PublicRoute XRD (ADR-101, armed), zone classes, the token matrix + cf-api-proxy, spend belt — plus the original tunnel+mTLS remote-access leg |
 | [github-setup.md](github-setup.md) | **GitHub org manual "required clicks"** — apps installed, tokens/PATs + their gaps, runner-group + fork-PR + public-repo toggles; the click-only bootstrap checklist |
 | [github-runner-bootstrap.md](github-runner-bootstrap.md) | ARC self-hosted runner bootstrap (App → install → secrets → scaleset); the `runs-on: homelab-ephemeral` path |
 | [tofu-state.md](tofu-state.md) | **Where each tofu root's state lives** — the encrypted-Garage backend ruling, the cone table, the migration runbook (FU-012) |

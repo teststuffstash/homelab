@@ -92,8 +92,9 @@ nobody has watched fail is not a check.
 
 ## When a clause file changes and no fixture can apply
 
-The ratchet fails any PR touching a clause file without touching `agents/replay/`, and names a note
-here as the alternative. Keep that hatch narrow by answering one question: **can the harness observe
+The ratchet fails any PR touching a clause file without touching `agents/replay/` (EXEMPT since
+2026-08-11: a pin-only diff to a pin-guarded clause file — the canonical no-fixture-applies case,
+regexes sourced from `pin-only-lint.sh`), and names a note here as the alternative. Keep that hatch narrow by answering one question: **can the harness observe
 this diff at all?** It asserts an action stream — the `gh`/`kubectl` calls a clause emits — so the
 answer is no only when the diff emits none. "The branching is unchanged but the payload moved" is
 observable, and there the ratchet is doing its job: extend the fixture.
@@ -110,6 +111,10 @@ Log each instance here, so the next author sees a register rather than a precede
   stream) but `retro-argo.yaml` has no fixture family yet — its FSM-side declaration is
   `unreplayed` and the first retro-lane fixture should record this step's world when it is built
   (jail-lane commit; the ratchet gained the file the same day, so the next PR touch pays properly).
+- **retro-lane 2026-08-11 (three more jail-lane clause diffs, same fixture debt)** —
+  `f791937` (AWS_REGION in tsenv), `6b1ece6` (harvest runs as root), `4db553e` (bounded worst-K
+  slice + pipefail) each touched `retro-argo.yaml` direct-to-master; all observable; the standing
+  entry below covers the debt — the first retro-lane fixture family pins ALL of it.
 - **guard stderr-fold fix (2026-08-11, homelab#237)** — the guard's busy-probe read kubectl's
   stderr "No resources found" as pod output (`2>&1`), refusing every fire since unsuspend; fixed
   to a split-stream read, both legs verified live from the jail (empty ns → idle, failing probe →

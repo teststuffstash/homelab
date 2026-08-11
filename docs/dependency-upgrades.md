@@ -281,23 +281,19 @@ classes** — stages 4 and 5 are where the gaps are.
 
 ### 3. Test / lint
 
-What `devbox run ci` gates on a homelab PR today:
-
-| Check | Catches |
-|---|---|
-| `argocd-validate-pins` | a pinned OCI chart that doesn't render with this repo's values — the class-1 gate |
-| `agents-registration-lint` | stacks.json ⊆ coordinator/reviewer token lists |
-| `merge-path-lint` | the FSM model drifting from the code |
-| `github-apps-lint` | mint sites ⊆ declared App permissions (FU-098) |
-| `router-self-test` | the ADR-096 router store |
+What `ci` gates on a homelab PR today: the authoritative list is `.github/workflows/ci.yaml`
+(~22 steps — highlights: `argocd-validate-pins`, `agents-registration-lint`, `merge-path-lint`,
+`github-apps-lint`, `router-self-test`, `manifest-lint` (kubeconform, since 2026-08-04),
+`prometheus-rules-lint` (promtool, since 2026-08-11 — FU-158), the ADR-103 replay ratchet,
+`tofu fmt -check`). ⚠ homelab has NO `devbox run ci` aggregate task — the workflow is the list.
 
 **What is missing for a dependency bump specifically:**
 
-- **No `tofu validate` / `tofu plan` in CI** for classes 4–6. A provider bump can merge with nobody
-  having rendered it. A read-only plan against a **non-live** backend, or at minimum
-  `tofu validate` + `fmt -check`, is the cheap version.
-- **No `helm template | kubeconform`** for class 2 (raw manifests in `argocd/resources/*`);
-  `argocd-validate-pins` covers OCI charts, not the hand-written YAML next to them.
+- **No `tofu validate` / `tofu plan` in CI** for classes 4–6 (`fmt -check` IS in ci since
+  2026-08-04; `validate` stays out — the FU-130 WAN class). A provider bump can merge with
+  nobody having rendered it.
+- ~~No kubeconform for class 2~~ — `manifest-lint` (kubeconform `-strict`) is a required check
+  since 2026-08-04; the residue is its CRD skip-set (the G04 sentinel's problem).
 - **No policy-as-code** for the platform invariants above.
 
 ### 4. Rollout
@@ -352,7 +348,7 @@ A bump is not done when it merges; it is done when nothing broke. What exists an
 | Signal | Exists? | Notes |
 |---|---|---|
 | ArgoCD app health / sync status | ✅ | shallow — see above |
-| Prometheus + Alertmanager → responder triage | ✅ | one bounded LLM session per new fingerprint (FU-103) |
+| Prometheus + Alertmanager → responder triage | ✅ | one bounded LLM session per new fingerprint (FU-133 is the live pointer) |
 | Blackbox probes on service endpoints | ✅ | FU-099 — seconds-grade, dumb |
 | Deep [contract probe](glossary.md) post-deploy | ❌ | the **prober** role ([`agents/roles.md`](agents/roles.md) §prober, FU-102) — the real acceptance signal |
 | Storage-cap breach visibility | ❌ | Garage exports **no** metrics at all; Longhorn per-disk unwatched ([`storage-ledger.md`](storage-ledger.md), FU-093) |

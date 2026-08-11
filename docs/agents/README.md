@@ -29,8 +29,8 @@ Two places where agents run, with one boundary between them:
   `review-<stack>` CronWorkflows in a `<stack>-agents` namespace as the `agentstack-loop` SA, which
   dispatches ephemeral worker pods into the per-repo fixer namespaces. **Zero cross-boundary
   Secrets live there** — git tokens are broker-fetched per run from the egress proxy under
-  TokenReview, and LLM creds are opaque `ref:` strings resolved at the proxy (ADR-087). All three
-  stacks are graduated: oracle (2026-07-18), sleep + platform (2026-07-26).
+  TokenReview, and LLM creds are opaque `ref:` strings resolved at the proxy (ADR-087). All FOUR
+  stacks are graduated: oracle (2026-07-18), sleep + platform (2026-07-26), circles (2026-08-03).
 
 The boundary between them is the interesting part: **the jail has the context and the authority;
 the cluster has the blast-radius containment.** Work moves from jail to cluster as an *issue* (the
@@ -57,10 +57,10 @@ every key — is [`roles.md`](roles.md); this is the map.
 | **reviewer** | `<stack>-agents` | reviewable transition (exporter edge) | live |
 | **responder** | `agent-coordinator` | an Alertmanager fingerprint | live (v2, triage-first) |
 | **scout** (model-scout) | cluster cron | weekly schedule | live |
-| **researcher/planner** | fixer ns | a human-queued `goal` issue | first mode proven |
+| **researcher/planner** | fixer ns | a human-queued `goal`-labelled MISSION (not an ADR-102 Goal — FU-163) | first mode proven |
 | **infra-fixer** | `-iac` lane | a typed `values.schema.json` delta | live (both -iac repos; first rides merged) |
-| **retro** | cluster cron | ledger level-trigger | live (Mon 05:00 self-fire since 2026-08-03) |
-| **prober** | — | post-deploy + schedule | planned (FU-102) |
+| **retro** | cluster cron | ledger level-trigger | first end-to-end run 2026-08-11 (hand-fired, 5 latent bugs fixed); first unattended 2026-08-17 |
+| **prober** | — | post-deploy + schedule | built 2026-08-07, disabled everywhere (no brief yet — FU-102) |
 
 **Lenses** (FU-101) are not roles: a lens is the reviewer's machinery with a different brief
 sourced from an externally maintained standard, selected by a deterministic artifact-class
@@ -84,6 +84,7 @@ growing without bound.
 | [`research-and-specs.md`](research-and-specs.md) | The research→specs process — fan-out arms, judges, downstream proxy, weave, harvest |
 | [`spec-gate-tiering.md`](spec-gate-tiering.md) | Proposal only — do not implement before the operator re-opens it |
 | [`meta-state.md`](meta-state.md) | Transient: what a fresh meta session must pick up |
+| [`../glossary.md`](../glossary.md) | The term→home index ruling this corpus's vocabulary (Goal/mission, canary/contract probe, the platform stack) |
 
 ## Design invariants
 

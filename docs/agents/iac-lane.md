@@ -143,7 +143,8 @@ set-judged debouncer:
   alert clearing (#68 was human-engaged, so the resolve leg could not close it, and it sat
   ripe in the pending set). The 21:00Z platform coordinator refused the unit and parked it
   `agent/blocked` with the full refutation. **Lesson: the set-pass reads bodies, not current
-  state — the queue gate needs a CURRENCY check (FU-133 leg c): skip when the alert has
+  state — the queue gate needs a CURRENCY check (FU-133 leg c — QUEUED as homelab#253,
+  blocked-by #244): skip when the alert has
   resolved, and treat a body older than its subject's last state change as suspect.** The
   reopening kill was `Error`-137 shared-fate (the PSI-stall class, FU-139 archive), not a
   values problem — #63/#65 are the same collateral, not riders on any longhorn-values fix.
@@ -204,8 +205,10 @@ makes the PR state which ran; and the PR must reference its issue or the scan re
 **Automerge safety is a function of check coverage, not of the path.** `ci` was
 `argocd-validate-pins` alone — it proves a pinned OCI chart renders and looks at nothing else, so a
 hand-written Deployment with a typo passed. `kubeconform -strict` over `argocd/resources/*` and
-`tofu fmt` landed with the tiers; the honest residue is that **87 of 154 resources are SKIPPED** for
-want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies, PrometheusRules) —
+`tofu fmt` landed with the tiers; the honest residue is that **most resources are SKIPPED** for
+want of a local CRD schema (Applications, AgentStacks, CiliumNetworkPolicies — PrometheusRules
+left this class 2026-08-11: `prometheus-rules-lint`/promtool parses every expr in `ci`, FU-158;
+behaviour tests still open) —
 `manifest-lint` prints that every run and fails if it ever validates nothing.
 
 **Operator ruling 2026-08-06: that skipped majority is the SENTINEL's problem, not a schema-vendoring
@@ -269,8 +272,8 @@ stack's `-iac`, which *is* this lane's revert path. Undefined ownership means a 
 
 **Rule: inside an open observation window for a recent deploy, the -iac lane owns the symptom** —
 the alert lane attaches evidence to that unit and dispatches nothing. Outside a window, the alert
-lane owns it. Modelled as IAC-G10; the correlation half (one issue per root cause via a `subject:`
-key, instead of one per fingerprint) is FU-133.
+lane owns it. Modelled as IAC-G10; the correlation half — filing-side `group_by = ["alertname"]`, one delivery per storm —
+is FU-133 leg (a), QUEUED as homelab#252.
 
 ## The infra-delta rollout matrix — what an upstream chart change costs the wrapper
 
@@ -413,8 +416,9 @@ by design) supports three rungs; **eventually Cloudflare fronts all services** (
   rollback = flag flip), a **parallel shadow CronJob** (new image against a clone/validation
   pool, compare outputs), or **phased schedule frequency** (canary runs 1×/day before the image
   lands on the real cadence). Pick per app; none needed for sleep.
-- **Rung 1 — in-cluster traffic split:** Gateway API weighted `backendRefs` (Cilium implements
-  them; the ADR-092 sleep Gateway is already this stack): stable + canary Deployments, promotion =
+- **Rung 1 — in-cluster traffic split** (a *deployment/traffic* canary — the glossary's third
+  sense, distinct from the scout's rail probe): Gateway API weighted `backendRefs` (Cilium
+  implements them; the ADR-092 sleep Gateway is already this stack): stable + canary Deployments, promotion =
   a weight flip driven by a Workflow step reading Prometheus. If/when analysis-driven promotion
   should be declarative, **Argo Rollouts + its Gateway API plugin** is the fit — the
   [README](README.md) §Open "revisit Rollouts only if reality proves testing insufficient" clause

@@ -3,7 +3,9 @@
 Garage (Deuxfleurs) is the in-cluster S3-compatible object store (ADR-031). It's the convergence
 point for the sleep-tracking pipeline (ADR-045) and a future home for Longhorn/HA backups.
 
-- **Deploy:** `tofu/garage.tf` (Helm, chart vendored at `argocd/charts/garage` — moved out of `tofu/` 2026-08-04 so ArgoCD can read it, FU-136 — Garage **v2.3.0**).
+- **Deploy:** `argocd/platform/garage.yaml` (ArgoCD, since 2026-08-04 — FU-136; chart vendored at
+  `argocd/charts/garage`, Garage **v2.3.0**). `tofu/garage.tf` keeps only the namespace, two
+  Secrets and the VIP Service.
 - **Access model: LAN-only.** In-cluster clients use the ClusterIP Service; LAN clients use
   `https://s3.teststuff.net` (OPNsense HAProxy → BGP VIP **192.168.40.16**:3900). No Cloudflare
   tunnel, no public LoadBalancer. Admin (3903) + RPC (3901) never leave the cluster.
@@ -72,10 +74,11 @@ Cloudflare). HAProxy must allow large request bodies / streaming for S3 uploads 
 - **Never expose 3903 (admin) or 3901 (RPC).** Admin has no auth boundary suited to the LAN; RPC is
   the inter-node trust channel (guarded by the rpc_secret, but keep it internal regardless).
 - **rpc_secret** is pinned in tofu state (`random_id.garage_rpc`) so applies don't churn it.
-- Chart is kept **chart-shaped** (homelab adds only the LoadBalancer Service); migrating to an
-  ArgoCD Application later is a re-point, not a rewrite (ADR-003/004).
-- Updating Garage: re-vendor the chart at the new tag (see `argocd/charts/garage/VENDORED.md`), bump
-  values in `garage.tf`, `plan`, review, `apply`.
+- Chart is kept **chart-shaped** (homelab adds only the LoadBalancer Service); the ArgoCD
+  re-point happened 2026-08-04 (FU-136).
+- Updating Garage: re-vendor the chart at the new tag (see `argocd/charts/garage/VENDORED.md`),
+  bump values in `argocd/platform/garage.yaml`, ArgoCD syncs (steps:
+  [`garage-bulk-migration.md`](garage-bulk-migration.md)).
 
 ## Durability — what actually stands between you and losing all of it
 
@@ -89,10 +92,10 @@ observability record) and the `sleep-*` buckets (27.5 MB of real personal data).
 and `oracle-specs` regenerate from CI and from `specs/` in the stack repos; `loki` self-expires at
 7 days.
 
-**What protects it:** Garage runs `replication_factor = 1` on a single node, so *all* redundancy is
-Longhorn's — 2 replicas per volume, currently healthy on distinct nodes (data `wk-metal-01`+`wk-02`,
-meta `thinkcentre`+`wk-02`). Note `wk-02` carries a replica of both; losing it degrades both at once
-without losing either.
+**What protects it:** Garage runs `replication_factor = 1` on a single node, so *all* redundancy
+is Longhorn's (2 replicas per volume). Replica PLACEMENT is owned by
+[`storage-ledger.md`](storage-ledger.md) §tier fence (the 2026-08-04 placement recorded here was
+invalidated by the 2026-08-07 `diskSelector` stamping — read the ledger, not a dated copy).
 
 **What does not protect it:** nothing backs Garage *out*. FU-013 backs other things *into* it. The
 sharp edge is the **meta volume** — 10Gi of LMDB on `longhorn`, tiny next to the data, and losing it
