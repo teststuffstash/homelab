@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-166**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-167**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -219,6 +219,16 @@ the block needs pruning, not more headings.
       **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (or fan the global
       trigger out over graduated namespaces); then decide if global has a reader left.
       Relates FU-143, FU-145, ADR-094.
+- [ ] **FU-166** — **The codeowner-park state is invisible to Prometheus; the needs-meta watch
+      re-polls GitHub for it** (operator catch 2026-08-11: the `agent-running` "green PRs waiting"
+      panel correctly reads 0 while parks exist — parked PRs are bot-APPROVED, so the reviewable
+      predicate excludes them by definition; only the jail watch's direct `gh` polling sees them,
+      against the one-poller doctrine and at 600s vs the exporter's 120s). Fix shape: the exporter
+      already fetches `reviewDecision` on its existing GraphQL walk — emit a park series (green ∧
+      bot-approved-at-head ∧ REVIEW_REQUIRED), panel it, add a `CodeownerParkWaiting` warning
+      (>30m — the belt OUTSIDE the session), then `meta-needs-attention.sh` clause 4 reads
+      Prometheus instead of `gh`. Post-goal-#278 work (exporter is mid-goal traffic). Relates
+      FU-150, FU-084, ADR-093.
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
