@@ -1,0 +1,25 @@
+# homelab#239 — leg B: the WITNESS. The same alert without the label is dispatchable again.
+#
+# CONDITION UNDER REPLAY. Leg A's world with the one label removed — the payload as it actually
+# arrived on 2026-08-11 (homelab#237). Holding everything else constant is the point: the only
+# thing that may move the verdict is the rule author's declaration.
+#
+# WHY A GREEN-PATH FIXTURE FOR A BUG. A gate is only worth its false-negative rate, and the cheap
+# wrong fix here was a name regex — `RetroReport*`, or `*Overdue`, or a third namespace list. Any
+# of those would make leg A pass for a reason that has nothing to do with the label, and would rot
+# one alert at a time exactly as the first two keys did. This fixture is what makes that visible:
+# it reds the moment the gate starts matching on anything intrinsic to this alert.
+#
+# THE CONTRACT:
+#   1. SELF_REF stays empty, SELF_WHY stays empty, and NOTHING is echoed — the alert flows on to
+#      an ordinary triage, which is correct for an alert nobody has declared as machinery.
+#   2. SELF_NOTE is EMPTY, so the brief gets no cap paragraph and the session is never told to
+#      write the `self-referential: true` marker.
+#   3. RC 0 — an unmatched gate is not an error condition.
+name: responder-selfref-unlabelled
+mode: actions
+source: agents/coordinator/responder-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:responder-selfref-gate
+  - file:../responder-selfref-platform-machinery/post.sh

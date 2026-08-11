@@ -1,0 +1,5 @@
+OUT SELF_REF=<empty>
+OUT SELF_WHY=<empty>
+OUT SELF_NOTE: empty — nothing appended to the brief
+OUT SELF_NOTE: no marker instruction (nothing appended)
+RC 0
