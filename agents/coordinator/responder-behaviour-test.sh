@@ -222,6 +222,68 @@ want "multi-alert payload → SECOND alert triaged too (the </dev/null stdin bel
 scenario selfref
 go "$(alert f13 '{"alertname":"AgentWorkerEgressDropped","source":"oracle-fleet"}')"
 want "Agent* alert is self-referential — may PR, must not auto-merge" "SELF-REFERENTIAL"
+want "…and the log names WHICH key matched" "alertname='AgentWorkerEgressDropped'"
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────
+section "#239 — platform_machinery is the THIRD self-referential key"
+# Both original keys INFER machinery from something else: a namespace in the platform set, or an
+# `Agent*` name. A platform-machinery alert derived from a PUSHGATEWAY metric carries neither.
+# RetroReportOverdue (retro_report_last_success_timestamp — no meaningful namespace, name not
+# Agent*) went through the gate on 2026-08-11, took a `fix` verdict, was debounce-queued, and put
+# a coordinator ride on the retro belt, which only the jail/operator lane can act on; it ended in
+# an agent/error latch (homelab#237). The label is declared by the rule AUTHOR, where the fact is
+# known — and these assertions are the reason it is testable at all.
+
+scenario platform-machinery-label
+go "$(alert f16 '{"alertname":"RetroReportOverdue","severity":"warning","platform_machinery":"true"}')"
+want      "the label alone trips the gate (no namespace, no Agent* name)" "SELF-REFERENTIAL"
+want      "…and the log names the label as the matching key" "platform_machinery='true'"
+wantbrief "…so the brief carries the never-auto-merge cap" "NEVER enable auto-merge on it"
+wantbrief "…and asks for the machine-readable marker the debouncer reads" "self-referential: true"
+want      "…while triage still RUNS (the label is not triage:none)" "subject=alert:RetroReportOverdue"
+
+# The #237 shape itself, as a witness: strip the label and this alert is dispatchable again. It
+# fails if someone ever makes the gate fire on the alertname instead — which is the rot this
+# issue exists to avoid, and would make the assertion above pass for the wrong reason.
+scenario platform-machinery-witness
+go "$(alert f17 '{"alertname":"RetroReportOverdue","severity":"warning"}')"
+wantnot "unlabelled RetroReportOverdue is NOT self-referential (the #237 shape)" "SELF-REFERENTIAL"
+
+# Exact-match on "true": anything else is not a declaration. A truthy-ish test would make a
+# future `platform_machinery: "false"` mean its own opposite.
+scenario platform-machinery-false
+go "$(alert f18 '{"alertname":"PVCNearFull","namespace":"monitoring","persistentvolumeclaim":"x","platform_machinery":"false"}')"
+wantnot "platform_machinery='false' does NOT trip the gate" "SELF-REFERENTIAL"
+
+# ── the PAIRING: the gate is only as good as the rules that stamp the label ──────────────────────
+# The assertions above prove the gate reads the label; these prove the label is actually ON the
+# alerts it was minted for. Read straight out of the live PrometheusRules — a rule edit that drops
+# a stamp fails HERE, which is the only place it can fail (kubeconform has no opinion about labels,
+# and the alert would simply become dispatchable again in silence).
+section "#239 — the stamped rule set (asserted against the real PrometheusRules)"
+stampval() { # <alertname> <file> → "true" | "unset" | "" (alert not found at all)
+  A="$1" yq -r '.spec.groups[].rules[] | select(.alert == strenv(A)) | .labels.platform_machinery // "unset"' \
+    "$REPO/$2" 2>/dev/null | head -1
+}
+stamped() { # <alertname> <file>
+  local v; v="$(stampval "$1" "$2")"
+  [ "$v" = "true" ] && ok "$1 carries platform_machinery (${2##*/resources/})" \
+                    || bad "$1 stamped in $2" "got '${v:-alert not found}'"
+}
+stamped RetroReportOverdue              argocd/resources/pushgateway/prometheusrule.yaml
+stamped CloudflareZoneSpendToggleEnabled argocd/resources/cloudflare-exporter/prometheusrule.yaml
+stamped CloudflareZonePlanNotFree       argocd/resources/cloudflare-exporter/prometheusrule.yaml
+stamped CloudflareSpendProbeBlind       argocd/resources/cloudflare-exporter/prometheusrule.yaml
+stamped GithubAppPermissionDrift        argocd/resources/github-exporter/prometheusrule.yaml
+stamped GithubPaidUsage                 argocd/resources/github-exporter/prometheusrule.yaml
+stamped GithubActionsMinutesHigh        argocd/resources/github-exporter/prometheusrule.yaml
+stamped GithubStorageHeldHigh           argocd/resources/github-exporter/prometheusrule.yaml
+stamped GithubRateLimitLow              argocd/resources/github-exporter/prometheusrule.yaml
+# …and the counterexample, so the stamp stays LOAD-BEARING rather than decorative: an alert the
+# fixer lane legitimately owns (a red master CI run in a claimed repo) must NOT be stamped.
+v="$(stampval GithubWorkflowRunFailed argocd/resources/github-exporter/prometheusrule.yaml)"
+[ "$v" = "unset" ] && ok "GithubWorkflowRunFailed stays dispatchable (not stamped)" \
+                   || bad "GithubWorkflowRunFailed unstamped" "got '${v:-alert not found}'"
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "#125 — the two brief rules that ride EVERY triage, not just egress drops"

@@ -54,6 +54,12 @@ spec:
           for: 30m
           labels:
             severity: warning
+            # homelab#239: the Apps ARE the loop's machinery — one of them mints the fixer's own
+            # git token — and closing this drift needs either an operator UI click plus an
+            # install approval or a declaration PR; neither is a surface a worker can land by
+            # itself. Fires in ns `monitoring` with a non-`Agent*` name, so the gate's two older
+            # keys both miss it.
+            platform_machinery: "true"
           annotations:
             summary: "GitHub App {{ $labels.app }} permissions differ from the declared state"
             description: "Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"{{ $labels.app }}\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
@@ -89,11 +95,18 @@ spec:
         # minutes discounted to $0, self-hosted runners and public ghcr free; the org's 2026-07
         # statement: gross $0.54 / billed $0). Net >$1 month-to-date = a surprise (runaway
         # private-repo cron, storage overage) — catch it pre-invoice.
+        # ⚠ The three billing alerts below carry `platform_machinery: "true"` (homelab#239). They
+        # are spend probes on the org's OWN account, and each `sum()`s every repo/SKU dimension
+        # away by design — so the alert states a fleet-wide money fact and names no owner, no
+        # repo and no file. There is nothing for a dispatched worker to edit; the next step is an
+        # operator reading the per-SKU breakdown each description already gives. The label caps
+        # the outcome at report/PR-without-auto-merge; triage still runs, which is the point.
         - alert: GithubPaidUsage
           expr: sum(github_billing_net_amount) > 1
           for: 1h
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "GitHub is billing real money this month"
             description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
@@ -106,6 +119,7 @@ spec:
           for: 1h
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "GitHub Actions hosted minutes at 80% of included quota"
             description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
@@ -119,6 +133,7 @@ spec:
           for: 6h
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "GitHub Actions/Packages storage at 80% of quota pace"
             description: '~{{ $value | printf "%.1f" }} GB held over the last day (2 GB included as a monthly average). Find it: per-repo github_billing_usage{unit=~"(?i)gigabytehour.*"}, then the repo''s /actions/artifacts — usually forgotten upload-artifact output (set retention-days, or push images to ghcr instead).'
@@ -190,6 +205,12 @@ spec:
           for: 5m
           labels:
             severity: warning
+            # homelab#239, and the most literally self-referential of the set: the drained pool
+            # belongs to an installation the fixer's own git token is minted from, so a worker
+            # dispatched at this alert spends the pool it is reporting on and FATAL-aborts inside
+            # it (the 2026-07-17 class this alert was built for). `token`/`resource` name an
+            # identity, never a file.
+            platform_machinery: "true"
           annotations:
             summary: "GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})"
             description: '{{ $labels.token }} has {{ $value | humanizePercentage }} of its {{ $labels.resource }} pool left — consumers of this installation will start erroring "API rate limit exceeded" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp.'

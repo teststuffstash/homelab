@@ -58,6 +58,12 @@
 #                comment per clear on a thread that never closes is unbounded by construction —
 #                27 of homelab's 80 comments on 2026-08-08 were this leg, #63 taking four in ~2h
 #                of PSI flapping. A comment is only worth posting where it is also the last word.
+#   self-ref   = THREE keys (#239, 2026-08-11): the rule author's `platform_machinery: "true"`
+#                alert label, plus the original namespace set and the `Agent*` name as belt.
+#                Both older keys INFER machinery from something else and a pushgateway-derived
+#                alert carries neither — RetroReportOverdue dispatched a ride at the retro belt
+#                and latched agent/error (homelab#237). The label is declared where the fact is
+#                known; the pairing is asserted in responder-behaviour-test.sh §#239.
 #   identity   = ONE subject marker per thread (#149, 2026-08-08). The subject IS an issue's
 #                identity and the dedup search greps COMMENTS, so a triage that comments its own
 #                'subject:' onto a thread born of a DIFFERENT subject makes that thread the
@@ -513,19 +519,45 @@ spec:
               # future selfQueue knob (FU-090) derives --no-arm without re-deriving any of this.
               # Widening this list is cheap; narrowing it after a loop has eaten its own outage is
               # not. Rationale + the corpus: docs/agents/roles.md §responder, FU-133.
+              #
+              # ── THIRD KEY: the rule author's own declaration (#239, 2026-08-11) ──────────────
+              # Both keys above INFER machinery from something else — a namespace in the platform
+              # set, or an `Agent*` name — so a platform-machinery alert derived from a PUSHGATEWAY
+              # metric matches neither. RetroReportOverdue (metric
+              # retro_report_last_success_timestamp: no meaningful namespace, name not Agent*)
+              # sailed through this gate on 2026-08-11, took a 'fix' verdict, was debounce-queued,
+              # and put a coordinator ride on the retro belt — a CronWorkflow whose re-fire is an
+              # argo mutation and whose manifests only a human merges. It ended in an agent/error
+              # latch (homelab#237). Name regexes rot one alert at a time; a LABEL is declared at
+              # the rule site, which is the only place the machinery fact is actually known. Same
+              # rule-author convention as `triage: none`, and the two compose rather than overlap:
+              # `triage: none` means do not investigate, this means investigate but a human merges.
+              # ⚠ Stamped where it is LOAD-BEARING, not everywhere it would be true: an alert the
+              # two keys above already catch gains nothing and would pay a label-set change — a new
+              # Alertmanager fingerprint and therefore a reset 24h ledger key. A `triage: none`
+              # alert is skipped before this gate, so a stamp there is inert as well. Which alerts
+              # carry it is asserted by responder-behaviour-test.sh §#239 against the real
+              # PrometheusRules — the only check that can catch a dropped stamp, since
+              # `manifest-lint` SKIPS the PrometheusRule kind (no local CRD schema).
               ANS="$_ns" # includes the alert-scoped `source` fallback — see the _ns derivation above (#124)
-              SELF_REF=""
+              SELF_REF=""; SELF_WHY=""
               case "$ANS" in
-                kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1;;
+                kube-system|argocd|longhorn-system|registry-cache|arc-runners|agent-coordinator|agent-egress|*-agents) SELF_REF=1; SELF_WHY="namespace='$ANS'";;
               esac
-              case "$NAME" in Agent*) SELF_REF=1;; esac
+              case "$NAME" in Agent*) SELF_REF=1; SELF_WHY="${SELF_WHY:+$SELF_WHY + }alertname='$NAME'";; esac
+              # Exact-match on "true": a label carrying any other value is NOT a declaration, and
+              # a truthy-ish test would make a future `platform_machinery: "false"` mean its own
+              # opposite. The value rides in the payload, so this costs zero lookups.
+              case "$(printf '%s' "$a" | jq -r '.labels.platform_machinery // empty')" in
+                true) SELF_REF=1; SELF_WHY="${SELF_WHY:+$SELF_WHY + }platform_machinery='true'";;
+              esac
               # ⚠ This text is the BINDING rule — the comment above and the echo below only describe
               # it. It drifted once (50b8418/60c2826 updated comment+echo but not this string, so
               # "report-only" kept running for 3 days after the cap-the-merge ruling; found 2026-08-07).
               SELF_NOTE=""
               [ -n "$SELF_REF" ] && SELF_NOTE="
-            ⚠ SELF-REFERENTIAL ALERT (computed deterministically from namespace='$ANS'): this fires in the agent loop's OWN substrate — the fix's merge path (CI runners, image pulls, volumes, the git-token broker) may be the very thing that is broken, and a green check proves nothing while the substrate is sick. The cap is on MERGING, not on working: you MAY author a fix PR, but NEVER enable auto-merge on it — state in the PR body that a human must merge it against the sick substrate. End any issue body you file with the line 'self-referential: true' on its own line."
-              [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (ns=$ANS) — may PR + be reviewed, must NOT auto-merge"
+            ⚠ SELF-REFERENTIAL ALERT (computed deterministically — matched: $SELF_WHY): this fires in the agent loop's OWN substrate or its own machinery — the fix's merge path (CI runners, image pulls, volumes, the git-token broker) may be the very thing that is broken, and a green check proves nothing while the substrate is sick; and where the machinery is the loop's own control files, they run from master, so a merge there is a human's call by ruleset. The cap is on MERGING, not on working: you MAY author a fix PR, but NEVER enable auto-merge on it — state in the PR body that a human must merge it. End any issue body you file with the line 'self-referential: true' on its own line."
+              [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (matched: $SELF_WHY) — may PR + be reviewed, must NOT auto-merge"
 
               # ── the fix PAYLOAD for egress drops (#124) ─────────────────────────────────────
               # Deterministic (keys off the alertname alone), because this alert's fixable cause
