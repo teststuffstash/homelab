@@ -28,6 +28,13 @@ meant to avoid.)
    #252 #253 #256-259 (+ circles#77/#78, oracle-fleet#258 on their stacks' own gates). Meta
    read + OrgAdmin merge each; the findings-harvester rule applies (meta-coordinate skill —
    the WHOLE body, every finding fixed/filed/dismissed pre-merge).
+   ⚠ **FIRST ACT of the session (operator directive 2026-08-11, before ANYTHING else incl. the
+   Goal): drain the existing open-PR/issue lane.** As of end-of-session, homelab has 5 open PRs
+   all red — CI runs cancelled by the day's master pushes, or dead on the FU-130 WAN class
+   (`argocd-validate-pins` → cache.nixos.org narinfo deadline — the SAME failure as
+   snore-recorder#15; not diagnosed, deliberately). Re-run/update-branch each, review + merge
+   the queue, and only THEN open the FU-165 Goal — **the regular-issue lane must be EMPTY
+   before the goal lane starts, so the two mechanisms never fight on the pilot run.**
 2. **Platform board residue**: #103 + #153 CLOSED 2026-08-11 (alerts cleared). Remaining:
    #221 (above), #223 (host session below), #235 queued, #241 (record + TTL-vs-crossrefs soak
    note), #242/#248 unqueued by intent — queue them during the blitz.
@@ -51,7 +58,12 @@ meant to avoid.)
    fan-out; kill the dead coordinate-now row) · FU-140 (Composition crash-net; write-only key
    ⇒ unconditional PUT) · FU-160 (agent_run_phase_seconds + panel + deviation alert) ·
    FU-158 behaviour half (promtool test fixtures, spend/agent-loop files first) · FU-102
-   (oracle probe.md from UC-1 + flip prober.enabled) · FU-162 (draw verb + pools, ADR-104).
+   (oracle probe.md from UC-1 + flip prober.enabled) · FU-162 (draw verb + pools, ADR-104) ·
+   **inventory-yaml unification** (operator, 2026-08-11: ONE inventory yaml — machines.yaml
+   extended — consumed by tofu via `yamldecode` for the metal flags AND by `generate.py` for
+   marker-delimited generated blocks in README/CLAUDE host tables + the version triple; kills
+   the hand-copy drift class proven today. SERVICES.md's generated successor stays FU-049,
+   separate).
    Judge at decompose (bigger): FU-095 legs, FU-090(b), FU-106 G01 flip post-soak + G06 lens,
    FU-104 teeth, FU-101 ASVS/e-ITS.
 5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
