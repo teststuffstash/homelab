@@ -138,6 +138,12 @@ spec:
             - { name: ORG, value: "teststuffstash" }
             - { name: DIGEST_REPO, value: "homelab" }
             - { name: PRICE_CEILING, value: "0.50" }
+            # FU-161 leg 2 (homelab#299/PR#306): the MCP get-model benchmark pull. OPERATOR
+            # direct-to-master by design — this file is pin-only-lint-guarded, so no PR can land
+            # non-pin lines; the Secret is ESO-minted by scout-account-key.yaml. optional: the
+            # scout degrades to `unbenched` columns without it.
+            - name: SCOUT_MCP_KEY
+              valueFrom: { secretKeyRef: { name: scout-account-key, key: OPENROUTER_API_KEY, optional: true } }
             - name: GH_TOKEN
               valueFrom: { secretKeyRef: { name: coordinator-git, key: GH_TOKEN, optional: true } }
             - { name: GH_TOKEN_FILE, value: "/var/run/coordinator-git/GH_TOKEN" }
