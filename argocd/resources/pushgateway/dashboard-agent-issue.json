@@ -156,12 +156,25 @@
       ]
     },
     {
+      "id": 15,
+      "type": "bargauge",
+      "title": "Dispatch phase breakdown — FLEET, the LATEST dispatch per stack (coordinator-owned, above the launcher)",
+      "description": "FU-160's coordinator half (homelab#319) — the ~2m16s that sat above `dispatch-gates` and used to be archaeology. ring-to-scan = doorbell/cron submit → the scan pod running (Sensor, the coordinator-scan mutex wait, schedule, image pull, container start); scan = the deterministic pass; coordinator-spinup = the item pod's apply → Ready (51s in the 2026-08-09 specimen, the single biggest line in the chain); coordinator-session = the headless tick as ONE number. ⚠ A DIFFERENT METRIC from the bars to the left, deliberately: these rows are per STACK (the scan runs before an item is picked, so they carry no issue/round) and their group is OVERWRITTEN by the next dispatch — so this shows the most recent dispatch per stack, never a history, and AgentRunPhaseSlow does not read them. Fleet-wide and NOT scoped to $project: `project` here is the STACK's main repo, which is usually not the repo a worker rides. A missing row means the emitter could not reach the pushgateway (a jail run), or — for ring-to-scan only — that the scan could not read its own Workflow object.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 19 },
+      "options": { "orientation": "horizontal" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (project, phase) (agent_dispatch_phase_seconds)", "instant": true, "legendFormat": "{{project}} · {{phase}}" }
+      ]
+    },
+    {
       "id": 7,
       "type": "bargauge",
       "title": "Control-plane cost by role — $project (OTLP, ALL issues)",
       "description": "claude_code_* metrics (coordinator/reviewer via the A0 OTLP rail) carry project and pr but NO issue label — this panel is project-scoped, not issue-scoped.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 19 },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 26 },
       "options": { "orientation": "horizontal" },
       "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
       "targets": [
@@ -173,7 +186,7 @@
       "type": "bargauge",
       "title": "Control-plane tokens by model — $project (ALL issues)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 19 },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 26 },
       "options": { "orientation": "horizontal" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [
@@ -185,7 +198,7 @@
       "type": "timeseries",
       "title": "Worker pods running in $project",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 19 },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 26 },
       "targets": [
         { "expr": "sum(kube_pod_status_phase{phase=\"Running\", namespace=\"$project\", pod=~\"agent-.*\"}) or vector(0)", "legendFormat": "workers" }
       ]
@@ -196,7 +209,7 @@
       "title": "DENIED destinations from $project (dashboard range)",
       "description": "What the netpol is blocking, by name: hubble drop metric runs destinationContext=dns|ip, so the DNS-proxy-known FQDN (or raw IP) labels every POLICY_DENIED drop. A legit destination goes into the claim's egress.extraFQDNs; openrouter.ai here = the policy doing its job.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
       "targets": [
         { "expr": "topk(15, sum by (destination) (increase(hubble_drop_total{reason=\"POLICY_DENIED\", source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
       ],
@@ -211,7 +224,7 @@
       "title": "DNS queries from $project (dashboard range)",
       "description": "Everything the namespace TRIED to resolve (hubble dns metric, query names per source namespace) — the intent signal that pairs with the denied-destinations table.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
       "targets": [
         { "expr": "topk(20, sum by (query) (increase(hubble_dns_queries_total{source=\"$project\"}[$__range])) > 0)", "instant": true, "format": "table" }
       ],
@@ -225,7 +238,7 @@
       "type": "logs",
       "title": "Worker pod logs — $project (all issues; grep the AGENT_RUN_STATS line for issue/pod mapping)",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 34 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 41 },
       "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
       "targets": [
         { "expr": "{namespace=\"$project\", pod=~\"agent-.*\"}", "refId": "A" }

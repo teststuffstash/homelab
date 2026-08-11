@@ -1,0 +1,67 @@
+# ── bridge ── two seams under the block: the wall clock and the transport. The Workflow read is
+# deliberately NOT one of them — it goes through the harness's PATH-shim `kubectl`, so the call
+# this clause makes (which object, in which namespace) lands in the action stream and the
+# `creationTimestamp` → epoch conversion stays real arithmetic over a recorded payload.
+#
+# THE CLOCK IS SET PER CALL, not advanced by the seam: `dispatch_phase` reads it inside a command
+# substitution and a subshell cannot write back, so a self-advancing `dp_now` would hand out its
+# first tick forever and every phase would measure 0 while the fixture looked green (the rule
+# agents/replay/README.md draws from run-phase-metric and the fix-debounce family).
+dp_now() { printf '%s' "${DP_NOW:?the fixture must pin DP_NOW before every dispatch_phase call}"; }
+
+curl() {
+  printf 'CALL curl %s\n' "$*" >> "$REPLAY_ACTIONS"
+  while IFS= read -r l; do printf 'STDIN %s\n' "$l" >> "$REPLAY_ACTIONS"; done
+  return "${CURL_RC:-0}"
+}
+
+# The block took both marks with the REAL clock at definition time — the bridge is composed after
+# it, so `dp_now` was still `date` then. Re-arm them on the fixture's clock: the pod started at
+# T0 and everything the fixture asserts is a difference from there.
+DISPATCH_PHASE_T0=1786464900
+DISPATCH_PHASE_MARK=1786464900
+
+# The recorded Workflow was submitted at 17:24:40Z = 1786464880, twenty seconds before the pod's
+# own start — the spike's "ring → scan pod cloning" row, give or take.
+
+echo "REACHED: the Workflow is unreadable — the ring row is absent, the scan row still ships"
+DP_NOW=1786464930; STUB_KUBECTL=fail dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+# A failed probe is NOT latched: the next dispatch tries again, and this time the world answers.
+echo "REACHED: the ring edge is readable"
+DP_NOW=1786464940; dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+# A second dispatch in the SAME scan (the global instance sweeping a second stack): `scan` measures
+# from the first dispatch, not from the pod's start, and `ring-to-scan` is unchanged because it
+# belongs to the pod. The probe is cached, so there is no second kubectl call.
+echo "REACHED: a second dispatch, a different stack"
+DP_NOW=1786465000; dispatch_phase oracle-fleet
+printf 'RETURN %s\n' "$?"
+
+# ── the paths that must never cost a dispatch ───────────────────────────────────────────────────
+# No project to key the group on: nothing is published, the clock still moves.
+echo "REACHED: no project"
+DP_NOW=1786465005; dispatch_phase ""
+printf 'RETURN %s\n' "$?"
+
+# AGENT_PUSHGATEWAY_URL explicitly emptied (the jail/manual path): same deal, no push at all.
+echo "REACHED: gateway disabled"
+DP_NOW=1786465011; DISPATCH_PHASE_PGW="" dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+# The gateway is up but refuses (curl exit 7). One warning, the dispatch is unaffected — and the
+# payload proves the two silent calls above still moved the mark (5s + 6s), which is the whole
+# reason it advances outside the push gate.
+echo "REACHED: gateway refuses the push"
+DP_NOW=1786465031; CURL_RC=7 dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+# The SECOND refusal in the same run says nothing: the warning is latched, because a line per
+# dispatch is the noise floor that hid a spinning Sensor for ~50 minutes (homelab#103).
+echo "REACHED: gateway refuses again — latched, no second warning"
+DP_NOW=1786465033; CURL_RC=7 dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+echo "REACHED: end"
