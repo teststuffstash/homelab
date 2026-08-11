@@ -1,33 +1,75 @@
-# Homelab machine inventory + benchmarks. Single source of truth — expand freely, then
-# regenerate the tables with:  python3 machines/generate.py   (writes machines/README.md + .html)
+# Homelab machine inventory — the SINGLE SOURCE OF TRUTH for what boxes exist, and (for the
+# bare-metal Talos workers) how tofu installs them. Two consumers read this file:
 #
-# Benchmark = stress-ng `--cpu N --cpu-method matrixprod` bogo-ops/s (synthetic; only comparable
-# across these runs, not a real-world score). See docs/power-measurements.md for the method.
-# Derived columns (perf/W, load delta) are computed by the generator — don't hand-edit them.
+#   1. `tofu/locals.tf`  — `yamldecode(file(...))` derives `local.metal_nodes` (tofu/metal.tf),
+#      `local.avx2_nodes` (the homelab.io/cpu-avx2 label) and `local.ephemeral_nodes` (the
+#      homelab.io/ephemeral taint). Editing a metal flag HERE changes the cluster on the next
+#      `tofu apply` — there is no second copy in the .tf files any more.
+#   2. `machines/generate.py` — regenerates machines/README.md + machines.html AND the
+#      marker-delimited host tables + version line in ../README.md and ../CLAUDE.md.
 #
-# Fields (leave null/omit what's not measured yet):
-#   name, role, hardware, cpu_cores (logical), memory_gb, ip, plug (HA entity),
-#   idle_w, load_w, singlecore_bogo_s, multicore_bogo_s, remote_power, notes
+# After ANY edit:  devbox run -- python3 machines/generate.py   (then commit the generated files;
+# re-running must produce an empty diff — the tables are a stable regeneration, CONTEXT.md #2).
 #
-# remote_power = how the box is powered on/cycled remotely (WoL, smart-plug, hypervisor, …).
-# Matters for power-loss recovery — see docs/runbook.md "Power-loss / ghost-node recovery".
+# ── Fields ───────────────────────────────────────────────────────────────────────────────────
+# Identity / docs (consumed by generate.py):
+#   name        node/host name (also the tofu map key + the k8s node name for cluster members)
+#   kind        metal | vm | lxc | device   — only `metal` boxes appear in the power/benchmark
+#               table (a VM/LXC draws no wall power of its own)
+#   label       host-table display name, markdown (README.md + CLAUDE.md "Host" column)
+#   role        one-line role — the "Role" column of BOTH generated tables
+#   ip          primary IPv4; `ip_display` overrides just the rendered text (pop-os is dual-homed)
+#   hardware    box/CPU description (power table "Hardware" column)
+#
+# Power / benchmarks (`kind: metal` only; leave null/omit what's not measured yet):
+#   cpu_cores (logical), memory_gb, plug (HA entity), idle_w, load_w, singlecore_bogo_s,
+#   multicore_bogo_s, remote_power, notes.
+#   Benchmark = stress-ng `--cpu N --cpu-method matrixprod` bogo-ops/s (synthetic; only comparable
+#   across these runs, not a real-world score). See docs/power-measurements.md for the method.
+#   Derived columns (perf/W, load delta) are computed by the generator — don't hand-edit them.
+#   remote_power = how the box is powered on/cycled remotely (WoL, smart-plug, hypervisor, …).
+#   Matters for power-loss recovery — see docs/runbook.md "Power-loss / ghost-node recovery".
+#
+# Talos / cluster flags (consumed by tofu):
+#   talos_metal_node  true ⇒ tofu/metal.tf manages this node's machine config (PXE-installed
+#                     bare-metal worker). Requires `install_disk`.
+#   install_disk      target disk for the Talos install (NOT the optane cache)
+#   optane_disks      extra block devices formatted+mounted as Longhorn "fast" disks. Mounted
+#                     UNDER /var/lib/longhorn/ on purpose: longhorn-manager only host-mounts that
+#                     path (Bidirectional propagation), so a disk anywhere else is invisible to
+#                     it. Each becomes /var/lib/longhorn/optane<N>; registered with tag "fast"
+#                     (scripts/longhorn-register-optane.sh + the longhorn-fast StorageClass).
+#   pin_hostname      pin the hostname via a HostnameConfig patch (default true). Set false for a
+#                     node that has NOT yet been reinstalled with the pinned config — otherwise a
+#                     plain `tofu apply` would push the hostname change to the *running* node and
+#                     ghost it (install-time only; see the ⚠ in tofu/metal.tf).
+#   kata              install the metal_kata image (Kata Containers runtime — SLSA Phase-3 /
+#                     agent-CI microVMs, tofu/image.tf) and label the node kata-capable (the
+#                     `kata` RuntimeClass in kata.tf selects on it). Requires VT-x in BIOS.
+#                     Install-time only, like everything in install.image.
+#   avx2              CPU has AVX2 ⇒ Talos machine.nodeLabels homelab.io/cpu-avx2=true, so the
+#                     label travels with the machine config and survives a reinstall
+#                     (boot-from-git) instead of an imperative `kubectl label`. Used to schedule
+#                     AVX2-only workloads (opencode's Bun runtime SIGILLs without it; see
+#                     agents/agent-session.sh). Applies to VMs and metal alike.
+#   ephemeral         compute/ephemeral tier ⇒ the homelab.io/ephemeral=true NoSchedule taint
+#                     (kubernetes_node_taint in tofu/metal.tf), so stateful workloads never land
+#                     there; explicitly-tolerating workloads still can. Applied AFTER the node
+#                     joins (docs/provisioning.md step 7).
+#
+# NOT here (yet), on purpose — each has one home and moving it needs a file outside this change:
+#   • VM specs (vm_id/cores/memory/disk) — `var.nodes` in tofu/variables.tf, `ci-runner.tf` for
+#     the runner VM. The `ip` below is the only field duplicated from there.
+#   • MAC addresses / DHCP reservations — `opnsense/dnsmasq-dhcp.py`.
+#   • Version triple (Talos/k8s/Cilium) — `tofu/variables.tf` defaults; generate.py READS them
+#     from there to render the version line (one home, no copy).
+#   • Services (VIPs/hostnames) — SERVICES.md (its generated successor is FU-049).
 
 machines:
-  - name: pve
-    role: Proxmox hypervisor (hosts the Talos VMs + Matchbox LXC)
-    hardware: AliExpress X99 + Intel Xeon E5-2680 v4
-    cpu_cores: 28        # 14C / 28T
-    memory_gb: 64
-    ip: 192.168.2.3
-    plug: sensor.plug_pve_power
-    idle_w: 127
-    load_w: null
-    singlecore_bogo_s: null
-    multicore_bogo_s: null
-    notes: Idle figure is from the dashboard; not stress-tested (don't want to stress the hypervisor).
-
   - name: opnsense
-    role: Router / firewall / DHCP / DNS / FRR / HAProxy
+    kind: metal
+    label: OPNsense ("Big Data", HP desktop)
+    role: Router/FW + DHCP (dnsmasq) + DNS (Unbound) + FRR/BGP + HAProxy + ACME
     hardware: HP desktop ("Big Data")
     cpu_cores: 4         # i5-2500
     memory_gb: 8
@@ -39,8 +81,58 @@ machines:
     multicore_bogo_s: null
     notes: Not stress-tested (production router).
 
+  - name: pve
+    kind: metal
+    label: Proxmox `pve` (X99/Xeon, 64GB)
+    role: Hypervisor for the Talos VMs + Matchbox LXC
+    hardware: AliExpress X99 + Intel Xeon E5-2680 v4
+    cpu_cores: 28        # 14C / 28T
+    memory_gb: 64
+    ip: 192.168.2.3
+    plug: sensor.plug_pve_power
+    idle_w: 127
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Idle figure is from the dashboard; not stress-tested (don't want to stress the hypervisor).
+
+  - name: matchbox
+    kind: lxc
+    label: Matchbox LXC (CTID 210)
+    role: PXE provisioning (proxy-DHCP + TFTP + Matchbox)
+    hardware: LXC container on pve (CTID 210)
+    ip: 192.168.2.30
+    notes: Provisioned by the separate tofu root tofu/provisioning/ (own state).
+
+  - name: cp-01
+    kind: vm
+    label: "`cp-01` (VM)"
+    role: k8s control plane
+    hardware: Talos VM on pve
+    ip: 192.168.2.51
+    # avx2 deliberately unset: the label targets AVX2-only *workload* scheduling, and the control
+    # plane carries none (unchanged from the pre-YAML local.avx2_nodes set).
+
+  - name: wk-01
+    kind: vm
+    label: "`wk-01` (VM)"
+    role: k8s worker
+    hardware: Talos VM on pve
+    ip: 192.168.2.61
+    avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
+
+  - name: wk-02
+    kind: vm
+    label: "`wk-02` (VM)"
+    role: k8s worker + Longhorn (bulk tier)
+    hardware: Talos VM on pve
+    ip: 192.168.2.62
+    avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
+
   - name: thinkcentre
-    role: k8s worker (storage tier + Optane fast tier)
+    kind: metal
+    label: "`thinkcentre` (metal, PXE)"
+    role: k8s worker + Longhorn (+ 2×Optane fast tier)
     hardware: Lenovo ThinkCentre Edge
     cpu_cores: 2
     memory_gb: 4
@@ -51,6 +143,17 @@ machines:
     singlecore_bogo_s: 1200.4
     multicore_bogo_s: 2231.7
     remote_power: smart-plug (switch.konditsioneer_socket); auto-boots on AC restore — NOT WoL
+    # ThinkCentre Edge — 120GB Kingston SV300S3 SATA SSD. ⚠️ Device name is enumeration-order
+    # dependent: it's /dev/sdb when PXE-booting with NO USB stick plugged (the steady state), but
+    # was /dev/sdc during the original USB-ISO onboarding (USB took sda). PXE now works reliably
+    # since the NIC cable was fixed (2026-06-11) — was "flaky PXE" purely because the marginal
+    # link timed out netboot. (A diskSelector by serial/wwid would be more robust than /dev/sdX.)
+    # Two Intel Optane M10 16GB (nvme0n1/nvme1n1) → Longhorn fast tier (replica=1 scratch).
+    # No AVX2 (Pentium G840) — verified via /proc/cpuinfo.
+    talos_metal_node: true
+    install_disk: /dev/sdb
+    optane_disks: [/dev/nvme0n1, /dev/nvme1n1]
+    pin_hostname: true
     notes: >-
       Desktop — highest absolute throughput of the tested boxes, but thirsty.
       WoL is not the control path: BIOS is set to power-on after AC loss, so the box never rests
@@ -59,65 +162,10 @@ machines:
       Home Assistant; it boots when AC returns. NIC-level WoL support is therefore unverified
       (Talos ships no ethtool) and moot for this box.
 
-  - name: wk-metal-01
-    role: k8s worker (ephemeral / compute tier, tainted; KATA node + Longhorn BULK tier)
-    hardware: Lenovo ThinkPad X240
-    cpu_cores: 4         # 2C / 4T
-    memory_gb: 8
-    ip: 192.168.2.182
-    plug: sensor.plug_laptop3_power
-    idle_w: 9.1
-    load_w: 28.8
-    singlecore_bogo_s: 1182.1
-    multicore_bogo_s: 1932.2
-    notes: Most power-efficient tested. AC draw is battery-buffered + power-capped (~29 W flat).
-
-  - name: wk-metal-02
-    role: k8s worker (ephemeral / compute tier, tainted; KATA node)
-    hardware: Lenovo ThinkPad X250
-    cpu_cores: 4
-    memory_gb: 8
-    ip: 192.168.2.183
-    plug: sensor.plug_laptop4_power
-    idle_w: null
-    load_w: null
-    singlecore_bogo_s: null
-    multicore_bogo_s: null
-    notes: Not yet stress-tested — matched-pair candidate vs the X240.
-
-  - name: wk-metal-03
-    role: k8s worker (ephemeral / compute tier, tainted; KATA node — microVM runtime)
-    hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
-    cpu_cores: 2
-    memory_gb: 8
-    ip: 192.168.2.184
-    plug: null
-    idle_w: null
-    load_w: null
-    singlecore_bogo_s: null
-    multicore_bogo_s: null
-    notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
-
-  - name: wk-metal-04
-    role: k8s worker (ephemeral / compute tier, tainted; KATA node + Longhorn BULK tier)
-    hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
-    cpu_cores: 4
-    memory_gb: 16
-    ip: 192.168.2.186
-    plug: null
-    idle_w: null
-    load_w: null
-    singlecore_bogo_s: null
-    multicore_bogo_s: null
-    notes: >-
-      The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so
-      opencode/Bun rides are excluded; onboarded 2026-07-28. Carries the THIRD bulk-tier
-      Longhorn disk since 2026-08-07 (ADR-089 addendum): 150Gi reserved, because Longhorn shares
-      the ephemeral partition with the containerd+kata image store and the kubelet's nodefs
-      floor evicts pods when they collide.
-
   - name: hp-01
-    role: k8s worker (storage tier, WoL-capable)
+    kind: metal
+    label: "`hp-01` (metal, PXE)"
+    role: k8s worker + Longhorn (WoL-capable)
     hardware: HP desktop
     cpu_cores: null
     memory_gb: 8
@@ -128,4 +176,144 @@ machines:
     singlecore_bogo_s: null
     multicore_bogo_s: null
     remote_power: Wake-on-LAN (PXE-booted; no smart plug)
+    # HP desktop — 128GB SanDisk SATA SSD. Installs WITH extensions (the metal install image),
+    # so it joins Longhorn-ready. Power: aquarium plug (AC-restore flaky → WoL).
+    # No AVX2 — verified via /proc/cpuinfo.
+    talos_metal_node: true
+    install_disk: /dev/sda
     notes: No smart plug — power not measurable from here.
+
+  - name: wk-metal-01
+    kind: metal
+    label: "`wk-metal-01` (ThinkPad X240, PXE)"
+    role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB) + Longhorn bulk tier
+    hardware: Lenovo ThinkPad X240
+    cpu_cores: 4         # 2C / 4T
+    memory_gb: 8
+    ip: 192.168.2.182
+    plug: sensor.plug_laptop3_power
+    idle_w: 9.1
+    load_w: 28.8
+    singlecore_bogo_s: 1182.1
+    multicore_bogo_s: 1932.2
+    # ThinkPad X240 — 500GB Crucial MX500 SATA SSD (confirmed via `talosctl get disks`).
+    # kata=true 2026-07-14 (docker-capable agent workers on all 3 laptops): the flag's
+    # install.image only matters at (re)install; the RUNNING node was moved to the kata image
+    # via `talosctl upgrade` (safe on metal), which is the same end state.
+    # Haswell → AVX2.
+    talos_metal_node: true
+    install_disk: /dev/sda
+    kata: true
+    avx2: true
+    ephemeral: true
+    notes: Most power-efficient tested. AC draw is battery-buffered + power-capped (~29 W flat).
+
+  - name: wk-metal-02
+    kind: metal
+    label: "`wk-metal-02` (ThinkPad X250, PXE)"
+    role: k8s worker, ephemeral/compute tier (tainted; kata node, 8GB)
+    hardware: Lenovo ThinkPad X250
+    cpu_cores: 4
+    memory_gb: 8
+    ip: 192.168.2.183
+    plug: sensor.plug_laptop4_power
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    # ThinkPad X250 — 128GB SanDisk SDSSDHP1 SATA SSD (confirmed via `talosctl get disks`).
+    # Laptop/compute tier like the X240: tainted ephemeral, no Longhorn disk.
+    # kata=true 2026-07-14, same talosctl-upgrade path as wk-metal-01. Broadwell → AVX2.
+    talos_metal_node: true
+    install_disk: /dev/sda
+    kata: true
+    avx2: true
+    ephemeral: true
+    notes: Not yet stress-tested — matched-pair candidate vs the X240.
+
+  - name: wk-metal-03
+    kind: metal
+    label: "`wk-metal-03` (laptop i5-6200U, PXE)"
+    role: k8s worker, ephemeral/compute tier (tainted; kata node)
+    hardware: laptop, i5-6200U (Skylake, VT-x/KVM + AVX2)
+    cpu_cores: 2
+    memory_gb: 8
+    ip: 192.168.2.184
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    # Laptop (i5-6200U Skylake: VT-x + AVX2) — 256GB Samsung MZ7LN256 SATA SSD (confirmed via
+    # maintenance-mode `get disks`). The FIRST kata node (kata=true → metal_kata install image +
+    # homelab.io/kata label; SLSA Phase-3 / agent-CI microVMs) — all 3 laptops carry it since
+    # 2026-07-14. Compute tier: tainted ephemeral.
+    talos_metal_node: true
+    install_disk: /dev/sda
+    kata: true
+    avx2: true
+    ephemeral: true
+    notes: Kata spike node (SLSA Phase-3 / agent-CI microVMs); 256GB Samsung MZ7LN256; onboarded 2026-07-13.
+
+  - name: wk-metal-04
+    kind: metal
+    label: "`wk-metal-04` (desktop i5-3570K 16GB, PXE)"
+    role: k8s worker, ephemeral/compute tier (tainted; kata node, no AVX2) + Longhorn bulk tier
+    hardware: desktop, i5-3570K (Ivy Bridge, VT-x/EPT, no AVX2)
+    cpu_cores: 4
+    memory_gb: 16
+    ip: 192.168.2.186
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    # Desktop i5-3570K (Ivy Bridge: VT-x + EPT → kata OK; VT-d absent on the K SKU but not needed
+    # for microVMs; NO AVX2 → intentionally left avx2-unset, so goose rides schedule here but
+    # opencode (Bun SIGILLs) does not). 16GB RAM = the roomy kata node: unlike the 8GB laptops a
+    # ~5Gi ride fits with ~7Gi to spare (the Playwright/Chrome gate's home — sleep#48).
+    # 500GB SATA SSD → /dev/sda (⚠ CONFIRM via `talosctl -n 192.168.2.186 get disks --insecure` at
+    # maintenance before install). kata=true → metal_kata install image + homelab.io/kata label +
+    # the FU-112b kubelet reservation (conservative on 16GB). Compute tier: tainted ephemeral.
+    talos_metal_node: true
+    install_disk: /dev/sda
+    kata: true
+    ephemeral: true
+    notes: >-
+      The roomy kata node (16GB — Playwright/Chrome gate home); 500GB SATA; no AVX2 so
+      opencode/Bun rides are excluded; onboarded 2026-07-28. Carries the THIRD bulk-tier
+      Longhorn disk since 2026-08-07 (ADR-089 addendum): 150Gi reserved, because Longhorn shares
+      the ephemeral partition with the containerd+kata image store and the kubelet's nodefs
+      floor evicts pods when they collide.
+
+  - name: ci-runner-01
+    kind: vm
+    label: "`ci-runner-01` (VM)"
+    role: GitHub Actions runner VM — Docker/binfmt builds (ADR-082)
+    hardware: Debian 12 VM on pve
+    ip: 192.168.2.55
+    notes: Specs + toggle live in tofu/ci-runner.tf (self-registering via the runner-registrar App).
+
+  - name: droplet
+    kind: device
+    label: Droplet (ESP32)
+    role: ESPHome plant-irrigation node
+    hardware: ESP32 (office-plants irrigation)
+    ip: 192.168.2.245
+    notes: Flashed from esphome/config/office-plants-irrigation.yaml (devbox run flash-irrigation).
+
+  - name: pop-os
+    kind: metal
+    label: pop-os
+    role: the Docker host running this jail
+    hardware: workstation (Pop!_OS)
+    ip: 192.168.2.10
+    ip_display: 192.168.2.10 / .57
+    cpu_cores: null
+    memory_gb: null
+    plug: null
+    idle_w: null
+    load_w: null
+    singlecore_bogo_s: null
+    multicore_bogo_s: null
+    notes: Not a cluster member — hosts the agent jail; dual-homed (.10 / .57).
