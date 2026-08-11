@@ -453,15 +453,15 @@ the block needs pruning, not more headings.
       over 1h vs baseline — cache degradation shows as pod-spinup/gates inflation). Shave
       candidates (fast-path, pr-open script, image pin) live in the spike, not here.
 
-- [ ] **FU-158** — **No PrometheusRule in `argocd/resources/**` has a behaviour gate: every alert
-      expr merges unexecuted.** Surfaced by PR#220's operator findings (2026-08-09): kubeconform
-      SKIPS the kind (schema gap, known — FU archive 2026-08-04 note), and there is no
-      `promtool test rules` (not in devbox.json) or any repo-wide rule replay — so a renamed
-      metric, inverted polarity, or wrong constant in any of the ~27 alerts ships green. Two
-      per-file self-tests now exist as the pattern (exporter, spend-probe: read the COMMITTED
-      exprs, replay against fixtures). Next: decide promtool-in-devbox (one tool, real `for:`
-      + time-series semantics) vs. extending the self-test pattern per rule file; either becomes
-      a CI step. Not urgent — the two files with product-spend/agent-loop rules are covered.
+- [ ] **FU-158** — **PrometheusRule behaviour gates — promtool RULED + check-half SHIPPED
+      2026-08-11** (operator: promtool over more per-file self-tests; the pattern's third
+      instance — exporter, spend-probe, responder-behaviour-test — settled the ≥2 rule).
+      Shipped: `prometheus` (cli output) in devbox, `devbox run prometheus-rules-lint`
+      (spec.groups → `promtool check rules`, fail-on-nothing-validated; 8 files / 44 rules,
+      all parse) + the ci step. **Remaining:** the BEHAVIOUR half — `promtool test rules`
+      fixtures per rule file (`for:` + time-series semantics; a renamed metric still ships
+      green today), worker-queueable per file; start with the two spend/agent-loop files.
+      Origin: PR#220 findings + the #237 gate-miss (more evidence 2026-08-11).
 
 - [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing:
       POINTER.** Mechanism, corpus audit (19-of-27), the shipped halves (resolve/dedup/dispatch,
