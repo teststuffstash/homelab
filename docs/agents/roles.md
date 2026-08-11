@@ -148,7 +148,8 @@ tier allowed, dual-model worth it) are FU-095's.
 
 ## Role machinery checklists (built + planned)
 
-- **prober** (FU-102) — the agentic canary. Product-contract probes (oracle UC-1 probe-e2e is
+- **prober** (FU-102) — the **contract probe** role (glossary ruling: *canary* unqualified is
+  the scout's rail probe; the early "agentic canary" name is retired). Product-contract probes (oracle UC-1 probe-e2e is
   the proven brief); prod-read + report-only. **Scheduled leg BUILT 2026-08-07, disabled
   everywhere**: claim knob `spec.prober {enabled, schedule, model}` renders `probe-<stack>`
   (CronWorkflow, loop ns) running `<mainRepo>/.agents/probe.md` on the SUBSCRIPTION

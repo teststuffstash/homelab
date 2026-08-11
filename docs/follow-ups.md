@@ -523,9 +523,11 @@ the block needs pruning, not more headings.
 - [ ] **FU-163** — **Homelab glossary + vocabulary pruning: POINTER.** The glossary EXISTS
       (2026-08-11): [`docs/glossary.md`](glossary.md) — ruled terms + collision inventory +
       the "a NEW name clears the glossary first" rule (also in CLAUDE.md prior-art); `/design`
-      term-closure consumes it as the term→home index. **Next:** the informal-usage sweep
-      (prose "goal" ~360 hits in docs/agents/ → Goal / mission / plain wording — ride the
-      docs-cleanup pipeline, not big-bang); the researcher `goal` dispatch-label rename
+      term-closure consumes it as the term→home index. **Next:** the informal-usage sweep —
+      MEASURED SMALL 2026-08-11: the dense "goal" files are correct TYPE vocabulary
+      (issue-authoring 163, lifecycle-fsm 113 = generated) and the ambiguity hot-spots carry
+      ⚠ notes; only ambiguous prose rewords, riding docs-cleanup; the researcher `goal`
+      dispatch-label rename
       (machinery touch: scan/Sensors/recipes read it — never ad hoc); build `docs-graph-lint`
       check #3 (a doc leaning on a term without linking its glossary home). Relates FU-117.
 - [ ] **FU-106** — **Build out the -iac lane: POINTER.** Role, doctrine, lane taxonomy, the
