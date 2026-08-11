@@ -1,0 +1,6 @@
+OUT → RetroReportOverdue (5d87a09c332779c8): SELF-REFERENTIAL (matched: platform_machinery='true') — may PR + be reviewed, must NOT auto-merge
+OUT SELF_REF=1
+OUT SELF_WHY=platform_machinery='true'
+OUT SELF_NOTE: carries the never-auto-merge cap
+OUT SELF_NOTE: asks for the marker the debouncer reads
+RC 0

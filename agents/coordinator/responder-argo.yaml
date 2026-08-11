@@ -539,6 +539,7 @@ spec:
               # carry it is asserted by responder-behaviour-test.sh §#239 against the real
               # PrometheusRules — the only check that can catch a dropped stamp, since
               # `manifest-lint` SKIPS the PrometheusRule kind (no local CRD schema).
+              # >>>REPLAY:responder-selfref-gate>>>
               ANS="$_ns" # includes the alert-scoped `source` fallback — see the _ns derivation above (#124)
               SELF_REF=""; SELF_WHY=""
               case "$ANS" in
@@ -558,6 +559,7 @@ spec:
               [ -n "$SELF_REF" ] && SELF_NOTE="
             ⚠ SELF-REFERENTIAL ALERT (computed deterministically — matched: $SELF_WHY): this fires in the agent loop's OWN substrate or its own machinery — the fix's merge path (CI runners, image pulls, volumes, the git-token broker) may be the very thing that is broken, and a green check proves nothing while the substrate is sick; and where the machinery is the loop's own control files, they run from master, so a merge there is a human's call by ruleset. The cap is on MERGING, not on working: you MAY author a fix PR, but NEVER enable auto-merge on it — state in the PR body that a human must merge it. End any issue body you file with the line 'self-referential: true' on its own line."
               [ -n "$SELF_REF" ] && echo "→ $NAME ($FP): SELF-REFERENTIAL (matched: $SELF_WHY) — may PR + be reviewed, must NOT auto-merge"
+              # <<<REPLAY:responder-selfref-gate<<<
 
               # ── the fix PAYLOAD for egress drops (#124) ─────────────────────────────────────
               # Deterministic (keys off the alertname alone), because this alert's fixable cause
