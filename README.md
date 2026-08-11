@@ -23,7 +23,7 @@ this repo (data is the only exception → S3, bucket-id in git). A Talos Linux K
 | Proxmox `pve` (X99/Xeon, 64GB) | 192.168.2.3 | Hypervisor for the Talos VMs + Matchbox LXC |
 | Matchbox LXC (CTID 210) | 192.168.2.30 | PXE provisioning (proxy-DHCP + TFTP + Matchbox) |
 | `cp-01` (VM) | 192.168.2.51 | k8s control plane |
-| `wk-01` (VM) | 192.168.2.61 | k8s worker + Longhorn |
+| `wk-01` (VM) | 192.168.2.61 | k8s worker |
 | `wk-02` (VM) | 192.168.2.62 | k8s worker + Longhorn (bulk tier) |
 | `thinkcentre` (metal, PXE) | 192.168.2.53 | k8s worker + Longhorn (+ 2×Optane fast tier) |
 | `hp-01` (metal, PXE) | 192.168.2.54 | k8s worker + Longhorn (WoL-capable) |

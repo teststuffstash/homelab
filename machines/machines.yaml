@@ -116,7 +116,7 @@ machines:
   - name: wk-01
     kind: vm
     label: "`wk-01` (VM)"
-    role: k8s worker + Longhorn
+    role: k8s worker
     hardware: Talos VM on pve
     ip: 192.168.2.61
     avx2: true           # Xeon E5-2680 v4 (Broadwell) — verified via /proc/cpuinfo
