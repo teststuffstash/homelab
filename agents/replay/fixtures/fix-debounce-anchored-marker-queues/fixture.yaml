@@ -1,0 +1,36 @@
+# homelab#249 — leg E: the SAME world with that one body line written as a REAL line-anchored
+# marker, and the ordinary queue path still runs end to end.
+#
+# CONDITION UNDER REPLAY. `fix-debounce-quoted-marker-inert`'s world with exactly one line of
+# #249's body changed — the quoted predicate (``body~alert-fp:`` inside a backticked expression)
+# becomes `alert-fp:1f0a9c73d5b2e846`, on a line of its own, the way the responder writes it. The
+# trailing prose line is reworded to say which world this is; nothing else moves. Holding the world
+# constant across the pair is the point: an anchoring that also silenced the lane would pass leg D
+# and be a far worse bug than the one it fixes — the alert lane would simply stop dispatching, in
+# silence, and no leg-D-shaped fixture could see it.
+#
+# One-line world delta per leg is this family's pattern (legs A–C move one LABEL; this pair moves
+# one BODY LINE, because the lane test reads the body and not the labels).
+#
+# THE CONTRACT:
+#   1. #249 is now the whole pending set — one issue — so the deterministic fast path runs: no
+#      set-pass session, no subscription latch, no LLM. `sq_decide` re-reads its body, finds a
+#      `Touches:` line whose paths are outside the ❌ table, and it is QUEUED, then the doorbell
+#      rings once for the repo that was queued.
+#   2. That queue is the anchoring's LOWER bound, and it is the only bound leg D cannot assert.
+#      `test("(^|\n)alert-fp:")` must accept the marker WHEREVER the responder puts it — first line
+#      or mid-body — so the alternation is pinned by behaviour rather than trusted to prose: #249's
+#      marker sits mid-body behind a `\n`, and #226's does too. A regression to `^alert-fp:` under
+#      jq's default line semantics is the failure this leg is watching for.
+#   3. #226 stays in SELFREF — the `self-referential: true` marker keeps it human-queued no matter
+#      what the lane test says (unchanged behaviour, and the same WITNESS that the list read was
+#      served at all; see leg D).
+#   4. The doorbell carries `{repo, unit}` only — platform is not a graduated stack, so no
+#      `{stack, loop_ns}` pair rides along (FU-144).
+name: fix-debounce-anchored-marker-queues
+mode: actions
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:../fix-debounce-blocked-inert/bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates

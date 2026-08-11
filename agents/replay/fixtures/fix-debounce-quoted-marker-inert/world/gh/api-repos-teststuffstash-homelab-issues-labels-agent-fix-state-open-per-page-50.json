@@ -1,0 +1,19 @@
+[
+  {
+    "number": 249,
+    "title": "fix-debounce: the alert-lane test is an unanchored substring match",
+    "labels": [
+      { "name": "agent-fix" }
+    ],
+    "body": "## Defect\n\n`fix-debounce`'s lane test is an unanchored substring match over the whole issue body, so an issue that merely MENTIONS the marker is selected:\n\n> `agent-fix ∧ open ∧ body~alert-fp: ∧ ¬agent/queued ∧ ¬agent/linked`\n\nTouches: agents/coordinator/fix-debounce-argo.yaml, agents/replay/\n\nHand-written by a human, not filed by the responder: the thread carries no `alert-fp:` marker line of its own, and the only occurrence anywhere in the body is the quoted predicate above.\n"
+  },
+  {
+    "number": 226,
+    "title": "ResponderSelfReferential: the alert lane's own namespace is degraded",
+    "labels": [
+      { "name": "alert" },
+      { "name": "agent-fix" }
+    ],
+    "body": "Responder evidence bundle for a degradation inside the agent platform's own namespace.\n\nalert-fp:2d5904ea7cb31f68\nself-referential: true\nTouches: argocd/resources/agent-coordinator/deployment.yaml\n"
+  }
+]

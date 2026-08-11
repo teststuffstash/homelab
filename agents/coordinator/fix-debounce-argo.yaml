@@ -200,6 +200,19 @@ spec:
               # an issue meta-state records as held — into "would queue". The fingerprint
               # marker is what makes an issue the RESPONDER's; everything else is not ours.
               #
+              # ⚠ The lane test is LINE-ANCHORED (`test("(^|\n)alert-fp:")`), not a substring
+              # `contains`. The responder writes the marker as a line of its own — its own resolve
+              # leg already greps `^alert-fp:` (responder-argo.yaml) — so anchoring matches how the
+              # marker is authored, and an unanchored test made "mentions the alert lane" mean
+              # "belongs to it". Live on homelab#249: #238 is a HAND-WRITTEN defect report about
+              # this very predicate, carries no marker, and was swept into the pending set and
+              # QUEUED over a live ride (`fix-debounce-backstop-1786436220`, 2026-08-11 08:17:00Z)
+              # because its body quotes `body~alert-fp:` mid-line inside the predicate under test.
+              # The `self-referential: true` breaker below does not cover this: that marker is
+              # written by the RESPONDER, so a hand-written issue about the debouncer sails past
+              # it. Orthogonal to the lifecycle-label half (#244) — every lifecycle label could be
+              # excluded and a non-alert issue would still enter a set it does not belong to.
+              #
               # ⚠ EVERY `agent/*` label excludes — the namespace, not a list. `agent/*` is the
               # LIFECYCLE (agents/coordinator/README.md §State machine); `agent-fix` is the
               # DIAGNOSIS and is spelled with a dash, so the prefix test keeps the opt-in and eats
@@ -227,7 +240,7 @@ spec:
               # re-queue was never load-bearing for either — it was the bug. The scan holds the
               # same rule on its side (coordinator-scan.sh:17 — the LLM never wakes for these).
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | any(startswith(\"agent/\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | test(\"(^|\\n)alert-fp:\")) | select([.labels[].name] | any(startswith(\"agent/\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
                 2>/dev/null >> /tmp/pending.jsonl || true
             done < /tmp/repos.txt
 
