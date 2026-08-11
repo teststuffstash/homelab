@@ -2,13 +2,14 @@
 #
 #   devbox run -- promtool test rules argocd/resources/pushgateway/agent-runs.promtool-test
 #
-# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these four
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these five
 # fire on the shapes they were written for and stay quiet on the shapes that look like them —
 # above all the PUSHGATEWAY-RESIDUE class, where a rule that merely parses is exactly how
 # sleep-tracking#20's 3-day-old auth-storm kept AgentRunInfraDeathBurst ringing for two days
-# (FU-021, found 2026-07-12). It is not wired into CI yet: the one-line `promtool test rules` hook
-# belongs in `scripts/` + `.github/workflows/ci.yaml`, both outside the fixer lane's tier, so it
-# is the codeowner's follow-on. Run it by hand until then.
+# (FU-021, found 2026-07-12). It IS wired into CI as of 2026-08-11: the codeowner's follow-on
+# landed, and `devbox run prometheus-rules-lint` (which `.github/workflows/ci.yaml` runs) now
+# executes `promtool test rules` over every `*.promtool-test` under `argocd/`. A red fixture here
+# is a red required check, not a note to whoever remembers to run it by hand.
 #
 # Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources,
 # and a non-manifest there would fail it.
@@ -137,7 +138,7 @@ tests:
               project: oracle-fleet
             exp_annotations:
               summary: "3+ non-clean agent runs in 1h on oracle-fleet"
-              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
       # 70m after the pushes: same series, same values, no alert — the freshness join is what
       # makes this alert a rate rather than a permanent statement about the past.
       - eval_time: 70m
@@ -226,16 +227,18 @@ tests:
         alertname: AgentRunInfraDeathBurst
         exp_alerts: []
 
-  # ── AgentRunInfraDeathBurst — ⚠ CURRENT behaviour, and a FINDING, not an endorsement ─────────
+  # ── AgentRunInfraDeathBurst — a deliberate stop is not a death (homelab#314) ─────────────────
   # `blocked-deliberate` is a live exit_status (4 of them in the pushgateway on 2026-08-11) and it
-  # is the OPPOSITE of an infra death: the agent read the issue, judged it unworkable, and said so.
-  # `exit_status!~"clean|ci-failed"` counts it anyway, so three deliberate blocks on one project
-  # inside an hour raise a burst whose description says "auth-storm/no-artifact/harness-death/…".
-  # This test pins TODAY's behaviour so the finding cannot be lost; changing the matcher is a scope
-  # change and belongs to its own issue (raised in homelab#288's PR body). If it is fixed, this
-  # test flips to exp_alerts: [] in the same commit — that is the point of writing it down.
+  # is the OPPOSITE of an infra death: the agent read the issue, judged it unworkable, emitted its
+  # structured stop report and exited 0 — "a DECISION, not a death" (agent-finalize `classify()`).
+  # Until homelab#314 the `exit_status!~"clean|ci-failed"` denylist counted it anyway, so three
+  # deliberate blocks on one project inside an hour raised a burst whose description says
+  # "auth-storm/no-artifact/harness-death/…". This fixture was written by homelab#288 pinning that
+  # BUG (exp_alerts: one sleep-iac alert) with a note that fixing it flips the expectation in the
+  # same commit; #314 is that commit and this is that flip. It is now an ordinary regression test:
+  # if the matcher ever loses `blocked-deliberate`, this goes red.
   - interval: 1m
-    name: "FINDING: three blocked-deliberate terminals raise an infra-death burst today"
+    name: three blocked-deliberate terminals never raise the burst (homelab#314)
     input_series:
       - series: 'agent_run_total{exit_status="blocked-deliberate",harness="goose",issue="70",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
         values: "1+0x120"
@@ -252,13 +255,49 @@ tests:
     alert_rule_test:
       - eval_time: 10m
         alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+
+  # ── AgentRunInfraDeathBurst — the MIXED shape, which is the one production actually makes ────
+  # homelab#314's real damage: not three deliberate blocks in a row (rare), but a deliberate block
+  # padding two genuine walls up to the `>= 3` line. Two infra deaths on a project IS bad luck by
+  # this alert's own definition, so the burst must stay silent — the deliberate one must not be
+  # allowed to cast the deciding vote. `failed` is in the same input on purpose as the other half
+  # of the classification: it is neither infra nor deliberate (nonzero-exit / no-output), so it
+  # STAYS counted, and with it the count is 3 and the alert DOES fire at the second assertion.
+  - interval: 1m
+    name: two infra deaths plus a deliberate block stay under the threshold; a `failed` tips it
+    input_series:
+      - series: 'agent_run_total{exit_status="harness-death",harness="goose",issue="80",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="81",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="blocked-deliberate",harness="goose",issue="82",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      # pushed 20m into the window, so the first assertion sees two walls + one deliberate block
+      # and the second sees the `failed` run join them
+      - series: 'agent_run_total{exit_status="failed",harness="goose",issue="83",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "_x20 1+0x100"
+      - series: 'push_time_seconds{issue="80",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="81",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="82",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="83",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "_x20 1200+0x100"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: AgentRunInfraDeathBurst
         exp_alerts:
           - exp_labels:
               severity: warning
               project: sleep-iac
             exp_annotations:
               summary: "3+ non-clean agent runs in 1h on sleep-iac"
-              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
 
   # ── AgentEventInfraSpinning — the 2026-08-05 Sensor spin, and the pods that must stay quiet ──
   # Measured baselines (live, 2026-08-11): the four Argo Events infra pods idle at 0.1-5.3
