@@ -1,0 +1,49 @@
+# FU-161 leg 2 / homelab#299 — the model scout's OWN OpenRouter credential, used ONLY for the
+# account-level MCP benchmark read (`get-model` against https://mcp.openrouter.ai/mcp, the same
+# server and the same STANDARD account-key surface the proxy's `list-benchmarks` pull already
+# uses — docs/agents/model-routing.md §The OpenRouter API surface). It completes NOTHING: the
+# weekly tick reads the Artificial-Analysis indices for candidate models and ranks on them.
+#
+# SHAPE COPIED FROM THE PRECEDENT, deliberately, not invented here:
+# argocd/resources/openrouter-proxy/openrouterkey.yaml (ADR-096) mints `router-account` for exactly
+# this class of read with exactly this least-privilege envelope — a standing operator-minted key,
+# $1/week ceiling, only-free guardrail (it never completes, so the guardrail + cap bound a leak),
+# explicit `secretName` so the consumer's reference is stable.
+#
+# WHY A SECOND CR RATHER THAN REUSING `router-account`: that key's Secret lands in namespace
+# `agent-egress` (the proxy's), and a Pod cannot read a Secret across namespaces. The scout runs in
+# `agent-coordinator`, so the credential has to be minted here. The operator watches ALL namespaces
+# (`--all-namespaces` + a ClusterRole binding), and it is the CR's OWN `metadata.namespace` — not
+# `spec.project` — that selects where the Secret is written; `spec.project` only shapes the
+# OpenRouter-side key name (verified against openrouter-operator's `_reconcile`/`write_key_secret`,
+# homelab#299 triage). Hence the explicit namespace below: this app's kustomization deliberately
+# carries no `namespace:` field (it spans namespaces), so each manifest states its own.
+#
+# THE CONSUMER. `agents/model-scout.sh` `scout_get_model()` reads `$SCOUT_MCP_KEY`; the operator
+# writes the credential under key `OPENROUTER_API_KEY` (openrouter-proxy.py `_resolve_ref`). So the
+# env entry on the `model-scout` CronWorkflow is:
+#
+#     - name: SCOUT_MCP_KEY
+#       valueFrom: { secretKeyRef: { name: scout-account-key, key: OPENROUTER_API_KEY, optional: true } }
+#
+# ⚠ THAT ENV ENTRY IS NOT IN THIS PR, and not because it was forgotten. It belongs in
+# `agents/coordinator/reflexes-argo.yaml`, which is carved out of CODEOWNERS with `pin-only-lint`
+# (required `ci`) standing in for the code owner — that lint permits ONLY arc-runner image pins and
+# CalVer `targetRevision:` lines into the file via a PR, so any PR adding these two lines is
+# structurally red and no agent can land them. The documented path is the operator's, straight to
+# master (CODEOWNERS §Carve-outs; CLAUDE.md §"How changes land"). Until that push lands, the key
+# below simply stands unused and the scout keeps degrading to `unbenched` for every candidate —
+# the pinned behaviour that `agents/replay/fixtures/scout-bench-unkeyed-unbenched` guards.
+apiVersion: openrouter.teststuff.net/v1alpha1
+kind: OpenRouterKey
+metadata:
+  name: scout-account
+  namespace: agent-coordinator
+  labels:
+    app: model-scout
+spec:
+  project: agent-coordinator
+  budgetUSD: 1
+  resetInterval: weekly
+  guardrail: only-free
+  secretName: scout-account-key
