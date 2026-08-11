@@ -6,99 +6,57 @@ done. **TICK-LOG carries history — this file carries ONLY what a fresh session
 meant to avoid.)
 
 
-## Live state (2026-08-09 ~12:45Z consolidation — everything below is CURRENT; history is TICK-LOG's)
+## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
-- **ADR-102/103 PROGRAM — clause set COMPLETE** (#206/#207/#208/#209/#212/#215 all merged,
-  replay-gated; ratchet v2 live). **#210 homelab leg MERGED ~12:50Z (PR#219** — union stats_ts
-  reader + machine-comment.sh; codeowner-reviewed by execution: jq union verified on a mixed
-  world, reader-sweep negative re-proven; spot-check the merged-closeout flip/harvest on #210).
-  REMAINING: none — **agent-runtime#62 SHIPPED 2026-08-09 13:16Z (PR#64)**, ~30 min after this
-  consolidation stamped it QUEUED (the stale read was repeated once, GAPS design-agents-G1);
-  old-shape cleanup is now unblocked (no open PR carries the old shape). **The 08-10 Monday
-  retro FAILED at guard — two latent guard bugs (busy-probe stderr fold `d4ad8c8`, missing
-  AWS_REGION `f791937`), BOTH fixed + hand-refired 2026-08-11 (`retro-session-xkj88`, guard
-  passed: 172 new ledger rows) — READ ITS REPORT PR when harvest opens it** (homelab#237 is the
-  label-clean subject record; defects filed #238 debounce-loop / #239 gate-miss / #240 mirror).
-- **minutark.ee LIVE + DNSSEC COMPLETE** (~17:00Z: DS at the .ee registry, `ad` flag from
-  1.1.1.1 — chain of trust verified; evidence on oracle-iac#351). #351 stays OPEN — its
-  deliverable is the bootstrap AS IaC, still blocked on the host-side ingress-token re-mint;
-  acceptance = drift-free re-plan through the two-zone token. NO LB (rung 1); MCP waits on the
-  gateway (T3c). FU-157 opportunistic. ⚠ probe lesson: `dig +short` WRAPS long DS digests with
-  a space — grep for the unbroken string is a dead probe; `tr -d ' '` first.
-  Host-side: next `tofu/cloudflare-token` apply is PREPPED (account-first policy order + two-zone
-  ingress token) — operator runs it outside the jail. **ADDED 13:45Z (PR#220 live-verify): with
-  the admin token first run `GET /user/tokens/permission_groups | grep -i argo` — the argo/
-  smart_routing setting 1015-refuses BOTH Zone Settings Read and Write, so the spend-probe's argo
-  leg is BLIND (CloudflareSpendProbeBlind firing is EXPECTED + known-cause, don't re-triage) until
-  a group is found + added to observability-read.tf; if no group exists, re-scope the argo leg +
-  the doctrine's write-vector claim (docs/cloudflare.md §Spend surface has the ⚠).**
-- **ert verification SUCCEEDED 2026-08-10 01:32Z** (`ert-verify-parse-dd2p9`: parse 5h26m →
-  build 4h05m → publish 8m, from the promoted snapshot) — **#217/#235 fix-cycle CLOSED GREEN.**
-  The wk-01 disk alert should clear now that parse's GET storm ended — homelab#103 (open,
-  label-clean subject record) can close once it does. Marginal-rate evidence → FU-160 (FU-159 ruled + archived 2026-08-11).
-- **META STOOD DOWN 01:40Z on operator instruction** — all monitors stopped + process-reaped;
-  board drained everywhere (0 queued / 0 in-progress / 0 open PRs / 0 rides). Next session
-  re-arms per the skill; FIRST READ = the 05:00Z Monday retro report (ADR-103 KPI scores).
-- **homelab#228 DONE (PR#229 merged ~19:50Z)** — reopen-strip is launcher-owned shell around the
-  responder session (ADR-094 applied; replay-fixtured both verdict legs). Live acceptance =
-  next same-subject reopen arrives label-clean. (Its PR was briefly red on my dangling spike ref
-  to an expired FU — #230, fixed; lint scans TRACKED files only, lint before add is a lie of scope.) **#103 open label-clean as the subject record** until the disk alert clears
-  (= parse ends); root cause on-thread: parse GETs vs garage META on std tier → FU-159
-  (RULED 2026-08-11: longhorn-fast rejected — scratch-intent single-node tier; archived). **needs-meta v5 running** (clause-4 jq precedence fixed
-  19:0xZ — green codeowner parks were invisible since the morning rewrite; fixture-executed).
-  **Delta cron SUSPENDED durably** (oracle-iac#361/PR#362; un-suspend = fleet#225's attended
-  first run). oracle-iac#343 stays de-queued (premise note stands).
-- **homelab#107 CLOSED 13:05Z** — the 12:23Z queue was a meta mis-queue (fix already on master
-  e5f568e; triaged from a truncated thread read — TICK-LOG has the lesson); dispatch refused the
-  no-op, all defect legs fixed, fingerprint re-fire is the net.
-- **BOARD DRAINED ~15:30Z**: #103 DONE (PR#225 — BestEffort Sensors got requests, soft hostname
-  spread via podSpecPatch/Exists-selector; ride corrected BOTH the issue body and my ⚖ — the
-  workflow templates already had requests; live pod check backgrounded, result → #103 comment).
-  #61/#62/#25/#217 all DONE same day. or-op#34 SOAKS (needs first daily-429 datum). Possible
-  trailing echo: or-op chart deploy bump self-merges via first-party lane (like #222).
-- **TOMORROW (meta, ~30 min): #103 residual leg — Composition podSpecPatch.** PR#225's spread
-  constraint covers agents/coordinator objects only; the per-stack cron CronWorkflows are
-  Crossplane-rendered (AgentStack Composition, argocd/resources/) and their tick pods verified
-  WITHOUT the constraint (15:30Z pod, tsc null). Mirror the merged podSpecPatch shape into the
-  Composition's CronWorkflow template + verify a fresh tick per stack. Composition = meta lane.
-- **TOMORROW (operator): rework DRAFT oracle-fleet#255** (ING-RT-RECONCILE mechanism) with
-  oracle context. Operator constraint captured on it: next bulk download is ATTENDED — no
-  scheduling until runaway-download protections exist (no egress volume/bandwidth belts today;
-  100-parallel-forever would be allowed). The protections piece likely splits to homelab.
-- **TOMORROW (operator): `homelab-jail-read-all` — AS CODE, not the dashboard** (plan rewritten
-  2026-08-10; the dashboard-mint version failed the click-ops check — CLAUDE.md §Safety, and
-  API Tokens **Read** is strictly dominated by the **Write** the admin token already carries, so
-  "admin can't list" is a missing tick-box, not a boundary). Sequence, all in the ONE prepped
-  host-side session: (1) dashboard-edit the **admin token** (Tier-0 mint-root — the sanctioned
-  manual class) to add user-scope `API Tokens: Read`; (2) `GET /user/tokens/permission_groups`
-  → settle the argo group for observability-read.tf OR prove the leg unimplementable → re-scope
-  #223 + the doctrine ⚠; (3) mint `homelab-jail-read-all` as a new .tf beside the staged mints
-  (catalog read-groups enumerated sorted + user-scope API Tokens Read; no IP filter, ≤1y TTL)
-  — and keep FU-156's tiny in-cluster inventory-read token SEPARATE (one consumer, one token —
-  docs/secrets.md §Minting doctrine); (4) while in the dashboard: **DELETE the legacy broad
-  "Read all resources" token** (expires 2026-12-14; retire-not-renew per FU-156 — its
-  precondition, homelab-observability-read LIVE, is met; after this exactly ONE dashboard-born
-  token remains: the Tier-0 mint root). Hand the jail-read-all value to the jail once → wallet
-  string + ~/.claude/cloudflare/ cache (wallet-files.sh) + docs/cloudflare.md token matrix.
-  Rationale unchanged: endpoint-first doctrine needs a probe credential (hit the wall twice
-  2026-08-09).
-- **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08 restart. pve +
-  laptop4: devices HEALTHY (jail tinytuya sessions work with devices.json versions) but HA-side
-  wedge survives reload ×2, WS disable/enable AND a core restart (14:48Z, clean) — leading
-  hypothesis: protocol_version mismatch in the tuya_local config entries vs. what the devices
-  now negotiate; next probe = compare entry versions against tinytuya negotiation, fix entries.
-  aquarium: DEVICE-side (refuses jail sessions too, Err 901) — physical cycle cuts aquarium
-  power, operator's call. Most of the 18 'stale' sensors were static-value FALSE POSITIVES
-  (details on the issue); consider a rule-side exclusion later.
-- **circles**: PR#21/#25 frozen (unchanged, operator's). **e2e-outage arc CLOSED**: PR#239
-  (with the #228 cancel-leak belt) + PR#234 merged; #228/#190/or-op#33 closed.
-- **Operator physical**: wk-metal-01 raised for cooling (verdict = tomorrow's daily peak vs
-  94–98°C baseline); zone.ee DS hand-back (above).
-- **tuya frozen-accepted** (silence c73baef2 → ~08-22 auto re-triage).
-- **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); Monday retro (FU-058);
-  FU-149 spot-check; FU-148 acceptance (first organic environmental-red self-retry); first
-  concurrent double-e2e contention glance; M11 shadow lines once #159 lands; ~5 stale local
-  branches in the oracle-iac checkout worth a checked sweep.
+- **minutark.ee LIVE + DNSSEC COMPLETE**; oracle-iac#351 OPEN — deliverable = the bootstrap AS
+  IaC, blocked on the host-side ingress-token re-mint (the host session below); acceptance =
+  drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
+  long DS digests — `tr -d ' '` before grepping.
+- **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08. Devices HEALTHY
+  via jail tinytuya; HA wedge survives reload/WS-cycle/core-restart — leading hypothesis:
+  protocol_version mismatch in config entries vs negotiation; next probe = compare + fix
+  entries. aquarium = DEVICE-side (physical cycle, operator). tuya frozen-accepted otherwise
+  (silence c73baef2 → ~08-22 re-triage).
+- **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
+  2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
+  ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
+  ONE approval per head; check-#3 shadow warnings stay zero.
+
+## NEXT SESSION — the worklog (written 2026-08-11)
+
+1. **Platform-lane PR queue** (the loop rides tonight): expect PRs for #240 #244 #245 #249
+   #252 #253 #256-259 (+ circles#77/#78, oracle-fleet#258 on their stacks' own gates). Meta
+   read + OrgAdmin merge each; the findings-harvester rule applies (meta-coordinate skill —
+   the WHOLE body, every finding fixed/filed/dismissed pre-merge).
+2. **Platform board residue**: #103 + #153 CLOSED 2026-08-11 (alerts cleared). Remaining:
+   #221 (above), #223 (host session below), #235 queued, #241 (record + TTL-vs-crossrefs soak
+   note), #242/#248 unqueued by intent — queue them during the blitz.
+3. **snore-recorder#15** (operator PR: CHANGES_REQUESTED + environmental red): `scan-secrets`
+   died on a cache.nixos.org narinfo deadline (FU-130 WAN class). (a) `gh run rerun --failed`
+   (jail PAT has Actions RW; read CI via `gh run list --commit` — no Checks perm); (b) on
+   repeat: check snore ci.yaml wires the in-cluster nix-cache substituter like the other
+   Tier-A repos; (c) then address the review verdict (FU-051 deploy-pin enablement).
+4. **THE FU BUILD-OUT BLITZ** (operator directive 2026-08-11: designed-but-unbuilt platform
+   FUs are cheaper to build than running another stack through the gaps). **Run it as the
+   FU-165 pilot Goal**: one `task/goal` issue "platform FU build-out", `Budget:` line,
+   children per cluster (known gap, note on the goal: subscription rides sum $0 in
+   goal-budget). Design-complete children, roughly ascending effort:
+   FU-161 legs 1–2 (scout filter + benchmark columns → hand-fire, retire #235's premise) ·
+   FU-151 next (automerge labels → 3 repos) · FU-145 (ScanWedged re-key on scan phase) ·
+   FU-150 OURS half (AutoscalingListener-zero alert) · FU-144 (emitter {stack,loop_ns}
+   fan-out; kill the dead coordinate-now row) · FU-140 (Composition crash-net; write-only key
+   ⇒ unconditional PUT) · FU-160 (agent_run_phase_seconds + panel + deviation alert) ·
+   FU-158 behaviour half (promtool test fixtures, spend/agent-loop files first) · FU-102
+   (oracle probe.md from UC-1 + flip prober.enabled) · FU-162 (draw verb + pools, ADR-104).
+   Judge at decompose (bigger): FU-095 legs, FU-090(b), FU-106 G01 flip post-soak + G06 lens,
+   FU-104 teeth, FU-101 ASVS/e-ITS.
+5. **docs-cleanup residue**: three comb agents' findings (docs/, docs/agents/, root+misc) —
+   apply centrally + the FU-164 settle-test report (doc-heat cold-living × decisions).
+6. **Standing from 08-10**: Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
+   oracle-fleet#255 rework (attended-download constraint stands) · **HOST-SIDE session**:
+   the 4-step jail-read-all sequence (admin-token edit → argo-group probe →
+   homelab-jail-read-all as .tf → DELETE the legacy "Read all resources" token) — also
+   unblocks #223 and settles #231's blind leg.
 
 ## Durable warnings — re-read before touching these files
 
