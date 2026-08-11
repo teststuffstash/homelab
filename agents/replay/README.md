@@ -116,6 +116,25 @@ fixtures and nothing will force the next author's. Adding it means editing `.git
 which the fixer lane may not touch (`.agents/fix.yaml`, the CI-runs-your-branch rule) — so it is
 noted here and on #282's PR for a seat that can.
 
+`fixtures/scan-phase-marker` + `fixtures/scan-wedge-alert` (FU-145, homelab#283) are the seventh
+family and the first **pair split across the two modes**, because the thing under test spans a
+shell emitter and a PromQL expr. `scan-phase-marker` is ordinary `actions`: the shipped
+`>>>REPLAY:scan-phase>>>` block, with `sp_now` and `curl` shadowed in the bridge, so the push URL
+(namespace-keyed group, pod as a metric label) and the `in_deterministic` value land in the action
+stream. `scan-wedge-alert` is `suite`: its entrypoint lifts the alert's expr OUT of
+`argocd/resources/pushgateway/prometheusrule.yaml` (annotations stripped — this pins firing, not
+prose) and replays series through `promtool test rules`. Two rules worth copying:
+
+- **Pin an emitter and its reader together or you have pinned neither.** An expr replayed against
+  series nobody emits asserts a fiction, and an emitter with no expr behind it is a metric nobody
+  reads — the FU-145 defect was exactly a rule whose subject was not what its emitter measured. The
+  suite also cross-checks the two metric names against `coordinator-scan.sh`, so a rename on one
+  side goes red instead of going silent.
+- **A behaviour test earns its place by red-casing the bug it fixes.** The four replays were run
+  against the pre-#283 pod-lifetime expr before landing: three go red, including the healthy-18m
+  ride the old rule fired on twice. `promtool` and `yq` come from devbox, so the suite exits 2
+  naming the missing tool rather than skipping when run outside it.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

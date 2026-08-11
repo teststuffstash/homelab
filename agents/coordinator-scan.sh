@@ -43,6 +43,66 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
+
+# ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
+# `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
+# alert names. The moment the scan dispatches, `coordinator-session.sh` streams the item session
+# synchronously, so a perfectly healthy ride >15m read as a wedge: twice in one hour on 2026-08-06
+# (the goal-decompose, then #30's ride), both healthy, both self-resolving, two false issues minted
+# (#120, #134). Evidence, the two remedies ruled OUT (raising the threshold, special-casing
+# goal-decompose) and why `fc7e9fb`'s calibration cannot be reused:
+# docs/agents/observability-and-retro.md §Part A″.
+#
+# So the scan PUBLISHES the phase it is in and the alert keys on that instead of on the pod:
+#   agent_scan_phase_start_timestamp   epoch at which the CURRENT phase began
+#   agent_scan_in_deterministic        1 = deterministic pass, 0 = blocked streaming a session
+# Pushed to the pushgateway — the `agent_run_*` precedent (FU-057), same best-effort contract as
+# `responder-budget.sh`: a dead gateway is an observability fault and must never change what the
+# scan dispatches.
+#
+# GROUPED BY NAMESPACE, with the pod as a metric LABEL — deliberately not grouped by pod. The
+# pushgateway serves every pushed group FOREVER (the lesson AgentRunInfraDeathBurst is still
+# carrying), so a per-pod grouping key would leak one group per scan, ~350/day; a per-namespace key
+# is overwritten by the next scan in that namespace and a stale marker just names a pod the alert's
+# `on(pod)` join no longer matches. One scan per namespace at a time is not an assumption — the
+# `coordinator-scan` mutex in the WorkflowTemplate serializes cron + Sensor submissions
+# (agents/coordinator/coordinate-argo.yaml). If that mutex ever goes, two concurrent scans in one
+# namespace trade markers and the loser falls back to the pod-lifetime branch below — i.e. to
+# today's false-positive, never to a missed wedge.
+#
+# ⚠ NOTHING IS PUSHED BEFORE THE FIRST TRANSITION, and that is the design, not an omission: until
+# then the pod has been in the deterministic phase since it started, so pod lifetime IS the phase
+# duration and the alert's no-marker branch measures it exactly — including a wedge that dies
+# before this script runs at all, which is the shape the alert was built for (2026-08-05,
+# homelab#103: zero log bytes, stuck in `git clone`, holding the mutex with twins Pending).
+# >>>REPLAY:scan-phase>>>
+SCAN_PHASE_PGW="${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+SCAN_PHASE_POD="${SCAN_PHASE_POD:-${HOSTNAME:-}}"
+SCAN_PHASE_NS="${SCAN_PHASE_NS:-$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo unknown)}"
+sp_now() { date -u +%s; }   # replay seam: the wall clock
+scan_phase() {   # $1 = dispatch | deterministic — record a phase transition for the wedge alert
+  local phase="${1:-}" indet
+  case "$phase" in
+    dispatch)      indet=0 ;;
+    deterministic) indet=1 ;;
+    *) echo "scan_phase: unknown phase '${phase}' — nothing pushed" >&2; return 0 ;;
+  esac
+  # No gateway or no pod identity (a jail/manual run) → no marker, and the alert's no-marker branch
+  # is correct for exactly that case. Never a failure: this is a report, not a gate.
+  [ -n "$SCAN_PHASE_PGW" ] && [ -n "$SCAN_PHASE_POD" ] || return 0
+  printf '%s\n' \
+    "# TYPE agent_scan_phase_start_timestamp gauge" \
+    "# HELP agent_scan_phase_start_timestamp Unix epoch at which this coordinate scan entered its current phase." \
+    "agent_scan_phase_start_timestamp{pod=\"${SCAN_PHASE_POD}\"} $(sp_now)" \
+    "# TYPE agent_scan_in_deterministic gauge" \
+    "# HELP agent_scan_in_deterministic 1 = running the deterministic pass; 0 = blocked streaming a dispatched session." \
+    "agent_scan_in_deterministic{pod=\"${SCAN_PHASE_POD}\"} ${indet}" \
+    | curl -fsS --max-time 5 --data-binary @- \
+        "${SCAN_PHASE_PGW}/metrics/job/agent_scan_phase/namespace/${SCAN_PHASE_NS}" >/dev/null 2>&1 \
+    || echo "scan_phase: pushgateway unreachable (${SCAN_PHASE_PGW}) — dispatch unaffected; AgentCoordinateScanWedged falls back to pod lifetime for this scan" >&2
+  return 0
+}
+# <<<REPLAY:scan-phase<<<
 # NO-OP ROUND PREDICATE — shared by the ci-red clause (FU-115b) and changes-requested (FU-147).
 # Input: `gh pr view N --json comments,commits`. Prints "1" when the LAST completed round pushed
 # nothing. Defined once because two copies WILL drift, and this one was already wrong twice:
@@ -314,9 +374,12 @@ fast_unit_dispatch() {
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
   echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
+  # FU-145: everything below this line is the session's stream, not the deterministic pass.
+  scan_phase dispatch
   bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
     --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" \
     --item "repo=${frepo} item=${fitem} clause=${fclause}"
+  scan_phase deterministic
   return 0
 }
 case "${SCAN_UNIT:-}" in ""|"-") ;; *)
@@ -1768,8 +1831,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     fi
     cmodel="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
     echo "→ spawning janitor tick for ${name} (report-only, model ${cmodel})…"
+    scan_phase dispatch   # FU-145
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
       --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --janitor
+    scan_phase deterministic
     continue
   fi
 
@@ -1812,7 +1877,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     fi
     if [ "${SCAN_ITEM_MODE:-1}" = "0" ]; then
       echo "→ spawning headless coordinator tick for ${name} (SCAN_ITEM_MODE=0 whole-stack mode)…"
+      scan_phase dispatch   # FU-145
       bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
+      scan_phase deterministic
       continue
     fi
     unit=""
@@ -2047,9 +2114,13 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
+    # FU-145: the deterministic pass ends HERE. What follows is the item session streaming the
+    # ride, which is WORK — bounded by the workflow's activeDeadlineSeconds, not by this alert.
+    scan_phase dispatch
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
       --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" \
       --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}"
+    scan_phase deterministic
   else
     echo "  run it (interactive, supervised):"
     echo "    devbox run coordinator-session -- --stack ${name} --repos \"${repos% }\" --main-repo ${mainrepo} --tick"

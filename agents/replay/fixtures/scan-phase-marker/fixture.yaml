@@ -1,0 +1,30 @@
+# FU-145 / homelab#283 — the EMITTER half of the scan-phase re-key.
+#
+# CONDITION UNDER REPLAY. A coordinate scan pod (`coordinate-circles-1` in `circles-agents`) walks
+# the transitions the dispatch sites make: into a dispatch, back into the deterministic pass, and
+# the three degenerate calls that must never cost a dispatch — an unknown phase, a disabled
+# gateway, and a gateway that refuses the push.
+#
+# THE CONTRACT:
+#   1. ONE push per transition, to the NAMESPACE-keyed group (`…/job/agent_scan_phase/namespace/…`)
+#      with the pod as a metric LABEL. Group by pod and the pushgateway leaks one group per scan
+#      forever; that choice is the whole reason a stale marker is harmless, so it is asserted in
+#      the URL, in the action stream.
+#   2. `agent_scan_in_deterministic` is 1 leaving a session and 0 entering one. Invert it and the
+#      alert goes silent on every real wedge while firing on every healthy ride — this line is the
+#      fix (`scan-wedge-alert` replays what the alert then does with it).
+#   3. Every degenerate path RETURNs 0. The marker is observability; a scan that refused to
+#      dispatch because a gateway was down would be a strictly worse bug than the one being fixed.
+#
+# The clock is the bridge's (`sp_now`), the transport is the bridge's (`curl`) — the seam pattern
+# from the responder pair. Everything between them is the shipped block.
+name: scan-phase-marker
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:scan-phase
+  - file:bridge.sh
+env:
+  - AGENT_PUSHGATEWAY_URL=http://prometheus-pushgateway.monitoring.svc.cluster.local:9091
+  - SCAN_PHASE_POD=coordinate-circles-1
+  - SCAN_PHASE_NS=circles-agents
