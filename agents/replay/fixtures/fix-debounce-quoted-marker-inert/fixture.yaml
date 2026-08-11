@@ -1,0 +1,49 @@
+# homelab#249 — leg D: an issue that merely QUOTES `alert-fp:` mid-line is NOT in the alert lane,
+# so it never enters the pending set.
+#
+# CONDITION UNDER REPLAY. The live 2026-08-11 loop. The lane test used to be an unanchored
+# substring match — `select(.body // "" | contains("alert-fp:"))` — over the WHOLE body. homelab#249
+# is the world it broke on: homelab#238 is a HAND-WRITTEN defect report about the debouncer, it
+# carries no responder marker, and its own line 4 quotes the predicate under test
+# (``body~alert-fp:`` inside a backticked expression). `contains` cannot tell a marker from a
+# mention, so the report was swept in and QUEUED on top of a live ride —
+# `fix-debounce-backstop-1786436220`, 08:17:00Z: "pending set: 1 issue(s) / QUEUED
+# teststuffstash/homelab#238 / rang /coordinate". The fixed test is line-anchored,
+# `test("(^|\n)alert-fp:")`, which is how the responder actually writes the marker — its own
+# resolve leg already greps `^alert-fp:`.
+#
+# This is ORTHOGONAL to the lifecycle-label half (#238/#244, legs A–C). Those legs ask "does the
+# lane's own issue still belong in the set"; this pair asks "is this the lane's issue at all". The
+# `agent-fix` opt-in is present and no `agent/*` label is, so every exclusion legs A–C pin is
+# satisfied here — and the issue still must not be queued.
+#
+# The existing reflexive breaker does not cover it either: `self-referential: true` is written by
+# the RESPONDER, so a hand-written issue about the debouncer sails straight past it. That is
+# exactly what #226 demonstrates from the other side in this same world.
+#
+# THE CONTRACT:
+#   1. #249 (`agent-fix`, no lifecycle label, `Touches:` line present and outside the ❌ table —
+#      it would sail through every downstream gate) draws NO write. Not a label, not a doorbell.
+#      Its only tie to the alert lane is a quoted string, and a quote is not a claim.
+#   2. #226 IS read, passes the label predicate on a REAL line-anchored marker, and lands in
+#      SELFREF. It is this leg's WITNESS in the family's usual sense — an unrecorded list read is
+#      swallowed by the query's own `2>/dev/null … || true` and leaves an empty pending set that
+#      looks exactly like a pass, and only a served read can print the SELFREF line. Here it does
+#      double duty: it is also the anchored-marker CONTROL inside leg D itself, so "the set is
+#      empty" cannot be the anchoring having eaten the whole lane.
+#   3. Pending set 0 → `nothing to decide`, exit 0, before the gates block is ever reached. Under
+#      the unanchored predicate N would be 1, the fast path would run, and a `labels[]=agent/queued`
+#      POST plus a `/coordinate` bell would appear in the stream — the live defect exactly, which
+#      is why the gates block is composed into this leg unreached, and why #249's body is recorded
+#      for the `sq_decide` read that must never happen.
+#
+# Its sibling `fix-debounce-anchored-marker-queues` holds this world with that one body line
+# rewritten as a real marker, and is the other half of the assertion: anchoring must not swallow
+# the lane it exists to serve.
+name: fix-debounce-quoted-marker-inert
+mode: actions
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:../fix-debounce-blocked-inert/bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates
