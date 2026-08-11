@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-167**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-168**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -219,6 +219,16 @@ the block needs pruning, not more headings.
       **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (or fan the global
       trigger out over graduated namespaces); then decide if global has a reader left.
       Relates FU-143, FU-145, ADR-094.
+- [ ] **FU-167** — **`agents/replay/**` is a growing serialization tax on the platform lane**
+      (operator catch 2026-08-11, mid-goal-#278): the ratchet rule mandates declaring the replay
+      tree on every clause-file child, so all such children mutually intersect and serialize —
+      tonight #285/#287/#290 queued serially (~1h tail) while their fixture FAMILIES are disjoint
+      subtrees. The real shared surface is `agents/replay/README.md`, a hand-appended family
+      register that also produced PR#275's genuine merge conflict (both-sides-append). Fix shape:
+      make the register DERIVED (fixture.yaml self-description or a run.sh-generated index), then
+      narrow the ratchet/authoring rule to `agents/replay/fixtures/<family>-*` — footprints
+      become truly disjoint. Post-goal (the replay tree is mid-goal traffic). Relates ADR-097,
+      ADR-103, FU-165.
 - [ ] **FU-166** — **Meta-session watches: codeowner-park invisible to Prometheus + poll-everything
       cadences** (operator, 2026-08-11). Leg (a): parked PRs are bot-APPROVED so the reviewable
       predicate/panel excludes them — only the watch's direct `gh` poll (600s, against the
