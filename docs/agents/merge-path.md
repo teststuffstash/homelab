@@ -178,7 +178,7 @@ investigation review **directly, while the PR is still red** — the review's jo
 break — which is precisely why a major can't ride the reflex (green-only, decision-free) path. Non-major
 devbox bumps stay armed and ride the reflex like any other PR. **Proven E2E (2026-07-05):** an opus
 coordinator drove sleep-tracking#18 (helm 3→4) through this exact lane — investigate-while-red → worker
-applied `--verify=false` → green → `major/awaiting-human` → human merged (FU-047).
+applied `--verify=false` → green → `major/awaiting-human` → human merged (2026-07-05).
 
 The corollary is **arm-at-open discipline (FU-079)**: any PR opened by an operator or a stacked
 workflow must either be armed immediately (`gh pr merge <N> --auto --squash`) or carry an owning

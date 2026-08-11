@@ -795,7 +795,7 @@ set = deploy-atomic; the meta-11 paired-rolls rule).
 
 ## Dependency major bumps (coordinator-owned, NOT the review reflex)
 
-The weekly `devbox update` (FU-022) opens a bump PR per repo. A **non-major** bump arms auto-merge and
+The weekly `devbox update` (`devbox-update.yaml`, docs/renovate.md) opens a bump PR per repo. A **non-major** bump arms auto-merge and
 rides the normal reflex track — you never see it. A **MAJOR** bump (e.g. `kubernetes-helm 3 → 4`) is
 different: `devbox-update.sh` labels it **`major`** and **deliberately does NOT arm auto-merge**, because
 a major crossing needs a human to merge *after* the machine has done its homework. **Arming is the
@@ -860,7 +860,7 @@ devbox run coordinator-session -- --run-tick
 > behavior change**. Edit the wording in one place and both follow.
 
 > **Scope note.** A coordinator instance is scoped to a **stack**: the
-> platform (homelab) **plus that stack's repos**. Since FU-025 a stack's deploy truth lives in its own
+> platform (homelab) **plus that stack's repos**. Since ADR-084 a stack's deploy truth lives in its own
 > `-iac` repo (sleep → `sleep-iac`), so a full "sleep coordinator" context is homelab + sleep-iac + the
 > app repos — and a *different* stack is a different context. **Landed:** `coordinator-session.sh`
 > **clones ALL the stack's `--repos`** into `/work/<repo>` and runs with its **cwd in the stack's
