@@ -1,0 +1,40 @@
+# homelab#253 — leg H: the same resolved world one debounce period later. The verdict is
+# unchanged, and it is NOT said twice.
+#
+# CONDITION UNDER REPLAY. `fix-debounce-currency-resolved-inert`'s world with exactly one delta —
+# the timeline already carries this gate's note, from the ride leg F recorded. Everything else is
+# identical, which is the point: a currency skip moves NO label and closes NOTHING (deliberately —
+# alert-state is not defect-state), so the issue stays in the pending set and every bell plus the
+# `17 */2` backstop re-derives the SAME verdict, forever, with nothing in the world changed.
+#
+# That is the shape of a bug this repo has already paid for twice. The responder's resolve leg
+# commented once per flap cycle until #148 (27 of one 2026-08-08 day's 80 homelab issue comments
+# were its ✅-notices; #63 took four in two hours), and ADR-103's census found ~2/3 of machine
+# timeline comments were residue of exactly this kind. The rule both fixes distilled: a per-cycle
+# machine comment is only earned where it is also the LAST word. This one never is.
+#
+# THE CONTRACT:
+#   1. ONE read of the timeline, and then nothing. The guard finds its own `kind=currency-skip`
+#      event marker in the summary comment and returns before `mc_event` — so `mc_event`'s own
+#      find-or-create read is ABSENT from this stream too. Two reads in legs F/G, one here: the
+#      difference IS the assertion.
+#   2. No PATCH. Appending "still resolved" to the summary comment every two hours is the same
+#      residue as a new comment, only harder to see.
+#   3. The verdict line still goes to the workflow log — the ride's record is the log, and a
+#      silent skip would be indistinguishable from a skipped probe.
+#   4. The marker the guard keys on is `mc_event`'s machine marker (`kind=<kind>`), which
+#      agents/machine-comment.sh declares STABLE as its machine interface. This fixture is what
+#      would go red if that marker's shape moved: the guard would stop finding the note and the
+#      2h re-notice would come back.
+name: fix-debounce-currency-note-once
+mode: actions
+source: agents/coordinator/fix-debounce-argo.yaml
+# 2026-08-11T14:00:00Z, ~1h45m after the note leg F wrote. MC_NOW is present but must never be
+# used here — a timestamp in this stream would mean the write happened.
+env:
+  - FC_NOW=1786456800
+  - MC_NOW=2026-08-11T14:00:00Z
+parts:
+  - file:../fix-debounce-blocked-inert/bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates

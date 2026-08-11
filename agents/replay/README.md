@@ -57,6 +57,22 @@ verdicts that flank it — a refusal that names the limit, and a warn band that 
 ride. Over-eagerness is the usual failure of a size check, so "89% still dispatches" is pinned as
 behaviour rather than trusted to prose.
 
+`fixtures/fix-debounce-currency-*` (homelab#253) are the fourth family, and the first whose seam
+serves a world of its own: the queue-time currency gate reads live alert state, so the bridge
+shadows `fc_am_alerts` (the Alertmanager `/api/v2/alerts` GET) and `fc_now` (the clock the
+`endsAt > now` split turns on), and the recording lands in `world/alertmanager/alerts.json` —
+beside `world/gh/`, but served by the seam rather than by a PATH-shim stub, and keyed by nothing
+because a fixture pins one moment of the alert store. Two rules make it worth copying:
+
+- **Record the seam's read as a `CALL` line.** A probe that silently stopped happening is a gate
+  that silently stopped gating, and an unrecorded read leaves the stream identical either way. It
+  is the same reason the responder's bridge writes `CALL curl …`.
+- **Pin the clock through `env:`, loudly.** `fc_now` reads `${FC_NOW:?…}` and dies with a message
+  naming the fixture's obligation, because a *defaulted* clock is a fixture asserting against an
+  accident: every recorded `endsAt` would silently drift into the past and the whole family would
+  converge on "resolved" while looking green. (`fixture.yaml`'s subset has no inline comments —
+  a trailing `# …` on the list item rides into the value and reaches `jq --argjson` as garbage.)
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

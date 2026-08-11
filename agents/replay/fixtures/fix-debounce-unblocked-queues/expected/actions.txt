@@ -1,5 +1,6 @@
 CALL gh api repos/teststuffstash/homelab/issues?labels=agent-fix&state=open&per_page=50 --jq .[] | select(.pull_request | not) | select(.body // "" | test("(^|\n)alert-fp:")) | select([.labels[].name] | any(startswith("agent/")) | not) | {repo: "teststuffstash/homelab", number: .number, title: .title, body: (.body // "")}
 CALL gh api repos/teststuffstash/homelab/issues/237 --jq .body // ""
+CALL alertmanager GET /api/v2/alerts (currency probe)
 CALL gh api -X POST repos/teststuffstash/homelab/issues/237/labels -f labels[]=agent/queued
 CALL curl -m 5 -fsS -X POST -H Content-Type: application/json -d {"repo":"homelab","unit":"-"} http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate
 OUT self-referential, left for a human to queue:
