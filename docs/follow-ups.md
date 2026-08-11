@@ -219,17 +219,13 @@ the block needs pruning, not more headings.
       **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (or fan the global
       trigger out over graduated namespaces); then decide if global has a reader left.
       Relates FU-143, FU-145, ADR-094.
-- [ ] **FU-146** — **The per-item dispatch hold on all three clauses — 2 of 3 PROVEN LIVE.**
-      Written for WIP=1; ADR-097's raise to 3 retired it silently (~59 of 71 coordinator sessions
-      did nothing, circles PR#39). Shipped: main scan `fc606e2`, doorbell fast path `277a73f`,
-      `ci-red` `f0169f1` (which had to add `body` to its probe); each predicate executed against
-      real data. Loki 2026-08-07 (ns circles-agents): `changes-requested held` on #18 ×8 +
-      `ci-red held` on #19 ×3 — real rounds, dispatch suppressed. The doorbell fast-path clause
-      ran same day but fell through pre-hold — no eligible traffic yet. Audit DONE 2026-08-11
-      (clean: changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch
-      carry state-fp, post-08-07 clauses emit no dispatch units). **Next:** SOAK ONLY — the
-      first live doorbell-path hold, then archive. Deliberately not an FU-165 goal child
-      (built-not-unbuilt; nothing to ride).
+- [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
+      (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
+      `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
+      fast-path clause just hasn't seen eligible traffic). Audit DONE 2026-08-11, clean:
+      changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch carry
+      state-fp, post-08-07 clauses emit no dispatch units. **Next:** SOAK ONLY — the first live
+      doorbell-path hold, then archive. Not an FU-165 goal child (built, nothing to ride).
 - [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
       scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
       fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
