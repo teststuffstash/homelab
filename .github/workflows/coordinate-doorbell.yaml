@@ -1,0 +1,24 @@
+# FU-143 point 7 — the merge doorbell, ported from circles (its header carries the full why).
+# homelab's lane paid the missing edge twice on 2026-08-11 alone: after every merge the next
+# dispatch sat behind the merged-closeout, which sat behind the */30 cron — the operator caught
+# "0 agents live, N queued" both times and the meta seat hand-rang the doorbell. This collapses
+# merge → closeout → next dispatch to seconds, which the FU-165 goal lane pays on every hop.
+# Payload = the graduated-stack shape (FU-144): {stack, loop_ns}, unit "-" EXPLICITLY (a missing
+# body.unit key logs a permanent Sensor error line). A false wake costs one scan; the
+# coordinator-scan mutex serialises against the cron.
+name: coordinate-doorbell
+on:
+  pull_request:
+    types: [closed]
+jobs:
+  ring:
+    if: github.event.pull_request.merged == true
+    runs-on: homelab-ephemeral
+    timeout-minutes: 5
+    steps:
+      - name: Ring the coordinator doorbell
+        run: |
+          curl -m 5 -s -X POST -H "Content-Type: application/json" \
+            -d '{"stack":"platform","loop_ns":"platform-agents","unit":"-"}' \
+            http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000/coordinate \
+            >/dev/null || true
