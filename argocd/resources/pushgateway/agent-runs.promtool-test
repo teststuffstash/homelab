@@ -1,0 +1,308 @@
+# Behaviour fixture for the agent-runs alerts (FU-158 behaviour half, homelab#288).
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/agent-runs.promtool-test
+#
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these four
+# fire on the shapes they were written for and stay quiet on the shapes that look like them —
+# above all the PUSHGATEWAY-RESIDUE class, where a rule that merely parses is exactly how
+# sleep-tracking#20's 3-day-old auth-storm kept AgentRunInfraDeathBurst ringing for two days
+# (FU-021, found 2026-07-12). It is not wired into CI yet: the one-line `promtool test rules` hook
+# belongs in `scripts/` + `.github/workflows/ci.yaml`, both outside the fixer lane's tier, so it
+# is the codeowner's follow-on. Run it by hand until then.
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources,
+# and a non-manifest there would fail it.
+#
+# CLOCK: promtool's test clock starts at 0, so `time()` is small. Two consequences are used
+# deliberately below: (1) a push AT the start of the test is `push_time_seconds 0`, and (2) a
+# STALE residue pushed three days before the test window is `push_time_seconds -259200`. Negative
+# is not a trick — it is "3 days before t=0" on this clock, and only the difference is asserted.
+#
+# LABELS are the real pushed sets read off the live series on 2026-08-11, minus the scrape target
+# labels (container/endpoint/namespace/pod/service on the pushgateway itself), which no expr here
+# reads. The join keys (project, issue, role, round) and every matcher label are complete.
+rule_files:
+  - agent-runs.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── RetroReportOverdue — the `or vector(0)` branch: a belt that NEVER succeeded ──────────────
+  # The failure this alert exists for is silence, not a bad value: the 2026-08-10 Monday cron
+  # fired, guard-refused, pushed nothing, and nothing said so for 13 hours. With a bare
+  # `max(...)` an absent series makes the whole expr empty and the alert can never fire — which
+  # is why `or vector(0)` is there, and why it needs a test: the series below has ZERO samples.
+  - interval: 1h
+    name: no retro report has EVER landed — fires at 8d+6h, not before
+    input_series:
+      - series: 'retro_report_last_success_timestamp{job="retro-session",stack="oracle"}'
+        values: "_x260"
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      # 8d = 192h is when the condition turns true; `for: 6h` still holds it here
+      - eval_time: 197h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 199h
+        alertname: RetroReportOverdue
+        exp_alerts: &retro_overdue_alert
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
+              description: "The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."
+      # and it does not self-resolve while the belt stays silent
+      - eval_time: 250h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+
+  # ── RetroReportOverdue — a report lands, ages out, and a fresh one clears it ─────────────────
+  # `max(...)` over the gauge means the NEWEST report wins even if the metric ever carries more
+  # than one `stack`, and the alert clears on its own the moment a report lands.
+  - interval: 1h
+    name: a report ages out at 8d and the next one clears the alert
+    input_series:
+      # landed at t=0 …then re-pushed at t=221h with that hour's timestamp (221 * 3600)
+      - series: 'retro_report_last_success_timestamp{job="retro-session",stack="oracle"}'
+        values: "0+0x220 795600+0x40"
+    alert_rule_test:
+      - eval_time: 190h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+      - eval_time: 199h
+        alertname: RetroReportOverdue
+        exp_alerts: *retro_overdue_alert
+      # the Monday report lands at 221h — one evaluation later the alert is gone
+      - eval_time: 222h
+        alertname: RetroReportOverdue
+        exp_alerts: []
+
+  # ── AgentRunNegativeCost — a data-quality bug, no `for:`, fires on the first evaluation ──────
+  # The positive-cost run in the same push window is the discriminator: this must be a sign test,
+  # not a "cost looks odd" test.
+  - interval: 1m
+    name: a negative cost fires immediately; a normal one never does
+    input_series:
+      - series: 'agent_run_cost_usd{exit_status="failed",harness="goose",issue="30",job="agent_run",model="anthropic/claude-haiku-4.5",node="wk-metal-03",project="oracle-fleet",role="worker",round="2"}'
+        values: "-0.42+0x30"
+      - series: 'agent_run_cost_usd{exit_status="clean",harness="goose",issue="31",job="agent_run",model="anthropic/claude-haiku-4.5",node="wk-metal-01",project="oracle-fleet",role="worker",round="1"}'
+        values: "0.0356+0x30"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AgentRunNegativeCost
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              exit_status: failed
+              harness: goose
+              issue: "30"
+              job: agent_run
+              model: anthropic/claude-haiku-4.5
+              node: wk-metal-03
+              project: oracle-fleet
+              role: worker
+              round: "2"
+            exp_annotations:
+              summary: "Agent run reported NEGATIVE cost (oracle-fleet issue 30)"
+              description: "agent_run_cost_usd=-0.42 for pod-pushed run (model anthropic/claude-haiku-4.5, round 2) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class."
+
+  # ── AgentRunInfraDeathBurst — three FRESH walls on one project ───────────────────────────────
+  # The meta-2 pattern as an alert. Note the second half of the assertion: the same three groups,
+  # untouched, stop counting once their pushes age past an hour. Pushgateway keeps serving them
+  # forever, so "stops counting" is a property of the expr, not of the data disappearing.
+  - interval: 1m
+    name: three fresh non-clean runs fire, and stop counting an hour after the push
+    input_series:
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="101",job="agent_run",model="qwen/qwen3-max",node="wk-metal-01",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="no-artifact",harness="goose",issue="102",job="agent_run",model="qwen/qwen3-max",node="wk-metal-02",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="harness-death",harness="goose",issue="103",job="agent_run",model="qwen/qwen3-max",node="wk-metal-03",project="oracle-fleet",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'push_time_seconds{issue="101",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="102",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="103",job="agent_run",project="oracle-fleet",role="worker",round="1"}'
+        values: "0+0x120"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: oracle-fleet
+            exp_annotations:
+              summary: "3+ non-clean agent runs in 1h on oracle-fleet"
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+      # 70m after the pushes: same series, same values, no alert — the freshness join is what
+      # makes this alert a rate rather than a permanent statement about the past.
+      - eval_time: 70m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+
+  # ── AgentRunInfraDeathBurst — the FU-021 regression, as a permanent test ─────────────────────
+  # Three non-clean groups pushed THREE DAYS before the window. The pre-FU-021 `count_over_time`
+  # form counted scrapes of these stale gauges and rang for two days on sleep-tracking#20; the
+  # push-freshness form must never look at them at all.
+  - interval: 1m
+    name: three-day-old pushgateway residue never fires (FU-021)
+    input_series:
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="20",job="agent_run",model="qwen/qwen3-max",node="wk-01",project="sleep-tracking",role="worker",round="1"}'
+        values: "1+0x180"
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="21",job="agent_run",model="qwen/qwen3-max",node="wk-01",project="sleep-tracking",role="worker",round="1"}'
+        values: "1+0x180"
+      - series: 'agent_run_total{exit_status="auth-storm",harness="goose",issue="22",job="agent_run",model="qwen/qwen3-max",node="wk-01",project="sleep-tracking",role="worker",round="1"}'
+        values: "1+0x180"
+      - series: 'push_time_seconds{issue="20",job="agent_run",project="sleep-tracking",role="worker",round="1"}'
+        values: "-259200+0x180"
+      - series: 'push_time_seconds{issue="21",job="agent_run",project="sleep-tracking",role="worker",round="1"}'
+        values: "-259200+0x180"
+      - series: 'push_time_seconds{issue="22",job="agent_run",project="sleep-tracking",role="worker",round="1"}'
+        values: "-259200+0x180"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+      - eval_time: 180m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+
+  # ── AgentRunInfraDeathBurst — model-scout canaries stay out (homelab#235) ────────────────────
+  # A scout tick runs MAX_CANARIES=3 trivial probes against brand-new models and treats their
+  # deaths as expected. Three dead canaries plus one genuine failure is ONE real datum, not a
+  # burst — and the `issue!~"scout-.*"` matcher must count exactly the genuine one.
+  - interval: 1m
+    name: three dead canaries plus one real failure do not make a burst
+    input_series:
+      - series: 'agent_run_total{exit_status="harness-death",harness="goose",issue="scout-x-ai-grok-5",job="agent_run",model="x-ai/grok-5",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="no-artifact",harness="goose",issue="scout-moonshot-kimi-k3",job="agent_run",model="moonshotai/kimi-k3",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="budget-403",harness="goose",issue="scout-deepseek-v4",job="agent_run",model="deepseek/deepseek-v4",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="failed",harness="goose",issue="44",job="agent_run",model="qwen/qwen3-max",node="wk-metal-04",project="openrouter-operator",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'push_time_seconds{issue="scout-x-ai-grok-5",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="scout-moonshot-kimi-k3",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="scout-deepseek-v4",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="44",job="agent_run",project="openrouter-operator",role="worker",round="1"}'
+        values: "0+0x120"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+
+  # ── AgentRunInfraDeathBurst — clean and ci-failed are not walls ──────────────────────────────
+  # `ci-failed` is the loop WORKING (the gate caught something); six of them in ten minutes is a
+  # busy afternoon, not an outage.
+  - interval: 1m
+    name: clean and ci-failed terminals never raise the burst
+    input_series:
+      - series: 'agent_run_total{exit_status="clean",harness="goose",issue="60",job="agent_run",model="deepseek/deepseek-v4-flash",node="wk-01",project="circles",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="clean",harness="goose",issue="61",job="agent_run",model="deepseek/deepseek-v4-flash",node="wk-01",project="circles",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="ci-failed",harness="goose",issue="62",job="agent_run",model="deepseek/deepseek-v4-flash",node="wk-01",project="circles",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="ci-failed",harness="goose",issue="63",job="agent_run",model="deepseek/deepseek-v4-flash",node="wk-01",project="circles",role="worker",round="2"}'
+        values: "1+0x120"
+      - series: 'push_time_seconds{issue="60",job="agent_run",project="circles",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="61",job="agent_run",project="circles",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="62",job="agent_run",project="circles",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="63",job="agent_run",project="circles",role="worker",round="2"}'
+        values: "0+0x120"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts: []
+
+  # ── AgentRunInfraDeathBurst — ⚠ CURRENT behaviour, and a FINDING, not an endorsement ─────────
+  # `blocked-deliberate` is a live exit_status (4 of them in the pushgateway on 2026-08-11) and it
+  # is the OPPOSITE of an infra death: the agent read the issue, judged it unworkable, and said so.
+  # `exit_status!~"clean|ci-failed"` counts it anyway, so three deliberate blocks on one project
+  # inside an hour raise a burst whose description says "auth-storm/no-artifact/harness-death/…".
+  # This test pins TODAY's behaviour so the finding cannot be lost; changing the matcher is a scope
+  # change and belongs to its own issue (raised in homelab#288's PR body). If it is fixed, this
+  # test flips to exp_alerts: [] in the same commit — that is the point of writing it down.
+  - interval: 1m
+    name: "FINDING: three blocked-deliberate terminals raise an infra-death burst today"
+    input_series:
+      - series: 'agent_run_total{exit_status="blocked-deliberate",harness="goose",issue="70",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="blocked-deliberate",harness="goose",issue="71",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'agent_run_total{exit_status="blocked-deliberate",harness="goose",issue="72",job="agent_run",model="qwen/qwen3-max",node="wk-02",project="sleep-iac",role="worker",round="1"}'
+        values: "1+0x120"
+      - series: 'push_time_seconds{issue="70",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="71",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+      - series: 'push_time_seconds{issue="72",job="agent_run",project="sleep-iac",role="worker",round="1"}'
+        values: "0+0x120"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AgentRunInfraDeathBurst
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              project: sleep-iac
+            exp_annotations:
+              summary: "3+ non-clean agent runs in 1h on sleep-iac"
+              description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
+
+  # ── AgentEventInfraSpinning — the 2026-08-05 Sensor spin, and the pods that must stay quiet ──
+  # Measured baselines (live, 2026-08-11): the four Argo Events infra pods idle at 0.1-5.3
+  # millicores; the 2026-08-05 fault sat at 1887m. The spinning series below runs at 1.887 cores
+  # and the idle one at 5m, i.e. the real separation the 0.5-core threshold sits inside.
+  # The workflow-controller series is the matcher's job: it burns 2 cores here and is not a
+  # sensor/eventsource, so it must never appear.
+  - interval: 1m
+    name: a sensor spin fires at 15m; idle sensors and a busy non-sensor stay silent
+    input_series:
+      # 5.3 millicores for half an hour, then the leaked-goroutine spin at 1.887 cores
+      - series: 'container_cpu_usage_seconds_total{container="main",namespace="agent-coordinator",pod="coordinator-sensor-kfmcv-7864c69448-zcwml"}'
+        values: "0+0.3x30 9.3+113.2x29"
+      - series: 'container_cpu_usage_seconds_total{container="main",namespace="agent-coordinator",pod="review-sensor-h5j67-6dd767d4b9-mzn8x"}'
+        values: "0+0.3x120"
+      - series: 'container_cpu_usage_seconds_total{container="main",namespace="agent-coordinator",pod="agent-loop-eventsource-npcgm-6f85454985-wk9s6"}'
+        values: "0+0.006x120"
+      - series: 'container_cpu_usage_seconds_total{container="controller",namespace="agent-coordinator",pod="argo-workflows-workflow-controller-7d6c9f8b45-q2xnm"}'
+        values: "0+120x120"
+    alert_rule_test:
+      # still idle
+      - eval_time: 30m
+        alertname: AgentEventInfraSpinning
+        exp_alerts: []
+      # spinning since ~31m — inside `for: 15m`, so pending, not firing
+      - eval_time: 40m
+        alertname: AgentEventInfraSpinning
+        exp_alerts: []
+      - eval_time: 50m
+        alertname: AgentEventInfraSpinning
+        exp_alerts: &spin_alert
+          - exp_labels:
+              severity: warning
+              pod: coordinator-sensor-kfmcv-7864c69448-zcwml
+            exp_annotations:
+              summary: "Argo Events infra pod coordinator-sensor-kfmcv-7864c69448-zcwml is burning CPU (idle baseline is ~5m)"
+              description: "coordinator-sensor-kfmcv-7864c69448-zcwml in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative."
+      # ⚠ THE DOCUMENTED TAIL, asserted: the pod is deleted at 60m and the alert keeps naming it
+      # while its samples are still inside the [5m] rate window. The rule's own comment warns
+      # about this ("expect a ~5-10 min tail naming the DELETED pod"); here it is, executed.
+      - eval_time: 63m
+        alertname: AgentEventInfraSpinning
+        exp_alerts: *spin_alert
+      # …and then it goes on its own, with no staleness handling anywhere
+      - eval_time: 67m
+        alertname: AgentEventInfraSpinning
+        exp_alerts: []

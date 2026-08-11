@@ -1,0 +1,208 @@
+# Behaviour fixture for github-exporter's loop/poller liveness alerts (FU-158 behaviour half,
+# homelab#288). The second fixture over this rule file; queued-age.promtool-test (#284) was first.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/loop-health.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+# CLOCK: promtool's test clock starts at 0, so a "last successful poll at epoch 0" simply means
+# "never since the test began" and `time() - it` is the age. Not wired into CI yet — the hook is
+# a `scripts/` + `.github/` change, outside the fixer lane's tier (codeowner's follow-on).
+#
+# ⚠ THE HEADLINE OF THIS FILE IS A FINDING, not a pass: AgentQueueStalled (FU-091) CANNOT FIRE in
+# production. Both of its "zero" conjuncts are `sum(...) == 0` over metrics that are emitted
+# PER OBJECT — one series per live worker pod, one per OPEN PR (github-exporter.py:771, "1 per
+# open PR"). Zero open PRs therefore means zero series, and `sum()` over no series is EMPTY, not
+# 0, so the `and` chain has nothing to match: the state the alert was built for is precisely the
+# state in which it evaluates to nothing. Live confirmation, 2026-08-11: the worker-pod aggregate
+# was present at only 343 of 865 five-minute steps over three days — absent 60% of the time, and
+# absent exactly when the loop is idle. The tests below pin all three shapes so the finding is
+# executed rather than argued. FIXING it (the `or vector(0)` idiom RetroReportOverdue already
+# uses) is an expr change on an alert homelab#288 was not scoped to touch — raised in that PR's
+# body for its own issue.
+rule_files:
+  - loop-health.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── AgentQueueStalled 1/3 — the real idle-loop shape: queued work, nothing running ───────────
+  # 5 queued issues, no worker pods in existence, no open PRs. This IS the 2026-07-21 wedge
+  # (a sidecar zombie held project-WIP for three days) and the alert stays silent through it,
+  # because two of its three conjuncts have no series to aggregate.
+  - interval: 1m
+    name: "FINDING: queued issues + a genuinely idle loop never fires (both zero-conjuncts are absent, not 0)"
+    input_series:
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "3+0x400"
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="circles"}'
+        values: "2+0x400"
+    alert_rule_test:
+      - eval_time: 2h1m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      - eval_time: 6h
+        alertname: AgentQueueStalled
+        exp_alerts: []
+
+  # ── AgentQueueStalled 2/3 — isolate which conjunct kills it ──────────────────────────────────
+  # Lingering Succeeded pod objects DO give the pod-phase conjunct its series (kube-state-metrics
+  # emits every phase for every existing pod, so Running/Pending read 0). That half is fine. The
+  # PR conjunct is the one that can never be satisfied: no open PR ⇒ no series ⇒ empty.
+  - interval: 1m
+    name: "FINDING: even with pod objects present and reading 0, the open-PR conjunct is unsatisfiable"
+    input_series:
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "5+0x400"
+      - series: 'kube_pod_status_phase{namespace="oracle-agents",phase="Running",pod="agent-oracle-fleet-issue-30-r1",uid="a1"}'
+        values: "0+0x400"
+      - series: 'kube_pod_status_phase{namespace="oracle-agents",phase="Pending",pod="agent-oracle-fleet-issue-30-r1",uid="a1"}'
+        values: "0+0x400"
+    alert_rule_test:
+      - eval_time: 2h1m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      - eval_time: 6h
+        alertname: AgentQueueStalled
+        exp_alerts: []
+
+  # ── AgentQueueStalled 3/3 — the ONLY shape that fires, and production cannot produce it ──────
+  # A `github_pull_request_open` series valued 0 makes the whole chain work. The exporter never
+  # emits one: it appends `github_pull_request_open{...} 1` per open PR and nothing otherwise.
+  # So this test is not "the alert works" — it is the proof that the alert's firing condition
+  # requires a series shape that does not exist, which is what makes 1/3 and 2/3 conclusive.
+  - interval: 1m
+    name: "the rule DOES work — against a zero-valued PR series github-exporter never emits"
+    input_series:
+      - series: 'github_agent_issue_labels{label="agent/queued",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "5+0x400"
+      # …and a worker pod finally starts at 2h4m, which is what ends the alert
+      - series: 'kube_pod_status_phase{namespace="oracle-agents",phase="Running",pod="agent-oracle-fleet-issue-30-r1",uid="a1"}'
+        values: "0+0x123 1+0x50"
+      - series: 'github_pull_request_open{number="259",owner="teststuffstash",repo="oracle-fleet"}'
+        values: "0+0x400"
+    alert_rule_test:
+      # `for: 2h` honoured
+      - eval_time: 1h59m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+      - eval_time: 2h1m
+        alertname: AgentQueueStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Agent queue stalled — queued issues but a fully idle loop"
+              description: "5 agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape."
+      # one live worker pod ends it immediately — there is no `for:` on the way down
+      - eval_time: 2h5m
+        alertname: AgentQueueStalled
+        exp_alerts: []
+
+  # ── GithubExporterDown — scrape liveness, `for: 15m` ─────────────────────────────────────────
+  # The companion to GithubExporterStale: a dead pod has no last_success gauge to age, so only
+  # `up == 0` can see that case. Both are needed and neither covers the other.
+  - interval: 1m
+    name: a 5m scrape blip stays silent; 15m of down fires
+    input_series:
+      - series: 'up{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1+0x10 0+0x5 1+0x10 0+0x60"
+    alert_rule_test:
+      # the 5-minute blip (11m…16m) never reaches 15m
+      - eval_time: 16m
+        alertname: GithubExporterDown
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: GithubExporterDown
+        exp_alerts: []
+      # down again from 27m; 14m in, still pending
+      - eval_time: 40m
+        alertname: GithubExporterDown
+        exp_alerts: []
+      - eval_time: 43m
+        alertname: GithubExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http-metrics
+              instance: 10.244.2.91:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-5c6d9f4f76-kcmdn
+              service: github-exporter
+            exp_annotations:
+              summary: "github-exporter is not being scraped"
+              description: "The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed."
+
+  # ── GithubExporterStale — the PAT-expiry reminder, `for: 30m` on top of a 30m threshold ──────
+  # The pod is up and scraping; it just cannot complete a poll. Total time to page is ~60m by
+  # construction (30m of staleness before the condition is true, then `for: 30m`).
+  - interval: 1m
+    name: a poller that stops succeeding pages at ~60m, and a healthy one never does
+    input_series:
+      # never succeeded since the test clock began
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0+0x120"
+      # a healthy second instance whose timestamp tracks the clock (60s per sample), so its age
+      # never exceeds one poll interval — the discriminator that keeps this a per-pod test
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.99:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-healthy-twin",service="github-exporter"}'
+        values: "0+60x120"
+    alert_rule_test:
+      # 30m: the condition has just turned true, `for: 30m` has not run
+      - eval_time: 31m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      - eval_time: 59m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      # ~60m, and ONLY the stuck pod — the healthy twin is the discriminator
+      - eval_time: 62m
+        alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http-metrics
+              instance: 10.244.2.91:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-5c6d9f4f76-kcmdn
+              service: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
+              description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+
+  # ── GithubExporterStale — ⚠ the #288 restart-gap class, alive in a SECOND alert ──────────────
+  # `github_exporter_last_success_timestamp` carries `pod`/`instance` too, so a poller roll during
+  # a stale spell restarts the 30m window under a new identity: the page slips from ~60m to ~72m
+  # here, and further in production (staleness markers kill the old series at the roll instead of
+  # 5m later). Same shape as SubscriptionWeeklyPoolLow before #288, and the same two-part fix
+  # would apply — asserted here as CURRENT behaviour, not fixed: that is its own issue, and this
+  # test flips in the same commit that fixes it. Not identical in severity to the proxy case: the
+  # exporter is a 1-replica Deployment too, but a PAT expiry outlives any number of rolls, so the
+  # page is delayed rather than lost.
+  - interval: 1m
+    name: "FINDING: a poller roll mid-staleness restarts the `for:` window (the #288 class again)"
+    input_series:
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0+0x40"
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-p7t2r",service="github-exporter"}'
+        values: "_x42 0+0x80"
+    alert_rule_test:
+      # without the roll this would have fired at ~60m; the old pod's window died with it
+      - eval_time: 65m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      # the new pod pages 30m after ITS first sample (42m + 30m), 12m late
+      - eval_time: 73m
+        alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http-metrics
+              instance: 10.244.2.93:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-5c6d9f4f76-p7t2r
+              service: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
+              description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
