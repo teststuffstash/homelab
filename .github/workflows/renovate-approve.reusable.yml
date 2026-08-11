@@ -34,6 +34,14 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'automerge') &&
       contains(github.event.pull_request.labels.*.name, 'dependencies')
     runs-on: homelab-ephemeral
+    # SERIALIZE per PR (homelab#114, 2026-08-11): one `labeled` event fires PER LABEL, so a
+    # producer adding automerge+dependencies spawns concurrent instances that all pass the
+    # dup-check below before any of them posts (PR#236: two APPROVEDs in the same minute at one
+    # head). cancel-in-progress is safe — every instance re-derives from live state, so the
+    # surviving latest one does the right thing.
+    concurrency:
+      group: renovate-approve-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
       # Skip gracefully (don't hard-fail every dep PR) if the reviewer secrets aren't wired yet — a red
       # job here becomes a failed check that (require_passed_checks) blocks the FU-041 updater. Never gate
@@ -79,9 +87,19 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          body=$(curl -sS -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/pulls/$PR/reviews?per_page=100" 2>/dev/null) || body=''
-          n=$(printf '%s' "$body" | python3 -c "import json,sys,os;rs=json.load(sys.stdin);print(sum(1 for r in rs if isinstance(r,dict) and r.get('state')=='APPROVED' and r.get('commit_id')==os.environ.get('SHA','')))" 2>/dev/null) || n=0
-          case "${n:-0}" in ''|*[!0-9]*) n=0;; esac
+          # FAIL-CLOSED (homelab#114, 2026-08-11): the old shape (`|| body=''` + 2>/dev/null)
+          # turned ANY listing failure into "no approval found → approve" — a probe failing INTO
+          # a write (rule #6), and the likely path of PR#236's third same-head approval. An
+          # unreadable review list now SKIPS: safe by this reflex's own charter (never gate the
+          # merge path — the next PR event retries), while approving-on-unknown is what storms.
+          if ! body=$(curl -sS --fail -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/pulls/$PR/reviews?per_page=100"); then
+            echo "::warning::could not LIST reviews for #$PR — skipping approve (fail-closed; next event retries)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if ! n=$(printf '%s' "$body" | python3 -c "import json,sys,os;rs=json.load(sys.stdin);print(sum(1 for r in rs if isinstance(r,dict) and r.get('state')=='APPROVED' and r.get('commit_id')==os.environ.get('SHA','')))"); then
+            echo "::warning::review list unparseable for #$PR — skipping approve (fail-closed; next event retries)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           if [ "$n" -gt 0 ]; then
             echo "already APPROVED at $SHA ($n review(s)) — skipping; another adds nothing but loop-detector noise"
             echo "skip=true" >> "$GITHUB_OUTPUT"
