@@ -213,13 +213,26 @@ tier allowed, dual-model worth it) are FU-095's.
   on the responder receiver — the resolve event is never delivered, so a cleared alert leaves an
   open issue); and **ownership vs the -iac observation window is undefined** (IAC-G10 —
   [`iac-lane.md`](iac-lane.md) §Who owns a symptom).
-  **Self-referential gate BUILT 2026-08-04** (`responder-argo.yaml`, deterministic — namespace ∈
-  {kube-system, argocd, longhorn-system, registry-cache, arc-runners, agent-coordinator,
-  agent-egress, *-agents} ∨ alertname `Agent*`): those alerts cap the outcome at report-only and
-  stamp `self-referential: true` on the issue, because the alerts most likely to want a fixer are
-  the ones that disable it — the pod, the pull, the PVC attach, the git token or the CI runners it
-  needs are the broken thing. The future `selfQueue` knob reads the marker instead of re-deriving
-  it. Verified against 11 alert shapes from the corpus (7 self, 4 dispatchable).
+  **Self-referential gate BUILT 2026-08-04** (`responder-argo.yaml`, deterministic — the alert
+  label `platform_machinery: "true"` ∨ namespace ∈ {kube-system, argocd, longhorn-system,
+  registry-cache, arc-runners, agent-coordinator, agent-egress, *-agents} ∨ alertname `Agent*`):
+  those alerts cap the outcome at report-only and stamp `self-referential: true` on the issue,
+  because the alerts most likely to want a fixer are the ones that disable it — the pod, the pull,
+  the PVC attach, the git token or the CI runners it needs are the broken thing. The future
+  `selfQueue` knob reads the marker instead of re-deriving it. Verified against 11 alert shapes
+  from the corpus (7 self, 4 dispatchable).
+  **The label key added 2026-08-11 (homelab#239), and it is the primary one:** the other two
+  *infer* machinery from something else, so an alert derived from a **pushgateway** metric matches
+  neither — `RetroReportOverdue` (no meaningful namespace, name not `Agent*`) passed the gate, took
+  a `fix` verdict, was debounce-queued, and put a worker on the retro belt, which only the
+  jail/operator lane can act on; it latched `agent/error` (homelab#237). A rule AUTHOR knows the
+  machinery fact and declares it at the rule site, exactly as with `triage: none` — the two are
+  different caps and compose: `triage: none` means *do not investigate*, `platform_machinery` means
+  *investigate, but a human merges the fix*. Stamped only where it is load-bearing (an alert the
+  namespace/`Agent*` belt already catches would gain nothing and would change its own Alertmanager
+  fingerprint); the live pairing is asserted in `agents/coordinator/responder-behaviour-test.sh`
+  §#239 against the real `PrometheusRule`s, which is the only place a dropped stamp can fail —
+  `manifest-lint` SKIPs both kinds involved.
 
   **POLICY_DENIED runbook — BUILT 2026-08-08 (homelab#125).** Before this, the lane faulted sessions
   for not following a runbook that was written down nowhere and whose only named tool

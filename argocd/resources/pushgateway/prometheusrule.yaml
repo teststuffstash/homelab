@@ -23,6 +23,15 @@ spec:
           for: 6h
           labels:
             severity: warning
+            # homelab#239, and this alert is why the label exists. The responder's
+            # self-referential gate inferred "loop machinery" from the namespace or an `Agent*`
+            # name, and a pushgateway-derived alert has neither: this one sailed through on
+            # 2026-08-11, took a `fix` verdict, and dispatched a worker at the retro belt — a
+            # CronWorkflow whose re-fire is an argo mutation and whose manifests only a human
+            # merges. It ended in an agent/error latch (homelab#237). The label caps the outcome
+            # at "author a PR, never auto-merge"; it does NOT silence triage (that is `triage:
+            # none`, which this alert must not have — the overdue state is worth diagnosing).
+            platform_machinery: "true"
           annotations:
             summary: "No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data"
             description: "The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058."

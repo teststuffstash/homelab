@@ -42,11 +42,20 @@ spec:
         # belts. Series come from cloudflare-spend-probe (spend-probe.py beside this file), whose
         # --self-test replays THESE exprs against a flipped fixture — rename an alert or a metric
         # on one side only and that test fails. severity: warning because info is inhibited here.
+        # ⚠ All three spend-belt alerts carry `platform_machinery: "true"` (homelab#239): they
+        # fire in ns `monitoring`, which is in no claim and in no self-referential namespace set,
+        # and their names are not `Agent*` — so the responder's gate saw them as ordinary
+        # dispatchable symptoms. They are not: the account, its card and its tokens are the
+        # platform's own, the evidence lives in a third-party console's audit log, and the
+        # remedy is an operator move (revert a toggle, re-scope a token) or a `tofu/cloudflare/**`
+        # change applied out-of-band. Triage still runs and still files — what the label caps is
+        # the auto-merge, per the gate in agents/coordinator/responder-argo.yaml.
         - alert: CloudflareZoneSpendToggleEnabled
           expr: cloudflare_zone_argo_smart_routing > 0
           for: 5m
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "Usage-billed toggle enabled on Cloudflare zone {{ $labels.zone }}"
             description: "Argo Smart Routing is no longer \"off\" on zone {{ $labels.zone }} — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value."
@@ -55,6 +64,7 @@ spec:
           for: 5m
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "Cloudflare product zone {{ $labels.zone }} is no longer on the free plan"
             description: "Zone {{ $labels.zone }} reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
@@ -63,6 +73,7 @@ spec:
           for: 30m
           labels:
             severity: warning
+            platform_machinery: "true"
           annotations:
             summary: "Cloudflare spend-toggle belt is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}"
             description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
