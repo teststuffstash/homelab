@@ -1,0 +1,331 @@
+# Behaviour fixture for the claude-subscription alerts (FU-158 behaviour half, homelab#288) —
+# built around the recorded 2026-08-07 06:41Z restart silence and the expr that fixes it.
+#
+#   devbox run -- promtool test rules argocd/resources/openrouter-proxy/subscription.promtool-test
+#
+# `devbox run prometheus-rules-lint` checks that every alert PARSES; this checks that these two
+# FIRE across the shapes they were written for — above all across a PROXY ROLL, which is the whole
+# point of #288. It is not wired into CI yet: the one-line `promtool test rules` hook belongs in
+# `scripts/` + `.github/workflows/ci.yaml`, both outside the fixer lane's tier, so it is the
+# codeowner's follow-on. Run it by hand until then.
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources,
+# and a non-manifest there would fail it.
+#
+# CLOCK: promtool's test clock starts at 0, so `time()` is small and the reset timestamps below
+# are small too (200000 ≈ "2.3 days out", 72000 ≈ "20h out"). Only the DIFFERENCE against `time()`
+# is asserted on, which is exactly what the alert does.
+#
+# LABELS are the real scraped set, read off the live series on 2026-08-11:
+#   container, endpoint, instance, job, namespace, pod, service + the metric's own `window`.
+# `pod` and `instance` are the two that churn on a roll, and they were on the ALERT before #288.
+#
+# ⚠ WHAT THIS FIXTURE CANNOT MODEL, and why it is still conclusive: promtool has no STALENESS
+# MARKER. In production the old pod's series stops being readable the instant its target goes
+# away; here a series that simply ends stays readable for the full 5m PromQL lookback. So every
+# silence measured below is a LOWER BOUND on the production silence — the old expr goes quiet
+# later here than it did on 2026-08-07 (where the measured raw gap was only 69s, yet the alert
+# dropped out of the firing set immediately). A fixture that under-states the bug and still
+# catches it is the honest direction to err in.
+rule_files:
+  - subscription.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Shape 1 — 2026-08-07 06:41Z, the roll that bought 30 minutes of silence ──────────────────
+  # Utilization was 0.92, fresh, single series, >1 day to the weekly reset — a real capacity
+  # problem, firing correctly. Deploying router.py replaced pod 8574bd8d9-r42tx with
+  # cdc58fc45-wm8kr (both names are the incident's own, docs/agents/meta-state.md §durable
+  # warning), the per-pod series ended, a new one began, and `for: 1800s` restarted from zero.
+  # The measured raw gap between the two pods' last/first samples was 69s; modelled as 2m here.
+  - interval: 1m
+    name: 2026-08-07 proxy roll — pre-288 expr goes silent, the shipped expr keeps firing
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy",window="7d"}'
+        values: "0.92+0x40"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy",window="7d"}'
+        values: "200000+0x40"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy",window="7d"}'
+        values: "_x42 0.92+0x60"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy",window="7d"}'
+        values: "_x42 200000+0x60"
+    alert_rule_test:
+      # `for: 30m` is honoured, both forms — 29m in, the condition is true but nothing has fired.
+      - eval_time: 29m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+      - eval_time: 29m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts: []
+      # 31m: both fire. Note the label sets — the shipped alert carries ONLY `window`, because
+      # `max by (window)` is half of the fix: the alert's identity no longer contains the pod.
+      - eval_time: 31m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 92% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+      - eval_time: 31m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+              container: proxy
+              endpoint: http
+              instance: 10.244.2.71:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-8574bd8d9-r42tx
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+      # ── THE ROLL: last sample of r42tx at 40m, first sample of wm8kr at 42m ──────────────────
+      # 50m — the pre-288 alert is GONE. r42tx's lookback ran out at 45m and wm8kr's own `for:`
+      # window only started at 42m. This is the 2026-08-07 silence, reproduced.
+      - eval_time: 50m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts: []
+      # …and the shipped expr never noticed the roll: max_over_time([10m]) bridged the hole and
+      # `max by (window)` kept the identity, so this is the SAME alert instance as at 31m.
+      - eval_time: 50m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 92% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+      # 70m — 28 minutes into wm8kr's restarted window, still silent on the old expr while the
+      # pool sits at 92%. In production this half-hour is when the operator learns nothing.
+      - eval_time: 70m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 92% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+      # 73m — the old expr finally re-fires, under the NEW pod's identity: 42m + 30m. That is the
+      # cost the fix removes (≥30m here, and the full 30m in production, where staleness kills the
+      # old series at the roll instead of 5m later).
+      - eval_time: 73m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+              container: proxy
+              endpoint: http
+              instance: 10.244.2.83:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-cdc58fc45-wm8kr
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+
+  # ── Shape 2 — a SLOW roll (7m with no series at all) ─────────────────────────────────────────
+  # The single-replica part of the bug, isolated: for 7 minutes the vector is EMPTY, so there is
+  # nothing left to aggregate over and `max by (window)` alone would not save the window. Only
+  # the [10m] range bridges it. (Measured rolls were 69-116s across the 10 pod generations in the
+  # 7 days to 2026-08-11; 7m is a slow image pull, well inside the range.)
+  - interval: 1m
+    name: slow roll — a 7m hole with zero series still does not reset the shipped window
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.90:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-aaa-1",service="openrouter-proxy",window="7d"}'
+        values: "0.94+0x30"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.90:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-aaa-1",service="openrouter-proxy",window="7d"}'
+        values: "200000+0x30"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.91:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-bbb-2",service="openrouter-proxy",window="7d"}'
+        values: "_x37 0.94+0x40"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.91:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-bbb-2",service="openrouter-proxy",window="7d"}'
+        values: "_x37 200000+0x40"
+    alert_rule_test:
+      # mid-hole (last sample 30m, next 37m): pre-288 has nothing to read from 36m on…
+      - eval_time: 36m
+        alertname: SubscriptionWeeklyPoolLowPre288
+        exp_alerts: []
+      # …and the shipped alert is still the instance that went pending at 0m.
+      - eval_time: 36m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 94% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+      - eval_time: 45m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 94% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+
+  # ── Shape 3 — THE CEILING, asserted rather than assumed ──────────────────────────────────────
+  # [10m] is a bridge, not immunity: a roll that takes longer than the range still resets the
+  # window, and pretending otherwise is how a "fixed" alert surprises someone later. A 13m hole
+  # (crash-loop, Longhorn-slow attach, node drain) costs the same 30m as before. Widening the
+  # range is not free either — it is also how long a resolved condition keeps ringing.
+  - interval: 1m
+    name: a 13m hole DOES reset the window — the accepted limit of [10m]
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.92:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ccc-3",service="openrouter-proxy",window="7d"}'
+        values: "0.95+0x30"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.92:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ccc-3",service="openrouter-proxy",window="7d"}'
+        values: "200000+0x30"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.93:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ddd-4",service="openrouter-proxy",window="7d"}'
+        values: "_x43 0.95+0x60"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.93:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ddd-4",service="openrouter-proxy",window="7d"}'
+        values: "_x43 200000+0x60"
+    alert_rule_test:
+      # 41m: the [10m] range window (31m…41m] holds no sample — the shipped alert resolves too.
+      - eval_time: 41m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+      # it re-fires 30m after the new pod's first sample (43m + 30m), not before
+      - eval_time: 72m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+      - eval_time: 74m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 95% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+
+  # ── Guard 1 — the reset is IMMINENT, so 92% is not a problem ─────────────────────────────────
+  # The second conjunct is the whole reason this alert is not "utilization > 0.9": running a
+  # weekly pool dry 20 hours before it refills is normal, expected, and worth zero pages.
+  - interval: 1m
+    name: high utilization with the weekly reset <1 day out never fires
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.94:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-eee-5",service="openrouter-proxy",window="7d"}'
+        values: "0.97+0x120"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.94:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-eee-5",service="openrouter-proxy",window="7d"}'
+        values: "72000+0x120"
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+
+  # ── Guard 2 — the 5h window is not the 7d window, and the threshold is not "high-ish" ────────
+  # 88% weekly + a saturated 5h window is the ordinary busy state. The window matcher is what
+  # keeps the noisy 5h series out of this alert entirely.
+  - interval: 1m
+    name: 88% weekly (and a hot 5h window) stays silent
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-fff-6",service="openrouter-proxy",window="7d"}'
+        values: "0.88+0x120"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-fff-6",service="openrouter-proxy",window="5h"}'
+        values: "0.99+0x120"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-fff-6",service="openrouter-proxy",window="7d"}'
+        values: "200000+0x120"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-fff-6",service="openrouter-proxy",window="5h"}'
+        values: "9000+0x120"
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+
+  # ── Guard 3 — the price of [10m]: up to 10m of stickiness after the pool genuinely drops ─────
+  # Asserted so the trade is a fact in a test rather than a claim in a comment. Utilization falls
+  # to 0.50 at 40m (a weekly reset, or headers re-read after a quiet spell); the alert holds for
+  # the length of the range window and then clears on its own.
+  - interval: 1m
+    name: after utilization drops, the alert clears within the [10m] range window
+    input_series:
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.96:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ggg-7",service="openrouter-proxy",window="7d"}'
+        values: "0.93+0x40 0.50+0x60"
+      - series: 'anthropic_subscription_reset_timestamp_seconds{container="proxy",endpoint="http",instance="10.244.2.96:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-ggg-7",service="openrouter-proxy",window="7d"}'
+        values: "200000+0x100"
+    alert_rule_test:
+      # still ringing at 45m — 0.93 is inside (35m…45m]
+      - eval_time: 45m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              window: 7d
+            exp_annotations:
+              summary: "Claude subscription weekly pool above 90%"
+              description: '7d utilization is 93% with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+      # gone by 52m, i.e. ≤11m after the drop
+      - eval_time: 52m
+        alertname: SubscriptionWeeklyPoolLow
+        exp_alerts: []
+
+  # ── SubscriptionDispatchLimited — `for: 15m` on the composite deferral verdict ───────────────
+  # The launchers' gate (429 latch OR utilization threshold). A short deferral is the mechanism
+  # WORKING and must stay silent; 15 unbroken minutes means batch work is actually parked.
+  # The description resolves the two utilization series via `query`, so they are in the fixture
+  # and the rendered percentages below are the real template output.
+  - interval: 1m
+    name: dispatch deferral — a 9m blip stays silent, a sustained one fires at 15m
+    input_series:
+      - series: 'anthropic_subscription_dispatch_limited{container="proxy",endpoint="http",instance="10.244.2.97:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-hhh-8",service="openrouter-proxy"}'
+        values: "1+0x9 0+0x5 1+0x60"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.97:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-hhh-8",service="openrouter-proxy",window="5h"}'
+        values: "0.86+0x80"
+      - series: 'anthropic_subscription_utilization{container="proxy",endpoint="http",instance="10.244.2.97:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-hhh-8",service="openrouter-proxy",window="7d"}'
+        values: "0.71+0x80"
+    alert_rule_test:
+      # the 9m latch (0-9m) never reaches 15m, and the reset at 10m clears the pending state
+      - eval_time: 9m
+        alertname: SubscriptionDispatchLimited
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: SubscriptionDispatchLimited
+        exp_alerts: []
+      # re-latched at 15m; 14m of it is not enough…
+      - eval_time: 29m
+        alertname: SubscriptionDispatchLimited
+        exp_alerts: []
+      # …16m is.
+      - eval_time: 31m
+        alertname: SubscriptionDispatchLimited
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              container: proxy
+              endpoint: http
+              instance: 10.244.2.97:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-hhh-8
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "Claude subscription dispatch is deferred"
+              description: "Agent dispatch (reviewers/coordinator/claude-tier workers) has been deferring for 15m — 5h utilization 86%, 7d 71%. Probe: GET openrouter-proxy.agent-egress:8080/anthropic-limit."

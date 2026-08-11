@@ -1,0 +1,65 @@
+# The four agent-runs alerts this fixture exercises, lifted VERBATIM out of prometheusrule.yaml
+# (comments stripped — the manifest is their one home) — the rules file that
+# agent-runs.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
+# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
+# there would fail it. (Same shape as github-exporter/queued-age.promtool-rules, FU-150/#284.)
+#
+# COVERAGE — this copy holds FOUR of the file's six alerts, and the two it omits are omitted on
+# purpose, not by oversight:
+#   - AgentCoordinateScanWedged is already pinned as an executed test by
+#     `agents/scan-wedge-alert-test.sh` (a clause-replay fixture, FU-145/#283); duplicating it
+#     here would give it two homes and one of them would rot.
+#   - AgentWorkerEgressDropped has NO behaviour fixture yet — a plain `rate(...) > 0` with
+#     `for: 2m`, and the honest reason it is uncovered is budget, not design. Named in homelab#288's
+#     PR body so it is a known hole rather than an assumed pass.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED. github-exporter's twin is, by `devbox run exporter-self-test`;
+# the general harness that would extract `.spec.groups` at run time and delete the hand copies
+# lives in `scripts/**` + `.github/**` — CI-invoked paths outside the fixer lane's tier, so it is
+# the codeowner's follow-on. Until then: re-copy after editing an alert.
+#
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] |
+#        select(.alert == "RetroReportOverdue" or .alert == "AgentRunNegativeCost" or
+#               .alert == "AgentRunInfraDeathBurst" or .alert == "AgentEventInfraSpinning")]}]}' \
+#     argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: agent-runs
+    rules:
+      - alert: RetroReportOverdue
+        expr: (time() - (max(retro_report_last_success_timestamp) or vector(0))) > 8 * 86400
+        for: 6h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: No retro report has landed in >8 days — ADR-103 weekly KPI scoring is not producing data
+          description: 'The Monday 05:00Z retro-session CronWorkflow has not landed a report PR in over 8 days (or has never landed one since the belt shipped 2026-08-10). The cron may be firing and guard-refusing — check the newest retro-session workflow in ns agent-coordinator and re-fire via: argo -n agent-coordinator submit --from cronworkflow/retro-session. KPI spec: docs/agents/retros/BRIEF.md; belt design: FU-058.'
+      - alert: AgentRunNegativeCost
+        expr: agent_run_cost_usd < 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Agent run reported NEGATIVE cost ({{ $labels.project }} issue {{ $labels.issue }})
+          description: agent_run_cost_usd={{ $value }} for pod-pushed run (model {{ $labels.model }}, round {{ $labels.round }}) — a probe failed into a value somewhere in the cost pipeline. See agent-runtime#12 for the class.
+      - alert: AgentRunInfraDeathBurst
+        expr: |
+          count by (project) (
+              agent_run_total{exit_status!~"clean|ci-failed", issue!~"scout-.*"}
+            and on (project, issue, role, round)
+              (time() - push_time_seconds{job="agent_run"}) < 3600
+          ) >= 3
+        labels:
+          severity: warning
+        annotations:
+          summary: 3+ non-clean agent runs in 1h on {{ $labels.project }}
+          description: Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this.
+      - alert: AgentEventInfraSpinning
+        expr: sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="agent-coordinator", pod=~".*-(sensor|eventsource)-.*", container!=""}[5m])) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Argo Events infra pod {{ $labels.pod }} is burning CPU (idle baseline is ~5m)
+          description: '{{ $labels.pod }} in agent-coordinator has held >0.5 cores for 15m; these pods idle near zero, so this is a spin, not load. THE LOG MAY BE COMPLETELY EMPTY — the 2026-08-05 12:48 recurrence logged nothing at all while burning 1692m, so an empty log is NOT evidence the pod is fine. If it does log, look for `AckSync() on message: nats: timeout` with one event id retriggering (a redelivery loop, whose CPU outlives it). Fix: delete the pod, the Deployment recreates it; then check for spurious workflows it submitted (`kubectl -n agent-coordinator get wf --sort-by=.metadata.creationTimestamp`). It RECURS — homelab#103, a restart is palliative.'

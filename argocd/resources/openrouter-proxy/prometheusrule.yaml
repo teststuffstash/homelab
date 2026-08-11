@@ -28,10 +28,31 @@ spec:
 
         # The WEEKLY pool is the scarce one (5h refills fast): >90% with >1 day to the reset
         # means the rest of the week runs on fumes even though 5h windows keep clearing.
+        #
+        # ⚠ RESTART-GAP HARDENED (homelab#288) — the plain
+        #   `anthropic_subscription_utilization{window="7d"} > 0.9 and (…reset… - time()) > 86400`
+        # form went silent for its whole `for:` window every time the proxy rolled: 2026-08-07
+        # 06:41Z, utilization 0.92 and fresh, deploying router.py replaced pod 8574bd8d9-r42tx
+        # with cdc58fc45-wm8kr and the 1800s timer restarted from zero. TWO mechanisms, and the
+        # fix needs both halves — either alone still resets the window:
+        #   (1) IDENTITY CHURN. `pod`/`instance` are on the scraped series, so they were on the
+        #       ALERT, and a new pod is a new alert instance → `max by (window)`.
+        #   (2) A REAL HOLE. The proxy is a SINGLE replica, so during a roll the vector is
+        #       genuinely empty — no other series to aggregate over — and Prometheus's staleness
+        #       marker makes that instant rather than lookback-cushioned → `max_over_time([10m])`
+        #       on BOTH sides (the reset timestamp gaps with the same pod, so bridging only the
+        #       utilization side would still leave the `and` empty).
+        # [10m] is sized off the measured rolls: the 10 pod generations in the 7 days to
+        # 2026-08-11 gapped 69-116s of raw samples, so this is ~5x margin; a roll longer than 10m
+        # (slow image pull) still resets the window, which is the accepted ceiling. Cost: up to
+        # 10m of stickiness after utilization genuinely falls — irrelevant against `for: 30m` on a
+        # weekly pool. Behaviour is pinned as an executed test — `subscription.promtool-test`
+        # replays the 2026-08-07 roll against BOTH exprs (old goes silent, this one keeps firing).
         - alert: SubscriptionWeeklyPoolLow
           expr: >-
-            anthropic_subscription_utilization{window="7d"} > 0.9
-            and (anthropic_subscription_reset_timestamp_seconds{window="7d"} - time()) > 86400
+            max by (window) (max_over_time(anthropic_subscription_utilization{window="7d"}[10m])) > 0.9
+            and on (window)
+            (max by (window) (max_over_time(anthropic_subscription_reset_timestamp_seconds{window="7d"}[10m])) - time()) > 86400
           for: 30m
           labels:
             severity: warning

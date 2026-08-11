@@ -1,0 +1,48 @@
+# The three "is the loop / the poller alive" alerts, lifted VERBATIM out of prometheusrule.yaml
+# (comments stripped — the manifest is their one home) — the rules file that
+# loop-health.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
+# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
+# there would fail it.
+#
+# This is the SECOND fixture over github-exporter's rule file (queued-age.promtool-* was the
+# first, FU-150/#284) and it covers 3 of the file's 13 alerts. The other 9 have no behaviour test
+# yet — homelab#288 shipped the two spend/agent-loop files the issue named first and this much of
+# the third; the rest is honest remaining work, listed in that PR's body.
+#
+# ⚠ NOT DRIFT-PINNED (unlike queued-age.promtool-rules, which `devbox run exporter-self-test`
+# checks): the general harness that would extract `.spec.groups` at run time lives in `scripts/**`
+# + `.github/**`, outside the fixer lane's tier. Re-copy after editing an alert:
+#
+#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] |
+#        select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or
+#               .alert == "GithubExporterStale")]}]}' \
+#     argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: github
+    rules:
+      - alert: GithubExporterDown
+        expr: up{job="github-exporter"} == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: github-exporter is not being scraped
+          description: The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed.
+      - alert: GithubExporterStale
+        expr: time() - github_exporter_last_success_timestamp > 1800
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: github-exporter polls are failing
+          description: 'No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens).'
+      - alert: AgentQueueStalled
+        expr: sum(github_agent_issue_labels{label="agent/queued"}) > 0 and sum(kube_pod_status_phase{phase=~"Running|Pending", pod=~"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}"}) == 0 and sum(github_pull_request_open) == 0
+        for: 2h
+        labels:
+          severity: warning
+        annotations:
+          summary: Agent queue stalled — queued issues but a fully idle loop
+          description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
