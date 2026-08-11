@@ -1,0 +1,25 @@
+# homelab#242 — the launcher REFUSES a pod command that would not survive execve().
+#
+# CONDITION UNDER REPLAY. The dispatch is assembled and the pod command is final: `args:
+# ["bash","-c","<WRAPPED>"]`, with the card-spliced recipe base64'd inside that one string. It is
+# over the kernel's per-argv-element ceiling. Nothing exists yet — no pod, no minted git token.
+#
+# THE CONTRACT:
+#   1. The launcher exits NON-ZERO before `ARGS=` is built, so the pod is never created. The
+#      absence of `REACHED:` in the stream is that half — post.sh runs only if execution continued.
+#   2. The refusal NAMES the limit: MAX_ARG_STRLEN, the measured size, the ceiling. The whole point
+#      of the issue is that the kernel's own message (`Argument list too long`) names none of them.
+#   3. The size is measured in BYTES. The payload here is 100 ASCII + 140 `→` — 240 characters,
+#      520 bytes. A `${#payload}` implementation would read 240, sail under the stand-in ceiling
+#      and dispatch a pod that dies at exec. The asserted `520 bytes` is what pins that.
+#
+# The ceiling is the fixture's ONE seam (`ag_limit`, declared in agents/argv-guard.sh): 512 bytes
+# stands in for 131072, because committing a 128KiB payload to assert arithmetic that does not
+# change with scale would be a 128KiB fixture.
+name: argv-payload-over-ceiling
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:argv-payload-ceiling
+  - file:post.sh

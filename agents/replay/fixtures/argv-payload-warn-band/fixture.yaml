@@ -1,0 +1,21 @@
+# homelab#242 — the other leg: close to the ceiling is a WARNING, never a refusal.
+#
+# CONDITION UNDER REPLAY. The same final pod command, 460 bytes against the same 512-byte stand-in
+# ceiling — 89%, inside the warn band and under the cliff.
+#
+# THE CONTRACT, and it is the half that is easy to break later:
+#   1. The ride PROCEEDS. `REACHED:` is in the stream, RC 0. A guard that turns "getting big" into
+#      a refusal would wedge every stack whose recipe grew — the failure mode of a size check is
+#      almost always over-eagerness, so it is pinned as behaviour rather than trusted to prose.
+#   2. It says so anyway, on stderr, with the percentage. The whole ask on #242 is that this class
+#      stops being silent; a payload at 89% is the last cheap moment to notice.
+#
+# Two fixtures, one guard, opposite verdicts — the difference between them is 60 bytes of payload
+# and it is visible in the action stream rather than argued.
+name: argv-payload-warn-band
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:argv-payload-ceiling
+  - file:post.sh

@@ -25,6 +25,10 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RETROS="$HERE/../docs/agents/retros"
+# The 128KiB per-argv-element ceiling (homelab#242). THIS script is where it was first hit live
+# (8rvhd, 2026-08-11): the brief travels base64'd inside the single `--run` string handed to
+# agent-session.sh, so the exec below is the first execve() big enough to fail.
+. "$HERE/argv-guard.sh"
 
 STACK="${1:?usage: retro-session <stack> --cell <harness>:<model> (--ledger <json> | --review <report.md>) [--deep-dive-k N]}"
 shift
@@ -99,6 +103,18 @@ case "$HARNESS" in
   claude) RUN="${DECODE}; claude -p --dangerously-skip-permissions --max-turns \${CLAUDE_MAX_TURNS:-200} '${FIRST_MSG}'";;
   *) echo "FATAL: harness '$HARNESS' not wired here (opencode: add when its retro cell is first used)" >&2; exit 2;;
 esac
+
+# The hand-off below passes $RUN as ONE argv element, so it is the execve() that fails first — and
+# it fails with `Argument list too long` from the exec'ing shell, which names neither the brief nor
+# the limit (homelab#242; that is verbatim what 8rvhd's operator saw).
+# >>>REPLAY:retro-payload-ceiling>>>
+if ! argv_guard "the retro --run payload for ${STACK} ${RUN_ID} (brief ${BRIEF})" "$RUN"; then
+  printf '  REFUSED before the hand-off to agent-session.sh — no pod was created.\n' >&2
+  printf '  Shrink the brief: the ledger slice is bounded worst-K (retro-argo.yaml), so the growable inputs are\n' >&2
+  printf '  --deep-dive-k, the HARNESS_SRC excerpts, and (on a cross-review leg) the report being reviewed.\n' >&2
+  exit 1
+fi
+# <<<REPLAY:retro-payload-ceiling<<<
 
 echo "→ ${STACK} ${RUN_ID} cell ${HARNESS}:${MODEL} — brief $BRIEF ($(wc -c <"$BRIEF") bytes)"
 echo "→ harvest: report goes to docs/agents/retros/$(date +%F)-${STACK}-${RUN_ID}-<model>.md via PR"
