@@ -1,0 +1,11 @@
+→ oracle r4 cell claude:opus — brief /tmp/retro-brief-Qm71.md (17204 bytes)
+→ harvest: report goes to docs/agents/retros/2026-08-18-oracle-r4-<model>.md via PR
+→ pod agent-oracle-fleet-retro-r4-r1 created in ns oracle-fleet
+→ streaming pod log
+BEGIN-RETRO-REPORT
+# oracle loop retro r4 — Claude Opus 5 (1M context)
+
+## Summary (≤5 lines)
+- 40 ranked tasks; the dominant waste is infra rounds, not code difficulty.
+END-RETRO-REPORT
+AGENT_RUN_STATS {"task":"retro-r4","exit_status":"clean","wall_time_s":1180,"rounds":1}
