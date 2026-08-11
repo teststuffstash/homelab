@@ -11,6 +11,9 @@ description: >
 
 # design — don't hold back on reads
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §design — unpromoted sightings apply until
+> closed (contract: [`../README.md`](../README.md)).
+
 > **Agent-platform topic? Use [`design-agents`](../design-agents/SKILL.md) instead** — the agents
 > subsystem is coupled enough that selective closure kept under-reading; that variant reads the
 > whole corpus upfront and drops the per-file grounding list (operator ruling 2026-08-10).

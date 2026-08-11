@@ -9,6 +9,9 @@ description: >
 
 # Run tofu in the homelab
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §tofu-apply — unpromoted sightings apply until
+> closed (contract: [`../README.md`](../README.md)).
+
 **Use the devbox wrappers — never wire secrets by hand.** `scripts/tf.sh` (invoked by the
 wrappers) resolves the cred dir (jail `~/.claude` or host `~/Projects/.claude-data`), sources all
 required `TF_VAR_*` from the KeePass wallet + cred files (`scripts/keepass-env.sh`), runs `init`,

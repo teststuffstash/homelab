@@ -16,6 +16,9 @@ description: >
 
 # fu-sweep — decide, then act
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §fu-sweep — unpromoted sightings apply until
+> closed (contract: [`../README.md`](../README.md)).
+
 `docs-cleanup` runs tracker→outward: it takes ids already archived or rewritten and repairs every
 doc that still describes the old status. It assumes the deciding already happened. **This skill is
 that deciding**, and it is the missing half — measured 2026-08-07: creation ran **2.4 ids/day over

@@ -5,6 +5,9 @@ description: Resume the meta-coordinator role over the agent loop (oracle stack 
 
 # meta-coordinate — the session-portable meta-coordinator
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §meta-coordinate — unpromoted sightings apply
+> until closed (contract: [`../README.md`](../README.md)).
+
 The role this skill resumes ran the 2026-07-21→24 meta-9 arc (agents/coordinator/TICK-LOG.md).
 Everything it needs is DURABLE — never rely on prior-session memory; re-read the world
 (level-triggered, the same doctrine as the loop itself).

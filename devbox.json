@@ -173,6 +173,9 @@
       "follow-ups-lint": [
         "sh scripts/follow-ups-lint.sh"
       ],
+      "skill-retro-scan": [
+        "sh scripts/skill-retro-scan.sh"
+      ],
       "docs-graph-lint": [
         "sh scripts/docs-graph-lint.sh"
       ],

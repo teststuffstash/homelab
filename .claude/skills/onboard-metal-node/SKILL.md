@@ -9,6 +9,9 @@ description: >
 
 # Onboard a bare-metal Talos node
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §onboard-metal-node — unpromoted sightings
+> apply until closed (contract: [`../README.md`](../README.md)).
+
 Full reference: `docs/provisioning.md`. Nodes are defined in `tofu/metal.tf` (`metal_nodes`).
 The flow is flag → reserve IP → boot to maintenance → read disk → install → **unflag**.
 

@@ -10,6 +10,9 @@ description: >
 
 # docs-cleanup — the fine comb
 
+> **Glance first**: [`../GAPS.md`](../GAPS.md) §docs-cleanup — unpromoted sightings apply
+> until closed (contract: [`../README.md`](../README.md)).
+
 The docs are the platform's memory; this pass keeps them TRUE, not just tidy. The failure class
 it hunts: **a fact that changed in one place and not the other** — the tracker archived an FU
 but a doc still says "pending"; a "Next:" line that shipped; a status table that drifted from
