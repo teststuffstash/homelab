@@ -1,0 +1,61 @@
+# The claude-subscription alerts, lifted VERBATIM out of prometheusrule.yaml — the rules file
+# that subscription.promtool-test loads. Not a manifest and not applied to anything: `promtool
+# test rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them
+# under `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
+# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
+# there would fail it. (Same shape as github-exporter/queued-age.promtool-rules, FU-150/#284.)
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED YET. github-exporter's twin is, by `devbox run
+# exporter-self-test`; there is no equivalent hook for this file, because the harness that would
+# extract `.spec.groups` at run time and delete the hand copies altogether lives in `scripts/**`
+# + `.github/**` — CI-invoked paths, outside the fixer lane's tier (homelab#288 ships the
+# fixtures; the wiring is the codeowner's follow-on). Until then: re-copy after editing the alert.
+#
+#   yq '{"groups": [{"name": "claude-subscription", "rules": [.spec.groups[] |
+#        select(.name == "claude-subscription") | .rules[]]}]}' \
+#     argocd/resources/openrouter-proxy/prometheusrule.yaml
+groups:
+  - name: claude-subscription
+    rules:
+      - alert: SubscriptionDispatchLimited
+        expr: anthropic_subscription_dispatch_limited == 1
+        for: 15m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: "Claude subscription dispatch is deferred"
+          description: 'Agent dispatch (reviewers/coordinator/claude-tier workers) has been deferring for 15m — 5h utilization {{ with query "anthropic_subscription_utilization{window=''5h''}" }}{{ . | first | value | humanizePercentage }}{{ end }}, 7d {{ with query "anthropic_subscription_utilization{window=''7d''}" }}{{ . | first | value | humanizePercentage }}{{ end }}. Probe: GET openrouter-proxy.agent-egress:8080/anthropic-limit.'
+
+      - alert: SubscriptionWeeklyPoolLow
+        expr: >-
+          max by (window) (max_over_time(anthropic_subscription_utilization{window="7d"}[10m])) > 0.9
+          and on (window)
+          (max by (window) (max_over_time(anthropic_subscription_reset_timestamp_seconds{window="7d"}[10m])) - time()) > 86400
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: "Claude subscription weekly pool above 90%"
+          description: '7d utilization is {{ $value | humanizePercentage }} with more than a day until the weekly reset — batch agent work will starve; consider suspending non-critical reflexes.'
+
+  # ── REGRESSION WITNESS — NOT a deployed rule, and deliberately not in prometheusrule.yaml ─────
+  # The pre-#288 expr, kept verbatim so the fixture can assert the FAILURE it fixed instead of
+  # merely asserting the fix. Every roll case in subscription.promtool-test checks both alerts at
+  # the same eval_time: this one falls silent, the shipped one keeps firing. That contrast IS the
+  # acceptance of homelab#288, executed on every run rather than claimed in a PR body.
+  # If SubscriptionWeeklyPoolLow's expr is ever revisited, this stays as it is — it is a fossil of
+  # what must not come back, not a copy of the live rule.
+  - name: regression-witness-pre-288
+    rules:
+      - alert: SubscriptionWeeklyPoolLowPre288
+        expr: >-
+          anthropic_subscription_utilization{window="7d"} > 0.9
+          and (anthropic_subscription_reset_timestamp_seconds{window="7d"} - time()) > 86400
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: "Claude subscription weekly pool above 90%"
