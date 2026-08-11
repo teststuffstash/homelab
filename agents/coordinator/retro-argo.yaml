@@ -283,24 +283,45 @@ spec:
               LOG_A=/work/log-a; CELL_A="{{workflow.parameters.cellA}}"
               LOG_B=/work/log-b; CELL_B="{{workflow.parameters.cellB}}"
               # >>>REPLAY:retro-harvest-slug>>>
+              # Naming is a TWO-PASS over the legs, and it is a function of the DISPATCH PARAMETERS
+              # ONLY (homelab#269) — derived identically whether or not a cell produced a report, so
+              # a dead cell can never change the surviving cell's filename.
+              # Pass 1, per leg: <harness>:<vendor>/<model> → <model>: "claude:opus" → opus,
+              # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename convention,
+              # DERIVED from the dispatch instead of sniffed off the report. The last-word-of-the-
+              # title parse this replaces read a model-authored prose heading, so
+              # "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
+              # docs/agents/retros/2026-08-11-oracle-r3-context.md.
+              SLUG_A="${CELL_A#*:}"; SLUG_A="${SLUG_A##*/}"
+              SLUG_A=$(printf '%s' "$SLUG_A" | tr -cd 'a-zA-Z0-9.-'); SLUG_A="${SLUG_A:-cell-A}"
+              SLUG_B="${CELL_B#*:}"; SLUG_B="${SLUG_B##*/}"
+              SLUG_B=$(printf '%s' "$SLUG_B" | tr -cd 'a-zA-Z0-9.-'); SLUG_B="${SLUG_B:-cell-B}"
+              # Pass 2, the COLLISION GUARD (homelab#269): the derivation drops the harness, so a
+              # harness A/B on one model — "claude:opus" vs "goose:opus", the natural shape of a
+              # harness comparison run — resolves to ONE filename and the second report silently
+              # overwrites the first. Disambiguate with the harness ON COLLISION ONLY: the ordinary
+              # path keeps the r1/r2 convention byte-identical (it is fixture-pinned), and the
+              # comparison run gets claude-opus / goose-opus instead of one file. Not "fail the
+              # harvest": that throws away BOTH good reports of a run that worked, and a landed
+              # report is this lane's only success signal (retro_report_last_success_timestamp).
+              # `tr -cd 'a-zA-Z0-9.-'` strips the ':' and '/', so sanitize the harness before
+              # joining it — same filter, same reason.
+              if [ "$SLUG_A" = "$SLUG_B" ]; then
+                HARNESS_A=$(printf '%s' "${CELL_A%%:*}" | tr -cd 'a-zA-Z0-9.-')
+                HARNESS_B=$(printf '%s' "${CELL_B%%:*}" | tr -cd 'a-zA-Z0-9.-')
+                SLUG_A="${HARNESS_A:+${HARNESS_A}-}${SLUG_A}"
+                SLUG_B="${HARNESS_B:+${HARNESS_B}-}${SLUG_B}"
+              fi
               N=0; DEAD=""
               for leg in A B; do
                 case "$leg" in
-                  A) src="$LOG_A"; cell="$CELL_A" ;;
-                  B) src="$LOG_B"; cell="$CELL_B" ;;
+                  A) src="$LOG_A"; cell="$CELL_A"; model="$SLUG_A" ;;
+                  B) src="$LOG_B"; cell="$CELL_B"; model="$SLUG_B" ;;
                 esac
-                # <harness>:<vendor>/<model> → <model>: "claude:opus" → opus,
-                # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename
-                # convention, now DERIVED from the dispatch instead of sniffed off the report. The
-                # last-word-of-the-title parse this replaces read a model-authored prose heading,
-                # so "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
-                # docs/agents/retros/2026-08-11-oracle-r3-context.md.
-                model="${cell#*:}"; model="${model##*/}"
-                model=$(printf '%s' "$model" | tr -cd 'a-zA-Z0-9.-')
                 if sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$src" | sed '1d;$d' > /tmp/report.md \
                    && [ -s /tmp/report.md ]; then
                   N=$((N+1))
-                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model:-cell-$leg}.md"
+                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model}.md"
                 else
                   echo "WARN: no report markers in $src (cell ${cell} died or contract broken)"
                   DEAD="${DEAD:+$DEAD, }${cell}"

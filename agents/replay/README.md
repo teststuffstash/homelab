@@ -178,8 +178,12 @@ Log each instance here, so the next author sees a register rather than a precede
   harvest's git/gh half are still unpinned, and `retro-argo.yaml`'s FSM-side declaration stays
   `unreplayed`. The next touch of either extends this family rather than opening a fourth
   register line. **Extended 2026-08-11 (homelab#268)** — `fixtures/retro-harvest-cell-errored`
-  joins the family for the DAG's Error phase (see the declaration note above). Still unpaid, and
-  still this entry's debt: the **guard** (busy-probe legs, ledger delta) and the harvest's git/gh
-  half.
+  joins the family for the DAG's Error phase (see the declaration note above). **Extended
+  2026-08-11 (homelab#269)** — `fixtures/retro-harvest-slug-collision` pins the other filename
+  branch: two cells on ONE model under different harnesses (`claude:opus` / `goose:opus`) derive
+  one slug, so the harvest disambiguates with the harness ON COLLISION ONLY; its sibling
+  `retro-harvest-slug` is the regression proof that the ordinary path's names did not move. Still
+  unpaid, and still this entry's debt: the **guard** (busy-probe legs, ledger delta) and the
+  harvest's git/gh half.
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
