@@ -275,6 +275,7 @@ stamped CloudflareZoneSpendToggleEnabled argocd/resources/cloudflare-exporter/pr
 stamped CloudflareZonePlanNotFree       argocd/resources/cloudflare-exporter/prometheusrule.yaml
 stamped CloudflareSpendProbeBlind       argocd/resources/cloudflare-exporter/prometheusrule.yaml
 stamped GithubAppPermissionDrift        argocd/resources/github-exporter/prometheusrule.yaml
+stamped CiDispatchStalled               argocd/resources/github-exporter/prometheusrule.yaml
 stamped GithubPaidUsage                 argocd/resources/github-exporter/prometheusrule.yaml
 stamped GithubActionsMinutesHigh        argocd/resources/github-exporter/prometheusrule.yaml
 stamped GithubStorageHeldHigh           argocd/resources/github-exporter/prometheusrule.yaml
