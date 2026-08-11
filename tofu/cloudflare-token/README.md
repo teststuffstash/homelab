@@ -12,8 +12,20 @@ lived here once and drifted — removed 2026-08-11).
 
 ## The admin token (Tier-0 mint-root — hand-made by construction)
 
-Cloudflare dashboard → My Profile → API Tokens → **"Create Additional Tokens"** template:
-user-scope `API Tokens: Write` plus read on the zone/account. The value lives in the host
+Cloudflare dashboard → My Profile → API Tokens → **"Create Additional Tokens"** template,
+expanded to the exact config below (dashboard names first; the API permission-group name —
+what `cloudflare-token-audit` renders — in parens where it differs):
+
+| Dashboard row | API permission group |
+|---|---|
+| User → API Tokens → **Edit** | `API Tokens Write` |
+| Zone → Zone → **Read** | `Zone Read` |
+| Account → Account Settings → **Read** | `Account Settings Read` |
+
+Resources: Account = Include → the account; Zone = Include → **All zones**. No client-IP
+filter. TTL: end date ≈1y out (current one → 2027-01-09, tracked in the `docs/cloudflare.md`
+matrix). The zone/account **Read** rows are what let the mint resolve the zone/account
+resources it scopes minted tokens to. The value lives in the host
 admin wallet (`~/Documents/homelab-admin.kdbx`) ONLY — never the jail, never the cluster
 (`docs/secrets.md` §Minting doctrine records why this one credential is manual). Renewal =
 re-create in the dashboard before its `expires_on`, re-store in the admin wallet.

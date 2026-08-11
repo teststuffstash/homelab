@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-133** *(archived 2026-08-11)* — Alert-lane correlation, all legs shipped: resolve/dedup/
+  dispatch halves earlier; leg (a) filing-side `group_by: [alertname]` pinned (PR#263 — proved
+  already-inherited, pinned against root-route drift); leg (c) queue-time currency gate in
+  `sq_decide` (PR#274 — `endsAt>now` resolved-test + `refired` body-staleness, skip≠close,
+  fail-closed probe). Both loop-authored, bot-reviewed, fixture-pinned. Mechanism doc survives:
+  [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues". IAC-G10's
+  window-ownership rule remains open there (not this id's).
 - **FU-159** *(archived 2026-08-11)* — Garage meta on the `std` tier saturates under heavy S3
   GET storms (ert-verify parse, homelab#103 trace). **Migration to `longhorn-fast` REJECTED**
   (operator): the tier is single-node Optane of modest speed whose INTENT is scratch for

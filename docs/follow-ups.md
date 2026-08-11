@@ -450,15 +450,6 @@ the block needs pruning, not more headings.
       green today), worker-queueable per file; start with the two spend/agent-loop files.
       Origin: PR#220 findings + the #237 gate-miss (more evidence 2026-08-11).
 
-- [ ] **FU-133** — **The alert lane files one issue per fingerprint and correlates nothing:
-      POINTER.** Mechanism, corpus audit (19-of-27), the shipped halves (resolve/dedup/dispatch,
-      verdict-keyed resolve PR#129) and the first-live-set-pass lessons:
-      [`iac-lane.md`](agents/iac-lane.md) §"one root cause, N alert issues"; class postmortem:
-      [`ghcr-mirror-recurring-fill.md`](incidents/2026-07-27-ghcr-mirror-recurring-fill.md).
-      **Remaining, BOTH QUEUED to the loop 2026-08-11:** (a) filing-side `group_by` correlation
-      = homelab#252; (c) queue-time currency gate in `sq_decide` = homelab#253 (blocked-by #244,
-      same file/fixture family). Lifecycle-exclusion siblings #243 merged / #244 queued.
-      Relates IAC-G10, FU-158.
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
       `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
       coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
