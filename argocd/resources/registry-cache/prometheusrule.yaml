@@ -28,7 +28,11 @@ spec:
         # it took four rounds of circles#19 to find. The store-maintenance initContainer now
         # counts dangling links every restart and pushes the count, so the invariant breaking is
         # a metric instead of an archaeology exercise. NON-ZERO MEANS IT ALREADY HAPPENED — the
-        # links are repaired by then, but something produced them and that wants explaining.
+        # links are repaired by then. What PRODUCES them stopped being a mystery in homelab#240
+        # (the proxy TTL scheduler vacuums a shared blob with no cross-repo refcount); what made
+        # it an OUTAGE was the in-memory descriptor cache answering for the deleted blob anyway,
+        # and that cache is off as of #240 — see mirror-ghcr.yaml. So this alert demoted itself
+        # from "invariant broken" to "housekeeping happened": read it, don't scramble for it.
         - alert: RegistryMirrorDanglingLinks
           expr: registry_mirror_dangling_links_repaired > 0
           for: 5m
@@ -36,7 +40,7 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $labels.mirror }} had {{ $value }} dangling layer link(s) repaired at last restart"
-            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. Investigate what deleted the blobs: --delete-untagged was removed on 2026-08-07, so a recurrence means a NEW mechanism (check the store-maintenance init log for a wipe, and REGISTRY_PROXY_TTL eviction racing a live reference)."
+            description: "A repository layer link pointed at a blob that was missing or zero-length — the homelab#116 failure, where the mirror answers HTTP 200 with 0 bytes for a live layer and BuildKit reports 'short read: expected N bytes but got 0'. The links were unlinked so the next pull re-fetches from upstream. The producer is IDENTIFIED as of homelab#240: the REGISTRY_PROXY_TTL scheduler vacuums an expiring blob out of the global content-addressed store without a cross-repo refcount, so any OTHER repository sharing that blob is left holding a link to nothing. Since #240 disabled the in-memory blob-descriptor cache, such a link is self-healing (the Stat misses on disk and the proxy re-fetches), so a non-zero count here is now EXPECTED HOUSEKEEPING rather than an outage — chase it only if it is large or paired with actual pull failures. Still check the store-maintenance init log for a wipe, which produces no dangling links at all and would mean a different cause."
         # The store now reclaims by WIPING when full rather than by selective deletion. A wipe is
         # correct but not free — it forces a cold re-pull herd, which is what left the abandoned
         # _uploads debris in #80. Frequent wipes therefore mean the PVC is undersized, not that

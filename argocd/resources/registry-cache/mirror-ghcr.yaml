@@ -95,6 +95,34 @@ spec:
             - { name: REGISTRY_PROXY_TTL, value: "168h" }
             - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # ⚠ BLOB-DESCRIPTOR CACHE OFF (homelab#240, 2026-08-11). The image default is
+            # `storage.cache.blobdescriptor: inmemory` — a per-PROCESS map of
+            # <repo>/<digest> → Descriptor that is invalidated by exactly two things: an API
+            # DELETE, or a restart. Nothing that happens on the storage side clears it, which is
+            # what turned one deleted blob into a 46-HOUR LIE: this mirror answered 200 with
+            # Content-Length 32 and a zero-byte body for the standard empty-layer blob, killing
+            # every agent-base pull with ImagePullBackOff, until a `rollout restart` (which
+            # clears the map, not the PVC) fixed it in one shot.
+            # THE DELETER IS NOT OUR GC. store-maintenance runs in init, before this process
+            # exists, so it cannot skew a cache that has not been populated yet. It is the proxy
+            # TTL scheduler below: its OnBlobExpire unlinks the blob from the ONE repository
+            # whose TTL fired — clearing only THAT repository's descriptor entry — and then
+            # vacuums the blob out of the GLOBAL content-addressed store with no cross-repo
+            # refcount. Every other repository keeps both its layer link and its stale
+            # descriptor. The empty layer is the most-shared blob in any registry, so it is the
+            # likeliest casualty, not a freak one. (That also answers the soak question left on
+            # #241: no, TTL eviction does not check cross-repo references.)
+            # WHY OFF IS ENOUGH: the same deletion becomes harmless without the map. The local
+            # Stat misses on disk, proxyBlobStore.serveLocal reports "not served", and the proxy
+            # re-fetches from upstream — a lie degrades into a cache MISS, and a miss in a
+            # pull-through cache is just a slow pull. The cost is one stat(2) per blob request
+            # against a local filesystem store, which a proxy barely notices next to the
+            # upstream fetch it exists to avoid.
+            # NB: "" is how you turn it off — there is no `disabled` value. A provider is
+            # selected only on the literal "redis"/"inmemory", so anything else means no cache.
+            # Do NOT substitute redis: it relocates the skew instead of removing it (a 2026
+            # advisory covers stale-blob resurrection via the repo-scoped redis cache).
+            - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
             # Upload-debris reaping (#80, 2026-08-03): concurrent cold pulls of a fat image
             # (arc-runner, ~2.7G layer × N ARC pods) each stream into their own _uploads/ dir;
             # an ENOSPC truncation abandons them, and the DEFAULT purge age of 168h left 9.8G

@@ -74,6 +74,13 @@ spec:
             - { name: REGISTRY_PROXY_TTL, value: "168h" }
             - { name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true" }
             - { name: REGISTRY_HTTP_ADDR, value: ":5000" }
+            # Blob-descriptor cache OFF — same rationale as mirror-ghcr (homelab#240), where it
+            # served a GC'd blob as 200/CL:32/0-bytes for 46h. Nothing about that failure was
+            # ghcr-specific: the deleter is the shared proxy TTL scheduler, which vacuums a blob
+            # from the global store without a cross-repo refcount, and the in-memory descriptor
+            # map then keeps answering for it until the process restarts. This mirror has the
+            # identical TTL + cache pair, so it is the same latent bug — fix both or fix neither.
+            - { name: REGISTRY_STORAGE_CACHE_BLOBDESCRIPTOR, value: "" }
             # Upload-debris reaping — same rationale as mirror-ghcr (#80): abandoned
             # pull-through uploads must reap in ~1h, not the 168h default.
             # NB: must be ONE env var holding the whole YAML map — per-key
