@@ -21,6 +21,14 @@
 # conjuncts were already label-less `sum()`s, so the `and` chain still matches. Tests 1/3 and 2/3
 # below are the regression pins: they assert the two production shapes now FIRE, and they fail if
 # the defaults are ever dropped again.
+#
+# ✅ THE FILE'S SECOND FINDING IS ALSO RESOLVED (homelab#313): GithubExporterStale carried the #288
+# restart-gap class — a scraped, single-replica gauge under a `for:` window, so a poller roll
+# mid-staleness restarted the clock under a new pod identity. Fixed with #288's two-part shape
+# (`max by (job)` + `max_over_time([10m])`); the test that used to PIN the defect now pins the fix,
+# and the pre-#313 expr rides along as GithubExporterStalePre313 (loop-health.promtool-rules
+# §regression-witness-pre-313) so the contrast, the [10m] ceiling and the cost of aggregating are
+# all executed rather than claimed.
 rule_files:
   - loop-health.promtool-rules
 
@@ -168,18 +176,16 @@ tests:
               description: "The GitHub poller pod is down or unreachable for 15m — no CI-failure or billing alerts until it's back. Usually the token Secret is missing (ExternalSecret github-exporter-token) or the pod crashed."
 
   # ── GithubExporterStale — the PAT-expiry reminder, `for: 30m` on top of a 30m threshold ──────
-  # The pod is up and scraping; it just cannot complete a poll. Total time to page is ~60m by
-  # construction (30m of staleness before the condition is true, then `for: 30m`).
+  # The base case, unchanged by #313: the pod is up and scraping, it just cannot complete a poll.
+  # Total time to page is ~60m by construction (30m of staleness before the condition is true, then
+  # `for: 30m`). The alert now carries only `severity` + `job` — dropping `pod`/`instance` from the
+  # alert's identity is half of the #313 fix, and this is where that shows.
   - interval: 1m
-    name: a poller that stops succeeding pages at ~60m, and a healthy one never does
+    name: a poller that stops succeeding pages at ~60m
     input_series:
       # never succeeded since the test clock began
       - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
         values: "0+0x120"
-      # a healthy second instance whose timestamp tracks the clock (60s per sample), so its age
-      # never exceeds one poll interval — the discriminator that keeps this a per-pod test
-      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.99:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-healthy-twin",service="github-exporter"}'
-        values: "0+60x120"
     alert_rule_test:
       # 30m: the condition has just turned true, `for: 30m` has not run
       - eval_time: 31m
@@ -188,46 +194,92 @@ tests:
       - eval_time: 59m
         alertname: GithubExporterStale
         exp_alerts: []
-      # ~60m, and ONLY the stuck pod — the healthy twin is the discriminator
       - eval_time: 62m
         alertname: GithubExporterStale
         exp_alerts:
           - exp_labels:
               severity: warning
-              endpoint: http-metrics
-              instance: 10.244.2.91:9504
               job: github-exporter
-              namespace: monitoring
-              pod: github-exporter-5c6d9f4f76-kcmdn
-              service: github-exporter
             exp_annotations:
               summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
 
-  # ── GithubExporterStale — ⚠ the #288 restart-gap class, alive in a SECOND alert ──────────────
-  # `github_exporter_last_success_timestamp` carries `pod`/`instance` too, so a poller roll during
-  # a stale spell restarts the 30m window under a new identity: the page slips from ~60m to ~72m
-  # here, and further in production (staleness markers kill the old series at the roll instead of
-  # 5m later). Same shape as SubscriptionWeeklyPoolLow before #288, and the same two-part fix
-  # would apply — asserted here as CURRENT behaviour, not fixed: that is its own issue, and this
-  # test flips in the same commit that fixes it. Not identical in severity to the proxy case: the
-  # exporter is a 1-replica Deployment too, but a PAT expiry outlives any number of rolls, so the
-  # page is delayed rather than lost.
+  # ── GithubExporterStale — a healthy poller never fires ───────────────────────────────────────
+  # The other half of the old base-case test, split out because after #313 a healthy instance and a
+  # stuck one can no longer be asserted in the SAME test (see the masking case below — that is now
+  # its own, deliberate, assertion). A timestamp that tracks the clock (60s per sample) has an age
+  # of ~0 and never approaches the 1800s threshold.
   - interval: 1m
-    name: "FINDING: a poller roll mid-staleness restarts the `for:` window (the #288 class again)"
+    name: a poller that keeps succeeding never fires
+    input_series:
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.99:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-hh8vq",service="github-exporter"}'
+        values: "0+60x120"
+    alert_rule_test:
+      - eval_time: 62m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: GithubExporterStale
+        exp_alerts: []
+
+  # ── GithubExporterStale — ✅ the #288 restart-gap class, FIXED here (homelab#313) ─────────────
+  # `github_exporter_last_success_timestamp` carries `pod`/`instance`, so before #313 a poller roll
+  # during a stale spell restarted the 30m window under a new identity and the page slipped from
+  # ~60m to ~72m — further in production, where staleness markers kill the old series at the roll
+  # instead of 5m later. This test used to PIN that defect; it now pins the fix, with the pre-#313
+  # expr kept beside it as GithubExporterStalePre313 so the contrast is executed on every run:
+  # at 65m the witness has nothing (its window died with the old pod) while the shipped alert has
+  # been firing since ~61m, and at 73m the witness finally re-pages 12 minutes late.
+  - interval: 1m
+    name: "a poller roll mid-staleness no longer restarts the `for:` window (the #288 class, fixed)"
     input_series:
       - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
         values: "0+0x40"
       - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-p7t2r",service="github-exporter"}'
         values: "_x42 0+0x80"
     alert_rule_test:
-      # without the roll this would have fired at ~60m; the old pod's window died with it
-      - eval_time: 65m
+      # `for: 30m` is still honoured across the roll — the window runs from 31m, not from 0m
+      - eval_time: 60m
         alertname: GithubExporterStale
         exp_alerts: []
-      # the new pod pages 30m after ITS first sample (42m + 30m), 12m late
+      # ~60m, on time, straight through the 2m hole: max_over_time([10m]) bridged it and
+      # `max by (job)` kept the identity, so this is one continuous alert instance.
+      - eval_time: 62m
+        alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
+              description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+      - eval_time: 65m
+        alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
+              description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+      # …and the witness is silent at that same moment: without the roll it would have fired at
+      # ~60m, but the old pod's window died with it.
+      - eval_time: 65m
+        alertname: GithubExporterStalePre313
+        exp_alerts: []
       - eval_time: 73m
         alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
+              description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+      # the witness pages 30m after the NEW pod's first sample (42m + 30m), 12m late and under a
+      # different identity — the cost this fix removes, still measured rather than asserted away.
+      - eval_time: 73m
+        alertname: GithubExporterStalePre313
         exp_alerts:
           - exp_labels:
               severity: warning
@@ -239,4 +291,72 @@ tests:
               service: github-exporter
             exp_annotations:
               summary: "github-exporter polls are failing"
+
+  # ── GithubExporterStale — THE CEILING, asserted rather than assumed ──────────────────────────
+  # [10m] is a bridge, not immunity — the same accepted limit #288 wrote down. A hole longer than
+  # the range (crash-loop, image pull off a cold mirror, node drain) empties the vector for real
+  # and costs the full 30m again. Widening the range would not be free either: it is also how long
+  # a stale reading keeps being believed after the poller is replaced.
+  - interval: 1m
+    name: a 13m hole DOES reset the window — the accepted limit of [10m]
+    input_series:
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.94:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-ccc31",service="github-exporter"}'
+        values: "0+0x30"
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.95:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-ddd42",service="github-exporter"}'
+        values: "_x43 0+0x60"
+    alert_rule_test:
+      # 42m: the [10m] range window holds no sample at all — the alert resolves, exactly as the
+      # pre-#313 form would have
+      - eval_time: 42m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      # …and it re-fires 30m after the new pod's first sample (43m + 30m), not before
+      - eval_time: 72m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      - eval_time: 74m
+        alertname: GithubExporterStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
               description: "No fully successful GitHub poll for 30m+ — likely the PAT expired/was revoked. Re-mint: scripts/github-exporter-pat-bootstrap.sh (docs/github-setup.md §Tokens)."
+
+  # ── GithubExporterStale — the PRICE of `max by (job)`: a healthy instance masks a stuck one ───
+  # The reverse face of the fix, asserted so the trade is a fact in a test rather than a claim in a
+  # comment. Two instances, one stuck and one healthy: the shipped alert stays silent (the freshest
+  # success in the job wins), while the pre-#313 per-pod expr pages for the stuck pod.
+  # This is UNREACHABLE in production — the Deployment is `replicas: 1` — and it is the same
+  # property that makes a roll safe, because a fresh pod publishes `..._last_success_timestamp 0`
+  # until its first successful poll and must NOT outrank the outgoing pod's real value. If this
+  # exporter is ever scaled out, this test is the one that has to change first.
+  - interval: 1m
+    name: "accepted cost: a healthy instance masks a stuck one (unreachable at replicas: 1)"
+    input_series:
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0+0x120"
+      - series: 'github_exporter_last_success_timestamp{endpoint="http-metrics",instance="10.244.2.99:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-hh8vq",service="github-exporter"}'
+        values: "0+60x120"
+    alert_rule_test:
+      - eval_time: 62m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: GithubExporterStale
+        exp_alerts: []
+      # the pre-#313 expr did page here — this is what the aggregation costs, in full
+      - eval_time: 62m
+        alertname: GithubExporterStalePre313
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http-metrics
+              instance: 10.244.2.91:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-5c6d9f4f76-kcmdn
+              service: github-exporter
+            exp_annotations:
+              summary: "github-exporter polls are failing"
