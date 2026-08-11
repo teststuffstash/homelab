@@ -193,6 +193,11 @@ spec:
             - { name: log-b, path: /work/log-b }
         container:
           image: ghcr.io/teststuffstash/agent-coordinator
+          # Argo's init container stages input artifacts root-owned; the image's non-root user
+          # then can't read them (xkj88: "sed: can't read /work/log-a: Permission denied" — the
+          # THIRD latent bug in this lane, each one step deeper than the last). Single-pod
+          # clone+sed+gh step; root inside its own container grants nothing beyond it.
+          securityContext: { runAsUser: 0 }
           command: ["bash", "-lc"]
           args:
             - |
