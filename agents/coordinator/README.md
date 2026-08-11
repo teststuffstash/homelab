@@ -69,15 +69,6 @@ sessions from specs — the dependency graph is known exactly at authoring time,
 lines then* (a reader without coverage leaves the graph in prose; the scan can only enforce what
 the body encodes). Native sub-issues/Projects may mirror this for UI, never replace it.
 
-**A `Touches:` footprint that lands on a `pin-only-lint` GUARDED file is reported, never dispatched
-(homelab#309).** Those files may receive only a pin line through a PR, so the required `ci` check is
-structurally red before the worker starts and the route is an operator push to master (CODEOWNERS
-§Carve-outs). The scan intersects the declared footprint with the set it READS from
-`scripts/pin-only-lint.sh` and emits `⛔ pin-only GUARDED path` — report-only, no label: the overlap
-may be only part of an issue's scope, so a human re-scopes or splits it. Before this check the
-round itself was the discovery (#299: the landable half shipped, the rest came back
-`AGENT_INFEASIBLE`, one session spent on a constraint that was on disk at dispatch time).
-
 > **Labels are provisioned as code** — every repo's labels are claim-owned (AgentStack `labels:`
 > → IssueLabels). `tofu/github/labels.tf` was retired 2026-08-04 (FU-068) when homelab joined the
 > platform claim, so the claim is now the only source.
@@ -509,7 +500,7 @@ the product:
 1. **Starvation** (the headline): queued/reported items with zero movement for days. A starved
    class looks quiet — compare what the scan reports against what actually moved.
 2. **Orphan aging**: the scan's report-only classes (🌱 drafts, queued-blocked, un-armed PRs,
-   footprint-held, pin-only GUARDED) judged for staleness — still valid, or rotting?
+   footprint-held) judged for staleness — still valid, or rotting?
 3. **Direction-change**: read `direction-change` issues; what do they imply for queued work?
 4. **Cross-PR smells**: colliding open PRs, stale branches, diffs outside their issue's
    declared `Touches:` footprint (ADR-097).
