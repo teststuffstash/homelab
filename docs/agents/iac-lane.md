@@ -108,9 +108,13 @@ set-judged debouncer:
   a decision ≥ wait after *it*; only `decide` serializes (mutex). A burst wakes together; the
   first decide sweeps the whole set, the rest exit empty.
 - **State is GitHub, nowhere else**: the pending set IS the live label query
-  `agent-fix ∧ ¬agent/queued ∧ ¬agent/linked` over the claims' repos (REST only — the search
-  index lags and the GraphQL pool is the one the reflex drained, FU-084). A killed workflow
-  loses nothing.
+  `agent-fix ∧ ¬agent/queued ∧ ¬agent/linked ∧ ¬agent/blocked ∧ ¬agent/error` over the claims'
+  repos (REST only — the search index lags and the GraphQL pool is the one the reflex drained,
+  FU-084). A killed workflow loses nothing. ⚠ The two human-waiting exclusions are load-bearing
+  (homelab#238, live on homelab#237 on 2026-08-11): a coordinator's BLOCK removes `agent/queued`,
+  so without them the block itself is what re-admits the issue to the pending set — the debouncer
+  re-queues it, dispatch re-discovers the same blocker, and the human gate is erased once per
+  debounce period. Same rule the scan holds on its side (`coordinator-scan.sh:17`).
 - **Decide**: 0 pending → exit. 1 → deterministic gates, queue. ≥2 → ONE sonnet set-pass
   (latch-gated, subscription-semaphore held only across decide) emits cause/downstream/
   independent as fenced JSON; the SHELL applies it (ADR-094 — the LLM judges, launcher-owned

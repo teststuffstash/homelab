@@ -1,0 +1,36 @@
+# homelab#238 — leg A: a BLOCKED alert-lane issue stays out of the pending set, so nothing is
+# queued and no coordinator is rung.
+#
+# CONDITION UNDER REPLAY. The live 2026-08-11 loop. homelab#237 is an alert-lane issue (`alert-fp:`
+# in the body, which is what makes a thread the RESPONDER's) that a coordinator ruled BLOCKED at
+# 01:53Z — and blocking removes `agent/queued`. The old pending set was
+# `agent-fix ∧ open ∧ body~alert-fp: ∧ ¬agent/queued ∧ ¬agent/linked`, so the block itself put the
+# issue BACK in scope: the debouncer re-queued it silently at 02:17Z with no coordinator in the
+# path, dispatch re-discovered the same blocker, and the FU-069 breaker latched `agent/error` —
+# the one label the old predicate happened to exclude, and only by accident of the scan's list.
+# Closed cycle, one ride per debounce period, human gate erased each turn.
+#
+# THE CONTRACT:
+#   1. #237 (`agent/blocked`) draws NO write. Not a comment, not a label, not a doorbell. A block
+#      is a human gate, and the only thing that may re-open the queue path is a human removing it.
+#   2. #229 (`agent/error`) draws no write either, and must stay excluded on PURPOSE rather than
+#      as a side effect. The FU-069 breaker's own output re-entering the set it was latched over
+#      is the second half of the same loop.
+#   3. #226 IS read, passes the label predicate, and lands in SELFREF — the responder's
+#      `self-referential: true` marker keeps it human-queued (unchanged behaviour). It is also the
+#      fixture's WITNESS: an unrecorded list read would be swallowed by the query's own
+#      `2>/dev/null … || true` and leave an empty pending set that looks exactly like this leg's
+#      pass. The SELFREF line can only be printed by a served read.
+#   4. Pending set 0 → `nothing to decide`, exit 0, before the gates block is ever reached. If the
+#      exclusions regress, N becomes 1, the gates block runs and a `labels[]=agent/queued` POST
+#      appears in the stream — which is why that block is composed into THIS leg too, unreached.
+#
+# Its sibling `fix-debounce-unblocked-queues` holds this world with one label removed and is the
+# other half of the assertion: excluding a human-waiting state must not break the ordinary queue.
+name: fix-debounce-blocked-inert
+mode: actions
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates

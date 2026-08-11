@@ -19,7 +19,10 @@
 # Concurrency: suspends run in PARALLEL (each bell guarantees a decision ≥WAIT after it), only
 # `decide` serializes (mutex) — so a burst wakes together, the first decide sweeps the whole set,
 # the rest exit empty in seconds. State lives in GitHub labels, nowhere else: agent-fix ∧
-# ¬agent/queued ∧ ¬agent/linked IS the pending set; a killed workflow loses nothing.
+# ¬agent/queued ∧ ¬agent/linked ∧ ¬agent/blocked ∧ ¬agent/error IS the pending set; a killed
+# workflow loses nothing. The two human-waiting exclusions are homelab#238's: without them a
+# coordinator's BLOCK re-enters the issue into the pending set, and the debouncer re-queues it —
+# the block is what makes the issue eligible again (see the query's own note).
 # Un-linking on refire: the responder's fp/subject belts REOPEN the same issue when its alert
 # refires after the cause-fix merged — the reopen comment is a human/meta cue; the linked label
 # is stripped by hand if the downstream issue turns out to be independent after all.
@@ -186,6 +189,7 @@ spec:
               || CLAIMS="$(jq '{items: [.stacks[] | {metadata: {name: .name}, spec: {loop: {graduated: (.graduated // false)}, repos: [.repos[] | {name: .}]}}]}' /work/homelab/agents/stacks.json)"
             printf '%s' "$CLAIMS" | jq -r '.items[] | .metadata.name as $s | ((.spec.loop.graduated // false) | if . then $s + "-agents" else "" end) as $ns | .spec.repos[].name | [., $s, $ns] | @tsv' > /tmp/stackmap.tsv
             { cut -f1 /tmp/stackmap.tsv; echo homelab; } | sort -u | grep -v '^$' > /tmp/repos.txt
+            # >>>REPLAY:fix-debounce-pending-set>>>
             : > /tmp/pending.jsonl
             while read -r r; do
               # ⚠ ALERT-LANE ONLY (`alert-fp:` in body) — found by the 2026-08-07 dry run: stack
@@ -193,8 +197,20 @@ spec:
               # footprint overlap, goal gating), and the unscoped query swept circles#42 —
               # an issue meta-state records as held — into "would queue". The fingerprint
               # marker is what makes an issue the RESPONDER's; everything else is not ours.
+              #
+              # ⚠ `agent/blocked` and `agent/error` are HUMAN-WAITING states and are excluded for
+              # the same reason `agent/queued` is: without them the pending set is re-entered BY
+              # VIRTUE OF the block. A coordinator rules an alert-lane issue blocked (which removes
+              # `agent/queued`) → the next bell re-derives it as pending → it is re-queued with no
+              # coordinator in the path → dispatch re-discovers the same blocker. One coordinator
+              # ride per debounce period, forever, with the human gate erased each turn. Live on
+              # homelab#237 (block 01:53Z → silent re-queue 02:17Z, 2026-08-11) until the FU-069
+              # breaker latched `agent/error` — which the old predicate did not exclude either, so
+              # the breaker's own output would have re-entered the set as soon as a human cleared
+              # anything else. homelab#238. The scan holds the same rule on its side
+              # (coordinator-scan.sh:17 — human-waiting states never wake the LLM).
               gh api "repos/$ORG/$r/issues?labels=agent-fix&state=open&per_page=50" \
-                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
+                --jq ".[] | select(.pull_request | not) | select(.body // \"\" | contains(\"alert-fp:\")) | select([.labels[].name] | (index(\"agent/queued\") or index(\"agent/linked\") or index(\"agent/blocked\") or index(\"agent/error\")) | not) | {repo: \"$ORG/$r\", number: .number, title: .title, body: (.body // \"\")}" \
                 2>/dev/null >> /tmp/pending.jsonl || true
             done < /tmp/repos.txt
 
@@ -205,7 +221,9 @@ spec:
             N="$(wc -l < /tmp/set.jsonl | tr -d ' ')"
             echo "pending set: $N issue(s)"
             [ "$N" -eq 0 ] && { echo "nothing to decide"; exit 0; }
+            # <<<REPLAY:fix-debounce-pending-set<<<
 
+            # >>>REPLAY:fix-debounce-gates>>>
             # ── deterministic gates (fail-closed; the ❌ table, NOT the old governance list) ──
             SQ_DENY='^(\.github/|\.agents/|devbox\.json|devbox\.lock|scripts/)'
             sq_decide() { # <repo> <number> — 0 = may queue
@@ -265,6 +283,7 @@ spec:
               queue_one "$r" "$n"
               exit 0
             fi
+            # <<<REPLAY:fix-debounce-gates<<<
 
             # ── ≥2 pending: ONE set-pass session (subscription; latch-gated like every spawn) ──
             if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
