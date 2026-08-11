@@ -15,6 +15,16 @@ spec:
   # the loop; loop.graduated cuts over (global scan skips platform, doorbell + per-stack review in-ns).
   coordinator:
     enabled: true # RESUMED 2026-07-28 (meta-15, operator "enable the world" after Phase 4)
+  # Bot review ON (operator directive 2026-08-11: platform PRs get the bot read BEFORE the
+  # codeowner read). The live object carried an imperative enabled:false patch (SSA-owned by
+  # kubectl, invisible in git — this explicit block takes the field back). Safe on homelab by
+  # construction: whole-repo scaffold CODEOWNERS + require_code_owner_review mean a bot approval
+  # parks at REVIEW_REQUIRED and a human still merges; agent-runtime returns to its documented
+  # unowned-lane design (PR#40 shape). ⚠ agent-coordinator + openrouter-operator have
+  # require_approval but NO codeowner gate until the tofu/github flip lands (host-side apply) —
+  # window accepted 2026-08-11, guards staged in tofu/github/variables.tf + repo CODEOWNERS.
+  reviewer:
+    enabled: true
   loop:
     perStack: true
     graduated: true
