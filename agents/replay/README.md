@@ -110,5 +110,10 @@ Log each instance here, so the next author sees a register rather than a precede
   stream) but `retro-argo.yaml` has no fixture family yet — its FSM-side declaration is
   `unreplayed` and the first retro-lane fixture should record this step's world when it is built
   (jail-lane commit; the ratchet gained the file the same day, so the next PR touch pays properly).
+- **guard stderr-fold fix (2026-08-11, homelab#237)** — the guard's busy-probe read kubectl's
+  stderr "No resources found" as pod output (`2>&1`), refusing every fire since unsuspend; fixed
+  to a split-stream read, both legs verified live from the jail (empty ns → idle, failing probe →
+  busy). Observable (a kubectl call + refusal line) — the debt above stands: the first retro-lane
+  fixture should pin BOTH the refusal legs and this empty-is-idle case (jail-lane commit).
 
 Adding a fixture, recording a world, and the ADR-103 ratchet rule are all in the workflow doc.
