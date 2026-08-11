@@ -53,10 +53,23 @@ spec:
         # firing for 2+ days (found 2026-07-12). A run-group is keyed (project, issue, role,
         # round) and holds one agent_run_total series, so "runs in the last hour" = groups whose
         # push_time_seconds is <1h old.
+        # `issue!~"scout-.*"` excludes MODEL-SCOUT CANARY rides (homelab#235, 2026-08-10): the weekly
+        # scout runs MAX_CANARIES=3 trivial probes per tick in CANARY_PROJECT (defaults to
+        # `openrouter-operator`, agents/model-scout.sh:37) against brand-new, unproven models, and
+        # `agents/model-scout.sh` already treats a canary failure as expected — "a canary failure never
+        # fails the tick". Three of them failing in one 6-minute tick is ONE scout-infra datum, not a
+        # fleet infra-death burst (docs/agents/model-routing.md §M7 rule 4, common-cause rule; FU-161),
+        # yet it tripped this alert on a project where nothing was broken. `issue` is a PUSHGATEWAY
+        # GROUPING-KEY label = `AGENT_TASK` with a leading `issue-` stripped, and canaries push
+        # `--task "scout-<mangled-id>"` (model-scout.sh:55), which never starts with `issue-` — so the
+        # `scout-` prefix is a sound discriminator, and PromQL's full anchoring makes the matcher mean
+        # exactly "does not START with scout-". It also fails OPEN: a series with no `issue` label at
+        # all is retained (empty ≠ `scout-.*`), so a push-path change cannot silently mute this alert.
+        # ⚠ Nothing else now watches canary deaths — re-typing those verdicts is FU-161 legs 3–4.
         - alert: AgentRunInfraDeathBurst
           expr: |
             count by (project) (
-                agent_run_total{exit_status!~"clean|ci-failed"}
+                agent_run_total{exit_status!~"clean|ci-failed", issue!~"scout-.*"}
               and on (project, issue, role, round)
                 (time() - push_time_seconds{job="agent_run"}) < 3600
             ) >= 3
@@ -64,7 +77,7 @@ spec:
             severity: warning
           annotations:
             summary: "3+ non-clean agent runs in 1h on {{ $labels.project }}"
-            description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns."
+            description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
         # FU-020 enforcement made loud: a worker egress miss under deny-all manifests as a HANG
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
