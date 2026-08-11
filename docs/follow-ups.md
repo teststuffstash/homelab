@@ -506,12 +506,9 @@ the block needs pruning, not more headings.
       Closed: G02/G03/G07 (2026-08-02), G05 rung-0 + G04 sentinel v1 shadow (2026-08-03), G08
       (2026-08-05). **Next:** the G01 ENFORCEMENT flip after the sentinel shadow soak (operator:
       reviewer-App statuses:write + tofu push ruleset + required check — plan in §L0b), then G06
-      advisory lens, then extend the G04 sentinel to **homelab** — one step owning three residues:
-      tier 1 (`argocd/resources/**`) back to unowned, the 87-of-154 kinds `manifest-lint`
-      can't schema-check (operator 2026-08-06: the sentinel's, no separate id — doc §The platform
-      lane), and the `agents/coordinator/*.yaml` PATH gap — manifest-lint globs only
-      `argocd/{resources,platform}`, so the loop's own Sensors/CronWorkflows are schema-checked by
-      nobody (PR#250's finding, 2026-08-11). Relates FU-087/FU-093, ADR-084, ADR-076.
+      advisory lens, then extend the G04 sentinel to **homelab** — one step owning THREE residues
+      (tier-1 unowning, the schema-blind kinds, the `agents/coordinator/*.yaml` path gap — all
+      enumerated in the doc §The platform lane). Relates FU-087/FU-093, ADR-084, ADR-076.
 - [ ] **FU-134** — **Web research is now a platform capability — soak, then close.** `POST /search`
       on the egress proxy (an ordinary completion carrying OpenRouter's `openrouter:web_search`
       server tool) returns `{answer, citations[]}` to ANY harness, riding the caller's own key ref
