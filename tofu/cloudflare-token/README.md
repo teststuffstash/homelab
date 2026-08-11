@@ -1,42 +1,41 @@
-# tofu/cloudflare-token
+# tofu/cloudflare-token — the Cloudflare mint root
 
-Mints the least-privilege **`homelab-tofu-apply`** Cloudflare write token that
-`tofu/cloudflare/` runs with. Separate root + state on purpose: this is the *privilege
-boundary*. You run it once with your admin token (from outside the jail); the agent only
-ever gets the scoped output.
+Mints every scoped Cloudflare API token as code (ADR-053): one `.tf` file per token, one
+consumer per token. Separate root + state on purpose — this is the *privilege boundary*: you
+run it with the **admin token** (the Tier-0 mint-root, host-side only); consumers only ever
+get the scoped outputs.
 
-## Token scope
+**Who holds which token — scopes, canonical store, delivery, consumer — is the token matrix in
+[`docs/cloudflare.md`](../../docs/cloudflare.md), the ONE table.** The `.tf` files here are the
+ground truth for permission groups/resources; this README does not restate them (a scope table
+lived here once and drifted — removed 2026-08-11).
 
-| Policy | Permission groups | Resource |
-|---|---|---|
-| zone | `DNS Write`, `SSL and Certificates Write`, `Zone WAF Write` | `teststuff.net` zone only |
-| account | `Cloudflare Tunnel Write` | account (tunnels are account-level) |
+## The admin token (Tier-0 mint-root — hand-made by construction)
 
-That's exactly what `tofu/cloudflare/` needs — DNS records, the mTLS client cert + hostname
-association, the WAF rule, and the tunnel + its config. Nothing else.
+Cloudflare dashboard → My Profile → API Tokens → **"Create Additional Tokens"** template:
+user-scope `API Tokens: Write` plus read on the zone/account. The value lives in the host
+admin wallet (`~/Documents/homelab-admin.kdbx`) ONLY — never the jail, never the cluster
+(`docs/secrets.md` §Minting doctrine records why this one credential is manual). Renewal =
+re-create in the dashboard before its `expires_on`, re-store in the admin wallet.
 
-## Apply (you, outside the jail)
+## Apply (operator, outside the jail)
 
 ```bash
-# 1. Create an admin API token in the dashboard (My Profile -> API Tokens), or use an
-#    existing admin token. It needs: API Tokens Write, plus read on the zone/account.
-export CLOUDFLARE_API_TOKEN=<your admin token>
-
-# 2. Mint the scoped token.
-tofu -chdir=tofu/cloudflare-token init
-tofu -chdir=tofu/cloudflare-token apply
-
-# 3. Hand the scoped token to the jail-readable secret dir (host path shown).
-tofu -chdir=tofu/cloudflare-token output -raw tofu_apply_token \
-  > ~/Projects/.claude-data/cloudflare/write-key
-chmod 600 ~/Projects/.claude-data/cloudflare/write-key
+export CLOUDFLARE_API_TOKEN=<admin token>   # from the admin wallet
+devbox run cloudflare-token-tofu plan       # scripts/cloudflare-token-tf.sh
+devbox run cloudflare-token-tofu apply      # prints the per-token store checklist
 ```
 
-The agent then applies `tofu/cloudflare/` with `CLOUDFLARE_API_TOKEN=$(cat ~/.claude/cloudflare/write-key)`.
+Minted values flow into the ordinary wallet: `keepass-init.sh` entry → `wallet-files.sh`
+regenerates the jail cache → Infisical via ESO for cluster consumers — the apply's checklist
+names each destination. Review minted reality with `devbox run cloudflare-token-audit`
+(renders policies with permission-group NAMES).
 
 ## Notes
 
-- Set `allowed_ips` (tfvars or `-var`) to pin the token to your egress IP for extra safety.
-- `expires_on` defaults to 2027-01-01 — rotate by re-applying before then.
-- State is local + gitignored like the other roots. The token **value** lives only in this
-  state and in `~/.claude/cloudflare/` — never in git.
+- Provider v5 "inconsistent result after apply" on a token modify = policy ORDERING, not
+  failure — gotcha 3 in `docs/cloudflare.md`; policy order in `main.tf` is load-bearing.
+- These are USER tokens (tied to the operator's Cloudflare user); migration to account tokens
+  is opportunistic, per-token, at re-mint time (FU-157).
+- `allowed_ips` (tfvars) pins a token to an egress IP. State is local + gitignored; token
+  values live only in this state and their stores — never in git.
