@@ -280,6 +280,13 @@ escaped-diff belt live THERE). Authoring-side semantics: **omitting the line is 
 exclusive** (classic WIP=1); a worker discovering mid-ride that it needs paths outside its
 declaration files a new issue for the owning concern (TRACKS rule 2).
 
+⚠ **A `Touches:` naming an ADR-103 ratchet clause file MUST also declare `agents/replay/**`** —
+the ratchet reds any clause-file diff without a replay-tree touch, so a footprint that names the
+clause file alone is **unsatisfiable, not merely narrow**: every conforming PR arrives with a
+guaranteed scope escape and cannot converge (homelab#270/PR#275, 2026-08-11 — the coordinator's
+arbitration proved no green conforming shape existed and escalated; the human sanctioned the
+wider diff). The ratchet's file list lives in `.github/workflows/ci.yaml` (the `clause=` grep).
+
 ## Base: the declared base branch (2026-08-05)
 
 An issue whose work must be built on an **unmerged branch** carries a `Base:` body line, same
