@@ -489,8 +489,9 @@ the block needs pruning, not more headings.
       root-owned artifacts; whole-ledger 146KB brief > argv cap; tee ate cell death), the lane
       had NEVER run end-to-end; all fixed + hand-fired green, **first report DELIVERED**
       (PR#246 merged; single-cell — cell-b mechanics = homelab#248). The belt caught it (first
-      firing = real). **Next:** 2026-08-17 = first UNATTENDED run; the report's 6 process
-      changes await the operator's filing word; then ledger emitter gaps, MCP slices (§B2).
+      firing = real). **Next:** 2026-08-17 = first UNATTENDED run; the report's process-change
+      batch FILED + QUEUED 2026-08-11 (homelab#256-259, circles#77/#78, oracle-fleet#258);
+      then ledger emitter gaps, MCP slices (§B2).
       Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
