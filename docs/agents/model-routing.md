@@ -407,6 +407,22 @@ children while the one-shot arm reached a comparable bake+page and drew only `CH
 so the fan-out arm's advantage was never demonstrated, and the reasoning tier had nothing hard to
 chew on. Calibrate goals so decomposition and the acceptance judgement are actually load-bearing.
 
+⚖ **The goal lane's model axis is PHASE, not clause — a single `GOAL_MODEL` knob turns the wrong
+thing (operator observation, 2026-08-11, from the FU-165 pilot prep; design OPEN, deliberately
+unwired).** The goal coordinator's work is three different jobs wearing one clause family: (1) the
+INITIAL decomposition — full-context composition, deserves the big model AND special instructions
+(the FU-165 pilot runs it in the jail with the design-agents corpus loaded for exactly this
+reason); (2) the MECHANICAL goal-review ticks — "did a child close, does something cover the gap"
+— which need no strong model at all; (3) sub-issue AUTHORING from harvested follow-ups — judgment
+work again, but it arrives as a TRICKLE (one sprout per closure), and paying a full-context
+re-read per sprout is too expensive for any model. The candidate shape is therefore not a model
+knob but a CHECKPOINT structure: big model + special instructions at decompose, and again at a
+designated larger checkpoint once the initial child set completes (a batched re-read that does the
+accumulated authoring judgment in one context), with the trickle in between handled mechanically
+or queued for the checkpoint. Do NOT wire a per-stack goal-model knob before this is designed —
+it would harden the wrong axis. Home for the design when it happens: this section + the
+goal-review play (issue-authoring.md §Leg (c)).
+
 **The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
 routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
 whole goal rests on — to `--model ${REVIEW_GOAL_MODEL:-sonnet} --rubric .agents/review-goal.md`

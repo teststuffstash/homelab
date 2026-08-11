@@ -251,7 +251,9 @@ the block needs pruning, not more headings.
       the shipped sub-issue lineage (2026-08-02), the `Touches:` contract (ADR-097) and the
       retro-checkpoint terminal: [`docs/agents/issue-authoring.md`](agents/issue-authoring.md).
       **Next:** the exporter sprout-RATE gauge + the depth-aware harvest gate reading it.
-      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`.
+      **Operator-deferred:** leg (c) goal-budget decomposition, `issueAuthoring.selfQueue`;
+      the goal lane's PHASE-keyed model/checkpoint design (a `GOAL_MODEL` knob turns the wrong
+      axis — [`model-routing.md`](agents/model-routing.md) §M10 ⚖, 2026-08-11; design before wiring).
       Relates FU-087, FU-044, FU-111, ADR-094, TICK-LOG §Loop safety.
 - [ ] **FU-129** — **`gh issue view <n> --comments` renders EMPTY (exit 0) — ROOT CAUSE CONFIRMED
       2026-08-05: it is gh SEMANTICS, not the image or the token.** `--comments` switches to a
