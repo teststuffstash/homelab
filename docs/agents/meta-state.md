@@ -44,7 +44,9 @@ meant to avoid.)
    FU-151 meta-delivered for sleep-tracking (`5b8c384`). Jail seat: quiet-goal backstop +
    closing sweep (per-child live re-probe + the two authoring lessons → issue-authoring §Touches:
    ratchet-clause files bring agents/replay/** [done]; Composition-new-kind brings rbac.yaml [at
-   sweep]).
+   sweep] + **the dispatch-concurrency deliverable, operator-chartered on #278**: re-mine the
+   full goal window (mutex-held vs ride time, Pending-doorbell depth, footprint-vs-mutex
+   attribution), then design open to ALL options incl. rethinking ADR-094 — numbers decide).
 4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
    `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
    wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
