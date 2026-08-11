@@ -197,7 +197,24 @@ alertmanager:
         - matchers:
             - alertname = "InfoInhibitor"
           receiver: "null"
+        # FU-133 leg (a) — the responder's correlation key is PINNED here, not inherited.
+        # Grouping by alertname is what makes one root cause one DELIVERY: the group is the unit
+        # Alertmanager POSTs, so a same-name storm arrives as a single webhook carrying N alerts
+        # instead of N webhooks. That is already the effective behaviour — an Alertmanager child
+        # route inherits group_by from its parent and the root route above groups by alertname —
+        # so this line changes nothing today, and exists so it cannot change silently: the root
+        # route's grouping is tuned for ha-webhook, a HUMAN notification surface, and widening it
+        # there (adding `namespace`) or setting the `['...']` no-grouping value would re-fan-out
+        # the responder without touching anything that names the responder.
+        # ⚠ Do NOT read this as the issue-dedup: the collapse to one ISSUE does not happen here.
+        # The respond workflow walks every firing alert in the group and dedups per alert on the
+        # 24h fingerprint + subject ledgers (agents/coordinator/responder-argo.yaml), which is
+        # deliberate — distinct subjects that share an alertname (three degraded Longhorn volumes)
+        # are distinct problems and must keep their own issues. Grouping reduces deliveries and
+        # workflow spawns; the ledgers reduce sessions and issues.
         - continue: true
+          group_by:
+            - alertname
           receiver: agent-responder
         - receiver: ha-webhook
   service:
