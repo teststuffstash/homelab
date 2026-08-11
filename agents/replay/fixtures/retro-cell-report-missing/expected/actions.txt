@@ -1,0 +1,6 @@
+ERR CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (goose:deepseek/deepseek-v4-pro).
+ERR   The ride exited 0, so the session died CLEAN — at the exit code a provider
+ERR   error before the first turn is indistinguishable from a finished run.
+ERR   The log is still harvested as an artifact and the sibling cell + harvest
+ERR   still run (continueOn), so a surviving report still lands.
+RC 1

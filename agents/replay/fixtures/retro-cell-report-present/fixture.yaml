@@ -1,0 +1,23 @@
+# homelab#248 — the other half of the marker self-check: a cell that DID produce a report passes.
+#
+# CONDITION UNDER REPLAY. Run 3's cell-a, the ride that actually delivered (its report is committed
+# at docs/agents/retros/2026-08-11-oracle-r3-context.md — misfiled by the slug bug this PR also
+# fixes, see `retro-harvest-slug`). Same log shape as the dead sibling, plus the BEGIN/END block.
+#
+# THE CONTRACT:
+#   1. RC 0 and `REACHED:` present — the check does not stop a good cell. Over-eagerness is the
+#      usual failure of a "did it really work" gate, and a gate that fails the retro on a delivered
+#      report would cost more than the silent-success bug it replaces; so "a real report passes" is
+#      pinned as behaviour rather than trusted to prose (the argv-guard warn-band precedent).
+#   2. The success line names the CELL and the extracted SIZE. The size is the assertion that the
+#      check extracted the report body — a grep for the marker word alone would pass on a log that
+#      merely mentioned it, and would have passed on the brief being echoed back.
+#   3. 155 bytes is the block BETWEEN the markers (`sed '1d;$d'` strips them) — the same bytes the
+#      harvest commits. If the two extractions ever diverge, this number moves.
+name: retro-cell-report-present
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-cell-marker-selfcheck
+  - file:post.sh

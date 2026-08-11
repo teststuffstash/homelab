@@ -1,0 +1,31 @@
+# homelab#248 — the harvest names a report after the CELL THAT PRODUCED IT, never after its title.
+#
+# CONDITION UNDER REPLAY. Both cells delivered. The old clause took the filename slug from the last
+# whitespace-separated word of the report's first line, which is model-authored prose: run 3's
+# "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
+# docs/agents/retros/2026-08-11-oracle-r3-context.md. Both logs here carry titles that would
+# misfile under that parse — "(1M context)" → `context`, and the r2-precedent goose heading
+# "(backing model not exposed in-env)" → `in-env` — so the fixture reds if the sniff ever returns.
+#
+# THE CONTRACT:
+#   1. The slug comes off the workflow's own `cellA`/`cellB` parameters, through the same A/B
+#      pairing that picks the log. `claude:opus` → `opus`; `goose:deepseek/deepseek-v4-pro` →
+#      `deepseek-v4-pro` — the r1/r2 filename convention, now derived rather than guessed.
+#   2. The PAIRING is asserted, not just the parsing: cellA's slug lands on log-a's report and
+#      cellB's on log-b's. A swap would still produce two plausible filenames and two committed
+#      reports, and nothing downstream would ever catch it — the failure would surface as a retro
+#      attributed to the wrong model, i.e. as bad routing evidence months later.
+#   3. Nothing is appended to the PR body: `DEAD_NOTE` stays empty when both cells delivered, so
+#      the partial-run warning its sibling pins cannot become boilerplate the reader skips.
+#   4. `cp` is the seam (a bridge function recording into the action stream, the responder-fixture
+#      `curl` pattern) — the clause's real output is WHICH path each report is written to, and the
+#      fixture must not write into the checkout to assert it.
+#
+# The two logs are the same reconstructions as the retro-cell pair, one per leg.
+name: retro-harvest-slug
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-harvest-slug
+  - file:post.sh

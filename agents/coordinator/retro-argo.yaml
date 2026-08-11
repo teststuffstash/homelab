@@ -9,6 +9,9 @@
 # outside-the-fixer-ns placement is future work) — the guard refuses to run while the fixer queue
 # is busy. Cross-review legs stay MANUAL for v1 (agents/retro-session.sh --review) — run them from
 # the harvested PR. Reports land via PR (human-gated); the workflow never merges its own output.
+# Each cell judges ITSELF on its own ride log (homelab#248): no report block ⇒ the cell fails,
+# `continueOn` keeps its sibling and the harvest alive, and the PR body names what was missing.
+# Pinned by agents/replay/fixtures/retro-cell-report-* and retro-harvest-*.
 #
 # Ownership: platform mechanism (observability-and-retro.md §B2); per-stack graduation = an
 # AgentStack `retro` knob later. Params below default to the oracle stack.
@@ -53,9 +56,16 @@ spec:
           tasks:
             - name: guard
               template: guard
+            # continueOn (homelab#248): a cell now FAILS itself when it produced no report, and a
+            # dead cell must not take its SIBLING's report down with it — run 3 kept cell-a's
+            # report only because the dead cell-b happened to exit 0. The task node still goes
+            # Failed, cell-b and the harvest still run, and a surviving report still lands via PR.
+            # The DEAD-cell notice in that PR's body is the belt that does not depend on Argo's
+            # continueOn status roll-up: the PR is the surface a human is guaranteed to read.
             - name: cell-a
               template: retro-cell
               dependencies: [guard]
+              continueOn: { failed: true }
               arguments:
                 parameters:
                   - { name: cell, value: "{{workflow.parameters.cellA}}" }
@@ -63,6 +73,7 @@ spec:
             - name: cell-b
               template: retro-cell
               dependencies: [cell-a]
+              continueOn: { failed: true }
               arguments:
                 parameters:
                   - { name: cell, value: "{{workflow.parameters.cellB}}" }
@@ -71,9 +82,13 @@ spec:
               template: harvest
               dependencies: [cell-a, cell-b]
               arguments:
+                # optional (homelab#248): a cell that dies BEFORE the tee never writes its log, and
+                # with continueOn above the harvest now runs anyway — an unresolvable artifact must
+                # not wedge it. The step's own loop already handles a missing/markerless log (WARN,
+                # then the N=0 refusal), which is the honest place for that decision.
                 artifacts:
-                  - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}" }
-                  - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}" }
+                  - { name: log-a, from: "{{tasks.cell-a.outputs.artifacts.ride-log}}", optional: true }
+                  - { name: log-b, from: "{{tasks.cell-b.outputs.artifacts.ride-log}}", optional: true }
 
       # Level-trigger + WIP guard. Exit 1 (fail loudly, per rule #6) when there's nothing to
       # retro or the fixer is busy — a skipped retro must be VISIBLE in the DAG, not silent.
@@ -148,7 +163,10 @@ spec:
             - configMapKeyRef: { name: subscription-capacity, key: claude }
         outputs:
           artifacts:
-            - { name: ride-log, path: /work/ride.log, archive: { none: {} } }
+            # optional: the cell can now fail before the tee exists (and its sibling still needs to
+            # run — see continueOn on the DAG tasks). A missing log is a WARN in the harvest, not an
+            # artifact-save error that reports as something else entirely.
+            - { name: ride-log, path: /work/ride.log, archive: { none: {} }, optional: true }
         container:
           image: ghcr.io/teststuffstash/agent-coordinator
           command: ["bash", "-lc"]
@@ -183,9 +201,33 @@ spec:
               if [ -n "{{workflow.parameters.retroKeySecret}}" ]; then
                 export RETRO_OPENROUTER_SECRET="{{workflow.parameters.retroKeySecret}}"
               fi
+              RIDE_LOG=/work/ride.log   # also this template's output artifact path (above)
+              CELL="{{inputs.parameters.cell}}"
               bash agents/retro-session.sh "{{workflow.parameters.stack}}" \
-                --cell "{{inputs.parameters.cell}}" --ledger /tmp/ledger-ranked.json \
-                2>&1 | tee /work/ride.log
+                --cell "$CELL" --ledger /tmp/ledger-ranked.json \
+                2>&1 | tee "$RIDE_LOG"
+              # >>>REPLAY:retro-cell-marker-selfcheck>>>
+              # A cell that produced NO report is a FAILED cell and has to say so ITSELF; leaving
+              # that to the harvest is how run 3's cell-b (kpg42, 2026-08-11) read as Succeeded with
+              # clean stats — its goose session died in 8s on a provider "Please retry", the
+              # in-pod finalize classified `exit_status: "clean"` (the FU-147 / agent-runtime#36
+              # misclassification class), the ride exited 0, and only the harvest's report count
+              # ever knew (homelab#248). pipefail above catches a session that DIED; it cannot catch
+              # one that died CLEAN, because at the exit code those are the same event.
+              # The test is the HARVEST'S OWN extraction, verbatim (the other copy is in the harvest
+              # step below) — "would the harvest find a report in this log?", never a weaker proxy.
+              sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$RIDE_LOG" | sed '1d;$d' > /tmp/cell-report.md
+              if [ -s /tmp/cell-report.md ]; then
+                echo "cell self-check: ${CELL} produced a report ($(wc -c < /tmp/cell-report.md) bytes)"
+              else
+                echo "CELL FAILED: no BEGIN/END-RETRO-REPORT block in this cell's OWN ride log (${CELL})." >&2
+                echo "  The ride exited 0, so the session died CLEAN — at the exit code a provider" >&2
+                echo "  error before the first turn is indistinguishable from a finished run." >&2
+                echo "  The log is still harvested as an artifact and the sibling cell + harvest" >&2
+                echo "  still run (continueOn), so a surviving report still lands." >&2
+                exit 1
+              fi
+              # <<<REPLAY:retro-cell-marker-selfcheck<<<
           env: *tsenv
           resources:
             requests: { cpu: "100m", memory: "256Mi" }
@@ -217,18 +259,47 @@ spec:
               DATE=$(date +%F)
               RUN=$(ls docs/agents/retros/ | grep -oE "${STACK}-r[0-9]+" | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
               RUN="r$(( ${RUN:-0} + 1 ))"
-              N=0
-              for src in /work/log-a /work/log-b; do
+              # The cell→log pairing, threaded from the workflow's OWN parameters (homelab#248).
+              LOG_A=/work/log-a; CELL_A="{{workflow.parameters.cellA}}"
+              LOG_B=/work/log-b; CELL_B="{{workflow.parameters.cellB}}"
+              # >>>REPLAY:retro-harvest-slug>>>
+              N=0; DEAD=""
+              for leg in A B; do
+                case "$leg" in
+                  A) src="$LOG_A"; cell="$CELL_A" ;;
+                  B) src="$LOG_B"; cell="$CELL_B" ;;
+                esac
+                # <harness>:<vendor>/<model> → <model>: "claude:opus" → opus,
+                # "goose:deepseek/deepseek-v4-pro" → deepseek-v4-pro — the r1/r2 filename
+                # convention, now DERIVED from the dispatch instead of sniffed off the report. The
+                # last-word-of-the-title parse this replaces read a model-authored prose heading,
+                # so "# oracle loop retro r3 — Claude Opus 5 (1M context)" filed itself as
+                # docs/agents/retros/2026-08-11-oracle-r3-context.md.
+                model="${cell#*:}"; model="${model##*/}"
+                model=$(printf '%s' "$model" | tr -cd 'a-zA-Z0-9.-')
                 if sed -n '/BEGIN-RETRO-REPORT/,/END-RETRO-REPORT/p' "$src" | sed '1d;$d' > /tmp/report.md \
                    && [ -s /tmp/report.md ]; then
                   N=$((N+1))
-                  MODEL=$(head -1 /tmp/report.md | grep -oE '[^ ]+$' | tr -cd 'a-zA-Z0-9.-' || echo "cell$N")
-                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${MODEL:-cell$N}.md"
+                  cp /tmp/report.md "docs/agents/retros/${DATE}-${STACK}-${RUN}-${model:-cell-$leg}.md"
                 else
-                  echo "WARN: no report markers in $src (cell died or contract broken)"
+                  echo "WARN: no report markers in $src (cell ${cell} died or contract broken)"
+                  DEAD="${DEAD:+$DEAD, }${cell}"
                 fi
               done
               [ "$N" -gt 0 ] || { echo "HARVEST FAILED: no cell produced a report"; exit 1; }
+              # A PARTIAL harvest must announce itself where a human will see it. The dead cell
+              # already failed its own step (retro-cell's marker self-check) and the DAG node is
+              # Failed — but whether that rolls up to a red WORKFLOW is Argo's continueOn semantics,
+              # not ours, and the PR is the artifact this lane exists to produce. So the missing
+              # cell is named in the body: "2 cells fired, 1 report" is a fact about the run that
+              # the reader of the report needs, and run 3 shipped without it (homelab#248).
+              # Built with printf, not a multi-line assignment: every line of this step is INSIDE a
+              # YAML `|` block scalar, so a continuation line at column 0 (which is what the note's
+              # leading blank line + markdown wants to be) silently ENDS the scalar and breaks the
+              # manifest. The escapes belong to printf; the YAML never sees a newline.
+              DEAD_NOTE=""
+              [ -n "$DEAD" ] && DEAD_NOTE=$(printf '\n\n⚠ **PARTIAL RUN — no report from: %s.** That cell failed its own report-marker self-check and its DAG task is marked Failed; its ride log is still attached as a workflow artifact. Read this report knowing it is one cell%s view, not the cross-checked pair.' "$DEAD" "'s")
+              # <<<REPLAY:retro-harvest-slug<<<
               export GH_TOKEN=$(cat /var/run/coordinator-git/GH_TOKEN)
               git config user.name "retro-session"; git config user.email "noreply@teststuff.net"
               BR="retro/${DATE}-${STACK}-${RUN}"
@@ -237,7 +308,7 @@ spec:
               git push "https://x-access-token:${GH_TOKEN}@github.com/teststuffstash/homelab" "HEAD:$BR"
               gh pr create --repo teststuffstash/homelab --base master --head "$BR" \
                 --title "retros: ${STACK} ${RUN} ($N report(s), scheduled retro)" \
-                --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report."
+                --body "FU-058 scheduled retro output — HUMAN-GATED, read before merging. Cross-review legs: run \`agents/retro-session.sh ${STACK} --cell <other-cell> --review docs/agents/retros/<report>.md\` per report.${DEAD_NOTE}"
               # ADR-103 rule-3 belt (FU-058, 2026-08-10): a report that LANDED is the only success
               # signal — the cron trigger counter increments on guard-refused runs too (the 08-10
               # Monday fired, refused, and nothing said so for 13h). RetroReportOverdue alerts on

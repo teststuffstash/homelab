@@ -1,0 +1,33 @@
+# homelab#248 — a retro cell that produced NO report FAILS ITSELF, before the harvest finds out.
+#
+# CONDITION UNDER REPLAY. Run 3's cell-b, live (kpg42, 2026-08-11): the goose session died in 8s on
+# a provider "Please retry", the in-pod finalize classified `exit_status: "clean"` (the FU-147 /
+# agent-runtime#36 misclassification class), and the ride command exited 0. `set -eo pipefail` —
+# added the same day precisely because `tee` had been eating cell death — sees nothing wrong,
+# because at the exit code a pre-ride provider death and a finished run are the same event. The DAG
+# called the cell Succeeded; the only thing that ever knew was the harvest's report count.
+#
+# THE CONTRACT:
+#   1. The cell exits NON-ZERO on its own log. `REACHED:` is absent from the stream — post.sh runs
+#      only if the step continued to its Succeeded exit, and diff asserts that absence for free.
+#   2. The test is the HARVEST'S OWN extraction, not a weaker proxy: this ride log contains the
+#      word "retro", the report's title format, and a clean AGENT_RUN_STATS line — every signal
+#      short of the BEGIN/END block a harvest can actually cut a report out of.
+#   3. The refusal names the CELL and says the exit code cannot be trusted here — the operator
+#      reading a red DAG needs to know it is looking at a pre-ride death, not a failed report.
+#   4. It also states that the sibling cell and the harvest still run (`continueOn: failed:true`,
+#      added with this check): a self-failing cell that silently took the OTHER cell's report down
+#      with it would be a worse trade than the bug it fixes. Run 3 shipped one report exactly
+#      because the dead cell exited 0.
+#
+# `ride.log` is a faithful RECONSTRUCTION of the kpg42 cell-b log, not a byte capture: the ride
+# predates the transcript-artifact plumbing that would have kept it, and the shapes it needs (the
+# launcher's two banner lines, the provider error, the clean stats line) are all in the issue and
+# in retro-session.sh. Its sibling `retro-cell-report-present` carries a real report block.
+name: retro-cell-report-missing
+mode: actions
+source: agents/coordinator/retro-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:retro-cell-marker-selfcheck
+  - file:post.sh
