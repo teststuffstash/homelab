@@ -177,8 +177,8 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   |---|---|---|---|
   | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
-  | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback: labels are already in its 120 s poll; conflict-resolution latency is non-critical | ≤2 min |
-  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs; exporter piggyback as belt | instant |
+  | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
+  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — ⚠ `{repo}`-only (inventory below), so a graduated stack still falls to its `*/30` cron; the "exporter piggyback as belt" this cell used to promise was never built | instant for the global scan only |
   | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
 
 ⚠ **That last row said `devbox run coordinate-now` until 2026-08-06 and was WRONG for every
@@ -187,13 +187,29 @@ entirely (FU-144), so the promised edge woke a run that printed `skipped ×4`. N
 watches this transition, so a queued issue simply waited for the `*/30` per-stack cron: **8m35s**,
 measured on circles#29. The whole point of the table is that *every* transition has an emitter —
 a row naming a mechanism that cannot reach the stack is worse than an empty row, because it stops
-anyone looking. Ring the stack's OWN CronWorkflow (the namespace argument, above) until FU-144
-fixes the payload properly. The fix's shape: teach the remaining emitters the `{stack, loop_ns}`
-payload (the new fix-debounce emitter sends it from birth, `83907ea` — it never joins this gap),
-or fan the global trigger out over graduated namespaces; then decide whether the global reflex
-has a reader left. ⚠ Two-readers trap for whoever implements it: the emitters read
-`agents/stacks.json` while the scan reads the LIVE claim — a stack graduated in the claim but
-stale in the mirror would get a payload the scan ignores.
+anyone looking.
+
+**Emitter inventory (2026-08-11, checked against `master`).** Everything that rings `/coordinate`
+from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
+[`agents/agent-session.sh`](../../agents/agent-session.sh),
+[`agents/reviewer-session.sh`](../../agents/reviewer-session.sh),
+[`scripts/coordinate-ring.sh`](../../scripts/coordinate-ring.sh) (`devbox run ring <stack>`),
+`fix-debounce-argo.yaml` (from birth, `83907ea`), `.github/workflows/coordinate-doorbell.yaml`,
+and the github-exporter's three dispatchers — review (FU-100), CI-red (FU-115) and, since #285,
+`merge-conflict`. The `{repo}`-only holdouts are exactly two: `.github/workflows/renovate.yaml`
+(`{"repo":"all"}`) and `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`), so the
+un-armed-`major` row above is the one transition still deferring graduated stacks to cron. Those
+two files, plus the `devbox run coordinate-now` script entry (the global reflex's remaining
+deliberate caller), are an **operator-lane residual**, not an oversight: `.github/**` and this
+repo's `devbox.json` execute from a PR's own branch, so the fixer lane may not edit them
+(`.agents/fix.yaml`) — and whether the global trigger should keep a reader at all, or be fanned
+out over graduated namespaces instead, is an operator call. Until it is made, ring the stack's OWN
+CronWorkflow (`devbox run ring <stack>`, the namespace argument above) rather than the global
+reflex.
+
+⚠ Two-readers trap for whoever finishes it: the emitters read `agents/stacks.json` while the scan
+reads the LIVE claim — a stack graduated in the claim but stale in the mirror would get a payload
+the scan ignores.
 
 - **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
   the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the

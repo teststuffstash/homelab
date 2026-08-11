@@ -105,6 +105,7 @@ _last_success = 0
 _dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0 in a healthy poller
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
+_conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
 
 
 def gh(path, token=None):
@@ -462,6 +463,69 @@ def maybe_dispatch_cired(repo, number, head_sha, *, ci_state, armed, draft, labe
         print(f"cired-edge: POST failed for {repo}#{number}: {e}", flush=True)
 
 
+def maybe_dispatch_conflict(repo, number, head_sha, *, review_decision, labels):
+    """FU-144 conflict edge-trigger: POST a /coordinate doorbell when an open agent PR carries
+    `merge-conflict`, so the scan's merge-conflict clause dispatches a resolution round instead of
+    waiting out the */30 cron (PR#275 did exactly that on 2026-08-11).
+
+    The row for this transition in docs/agents/workflow.md §Triggers promised an "exporter
+    piggyback" from the day the table was written and it was never built — the label was already
+    in this poll's `label_names`, but nothing read it. So this is the missing emitter, not a
+    payload edit; every other in-repo emitter already carries {stack, loop_ns}.
+
+    `update-pr-branch` is the actor that applies the label and it is GitHub-hosted BY DESIGN (the
+    merge path must not depend on the self-hosted tier being awake), so it cannot curl the
+    in-cluster webhook itself — the piggyback is the belt for exactly that off-cluster class.
+    Latency becomes ≤ one poll (120 s) instead of ≤30 min.
+
+    Predicate mirrors the scan's merge-conflict clause (coordinator-scan.sh, the `merge-conflict`
+    unit loop) label for label: the label present, `agent/error`/`agent/arbitrate` absent (the
+    human-first breaker and the arbitration park), and reviewDecision ≠ CHANGES_REQUESTED (that PR
+    belongs to the changes-requested clause, which resolves the conflict as part of its round).
+    Deliberately NOT filtered on armed/draft, because the scan's clause is not either — the
+    doorbell may over-approximate (a false wake costs a scan, never an LLM tick) but a wake the
+    scan then ignores as out-of-predicate is pure waste.
+
+    Deduped per (repo, number, head_sha) like the red edge: one wake per conflicted head, so a
+    resolution round that pushes nothing cannot re-wake itself, while a genuine new head that is
+    STILL conflicted rings again. Best-effort — the */30 cron stays the backstop; a pod restart
+    re-POSTs a still-conflicted head, which the scan's own predicate re-judges anyway."""
+    if not COORDINATE_WEBHOOK_URL:
+        return
+    conflicted = (
+        "merge-conflict" in labels
+        and not ({"agent/error", "agent/arbitrate"} & set(labels))
+        and review_decision != "changes_requested"
+    )
+    if not conflicted or not head_sha:
+        return
+    key = (repo, str(number), head_sha)
+    if key in _conflict_dispatched:
+        return
+    payload = {"repo": repo, "number": str(number), "head_sha": head_sha}
+    # FU-144: a graduated stack's POST carries {stack, loop_ns} so the coordinator Sensor's
+    # per-stack trigger scans INSIDE <loop_ns> — a plain {repo} POST takes the global trigger,
+    # which SKIPS graduated stacks entirely and would leave the wake doing nothing at all (the
+    # `coordinate-now` sting, workflow.md §Triggers ⚠). A failed/absent lookup fails SOFT to the
+    # plain payload = today's behaviour, i.e. the cron backstop.
+    grad = graduated_loop_ns(repo)
+    if grad:
+        payload.update(grad)
+    body = json.dumps(payload).encode()
+    try:
+        req = urllib.request.Request(
+            COORDINATE_WEBHOOK_URL, data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        _conflict_dispatched.add(key)
+        print(f"conflict-edge: POST /coordinate for {repo}#{number} @ {head_sha[:8]}"
+              f"{' (loop_ns ' + grad['loop_ns'] + ')' if grad else ''}", flush=True)
+    except Exception as e:
+        print(f"conflict-edge: POST failed for {repo}#{number}: {e}", flush=True)
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
                           labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
@@ -759,6 +823,15 @@ def collect_open_prs(lines):
                     ci_state=ci_state,
                     armed=pr.get("autoMergeRequest") is not None,
                     draft=bool(pr["isDraft"]),
+                    labels=label_names,
+                )
+                # FU-144 conflict edge-trigger: the third /coordinate edge — POST when this PR
+                # carries `merge-conflict`, the transition whose workflow.md row promised this
+                # piggyback and never had one (its actor, update-pr-branch, is GitHub-hosted by
+                # design and cannot curl the in-cluster webhook).
+                maybe_dispatch_conflict(
+                    repo["name"], pr["number"], pr.get("headRefOid") or "",
+                    review_decision=(pr["reviewDecision"] or "none").lower(),
                     labels=label_names,
                 )
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
@@ -1491,8 +1564,80 @@ def self_test():
         "`promtool test rules argocd/resources/github-exporter/queued-age.promtool-test`\n"
         f"  shipped: {shipped}\n  fixture: {fixture}")
 
+    # ── FU-144 conflict edge-trigger (#285): the doorbell this transition never had ──────────────
+    # Hermetic: urlopen is swapped for a recorder, so the predicate, the {stack, loop_ns} routing
+    # and the dedup are all exercised without a socket. The dispatcher is the ONLY executable gate
+    # this emitter has (agents/replay/ records coordinator-SCAN behaviour — an exporter dispatcher
+    # is not a scan clause and has no fixture shape there), so every arm of the predicate is
+    # pinned here.
+    global COORDINATE_WEBHOOK_URL
+    _stacks_cache.update({
+        "at": time.monotonic(),  # fresh ⇒ graduated_loop_ns never refreshes over the network
+        "map": {"circles": {"stack": "circles", "loop_ns": "circles-agents"}},
+        "stack_of": {"oracle-fleet": "oracle", "circles": "circles"},
+    })
+    posted = []
+
+    class _Recorded:
+        def read(self):
+            return b""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+    def _record(req, timeout=None):
+        posted.append((req.full_url, json.loads((req.data or b"{}").decode())))
+        return _Recorded()
+
+    saved_urlopen, saved_url = urllib.request.urlopen, COORDINATE_WEBHOOK_URL
+    urllib.request.urlopen = _record
+    COORDINATE_WEBHOOK_URL = "http://agent-loop.invalid/coordinate"
+    try:
+        def conflict(repo, number, labels, review_decision="none", head_sha="deadbeefcafe"):
+            del posted[:]
+            maybe_dispatch_conflict(repo, number, head_sha,
+                                    review_decision=review_decision, labels=set(labels))
+            return list(posted)
+
+        # Fires on the label alone — the scan's clause filters on nothing else, and the doorbell
+        # may over-approximate (a false wake costs a scan run, never an LLM tick).
+        fired = conflict("some-repo", 275, {"merge-conflict"})
+        assert len(fired) == 1, fired
+        assert fired[0][0] == COORDINATE_WEBHOOK_URL
+        assert fired[0][1] == {"repo": "some-repo", "number": "275",
+                               "head_sha": "deadbeefcafe"}, fired[0][1]
+        # Silent without the label, and on each exclusion the scan's merge-conflict clause makes.
+        assert conflict("some-repo", 276, {"agent/queued"}) == []
+        assert conflict("some-repo", 277, {"merge-conflict", "agent/error"}) == []
+        assert conflict("some-repo", 278, {"merge-conflict", "agent/arbitrate"}) == []
+        assert conflict("some-repo", 279, {"merge-conflict"},
+                        review_decision="changes_requested") == [], \
+            "a changes-requested PR belongs to that clause, which resolves the conflict itself"
+        # No head SHA ⇒ nothing to dedup on, so nothing is sent (the poll retries next cycle).
+        assert conflict("some-repo", 280, {"merge-conflict"}, head_sha="") == []
+        # A GRADUATED repo routes into its own loop_ns; an unknown one falls SOFT to {repo} (the
+        # global trigger + its cron backstop) rather than inventing a namespace.
+        grad = conflict("circles", 281, {"merge-conflict"})[0][1]
+        assert grad["stack"] == "circles" and grad["loop_ns"] == "circles-agents", grad
+        assert "stack" not in conflict("some-repo", 282, {"merge-conflict"})[0][1]
+        # Dedup per (repo, number, head_sha): one wake per conflicted head — a resolution round
+        # that pushes NO commit keeps the same head and must not re-ring…
+        assert conflict("some-repo", 283, {"merge-conflict"}), "first call must fire"
+        assert conflict("some-repo", 283, {"merge-conflict"}) == [], "repeat head must not re-ring"
+        # …while a genuinely new head that is still conflicted rings again.
+        assert conflict("some-repo", 283, {"merge-conflict"}, head_sha="f00df00df00d"), \
+            "a new head still carrying the label is a new wake"
+        # Empty webhook URL = the feature is off (the pre-FU-144 behaviour).
+        COORDINATE_WEBHOOK_URL = ""
+        assert conflict("some-repo", 284, {"merge-conflict"}) == []
+    finally:
+        urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen, saved_url
+
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
-          "fallback query, queued-age series + alert wiring)")
+          "fallback query, queued-age series + alert wiring, conflict edge-trigger)")
     return 0
 
 
