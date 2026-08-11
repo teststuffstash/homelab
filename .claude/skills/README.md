@@ -7,8 +7,9 @@ treat a skill edit like a doc edit (routing table, one home per fact).
 |---|---|
 | [design](design/SKILL.md) | Full-context mode for design questions (owning doc + link closure) |
 | [design-agents](design-agents/SKILL.md) | `/design` for the agent platform — full-corpus read |
+| [board-sweep](board-sweep/SKILL.md) | Sweep the live board: what the loop did, and what escalated unseen |
 | [docs-cleanup](docs-cleanup/SKILL.md) | Fine-comb grooming: sync every doc with tracker truth |
-| [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (run before docs-cleanup) |
+| [fu-sweep](fu-sweep/SKILL.md) | Triage every open FU and act (pipeline: board-sweep → this → docs-cleanup) |
 | [meta-coordinate](meta-coordinate/SKILL.md) | Resume the meta-coordinator role in a fresh session |
 | [handoff](handoff/SKILL.md) | Process the stack-jail → mono-jail work queue |
 | [onboard-metal-node](onboard-metal-node/SKILL.md) | PXE-onboard a bare-metal Talos worker |

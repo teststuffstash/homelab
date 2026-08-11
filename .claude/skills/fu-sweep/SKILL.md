@@ -27,6 +27,12 @@ FU-050→100 and 4.4/day over FU-100→153**, the Agents block reached **34 of 5
 
 ## Hard rules
 
+- **Agents-dominated tracker ⇒ corpus preload.** When the open items are mostly agent-platform
+  (the standing state: 92% for ids ≥100), run the [`design-agents`](../design-agents/SKILL.md)
+  read plan first (skip if already read this session) — classifying agents items without the
+  corpus under-reads, per the ruling that created that skill. If a
+  [`board-sweep`](../board-sweep/SKILL.md) ran this session, its HANDLED bucket IS step 2's
+  machine-lane delta — verify by substance and move on.
 - **This is not a closing spree.** "Close the stale ones" produces a small tracker and a large
   amount of silently-dropped work. Every item leaves the pass with a REASON, and the default for
   anything you cannot evidence is **leave it open, unchanged**.
