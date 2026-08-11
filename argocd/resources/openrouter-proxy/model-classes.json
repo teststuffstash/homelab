@@ -51,6 +51,65 @@
     "subscription"
    ],
    "tier": "dispatch"
+  },
+  "regular": {
+   "_comment": "ADR-104 research BANDS — four classes whose only job is to select a curated pool below (`class` + `slot` + `jitter:false` = the draw verb). They carry no chain: a draw never falls through to the rotation path, because a substituted arm is a corrupted experiment (§M13).",
+   "pool": "regular",
+   "reasoning": true,
+   "rails": [
+    "openrouter"
+   ],
+   "tier": "heavy"
+  },
+  "premium": {
+   "pool": "premium",
+   "reasoning": true,
+   "rails": [
+    "openrouter",
+    "subscription"
+   ],
+   "tier": "heavy"
+  },
+  "ultra": {
+   "pool": "ultra",
+   "reasoning": true,
+   "rails": [
+    "subscription",
+    "openrouter"
+   ],
+   "tier": "heavy"
+  },
+  "instrument": {
+   "pool": "instrument",
+   "reasoning": false,
+   "rails": [
+    "openrouter"
+   ],
+   "tier": "heavy"
+  }
+ },
+ "pools": {
+  "_comment": "ADR-104 / model-routing.md §M13 — the CURATED half of the research draw verb: ranked, family-deduped, disjoint bands, consumed by slot index and never computed at request time. HAND-SEEDED (FU-162, 2026-08-11): entries are model_tiers members only (the human-approved universe — graduation stays human) and the ranking is that grade, large → cheap → free, because this pod has no capability/market read. The scout's weekly refresh (capability × task_market × effective price × rail-compat, §M7 leg 5) replaces the ranking and deepens the bands — it rides FU-161, so until then this table moves by PR and `version` bumps with every edit. `version` is echoed by /route as pool_version: an arm table that records (class, slot, pool_version) can be re-drawn exactly. Disjointness + family-dedup are CURATION policy, not router invariants (ADR-104 (3)) — devbox run router-self-test is where they are enforced, at edit time. Known shortfall: `regular` is 6 deep against the doc's 7-arm over-provision, and `instrument` shares the deepseek FAMILY with regular's #2 (the run-1 slip was the same MODEL grading its own arm, which disjointness forbids); both are curation depth, i.e. the scout refresh's job.",
+  "version": "2026-08-11.1",
+  "bands": {
+   "regular": [
+    "moonshotai/kimi-k3",
+    "deepseek/deepseek-v4-pro",
+    "xiaomi/mimo-v2.5",
+    "tencent/hy3",
+    "poolside/laguna-s-2.1",
+    "inclusionai/ling-3.0-flash:free"
+   ],
+   "premium": [
+    "openrouter/fusion",
+    "claude/sonnet"
+   ],
+   "ultra": [
+    "claude/opus"
+   ],
+   "instrument": [
+    "deepseek/deepseek-v4-flash"
+   ]
   }
  },
  "role_defaults": {

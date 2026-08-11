@@ -4,11 +4,22 @@
 # cherry-pick the resulting research/* branches (the nemotron /workspace/idp jail run is the
 # reference output shape; oracle-fleet#166 / sleep PR port the grow-mode research recipes).
 #
-#   bash agents/research-fanout.sh <project> <goal-issue> <model> [model ...]
-#   bash agents/research-fanout.sh oracle-fleet 210 nvidia/nemotron-3-ultra-550b-a55b \
-#        qwen/qwen3-max moonshotai/kimi-k2.5 claude/opus
+#   bash agents/research-fanout.sh <project> <goal-issue> --arms N [--class regular] [--dry-run]
+#   bash agents/research-fanout.sh oracle-fleet 210 --arms 7
 #
-# `claude/<alias>` entries ride the SUBSCRIPTION claude harness (no OpenRouter key/mint —
+# THE CALLER NAMES ZERO MODELS (ADR-104 / model-routing.md §M13, built FU-162). The roster is
+# DRAWN: one `POST /route` per arm carrying `class` + `slot` + `jitter:false`, answered from the
+# scout-curated pool, so the same (class, slot, pool-version) always yields the same model — a
+# relaunched arm is identical and the mission is reproducible from its calls. Hand-picked model
+# ids are refused: run 1's arm #2 rode deepseek-v4-**flash** where the intent was **pro**, a
+# one-token slip nothing displayed, and that slip is why the draw exists.
+#
+# Over-provision instead of retrying (ADR-104 (3)): ask for 7 arms when 5 are needed. Slots that
+# come back a TYPED defer (cooldown, capacity, a denied model) are printed in the arm table and
+# left empty — never substituted, because a silently swapped arm corrupts the experiment. The
+# operator re-runs with a wider `--arms` or waits out the retry, in the open.
+#
+# `claude/<alias>` draws ride the SUBSCRIPTION claude harness (no OpenRouter key/mint —
 # the FU-066 rail; the claim needs fixer.claudeTier: true).
 #
 # Per model: a short slug (vendor stripped, :free stripped, non-alnum → '-') keys EVERYTHING —
@@ -27,24 +38,95 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-PROJECT="${1:?usage: research-fanout.sh <project> <goal-issue> <model> [model ...]}"
+USAGE="usage: research-fanout.sh <project> <goal-issue> --arms N [--class regular] [--start-slot 1] [--dry-run]"
+PROJECT="${1:?$USAGE}"
 ISSUE="${2:?goal issue number}"
 shift 2
-[ $# -ge 1 ] || { echo "at least one model required" >&2; exit 2; }
+
+ARMS=""; CLASS="regular"; START_SLOT=1; DRY=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --arms)       ARMS="${2:?--arms needs a count}"; shift 2;;
+    --class)      CLASS="${2:?--class needs a band}"; shift 2;;
+    --start-slot) START_SLOT="${2:?--start-slot needs a slot}"; shift 2;;
+    --dry-run)    DRY=1; shift;;
+    # The old interface took model ids here. Refuse them by name rather than mis-parsing: a
+    # fan-out that quietly ignored a hand-picked roster would be the same class of invisible
+    # slip ADR-104 was written for.
+    */*|claude/*) echo "research-fanout no longer takes model ids — the roster is DRAWN (ADR-104). Use --arms N [--class regular]." >&2; exit 2;;
+    *)            echo "$USAGE" >&2; exit 2;;
+  esac
+done
+case "$ARMS" in ''|*[!0-9]*) echo "$USAGE" >&2; exit 2;; esac
+[ "$ARMS" -ge 1 ] || { echo "--arms must be ≥ 1" >&2; exit 2; }
+case "$START_SLOT" in ''|*[!0-9]*) echo "--start-slot must be a positive integer" >&2; exit 2;; esac
 
 RECIPE="${RESEARCH_RECIPE:-/workspace/${PROJECT}/.agents/research.yaml}"
-[ -f "$RECIPE" ] || { echo "recipe not found: ${RECIPE} (set RESEARCH_RECIPE)" >&2; exit 2; }
+if [ "$DRY" = 0 ] && [ ! -f "$RECIPE" ]; then
+  echo "recipe not found: ${RECIPE} (set RESEARCH_RECIPE)" >&2; exit 2
+fi
 
 ORG="${ORG:-teststuffstash}"
-N=$#
-echo "→ FU-126 fan-out: ${PROJECT}#${ISSUE} → ${N} models (WIP limit ${N})"
+ROUTER_URL="${AGENT_EGRESS_PROXY:-${AGENT_OPENROUTER_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}}"
+STACK="$(jq -r --arg p "$PROJECT" '[.stacks[] | select(.repos[]? == $p)][0].name // ""' "$HERE/stacks.json" 2>/dev/null)" || STACK=""
 
-for MODEL in "$@"; do
+# ── SEAM (agents/replay/) ── the draw's ONE piece of I/O. A replay bridge redefines exactly this
+# function to serve recorded decisions; the slot walk, the arm table and the dispatch split above
+# it stay real, which is the rule the harness README states for sourced helpers.
+rf_route() {   # rf_route <class> <slot> <session> → the /route decision JSON on stdout
+  jq -nc --arg cls "$1" --argjson slot "$2" --arg session "$3" \
+         --arg stack "$STACK" --arg task "research-${ISSUE}" \
+     '{stack: $stack, task: $task, role: "researcher", session: $session,
+       class: $cls, slot: $slot, jitter: false}' \
+  | curl -fsS --max-time 10 -H "Content-Type: application/json" -d @- "${ROUTER_URL}/route"
+}
+
+echo "→ FU-126 fan-out: ${PROJECT}#${ISSUE} → drawing ${ARMS} arm(s) from the ${CLASS} pool"
+
+# >>>REPLAY:draw-roster>>>
+# The DRAW (ADR-104 §M13). One /route per slot, jitter off, no substitution: a slot that defers
+# stays empty and is reported, because the arm table is the artifact — "slot 4 deferred, cooldown"
+# is evidence, a silently shifted roster is not.
+ROSTER_SLOTS=(); ROSTER_MODELS=(); POOL_VERSION=""; DRAWN=0
+_slot="$START_SLOT"; _last=$(( START_SLOT + ARMS - 1 ))
+while [ "$_slot" -le "$_last" ]; do
+  _dec="$(rf_route "$CLASS" "$_slot" "research-${ISSUE}-slot-${_slot}")" || _dec=""
+  if [ -z "$_dec" ]; then
+    echo "  slot ${_slot}: router unreachable (${ROUTER_URL}) — no arm drawn"
+    _slot=$(( _slot + 1 )); continue
+  fi
+  _verdict="$(printf '%s' "$_dec" | jq -r '.decision // "?"')"
+  _model="$(printf '%s' "$_dec" | jq -r '.model // ""')"
+  _pv="$(printf '%s' "$_dec" | jq -r '.pool_version // ""')"
+  if [ -n "$_pv" ]; then POOL_VERSION="$_pv"; fi   # `[ … ] && x=y` would exit under set -e
+  if [ "$_verdict" = "dispatch" ] && [ -n "$_model" ]; then
+    ROSTER_SLOTS+=("$_slot"); ROSTER_MODELS+=("$_model")
+    DRAWN=$(( DRAWN + 1 ))
+    echo "  slot ${_slot}: ${_model}"
+  else
+    _why="$(printf '%s' "$_dec" | jq -r '[.reason, (.retry_after_s | if . == null then empty else "retry " + (.|tostring) + "s" end)] | map(select(. != null and . != "")) | join(", ")')"
+    echo "  slot ${_slot}: — (${_verdict}: ${_why:-no reason given}) — NOT substituted (ADR-104)"
+  fi
+  _slot=$(( _slot + 1 ))
+done
+echo "→ arm table: ${DRAWN}/${ARMS} arm(s) drawn, class=${CLASS} pool-version=${POOL_VERSION:-unknown}"
+# <<<REPLAY:draw-roster<<<
+
+[ "$DRAWN" -ge 1 ] || { echo "no arms drawn — nothing to dispatch" >&2; exit 3; }
+if [ "$DRY" = 1 ]; then
+  echo "→ --dry-run: roster drawn, nothing dispatched (re-run without --dry-run to ride it)"
+  exit 0
+fi
+
+N="$DRAWN"
+echo "→ dispatching ${N} ride(s) (WIP limit ${N})"
+for _i in "${!ROSTER_MODELS[@]}"; do
+  SLOT="${ROSTER_SLOTS[$_i]}"; MODEL="${ROSTER_MODELS[$_i]}"
   # slug: last path segment, :free/:suffix stripped, lowercased, non-alnum → '-'
   SLUG="$(printf '%s' "${MODEL##*/}" | cut -d: -f1 | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')"
   TASK="research-${ISSUE}-${SLUG}"
   SESSION="${TASK}-round-1"
-  echo "── ${MODEL} (task ${TASK}) ──"
+  echo "── slot ${SLOT}: ${MODEL} (task ${TASK}) ──"
 
   # SUBSCRIPTION rail (operator 2026-08-03): a `claude/<alias>` entry rides the claude harness —
   # no OpenRouter key, no estimate/mint (the subscription is the budget; FU-088 latch gates load).

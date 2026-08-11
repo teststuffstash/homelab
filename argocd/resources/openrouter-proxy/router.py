@@ -684,8 +684,53 @@ def _rotation_candidates(cinfo: dict) -> list[str]:
     return out
 
 
+def _as_bool(v, default: bool) -> bool:
+    """A JSON field that may arrive as a bool, a number or a shell-ish string. Anything the caller
+    did not spell one of the two ways falls back to `default` — a typo must not silently flip an
+    experiment's reproducibility knob."""
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    s = str(v).strip().lower()
+    if s in ("0", "false", "no", "off"):
+        return False
+    if s in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+def draw_slot(cls: str, cinfo: dict, slot) -> dict:
+    """ADR-104 §M13: the deterministic draw — (class, slot, pool-version) → exactly one model.
+
+    A pure lookup into the CURATED band (model-classes.json `pools`), never a computation over
+    live state, and never a fallback: the ordinary filters (deny/strike/cooldown/floor/rail) then
+    apply to the drawn model as they would to a one-entry chain, so a drawn-but-unusable slot
+    DEFERS with its usual type instead of substituting the next model down. That is the whole
+    point — a relaunched arm must draw what it drew before (idempotent relaunch), and a caller
+    that needs another model asks for `slot=N+1` itself, in the open, where the arm table records
+    it. Diversity is a curation property, so this function has no notion of it."""
+    pools = _classes.get("pools") or {}
+    band = str(cinfo.get("pool") or cls)
+    entries = [str(m) for m in ((pools.get("bands") or {}).get(band) or [])]
+    out = {"pool": band, "pool_version": str(pools.get("version") or ""), "slot": slot}
+    try:
+        n = int(slot)
+    except (TypeError, ValueError):
+        n = 0
+    if not entries:
+        out["draw_reason"] = f"no-pool-for-class:{cls}"
+    elif n < 1 or n > len(entries):
+        out["draw_reason"] = f"slot-outside-pool:{band}[1..{len(entries)}]"
+    else:
+        out["model"] = entries[n - 1]
+    return out
+
+
 def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: set, struck: set,
-                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float) -> dict:
+                   cool: dict, ctx: dict, sub_gate, or_gate, jitter: float, pick) -> dict:
     """M11 legs 1+2+3, computed ALONGSIDE the served decision and never feeding it.
 
     The would-be pick if the ladder were authoritative: rungs ordered by true marginal cost
@@ -708,7 +753,9 @@ def _shadow_ladder(payload: dict, cls: str, rails: list, eligible: list, deny: s
     # unless the cell is proven"). §M11.
     proven = learned == 0 and st["clean"] >= cfg["promote_after"]
     start = max(learned, cfg["tight_floor_tier"]) if (urgency == "tight" and not proven) else learned
-    pick = ctx.get("pick", random.choice)
+    # `pick` comes from route() rather than ctx: with `jitter: false` it is the stable-tie-break
+    # picker, and a shadow that jittered while the served decision did not would log a divergence
+    # the ladder never had (ADR-104 — experiments do not jitter, on either side of the pane).
     pct = max(0, min(100, int(round(jitter * 100))))
     reprobe = bool(start > 0 and pick([False] * (100 - pct) + [True] * pct))
     if reprobe:
@@ -796,17 +843,25 @@ def route(payload: dict, ctx: dict) -> dict:
     """The ADR-096 /route decision core — pure given ctx, so the self-test can drive it.
 
     payload: {stack, task, role, session, labels[], chain[], deny[], class?, tier?, key_ref?,
-              urgency?}
+              urgency?, slot?, jitter?}
     ctx:     {price: fn(model)->(usd_per_mtok|None, basis|None),
               subscription_ok: fn(tier)->(ok, reason|None, retry_after_s),
               openrouter_ok:  fn(key_ref)->(ok, reason|None),
-              pick: fn(list)->item  (optional; defaults to uniform random — the jitter band)}
+              pick: fn(list)->item  (optional; defaults to uniform random — the jitter band.
+                    Unused under `jitter: false`, where the tie-break is caller/pool order)}
 
-    Walk: resolve class (explicit > label_map > role_defaults) → candidates (chain, else
-    rotation-fed) → filter deny/strikes/cooldowns/rail → per class-rail-order pick the
-    effective-cheapest with a jitter-band uniform pick → capacity-gate the rail → dispatch,
-    or a TYPED defer (capacity reasons and cooldowns carry retry_after; only chain-exhausted
-    escalates — M1 doctrine).
+    Walk: resolve class (explicit > label_map > role_defaults) → candidates (a `slot` DRAW on the
+    class's curated pool, else the chain, else rotation-fed) → filter deny/strikes/cooldowns/rail
+    → per class-rail-order pick the effective-cheapest with a jitter-band uniform pick → capacity-
+    gate the rail → dispatch, or a TYPED defer (capacity reasons and cooldowns carry retry_after;
+    only chain-exhausted escalates — M1 doctrine).
+
+    ADR-104 (FU-162) adds the DRAW form on top of that walk rather than beside it: `slot` picks
+    one model out of the class's pool (`draw_slot`) and hands it to the same filters as a
+    one-entry chain, and `jitter: false` suppresses the exploration band everywhere in the call —
+    served pick and shadow ladder both — so ties break stably. Same (class, slot, jitter:false,
+    pool-version) ⇒ same model, which is what makes a research mission's roster reproducible and
+    a dead arm's relaunch identical. The defer types are unchanged by the draw.
 
     The M11 cross-rail LADDER rides along in `decision["shadow"]` and changes nothing about the
     walk above: it is computed from the same filtered candidates and the same capacity gates, and
@@ -815,7 +870,13 @@ def route(payload: dict, ctx: dict) -> dict:
     role = str(payload.get("role") or "worker")
     labels = [str(x) for x in (payload.get("labels") or [])]
     sel = _classes.get("selection") or {}
-    jitter = float(sel.get("jitter_band_pct", 15)) / 100.0
+    # ADR-104: the jitter band is exploration budget for high-volume dispatch and corruption
+    # inside a ~13-call experiment. `jitter: false` zeroes the band AND replaces the uniform pick
+    # with a stable tie-break (caller/pool order), which is what "ties break stably" has to mean
+    # for the draw to be idempotent across relaunches.
+    jitter_on = _as_bool(payload.get("jitter"), True)
+    jitter = float(sel.get("jitter_band_pct", 15)) / 100.0 if jitter_on else 0.0
+    pick_fn = ctx.get("pick", random.choice) if jitter_on else (lambda xs: xs[0])
     cls = str(payload.get("class") or "")
     label_map = _classes.get("label_map") or {}
     for lab in labels:
@@ -829,7 +890,20 @@ def route(payload: dict, ctx: dict) -> dict:
     rails = list(cinfo.get("rails") or ["openrouter", "subscription"])
     chain = [str(m) for m in (payload.get("chain") or [])]
     source = "chain"
-    if not chain:
+    pre_skipped: list[dict] = []
+    drawn: dict | None = None
+    if payload.get("slot") is not None:
+        drawn = draw_slot(cls, cinfo, payload.get("slot"))
+        source = "pool"
+        if chain:
+            # A draw caller names ZERO models (§M13). One that passes both gets the draw, said
+            # out loud — silently honouring the chain would put a hand-picked arm in a roster the
+            # arm table claims was drawn, which is the exact circles slip ADR-104 answers.
+            pre_skipped += [{"model": m, "reason": "chain-ignored:draw"} for m in chain]
+        chain = [drawn["model"]] if drawn.get("model") else []
+        if drawn.get("draw_reason"):
+            pre_skipped.append({"model": "", "reason": drawn["draw_reason"]})
+    elif not chain:
         chain = _rotation_candidates(cinfo)
         source = "rotation"
     deny = {str(m) for m in (payload.get("deny") or [])}
@@ -838,7 +912,7 @@ def route(payload: dict, ctx: dict) -> dict:
     struck = set(strikes_for(str(payload.get("task") or ""), str(payload.get("stack") or ""))) \
         if STRIKE_ENFORCE else set()
     cool = active_cooldowns(now)
-    skipped: list[dict] = []
+    skipped: list[dict] = list(pre_skipped)
     eligible: list[tuple[str, str]] = []
     for m in chain:
         rail = "subscription" if m.startswith("claude/") else "openrouter"
@@ -898,7 +972,7 @@ def route(payload: dict, ctx: dict) -> dict:
             if known:
                 floor = min(p[1] for p in known)
                 band = [p for p in known if p[1] <= floor * (1 + jitter) + 1e-12]
-                pick = ctx.get("pick", random.choice)(band)
+                pick = pick_fn(band)
             else:
                 pick, band = priced[0], priced[:1]  # unpriced chain: keep caller order
             result = {"model": pick[0], "rail": rail, "price_per_mtok": pick[1],
@@ -908,7 +982,7 @@ def route(payload: dict, ctx: dict) -> dict:
         half_open = bool(_read(
             "SELECT 1 FROM model_cooldowns WHERE model=? AND until <= ?", (result["model"], now)))
         decision = {"decision": "dispatch", "class": cls, "tier": tier, "source": source,
-                    "half_open": half_open, "skipped": skipped, **result}
+                    "half_open": half_open, "skipped": skipped, "jitter": jitter_on, **result}
     else:
         if capacity_block:
             reason, retry = capacity_block["reason"], capacity_block.get("retry_after_s") or 900
@@ -920,10 +994,15 @@ def route(payload: dict, ctx: dict) -> dict:
             reason = "chain-exhausted"  # deny/strike only — the one defer that escalates
             retry = None
         decision = {"decision": "defer", "reason": reason, "retry_after_s": retry,
-                    "class": cls, "tier": tier, "source": source, "skipped": skipped}
+                    "class": cls, "tier": tier, "source": source, "skipped": skipped,
+                    "jitter": jitter_on}
+    if drawn:
+        # The draw's provenance rides BOTH verdicts: a deferred slot has to be recordable in the
+        # arm table too ("slot 4 deferred, cooldown" is evidence; a blank is not).
+        decision.update({k: v for k, v in drawn.items() if k in ("pool", "pool_version", "slot")})
     # ── M11 SHADOW (homelab#159) — computed after the served decision, consumed by nobody ──
     shadow = _shadow_ladder(payload, cls, rails, eligible, deny, struck, cool, ctx,
-                            sub_gate, or_gate, jitter)
+                            sub_gate, or_gate, jitter, pick_fn)
     record_shadow_decision(payload, cls, decision, shadow)
     decision["shadow"] = shadow
     _write("INSERT INTO decisions VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -1356,6 +1435,62 @@ def self_test() -> int:
         "a PROVEN cell lets even tight work start on the free rung (§M11)"
     assert dp["model"] == "inclusionai/ling-3.0-flash:free", "…and the served pick never moved"
     assert status_summary()["ladder_cells"] and status_summary()["shadow_24h"], "soak surfaces"
+    # ── ADR-104 / FU-162: the DRAW verb — class + slot + jitter:false on the curated pools ──
+    # Two properties carry the research lane and neither is visible in a single call: the same
+    # inputs must draw the same model on a relaunch, and an unusable slot must DEFER rather than
+    # quietly hand back the next model down (a substituted arm is a corrupted experiment, and the
+    # circles run-1 slip is what happens when nothing pins that).
+    _bands = ((_classes.get("pools") or {}).get("bands") or {})
+    if _bands:
+        _pv = str(_classes["pools"]["version"])
+        d1 = route(dict(base, session="t-draw-1", slot=2, jitter=False,
+                        **{"class": "regular"}), CTX)
+        assert d1["decision"] == "dispatch" and d1["source"] == "pool", d1
+        assert d1["model"] == _bands["regular"][1], d1
+        assert (d1["pool"], d1["pool_version"], d1["slot"]) == ("regular", _pv, 2), d1
+        assert d1["jitter"] is False and d1["rail"] == "openrouter", d1
+        # `base` carries a chain; a draw caller names zero models, so the chain is dropped LOUDLY
+        assert [s for s in d1["skipped"] if s["reason"] == "chain-ignored:draw"], d1["skipped"]
+        # IDEMPOTENCE: different session, different jitter picker, same (class, slot, version)
+        d1b = route(dict(base, session="t-draw-1b", chain=[], slot=2, jitter=False,
+                         **{"class": "regular"}), {**CTX, "pick": lambda b: b[-1]})
+        assert (d1b["model"], d1b["pool_version"]) == (d1["model"], _pv), (d1, d1b)
+        # a slot past the end of the band is the ESCALATING defer, not a wrap-around or a walk
+        _n = len(_bands["regular"])
+        dz = route(dict(base, session="t-draw-z", chain=[], slot=_n + 1, jitter=False,
+                        **{"class": "regular"}), CTX)
+        assert dz["decision"] == "defer" and dz["reason"] == "chain-exhausted", dz
+        assert any(s["reason"].startswith("slot-outside-pool:regular") for s in dz["skipped"]), dz
+        assert dz["slot"] == _n + 1 and dz["pool_version"] == _pv, dz
+        # a drawn model the claim denies DEFERS — it never slides to slot+1 behind the caller
+        dd2 = route(dict(base, session="t-draw-deny", chain=[], slot=1, jitter=False,
+                         deny=[_bands["regular"][0]], **{"class": "regular"}), CTX)
+        assert dd2["decision"] == "defer" and dd2["reason"] == "chain-exhausted", dd2
+        assert dd2.get("model") is None and dd2["pool"] == "regular", dd2
+        # the instrument is one fixed model, and NOT an arm — the run-1 "proxy graded its own arm"
+        di = route(dict(base, session="t-draw-i", chain=[], slot=1, jitter=False,
+                        **{"class": "instrument"}), CTX)
+        assert di["decision"] == "dispatch" and di["model"] == _bands["instrument"][0], di
+        assert di["model"] not in _bands["regular"], "instrument ∉ regular (ADR-104 disjointness)"
+        # the ultra band rides the subscription rail, and the class rails let it
+        du = route(dict(base, session="t-draw-u", chain=[], slot=1, jitter=False,
+                        **{"class": "ultra"}), CTX)
+        assert du["decision"] == "dispatch" and du["rail"] == "subscription", du
+        assert du["model"] == _bands["ultra"][0], du
+    # JITTER SUPPRESSED, on the ordinary chain path too: three equally-priced candidates put the
+    # tie-break in the open. With the band live, the ctx picker roams it; with `jitter: false` the
+    # pick is the first in caller order and the shadow ladder stops re-probing a rung down.
+    # (class `review`, whose ladder cell is still unproven here — the `coding` cell was promoted
+    # to the free rung by the leg-3 fixtures above, and a proven cell never re-probes.)
+    EQ = {**CTX, "price": lambda m: (0.05, "market"), "pick": lambda b: b[-1]}
+    _eqbase = dict(base, chain=CHAIN[:3], **{"class": "review"})
+    dj_on = route(dict(_eqbase, session="t-jitter-on"), EQ)
+    dj_off = route(dict(_eqbase, session="t-jitter-off", jitter=False), EQ)
+    assert dj_on["model"] == "tencent/hy3" and dj_on["jitter"] is True, dj_on
+    assert dj_off["model"] == "inclusionai/ling-3.0-flash:free", dj_off
+    assert dj_off["model"] == dj_off["jitter_pool"][0], "ties break stably, in caller order"
+    assert dj_on["shadow"]["reprobe"] and not dj_off["shadow"]["reprobe"], \
+        "the shadow ladder must not jitter either when the caller asked for none"
     # homelab#180: the operator-gauge parse behind the latch's `credit` leg. The proxy half is one
     # HTTP GET; every way this leg can go quietly dead is decided HERE, so it is pinned HERE.
     _OP_TS = 1786237718.460958
@@ -1424,6 +1559,38 @@ def self_test() -> int:
         assert lad["subscription_model"] in (_classes.get("model_tiers") or {}), \
             "the ladder's subscription candidate must be a graded model (model_tiers)"
         assert 0 <= lad["tight_floor_tier"] < len(LADDER)
+        # ADR-104 POOL CURATION invariants (FU-162). The router deliberately does not enforce
+        # these at request time — research is an operator-driven lane where visibility is the
+        # guard (ADR-104 (3)) — so the enforcement point is HERE, where a hand-seeded edit meets
+        # CI. Everything asserted is a property of the TABLE, not of any request.
+        pools = _classes.get("pools") or {}
+        if pools:
+            assert str(pools.get("version") or ""), \
+                "pools.version is missing — /route echoes it, and an arm table without it cannot be re-drawn"
+            all_classes = _classes.get("classes") or {}
+            tiers = _classes.get("model_tiers") or {}
+            band_of: dict[str, str] = {}
+            for bname, entries in (pools.get("bands") or {}).items():
+                assert entries, f"pool {bname} is empty — a band with no depth is not a band"
+                selectors = [c for c, ci in all_classes.items()
+                             if str(ci.get("pool") or c) == bname]
+                assert selectors, f"pool {bname} has no class selecting it (/route's `class` is the selector)"
+                fams: set[str] = set()
+                for m in entries:
+                    assert m in tiers, \
+                        f"pool {bname}: {m} is not in model_tiers — pools draw from the human-approved universe only"
+                    assert m not in band_of, \
+                        f"bands must be DISJOINT: {m} is in both {band_of[m]} and {bname} (the run-1 self-grading arm)"
+                    band_of[m] = bname
+                    fam = m.split("/")[0]
+                    assert fam not in fams, f"pool {bname}: family {fam} twice — pools are family-deduped"
+                    fams.add(fam)
+                    # Same rail rule the walk above applies, so a pool cannot hold a model its
+                    # own class would skip as rail-not-in-class on every single draw.
+                    rail = "subscription" if m.startswith("claude/") else "openrouter"
+                    for c in selectors:
+                        assert rail in (all_classes[c].get("rails") or []), \
+                            f"pool {bname}: {m} rides {rail}, absent from class {c} rails"
         cb = _classes.get("circuit_breaker") or {}
         assert int(cb.get("auth_threshold", 4)) < int(cb.get("generic_threshold", 10)), \
             "auth breaker must trip before the generic one (auth never self-heals)"
