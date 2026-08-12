@@ -164,6 +164,15 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   carry state (at-least-once, missable — the review-path rule). A false wake costs a scan run (a
   handful of `gh` calls), **not** an LLM tick: the scan gate is what protects the subscription, so
   emitters may over-approximate freely.
+- ⚑ **ALL EVENTS HAVE DOORBELLS — a rule with NO exceptions (operator, 2026-08-12).** No
+  convenience carve-outs ("it's weekly", "it's human-gated", "the cron covers it"): each one is
+  individually defensible and their SUM was the goal-#278 famine — 14.5h of wall clock for ~4.5h
+  of work, 361 minutes of a non-empty queue with zero pods, assembled one tolerated dead edge at
+  a time. The cron is a FAILURE DETECTOR, not a coverage mechanism: a dispatch the cron serviced
+  is a defect with an id, full stop (Part A″'s accounting rule, now universal). Enforcement is
+  MEASURED, not promised: the scan states its wake source per dispatch (a ring-to-scan phase row
+  exists ⇔ edge-woken), so "% of dispatches edge-woken" is a number and a recurring cron-woken
+  dispatch is an alert, not an anecdote — the A2 chunk's acceptance criterion.
 - **Pick emitters per transition** — the review-path insight generalizes: *almost every actor that
   CAUSES a scan-actionable transition already runs in-cluster*, so the sharpest emitter is one curl
   at the moment it acts (instant, exact, no new polling). That includes **ARC**: any workflow on

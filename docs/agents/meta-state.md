@@ -32,8 +32,9 @@ meant to avoid.)
    **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
    debt):** A0 verify the iac-sentinel soak is observable (`iac_sentinel_violations` = no-series!)
    · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
-   everything else rides its lock · A2 famine fixes (doorbell fixed-name collapse, mutex
-   scope/stream-detach) — ⚖ rail move REJECTED (workers stay subscription; ruling in
+   everything else rides its lock · A2 famine fixes (doorbell fixed-name collapse + FU-144 receiver-side fan-out + mutex
+   scope; acceptance = "all events have doorbells" measured: cron-woken dispatches ≈ 0, alerted
+   on regression) — ⚖ rail move REJECTED (workers stay subscription; ruling in
    model-routing.md §M12) · A3 ✅ DONE 2026-08-12 (the same-session sitting) → **ADR-106** (PR#389): single-mode
    feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
    ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
