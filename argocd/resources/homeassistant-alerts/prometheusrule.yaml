@@ -26,13 +26,60 @@ spec:
   groups:
     - name: homeassistant-freshness
       rules:
+        # ── THE #288 RESTART-GAP CLASS, BOTH ALERTS, ONE ARGUMENT (homelab#336) ─────────────────
+        # The class has one home (argocd/resources/openrouter-proxy/prometheusrule.yaml — the test
+        # is "DOES THE CONDITION OUTLIVE THE ROLL?") and its [10m] default is sized at
+        # GithubExporterStale in argocd/resources/github-exporter/prometheusrule.yaml. Both rules
+        # below read ONE metric off ONE target and fail the same way, so the reasoning is written
+        # once here rather than twice below.
+        #
+        # (i)   THE CONDITION OUTLIVES ANY HOLE, in the strongest form the test has: a frozen
+        #       sensor is EXTERNALLY true. The plug does not start reporting because Prometheus
+        #       missed a scrape; only the measurement went away. This is the persisted arm, exactly
+        #       as KSM is in #333.
+        # (ii)  ONLY THE HOLE HALF. Home Assistant is scraped as a STATIC target at its LAN VIP
+        #       (`instance="192.168.40.10:8123"`, `job="home-assistant"`), so there is no `pod` on
+        #       these series and `instance` does not change when the HA pod moves — live label set
+        #       {domain, entity, friendly_name, instance, job}, read off Prometheus 2026-08-12.
+        #       Nothing churns, so `max by (...)` would repair nothing and would cost `entity` and
+        #       `friendly_name`, which is the entire content of both annotations.
+        # (iii) THE DIRECTION IS `min_over_time`. This metric is a TIMESTAMP where LOW is bad
+        #       (old = stale), so the alert-preserving function is `min`, as at CiDispatchStalled.
+        #       `max_over_time` would take the FRESHEST last_updated in the window and delay every
+        #       page by the range.
+        # (iv)  THE HOLE IS MEASURED, and it is not the one the issue expected. Over the 8 days
+        #       Prometheus retains, the HA pod never restarted (0 restarts, 3.6d old at the time of
+        #       writing) — yet `homeassistant_last_updated_time_seconds` was staleness-marked four
+        #       times: 180s, 180s (2026-08-07 18:00 and 18:08), 120s, 120s (08-08 11:19, 08-09
+        #       14:48), and `up{job="home-assistant"}` was 0 for six scrape-minutes in the week. So
+        #       the "an HA restart also refreshes last_updated, so this is self-cancelling" reading
+        #       covers only the RESTART case: the holes that actually happen here are failed
+        #       scrapes against a running HA, and they leave the sensor exactly as frozen as it was
+        #       while resetting a 30m and a 2h `for:` window from zero.
+        # (v)   [10m], the class's own size, and #349's bound is SLACK here rather than binding.
+        #       HA renders /api/prometheus on request, so there is no cached exposition and the
+        #       composed phantom is just B; the bound `for: > cache + B` is 30m > 10m and 2h > 10m,
+        #       both with room. Sizing: 3.3x the worst measured hole (180s) and 5-8x #288's
+        #       69-116s roll.
+        #       THE PRICE, both faces: a sensor that starts updating again keeps reading stale for
+        #       ≤10m, and — the CiDispatchStalled quirk, because this is a timestamp — `{{ $value }}`
+        #       does not merely freeze, it keeps CLIMBING through that tail, since `time()` advances
+        #       against a held value. Both are ≤10m of slack on conditions whose thresholds are 6h
+        #       and 24h, and the alert cannot invent one: firing still needs a genuinely 6h/24h-old
+        #       timestamp to have been observed.
+        # CEILING, asserted rather than assumed: a hole wider than 10m still restarts the window.
+        # Both alerts, both halves of the price, the ceiling and the label survival are executed in
+        # freshness.promtool-test, against the pre-#336 exprs kept as a witness in
+        # freshness.promtool-rules.
+        #
         # Power plugs report continuously (they are the perf/W evidence base — machines/README.md,
         # docs/power-measurements.md — and switch.konditsioneer_socket is the ThinkCentre's remote
         # power path in the runbook's power-loss recovery). An hour without an update is broken,
         # not quiet. 6h before firing so a brief cloud/wifi blip stays quiet.
+        # ⚠ RESTART-GAP BRIDGED (homelab#336 — this group's class block above).
         - alert: HomeAssistantPowerSensorStale
           expr: |
-            time() - homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"} > 21600
+            time() - min_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"}[10m]) > 21600
           for: 30m
           labels:
             severity: warning
@@ -48,9 +95,14 @@ spec:
         # HA's websocket registry API; until then this exclusion is the cheaper answer. The live
         # readings come from tuya_local and surface as sensor.plug_<box>_*, which the rule above
         # still watches.
+        # ⚠ RESTART-GAP BRIDGED (homelab#336 — this group's class block above). Treated IDENTICALLY
+        # to its sibling above and deliberately so: same metric, same static target, same direction,
+        # same hole. It has the LONGEST window in this file, so a 180s scrape gap costs it two whole
+        # hours — by "how much window a hole destroys" it is the strongest case here, not the
+        # weakest, whatever its severity says.
         - alert: HomeAssistantSensorStale
           expr: |
-            time() - homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"} > 86400
+            time() - min_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
           for: 2h
           labels:
             severity: info

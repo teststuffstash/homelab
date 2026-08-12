@@ -181,8 +181,17 @@ spec:
                       expr: ((1 - avg_over_time(probe_success{job="slo-{{ $sloStack }}"}[30d])) > (1 - {{ default 0.99 (get $slo "availability") }})) or vector(0)
                       labels:
                         stack: {{ $sloStack }}
+                    # ⚠ RESTART-GAP BRIDGED (homelab#336). THE SECOND OF TWO COPIES — the first is
+                    # in argocd/resources/blackbox/blackbox.yaml, which carries the whole argument
+                    # (hole half only, `min_over_time` because low is bad, [5m] because #349's
+                    # bound makes the class's [10m] page on a two-probe flake). Do not restate it
+                    # here: this text is rendered into EVERY stack's manifest. Do not change one
+                    # copy without the other either — they are one alert in two files, and
+                    # blackbox/probes.promtool-test executes this one as a hand-rendered copy.
+                    # This is the platform's templated lane: the edit changes what every
+                    # AgentStack renders, not just oracle's.
                     - alert: EndpointProbeFailing
-                      expr: probe_success{job="slo-{{ $sloStack }}"} == 0
+                      expr: min_over_time(probe_success{job="slo-{{ $sloStack }}"}[5m]) == 0
                       for: 10m
                       labels:
                         severity: warning
