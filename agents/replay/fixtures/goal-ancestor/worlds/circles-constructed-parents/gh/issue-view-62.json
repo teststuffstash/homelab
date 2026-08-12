@@ -1,0 +1,8 @@
+{
+  "number": 62,
+  "title": "Goal: the kind system gate",
+  "labels": [
+    { "name": "agent-fix" }
+  ],
+  "body": "## Goal\n\nEvery kind in the registry has a gate that runs.\n\n## Acceptance\n\n- the gate is required on the repo's ruleset\n"
+}

@@ -1,0 +1,49 @@
+# goal-ancestor — THE FAMILY, as one decision table (FU-167 move-2 rollout; was 4 copied dirs).
+#
+# THE CONTRACT (homelab#367 — consolidated from the four fixture essays; per-row intent is the
+# rows file). The subject is a LOOKUP, not a computation: which of a ride's ancestors is the goal,
+# walked by `goal_resolve_ancestor` (agents/goal-budget.sh) and consumed by both the budget
+# pre-flight and the goal card. The bridge sources that helper and redefines NOTHING — the walk is
+# pure shell over `gh`, so every hop rides the PATH-shim and the hop SEQUENCE is the assertion.
+# The shipped defect computed everything correctly about the WRONG issue: one `/parent` hop landed
+# on the ADR-102 post-launch bucket #295 (no `Budget:` line), so the gate read `no-budget` and
+# waved rides through while goal #278 sat `exhausted` at $76 of $60 — and the bucket has no
+# Goal/Acceptance headings, so the same single hop also left the ride goal-blind. The four arms:
+#   bucket-child       the defect, on the tree it was found in (#367 → bucket #295 → goal #278):
+#                      the walk CLIMBS (two `issue view` + two `parent` reads, in that order), the
+#                      hop is SAID (`walked 1 hop(s)`), `GATE SUBJECT: #278`, card = #278 bounded.
+#   direct-child       the lane that was already correct must stay so (#291 → #278): the walk stops
+#                      IMMEDIATELY — one `issue view`, NO second `/parent` read, NO hop line (log
+#                      noise on the busiest lane is how a useful line stops being read).
+#   none-fallback      the degrade that makes the fix safe to ship (#88 → #61 → ∅, `/parent` =
+#                      null): no goal found ⇒ the DIRECT parent keeps producing the bounded card
+#                      (the pre-#367 behaviour thousands of rides sit on), the degrade is SAID, and
+#                      it cannot weaken the gate — an ancestor reached by this arm has no `Budget:`
+#                      line by construction, so `goal_budget_read` returns `no-budget` as before.
+#   unlabelled-budget  the second discriminator, which nothing else pins (#90 → #62, `Budget: 8`
+#                      with NO `task/goal`): either stop condition ALONE halts the walk, and the
+#                      patch ADDS the mis-authoring to a clean #62 — without this row the
+#                      `Budget:`-line half of the stop-OR ships untested and can decay into an AND.
+# post.sh is the observation point: `GATE SUBJECT: #<n>` prints the variable the pre-flight passes
+# to `goal_budget_read` next — how a resolution fixture asserts on enforcement it does not run.
+#
+# WORLDS (family-local; no registry world matches — worlds/circles-29-tree is the #29 tree, none
+# of these issues):
+#   homelab-278-tree             RECORDED from live homelab state (2026-08-12): both ancestry
+#                                edges, #295's bucket body, #278's labels + whole body verbatim.
+#                                One deliberate edit, the harvest-* convention: `/parent` payloads
+#                                trimmed to the `{id, number, title}` the clause reads. ONE tree,
+#                                two entry points — the rows differ only in env `ISSUE_N`.
+#   circles-constructed-parents  CONSTRUCTED, not recorded — circles has no such issues (a
+#                                mis-authored goal is the shape you cannot count on finding live).
+#                                CLEAN base: #61 and #62 are ordinary parents (Goal/Acceptance
+#                                headings, no label, no `Budget:`); the `null` `/parent` payload
+#                                is the real shape GitHub returns for a parentless issue.
+name: goal-ancestor
+mode: table
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-ancestor
+  - file:post.sh
+rows: rows.psv

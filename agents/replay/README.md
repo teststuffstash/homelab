@@ -131,10 +131,7 @@ is stale, so it cannot drift the way the prose register did.
 | `dispatch-phase-session` | actions | - | `agents/coordinator-session.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
-| `goal-ancestor-bucket-child` | actions | - | `agents/agent-session.sh` | - |
-| `goal-ancestor-direct-child` | actions | - | `agents/agent-session.sh` | - |
-| `goal-ancestor-none-fallback` | actions | - | `agents/agent-session.sh` | - |
-| `goal-ancestor-unlabelled-budget` | actions | - | `agents/agent-session.sh` | - |
+| `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-assembly-complete` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
 | `goal-budget-refusal-first-touch` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-interleaved` | actions | - | `agents/agent-session.sh` | - |
