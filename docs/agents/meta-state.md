@@ -121,8 +121,8 @@ meant to avoid.)
    ci-runner-01 REPLACED and verified up (guest agent: .55 on eth0, docker0 up, SSH over TCP —
    ⚠ ICMP from the jail lies here, probe TCP).
 5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
-   (a) ✅ merged 2026-08-12 (#395); (b) the network-physical re-capture — ci-runner-01/vmbr0
-   derivable, the wk-metal fleet + hp-01 cabling NEEDS OPERATOR (asked 2026-08-12); (c) FU-001 ref scrubs when its archive entry
+   (a) ✅ merged 2026-08-12 (#395); (b) ✅ re-captured 2026-08-12 (operator cabling: wk-metal-01/02+hp-01 on the core 10-port,
+   wk-metal-03/04 on the office 5-port; ci-runner-01 on vmbr0); (c) FU-001 ref scrubs when its archive entry
    expires (~08-13); (d) the openrouter-proxy.py FU-021 comment repoint — rides the NEXT
    functional proxy change (a comment-only sync restarts the proxy and resets every for:
    window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
