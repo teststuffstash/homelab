@@ -45,12 +45,61 @@ spec:
 
     - name: github
       rules:
+        # ── THE #288 RESTART-GAP CLASS, ported to five alerts in this group (homelab#331) ───────
+        # The class, its two halves and the [10m] sizing are written out ONCE, at
+        # GithubExporterStale below (homelab#313) — read that first. This block records only what
+        # porting it to five more persistent-condition alerts needed BEYOND the mechanical
+        # substitution. Ported: GithubAppPermissionDrift, GithubVendorOutage, GithubRateLimitLow,
+        # GithubPaidUsage, GithubActionsMinutesHigh — each carries a ⚠ note with its own price,
+        # and every claim below is executed in loop-health.promtool-test against the pre-#331
+        # exprs kept as loop-health.promtool-rules §regression-witness-pre-331.
+        #
+        # (i)  THE HOLE IS WIDER THAN A ROLL for these five. `replicas: 1` (deployment.yaml) makes
+        #      a poller roll empty the vector, as everywhere else — but poll_forever() also
+        #      REPUBLISHES the whole exposition every 120s, and a collector that raises simply is
+        #      not in the new body (github-exporter.py: the `for collector in (…)` loop catches,
+        #      logs, sets ok=False and moves on). So an upstream 5xx inside collect_billing /
+        #      collect_vendor_status / collect_app_permission_drift — or one failing token probe
+        #      in collect_rate_limits, which `continue`s past it — deletes that family for a poll
+        #      cycle while the pod stays healthy and `up` stays 1. Same shape #330 measured on the
+        #      GraphQL walk, and neither GithubExporterDown nor GithubExporterStale can see it.
+        # (ii) THE DIRECTION IS NOT AUTOMATIC. `max_over_time` is the alert-PRESERVING function
+        #      only where HIGH is the bad reading. GithubRateLimitLow is a LOW-is-bad ratio, so it
+        #      bridges with `min_over_time` on the numerator; bridging it with `max` would hold
+        #      the healthiest sample of the last 10m and delay the page by up to 10m — twice that
+        #      alert's whole `for:` window.
+        # (iii) A LABEL-LESS `sum()` DOES NOT MEAN "no identity half needed". What is summed still
+        #      carries `pod`/`instance`, so a bare `sum(max_over_time(…))` counts BOTH pod
+        #      generations for the ≤10m the range holds them — the two billing alerts drop
+        #      identity inside the sum for that reason, priced at GithubPaidUsage.
+        # (iv) THE PRICE IS ALWAYS THE SAME SHAPE: a bridged expr believes a condition for up to
+        #      10m after it genuinely ends, so each of the five resolves up to 10m late and
+        #      `{{ $value }}` reports the window's worst sample rather than the newest one. It
+        #      also shortens what `for:` demands — a condition true for two scrapes and then gone
+        #      keeps the expr true for the following 10m, so a flap that used to be ridden out can
+        #      now reach a `for:` of ≤10m. Priced per alert, asserted per alert.
+        # (v) NOT PORTED, deliberately: GithubExporterDown (`up == 0` needs a live target, and a
+        #      replaced target restarting the window is a genuinely new attempt at being scraped),
+        #      GithubWorkflowRunFailed / AgentReviewLoop / AgentErrorFlagged (no `for:` — no
+        #      window to restart), GithubStorageHeldHigh (`increase(…[24h])` already spans any
+        #      hole this class is about), CiDispatchStalled (homelab#335 — its `for: 10m` phantom-
+        #      pickup window interacts with a bridge and needs its own reasoning) and AgentQueueStalled
+        #      (#330 — bridged per conjunct, and deliberately not wholesale).
+        #
         # FU-098: fires while an App's LIVE permissions differ from docs/github-apps.yaml in
         # EITHER direction. This IS the change flow's turn signal: a permission PR rings it
         # until the operator's UI click + install approval land; a click nobody PR'd rings it
         # until declared. 30m for-window: a scrape blip is not drift.
+        # ⚠ RESTART-GAP HARDENED (homelab#331 — the class block at the top of this group). BOTH
+        # halves: the gauge is scraped, so `pod`/`instance` sat on the alert and a roll re-clocked
+        # `for: 30m` under a new identity; and at `replicas: 1` the roll empties the vector
+        # outright. `app` is the label that must survive — it names the App the operator has to
+        # act on, and `github_app_permission_mismatch{app=…}` is keyed on it too. Price: drift
+        # that CLEARS (the UI click + install approval, or the declaring PR) keeps ringing for
+        # ≤10m. Against a 30m window on a human-driven fix that is invisible, and it is the safe
+        # direction: this alert exists to nag until the change flow finishes.
         - alert: GithubAppPermissionDrift
-          expr: github_app_permission_drift == 1
+          expr: max by (app) (max_over_time(github_app_permission_drift[10m])) == 1
           for: 30m
           labels:
             severity: warning
@@ -80,8 +129,21 @@ spec:
         # annotation. The responder prompt already tells sessions to consult this signal.
         # >= 2 = partial_outage or worse (1 = degraded_performance happens weekly, not
         # actionable); 10m `for:` rides out statuspage flaps.
+        # ⚠ RESTART-GAP HARDENED (homelab#331 — the class block at the top of this group). BOTH
+        # halves; `component` is the surviving label (the summary names it, and one component's
+        # outage must not be merged with another's). The price is the one worth naming here,
+        # because it lands on the `for:` this alert was tuned around: with the bridge, a ≥2
+        # reading that lasts two scrapes and then clears keeps the expr true for the next 10m and
+        # DOES page, where the bare form could not. Asserted in the fixture rather than argued
+        # here. Accepted because the two errors are not symmetric — this alert is `triage: none`,
+        # so a false page costs one operator glance and dispatches nobody, while the miss it
+        # exists for is 2026-08-07: five hours in which every in-cluster signal looked like ours.
+        # A partial_outage on GitHub's own status page is a state GitHub SET, not scrape noise.
+        # `{{ $value }}` now reads the worst status of the last 10m, which is the right one to
+        # print for a component that is degrading.
         - alert: GithubVendorOutage
-          expr: github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"} >= 2
+          expr: >-
+            max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m])) >= 2
           for: 10m
           labels:
             severity: warning
@@ -146,8 +208,29 @@ spec:
         # repo and no file. There is nothing for a dispatched worker to edit; the next step is an
         # operator reading the per-SKU breakdown each description already gives. The label caps
         # the outcome at report/PR-without-auto-merge; triage still runs, which is the point.
+        # ⚠ The FIRST TWO of the three are RESTART-GAP HARDENED (homelab#331 — the class block at
+        # the top of this group). The hole is the reason: `sum()` over an EMPTY vector is empty,
+        # not 0, so one missing exposition (a roll, or a 5xx inside collect_billing) resolved them
+        # and threw away a full hour of `for:`. Bridged per series BEFORE the sum, the way
+        # AgentQueueStalled's queued conjunct is.
+        # …but `max_over_time` ALONE is wrong here, and this is the one place in this PR where the
+        # mechanical port would have shipped a defect. `sum()` being label-less says nothing about
+        # what is being summed: the samples carry `pod`/`instance`, so for the ≤10m the range
+        # holds BOTH pod generations the sum counts each SKU twice — a money figure reported at 2x
+        # and, at the threshold, a page a roll invented. So identity is dropped INSIDE the sum
+        # first. `without (instance, pod)` rather than a positive `by (org, product, sku, unit,
+        # repo, visibility)` list on purpose: `without` keeps any billing dimension the exporter
+        # adds later, where a stale `by` list would silently `max` two SKUs into one and
+        # UNDER-report the bill — the wrong direction to fail on a spend alert. Both readings are
+        # asserted at the overlap instant in loop-health.promtool-test.
+        # Otherwise free in both directions, unlike the other three ports: both metrics are
+        # month-to-date CUMULATIVE, so the 10m high-water IS the newest value and the range can
+        # neither delay a page nor hold one — the single moment it shows is the month rollover,
+        # where the old month's total is believed for ≤10m under a 1h window.
+        # GithubStorageHeldHigh needs nothing: `increase(…[24h])` already spans any hole this
+        # class is about.
         - alert: GithubPaidUsage
-          expr: sum(github_billing_net_amount) > 1
+          expr: sum(max without (instance, pod) (max_over_time(github_billing_net_amount[10m]))) > 1
           for: 1h
           labels:
             severity: warning
@@ -160,7 +243,8 @@ spec:
         # "179 min used / 3,000 min included"); alert at 80%. unit=Min.* matches the API's
         # "Minutes" and excludes the GigabyteHours storage SKUs under the same product.
         - alert: GithubActionsMinutesHigh
-          expr: sum(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}) > 2400
+          expr: >-
+            sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))) > 2400
           for: 1h
           labels:
             severity: warning
@@ -320,9 +404,24 @@ spec:
             description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
         # FU-084: the 2026-07-17 class — an installation's pool (GraphQL was the invisible one)
         # drains and consumers start FATAL-aborting. Symptom-only; per token identity + resource.
+        # ⚠ RESTART-GAP HARDENED (homelab#331 — the class block at the top of this group), the
+        # RANGE half ONLY: `min by (token, resource)` already drops pod/instance, so this alert's
+        # identity never churned and the aggregation half was done before the class was named.
+        # The hole is real all the same — `replicas: 1`, plus collect_rate_limits `continue`s past
+        # a token whose probe fails, so one bad token deletes that token's series for the poll —
+        # and `for: 5m` is the shortest window of the five, so a 70-120s roll eats a third of it.
+        # LOW is the bad reading here, which is why this one does NOT use `max_over_time`: the
+        # alert-preserving direction is `min_over_time` on the numerator. The denominator gets
+        # `max_over_time` because bridging one side of a division leaves the other side empty and
+        # takes the ratio with it (pool limits are constant, so that max IS the limit; if a pool
+        # is ever resized mid-window, the larger denominator is the conservative read).
+        # Price: a pool that RESETS keeps reading drained for ≤10m, and `{{ $value }}` reports the
+        # window's low-water ratio. Both are asserted in loop-health.promtool-test.
         - alert: GithubRateLimitLow
           expr: >-
-            min by (token, resource) (github_rate_limit_remaining / github_rate_limit_limit) < 0.10
+            min by (token, resource) (
+              min_over_time(github_rate_limit_remaining[10m]) / max_over_time(github_rate_limit_limit[10m])
+            ) < 0.10
           for: 5m
           labels:
             severity: warning
