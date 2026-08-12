@@ -1314,6 +1314,37 @@ aggregate). **Why:** the #17→#29 supersession already executed this lifecycle 
 squash boundary is the revert unit; goal-review clause renamed assembly-complete; IL-G04 and the
 goal-half of FU-090 superseded; design detail: docs/agents/issue-authoring.md §Goal container.
 
+### ADR-106 — Goal lane v1.2: single-mode feature goals, origin lineage, the findings store, a demoted fence, a freed mutex
+
+**Status:** Accepted (operator design session 2026-08-12 — the A3 sitting; evidence =
+[`spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md), priced by the
+objective function: codeowner-touch count first). **Decision:** (1) a Goal is FEATURE-shaped
+only — children merge into `goal/**`, ONE assembly PR = the one codeowner tax; per-child-to-
+master work is NOT a Goal (ordinary queued issues) and the v1.1 master-lane variant is RETIRED
+— the operator: the shape was the defect, "I could have held all the features back and merged
+them once and nothing bad would have happened". (2) Sprouts parent to their ORIGINATING issue
+(native derivation — the budget walk and close sweep are transitive; the bucket returns to
+ADR-102's original role: post-assembly strays only). (3) One typed FINDINGS STORE per goal
+(machine comment; harvest APPENDS, never mints; count-keyed `dispositioned-through:` marker) +
+CHECKPOINT sessions (reasoning tier) on N≥5 new entries / a child-set completing / a budget
+fraction / pre-verdict; per-closure goal-review demotes to a deterministic burn-down append.
+(4) `Touches:` demotes to metadata (dispatch ordering, the static ❌/pin-only intersections,
+coupling docs); declared ≤~20-line folds allowed; governance enforcement becomes a MECHANICAL
+lint (worker-authored diff ∩ governance paths incl. `.agents/**` = red). (5) Concurrency:
+doorbell fixed-name collapse + the `coordinator-scan` mutex scoped to the deterministic phase;
+ADR-094 item-scoping untouched; re-measure before more. (6) Goals are STACK-scoped — the claim's
+repo list incl. `-iac`, sibling-repo doorbells, `Production-leg:` verified in-tree through the
+deploy. **Considered:** dual feature/wave modes (rejected — post-launch already accommodates
+ship-then-fix; adding a mode adds complexity for a shape that should not recur); N-unit dispatch
+and the worker rail move (deferred/rejected — spike + model-routing §M12). **Why:** the v1.1
+measurements — 2-vs-5 generations, 52/52 worker-authored inflow, 21 rulings/46 mints, the fence
+7× against with zero conflicts, 3,550-vs-605-minute dispatcher famine — each read against
+codeowner economics. **Consequences:** ADR-102's bucket text is fully correct again; the
+IL-T15/T17 master-lane disposition simplifies away; the ADR-097 footprint HOLD and the #270
+replay coupling retire (conflicts route via the updater/MP-T06 as measured); FU-090's gauge =
+the exporter's existing walk over now-native depth; build items = Bucket A4/A2 then the next
+Goal's children; doc homes: issue-authoring.md, model-routing.md §M10, workflow.md.
+
 ### ADR-103 — The platform develops itself like a stack: replay-gated clauses, human-only timelines, weekly self-KPIs
 
 **Status:** Accepted (operator 2026-08-09, from the 2-day failure census + recurrence audit).

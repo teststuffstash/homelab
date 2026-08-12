@@ -1,6 +1,6 @@
 # Goal lane v1.1 — the FU-165 pilot (homelab#278), measured
 
-**Status:** evidence complete (2026-08-12); feeds the v1.2 design (FU-168, FU-166, the #295
+**Status:** SETTLED — ADR-106 (2026-08-12) is the v1.2 design this evidence produced; kept as its evidence record. Original framing: feeds the v1.2 design (FU-168, FU-166, the #295
 bucket-semantics question, FU-090's §M10 phase-not-clause block). Version register:
 [`../agents/issue-authoring.md`](../agents/issue-authoring.md) §Goal lane versions.
 
