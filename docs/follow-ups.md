@@ -216,8 +216,9 @@ the block needs pruning, not more headings.
       emitter rings only the GLOBAL Sensor, and the global scan skips graduated stacks. Gap,
       measured cost, workaround (`scripts/reflex-now.sh <ns>`), fix shape and the two-readers
       trap: [`workflow.md`](agents/workflow.md) §Triggers.
-      **Next:** teach the remaining emitters the `{stack, loop_ns}` payload (or fan the global
-      trigger out over graduated namespaces); then decide if global has a reader left.
+      **SHIPPED 2026-08-11 (goal #278 child #285/PR#305 — exporter conflict edge; the merge edge as
+      coordinate-doorbell.yaml same day):** remaining fork = fan the global trigger out (rewrites
+      the coordinator Sensor, sits on the two-readers trap) — operator call, recorded in the doc.
       Relates FU-143, FU-145, ADR-094.
 - [ ] **FU-167** — **`agents/replay/**` is a growing serialization tax on the platform lane**
       (operator catch 2026-08-11, mid-goal-#278): the ratchet rule mandates declaring the replay
@@ -252,8 +253,7 @@ the block needs pruning, not more headings.
       cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
       Minted TWO false issues (#120, #134 — the #134 ride's disproof is the class writeup).
       Description fixed 2026-08-08 (leads with the FP class + the early-death-vs-reached-clones
-      discriminator; the log-compare test is retired). **Next:** key the alert on the
-      deterministic scan phase. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
+      discriminator; the log-compare test is retired). **SHIPPED 2026-08-11 (goal #278 child #283/PR#300 + KSM/pushgateway halves #347/#370):** re-keyed on the scan phase with fixtures. ⚠ the Forbid-cron suppression second symptom remains (dispatch holds the scan pod open — the #278 closeout deliverable owns the design). **Next:** archive once that design lands or is FU'd separately. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
@@ -335,10 +335,11 @@ the block needs pruning, not more headings.
       runs with every belt green — full analysis:
       [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
       Vendor half SHIPPED 2026-08-07 (`72c3a42`: githubstatus.com poll → `GithubVendorOutage`).
-      **Next (the OURS-side half):** an alert on the throughput signal — **queued-age** now
-      preferred over listener-zero: the 2026-08-11 wk-metal-02 route-loss incident starved the
-      queue with the listener alive and scaling (listener-zero blind), while queued-age catches
-      every cannot-dispatch cause ([incident](incidents/2026-08-11-wk-metal-02-default-route-loss.md)).
+      **SHIPPED 2026-08-11 (goal #278 child #284/PR#298):** `CiDispatchStalled` queued-age alert
+      live with promtool fixtures replaying BOTH incidents (2026-08-07 listener wedge + the
+      [route-loss](incidents/2026-08-11-wk-metal-02-default-route-loss.md)); its [5m] hole half
+      landed via #335/PR#349. **Next:** archive after it survives its first real firing or a
+      quiet month.
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
       review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
@@ -452,10 +453,10 @@ the block needs pruning, not more headings.
       to every ride would be invisible.** One specimen fully reconstructed 2026-08-09
       ([spike](spikes/ride-latency-breakdown.md)): 8m46s floor-case ride ≈ 25% dispatch, 60%
       pod/clone/LLM overhead, ~0% "the work"; whether its image was node-cached is UNKNOWABLE
-      after the fact. Next: emit `agent_run_phase_seconds{phase=…}` from the launcher +
-      agent-finalize (both already hold the timestamps; pushgateway `agent_run_*` precedent),
-      Grafana breakdown panel beside the cost panels, and a baseline-deviation alert (phase p50
-      over 1h vs baseline — cache degradation shows as pod-spinup/gates inflation). Shave
+      after the fact. **SHIPPED 2026-08-11/12 (goal #278: launcher half #287/PR#317, dispatch rows #319/PR#339):**
+      `agent_run_phase_seconds` + `agent_dispatch_phase_seconds`, panels, self-baselined
+      `AgentRunPhaseSlow`. Remaining: the agent-finalize IN-POD half (agent-runtime repo — no
+      sibling issue yet) + #324 (launcher never emits ride/bookkeeping rows — queued). Shave
       candidates (fast-path, pr-open script, image pin) live in the spike, not here.
 
 - [ ] **FU-158** — **PrometheusRule behaviour gates — promtool RULED + check-half SHIPPED
@@ -463,9 +464,10 @@ the block needs pruning, not more headings.
       instance — exporter, spend-probe, responder-behaviour-test — settled the ≥2 rule).
       Shipped: `prometheus` (cli output) in devbox, `devbox run prometheus-rules-lint`
       (spec.groups → `promtool check rules`, fail-on-nothing-validated; 8 files / 44 rules,
-      all parse) + the ci step. **Remaining:** the BEHAVIOUR half — `promtool test rules`
-      fixtures per rule file (`for:` + time-series semantics; a renamed metric still ships
-      green today), worker-queueable per file; start with the two spend/agent-loop files.
+      all parse) + the ci step. **SHIPPED 2026-08-11/12 (goal #278 child #288/PR#310 + the estate sweep):** 13 behaviour
+      fixtures run in CI (`prometheus-rules-lint` hook, jail-landed); the WeeklyPoolLow
+      restart-gap expr fixed with a permanent regression witness; the sweep then eradicated the
+      restart-gap class estate-wide (#331-#336/#351-#353 arc). **Next:** archive.
       Origin: PR#220 findings + the #237 gate-miss (more evidence 2026-08-11).
 
 - [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
@@ -474,7 +476,7 @@ the block needs pruning, not more headings.
       coordinator-session.sh's exit trap, so a tick that dies before it (OOM kill, node reboot,
       DeadlineExceeded) loses its transcript, which IS the log for an exec-run session. Found while
       checking FU-132's premise; harmless that time (267/267 files were already in Garage) by luck.
-      **Next:** render a per-loop-ns crash-net from the Composition. ⚠ the loop-ns S3 secret is
+      **SHIPPED 2026-08-11 (goal #278 child #286/PR#294 + the batch/cronjobs RBAC grant):** crash-net renders in all four loop namespaces, verified live. **Next:** archive after the first nightly runs land transcripts (verify one run, then archive). ⚠ the loop-ns S3 secret is
       WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
       upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
       Relates FU-132 (archived), FU-058, ADR-089.
