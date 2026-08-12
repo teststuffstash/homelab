@@ -269,10 +269,14 @@ detach_post() {
 }
 SNIP
 )
-    WRAPPED="${PREP}
+    # CS_SESSION_START opens at the FIRST in-pod instruction, not at claude launch: the streamed
+    # path's `coordinator-session` row measured Ready → log-stream-end, which INCLUDES the prep
+    # (clone, gh auth). Capturing after ${PREP} silently redefined the metric for every detached
+    # dispatch and broke its before/after baseline (bot review, PR#393).
+    WRAPPED="CS_SESSION_START=\$(date -u +%s); ${PREP}
 ${UPLOAD_FN}
 ${DETACH_FN}
-set +e; CS_SESSION_START=\$(date -u +%s); claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
+set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
   else
     WRAPPED="${PREP}
 ${UPLOAD_FN}

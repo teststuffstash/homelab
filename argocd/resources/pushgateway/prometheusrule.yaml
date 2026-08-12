@@ -214,19 +214,22 @@ spec:
         # deleting the record of the last cron one). `changes()` over an epoch gauge counts
         # dispatches, so "% edge-woken" is `changes(edge[7d]) / (changes(edge[7d]) +
         # changes(cron[7d]))` on the dashboard, and THIS alert is the regression tooth: fires on
-        # a SECOND cron-woken dispatch inside 24h: the charter's acceptance is "≈ 0, alerted on
-        # regression" — one event in isolation is the tolerated mid-scan race, recurrence means
-        # some transition's emitter is dead or mis-routed. (A brand-new series appearing counts 0
+        # a SECOND cron-woken dispatch inside 24h PER STACK (`sum by (project)` — the pushgateway
+        # group key; the tolerance is per stack, so two unrelated stacks each hitting the single
+        # tolerated race in one window must NOT sum to a false page — bot review, PR#393): the
+        # charter's acceptance is "≈ 0, alerted on regression" — one event in isolation is the
+        # tolerated mid-scan race, recurrence means some transition's emitter is dead or
+        # mis-routed. (A brand-new series appearing counts 0
         # in changes(), so the very first cron-woken dispatch after this ships is invisible here
         # — the accepted cost of an epoch-gauge design; the second one fires.)
         # platform_machinery for the homelab#239 reason.
         - alert: AgentDispatchCronWoken
-          expr: sum(changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
+          expr: sum by (project) (changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
           labels:
             severity: warning
             platform_machinery: "true"
           annotations:
-            summary: "{{ $value }} cron-woken coordinator dispatches in 24h — a doorbell edge is dead"
+            summary: "{{ $value }} cron-woken coordinator dispatches on stack {{ $labels.project }} in 24h — a doorbell edge is dead"
             description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h. Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack: `agent_dispatch_cron_woken_timestamp` carries the pushgateway group's project label — `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` names it. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
