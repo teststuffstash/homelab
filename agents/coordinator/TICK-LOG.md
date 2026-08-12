@@ -3677,3 +3677,18 @@ budget gate + card resolve the GOAL not the bucket, red-cased on the live defect
 inert residue enumerated in meta-state 4a, pending verifies in 4c. Monitors (needs-meta v3 +
 heartbeat) die with the session — re-arm per meta-state §Re-arm. The seat's own session lessons
 went durable earlier: GAPS G1 resight (full review bodies), the bulk-queue error owned on #337.
+
+### 2026-08-12 — meta (morning): goal #278 drawn; the goal-graph seat tool built
+**Condition:** operator asked to SEE #278's tree (GitHub UI collapses the 46-child post-launch
+bucket) and for a deterministic re-runnable version of the one-off "Goal #174 — one goal, drawn"
+artifact. Prior-art grep: no FU/ADR matches a goal-graph dump/render script — nearest are FU-090
+rung 4 (exporter sprout-RATE gauge → Grafana node-graph, unbuilt) and #209's agent-goals panel
+(convergence numbers, no edges); this is the on-demand SEAT renderer over the same sprout index
+(jail tooling, not platform mechanism — roles.md §meta-coordinator).
+**Command:** built `agents/goal_graph.py` — `fetch` walks native sub-issue + blocked_by edges into
+canonical sorted JSON (byte-identical across runs, proven), `render` is a pure function over the
+file (mermaid + dot; status=color, open-vs-closed=shape, invisible-link grid wrap so 46 edge-less
+siblings don't share one 15000px rank). Ran it on #278: 59 nodes / 58 sub + 1 blocked_by edge
+(#309→#326); artifact "Goal #278 — sprout DAG" published. Two reads out of the drawing: the tree
+is exactly two generations (the depth-≥2 reviewer bar held), and #280/#292 sit OUTSIDE the tree
+(parented to #268/#269 per the master-lane harvest rule) so #278's close sweep never touches them.
