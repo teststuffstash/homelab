@@ -50,28 +50,6 @@ meant to avoid.)
    wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
    taint (`kubernetes_node_taint.ephemeral["wk-metal-04"]`) was never applied. Neither is
    today's work; operator decides the apply window.
-   **Decompose rulings (operator, 2026-08-11): the decompose runs IN THE JAIL
-   with the design-agents corpus loaded — the cluster goal-decompose clause reads only the
-   goal body and would make a mess on a platform-machinery goal; and the goal COORDINATION
-   seat is FABLE (the meta seat authors+queues children, holds goal-review's quiet-goal
-   backstop; `GOAL_MODEL=fable` if the cluster clause ever re-decomposes).** Extra child noted
-   2026-08-11: fold the `SubscriptionWeeklyPoolLow` restart-silence fix (`max_over_time` —
-   the durable warning below, no FU of its own) into the FU-158 behaviour-half child.
-   Design-complete children, roughly ascending effort:
-   FU-161 legs 1–2 (scout filter + benchmark columns → hand-fire, retire #235's premise) ·
-   FU-151 next (automerge labels → 3 repos) · FU-145 (ScanWedged re-key on scan phase) ·
-   FU-150 OURS half (AutoscalingListener-zero alert) · FU-144 (emitter {stack,loop_ns}
-   fan-out; kill the dead coordinate-now row) · FU-140 (Composition crash-net; write-only key
-   ⇒ unconditional PUT) · FU-160 (agent_run_phase_seconds + panel + deviation alert) ·
-   FU-158 behaviour half (promtool test fixtures, spend/agent-loop files first) · FU-102
-   (oracle probe.md from UC-1 + flip prober.enabled) · FU-162 (draw verb + pools, ADR-104) ·
-   **inventory-yaml unification** (operator, 2026-08-11: ONE inventory yaml — machines.yaml
-   extended — consumed by tofu via `yamldecode` for the metal flags AND by `generate.py` for
-   marker-delimited generated blocks in README/CLAUDE host tables + the version triple; kills
-   the hand-copy drift class proven today. SERVICES.md's generated successor stays FU-049,
-   separate).
-   Judge at decompose (bigger): FU-095 legs, FU-090(b), FU-106 G01 flip post-soak + G06 lens,
-   FU-104 teeth, FU-101 ASVS/e-ITS.
 5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
    (a) cloudflare.md's two zone-classes sections merge (structural, one home); (b) the
    network-physical re-capture (banner placed); (c) FU-001 ref scrubs when its archive entry
