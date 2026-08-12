@@ -88,6 +88,18 @@ native lineage + budget walk + ride all held), but no sibling platform repo has 
 (the -iac bump) sits OUTSIDE the goal tree, so the goal effectively ends at the app-repo merge.
 v1.2 should make the Goal a STACK-scoped object: descendants across the claim's repos including
 `-iac`, the `Production-leg:` verified through the -iac deploy + KPIs in post-launch.
+**THE OBJECTIVE FUNCTION (operator, 2026-08-12) — codeowner-touch events, priced first.** The
+current system values codeowner time at ZERO while it is the most expensive resource (the $1.74K
+jail subscription exists precisely to FILTER codeowner responsibility; the operator's time is
+worth more than that). Count where touches mint: worker-authored platform PRs (41 on goal night),
+per-sprout triage reads (46), verdict gates, major/awaiting-human. The Goal type's original
+economics — **assembly merge = ONE codeowner tax per feature, all nits solved by then** — was
+silently dissolved by the v1.1 master-lane variant (every child its own tax event). v1.2 requirement:
+restore the single-tax boundary (goal-branch assembly on platform goals too, or an equivalent
+batch point), and evaluate every design option by codeowner-touch count FIRST, wall-clock second,
+tokens third. Seat-authored PRs are touch-free (author==sole-codeowner waiver) — the filter works
+when the SEAT authors; designs should prefer routing codeowner-class reads to the seat.
+
 **Design synthesis (operator session, 2026-08-12) — the typed findings STORE is the load-bearing
 piece**: one machine-readable pile per goal (ADR-103 shape: edited-in-place comment/check-run,
 entries = origin + surface + substance), dispositioned at checkpoints. It resolves findings 1+2+3

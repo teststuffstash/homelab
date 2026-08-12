@@ -43,7 +43,9 @@ meant to avoid.)
    repos + pilot evidence in the ledger · KPI: sprouts-per-ride < 1.2 (the debt-drain
    prediction) · Budget: subscription-window capped (subscription budgets = later work).
    **Launch criteria:** doorbell Pending gauge flat under load · v1.2 legs replay-pinned ·
-   7d utilization headroom (74% at charter) · A0 green.
+   7d utilization headroom (74% at charter) · A0 green · **the single-tax boundary designed**
+   (operator, 2026-08-12: codeowner-touch count is THE objective — assembly merge = one tax
+   per feature; the master-lane variant dissolved it and must not recur).
 
 1. **PR queue DRAINED 2026-08-11 (~11:30Z)**: #250/#251/#254/#255/#260 all merged (findings
    harvested; residues: FSM dup keys + fixture registration + FU-106 third residue — all in the

@@ -221,7 +221,7 @@ the block needs pruning, not more headings.
       the coordinator Sensor, sits on the two-readers trap) — operator call, recorded in the doc.
       Relates FU-143, FU-145, ADR-094.
 - [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout (ADR-094 + ADR-097,
-      all options open — the numbers decide).** Two coupled halves: (a) concurrency (scan mutex +
+      all options open — the numbers decide; OBJECTIVE = codeowner-touch count first, wall-clock second, tokens third — spike §objective function).** Two coupled halves: (a) concurrency (scan mutex +
       session-streams-the-ride + the doorbell convoy, an ADR-093 regression — the fixed-name
       collapse was lost); (b) the `Touches:` fence (over-blocks small folds ~7×, under-enforces
       governance — #379). Evidence + candidate directions:
