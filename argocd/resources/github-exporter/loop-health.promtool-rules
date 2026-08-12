@@ -1,23 +1,25 @@
-# The three "is the loop / the poller alive" alerts, lifted VERBATIM out of prometheusrule.yaml
-# (comments stripped — the manifest is their one home) — the rules file that
-# loop-health.promtool-test loads. Not a manifest and not applied to anything: `promtool test
-# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
-# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on
-# purpose — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest
-# there would fail it.
+# The github-exporter alerts that carry a `for:` window over a single-replica scrape — the "is the
+# loop / the poller alive" three plus the five persistent-condition alerts hardened in homelab#331
+# — lifted VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is their one home).
+# This is the rules file that loop-health.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`, so the CR cannot be loaded directly. Named
+# .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY *.yaml under
+# argocd/resources and a non-manifest there would fail it.
 #
 # This is the SECOND fixture over github-exporter's rule file (queued-age.promtool-* was the
-# first, FU-150/#284) and it covers 3 of the file's 13 alerts. The other 9 have no behaviour test
-# yet — homelab#288 shipped the two spend/agent-loop files the issue named first and this much of
-# the third; the rest is honest remaining work, listed in that PR's body.
+# first, FU-150/#284) and it covers 8 of the file's 13 alerts. The other 5 have no behaviour test
+# yet — honest remaining work, listed in #331's PR body.
 #
 # ⚠ NOT DRIFT-PINNED (unlike queued-age.promtool-rules, which `devbox run exporter-self-test`
 # checks): the general harness that would extract `.spec.groups` at run time lives in `scripts/**`
-# + `.github/**`, outside the fixer lane's tier. Re-copy after editing an alert:
+# + `.github/**`, outside the fixer lane's tier (homelab#337). Re-copy after editing an alert:
 #
 #   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] |
 #        select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or
-#               .alert == "GithubExporterStale")]}]}' \
+#               .alert == "GithubExporterStale" or .alert == "GithubAppPermissionDrift" or
+#               .alert == "GithubVendorOutage" or .alert == "GithubRateLimitLow" or
+#               .alert == "GithubPaidUsage" or .alert == "GithubActionsMinutesHigh")]}]}' \
 #     argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
 #
 # …that command regenerates the `github` group ONLY. The `regression-witness-*` groups at the
@@ -25,6 +27,42 @@
 groups:
   - name: github
     rules:
+      - alert: GithubAppPermissionDrift
+        expr: max by (app) (max_over_time(github_app_permission_drift[10m])) == 1
+        for: 30m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: GitHub App {{ $labels.app }} permissions differ from the declared state
+          description: 'Live permissions of {{ $labels.app }} do not match docs/github-apps.yaml (github_app_permission_mismatch{app="{{ $labels.app }}"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration.'
+      - alert: GithubVendorOutage
+        expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m])) >= 2
+        for: 10m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: 'GitHub-side outage: {{ $labels.component }}'
+          description: githubstatus.com reports {{ $labels.component }} at status index {{ $value }} (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com
+      - alert: GithubPaidUsage
+        expr: sum(max without (instance, pod) (max_over_time(github_billing_net_amount[10m]))) > 1
+        for: 1h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: GitHub is billing real money this month
+          description: 'Month-to-date net spend is ${{ $value | printf "%.2f" }} (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount).'
+      - alert: GithubActionsMinutesHigh
+        expr: sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))) > 2400
+        for: 1h
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: GitHub Actions hosted minutes at 80% of included quota
+          description: '{{ $value | printf "%.0f" }} hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*"}).'
       - alert: GithubExporterDown
         expr: up{job="github-exporter"} == 0
         for: 15m
@@ -49,6 +87,18 @@ groups:
         annotations:
           summary: Agent queue stalled — queued issues but a fully idle loop
           description: '{{ $value }} agent/queued issue(s) with zero live workers and zero open PRs for 2h — check the coordinate ticks (kubectl -n oracle-agents get wf), the WIP holds in the scan report, and agents/coordinator/TICK-LOG.md for the last incident shape.'
+      - alert: GithubRateLimitLow
+        expr: |-
+          min by (token, resource) (
+            min_over_time(github_rate_limit_remaining[10m]) / max_over_time(github_rate_limit_limit[10m])
+          ) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})
+          description: '{{ $labels.token }} has {{ $value | humanizePercentage }} of its {{ $labels.resource }} pool left — consumers of this installation will start erroring "API rate limit exceeded" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp.'
 
   # ── REGRESSION WITNESS — NOT a deployed rule, and deliberately not in prometheusrule.yaml ─────
   # The pre-#313 GithubExporterStale expr, kept verbatim so the fixture can assert the FAILURE it
@@ -90,3 +140,65 @@ groups:
           severity: warning
         annotations:
           summary: Agent queue stalled — queued issues but a fully idle loop
+
+  # ── REGRESSION WITNESS — the same device for homelab#331, and NOT a deployed rule ─────────────
+  # The five pre-#331 exprs, verbatim, one per alert the PR hardened. Each is checked at the SAME
+  # eval times as its shipped twin in loop-health.promtool-test, so every claim the manifest makes
+  # about the class ("the hole restarted this window") is executed against the form that had the
+  # defect rather than asserted about it. `for:`, thresholds and `severity` are carried unchanged —
+  # only the expr differs, which is what keeps the contrast attributable to the bridge alone.
+  # These are fossils, not copies: if any of the five exprs is revisited, this group stays as it
+  # is. It is also what stops a STALE hand copy of the `github` group above from passing vacuously
+  # — with the old expr in both places the pairs would agree and every roll assertion fails.
+  # Annotations are trimmed to `summary` (the same convention as the two witness groups above):
+  # the fixture asserts WHEN each witness fires, and the description templates are pinned on the
+  # shipped side.
+  - name: regression-witness-pre-331
+    rules:
+      - alert: GithubAppPermissionDriftPre331
+        expr: github_app_permission_drift == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub App {{ $labels.app }} permissions differ from the declared state
+      - alert: GithubVendorOutagePre331
+        expr: github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"} >= 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'GitHub-side outage: {{ $labels.component }}'
+      - alert: GithubPaidUsagePre331
+        expr: sum(github_billing_net_amount) > 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub is billing real money this month
+      - alert: GithubActionsMinutesHighPre331
+        expr: sum(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}) > 2400
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub Actions hosted minutes at 80% of included quota
+      - alert: GithubRateLimitLowPre331
+        expr: min by (token, resource) (github_rate_limit_remaining / github_rate_limit_limit) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})
+      # NOT a pre-fix form and NOT a proposal: the mechanical port, i.e. what GithubRateLimitLow
+      # would be if the #313 idiom had been copied without asking which direction preserves the
+      # alert. On a draining pool `max_over_time` reads the HEALTHIEST sample of the last 10m, so
+      # the fixture's direction case shows it paging 9 minutes after the shipped alert — nearly
+      # two of its `for: 5m` windows. Kept here so the manifest's claim (ii) is executed.
+      - alert: GithubRateLimitLowMaxDirection
+        expr: min by (token, resource) (max_over_time(github_rate_limit_remaining[10m]) / max_over_time(github_rate_limit_limit[10m])) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: GitHub rate-limit pool under 10% ({{ $labels.token }}/{{ $labels.resource }})

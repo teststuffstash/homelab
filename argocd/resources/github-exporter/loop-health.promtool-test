@@ -41,6 +41,18 @@
 # and the pre-#313 expr rides along as GithubExporterStalePre313 (loop-health.promtool-rules
 # §regression-witness-pre-313) so the contrast, the [10m] ceiling and the cost of aggregating are
 # all executed rather than claimed.
+#
+# ✅ AND THE SAME CLASS IN FIVE MORE ALERTS OF THIS FILE (homelab#331): GithubAppPermissionDrift,
+# GithubVendorOutage, GithubRateLimitLow, GithubPaidUsage and GithubActionsMinutesHigh all carry a
+# `for:` window over a single-replica scrape, and all five measure a PERSISTENT condition — drift
+# lasts until a PR or a UI click, a vendor outage outlives any roll, a drained pool refills on
+# GitHub's schedule, a month-to-date bill only grows. The last section of this file is their
+# cases: one roll per alert against the pre-#331 exprs (loop-health.promtool-rules
+# §regression-witness-pre-331), the [10m] ceiling once for the group, and — the part that is NOT
+# mechanical — the three places where a copy-paste port would have been wrong: the direction of
+# the bridge on a LOW-is-bad ratio, the double count a bare `sum(max_over_time(…))` produces
+# across two pod generations, and the `for:` a bridge quietly shortens on a flappy input. Each of
+# those is asserted, not argued.
 rule_files:
   - loop-health.promtool-rules
 
@@ -488,3 +500,566 @@ tests:
               service: github-exporter
             exp_annotations:
               summary: "github-exporter polls are failing"
+
+  # ═══ homelab#331 — the #288 class in the five persistent-condition alerts ════════════════════
+  # Every case below pairs the shipped alert with its pre-#331 twin from
+  # loop-health.promtool-rules §regression-witness-pre-331 at the SAME eval times. The roll shape
+  # is the one #288 measured (70-120s of vector-empty; modelled here as a 2-3m hole with an
+  # explicit `stale` marker, which is what kube SD writes when the old target disappears — a
+  # plain end-of-series would let PromQL's 5m lookback flatter the pre-fix form).
+
+  # ── GithubAppPermissionDrift 1/3 — the poller roll, both halves ──────────────────────────────
+  # Drift is standing (a permission PR is open, or a UI click has not landed) and the poller rolls
+  # 20 minutes in. The shipped alert never notices: `max_over_time([10m])` carries the value across
+  # the 2m hole and `max by (app)` keeps ONE alert instance for the App, so `for: 30m` runs from
+  # t=0 and pages at 30m. The pre-#331 expr had `pod`/`instance` on the alert, so the old pod's
+  # window died with the pod and the new pod started its own — 23 minutes of clock thrown away for
+  # a 2-minute roll.
+  - interval: 1m
+    name: "a poller roll no longer re-clocks GithubAppPermissionDrift's `for: 30m`"
+    input_series:
+      - series: 'github_app_permission_drift{app="homelab-agents",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1+0x20 stale"
+      - series: 'github_app_permission_drift{app="homelab-agents",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x23 1+0x120"
+    alert_rule_test:
+      # `for: 30m` is honoured — the bridge does not make it fire early
+      - eval_time: 29m
+        alertname: GithubAppPermissionDrift
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: GithubAppPermissionDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              app: homelab-agents
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+              description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+      # one continuous instance, not two
+      - eval_time: 40m
+        alertname: GithubAppPermissionDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              app: homelab-agents
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+              description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+      # THE WITNESS: silent when the shipped alert pages…
+      - eval_time: 31m
+        alertname: GithubAppPermissionDriftPre331
+        exp_alerts: []
+      - eval_time: 52m
+        alertname: GithubAppPermissionDriftPre331
+        exp_alerts: []
+      # …and paging only 30m after the NEW pod's first sample (23m + 30m), 23m late and under a
+      # per-pod identity that no longer matches the one that was pending
+      - eval_time: 54m
+        alertname: GithubAppPermissionDriftPre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              app: homelab-agents
+              endpoint: http-metrics
+              instance: 10.244.2.93:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-6d7e8a9b1c-p7t2r
+              service: github-exporter
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+
+  # ── GithubAppPermissionDrift 2/3 — THE PRICE, asserted rather than argued ────────────────────
+  # The mirror image of the bridge: for up to 10m after the drift genuinely clears (the operator's
+  # UI click + install approval lands, or the declaring PR merges) the alert still believes it.
+  # The boundary is exact — range selectors are LEFT-OPEN, so `[10m]` at t sees (t-10m, t] and the
+  # last `1` (t=40m) is in range up to and including t=49m. Accepted: the fix is human-driven and
+  # this alert exists to nag until the change flow finishes, so ringing 10m long costs nothing and
+  # ringing 10m short during a roll is what #331 fixed.
+  - interval: 1m
+    name: "accepted cost: drift that clears keeps ringing for ≤10m (the range is symmetric)"
+    input_series:
+      - series: 'github_app_permission_drift{app="homelab-agents",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1+0x40 0+0x100"
+    promql_expr_test:
+      - expr: max by (app) (max_over_time(github_app_permission_drift[10m]))
+        eval_time: 49m
+        exp_samples:
+          - labels: '{app="homelab-agents"}'
+            value: 1
+      - expr: max by (app) (max_over_time(github_app_permission_drift[10m]))
+        eval_time: 50m
+        exp_samples:
+          - labels: '{app="homelab-agents"}'
+            value: 0
+    alert_rule_test:
+      # 4m after the drift cleared the shipped alert is still ringing…
+      - eval_time: 45m
+        alertname: GithubAppPermissionDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              app: homelab-agents
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+              description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+      # …while the pre-#331 form resolved the moment the gauge read 0. That difference IS the price
+      - eval_time: 45m
+        alertname: GithubAppPermissionDriftPre331
+        exp_alerts: []
+      # …and it is bounded by the range, not open-ended
+      - eval_time: 51m
+        alertname: GithubAppPermissionDrift
+        exp_alerts: []
+
+  # ── GithubAppPermissionDrift 3/3 — THE CEILING for this group, asserted rather than assumed ──
+  # [10m] is a bridge, not immunity, and the sizing is #288's (ten pod generations gapped 69-116s
+  # of raw samples). A hole longer than the range — a crash-loop, an image pull off a cold mirror,
+  # a node drain — empties the vector for real and costs the whole window again. Asserted once for
+  # the five #331 alerts here: they share one range and one mechanism, and GithubExporterStale's
+  # own ceiling case above pins the same boundary from the other side of the file.
+  - interval: 1m
+    name: a 13m hole DOES reset the window — the accepted limit of [10m]
+    input_series:
+      - series: 'github_app_permission_drift{app="homelab-agents",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1+0x29 stale"
+      - series: 'github_app_permission_drift{app="homelab-agents",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x43 1+0x120"
+    promql_expr_test:
+      # last real sample is t=29m; at 38m it is still inside (28m, 38m]…
+      - expr: max by (app) (max_over_time(github_app_permission_drift[10m]))
+        eval_time: 38m
+        exp_samples:
+          - labels: '{app="homelab-agents"}'
+            value: 1
+      # …and at 39m the range is (29m, 39m], which holds nothing at all
+      - expr: max by (app) (max_over_time(github_app_permission_drift[10m]))
+        eval_time: 39m
+        exp_samples: []
+    alert_rule_test:
+      # firing on time, still bridged nine minutes into the hole
+      - eval_time: 35m
+        alertname: GithubAppPermissionDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              app: homelab-agents
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+              description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+      # …then the range empties and the alert resolves, exactly as the pre-#331 form behaved
+      - eval_time: 41m
+        alertname: GithubAppPermissionDrift
+        exp_alerts: []
+      # …and it re-pages 30m after the new pod's first sample (43m + 30m), not before
+      - eval_time: 72m
+        alertname: GithubAppPermissionDrift
+        exp_alerts: []
+      - eval_time: 74m
+        alertname: GithubAppPermissionDrift
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              app: homelab-agents
+            exp_annotations:
+              summary: "GitHub App homelab-agents permissions differ from the declared state"
+              description: "Live permissions of homelab-agents do not match docs/github-apps.yaml (github_app_permission_mismatch{app=\"homelab-agents\"} carries the per-permission detail: declared vs live). Either finish the pending grant (UI click + approve on each installation) or PR the declaration."
+
+  # ── GithubVendorOutage 1/2 — the poller roll during a real GitHub outage ─────────────────────
+  # 2026-08-07 in miniature: Actions at partial_outage while our own poller rolls. The vendor state
+  # is GitHub's, not ours, so it outlives the roll — but the alert did not: `component` shared the
+  # series with `pod`/`instance`, and `for: 10m` restarted under the new pod. This is the alert the
+  # operator would have consulted during a five-hour outage, so a self-inflicted 8-minute delay is
+  # exactly the wrong failure.
+  - interval: 1m
+    name: "a poller roll no longer re-clocks GithubVendorOutage's `for: 10m`"
+    input_series:
+      - series: 'github_vendor_component_status{component="Actions",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "2+0x5 stale"
+      - series: 'github_vendor_component_status{component="Actions",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x8 2+0x60"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: GithubVendorOutage
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: GithubVendorOutage
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              component: Actions
+            exp_annotations:
+              summary: "GitHub-side outage: Actions"
+              description: "githubstatus.com reports Actions at status index 2 (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com"
+      # THE WITNESS: its window died with the old pod and restarted at 8m
+      - eval_time: 11m
+        alertname: GithubVendorOutagePre331
+        exp_alerts: []
+      - eval_time: 17m
+        alertname: GithubVendorOutagePre331
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: GithubVendorOutagePre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: Actions
+              endpoint: http-metrics
+              instance: 10.244.2.93:9504
+              job: github-exporter
+              namespace: monitoring
+              pod: github-exporter-6d7e8a9b1c-p7t2r
+              service: github-exporter
+            exp_annotations:
+              summary: "GitHub-side outage: Actions"
+
+  # ── GithubVendorOutage 2/2 — THE PRICE, and the sharpest one in this PR ──────────────────────
+  # This alert's `for: 10m` was tuned to ride out statuspage flaps. A bridge weakens exactly that:
+  # `max_over_time([10m])` keeps the expr TRUE for ten minutes after a ≥2 reading, so a flap of
+  # three samples (t=20-22m) that clears immediately now satisfies `for: 10m` and pages at 30m —
+  # where the pre-#331 form could not, and is asserted silent here to prove it. The threshold is
+  # sharp and worth reading off the numbers: the range is left-open, so a flap of ONE sample keeps
+  # the expr true for exactly the `for:` window minus one evaluation and cannot page at all; every
+  # sample beyond the first buys the flap another minute of firing.
+  # ACCEPTED, and the asymmetry is the argument: this alert carries `triage: none`, so a false page
+  # costs one operator glance and dispatches nobody, while the miss it exists for is 2026-08-07 —
+  # five hours in which every in-cluster signal looked like ours. A ≥2 on GitHub's own status page
+  # is also a state GitHub SET, not scrape noise. If flaps ever do page in practice, the narrower
+  # instrument is `last_over_time` (bridges the hole without extending truth) — recorded here as
+  # the lever, not taken now: it would make this the only alert in the file on a second idiom.
+  - interval: 1m
+    name: "accepted cost: a three-sample statuspage flap now reaches `for: 10m` and pages"
+    input_series:
+      - series: 'github_vendor_component_status{component="Actions",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0+0x19 2+0x2 0+0x100"
+    promql_expr_test:
+      # the flap's last sample is t=22m, and the range is left-open: it is inside (21m, 31m]…
+      - expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m]))
+        eval_time: 31m
+        exp_samples:
+          - labels: '{component="Actions"}'
+            value: 2
+      # …and out of (22m, 32m], which is where the invented alert ends
+      - expr: max by (component) (max_over_time(github_vendor_component_status{component=~"Actions|API Requests|Git Operations|Webhooks|Packages"}[10m]))
+        eval_time: 32m
+        exp_samples:
+          - labels: '{component="Actions"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: GithubVendorOutage
+        exp_alerts: []
+      # the cost, executed: a 3-minute flap pages 10 minutes later
+      - eval_time: 31m
+        alertname: GithubVendorOutage
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              component: Actions
+            exp_annotations:
+              summary: "GitHub-side outage: Actions"
+              description: "githubstatus.com reports Actions at status index 2 (2=partial_outage, 3=major_outage). Vendor-side — in-cluster CI signals will LOOK broken (idle runners, frozen queues, no failures). Do NOT re-run queued work (re-runs deepen a dead queue) and do NOT change capacity settings off this state. https://www.githubstatus.com"
+      # bounded by the range: gone as soon as the flap's last sample leaves it
+      - eval_time: 33m
+        alertname: GithubVendorOutage
+        exp_alerts: []
+      # the pre-#331 form rode the flap out entirely — this is what the bridge trades away
+      - eval_time: 31m
+        alertname: GithubVendorOutagePre331
+        exp_alerts: []
+      - eval_time: 33m
+        alertname: GithubVendorOutagePre331
+        exp_alerts: []
+
+  # ── GithubRateLimitLow 1/3 — the hole half only, and the shortest `for:` of the five ─────────
+  # `min by (token, resource)` already dropped pod/instance before #331, so this alert's identity
+  # never churned — but the vector still EMPTIES at `replicas: 1` (and whenever collect_rate_limits
+  # `continue`s past a token whose probe failed), and `for: 5m` is short enough that a 2-minute
+  # hole costs most of it. The shipped alert rides through; the witness resolves, re-clocks from
+  # the new pod's first sample and pages 8 minutes late.
+  # It also shows the alert instance is CONTINUOUS across the roll: one alert, whose `$value`
+  # simply tracks the pool (8% off the outgoing pod's samples, 7.6% once only the new pod's are in
+  # range).
+  - interval: 1m
+    name: "a poller roll no longer re-clocks GithubRateLimitLow's `for: 5m`"
+    input_series:
+      - series: 'github_rate_limit_remaining{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "400+0x5 stale"
+      - series: 'github_rate_limit_limit{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "5000+0x5 stale"
+      - series: 'github_rate_limit_remaining{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x8 380+0x120"
+      - series: 'github_rate_limit_limit{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x8 5000+0x120"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: GithubRateLimitLow
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 8% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      # same instance, still firing, now reading the new pod's samples
+      - eval_time: 20m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 7.6% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      # THE WITNESS: the empty vector resolved it at 6m and it re-clocked from 8m
+      - eval_time: 6m
+        alertname: GithubRateLimitLowPre331
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: GithubRateLimitLowPre331
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: GithubRateLimitLowPre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+
+  # ── GithubRateLimitLow 2/3 — THE DIRECTION, which is the part that is not mechanical ─────────
+  # `max_over_time` is the alert-preserving function only where HIGH is the bad reading. Here LOW
+  # is, so the numerator bridges with `min_over_time`. GithubRateLimitLowMaxDirection carries the
+  # mechanical port for contrast: on a pool draining 100 requests a minute it reads the HEALTHIEST
+  # sample of the last 10m and pages at 60m, nine minutes after the shipped alert and nearly two
+  # whole `for: 5m` windows late — on the one alert in this group whose whole point is to be seen
+  # BEFORE the pool hits zero and consumers start FATAL-aborting.
+  - interval: 1m
+    name: "the bridge direction matters: `min_over_time` pages at 51m, the `max` port at 60m"
+    input_series:
+      # 5000 → 0 at 100/minute; crosses 10% (500) at t=46m and empties at t=50m
+      - series: 'github_rate_limit_remaining{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "5000-100x50 0+0x60"
+      - series: 'github_rate_limit_limit{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "5000+0x120"
+    alert_rule_test:
+      # shipped: condition true from 46m, `for: 5m` → 51m
+      - eval_time: 50m
+        alertname: GithubRateLimitLow
+        exp_alerts: []
+      - eval_time: 52m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 0% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      # the mechanical port: the oldest sample in each window is the biggest, so its condition
+      # only turns true at 55m and it pages at 60m — by which time the pool has been empty for 10m
+      - eval_time: 52m
+        alertname: GithubRateLimitLowMaxDirection
+        exp_alerts: []
+      - eval_time: 59m
+        alertname: GithubRateLimitLowMaxDirection
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: GithubRateLimitLowMaxDirection
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+
+  # ── GithubRateLimitLow 3/3 — THE PRICE: a refilled pool keeps reading drained for ≤10m ───────
+  # The mirror image of choosing `min`. GitHub resets the pool on the hour; for up to a range
+  # window afterwards `min_over_time` still reports the low-water sample, so the alert clears late
+  # and `{{ $value }}` reads the worst of the window rather than the newest. Bounded and exact —
+  # the last drained sample (t=20m) leaves the range at t=30m.
+  - interval: 1m
+    name: "accepted cost: a pool that resets keeps reading drained for ≤10m"
+    input_series:
+      - series: 'github_rate_limit_remaining{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "400+0x20 5000+0x100"
+      - series: 'github_rate_limit_limit{token="coordinator-git",resource="graphql",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "5000+0x120"
+    promql_expr_test:
+      - expr: min by (token, resource) (min_over_time(github_rate_limit_remaining[10m]) / max_over_time(github_rate_limit_limit[10m]))
+        eval_time: 29m
+        exp_samples:
+          - labels: '{token="coordinator-git", resource="graphql"}'
+            value: 0.08
+      - expr: min by (token, resource) (min_over_time(github_rate_limit_remaining[10m]) / max_over_time(github_rate_limit_limit[10m]))
+        eval_time: 30m
+        exp_samples:
+          - labels: '{token="coordinator-git", resource="graphql"}'
+            value: 1
+    alert_rule_test:
+      # both forms page while the pool is genuinely drained
+      - eval_time: 6m
+        alertname: GithubRateLimitLowPre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+      # the pool resets at 21m: the pre-#331 form clears at once, the shipped one holds ≤10m
+      - eval_time: 25m
+        alertname: GithubRateLimitLowPre331
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: GithubRateLimitLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              token: coordinator-git
+              resource: graphql
+            exp_annotations:
+              summary: "GitHub rate-limit pool under 10% (coordinator-git/graphql)"
+              description: "coordinator-git has 8% of its graphql pool left — consumers of this installation will start erroring \"API rate limit exceeded\" when it reaches 0; the pool resets at github_rate_limit_reset_timestamp."
+      - eval_time: 31m
+        alertname: GithubRateLimitLow
+        exp_alerts: []
+
+  # ── GithubPaidUsage — the roll, and the DOUBLE COUNT a bare `sum(max_over_time(…))` produces ──
+  # `sum()` is label-less, so this alert never had an identity to churn — but what it sums does:
+  # every billing series carries `pod`/`instance`, so for the ≤10m the range holds both pod
+  # generations a bare `sum(max_over_time(…))` counts each SKU TWICE. The promql assertions below
+  # are that claim, executed at the overlap instant: 2.50 from the mechanical port against the real
+  # 1.25. On a $1 threshold that is a page a roll invented, and a money figure reported at 2x in
+  # the annotation the operator reads. Dropping identity INSIDE the sum is what makes it 1.25.
+  # The `for: 1h` half is the ordinary one: a 2-minute hole used to throw away a full hour.
+  - interval: 1m
+    name: "a poller roll neither re-clocks GithubPaidUsage's `for: 1h` nor doubles the bill"
+    input_series:
+      - series: 'github_billing_net_amount{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0.75+0x30 stale"
+      - series: 'github_billing_net_amount{org="teststuffstash",product="Packages",sku="Packages Storage",unit="GigabyteHours",repo="oracle-fleet",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "0.5+0x30 stale"
+      - series: 'github_billing_net_amount{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x33 0.75+0x120"
+      - series: 'github_billing_net_amount{org="teststuffstash",product="Packages",sku="Packages Storage",unit="GigabyteHours",repo="oracle-fleet",visibility="private",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x33 0.5+0x120"
+    promql_expr_test:
+      # the shipped expr, at an instant where both pod generations are inside the range
+      - expr: sum(max without (instance, pod) (max_over_time(github_billing_net_amount[10m])))
+        eval_time: 35m
+        exp_samples:
+          - labels: "{}"
+            value: 1.25
+      # the mechanical port at the same instant — every SKU counted once per pod generation
+      - expr: sum(max_over_time(github_billing_net_amount[10m]))
+        eval_time: 35m
+        exp_samples:
+          - labels: "{}"
+            value: 2.5
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: GithubPaidUsage
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: GithubPaidUsage
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "GitHub is billing real money this month"
+              description: "Month-to-date net spend is $1.25 (expected $0 — everything inside included usage). Break it down by SKU: sum by (product, sku, repo) (github_billing_net_amount)."
+      # THE WITNESS: `sum()` over an empty vector is empty, an empty expr is a resolved alert, and
+      # a resolved alert restarts `for: 1h` — 33 minutes late off a 2-minute roll
+      - eval_time: 61m
+        alertname: GithubPaidUsagePre331
+        exp_alerts: []
+      - eval_time: 92m
+        alertname: GithubPaidUsagePre331
+        exp_alerts: []
+      - eval_time: 94m
+        alertname: GithubPaidUsagePre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "GitHub is billing real money this month"
+
+  # ── GithubActionsMinutesHigh — the same shape on the quota alert, plus the selector ──────────
+  # Identical mechanism to GithubPaidUsage (the two are one idiom), so this case carries the parts
+  # that are NOT identical: the selector has to keep excluding the storage SKUs (`unit=~"(?i)min.*"`)
+  # and public-repo usage (`visibility="private"`), and the annotation prints the deduped total —
+  # 2500 minutes, not the 5000 the mechanical port would report mid-roll. The two decoy series
+  # below would each blow past the 2400 threshold on their own if the selector ever slipped.
+  - interval: 1m
+    name: "a poller roll neither re-clocks GithubActionsMinutesHigh's `for: 1h` nor doubles the minutes"
+    input_series:
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1300+0x30 stale"
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="oracle-fleet",visibility="private",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "1200+0x30 stale"
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x33 1300+0x120"
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="oracle-fleet",visibility="private",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "_x33 1200+0x120"
+      # decoys: the storage SKU under the same product, and a public repo's minutes
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Storage",unit="GigabyteHours",repo="homelab",visibility="private",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "9000+0x160"
+      - series: 'github_billing_usage{org="teststuffstash",product="Actions",sku="Actions Linux",unit="Minutes",repo="oracle-prober",visibility="public",endpoint="http-metrics",instance="10.244.2.93:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-6d7e8a9b1c-p7t2r",service="github-exporter"}'
+        values: "9000+0x160"
+    promql_expr_test:
+      - expr: sum(max without (instance, pod) (max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m])))
+        eval_time: 35m
+        exp_samples:
+          - labels: "{}"
+            value: 2500
+      - expr: sum(max_over_time(github_billing_usage{product=~"(?i)actions", unit=~"(?i)min.*", visibility="private"}[10m]))
+        eval_time: 35m
+        exp_samples:
+          - labels: "{}"
+            value: 5000
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: GithubActionsMinutesHigh
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: GithubActionsMinutesHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+            exp_annotations:
+              summary: "GitHub Actions hosted minutes at 80% of included quota"
+              description: "2500 hosted-runner minutes this month (3000 included, resets monthly). Per repo: sum by (repo, sku) (github_billing_usage{product=~\"(?i)actions\", unit=~\"(?i)min.*\"})."
+      # THE WITNESS: same restart, same 33 minutes
+      - eval_time: 61m
+        alertname: GithubActionsMinutesHighPre331
+        exp_alerts: []
+      - eval_time: 94m
+        alertname: GithubActionsMinutesHighPre331
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "GitHub Actions hosted minutes at 80% of included quota"
