@@ -437,9 +437,11 @@ knob but a CHECKPOINT structure: big model + special instructions at decompose, 
 designated larger checkpoint once the initial child set completes (a batched re-read that does the
 accumulated authoring judgment in one context), with the trickle in between handled mechanically
 or queued for the checkpoint. Do NOT wire a per-stack goal-model knob before this is designed —
-it would harden the wrong axis. Home for the design when it happens: this section + the
-goal-review play (issue-authoring.md §Leg (c)). **Tracked by:** FU-090 (its Operator-deferred
-line holds the status; this block is the design).
+it would harden the wrong axis. **RESOLVED by ADR-106 (2026-08-12): the phases are decompose /
+deterministic ticks / checkpoints / assembly / verdict — reasoning tier at decompose AND
+checkpoints (the two authoring moments), NO model on per-closure ticks (demoted to a
+deterministic burn-down append), sonnet on reviews, human at the tax + verdict.** Build rides
+Bucket A4. **Tracked by:** FU-090 (its Operator-deferred line holds the status).
 
 **The reviewer lane's one model split: the ASSEMBLY review (2026-08-06).** `review-reflex.sh`
 routes a pick whose **head** is `goal/**` — the goal→master assembly PR, the cumulative review the
