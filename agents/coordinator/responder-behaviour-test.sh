@@ -274,7 +274,8 @@ stamped() { # <alertname> <file>
                     || bad "$1 stamped in $2" "got '${v:-alert not found}'"
 }
 stamped RetroReportOverdue              argocd/resources/pushgateway/prometheusrule.yaml
-stamped CloudflareZoneSpendToggleEnabled argocd/resources/cloudflare-exporter/prometheusrule.yaml
+# CloudflareZoneSpendToggleEnabled left this list 2026-08-12: retired WITH the spend-probe's
+# argo leg (entitlement-gated endpoint — docs/cloudflare.md §spend surface), not un-stamped.
 stamped CloudflareZonePlanNotFree       argocd/resources/cloudflare-exporter/prometheusrule.yaml
 stamped CloudflareSpendProbeBlind       argocd/resources/cloudflare-exporter/prometheusrule.yaml
 stamped GithubAppPermissionDrift        argocd/resources/github-exporter/prometheusrule.yaml

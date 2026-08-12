@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Cloudflare spend-toggle drift probe → Prometheus (homelab#217).
 
-WHY this exists: the Cloudflare account has a payment card attached, and some usage-billed
-features are toggled by ORDINARY zone Write permission groups — the proven case is Argo Smart
-Routing (per-GB), enabled by `PATCH /zones/{id}/argo/smart_routing` and gated by Zone Settings
-Write, which `homelab-tofu-apply` legitimately needs for the minutark bootstrap and which lives in
-the jail wallet (LLM-session-readable by construction). Purchase-shaped spend is already closed —
-no token carries Billing groups (`devbox run cloudflare-token-audit`). Usage toggles are the
-residual, and with a card on file they bill silently. This is the BELT: it cannot prevent the
-toggle, it makes the toggle loud. Design + doctrine: docs/cloudflare.md §Zone classes + spend
-surface.
+WHY this exists: the Cloudflare account has a payment card attached, and with a card on file a
+plan change bills silently. This is the BELT: it cannot prevent the change, it makes it loud.
+Purchase-shaped spend is otherwise closed — no token carries Billing groups (`devbox run
+cloudflare-token-audit`). Design + doctrine: docs/cloudflare.md §Zone classes + spend surface.
+
+⚠ THE ARGO LEG WAS RETIRED 2026-08-12 (it shipped assuming `PATCH /zones/{id}/argo/smart_routing`
+was gated by Zone Settings Write). The host-side admin-token session settled it: the argo
+endpoint answers 1015 `Cause(s): smart_routing` to EVERY mintable scope — admin, Zone Settings
+Read+Write, and the legacy all-read-groups template alike — no Argo permission group exists in
+the catalog, and the endpoint docs name no accepted-permissions line. The setting is
+ENTITLEMENT-gated, not permission-gated: no credential we hold can read OR write it, so a leg
+polling it can only ever be blind (it spent 3 days raising per poll), and "1015 ⇒ off" cannot be
+verified without buying the entitlement. Conservative option taken: the leg is gone, the
+dashboard-toggle residual is caught by the audit log (`Account Settings Read` on the
+observability token — an on-demand jail read, docs/cloudflare.md §spend surface has the verdict
+table). What remains here is the PLAN gauge + probe_ok.
 
 WHY a second poller in `monitoring` and not a change to the exporter next door: that exporter is
 upstream `ghcr.io/lablabs/cloudflare_exporter` — a third-party binary with none of our code in it,
@@ -55,7 +62,7 @@ TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
 # every write token's zone map, and is not homelab's to watch.
 ZONE_IDS = [z.strip() for z in os.environ.get("CF_SPEND_ZONE_IDS", "").split(",") if z.strip()]
 # Drift detection, not latency-sensitive: matched to the sibling exporter's 120s scrape rather
-# than tuned. Two GETs per zone per poll — negligible against Cloudflare's 1200/5min limit.
+# than tuned. One GET per zone per poll — negligible against Cloudflare's 1200/5min limit.
 INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "120"))
 PORT = int(os.environ.get("LISTEN_PORT", "9505"))
 
@@ -65,8 +72,6 @@ _errors = 0
 _last_success = 0
 
 HEADERS = [
-    "# HELP cloudflare_zone_argo_smart_routing Argo Smart Routing (per-GB billed) state on the zone: 0 only when the API says exactly \"off\", else 1.",
-    "# TYPE cloudflare_zone_argo_smart_routing gauge",
     "# HELP cloudflare_zone_plan_is_free 1 when the zone's plan.legacy_id is \"free\", else 0.",
     "# TYPE cloudflare_zone_plan_is_free gauge",
     "# HELP cloudflare_zone_spend_probe_ok 1 when BOTH spend reads succeeded for the zone this poll. 0 or absent means the gauges above are unknown, NOT safe.",
@@ -103,16 +108,6 @@ def metric(name, labels, value):
     return f"{name}{{{inner}}} {value}"
 
 
-def argo_enabled(result):
-    """The issue's rule verbatim: fire when argo != off. So ONLY the literal "off" reads as 0 —
-    an unrecognised value is treated as enabled rather than quietly as safe. A response with no
-    `value` at all is not a reading; it raises, and the zone goes probe_ok=0."""
-    value = str((result or {}).get("value", "")).strip().lower()
-    if not value:
-        raise ValueError("argo/smart_routing result carries no `value`")
-    return 0 if value == "off" else 1
-
-
 def plan_is_free(result):
     """Same asymmetry: an unreadable plan must not render as "not free" (a false page) NOR as
     "free" (a false all-clear) — it raises, and the blind alert owns the case."""
@@ -139,13 +134,6 @@ def collect(lines, fetch=api_get, zone_ids=None):
             failed += 1
             _errors += 1
             print(f"zone {zone_id}: plan read failed: {exc}", flush=True)
-        try:
-            argo = argo_enabled(fetch(f"/zones/{zone_id}/argo/smart_routing"))
-            lines.append(metric("cloudflare_zone_argo_smart_routing", {"zone": zone}, argo))
-        except Exception as exc:
-            failed += 1
-            _errors += 1
-            print(f"zone {zone_id}: argo read failed: {exc}", flush=True)
         lines.append(metric("cloudflare_zone_spend_probe_ok", {"zone": zone}, 0 if failed else 1))
 
 
@@ -223,19 +211,16 @@ class Handler(BaseHTTPRequestHandler):
 _Z_PLATFORM = "6b63f95592a9e036f8b8f6934511d321"  # teststuff.net
 _Z_PRODUCT = "fa1b02951c29ee4828b8948d0dd7baaf"  # minutark.ee
 
-# Recorded response shapes. TODAY = the state the issue records as current (argo off, plan free).
+# Recorded response shapes. TODAY = the state the issue records as current (plan free, both zones).
 _TODAY = {
     f"/zones/{_Z_PLATFORM}": {"id": _Z_PLATFORM, "name": "teststuff.net",
                               "plan": {"legacy_id": "free", "name": "Free Website"}},
-    f"/zones/{_Z_PLATFORM}/argo/smart_routing": {"id": "smart_routing", "value": "off", "editable": True},
     f"/zones/{_Z_PRODUCT}": {"id": _Z_PRODUCT, "name": "minutark.ee",
                              "plan": {"legacy_id": "free", "name": "Free Website"}},
-    f"/zones/{_Z_PRODUCT}/argo/smart_routing": {"id": "smart_routing", "value": "off", "editable": True},
 }
-# FLIPPED: someone enabled Argo on the platform zone and moved the product zone off free — one
-# drift per zone, so the test also proves each alert selects the RIGHT zone rather than both.
+# FLIPPED: someone moved the product zone off free while the platform zone stays put — one
+# drifted zone and one quiet one, so the test also proves the alert selects the RIGHT zone.
 _FLIPPED = json.loads(json.dumps(_TODAY))
-_FLIPPED[f"/zones/{_Z_PLATFORM}/argo/smart_routing"]["value"] = "on"
 _FLIPPED[f"/zones/{_Z_PRODUCT}"]["plan"] = {"legacy_id": "pro", "name": "Pro Website"}
 
 RULE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prometheusrule.yaml")
@@ -357,17 +342,7 @@ def self_test():
     through the committed alert expressions."""
     global _errors
 
-    # 1. Parsers: only "off" is off, and an unreadable field is an error, never a reading.
-    assert argo_enabled({"value": "off"}) == 0
-    assert argo_enabled({"value": "on"}) == 1
-    assert argo_enabled({"value": "ON"}) == 1, "case-insensitive"
-    assert argo_enabled({"value": "something-new"}) == 1, "unknown reads as enabled, not as safe"
-    for bad in ({}, {"value": ""}, None):
-        try:
-            argo_enabled(bad)
-            raise AssertionError(f"argo_enabled({bad!r}) must raise, not guess")
-        except ValueError:
-            pass
+    # 1. Parser: an unreadable field is an error, never a reading.
     assert plan_is_free({"plan": {"legacy_id": "free"}}) == 1
     assert plan_is_free({"plan": {"legacy_id": "pro"}}) == 0
     for bad in ({}, {"plan": {}}, {"plan": None}, None):
@@ -377,12 +352,10 @@ def self_test():
         except ValueError:
             pass
 
-    # 2. Today's fixture → the exact samples the issue's acceptance names (argo off, plan free).
+    # 2. Today's fixture → the exact samples the issue's acceptance names (plan free, both zones).
     today = _exposition(_TODAY)
     body = "\n".join(today)
     for sample in (
-        'cloudflare_zone_argo_smart_routing{zone="teststuff.net"} 0',
-        'cloudflare_zone_argo_smart_routing{zone="minutark.ee"} 0',
         'cloudflare_zone_plan_is_free{zone="teststuff.net"} 1',
         'cloudflare_zone_plan_is_free{zone="minutark.ee"} 1',
         'cloudflare_zone_spend_probe_ok{zone="teststuff.net"} 1',
@@ -393,10 +366,15 @@ def self_test():
     # 3. The committed rules, read from disk — the test states the names it expects so a rename
     #    or a deleted alert fails here instead of silently reducing coverage.
     exprs = rule_exprs()
-    toggle, plan, blind = ("CloudflareZoneSpendToggleEnabled", "CloudflareZonePlanNotFree",
-                           "CloudflareSpendProbeBlind")
-    for name in (toggle, plan, blind):
+    plan, blind = ("CloudflareZonePlanNotFree", "CloudflareSpendProbeBlind")
+    for name in (plan, blind):
         assert name in exprs, f"{name} is not in {RULE_FILE} (renamed? deleted?): {sorted(exprs)}"
+    # …and the retired one STAYS retired: its input metric no longer exists, so a re-added rule
+    # would be born permanently silent while looking like coverage (the argo leg, 2026-08-12).
+    assert "CloudflareZoneSpendToggleEnabled" not in exprs, \
+        "CloudflareZoneSpendToggleEnabled was retired with the argo leg (entitlement-gated, " \
+        "2026-08-12) — its input series is never emitted, so this rule cannot fire; re-adding " \
+        "it needs the leg back first (docs/cloudflare.md §spend surface)"
 
     # 3b. The #334 restart-gap bridge, pinned as literals because this evaluator cannot infer it:
     #     over one instant `min_over_time` and `max_over_time` are the same number, so a direction
@@ -405,7 +383,7 @@ def self_test():
     #     CloudflareSpendProbeBlind's absent() arm included, since an unbridged one swaps the
     #     alert's identity for a label-less one at every roll, which is a `for:` restart by another
     #     route (§3/7). Widening the range is a deliberate change, so it fails here too.
-    for name, want in ((toggle, ("max", "10m")), (plan, ("min", "10m")), (blind, ("min", "10m"))):
+    for name, want in ((plan, ("min", "10m")), (blind, ("min", "10m"))):
         got = bridges(exprs[name])
         assert got and all(bridge == want for bridge in got), \
             f"{name} must bridge EVERY arm with {want[0]} by (zone) / {want[0]}_over_time[{want[1]}]" \
@@ -413,26 +391,26 @@ def self_test():
 
     # 4. Replay: today's state is quiet, on every rule.
     quiet = samples_of(today)
-    for name in (toggle, plan, blind):
+    for name in (plan, blind):
         assert firing_zones(exprs[name], quiet) == set(), \
             f"{name} fires on today's state ({exprs[name]!r})"
 
-    # 5. Replay: the flipped fixture fires — each alert on its own zone, not on both.
+    # 5. Replay: the flipped fixture fires — on the drifted zone only, never the quiet one.
     flipped = samples_of(_exposition(_FLIPPED))
-    assert firing_zones(exprs[toggle], flipped) == {"teststuff.net"}, firing_zones(exprs[toggle], flipped)
     assert firing_zones(exprs[plan], flipped) == {"minutark.ee"}, firing_zones(exprs[plan], flipped)
     assert firing_zones(exprs[blind], flipped) == set(), "a drifted zone is still a READ zone"
 
-    # 6. A zone that stops answering is blind, not silently safe: no gauges, probe_ok=0, and the
-    #    blind alert names that zone while the two spend alerts stay quiet (nothing to assert on).
+    # 6. A zone that stops answering is blind, not silently safe: no gauge, probe_ok=0, and the
+    #    blind alert names that zone while the plan alert stays quiet (nothing to assert on).
+    #    The whole zone read fails here, so the name lookup does too — the zone label falls back
+    #    to the id, which is the documented degradation (unambiguous, just uglier).
     before = _errors
-    broken = samples_of(_exposition({f"/zones/{_Z_PLATFORM}": _TODAY[f"/zones/{_Z_PLATFORM}"]},
-                                    zone_ids=(_Z_PLATFORM,)))
-    assert ("cloudflare_zone_argo_smart_routing", "teststuff.net") not in broken, \
-        "a failed read must emit NO gauge — an absent sample, never a fabricated 0"
-    assert broken[("cloudflare_zone_spend_probe_ok", "teststuff.net")] == 0
-    assert firing_zones(exprs[blind], broken) == {"teststuff.net"}
-    assert firing_zones(exprs[toggle], broken) == set()
+    broken = samples_of(_exposition({}, zone_ids=(_Z_PLATFORM,)))
+    assert not any(series == "cloudflare_zone_plan_is_free" for series, _ in broken), \
+        "a failed read must emit NO gauge — an absent sample, never a fabricated value"
+    assert broken[("cloudflare_zone_spend_probe_ok", _Z_PLATFORM)] == 0
+    assert firing_zones(exprs[blind], broken) == {_Z_PLATFORM}
+    assert firing_zones(exprs[plan], broken) == set()
     assert _errors == before + 1, "a failed read must count toward cloudflare_spend_probe_errors_total"
     _errors = before
 
@@ -441,8 +419,9 @@ def self_test():
     assert firing_zones(exprs[blind], {}) == {"<absent>"}, \
         f"{blind} must survive the series disappearing: {exprs[blind]!r}"
 
-    print("cloudflare spend-probe self-test: OK (parsers, today's exposition, and the committed "
-          f"{toggle}/{plan}/{blind} exprs replayed against flipped + blind fixtures)")
+    print("cloudflare spend-probe self-test: OK (parser, today's exposition, and the committed "
+          f"{plan}/{blind} exprs replayed against flipped + blind fixtures; the retired argo "
+          "leg asserted absent)")
     return 0
 
 
