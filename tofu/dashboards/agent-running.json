@@ -505,7 +505,7 @@
           "options": {
             "excludeByName": {
               "Time": true,
-              "Value": true,
+              "Value": false,
               "__name__": true,
               "owner": true,
               "instance": true,
@@ -519,7 +519,7 @@
             "indexByName": {
               "repo": 0,
               "number": 1,
-              "label": 2
+              "Value": 2
             }
           }
         }
@@ -544,6 +544,36 @@
                     "title": "open on GitHub",
                     "targetBlank": true,
                     "url": "https://github.com/teststuffstash/${__data.fields.repo}/issues/${__data.fields.number}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "queue"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "reflex queue",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "CODEOWNER PARK",
+                        "index": 1
+                      }
+                    }
                   }
                 ]
               }
