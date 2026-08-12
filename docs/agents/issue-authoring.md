@@ -650,3 +650,18 @@ the two read-honesty signals live in
 
 Implementation: the harvest/closeout clause changes ship WITH executed replays (ADR-103 —
 they are exactly the clause class that produced homelab#198/#204).
+
+## Goal lane versions — which design had which problems
+
+The lane redesigns wholesale (the scout's §M7 v1/v2/v3 pattern), so its history is versioned:
+a **major.minor bump per design generation**, each row naming the era's exemplar goals, its
+defining decisions, and the *measured* problems that killed it — so a recurring symptom can be
+dated to the design that produced it instead of being rediscovered. Convention: bump the minor
+for machinery redesigns inside one lifecycle model, the major if the lifecycle itself changes.
+Add the row in the same commit as the superseding decision.
+
+| version | era / exemplars | defining design | measured problems (evidence) | superseded by |
+|---|---|---|---|---|
+| **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
+| **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | v1.2 (open) |
+| **v1.2** | design OPEN | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) | — | — |

@@ -3704,3 +3704,14 @@ it held). Both views published side-by-side on the artifact — operator framing
 the machinery saw, view 2 = what happened; FU-165 is making them converge. Evidence exhibit for
 the recorded #295 bucket-semantics question + FU-090's sprout-RATE gauge (which today could only
 ever read depth 2).
+↳ (same session, the v1.1 record) Operator ruled the FU-165 pilot spike-worthy and the goal lane
+VERSIONED: docs/spikes/goal-lane-v1.1-fu165-pilot.md (the git-durable evidence — 7 findings, all
+measured: bucket flattening 2-vs-5 generations; 52/52 inflow edges worker/ride-authored, the
+depth bar gates the messenger not the author; per-event cadence 21 rulings/46 mints; Touches
+fence ~7× against sub-60-line folds, 0 conflicts all run; dispatcher-bound queue 3550 min vs
+pod 605, 361 min starvation, ring-to-scan ~45 min sampled; no consumer for goal-thread operator
+directives; budget machinery self-fixed in-run). issue-authoring.md gained §Goal lane versions
+(v1 circles/goal-174 → v1.1 ADR-102/#278 → v1.2 OPEN = FU-168 + #295 + typed findings + §M10 +
+FU-166(b)). FU-168 filed this session (charter's design half, pre-verdict); FU-166(b) gained the
+goal-thread comment source; FU-145 repointed. Close procedure handed to the operator: apply
+goal/validated → IL-T19 closes + report-first sweep; FU-166/167/168 unblock at the verdict.
