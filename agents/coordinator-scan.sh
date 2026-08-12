@@ -1506,11 +1506,13 @@ EOF_GUARDED
         case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         set -- $gdesc; gtotal_n=$#
-        _gf_find "$slug" "$g" || true
+        _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
         gfbody="$GF_BODY"
         gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
         gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"
-        if [ "$gcur" != "$gbd" ]; then
+        # gf_rc=2 (comments UNREADABLE) skips the write outright: the `-` sentinel means
+        # CONFIRMED absent, and a blind create risks a second store comment (PR#398 r2).
+        if [ "$gcur" != "$gbd" ] && [ "${gf_rc:-2}" != "2" ]; then
           gf_burndown "$slug" "$g" "$gbd" "${GF_ID:--}" "$gfbody" >/dev/null 2>&1 \
             || echo "  [$repo] ⚠ goal #${g}: burn-down write refused — store stale, checkpoint counting unaffected" >&2
         fi

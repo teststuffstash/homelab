@@ -27,18 +27,22 @@ _gf_comments() {   # $1 slug, $2 issue → full comments json (id+body) or ""
 }
 
 GF_ID=""; GF_BODY=""
-_gf_find() {   # $1 slug, $2 issue → sets GF_ID/GF_BODY; rc 1 when absent/unreadable.
+_gf_find() {   # $1 slug, $2 issue → 0 = found (GF_ID/GF_BODY set); 1 = confirmed ABSENT (read ok,
+  # no store comment); 2 = UNREADABLE. The 1-vs-2 split is load-bearing (bot review, PR#398 r2):
+  # a writer that treats a blind read as "absent" CREATES a second store comment on a transient
+  # API failure — the exact ONE-machine-comment invariant (ADR-103) this file exists to hold.
   # Two jq passes over one fetch, NOT @tsv: tsv escapes embedded newlines to literal \n, which
   # flattened every real multi-line store into one unparseable line — counts read 0/0 and the
   # burn-down compare always missed (caught by the goal-checkpoint-due fixture, 2026-08-12).
   GF_ID=""; GF_BODY=""
   local js; js="$(_gf_comments "$1" "$2")" || js=""
-  [ -n "$js" ] || return 1
+  [ -n "$js" ] || return 2
+  jq -e 'type == "array"' >/dev/null 2>&1 <<<"${js:-null}" || return 2
   GF_ID="$(printf '%s' "$js" | jq -r --arg m "$MARK" \
     '[.[] | select((.body // "") | startswith($m))] | first // empty | .id' 2>/dev/null)" || GF_ID=""
-  [ -n "$GF_ID" ] || return 1
+  [ -n "$GF_ID" ] || return 1   # read OK, no store → confirmed absent
   GF_BODY="$(printf '%s' "$js" | jq -r --arg m "$MARK" \
-    '[.[] | select((.body // "") | startswith($m))] | first.body' 2>/dev/null)" || { GF_ID=""; return 1; }
+    '[.[] | select((.body // "") | startswith($m))] | first.body' 2>/dev/null)" || { GF_ID=""; return 2; }
   return 0
 }
 
@@ -68,8 +72,13 @@ gf_counts() {   # $1 slug, $2 issue → "total dispositioned" ("" on unreadable 
 }
 
 gf_append() {   # $1 slug, $2 issue, $3 entry-line (no leading number)
-  local id body next
-  if _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"; else id=""; body="$(_gf_empty_body)"; fi
+  local id body next _rc
+  _gf_find "$1" "$2" && _rc=0 || _rc=$?
+  case "$_rc" in
+    0) id="$GF_ID"; body="$GF_BODY";;
+    1) id=""; body="$(_gf_empty_body)";;
+    *) echo "goal-findings: comments UNREADABLE for ${1}#${2} — refusing to append (a create on a blind read risks a SECOND store; ADR-103)" >&2; return 1;;
+  esac
   next="$(printf '%s\n' "$body" | awk '/^[0-9]+\. /{n=$1+0} END{print n+1}')"
   printf '%s\n%s. %s\n' "$body" "$next" "$3" | _gf_put "$1" "$id" "$2"
   echo "goal-findings: appended entry ${next} to ${1}#${2}"
@@ -90,8 +99,14 @@ gf_burndown() {   # $1 slug, $2 issue, $3 text [, $4 id, $5 body — pre-fetched
   local id body
   if [ $# -ge 5 ] && [ "$4" = "-" ]; then id=""; body="$(_gf_empty_body)"   # cached: store known absent → create, no re-GET
   elif [ $# -ge 5 ] && [ -n "$4" ]; then id="$4"; body="$5"
-  elif _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"
-  else id=""; body="$(_gf_empty_body)"; fi
+  else
+    local _rc; _gf_find "$1" "$2" && _rc=0 || _rc=$?
+    case "$_rc" in
+      0) id="$GF_ID"; body="$GF_BODY";;
+      1) id=""; body="$(_gf_empty_body)";;
+      *) echo "goal-findings: comments UNREADABLE for ${1}#${2} — burn-down skipped (no blind create; ADR-103)" >&2; return 1;;
+    esac
+  fi
   printf '%s\n' "$body" | awk -v t="$3" '{ if ($0 ~ /^burn-down:/) print "burn-down: " t; else print }' \
     | _gf_put "$1" "$id" "$2"
   echo "goal-findings: ${1}#${2} burn-down updated"
@@ -102,10 +117,7 @@ _gf_self_test() {
   local body counts
   body="$(_gf_empty_body)"
   body="$(printf '%s\n1. origin=#12 surface=a class=fold — x\n2. origin=#13 surface=b class=child — y\n' "$body")"
-  counts="$(printf '%s\n' "$body" | awk '
-    /^[0-9]+\. / { n = $1 + 0 }
-    /^dispositioned-through:/ { d = $2 + 0 }
-    END { printf "%d %d\n", n, d }')"
+  counts="$(printf '%s\n' "$body" | gf_parse_counts)"   # THE parse — a hand copy here is how the helper and its test silently diverge (bot review, PR#398 r2)
   [ "$counts" = "2 0" ] || { echo "self-test: counts parse got '$counts' want '2 0'" >&2; return 1; }
   next="$(printf '%s\n' "$body" | awk '/^[0-9]+\. /{n=$1+0} END{print n+1}')"
   [ "$next" = "3" ] || { echo "self-test: next-entry got '$next' want 3" >&2; return 1; }
