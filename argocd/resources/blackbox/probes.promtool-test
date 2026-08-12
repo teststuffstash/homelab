@@ -146,7 +146,7 @@ tests:
   # grafana's actual shape at 17:06Z that day — two consecutive failed probes on an endpoint that
   # was fine before and after. This is the input that decides the range, because #349's bound says
   # the effective patience is `for: − B`: at the class's B = 10m it is zero, and this series then
-  # holds the expr true for twelve minutes and PAGES. The shipped [5m] peaks at seven and cannot.
+  # holds the expr true for eleven minutes and PAGES. The shipped [5m] peaks at six and cannot.
   # If anyone ever "completes" this port to the class's default, this case is what goes red.
   - interval: 1m
     name: the 2026-08-07 two-probe flake — [5m] silent, the mechanical [10m] port pages
@@ -173,7 +173,7 @@ tests:
       - eval_time: 30m
         alertname: EndpointProbeFailing
         exp_alerts: []
-      # the counter-witness, on the same two-minute flake: a page eight minutes after the endpoint
+      # the counter-witness, on the same two-minute flake: a page nine minutes after the endpoint
       # came back, for a front that missed two probes.
       - eval_time: 15m
         alertname: EndpointProbeFailingBridge10m
