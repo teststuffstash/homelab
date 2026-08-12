@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-168**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-169**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -220,6 +220,20 @@ the block needs pruning, not more headings.
       coordinate-doorbell.yaml same day):** remaining fork = fan the global trigger out (rewrites
       the coordinator Sensor, sits on the two-readers trap) — operator call, recorded in the doc.
       Relates FU-143, FU-145, ADR-094.
+- [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout (ADR-094 + ADR-097,
+      all options open — the numbers decide).** Operator charter (#278 comment 5257393726): re-mine
+      done (burn-down 5262051051 + meta-state §4); the DESIGN is the deferral. Two coupled halves,
+      one revisit: (a) **concurrency** — the scan mutex + session-streams-the-ride shape caps
+      parallelism (peak 3, 1-worker windows while streams hold the mutex; the Forbid-cron symptom
+      FU-145 points here); (b) **the `Touches:` fence** — measured 2026-08-12 over all 41 goal PRs:
+      ONE overlapping same-file write (auto-merged), ZERO merge-conflict 422s, counterfactual
+      full-drift ≈ 1 trivial collision, while ≥7 sub-60-line deferred wants each cost a full ride
+      (~7× margin for size-discriminated declared fold-in; evidence + method: the goal-278 sprout-DAG
+      artifact, `agents/goal_graph.py`). Candidate directions recorded on #278: detach the stream /
+      rethink item-scoped dispatch; demote `Touches:` to metadata + static ❌/pin-only checks, gate
+      the merge not the launch. **Next:** the design session, fresh numbers in hand; single-run
+      caveat — re-measure on a concurrent stack first if one is riding by then.
+      Relates ADR-094, ADR-097, FU-145, FU-167, FU-090 (§M10 phase-not-clause), FU-165.
 - [ ] **FU-167** — **`agents/replay/**` is a growing serialization tax on the platform lane**
       (operator catch 2026-08-11, mid-goal-#278): the ratchet rule mandates declaring the replay
       tree on every clause-file child, so all such children mutually intersect and serialize —
@@ -253,7 +267,7 @@ the block needs pruning, not more headings.
       cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
       Minted TWO false issues (#120, #134 — the #134 ride's disproof is the class writeup).
       Description fixed 2026-08-08 (leads with the FP class + the early-death-vs-reached-clones
-      discriminator; the log-compare test is retired). **SHIPPED 2026-08-11 (goal #278 child #283/PR#300 + KSM/pushgateway halves #347/#370):** re-keyed on the scan phase with fixtures. ⚠ the Forbid-cron suppression second symptom remains (dispatch holds the scan pod open — the #278 closeout deliverable owns the design). **Next:** archive once that design lands or is FU'd separately. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
+      discriminator; the log-compare test is retired). **SHIPPED 2026-08-11 (goal #278 child #283/PR#300 + KSM/pushgateway halves #347/#370):** re-keyed on the scan phase with fixtures. ⚠ the Forbid-cron suppression second symptom remains (dispatch holds the scan pod open — the #278 closeout deliverable owns the design). **Next:** archive — the design is **FU-168** now. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
