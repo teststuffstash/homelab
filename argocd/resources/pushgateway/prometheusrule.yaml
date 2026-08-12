@@ -272,12 +272,52 @@ spec:
         # Behaviour is pinned as an executed test, not as prose: `agents/scan-wedge-alert-test.sh`
         # (registered as a clause-replay fixture) extracts THIS expr and replays the 2026-08-06
         # healthy-ride shape against it plus both wedge shapes.
+        #
+        # ── KSM RESTART-GAP BRIDGED, AT [5m] AND DELIBERATELY NOT [10m] (homelab#333) ───────────
+        # Every conjunct below that is not a pushgateway marker comes from ONE workload:
+        # kube-state-metrics, `replicas: 1` (the kube-prometheus-stack default — values/ overrides
+        # only resources), live a SINGLE scrape target. That makes it a dependency SHARED with
+        # RegistryGCMirrorsStale/Suspended, and #333 decided it once for all three rather than
+        # three times: the verdict and the "KSM is a MIRROR, not a source" reasoning live in
+        # argocd/resources/registry-cache/prometheusrule.yaml's header. It applies unchanged here —
+        # a fresh KSM re-lists the API and republishes the same pod start time and phase, so the
+        # wedge outlives the hole and only the measurement of it went away.
+        # Two halves, and #288 proved either alone still resets `for:` at one replica:
+        #   (1) IDENTITY CHURN → `max by (...)`. KSM's ServiceMonitor sets honor_labels (verified
+        #       live: no `exported_pod` anywhere), so on `kube_pod_*` the SUBJECT pod keeps
+        #       `namespace`/`pod`/`uid` — but `instance` (KSM's own pod IP), `job`, `service`,
+        #       `endpoint` and `container` are KSM's and they ride onto this alert. A KSM
+        #       reschedule changes `instance`, which makes a FIRING alert a different alert
+        #       instance: a spurious resolve and a re-fire 2m later on a wedge that never stopped.
+        #       `by (namespace,pod,uid)` keeps exactly the subject's identity — what the
+        #       annotations read — and drops exactly KSM's. Arm 2 joins `on(pod)`, so `by (pod)`
+        #       there is the join key itself.
+        #   (2) A REAL HOLE → `max_over_time(...[5m])`. At one replica a KSM reschedule empties
+        #       every kube_* series and the staleness markers make that instant.
+        # ⚠ [5m], NOT the [10m] of #288/#313/#332, and the difference is this alert's `for: 2m`.
+        # The range is ALSO how long the alert keeps ringing after the pod it names is gone — and
+        # the containment for THIS alert is "delete the workflow", so the bridge is paid on every
+        # true firing while the hole it covers is rare. Measured against KSM's real behaviour
+        # (2026-08-12, the 8 days Prometheus retains): 11519 of 11521 scrape minutes present, worst
+        # hole 120s, twice, one pod generation, 0 restarts, pod 15d old. #288 measured this class
+        # on this cluster at 69-116s across 10 pod generations. [5m] is ~2.5-4x that. [10m] would
+        # be five times the alert's entire window and would outlive the fix by five times its own
+        # patience; a 120s hole, meanwhile, already resets a 2m window unaided, which is what made
+        # the identity half insufficient on its own here.
+        # CEILING, accepted and asserted rather than assumed: a KSM hole longer than 5m
+        # (crash-loop, cold image pull, node drain) still resets the 2m window.
+        # ⚠ DOES NOT TOUCH THE FU-145 RE-KEY (#283). Both branches still ask their question of the
+        # SCAN PHASE: arm 2's clock is still `agent_scan_phase_start_timestamp` and its gate is
+        # still `agent_scan_in_deterministic`, neither of which is a KSM series and neither of
+        # which is bridged. Only the KSM liveness conjunct changed, in both arms.
+        # The pushgateway's own restart gap is a DIFFERENT dependency and out of #333's scope —
+        # carried in the PR body as a finding, not silently folded in here.
         - alert: AgentCoordinateScanWedged
           expr: |
             (
-                (time() - kube_pod_start_time{pod=~"coordinate-.*"}) > 900
+                (time() - max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))) > 900
               and on(namespace,pod)
-                kube_pod_status_phase{phase="Running"} == 1
+                max by (namespace,pod,uid) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
               unless on(pod)
                 agent_scan_phase_start_timestamp
             )
@@ -287,7 +327,7 @@ spec:
               and on(pod)
                 agent_scan_in_deterministic == 1
               and on(pod)
-                kube_pod_status_phase{phase="Running"} == 1
+                max by (pod) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
             )
           for: 2m
           labels:

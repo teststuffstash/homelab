@@ -207,6 +207,18 @@ class Handler(BaseHTTPRequestHandler):
 # inverted gauge polarity (`plan_is_free == 0` vs `> 0`), a comparison against the wrong constant,
 # or a zone that stops emitting all fail this. The evaluator understands EXACTLY two expression
 # forms and RAISES on anything else, so an expr it cannot model can never pass silently.
+#
+# ⚠ …and since homelab#334 those two forms may carry the restart-gap BRIDGE
+# (`max|min by (zone) (max|min_over_time(<metric>[10m]))`, plus `absent(…_over_time(…))`). Over the
+# ONE instant this evaluator models, a bridge is a no-op — a range function over a single sample is
+# that sample, and `by (zone)` over one series per zone is the identity — so it is stripped before
+# the arm is evaluated and everything above still holds unchanged. What that also means is that the
+# one thing this evaluator structurally CANNOT see is the direction: at one instant `min_over_time`
+# and `max_over_time` are the same number, while in production the wrong one delays a real plan
+# upgrade by the whole range. So the direction and the range are pinned as literals in step 3b
+# instead of inferred, and the behaviour over time — `for:` windows, scrape holes, the absent() arm
+# transition — belongs to `promtool test rules` over spend-belt.promtool-test beside this file
+# (`devbox run prometheus-rules-lint`). Neither check subsumes the other.
 
 _Z_PLATFORM = "6b63f95592a9e036f8b8f6934511d321"  # teststuff.net
 _Z_PRODUCT = "fa1b02951c29ee4828b8948d0dd7baaf"  # minutark.ee
@@ -235,6 +247,43 @@ _CMP_RE = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)\s*(==|!=|>=|<=|>|<)\s*(-?[\d.
 _ABSENT_RE = re.compile(r"^absent\(([a-zA-Z_:][a-zA-Z0-9_:]*)\)$")
 _OPS = {"==": lambda a, b: a == b, "!=": lambda a, b: a != b, ">": lambda a, b: a > b,
         ">=": lambda a, b: a >= b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b}
+# The homelab#334 restart-gap wrapper, in the only two places it appears. `zone` is hard-coded on
+# purpose: it is the one label on these series that does NOT churn when the pod is replaced, and
+# grouping by anything else (`job`, `instance`) either collapses the two product zones into one
+# alert or keeps the churn the bridge exists to remove.
+_BRIDGE_CMP_RE = re.compile(
+    r"^(max|min) by \(zone\) \((max|min)_over_time\(([a-zA-Z_:][a-zA-Z0-9_:]*)\[(\d+[smhdwy])\]\)\)"
+    r"\s*(==|!=|>=|<=|>|<)\s*(-?[\d.]+)$")
+_BRIDGE_ABSENT_RE = re.compile(
+    r"^absent\((max|min)_over_time\(([a-zA-Z_:][a-zA-Z0-9_:]*)\[(\d+[smhdwy])\]\)\)$")
+
+
+def unbridge(arm):
+    """One expr arm → (the arm with any #334 bridge stripped, (direction, range) or None).
+
+    A bridge is a no-op over the single instant this evaluator models, so stripping it lets the two
+    modelled forms below stay exactly as narrow as they were. The one thing checked here rather
+    than ignored is coherence: an outer `max by (zone)` over an inner `min_over_time` (or the
+    reverse) reads opposite ends of the same window, which is homelab#331's direction bug written
+    into one expression, and it raises."""
+    match = _BRIDGE_ABSENT_RE.match(arm)
+    if match:
+        return f"absent({match.group(2)})", (match.group(1), match.group(3))
+    match = _BRIDGE_CMP_RE.match(arm)
+    if match:
+        agg, over, name, window, op, threshold = match.groups()
+        if agg != over:
+            raise AssertionError(
+                f"bridged arm mixes directions — `{agg} by (zone)` over `{over}_over_time` in "
+                f"{arm!r}: the aggregation and the range function must agree, or one of them is "
+                "reading the wrong end of the window (the homelab#331 direction bug)")
+        return f"{name} {op} {threshold}", (agg, window)
+    return arm, None
+
+
+def bridges(expr):
+    """Every arm's (direction, range), None where an arm carries no #334 bridge at all."""
+    return [unbridge(arm.strip())[1] for arm in expr.split(" or ")]
 
 
 def rule_exprs(path=RULE_FILE):
@@ -268,12 +317,12 @@ def samples_of(lines):
 def firing_zones(expr, samples):
     """The set of `zone` labels an expr selects over one instant of samples.
 
-    Supported: `<metric> <cmp> <number>` and `absent(<metric>)`, joined by ` or `. Anything else
-    raises — an evaluator that shrugs at an expression it does not understand would report green
-    on a rule it never checked."""
+    Supported: `<metric> <cmp> <number>` and `absent(<metric>)`, joined by ` or `, each optionally
+    wrapped in the #334 restart-gap bridge (see unbridge). Anything else raises — an evaluator that
+    shrugs at an expression it does not understand would report green on a rule it never checked."""
     firing = set()
     for arm in expr.split(" or "):
-        arm = arm.strip()
+        arm, _ = unbridge(arm.strip())
         match = _CMP_RE.match(arm)
         if match:
             name, op, threshold = match.group(1), match.group(2), float(match.group(3))
@@ -348,6 +397,19 @@ def self_test():
                            "CloudflareSpendProbeBlind")
     for name in (toggle, plan, blind):
         assert name in exprs, f"{name} is not in {RULE_FILE} (renamed? deleted?): {sorted(exprs)}"
+
+    # 3b. The #334 restart-gap bridge, pinned as literals because this evaluator cannot infer it:
+    #     over one instant `min_over_time` and `max_over_time` are the same number, so a direction
+    #     flipped here would be silent — and 10 minutes late in production, on the two LOW-is-bad
+    #     gauges (spend-belt.promtool-test §2/7 executes exactly that). Every arm must be bridged:
+    #     CloudflareSpendProbeBlind's absent() arm included, since an unbridged one swaps the
+    #     alert's identity for a label-less one at every roll, which is a `for:` restart by another
+    #     route (§3/7). Widening the range is a deliberate change, so it fails here too.
+    for name, want in ((toggle, ("max", "10m")), (plan, ("min", "10m")), (blind, ("min", "10m"))):
+        got = bridges(exprs[name])
+        assert got and all(bridge == want for bridge in got), \
+            f"{name} must bridge EVERY arm with {want[0]} by (zone) / {want[0]}_over_time[{want[1]}]" \
+            f" — got {got} in {exprs[name]!r}"
 
     # 4. Replay: today's state is quiet, on every rule.
     quiet = samples_of(today)

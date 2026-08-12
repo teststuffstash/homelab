@@ -180,7 +180,10 @@ all `severity: warning` into the normal responder path). Unlike the exporter it 
 must not inherit that blind spot. `eid-demo.com` is out of scope: legitimately Pro, outside every
 write token's zone map. Why a belt and not a guard is §Spend surface above; the mechanism and its
 `--self-test` (recorded API shapes replayed through the committed alert exprs) live in
-`argocd/resources/cloudflare-exporter/spend-probe.py`.
+`argocd/resources/cloudflare-exporter/spend-probe.py`. That self-test evaluates ONE instant; the
+three alerts' behaviour over time — the `for:` windows, and the fact that none of them restarts one
+when the single-replica probe rolls (homelab#334) — is the promtool fixture beside it,
+`spend-belt.promtool-test`, run by `devbox run prometheus-rules-lint` in CI.
 
 ### Free-zone GraphQL matrix (VALIDATED LIVE 2026-08-08, teststuff.net free vs eid-demo.com pro)
 
