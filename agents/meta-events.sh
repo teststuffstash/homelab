@@ -127,7 +127,10 @@ src_famine() {
 # SEATPR — the fix-on-feedback loop's own events (added 2026-08-12 after PR#381's approval went
 # unseen: needs-meta reports STUCK states by design, so a healthy verdict→merge — and worse, a
 # CHANGES_REQUESTED the seat must act on — had no source). Set lines carry the phase, so a
-# verdict flip emits (old clears, new fires); merged PRs hold a line for 24h.
+# verdict flip emits (old clears, new fires); merged PRs hold a line for 24h. CR lines carry
+# the newest CR verdict's timestamp (@...) so a SAME-verdict re-review still edges — without it
+# #398's round-2 CHANGES_REQUESTED (15:59, three minutes after the fix push) was invisible and
+# the seat sat blind for an hour (operator caught it, 2026-08-12).
 # CI-RED belt (2026-08-12, operator catch: PR#394 sat CI-red UNSEEN — a red check parks a PR in
 # a state no review-decision edge crosses, because the reviewer only lifts green+current PRs, so
 # the phase line above never moves). For OPEN seat PRs the head commit's `CI` run conclusion is
@@ -144,12 +147,12 @@ src_seatpr() {
   local r ok=1 prs pr_sha n sha c
   for r in $SEAT_REPOS; do
     prs="$(gh pr list -R "$ORG/$r" --state all --limit 15 \
-        --json number,author,state,reviewDecision,mergedAt,headRefOid 2>/dev/null)" || { ok=0; continue; }
+        --json number,author,state,reviewDecision,mergedAt,headRefOid,latestReviews 2>/dev/null)" || { ok=0; continue; }
     # pipe to REAL jq — `gh --jq` takes no --arg (the standing coordinator-scan rule)
     printf '%s' "$prs" | jq -r --arg me "$me" --arg r "$r" \
         '.[] | select(.author.login==$me)
          | select(.state=="OPEN" or ((.mergedAt // "") > (now - 86400 | todate)))
-         | "SEATPR|\($r)#\(.number)|\(if .state=="MERGED" then "MERGED" else (.reviewDecision // "AWAITING-REVIEW") end)"' \
+         | "SEATPR|\($r)#\(.number)|\(if .state=="MERGED" then "MERGED" else (.reviewDecision // "AWAITING-REVIEW") end)\(if .state != "MERGED" and .reviewDecision == "CHANGES_REQUESTED" then "@" + ([.latestReviews[]? | select(.state == "CHANGES_REQUESTED") | .submittedAt] | max // "?") else "" end)"' \
         >> "$tmp" || ok=0
     for pr_sha in $(printf '%s' "$prs" | jq -r --arg me "$me" \
         '.[] | select(.author.login==$me and .state=="OPEN") | "\(.number):\(.headRefOid)"' 2>/dev/null); do
