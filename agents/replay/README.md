@@ -129,6 +129,8 @@ is stale, so it cannot drift the way the prose register did.
 | `depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase-session` | actions | - | `agents/coordinator-session.sh` | - |
+| `doorbell-collapse` | actions | - | `agents/coordinator-scan.sh` | - |
+| `doorbell-fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |

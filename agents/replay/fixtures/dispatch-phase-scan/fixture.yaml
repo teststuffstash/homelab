@@ -3,7 +3,9 @@
 # CONDITION UNDER REPLAY. One scan pod (`coordinate-circles-1` in `circles-agents`) reaches a
 # dispatch four times over: with its own Workflow object unreadable, with it readable, a SECOND
 # dispatch in the same scan, and then the paths that must never cost a dispatch — no project to
-# key on, a disabled gateway, and a gateway that refuses the push twice.
+# key on, a disabled gateway, and a gateway that refuses the push twice. Two closing legs run the
+# CRON-submitted twin (017790c): the `workflows.argoproj.io/cron-workflow` label suppresses the
+# ring row and swaps the edge stamp for the cron one.
 #
 # THE CONTRACT:
 #   1. ITS OWN METRIC NAME AND JOB (`agent_dispatch_phase_seconds`, `job/agent_dispatch_phase`),
@@ -12,11 +14,15 @@
 #      STACK and the scan has no issue yet when it runs. Sharing a name would also mean a third
 #      HELP string for one metric name, and sharing a GROUP with coordinator-session.sh's rows
 #      would mean one emitter's POST silently deleting the other's.
-#   2. THE RING ROW IS OPTIONAL, THE SCAN ROW IS NOT. The ring edge is read off this scan's own
-#      Workflow object (`creationTimestamp`), through the real `dp_ring` and the PATH-shim
-#      `kubectl` — not a shadowed seam, because "which object, read how" is the part worth pinning.
-#      When that read fails (no RBAC, no Argo, a jail run) the row is ABSENT and the push still
-#      happens; a probe that failed once is retried at the next dispatch rather than latched off.
+#   2. THE RING ROW IS EDGE-ONLY, THE SCAN ROW IS NOT. The wake is read off this scan's own
+#      Workflow object (`dp_wake`, creationTimestamp + the cron-workflow label) through the
+#      PATH-shim `kubectl` — not a shadowed seam, because "which object, read how" is the part
+#      worth pinning. A ring-to-scan row exists ⇔ edge-woken (017790c): a cron wake gets NO ring
+#      row and stamps `agent_dispatch_cron_woken_timestamp`; an edge wake stamps the edge twin —
+#      two metric NAMES, because a pushgateway POST replaces per name and one name per source is
+#      what keeps an edge dispatch from deleting the last cron record. When the read fails (no
+#      RBAC, no Argo, a jail run) BOTH stamps are absent — "not measured", never "edge" — the
+#      push still happens, and the probe is retried at the next dispatch rather than latched off.
 #   3. TWO MARKS, NOT ONE. `scan` measures from the previous dispatch (or the pod's start), so a
 #      second dispatch cannot bill itself for the first one's streamed session; `ring-to-scan`
 #      measures to T0 — the POD's start — and therefore reports the SAME value at both dispatches.

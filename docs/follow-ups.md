@@ -212,26 +212,16 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
-- [ ] **FU-144** — **Doorbell fan-out RULED: option (a), receiver-side resolution** (operator,
-      2026-08-12): an emitter that edits a repo must NOT need to know stack mechanics or that a
-      namespace exists — `{repo}` is the honest payload; the global trigger RESOLVES repo→
-      {stack, loop_ns} and fans out. The map = one source of truth (the AgentStack claims, via
-      the stacks.json mirror), written out by a JAIL generator as part of the new-stack flow
-      (`scripts/new-agent-repo.sh` — the only birthplace of repos). Gap, cost, inventory:
-      [`workflow.md`](agents/workflow.md) §Triggers. **Next:** build WITH A2's doorbell-collapse
-      Sensor touch (same file, cheapest moment); simplest shape = the global workflow re-rings
-      `/coordinate` with the resolved pair (a resolver hop, no Sensor rewrite).
-      Relates FU-143, FU-145(arch), FU-168, ADR-094, ADR-106.
-
-- [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout (ADR-094 + ADR-097,
-      all options open — the numbers decide; OBJECTIVE = codeowner-touch count first, wall-clock second, tokens third — spike §objective function).** Two coupled halves: (a) concurrency (scan mutex +
-      session-streams-the-ride + the doorbell convoy, an ADR-093 regression — the fixed-name
-      collapse was lost); (b) the `Touches:` fence (over-blocks small folds ~7×, under-enforces
-      governance — #379). Evidence + candidate directions:
+- [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout — the design half
+      is ADR-106's (the A3 sitting); this item now tracks the build + soak.** (a) concurrency
+      shipped 2026-08-12 (the A2 famine PR — doorbell collapse + `--detach` mutex scoping +
+      FU-144 fan-out; the 017790c wake metrics + `AgentDispatchCronWoken` are the acceptance
+      instrument — cron-woken dispatches ≈ 0 once soaked); (b) the `Touches:` fence demotion +
+      mechanical governance lint = Bucket A4 (ADR-106 (4)). Evidence:
       [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
-      findings 4–5 + #278's charter comments. **Next:** the design session — AFTER FU-167
-      moves 1–3 land (its deliverables ride the replay lock).
-      Relates ADR-094, ADR-097, FU-145(arch), FU-167, FU-090, FU-165(arch).
+      findings 4–5. **Next:** watch the wake metrics after the A2 merge+sync (the alert is the
+      regression tooth); close when A4's fence half ships and the famine numbers hold.
+      Relates ADR-106, ADR-094, ADR-097, FU-167, FU-090.
 
 - [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
       × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
