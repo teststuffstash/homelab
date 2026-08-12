@@ -9,7 +9,8 @@ meant to avoid.)
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
 - **minutark.ee LIVE + DNSSEC COMPLETE**; oracle-iac#351 OPEN — deliverable = the bootstrap AS
-  IaC, blocked on the host-side ingress-token re-mint (the host session below); acceptance =
+  IaC, **UNBLOCKED 2026-08-12** (the host-side token session ran: two-zone ingress token minted +
+  stored) but oracle is PARKED (operator 2026-08-11) — pick up at unpark; acceptance =
   drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
   long DS digests — `tr -d ' '` before grepping.
 - **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08. Devices HEALTHY
@@ -32,9 +33,10 @@ meant to avoid.)
    **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
    debt):** A0 verify the iac-sentinel soak is observable (`iac_sentinel_violations` = no-series!)
    · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
-   everything else rides its lock · A2 famine fixes (doorbell fixed-name collapse + FU-144 receiver-side fan-out + mutex
-   scope; acceptance = "all events have doorbells" measured: cron-woken dispatches ≈ 0, alerted
-   on regression) — ⚖ rail move REJECTED (workers stay subscription; ruling in
+   everything else rides its lock · A2 ✅ DONE 2026-08-12 (#393): receiver-side collapse
+   (absorb-pending, zero lost edges) + FU-144 fan-out + `--detach` mutex scoping; the 017790c
+   wake metrics + `AgentDispatchCronWoken` are live — the "cron-woken ≈ 0" acceptance now SOAKS
+   under FU-168 — ⚖ rail move REJECTED (workers stay subscription; ruling in
    model-routing.md §M12) · A3 ✅ DONE 2026-08-12 (the same-session sitting) → **ADR-106** (PR#389): single-mode
    feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
    ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
@@ -44,6 +46,10 @@ meant to avoid.)
    (operator call, after A4's lint) · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
    inert triage). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
+   **Subagent trial RUN 1 recorded 2026-08-12** (goal-ancestor table-mode, PR#392 merged):
+   defects by catch-point seat 0 / bot 0 / post-merge = watch with lag; 148.5k subagent tokens;
+   9m11s authoring, ~20m dispatch→merged. One data point, no adoption verdict — next comparable
+   chunk continues the A/B (harvest-goal or c4c5 conversions are the named candidates).
    **Next-session shape (operator, 2026-08-12, calibrated): worktree-subagent TRIAL first, not
    adoption.** Suitability test = "would it need the design-agents corpus?" — if yes, it is
    design mislabeled as build → SEAT work (doorbell collapse is seat work by this test; today's
@@ -120,10 +126,10 @@ meant to avoid.)
    gates/parks alone until re-opened; incl. circles#77 ci-red park + oracle-fleet#259
    codeowner park + oracle-fleet#225 ERT snapshot re-run, upstream healthy again):
    Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
-   oracle-fleet#255 rework (attended-download constraint stands) · **HOST-SIDE session**:
-   the 4-step jail-read-all sequence (admin-token edit → argo-group probe →
-   homelab-jail-read-all as .tf → DELETE the legacy "Read all resources" token) — also
-   unblocks #223 and settles #231's blind leg.
+   oracle-fleet#255 rework (attended-download constraint stands). The HOST-SIDE 4-step
+   jail-read-all sequence: ✅ ALL DONE 2026-08-12 (argo verdict → PR#394; jail-read-all minted,
+   verified from the jail, legacy token DELETED; #231's blind leg settled + annotated —
+   **#231 is probably closeable now, operator's call**).
 
 ## Durable warnings — re-read before touching these files
 

@@ -3771,3 +3771,42 @@ goal #278 VALIDATED (first terminal), the v1.1 postmortem + spike + version regi
 the new lane, v1.2 DESIGNED (ADR-106), jail default reversed to PR-lane, review rubric hardened,
 .agents/** governance gap closed, codeowner economics recorded as THE objective. Next session:
 build A2 ∥ the subagent trial (prompt in meta-state §0's bootstrap rule).
+
+## 2026-08-12 build session — A2 shipped ∥ subagent trial run 1 ∥ the Cloudflare token dance (~12:30–14:30Z)
+
+The chartered build session, exactly the §0 shape (charter + §Re-arm, no corpus). **A2 (#393,
+MERGED)**: the famine chunk as one PR — doorbell COLLAPSE built receiver-side (a starting full
+scan absorbs Pending `coordinate*` siblings BEFORE its re-list: the ADR-093 fixed-name effect
+with zero lost edges — a Sensor-side fixed name drops rings mid-run, each a 017790c defect, so
+the deviation is argued in the PR) + FU-144 receiver-side fan-out (repo-dumb rings resolve via
+stacks_json; loop-break = ring_ns + cron-never-fans-out; FU-144 ARCHIVED) + `--detach` at all
+four dispatch sites (the mutex now spans the deterministic pass; the pod uploads, pushes its own
+session row, rings its own completion doorbell). The 017790c instrument live: dp_wake stamps
+`agent_dispatch_{edge,cron}_woken_timestamp`, `AgentDispatchCronWoken` is the tooth; acceptance
+soaks under FU-168. Found latent: NEITHER scan SA had workflows RBAC — dp_ring (FU-160) had
+failed silently fail-open since it shipped. Bot review: 2 blocking findings, both real (per-stack
+`sum by (project)`; CS_SESSION_START window parity), fixed in-PR; its follow-up (mutex-release
+precedes item claim) acknowledged → FU-168's soak watches it. Fixtures: `doorbell-collapse` +
+`doorbell-fanout` families, cron legs on `dispatch-phase-scan`; suite 77/0.
+**Subagent trial run 1 (PR#392, MERGED)**: goal-ancestor 4 dirs → 1 table family, worktree
+subagent + pre-push seat review (verification-heavy: independent suite run, byte-identity,
+patch round-trip). Numbers: seat 0 / bot 0 defects, post-merge lagged; 148.5k tokens; 9m11s
+authoring, ~20m dispatch→merged. Report-only finds: jq≥1.7 hermeticity sighting (#329's
+diagnosis), IL-T11 desc prose staleness. One data point; A/B continues.
+**Cloudflare (PR#394, MERGED + the operator's live sitting)**: the admin-token session's verdict
+recorded — argo is ENTITLEMENT-gated (evidence table in docs/cloudflare.md §spend surface; the
+doctrine gains "the gate may not be a permission at all"); spend-probe argo leg RETIRED
+coherently (probe/CR/promtool pair/self-test, which now pins the alert STAYS retired; the blind
+alert's 3-day cause thereby removed); #231 annotated (closeable, operator's call);
+jail-read-all.tf minted the legacy "Read all resources" replacement AS CODE (live-catalog
+`\bRead\b` filter — operator's shape; var.user_id defaulted → FU-156's inventory credential
+minted in the same apply), token dance run to completion IN-SESSION: store-script gap caught
+live (no jail-read-all MAP row — fixed on the PR), token verified from the jail (zones, token
+list, audit log), legacy DELETED, 8 tokens remain and all map to the matrix. Measured en route:
+the account audit log carries zone/account actions but NOT user-token CRUD (footnote landed).
+**Meta-events**: CI-RED seat-PR clause (operator catch — #394 sat CI-red invisibly: a red check
+crosses no review-decision edge; `gh run list --commit`, never statusCheckRollup) + re-armed.
+CI red itself was the responder harness's #239 stamped-set currency check catching the retired
+alert — the belts compose. Residue for next session: A0 (iac-sentinel observability), A4 (v1.2
+minimum build), check-#3 shadow showed two term-unlinked warnings (soak datum), FU-001 ref scrub
+due ~08-13.

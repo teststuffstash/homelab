@@ -161,7 +161,11 @@ included, which is good news for containment. Consequences: the spend-probe's **
 RETIRED** (not reinterpreted — "1015 ⇒ off on a free zone" is plausible but unverifiable without
 buying the entitlement; conservative option taken), so the belt is now the PLAN gauge +
 probe-health, and a dashboard-side Argo toggle lands in the **audit log** (`Account Settings
-Read` on the observability token — an on-demand jail read, `accounts/{id}/logs/audit`).
+Read` on the observability token — an on-demand jail read, `accounts/{id}/audit_logs`).
+⚠ Scope of that claim, measured 2026-08-12: the account audit log carries ZONE/account actions
+(`zone.settings` updates verified present) but NOT user-token CRUD — the day's own token mints
+and the legacy-token deletion never appeared in it. Token lifecycle is `/user/tokens` territory
+(the FU-156 inventory credential), not the audit log's.
 Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries — verify
 anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES; plans show
 hex only). Containment: the autonomous path can't reach those endpoints (allowlist); the jail
