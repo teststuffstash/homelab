@@ -1,0 +1,378 @@
+# Behaviour fixture for CloudflareExporterDown (#351) — the alert spend-belt.promtool-test names as
+# its own honest remaining work, and FU-158's last leg in this directory.
+#
+#   devbox run -- promtool test rules argocd/resources/cloudflare-exporter/exporter-down.promtool-test
+#
+# Named .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+# CI-enforced since 2026-08-11 — .github/workflows/ci.yaml runs `devbox run prometheus-rules-lint`,
+# which runs `promtool test rules` over every *.promtool-test under argocd/. That is the ONLY gate
+# this alert has: kubeconform has no PrometheusRule schema, so manifest-lint SKIPS the CR, and
+# spend-probe.py --self-test models the three spend gauges and no `up` series at all.
+#
+# CLOCK: promtool's test clock starts at 0. Range selectors are LEFT-OPEN in Prometheus 3.x, so
+# `[10m]` at t sees (t-10m, t] — a last real sample at T is in range through T+9m at a 1m interval
+# and gone at T+10m. Verified against promtool 3.13.1 rather than assumed, and every boundary claim
+# below is pinned by a promql_expr_test rather than counted in a comment.
+#
+# CADENCE: the ServiceMonitor beside this file scrapes at `interval: 120s`; these series sample
+# every 1m, like every other fixture in this repo. That is a denser series than production, not a
+# different one — `for:` measures elapsed TIME, not samples. The one place the real cadence would
+# change a reading is spelled out where it matters: a FAILED scrape writes `up = 0` (so an outage
+# is a run of 0s, halved in count at 120s but the same wall-clock), while a target REMOVED from
+# service discovery writes no sample at all but a STALE MARKER — which is what the `stale` tokens
+# below model, and what makes the `absent()` arm reachable within seconds instead of after the 5m
+# lookback expires.
+#
+# ✅ WHAT THIS FILE EXECUTES. The manifest carries a one-sentence claim about this alert — that it
+# is deliberately NOT in the #288/#313/#328 restart-gap class its three neighbours were ported into
+# by homelab#334, because "`up == 0` needs a live target, and a replaced target is a genuinely new
+# attempt at being scraped, so its reset is correct". Until now that was reasoning about an expr
+# nobody had written. exporter-down.promtool-rules writes it — `CloudflareExporterDownBridged334`,
+# the bridge ported onto this alert properly (see that group's header for why it is not a strawman)
+# — and tests 3, 4 and 5 run the two forms over the SAME inputs at the SAME eval times:
+#   • test 4 is the crux. An outage ended by a pod REPLACEMENT: the shipped alert's window resets
+#     and it never pages, because the condition ENDED (asserted directly, at the first scrape of
+#     the new target). The bridged form carries the dead pod's failed scrapes for 10m and PAGES at
+#     30m about an exporter that has been scraping successfully for three minutes.
+#   • test 5 is the price on the case FU-150 exists for. When the exporter is undeployed outright,
+#     the bridge delays "absence is the alert" by 9 minutes — bought nothing, cost the one page
+#     that cannot be recovered from anywhere else.
+#   • tests 1 and 2 are the fairness half: on a genuine outage the two forms fire at the SAME
+#     minute. The divergence above is attributable to the replacement, not to the witness being
+#     generally noisy.
+# What is NOT re-litigated here: the DIRECTION of the bridge. `up == 0` is LOW-is-bad, so the
+# witness uses `min_over_time`, the alert-preserving direction; the `max` mistake is already
+# executed one file over as CloudflareZonePlanNotFreeMaxDirection.
+#
+# ⚠ NOT covered, deliberately: the alert's behaviour when the exporter is scaled past `replicas: 1`
+# (it is 1 today, and the whole per-target form is chosen for that). With two replicas the `up == 0`
+# arm produces one alert instance per target, which is correct-by-construction for a scrape-liveness
+# alert and is the reason no aggregation was added. This is the test to revisit first if the
+# Deployment beside this file is ever scaled out.
+rule_files:
+  - exporter-down.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1/5 — the base case: a genuinely-down exporter pages at 30m, and only for its own job ─────
+  # `job=~".*cloudflare-exporter.*"` is a LOOSE selector (it tolerates an operator-style
+  # `monitoring/cloudflare-exporter` job label as well as the bare Service name). Loose is not the
+  # same as wrong, and the decoy proves which: cloudflare-spend-probe — the OTHER `replicas: 1`
+  # scrape target in this directory, with its own belt in spend-belt.promtool-test — is down for
+  # the whole run and must never raise THIS alert. If the regex is ever widened into it, the 30m
+  # assertion below fires two alerts where one is expected and this test goes red.
+  - interval: 1m
+    name: 30m of failed scrapes pages once, on the exporter's target only
+    input_series:
+      - series: 'up{endpoint="http",instance="10.244.2.148:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-6c9d7f8b45-2sxvq",service="cloudflare-exporter"}'
+        values: "1+0x9 0+0x120"
+      # the decoy: a different job, down from the first sample
+      - series: 'up{endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
+        values: "0+0x130"
+    promql_expr_test:
+      # the selector's scope, asserted directly: one series matches, not two
+      - expr: up{job=~".*cloudflare-exporter.*"} == 0
+        eval_time: 40m
+        exp_samples:
+          - labels: 'up{endpoint="http", instance="10.244.2.148:8080", job="cloudflare-exporter", namespace="monitoring", pod="cloudflare-exporter-6c9d7f8b45-2sxvq", service="cloudflare-exporter"}'
+            value: 0
+    alert_rule_test:
+      # scrapes start failing at 10m; `for: 30m` is honoured to the minute
+      - eval_time: 20m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      # 30m — where the decoy WOULD page, having been down since the first sample
+      - eval_time: 30m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 39m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CloudflareExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http
+              instance: 10.244.2.148:8080
+              job: cloudflare-exporter
+              namespace: monitoring
+              pod: cloudflare-exporter-6c9d7f8b45-2sxvq
+              service: cloudflare-exporter
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+              description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
+
+  # ── 2/5 — a blip does not page, and recovery legitimately restarts the window ─────────────────
+  # The SAME target throughout: no roll, no replacement, just the exporter failing scrapes for 6m
+  # (a GraphQL timeout, a container restart in place) and then succeeding again. The reset here is
+  # not controversial and neither form disputes it — 6m of down plus a later outage must not add up
+  # to an early page. The point of running the witness at the same eval times is the fairness
+  # check: on a genuine outage against a live target the bridged form fires at the same minute, so
+  # tests 4 and 5 cannot be waved away as "the witness pages more, everywhere".
+  - interval: 1m
+    name: a 6m blip stays silent; the outage that follows pages at its own 30m, both forms
+    input_series:
+      - series: 'up{endpoint="http",instance="10.244.2.148:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-6c9d7f8b45-2sxvq",service="cloudflare-exporter"}'
+        values: "1+0x9 0+0x5 1+0x9 0+0x60"
+    alert_rule_test:
+      # the blip (10m…15m) never reaches 30m…
+      - eval_time: 15m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      # …and scrapes succeed again from 16m, so the window is genuinely over
+      - eval_time: 25m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      # down for good from 26m: 29m in, still pending — the blip did NOT carry over
+      - eval_time: 55m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 56m
+        alertname: CloudflareExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              endpoint: http
+              instance: 10.244.2.148:8080
+              job: cloudflare-exporter
+              namespace: monitoring
+              pod: cloudflare-exporter-6c9d7f8b45-2sxvq
+              service: cloudflare-exporter
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+              description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
+      # the witness agrees, to the minute: its 10m bridge is dropped by the single evaluation at
+      # 25m where the whole range is healthy, so its window restarts at 26m exactly as the shipped
+      # one does. Same page, same time — the bridge is not what fires here.
+      - eval_time: 55m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+      - eval_time: 56m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: cloudflare-exporter
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+
+  # ── 3/5 — a ROUTINE roll of a healthy exporter: the mechanism, before it costs anything ───────
+  # Every ArgoCD sync of this Deployment does exactly this: the outgoing pod fails its last two
+  # scrapes as it terminates (11m, 12m), its target is removed from SD (a `stale` marker at 13m —
+  # a plain end-of-series would let PromQL's 5m lookback flatter both forms), a 2m hole follows —
+  # the roll shape #288 measured, 69-116s over ten pod generations — and the new pod scrapes fine
+  # from 15m.
+  # Nothing pages, either way: an 11m carry cannot fill a 30m window. What the assertions pin is
+  # the MECHANISM that tests 4 and 5 then charge for — the shipped condition is FALSE from the new
+  # pod's first scrape at 15m, while the bridged one keeps reporting the dead pod's failed scrapes
+  # as a live condition until 21m, when the last of them leaves the range. Note the half of the
+  # class that DOES apply and is simply not worth having here: the shipped `absent()` arm flickers
+  # to a label-less instance for the 2m hole (bridging removes that, as it does for
+  # CloudflareSpendProbeBlind), but at `for: 30m` a 2m flicker is 28 minutes short of mattering.
+  - interval: 1m
+    name: "a healthy roll: the shipped condition ends at 15m, the bridged one runs to 21m"
+    input_series:
+      - series: 'up{endpoint="http",instance="10.244.2.148:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-6c9d7f8b45-2sxvq",service="cloudflare-exporter"}'
+        values: "1+0x10 0 0 stale"
+      - series: 'up{endpoint="http",instance="10.244.2.153:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-7f4b9c6d58-hq4kt",service="cloudflare-exporter"}'
+        values: "_x15 1+0x120"
+    promql_expr_test:
+      # mid-hole (13m): the shipped absent() arm sees no target at all…
+      - expr: absent(up{job=~".*cloudflare-exporter.*"})
+        eval_time: 13m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+      # …and the bridged arm does not, because the outgoing pod's samples are still in range
+      - expr: absent(min_over_time(up{job=~".*cloudflare-exporter.*"}[10m]))
+        eval_time: 13m
+        exp_samples: []
+      # 20m — five minutes of successful scrapes into the new pod's life. The shipped condition is
+      # over: no arm of it produces a sample.
+      - expr: up{job=~".*cloudflare-exporter.*"} == 0 or absent(up{job=~".*cloudflare-exporter.*"})
+        eval_time: 20m
+        exp_samples: []
+      # the bridged form disagrees, on the same instant and the same data
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 20m
+        exp_samples:
+          - labels: '{job="cloudflare-exporter"}'
+            value: 0
+      # …for exactly the range's width, and not a minute longer: the last failed scrape at 12m is
+      # in `[10m]` through 21m and gone at 22m (left-open — (12m, 22m] excludes the 12m sample)
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 21m
+        exp_samples:
+          - labels: '{job="cloudflare-exporter"}'
+            value: 0
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 22m
+        exp_samples: []
+    alert_rule_test:
+      # neither form pages on a roll alone — this test is the mechanism, test 4 is the bill
+      - eval_time: 40m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+
+  # ── 4/5 — THE CRUX: an outage ENDED by a replacement. The window reset is the correct answer ──
+  # The exporter has been failing every scrape since the clock started (a bad token, a crashing
+  # container — 24m in, six minutes short of paging). Then the pod is REPLACED: the old target goes
+  # stale at 25m, a 2m hole, and the new pod scrapes successfully from 27m.
+  # This is the shape the manifest's sentence is about, and the two readings of it are:
+  #   • #288's reading, which is right for a gauge: "the condition never stopped being true, the
+  #     roll only broke the series carrying it, so bridge the hole".
+  #   • what is actually true for `up`: the condition DID stop being true. `up` is not a property
+  #     of the exporter, it is the RESULT OF AN ATTEMPT to scrape one, and a new target is a new
+  #     attempt — one that succeeded. Asserted at 27m: no arm of the shipped expr produces a
+  #     sample. Nothing is being carried over a hole, because there is nothing left to carry.
+  # So the shipped alert never pages, and the bridged one pages at 30m — three minutes after the
+  # exporter demonstrably started answering — and keeps paging until its range ages out at 34m.
+  # 24m of real outage went unpaged in BOTH forms, which is `for: 30m` doing its job in both; the
+  # only thing the bridge adds is a page with no live condition under it.
+  - interval: 1m
+    name: "a replaced target restarts the window (correct); the bridged port pages on a healthy exporter"
+    input_series:
+      - series: 'up{endpoint="http",instance="10.244.2.148:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-6c9d7f8b45-2sxvq",service="cloudflare-exporter"}'
+        values: "0+0x24 stale"
+      - series: 'up{endpoint="http",instance="10.244.2.153:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-7f4b9c6d58-hq4kt",service="cloudflare-exporter"}'
+        values: "_x27 1+0x120"
+    promql_expr_test:
+      # 24m: the outage is real and the window is running — six minutes from a page
+      - expr: up{job=~".*cloudflare-exporter.*"} == 0
+        eval_time: 24m
+        exp_samples:
+          - labels: 'up{endpoint="http", instance="10.244.2.148:8080", job="cloudflare-exporter", namespace="monitoring", pod="cloudflare-exporter-6c9d7f8b45-2sxvq", service="cloudflare-exporter"}'
+            value: 0
+      # 27m, the new target's FIRST scrape: the shipped condition is false on both arms. This one
+      # assertion is why the reset is correct rather than a defect.
+      - expr: up{job=~".*cloudflare-exporter.*"} == 0 or absent(up{job=~".*cloudflare-exporter.*"})
+        eval_time: 27m
+        exp_samples: []
+      # the bridged form at the same instants: still true at 30m (it pages here) and at 33m…
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 30m
+        exp_samples:
+          - labels: '{job="cloudflare-exporter"}'
+            value: 0
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 33m
+        exp_samples:
+          - labels: '{job="cloudflare-exporter"}'
+            value: 0
+      # …and false at 34m, when the dead pod's last sample (24m) leaves the left-open [10m]
+      - expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0
+        eval_time: 34m
+        exp_samples: []
+    alert_rule_test:
+      # SHIPPED: pending at 24m, and never fires — not at its would-be 30m, not ever
+      - eval_time: 24m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      # BRIDGED: 29m in, then it pages — on a target that has been scraping for three minutes
+      - eval_time: 29m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: cloudflare-exporter
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+      # still paging at 33m — six minutes of healthy scrapes deep
+      - eval_time: 33m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: cloudflare-exporter
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+      # and it only resolves when the range forgets the dead pod, not when the exporter recovered
+      - eval_time: 34m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+
+  # ── 5/5 — the absent() arm (FU-150), and what the bridge would cost it ────────────────────────
+  # "Absence is the alert, not an error count" — the lesson this rule file's header opens with. The
+  # exporter is UNDEPLOYED (ArgoCD app removed, ServiceMonitor selector broken, Service renamed):
+  # the target disappears at 9m and never returns, so there is no `up == 0` to see and only the
+  # second arm can page. It does, at 39m, with the label-less identity that arm necessarily
+  # produces — no pod, no instance, because there is no target to name.
+  # A live unrelated target (cloudflare-spend-probe, healthy throughout) runs alongside to pin that
+  # `absent()` here is scoped to the exporter's own job: a busy `monitoring` namespace must not
+  # silence it. `absent(up)` is empty at the same instant; `absent(up{job=~…})` is 1.
+  # THE PRICE OF THE COUNTERFACTUAL, on the case that matters most: the bridged form cannot see the
+  # absence until the last real sample leaves its range, so it pages at 48m — nine minutes late on
+  # the one signal that has no other source. FU-150's "absence is the alert" still holds under the
+  # bridge, it just holds nine minutes slower, and buys nothing anywhere else in this file.
+  - interval: 1m
+    name: "an undeployed exporter pages label-less at 30m; the bridged port would page 9m late"
+    input_series:
+      - series: 'up{endpoint="http",instance="10.244.2.148:8080",job="cloudflare-exporter",namespace="monitoring",pod="cloudflare-exporter-6c9d7f8b45-2sxvq",service="cloudflare-exporter"}'
+        values: "1+0x8 stale"
+      # a healthy, unrelated target for the whole run
+      - series: 'up{endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
+        values: "1+0x130"
+    promql_expr_test:
+      # scoped absence: the exporter is gone even though `up` itself is not
+      - expr: absent(up{job=~".*cloudflare-exporter.*"})
+        eval_time: 20m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+      - expr: absent(up)
+        eval_time: 20m
+        exp_samples: []
+      # the bridged arm is blind to the absence until 18m: the last real sample (8m) is in the
+      # left-open [10m] through 17m
+      - expr: absent(min_over_time(up{job=~".*cloudflare-exporter.*"}[10m]))
+        eval_time: 17m
+        exp_samples: []
+      - expr: absent(min_over_time(up{job=~".*cloudflare-exporter.*"}[10m]))
+        eval_time: 18m
+        exp_samples:
+          - labels: "{}"
+            value: 1
+    alert_rule_test:
+      # SHIPPED: absent from 9m, pages at 39m, label-less
+      - eval_time: 38m
+        alertname: CloudflareExporterDown
+        exp_alerts: []
+      - eval_time: 39m
+        alertname: CloudflareExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"
+              description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
+      # BRIDGED: silent when the shipped alert pages, and only catches up at 48m
+      - eval_time: 39m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+      - eval_time: 47m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts: []
+      - eval_time: 48m
+        alertname: CloudflareExporterDownBridged334
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Cloudflare exporter scrape target down/absent"

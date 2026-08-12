@@ -1,0 +1,83 @@
+# CloudflareExporterDown — the one alert in this directory's rule file that spend-belt.promtool-*
+# does NOT cover (FU-158's remaining leg here, #351) — lifted VERBATIM out of prometheusrule.yaml
+# (comments stripped, the manifest is their one home). This is the rules file that
+# exporter-down.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose
+# — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would
+# fail it.
+#
+# The SECOND fixture pair in this directory (spend-belt.promtool-* was the first, #334). With this
+# one the CR's alerts are 4 of 4 covered: the three spend-belt alerts there, this one here.
+# A SEPARATE PAIR rather than a fourth rule in spend-belt.promtool-rules, for the reason
+# registry-cache/gc-mirrors-witness.promtool-rules records: promtool evaluates EVERY rule in EVERY
+# loaded file at EVERY step of EVERY test in that file, so rules sharing a file must tolerate each
+# other's inputs. These tests drive the `up` series through holes and stale markers that the
+# spend-belt cases have no business seeing, and vice versa.
+#
+# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
+# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
+# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit:
+#
+#   devbox run -- yq -o=json '{"groups": [{"name": "cloudflare-exporter-down", "rules": [.spec.groups[].rules[] | select(.alert == "CloudflareExporterDown")]}]}' argocd/resources/cloudflare-exporter/prometheusrule.yaml | devbox run -- yq -P '.'
+#
+# …that command regenerates the `cloudflare-exporter-down` group ONLY, and it was RUN as written
+# to produce the group below (#344 reports three other headers whose recipe does not survive a
+# copy-paste — this one does; it is one line on purpose, because `devbox run` executes scripts
+# under dash, which mangles a multi-line quoted argument — CLAUDE.md §Environment). The
+# `regression-witness-bridged-334` group at the bottom is not in the CR and must survive the
+# re-copy — re-append it (see its own header).
+#
+# The OTHER checks in this directory do NOT see this alert: `devbox run spend-probe-self-test`
+# replays the three spend exprs out of the committed CR and models no `up` series at all, and
+# manifest-lint SKIPS the CR outright (kubeconform has no PrometheusRule schema). For
+# CloudflareExporterDown, this fixture is the whole gate.
+groups:
+  - name: cloudflare-exporter-down
+    rules:
+      - alert: CloudflareExporterDown
+        expr: up{job=~".*cloudflare-exporter.*"} == 0 or absent(up{job=~".*cloudflare-exporter.*"})
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cloudflare exporter scrape target down/absent
+          description: 'Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix).'
+
+  # ── REGRESSION WITNESS — NOT deployed, and deliberately not in prometheusrule.yaml ────────────
+  # A COUNTERFACTUAL rather than a fossil, which is the one way this witness differs from
+  # spend-belt.promtool-rules §regression-witness-pre-334: `CloudflareExporterDown` never had a
+  # pre-#334 form, because #334 deliberately left it out of the restart-gap class. The manifest
+  # says why, in one sentence — "`up == 0` needs a live target, and a replaced target is a
+  # genuinely new attempt at being scraped, so its reset is correct" — and that sentence is a
+  # claim about an expr that does not exist anywhere. This group is that expr: the #288/#313/#328
+  # bridge ported onto this alert exactly as it was ported onto the three beside it.
+  #
+  # It is the port done RIGHT, not a strawman, which is what makes the contrast worth executing:
+  #   • `min by (job)` — drops the churning `pod`/`instance` identity, keeps a label that survives
+  #     a roll (`job`), same as `max|min by (zone)` there;
+  #   • `min_over_time(…[10m])` — `up == 0` is LOW-is-bad, so `min` is the alert-PRESERVING
+  #     direction under #334's direction rule (a `max` port would read the healthiest scrape in
+  #     the window and mask a real outage — that mistake is already executed one file over, as
+  #     CloudflareZonePlanNotFreeMaxDirection, and is not re-litigated here);
+  #   • the `absent()` arm bridged too, as CloudflareSpendProbeBlind's is.
+  # So the divergence the fixture measures is not a direction error and not a half-fix. It is the
+  # class simply not applying: bridging carries a RESOLVED condition forward, and the roll that
+  # restarts this window ends the condition instead of continuing it. `for:` and `severity` are
+  # carried unchanged so the contrast is attributable to the expr alone; annotations are trimmed
+  # to `summary`, the convention the openrouter-proxy, github-exporter and spend-belt witness
+  # groups already use.
+  #
+  # If CloudflareExporterDown's expr is ever revisited, this stays as it is — it is a fossil of a
+  # road not taken, not a copy of the live rule. It is also what stops a STALE hand copy of the
+  # group above from passing vacuously: with the bridged expr in both places the pairs would agree
+  # and every replacement assertion in the test file fails.
+  - name: regression-witness-bridged-334
+    rules:
+      - alert: CloudflareExporterDownBridged334
+        expr: min by (job) (min_over_time(up{job=~".*cloudflare-exporter.*"}[10m])) == 0 or absent(min_over_time(up{job=~".*cloudflare-exporter.*"}[10m]))
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cloudflare exporter scrape target down/absent
