@@ -42,6 +42,9 @@ SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # ADR-097 footprint-intersection dispatch: the predicate lives in a sourceable helper so the
 # double-dispatch belt (agents/footprint-test.sh, in ci) exercises the exact code the scan runs.
 . "${HERE}/footprint.sh"
+# ADR-106 (3): the findings-store helpers (burn-down write + checkpoint counts) — the store
+# format's ONE home; the coordinator session uses the same file's CLI verbs.
+. "${HERE}/goal-findings.sh"
 # Parallelism ceilings (ADR-097): hard per-repo worker max, and the TRACKS-rule-1 open-PR bound
 # (updater churn is O(open PRs × merges)) that holds NEW work regardless of footprints.
 REPO_MAX_WIP="${REPO_MAX_WIP:-3}"
@@ -745,7 +748,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # human-first report (agent/error style), not dispatched. A FAILED dep probe blocks
     # CONSERVATIVELY with a PROBE-FAILED marker — rule #6: never fail INTO a dispatch.
     # ONE fetch, two derivations (leg (c)): `queued` is the dispatchable set; `openall` keeps the
-    # unfiltered list so the goal-review clause can find goals that have LEFT agent/queued for the
+    # unfiltered list so the goal lane can find goals that have LEFT agent/queued for the
     # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
     # what this loop actually runs out of (FU-084).
     openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent 2>/dev/null)" || openall='[]'
@@ -1210,7 +1213,7 @@ EOF_GUARDED
     done < <(printf '%s' "$queued" | jq -r '.[] | [ .number, .title, (([(.body // "") | scan("(?mi)^[ \\t]*touches:[ \\t]*(.+)$")] | flatten | join(",")) | if . == "" then "-" else . end), ([((.blockedBy // {}).nodes // [])[] | .url | capture("github.com/(?<r>[^/]+/[^/]+)/issues/(?<n>[0-9]+)") | "\(.r)#\(.n)"]
             | unique | join(", ") | if . == "" then "-" else . end), (if .isPinned then "P" else "-" end), ([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/")), ((.parent.number // "") | tostring) ] | @tsv')
     iss="$(printf '%b' "$iss")"  # the emitters below expect newline-joined plain text
-    # ── goal-review (FU-090 leg (c), 2026-08-05) ───────────────────────────────────────────────
+    # ── the goal lane (FU-090 leg (c) 2026-08-05; per-closure session DEMOTED by ADR-106 (3) 2026-08-12) ───────────────────────────────────────────────
     # The forest/trees rule's third leg: a goal must be RE-EVALUATED, not merely survive its
     # children. Fires when a child CLOSES — not only when the last one does (operator, 2026-08-05:
     # "there should be some kind of backstop on the goal also ... it will deadlock too much when
@@ -1454,7 +1457,7 @@ EOF_GUARDED
                 "" \
                 "**That is a MIDPOINT, not a verdict** (ADR-102). Assembly-complete measures \"built as specified\"; it says nothing about whether the idea works — circles#17 was machine-ruled met 100 minutes before the operator refuted it, which is why this transition no longer closes anything. The goal is now \`goal/post-launch\` and STAYS OPEN, shipping to production at its own pace against the same \`Budget:\` line." \
                 "" \
-                "**Where post-launch work goes:** ${gbucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-review\`." \
+                "**Where post-launch work goes:** ${gbucktxt}. Children there base \`master\` and carry NO \`Base:\` line — the goal branch dies at the assembly squash, and goal identity is this issue plus its budget, never the branch. Open descendants still carrying a \`Base: goal/**\` line need retargeting to master at the next \`goal-checkpoint\`." \
                 "" \
                 "**It closes only on a VERDICT**, applied here as a label by this goal's verdict authority (\`Verdict-authority:\`, default \`human\`):" \
                 "" \
@@ -1472,30 +1475,58 @@ EOF_GUARDED
           fi
         fi
         # A goal this block moved is DONE for this pass: it is closed (terminal), just announced
-        # (post-launch — that comment is also what retires the stateless goal-review predicate), or
-        # deliberately held for a human. Any of the three makes a goal-review unit noise at best.
+        # (post-launch), or deliberately held for a human. Any of the three makes further goal
+        # bookkeeping this pass noise at best.
         [ -n "$gacted" ] && continue
         [ -z "${gdesc# }" ] && continue
-        newest_close="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+        # ── v1.2 (ADR-106 (3)): the per-closure goal-review SESSION is DEMOTED ──────────────────
+        # Goal #278 drew 21 ruling sessions, 13 re-deriving the same "not complete" — so the
+        # per-closure tick now costs ZERO tokens: a deterministic burn-down line inside the
+        # FINDINGS STORE (agents/goal-findings.sh — ONE machine comment, edited in place). The
+        # old `last_bot` debounce is deleted WITH the session it debounced, and it could not have
+        # debounced this anyway: a comment PATCH keeps `createdAt`, so the debounce here is
+        # compare-then-write (an unchanged burn-down writes nothing).
+        # The REASONING tier now runs only where work is CREATED — a `goal-checkpoint` unit on:
+        #   (a) ≥ GOAL_CHECKPOINT_N undispositioned store findings (count-keyed marker), or
+        #   (b) the child-set completing PRE-launch — the operator's 2026-08-05 deadlock backstop
+        #       ("it will deadlock too much when only child traffic causes the goal to move"),
+        #       carried over from the retired clause and INDEPENDENT of store readability.
+        # Budget-fraction + pre-verdict triggers are ADR-106's later legs, not built here.
+        # An absent/unreadable store reads as counts 0 0 (the comments API swallows both shapes)
+        # — trigger (a) simply cannot arm, which is rule #6's direction (never fail INTO a
+        # dispatch), while (b) still fires; the next scan retries the read.
+        gopen_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
           '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
-           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED") | .closedAt] | sort | last // ""')"
-        [ -z "$newest_close" ] || [ "$newest_close" = "null" ] && continue
-        # newest comment BY THE LOOP on the goal — a human comment must not silence the clause
-        # ⚠ `gh --jq` takes ONLY an expression — it has no --arg/--argjson (those are jq flags).
-        # Passing them makes gh exit "accepts 1 arg(s)", and behind `|| echo ""` that yields an
-        # EMPTY last_bot, which this predicate reads as "the loop has never commented" — so the
-        # clause re-fires EVERY tick for any goal with a closed child, burning a coordinator
-        # session each time. Two were spent (16:30, 17:00) on 2026-08-05 before it was caught.
-        # This is the SAME trap already written up for the budget gate hours earlier in the same
-        # session; pipe to a real jq, always.
-        last_bot="$(gh issue view "$g" --repo "$slug" --json comments 2>/dev/null \
-          | jq -r --arg wa "${WORKER_AUTHOR:-app/homelab-agents-1234}" \
-             '[.comments[] | select(.author.login == ($wa|ltrimstr("app/"))) | .createdAt] | sort | last // ""' 2>/dev/null || echo "")"
-        # ISO-8601 Z sorts lexically, but `[ a \> b ]` is a bashism that silently misbehaves under
-        # other shells — compare with sort so the predicate cannot quietly invert.
-        newer="$(printf '%s\n%s\n' "$newest_close" "$last_bot" | sort | tail -1)"
-        if [ -z "$last_bot" ] || { [ "$newer" = "$newest_close" ] && [ "$newest_close" != "$last_bot" ]; }; then
-          units="${units}goal-review|${repo}|issue-${g}\n"
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "OPEN")] | length' 2>/dev/null || echo "")"
+        gclosed_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
+          '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
+           | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
+        # Each count validated on its own — concatenation would let ("", "3") read as the
+        # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
+        case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        set -- $gdesc; gtotal_n=$#
+        _gf_find "$slug" "$g" && gf_rc=0 || gf_rc=$?
+        gfbody="$GF_BODY"
+        gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
+        gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"
+        # gf_rc=2 (comments UNREADABLE) skips the write outright: the `-` sentinel means
+        # CONFIRMED absent, and a blind create risks a second store comment (PR#398 r2).
+        if [ "$gcur" != "$gbd" ] && [ "${gf_rc:-2}" != "2" ]; then
+          gf_burndown "$slug" "$g" "$gbd" "${GF_ID:--}" "$gfbody" >/dev/null 2>&1 \
+            || echo "  [$repo] ⚠ goal #${g}: burn-down write refused — store stale, checkpoint counting unaffected" >&2
+        fi
+        gcounts="$(printf '%s\n' "$gfbody" | gf_parse_counts)"
+        gtot="${gcounts% *}"; gdisp="${gcounts#* }"
+        gundisp=$(( gtot - gdisp ))
+        gck=""
+        [ "$gundisp" -ge "${GOAL_CHECKPOINT_N:-5}" ] && gck="findings ${gundisp} undispositioned"
+        if [ "$gopen_n" -eq 0 ] && [ "$gclosed_n" -gt 0 ] && [ "$gpl" -eq 0 ]; then
+          gck="${gck:+${gck} + }child-set complete pre-launch"
+        fi
+        if [ -n "$gck" ]; then
+          echo "  [$repo] goal #${g}: CHECKPOINT due (${gck}; store ${gtot} total / ${gdisp} dispositioned)"
+          units="${units}goal-checkpoint|${repo}|issue-${g}\n"
         fi
       done
     fi
@@ -1537,8 +1568,8 @@ EOF_GUARDED
     # same absorbing-belt class as the WIP-hold jq-null bug).
     # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
     # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
-    # would be refused; the mandate is a NEW child on the goal — coordinator README goal-review
-    # play). Report-only line below so it never rots silently.
+    # would be refused; the mandate is a NEW child on the goal — coordinator README
+    # goal-checkpoint play). Report-only line below so it never rots silently.
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
       orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
     done
@@ -2123,8 +2154,8 @@ EOF_GUARDED
     c6_n=0
     # FU-143 point 1: the goal children detected above (OPEN, merged into their declared goal/**
     # base, keyword inert) — same unit, same play, same cap; emitted FIRST because C4/C5 was told
-    # to stand aside for exactly these, and the closeout unblocks goal-review + blocked-by
-    # siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
+    # to stand aside for exactly these, and the closeout moves the burn-down + unblocks
+    # blocked-by siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
     for gb in $(printf '%b' "${c6g:-}"); do
       gn="${gb%%|*}"; gbase="${gb#*|}"
       if [ "$c6_n" -lt 3 ]; then
@@ -2201,7 +2232,7 @@ EOF_GUARDED
 
   # ⚠ `units` is NOT derivable from `items`, and gating on `items` alone silently starves a whole
   # clause. Every OTHER unit happens to feed both — its subject is a queued/in-progress issue or an
-  # open PR, which also lands in a report list — but `goal-review`'s subject is a goal parked in
+  # open PR, which also lands in a report list — but `goal-checkpoint`'s subject is a goal parked in
   # `agent/blocked`, deliberately in no report list at all. So the backstop was unreachable in
   # EXACTLY the state it was built for: every child closed and nothing else going on, which is the
   # deadlock the operator asked to be backstopped ("it will deadlock too much when only child
@@ -2255,7 +2286,7 @@ EOF_GUARDED
     # but it must win over it when a repo has both, because a goal left undecomposed is what makes
     # its children exist at all (leg (c), 2026-08-05). It stays BELOW every recovery and merge-path
     # clause — an in-flight failure is always more urgent than planning the next thing.
-    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-review goal-decompose queued-dispatch; do
+    for clause in c4c5-redispatch arbitrate changes-requested merge-conflict unarmed-major infra-enrich ci-red merged-closeout goal-checkpoint goal-decompose queued-dispatch; do
       unit="$(printf '%b' "$units" | grep -m1 "^${clause}|" || true)"
       [ -n "$unit" ] && break
     done
@@ -2317,7 +2348,10 @@ EOF_GUARDED
     # route through yet. When the coordinator lane is wired to /route (post-P4, FU-095), this map
     # becomes a subscription-rail reasoning class and dies here. See docs/agents/model-routing.md §M10.
     case "$uclause" in
-      goal-decompose) cmodel="${GOAL_MODEL:-opus}";;
+      # AUTHORING vs CHECKING (operator ruling 2026-08-05): decompose CREATES work; the ADR-106
+      # checkpoint is the SECOND authoring moment (fold-by-footprint / mint children / drop), so
+      # it rides the same reasoning tier. The demoted burn-down tick costs no model at all.
+      goal-decompose|goal-checkpoint) cmodel="${GOAL_MODEL:-opus}";;
     esac
     # ADR-097: the launcher-owned AGENT_WIP_LIMIT for this repo (live workers + 1, ceiling-capped;
     # 1 on probe failure). Computed by the scan, carried as pod env — never LLM-assembled.
@@ -2360,7 +2394,7 @@ EOF_GUARDED
     # same reason the state-fp marker sits directly above), so the ancestry probe + budget read
     # cost one unit's worth of calls per scan instead of the emission cap's three.
     #
-    # BUCKET CREATION IS IDEMPOTENT and fires at the goal-review/closeout site, which is where
+    # BUCKET CREATION IS IDEMPOTENT and fires at the goal-checkpoint/closeout site, which is where
     # ADR-102 puts it. It fires EARLIER than "at assembly merge" on purpose: deliverable 2 files
     # open-goal sprouts into the bucket, so the container must exist while the goal is still
     # pre-launch. One container per goal either way — the search below is what makes a second call
@@ -2375,11 +2409,11 @@ EOF_GUARDED
     # >>>REPLAY:harvest-disposition>>>
     uharvest=""
     case "$uclause" in
-      merged-closeout|goal-review)
+      merged-closeout|goal-checkpoint)
         hslug="${ORG}/${urepo}"; hgoal=""; hbucket=""; hsq=""; hwhy=""
         case "$uclause" in
-          # A goal-review unit IS the goal. Nothing to walk.
-          goal-review) hgoal="${uitem#issue-}" ;;
+          # A goal-checkpoint unit IS the goal. Nothing to walk.
+          goal-checkpoint) hgoal="${uitem#issue-}" ;;
           # A closeout item is the GOAL itself (the assembly PR's own closeout), a goal CHILD
           # (depth 1), or a sprout of one (depth 2+). Test the item, then climb the native
           # sub-issue chain — `goal_resolve_ancestor` (agents/goal-budget.sh). Testing the ITEM
@@ -2436,27 +2470,22 @@ EOF_GUARDED
               fi
             fi
           fi
+          # ── v1.2 (ADR-106 (2)+(3)) — harvest APPENDS, never mints ─────────────────────────
+          # The selfqueue GRANT is retired: 52 of 52 goal-#278 inflow edges were worker/ride-
+          # authored issues minted per-event, which is the debt the store exists to batch. A
+          # closeout's findings now APPEND to the goal's findings store (agents/goal-findings.sh)
+          # and the CHECKPOINT is the one minting moment — budget-gated THERE (goal_budget_read
+          # moved into that play; children parent to their ORIGINATING issue, the bucket back to
+          # post-assembly strays only). A dead goal's findings land inert, as ever.
           if [ "$uclause" = "merged-closeout" ]; then
-            if [ -z "$hbucket" ]; then
-              hsq="no"; hwhy="no post-launch bucket could be resolved or created under goal #${hgoal} — nowhere to file, so nothing self-queues"
-            elif [ "$hgstate" != "OPEN" ]; then
-              hsq="no"; hwhy="goal #${hgoal} is ${hgstate} — the self-queue right dies with the goal (ADR-102)"
+            if [ "$hgstate" != "OPEN" ]; then
+              hsq="inert"; hwhy="goal #${hgoal} is ${hgstate} — findings from a dead goal land inert (ADR-102 terminals)"
             else
-              # The SAME arithmetic the launcher pre-flight enforces with — advisory here, per the
-              # ⚖ line on #207: this read may demote a label, the pre-flight is what refuses a
-              # ride. No dispatch issue is passed; the question is "does the goal have room", not
-              # "may this key be minted".
-              command -v goal_budget_read >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
-              goal_budget_read "$hslug" "$hgoal" "${wmodel:-claude/haiku}"
-              case "$GB_VERDICT" in
-                within)    hsq="yes"; hwhy="goal #${hgoal} OPEN and Σ(spend + reservations) \$${GB_SUM} ≤ Budget \$${GB_BUDGET}" ;;
-                exhausted) hsq="no";  hwhy="goal #${hgoal} OPEN but Σ(spend + reservations) \$${GB_SUM} > Budget \$${GB_BUDGET} — out of funding" ;;
-                *)         hsq="no";  hwhy="goal #${hgoal} carries no machine-parsed \`Budget:\` line — no grant, no self-queue right (ADR-102 fail-closed)" ;;
-              esac
+              hsq="store"; hwhy="v1.2: findings APPEND to the store; minting is the checkpoint's, budget-gated there (ADR-106 (3))"
             fi
           fi
-          uharvest=" goal=${hgoal}${hbucket:+ bucket=${hbucket}}${hsq:+ selfqueue=${hsq}}"
-          echo "  harvest disposition (ADR-102): ${urepo} ${uitem} → goal #${hgoal}, bucket ${hbucket:-UNRESOLVED}${hsq:+, self-queue ${hsq}}${hwhy:+ — ${hwhy}}"
+          uharvest=" goal=${hgoal}${hbucket:+ bucket=${hbucket}}${hsq:+ harvest=${hsq}}"
+          echo "  harvest disposition (ADR-106): ${urepo} ${uitem} → goal #${hgoal}, bucket ${hbucket:-UNRESOLVED}${hsq:+, harvest ${hsq}}${hwhy:+ — ${hwhy}}"
         fi
         ;;
     esac

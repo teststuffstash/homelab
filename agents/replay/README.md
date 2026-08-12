@@ -153,6 +153,7 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-budget-refusal-legacy` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-unchanged` | actions | - | `agents/agent-session.sh` | - |
 | `goal-budget-refusal-unreadable` | actions | - | `agents/agent-session.sh` | - |
+| `goal-checkpoint-due` | actions | - | `agents/coordinator-scan.sh` | IL-T12 |
 | `goal-nonassembly-merge-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
 | `goal-reverted` | actions | - | `agents/coordinator-scan.sh` | IL-T20 IL-T22 |
 | `goal-validated` | actions | - | `agents/coordinator-scan.sh` | IL-T19 IL-T22 |
