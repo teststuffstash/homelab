@@ -35,13 +35,46 @@ spec:
               sum by (project, issue) (agent_run_cost_usd)
               * on (project, issue) group_right () goal_descendant_info
             )
-        # Both operands carry exactly (owner, project, stack, goal), so the plain match is right.
-        # A goal with no parsable `Budget:` line has NO goal_budget_usd series and therefore no
-        # ratio and no remaining — absent, not a fake 0/∞ (the exporter's rule, kept here).
+        # ⚠ THE OPERANDS DO NOT SHARE A LABEL SET, and this comment asserted for months that they
+        # did (homelab#348). `goal_spent_usd` is the aggregate ABOVE — `sum by (…)` leaves it with
+        # exactly (owner, project, stack, goal). `goal_budget_usd` is scraped straight off the
+        # exporter, so it carries the target labels too (container, endpoint, instance, job,
+        # namespace, pod, service). A plain binary operator matches on the FULL label set of both
+        # sides, so 4 labels never matched 11: both rules evaluated to NOTHING, for every goal,
+        # from #209 until #348 — and the panel that reads goal_budget_ratio read "No data" while
+        # the registry table beside it looked healthy (it reads the two families SEPARATELY).
+        # Silent exactly like #312/#330: an expr that evaluates to nothing is indistinguishable
+        # from a condition that is not happening.
+        #
+        # The fix collapses the SCRAPED side to the aggregate's label set, rather than writing an
+        # explicit `on (owner, project, stack, goal) group_left ()`. Both return the right three
+        # series today (verified live, 2026-08-12), but they differ on the roll: `replicas: 1`
+        # with the default RollingUpdate surges to two Ready pods, so both generations are scraped
+        # and goal_budget_usd briefly carries TWO series per goal. As the "one" side of a
+        # group_left that is a duplicate-match error, and a rule that errors records nothing — for
+        # EVERY goal, not just the doubled one. `max by (…)` collapses the generations instead.
+        # Same reasoning as claim (iii) of the restart-gap block in the `github` group below, and
+        # both shapes are executed against a two-generation input in agent-goals.promtool-test.
+        #
+        # ABSENCE, in the two directions this pair can be blind:
+        #  - No parsable `Budget:` line ⇒ no goal_budget_usd ⇒ no ratio, no remaining. Absent, not
+        #    a fake 0/∞ — unfunded-unknown is not funded-zero (the exporter's rule, kept here).
+        #  - A budget but NO goal_spent_usd ⇒ still absent, and that is DECIDED, not inherited
+        #    (#348). Goal #278 is the live case: ~26 rides, all `claude/haiku` on the subscription
+        #    rail, which pushes agent_run_total but no agent_run_cost_usd — so it has a $60 budget
+        #    and no spend series at all. `or vector(0)` would render it as 0% burn. Rejected: this
+        #    rule cannot tell a subscription-rail goal from one whose cost pushes were LOST (the
+        #    FU-131 harvest gap — killed pods), and agents/goal-budget.sh, the arithmetic that
+        #    actually gates a dispatch, reads that same state fail-CONSERVATIVE (a child that has
+        #    ridden with nothing in the ledger is charged its full cap). A panel printing 0% burn
+        #    for precisely the state the gate prices at maximum would put the two in contradiction
+        #    on one screen, and 0 is a claim this rule has no evidence for. Absent is honest; that
+        #    it is also INVISIBLE is the real residue, and it is written up in #348's PR body
+        #    rather than papered over with a zero.
         - record: goal_budget_ratio
-          expr: goal_spent_usd / goal_budget_usd
+          expr: goal_spent_usd / max by (owner, project, stack, goal) (goal_budget_usd)
         - record: goal_budget_remaining_usd
-          expr: goal_budget_usd - goal_spent_usd
+          expr: max by (owner, project, stack, goal) (goal_budget_usd) - goal_spent_usd
 
     - name: github
       rules:

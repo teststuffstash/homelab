@@ -1,0 +1,78 @@
+# The `agent-goals` recording rules — ADR-102's goal registry arithmetic — lifted VERBATIM out of
+# prometheusrule.yaml (comments stripped, the manifest is their one home). This is the rules file
+# that agent-goals.promtool-test loads. Not a manifest and not applied to anything: `promtool test
+# rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under
+# `.spec`, so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose
+# — manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would
+# fail it.
+#
+# The THIRD fixture over github-exporter's rule file (queued-age.promtool-* was first, FU-150/#284;
+# loop-health.promtool-* second, #331) and the first over a RECORDING group. It exists because
+# #348 found goal_budget_ratio and goal_budget_remaining_usd empty for every goal since #209 —
+# a `sum by (…)` aggregate divided by a raw scrape, so the plain match never had a pair to match.
+#
+# ✅ DRIFT-PINNED, unlike loop-health.promtool-rules: `devbox run exporter-self-test` compares the
+# three `agent-goals` record blocks below against prometheusrule.yaml line for line and fails if
+# they diverge (github-exporter.py, record_rule()). That pin is the whole reason this copy is
+# allowed to exist — the hazard it closes is homelab#337's: a stale copy tests the OLD expr and
+# passes VACUOUSLY, which is a green that saw nothing (the FU-125/FU-108 class). Re-copy after
+# editing a rule:
+#
+#   yq -o=json '{"groups": [.spec.groups[] | select(.name == "agent-goals")]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
+# input text"), so a pretty-wrapped form does not run as written (homelab#344, same constraint
+# stated in loop-health.promtool-rules and agent-router.promtool-rules). Verified by RUNNING the
+# line above on 2026-08-12. ⚠ Two things it does NOT do: it re-emits `goal_spent_usd`'s folded
+# `>-` expr as a literal `|-` block (re-fold it by hand, or the drift pin's line comparison trips
+# on formatting rather than meaning), and it regenerates the `agent-goals` group ONLY — the two
+# witness groups at the bottom are not in the CR and must survive the re-copy.
+groups:
+  - name: agent-goals
+    rules:
+      - record: goal_spent_usd
+        expr: >-
+          sum by (owner, project, stack, goal) (
+            sum by (project, issue) (agent_run_cost_usd)
+            * on (project, issue) group_right () goal_descendant_info
+          )
+      - record: goal_budget_ratio
+        expr: goal_spent_usd / max by (owner, project, stack, goal) (goal_budget_usd)
+      - record: goal_budget_remaining_usd
+        expr: max by (owner, project, stack, goal) (goal_budget_usd) - goal_spent_usd
+
+  # ── regression witness: the exprs exactly as they shipped from #209 to #348 ────────────────────
+  # NOT a proposal and not deployed — the pre-fix forms, kept runnable so the fixture can EXECUTE
+  # the contrast instead of asserting it in prose (the #310/#328/#345 shape). Every case below that
+  # asserts a shipped ratio also asserts these EMPTY at the same eval time; that pairing is what
+  # attributes the fix to the join and not to the fixture's input.
+  #
+  # These read goal_spent_usd, which the group above records — group order in this file is
+  # evaluation order, so the aggregate exists by the time these run.
+  - name: regression-witness-pre-348
+    rules:
+      - record: goal_budget_ratio_pre348
+        expr: goal_spent_usd / goal_budget_usd
+      - record: goal_budget_remaining_usd_pre348
+        expr: goal_budget_usd - goal_spent_usd
+
+  # ── the REJECTED alternative is deliberately NOT a group here ─────────────────────────────────
+  # #348 offered two working shapes and left the choice to the PR. The one not taken is an explicit
+  #
+  #     goal_spent_usd / on (owner, project, stack, goal) group_left () goal_budget_usd
+  #
+  # which returns the same three series as the shipped rule on a steady-state scrape and parts
+  # company with it on a pod roll (agent-goals.promtool-test case 3). It is not carried here as a
+  # fourth group because a rule that ERRORS cannot live in a green fixture: `promtool test rules`
+  # reports a rule-evaluation error at every evaluation, asserted or not, and fails the whole run.
+  # Adding it back and re-running yields, verbatim (measured 2026-08-12):
+  #
+  #   FAILED: rule: goal_budget_ratio_group_left, time: 8m0s, err: found duplicate series for the
+  #   match group {goal="29", owner="teststuffstash", project="circles", stack="circles"} on the
+  #   right hand-side of the operation: […pod="…-kcmdn"…, …pod="…-p2xqz"…]; many-to-many matching
+  #   not allowed: matching labels must be unique on one side
+  #
+  # …which is the failure itself, not a description of it: a recording rule that errors records
+  # NOTHING, for every goal in the rule, not just the doubled one. What CI holds standing instead
+  # is the PRECONDITION — case 3 asserts that a surge really does put two goal_budget_usd series in
+  # one match group, and that `max by (…)` really does collapse them to one.

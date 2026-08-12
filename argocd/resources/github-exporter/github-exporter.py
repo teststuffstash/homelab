@@ -1423,22 +1423,26 @@ _FIXTURE = {
 _HERE = os.path.dirname(os.path.abspath(__file__))
 RULE_FILE = os.path.join(_HERE, "prometheusrule.yaml")
 FIXTURE_RULES = os.path.join(_HERE, "queued-age.promtool-rules")
+GOALS_FIXTURE_RULES = os.path.join(_HERE, "agent-goals.promtool-rules")
 QUEUED_AGE_METRIC = "github_workflow_run_queued_since_timestamp"
 _ALERT_RE = re.compile(r"^\s*-\s*alert:\s*(\S+)\s*$")
+# homelab#348: the goal registry's arithmetic is RECORDING rules, so the pin needs the same block
+# scan keyed on `- record:`. Same shape, one regex apart — hence _rule_block below.
+_RECORD_RE = re.compile(r"^\s*-\s*record:\s*(\S+)\s*$")
 
 
-def alert_rule(path, name):
-    """One alert's rule block, dedented so the CR and the promtool copy compare as equals.
+def _rule_block(path, pattern, name):
+    """One rule's block, dedented so the CR and the promtool copy compare as equals.
 
     Comments and blank lines are dropped (the CR carries the reasoning, the fixture carries the
     runnable copy); everything the rule MEANS — expr, for, labels, annotations — must match."""
     out, indent, capturing = [], 0, False
     with open(path, encoding="utf-8") as handle:
         for line in handle:
-            match = _ALERT_RE.match(line)
+            match = pattern.match(line)
             if match:
                 if capturing:
-                    break              # the next alert starts: this block is complete
+                    break              # the next rule starts: this block is complete
                 if match.group(1) != name:
                     continue
                 capturing, indent = True, len(line) - len(line.lstrip())
@@ -1452,6 +1456,16 @@ def alert_rule(path, name):
                 break                  # dedented out of the rule
             out.append(line[indent:].rstrip())
     return out
+
+
+def alert_rule(path, name):
+    """One alert's rule block (see _rule_block)."""
+    return _rule_block(path, _ALERT_RE, name)
+
+
+def record_rule(path, name):
+    """One recording rule's block (see _rule_block)."""
+    return _rule_block(path, _RECORD_RE, name)
 
 
 def self_test():
@@ -1564,6 +1578,34 @@ def self_test():
         "`promtool test rules argocd/resources/github-exporter/queued-age.promtool-test`\n"
         f"  shipped: {shipped}\n  fixture: {fixture}")
 
+    # ── the agent-goals pins (homelab#348) ───────────────────────────────────────────────────────
+    # Same pin, RECORDING lane. #348 found goal_budget_ratio and goal_budget_remaining_usd empty
+    # for every goal since #209 — a `sum by (…)` aggregate over a raw scrape, so the plain match
+    # had no pair to match — and the fix only stays fixed if the behaviour fixture keeps testing
+    # the expr that actually ships. An un-pinned hand copy is #337's hazard: the fixture would go
+    # on asserting the OLD expr and pass VACUOUSLY, a green that saw nothing (FU-125/FU-108).
+    for _record in ("goal_spent_usd", "goal_budget_ratio", "goal_budget_remaining_usd"):
+        _shipped = record_rule(RULE_FILE, _record)
+        _fixture = record_rule(GOALS_FIXTURE_RULES, _record)
+        assert _shipped, f"the {_record} recording rule is gone from {RULE_FILE}"
+        assert _fixture, f"{_record} not found in {GOALS_FIXTURE_RULES}"
+        assert _shipped == _fixture, (
+            f"the promtool fixture's copy of {_record} has drifted from prometheusrule.yaml — "
+            "re-extract it (the yq one-liner is in agent-goals.promtool-rules; re-fold the `>-` "
+            "expr by hand) and re-run `promtool test rules "
+            "argocd/resources/github-exporter/agent-goals.promtool-test`\n"
+            f"  shipped: {_shipped}\n  fixture: {_fixture}")
+    # The join is the whole bug: both derived rules must collapse the SCRAPED side to the
+    # aggregate's label set. A plain `goal_spent_usd / goal_budget_usd` parses and returns nothing,
+    # which no parse check can see — so the shape is asserted here too, not just its copy.
+    for _record in ("goal_budget_ratio", "goal_budget_remaining_usd"):
+        _expr = next((ln.split("expr:", 1)[1].strip() for ln in record_rule(RULE_FILE, _record)
+                      if ln.strip().startswith("expr:")), "")
+        assert "max by (owner, project, stack, goal) (goal_budget_usd)" in _expr, (
+            f"{_record} reads goal_budget_usd without collapsing it to the aggregate's label set "
+            f"— the scraped gauge carries the target labels too and the match yields NOTHING "
+            f"(homelab#348): {_expr!r}")
+
     # ── FU-144 conflict edge-trigger (#285): the doorbell this transition never had ──────────────
     # Hermetic: urlopen is swapped for a recorder, so the predicate, the {stack, loop_ns} routing
     # and the dedup are all exercised without a socket. The dispatcher is the ONLY executable gate
@@ -1637,7 +1679,8 @@ def self_test():
         urllib.request.urlopen, COORDINATE_WEBHOOK_URL = saved_urlopen, saved_url
 
     print("github-exporter self-test: OK (goal walk, budget parse, verdict, membership, "
-          "fallback query, queued-age series + alert wiring, conflict edge-trigger)")
+          "fallback query, queued-age series + alert wiring, agent-goals record pins + join "
+          "shape, conflict edge-trigger)")
     return 0
 
 
