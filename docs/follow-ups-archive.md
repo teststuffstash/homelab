@@ -8,6 +8,13 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-144** *(archived 2026-08-12)* — doorbell fan-out, ruled option (a) receiver-side and BUILT
+  same day (the A2 famine PR): the edge-woken global scan resolves a repo-dumb `{repo}` ring to
+  {stack, loop_ns} off `stacks_json()` and re-rings `/coordinate` (`coordinator-scan.sh`
+  §doorbell-fanout, `doorbell-fanout` replay family). Emitters stay repo-dumb; the map IS
+  `stacks_json()` (claims merged over the mirror — no new file; generating the mirror from
+  claims remains FU-049). Loop-break = the re-ring's own `loop_ns` + cron wakes never fan out.
+  Mechanism doc: workflow.md §Triggers.
 - **FU-140** *(archived 2026-08-12)* — per-loop-ns transcript crash-net (#286/PR#294, goal #278).
   First nightly PROVEN 2026-08-12 04:23Z: all four `transcripts-crashnet` jobs Succeeded;
   platform-agents log: `297 uploaded, 0 already marked, 0 failed` to `s3://agent-transcripts/...`.

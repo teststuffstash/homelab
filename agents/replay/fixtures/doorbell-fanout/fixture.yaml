@@ -1,0 +1,34 @@
+# doorbell-fanout (FU-144, ruled 2026-08-12: option (a), receiver-side resolution) — the GLOBAL
+# scan resolves a repo-dumb ring to {stack, loop_ns} off stacks_json() and re-rings /coordinate,
+# so a graduated stack's own loop takes the edge instead of the ring dying in "skipped ×4".
+#
+# CONDITION UNDER REPLAY. The two live repo-dumb emitters (renovate.yaml `{"repo":"all"}`,
+# devbox-update.yaml `{"repo":"<repo>"}`) used to wake a global scan that skipped every
+# graduated stack and dispatched nothing — circles#29 measured 8m35s of cron wait for an
+# instant-shaped edge. The gates are the contract as much as the ring is:
+#   fans-out-all       edge-woken, repo scope "all": every graduated stack the sweep skips gets
+#                      one POST carrying its resolved {stack, loop_ns} (the payload IS the
+#                      assertion — the per-stack Sensor trigger keys on loop_ns).
+#   repo-scoped        a named repo rings ONLY its own stack; the sibling stays silent.
+#   already-routed     SCAN_RING_NS set = the emitter carried loop_ns, the perstack trigger
+#                      already fired — ringing again is the loop this gate breaks (the scan's
+#                      own re-rings carry loop_ns, so the junk global run they spawn lands here).
+#   cron-wake-inert    the cron backstop must NEVER fan out: it would re-launder every */10
+#                      sweep as a fresh edge and the 017790c wake metric would read 100%
+#                      edge-woken while lying.
+#   latched-inert      the FU-088 latch holds rings exactly like coordinate-ring.sh (the
+#                      reference): a woken scan could only dispatch work that defers for the
+#                      same reason (the circles#31 spin). Said once, then quiet.
+#   unit-delegated     the fast-path's graduated branch forwards the UNIT in the ring, so a
+#                      repo-dumb unit doorbell becomes the stack's own scoped fast-path.
+#   ring-fails         a refused POST is loud and names the cron backstop as the owner — the
+#                      failure mode is bounded staleness, never a silent drop.
+name: doorbell-fanout
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:doorbell-fanout
+  - file:drive.sh
+env:
+  - SPAWN=1

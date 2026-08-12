@@ -64,4 +64,20 @@ echo "REACHED: gateway refuses again — latched, no second warning"
 DP_NOW=1786465033; CURL_RC=7 dispatch_phase circles
 printf 'RETURN %s\n' "$?"
 
+# ── the CRON wake (017790c: a ring-to-scan row exists ⇔ edge-woken) ────────────────────────────
+# The controller's `workflows.argoproj.io/cron-workflow` label decides: NO ring row (the
+# creationTimestamp is a schedule, not a ring) and the CRON stamp instead of the edge one — the
+# row the AgentDispatchCronWoken tooth counts. The wake cache is reset because this leg models a
+# DIFFERENT pod (a cron-submitted scan), not a re-probe inside one.
+echo "REACHED: cron-submitted scan — no ring row, the cron stamp instead"
+DISPATCH_PHASE_WAKE=""; DISPATCH_PHASE_POD=coordinate-circles-cron-1
+DP_NOW=1786465100; dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
+# The wake source is cached like the edge probe: a second dispatch in the same cron scan makes
+# no second workflow read and stamps a fresh cron epoch (changes() is what counts them).
+echo "REACHED: second cron dispatch — cached, fresh stamp"
+DP_NOW=1786465130; dispatch_phase circles
+printf 'RETURN %s\n' "$?"
+
 echo "REACHED: end"

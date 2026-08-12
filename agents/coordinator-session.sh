@@ -42,7 +42,7 @@ KUBECTL="$(command -v kubectl || true)"
 # Level-triggered, covers BOTH lanes (agent-fix issues + the coordinator-owned `major` devbox PRs).
 TICK_PROMPT="You are running IN the coordinator pod: tools (gh/kubectl/python3/jq) are on PATH and called directly — there is NO devbox and NO tofu/kubeconfig here (kubectl auths via the pod ServiceAccount). Do ONE reconcile pass as the coordinator, per your brief (agents/coordinator/README.md). Re-list the world level-triggered, holding no state: open agent-fix issues across the stack repos (actionable = labelled agent/queued) and open PRs labelled major that are not yet major/awaiting-human (the coordinator-owned devbox-bump lane). Pick the single highest-priority actionable item; CLAIM it first (relabel + a one-line plan comment) before investigating; then take exactly the next action its state calls for per the brief. Keep every bit of state in GitHub labels and comments. Never merge by hand and never touch the review reflex armed PRs. If nothing is actionable, say so and stop."
 
-RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"; JANITOR=""
+RUN_CMD=""; SEED=""; STACK=""; STACK_REPOS=""; MAIN_REPO="homelab"; BASE_REF="master"; MODEL="opus"; PERM_MODE="bypassPermissions"; NO_ATTACH=""; ITEM=""; WIP_LIMIT="1"; JANITOR=""; DETACH=""
 REPO_URL="${REPO_URL:-https://github.com/teststuffstash/homelab.git}"
 ORG="${ORG:-teststuffstash}"   # org the stack repos live under (for `gh repo clone <org>/<repo>`)
 while [ $# -gt 0 ]; do
@@ -63,6 +63,7 @@ while [ $# -gt 0 ]; do
     --model)           MODEL="$2"; shift 2;;       # sonnet|opus|haiku|fable|<full-id>. Default opus (needs Max); --model sonnet to save.
     --permission-mode) PERM_MODE="$2"; shift 2;;   # default|acceptEdits|plan|auto|dontAsk|bypassPermissions
     --no-attach)       NO_ATTACH=1; shift;;
+    --detach)          DETACH=1; shift;;      # ADR-106 (5): headless only — exit at pod-Ready; the POD uploads, pushes its session row, and rings the completion doorbell itself (the caller's mutex must not span the ride)
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -96,6 +97,27 @@ if [ -n "$STACK" ]; then
   SCOPE="You are the coordinator for the ${STACK} stack; its repos are: ${STACK_REPOS:-see agents/stacks.json}, cloned at /work/<repo>; your cwd is the stack main repo ${MAIN_REPO}. Clones are READ-ONLY reference — your writes remain labels, comments, and merge state via gh. "
   [ -n "$RUN_CMD" ] && RUN_CMD="${SCOPE}${RUN_CMD}"
   [ -n "$SEED" ]    && SEED="${SCOPE}${SEED}"
+fi
+
+# ADR-106 (5): detach is a headless-only contract — an interactive pod has a human attached and
+# nothing in-pod to hand the follow-through to.
+if [ -n "$DETACH" ] && [ -z "$RUN_CMD" ]; then
+  echo "--detach requires a headless mode (--run/--run-tick/--item/--janitor)" >&2; exit 2
+fi
+# The unit-completion doorbell payload (2026-08-05 block below), computed AT LAUNCH for the detach
+# path: the pod can't run this launcher's stacks.json lookup after the fact, so the launcher bakes
+# the resolved JSON into pod env (CS_DOORBELL_JSON) and the pod rings it after claude exits —
+# latch-guarded in-pod exactly like the launcher-side block. ITEM MODE ONLY, unchanged: a janitor
+# is report-only and must not chain; `unit: "-"` = "something moved, re-scan" (the scan owns
+# scheduling, ADR-094).
+DOOR_JSON=""
+if [ -n "$DETACH" ] && [ -n "$ITEM" ]; then
+  _dgrad="$(jq -r --arg s "$STACK" '.stacks[]|select(.name==$s)|select((.graduated // false)==true)|.name' "${HERE}/stacks.json" 2>/dev/null | head -1)"
+  if [ -n "$_dgrad" ] && [ "$_dgrad" != "null" ]; then
+    DOOR_JSON="{\"stack\":\"${_dgrad}\",\"loop_ns\":\"${_dgrad}-agents\",\"unit\":\"-\"}"
+  else
+    DOOR_JSON="{\"repo\":\"${MAIN_REPO}\",\"unit\":\"-\"}"
+  fi
 fi
 
 NS="${LOOP_NS_ARG:-agent-coordinator}"
@@ -213,9 +235,49 @@ if [ -n "$RUN_CMD" ]; then
   # prose-inside-executing-code class, fourth instance.
   RUN_B64="$(printf '%s' "$RUN_CMD" | base64 | tr -d '\n')"
   PREP="${PREP}; printf %s '${RUN_B64}' | base64 -d > /work/coord-run"
-  WRAPPED="${PREP}
+  if [ -n "$DETACH" ]; then
+    # ADR-106 (5): the launcher leaves at pod-Ready, so everything it used to do after `logs -f`
+    # moves IN-POD: the session-duration row and the completion doorbell. Single-quoted heredoc
+    # like UPLOAD_FN — everything resolves from POD env at run time.
+    DETACH_FN=$(cat <<'SNIP'
+detach_post() {
+  # FU-160 session row, pushed by the POD into its OWN pushgateway group (role/coordinator-pod):
+  # a POST replaces per metric name within a group, so pushing into the launcher's
+  # role/coordinator group would delete the coordinator-spinup row the launcher just wrote there.
+  if [ -n "${AGENT_PUSHGATEWAY_URL:-}" ] && [ -n "${CS_SESSION_START:-}" ]; then
+    printf '%s\n%s\n%s\n' \
+      "# TYPE agent_dispatch_phase_seconds gauge" \
+      "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \
+      "agent_dispatch_phase_seconds{phase=\"coordinator-session\"} $(( $(date -u +%s) - CS_SESSION_START ))" \
+      | curl -fsS --max-time 5 --data-binary @- \
+          "${AGENT_PUSHGATEWAY_URL}/metrics/job/agent_dispatch_phase/project/${MAIN_REPO:-homelab}/role/coordinator-pod" >/dev/null 2>&1 \
+      || echo "detach_post: pushgateway unreachable — session row lost (observability only, never the pass)"
+  fi
+  # The unit-completion doorbell (payload launcher-resolved, rationale at the launcher-side block
+  # below). ⚠ DO NOT ring while the subscription is latched — the doorbell feeds the constraint
+  # it waits on (circles#31 spin, 2026-08-06). Fail-open: an unreachable latch rings as before.
+  if [ -n "${CS_DOORBELL_JSON:-}" ]; then
+    if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh 2>/dev/null; then
+      echo "→ coordinator doorbell SKIPPED — subscription latched; cron backstop owns it"
+    else
+      curl -m 5 -s -X POST -H "Content-Type: application/json" -d "${CS_DOORBELL_JSON}" \
+        "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
+        >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${CS_DOORBELL_JSON})" || true
+    fi
+  fi
+  return 0
+}
+SNIP
+)
+    WRAPPED="${PREP}
+${UPLOAD_FN}
+${DETACH_FN}
+set +e; CS_SESSION_START=\$(date -u +%s); claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; detach_post; exit \$RC"
+  else
+    WRAPPED="${PREP}
 ${UPLOAD_FN}
 set +e; claude -p ${COMMON_FLAGS} \"\$(cat /work/coord-run)\"; RC=\$?; upload_transcripts; exit \$RC"
+  fi
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "$WRAPPED" | jq -Rs .)]"
 else
   ARGS="[\"bash\",\"-lc\",$(printf '%s' "${PREP}; sleep infinity" | jq -Rs .)]"
@@ -320,6 +382,14 @@ spec:
         # Provenance for the transcript manifest (docs/agents/observability-and-retro.md §A1).
         - name: MODEL
           value: "${MODEL}"
+        # ADR-106 (5) detach: the pod pushes its own session row and rings the launcher-resolved
+        # completion doorbell (detach_post). CS_DOORBELL_JSON is empty on streamed/non-item runs,
+        # which no-ops the in-pod block. The gateway var mirrors the scan's `-` default (an
+        # explicitly EMPTY value stays a disable, only unset gets the cluster default).
+        - name: AGENT_PUSHGATEWAY_URL
+          value: "${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
+        - name: CS_DOORBELL_JSON
+          value: '${DOOR_JSON}'
         # A0 standard rail: Claude Code exports OTLP metrics+logs (GenAI conventions) to the
         # in-cluster collector (argocd/resources/otel-collector/) → Loki + Prometheus. Telemetry
         # only — transcripts stay the durable record. Override endpoint with OTLP_ENDPOINT.
@@ -415,6 +485,13 @@ upload_transcripts" \
 fi
 
 if [ -n "$RUN_CMD" ]; then
+  if [ -n "$DETACH" ]; then
+    # ADR-106 (5): stop at pod-Ready. The pod owns the transcript upload, its own session row
+    # (role/coordinator-pod group) and the completion doorbell (detach_post) — so the caller's
+    # `coordinator-scan` mutex is held for spin-up minutes, never for a streamed session.
+    echo "→ detached: ${NS}/${POD} runs the session in-pod; delete with: kubectl -n ${NS} delete pod ${POD}"
+    exit 0
+  fi
   "$KUBECTL" $KUBE -n "$NS" logs -f "${POD}" || true
   # FU-160: the headless tick as one number. Only this branch closes it — an interactive session is
   # driven by a human at a terminal, so "how long did it take" is not a platform latency at all.

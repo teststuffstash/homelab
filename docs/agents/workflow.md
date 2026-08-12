@@ -187,16 +187,21 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   | C4/C5: worker terminal, no PR (incl. `AGENT_STRIKE`) | `agent-session.sh` launcher — it *posts* the strike comment | launcher curls `/coordinate` right after | instant — the #29 case |
   | PR → `CHANGES_REQUESTED` (round N+1) | reviewer pod (`reviewer-session.sh` verdict) | reviewer curls after posting the verdict | instant |
   | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
-  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — ⚠ `{repo}`-only (inventory below), so a graduated stack still falls to its `*/30` cron; the "exporter piggyback as belt" this cell used to promise was never built | instant for the global scan only |
+  | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the global scan resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
   | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
 
 ⚠ **That last row said `devbox run coordinate-now` until 2026-08-06 and was WRONG for every
-graduated stack** — `coordinate-now` fires the GLOBAL reflex, which skips graduated stacks
-entirely (FU-144), so the promised edge woke a run that printed `skipped ×4`. Nothing else
-watches this transition, so a queued issue simply waited for the `*/30` per-stack cron: **8m35s**,
-measured on circles#29. The whole point of the table is that *every* transition has an emitter —
-a row naming a mechanism that cannot reach the stack is worse than an empty row, because it stops
-anyone looking.
+graduated stack** — `coordinate-now` fired the GLOBAL reflex, which skipped graduated stacks
+entirely, so the promised edge woke a run that printed `skipped ×4`; a queued issue simply waited
+for the `*/30` per-stack cron: **8m35s**, measured on circles#29. **CLOSED by FU-144 (ruled +
+built 2026-08-12, the A2 chunk): the receiver resolves.** An edge-woken global scan maps a
+repo-dumb ring to {stack, loop_ns} off `stacks_json()` (the claims merged over the mirror — the
+one stack source it already trusts) and re-rings `/coordinate` with the resolved pair, so the
+per-stack trigger fires (`coordinator-scan.sh` §doorbell-fanout; latch-gated like every ring,
+cron wakes never fan out, and the re-ring's own `loop_ns` is the loop-break). Emitters stay
+repo-dumb by design — that is the honest payload for anything that edits a repo. The lesson the
+old warning carried stands: a table row naming a mechanism that cannot reach the stack is worse
+than an empty row, because it stops anyone looking.
 
 **Emitter inventory (2026-08-11, checked against `master`).** Everything that rings `/coordinate`
 from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
@@ -205,20 +210,18 @@ from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
 [`scripts/coordinate-ring.sh`](../../scripts/coordinate-ring.sh) (`devbox run ring <stack>`),
 `fix-debounce-argo.yaml` (from birth, `83907ea`), `.github/workflows/coordinate-doorbell.yaml`,
 and the github-exporter's three dispatchers — review (FU-100), CI-red (FU-115) and, since #285,
-`merge-conflict`. The `{repo}`-only holdouts are exactly two: `.github/workflows/renovate.yaml`
-(`{"repo":"all"}`) and `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`), so the
-un-armed-`major` row above is the one transition still deferring graduated stacks to cron. Those
-two files, plus the `devbox run coordinate-now` script entry (the global reflex's remaining
-deliberate caller), are an **operator-lane residual**, not an oversight: `.github/**` and this
-repo's `devbox.json` execute from a PR's own branch, so the fixer lane may not edit them
-(`.agents/fix.yaml`) — and whether the global trigger should keep a reader at all, or be fanned
-out over graduated namespaces instead, is an operator call. Until it is made, ring the stack's OWN
-CronWorkflow (`devbox run ring <stack>`, the namespace argument above) rather than the global
-reflex.
-
-⚠ Two-readers trap for whoever finishes it: the emitters read `agents/stacks.json` while the scan
-reads the LIVE claim — a stack graduated in the claim but stale in the mirror would get a payload
-the scan ignores.
+`merge-conflict`. The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
+(`{"repo":"all"}`) and `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) — are
+**served by the FU-144 receiver-side fan-out since 2026-08-12** (the ⚠ block above): repo-dumb
+payloads are the SUPPORTED shape now, and new emitters should prefer them over learning stack
+mechanics. The operator-lane note stands for the files themselves (`.github/**` executes from a
+PR's own branch, so the fixer lane may not edit them), and `devbox run coordinate-now` remains
+the global reflex's deliberate manual caller — its wakes now fan out too when edge-shaped.
+The old two-readers trap (emitters read the mirror, the scan reads the live claim) is CLOSED for
+this path by construction: the resolver runs inside the scan and reads the same `stacks_json()`
+merge (claim wins) the skip decision itself uses — one reader, one source. `coordinate-ring.sh`
+still derives `loop_ns` from the stack name jail-side; that convention (`<stack>-agents`) is the
+Composition's own naming and moves only if the Composition's does.
 
 - **Serialization + storm safety.** Edge-triggering removes the cron's implicit 10-min damping, so
   the existing guards carry the load: the scan gate, bounded rounds + the strike chain, the
@@ -226,6 +229,13 @@ the scan ignores.
   test-and-set. Add mechanically: one `synchronization.mutex` (`coordinator-scan`) shared by the
   Sensor-submitted Workflow AND the CronWorkflow — the Cron's `concurrencyPolicy: Forbid` does
   **not** see Sensor submissions — plus a Sensor trigger `rateLimit` as the dumb outer belt.
+  **ADR-106 (5) re-scoped both halves after the goal-#278 famine** (361 min starved, 56 Pending
+  workflows at 03:15 — the spike's finding 5): the mutex now spans ONLY the deterministic pass —
+  `coordinator-session.sh --detach` exits at pod-Ready and the session pod uploads, pushes its
+  own phase row, and rings the completion doorbell itself — and a starting full scan ABSORBS all
+  Pending sibling `coordinate*` workflows before its re-list (`coordinator-scan.sh`
+  §doorbell-collapse: delete-then-list ordering means an absorbed ring's cause is always visible
+  to the re-list — the ADR-093 fixed-name collapse's effect without its dropped-ring race).
 - **Refactor (done):** the cron's inline scan container was extracted into the `coordinate`
   WorkflowTemplate; CronWorkflow and Sensor both `workflowTemplateRef` it (the review-argo shape).
   Scoping went further than the planned `--repo`: ADR-094 item-scoped dispatch (FU-086) — the

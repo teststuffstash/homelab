@@ -206,7 +206,28 @@ spec:
           annotations:
             summary: "Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline"
             description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
-        # FU-020 enforcement made loud: a worker egress miss under deny-all manifests as a HANG
+        # 017790c doctrine (ADR-106 (5), the A2 famine chunk): ALL events have doorbells — the
+        # cron is a FAILURE DETECTOR, so a dispatch the cron serviced is a dead doorbell edge
+        # with an id, not background noise. The scan stamps epoch-valued wake gauges per dispatch
+        # (agents/coordinator-scan.sh `dp_wake`: two metric NAMES, not a source label — a
+        # pushgateway POST replaces per name, and one name per source keeps an edge dispatch from
+        # deleting the record of the last cron one). `changes()` over an epoch gauge counts
+        # dispatches, so "% edge-woken" is `changes(edge[7d]) / (changes(edge[7d]) +
+        # changes(cron[7d]))` on the dashboard, and THIS alert is the regression tooth: fires on
+        # a SECOND cron-woken dispatch inside 24h: the charter's acceptance is "≈ 0, alerted on
+        # regression" — one event in isolation is the tolerated mid-scan race, recurrence means
+        # some transition's emitter is dead or mis-routed. (A brand-new series appearing counts 0
+        # in changes(), so the very first cron-woken dispatch after this ships is invisible here
+        # — the accepted cost of an epoch-gauge design; the second one fires.)
+        # platform_machinery for the homelab#239 reason.
+        - alert: AgentDispatchCronWoken
+          expr: sum(changes(agent_dispatch_cron_woken_timestamp[24h])) >= 2
+          labels:
+            severity: warning
+            platform_machinery: "true"
+          annotations:
+            summary: "{{ $value }} cron-woken coordinator dispatches in 24h — a doorbell edge is dead"
+            description: "SYMPTOM ONLY — real work reached dispatch via the level-triggered cron sweep instead of an edge, at least twice in 24h. Some transition that should ring /coordinate is not ringing (dead emitter, mis-routed payload, latched-then-forgotten ring, or a collapse/fan-out defect — agents/coordinator-scan.sh §doorbell-collapse/§doorbell-fanout). WHICH stack: `agent_dispatch_cron_woken_timestamp` carries the pushgateway group's project label — `changes(agent_dispatch_cron_woken_timestamp[24h]) > 0` names it. Then reconstruct what the dispatch was from that stack's coordinate workflow logs (Loki, ns <stack>-agents) and walk the emitter inventory in docs/agents/workflow.md §Triggers for the transition that produced it. The tolerated single race: a ring landing mid-scan after the re-list point is absorbed nowhere and falls to the cron once — one event in isolation is that race, recurrence is a defect (017790c)."
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
         # the namespace (hubble drop metric runs sourceContext=namespace, tofu/cilium.tf); scoped to
