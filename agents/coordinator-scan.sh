@@ -243,7 +243,7 @@ pr_state_fp_pair() {
   local fp_probe fp_raw fp_prev fp_cur
   fp_probe="$(gh pr view "$2" --repo "$1" \
       --json headRefOid,reviewDecision,statusCheckRollup,reviews,comments 2>/dev/null)" || fp_probe=''
-  if ! jq -e . >/dev/null 2>&1 <<<"$fp_probe"; then printf '%s|%s\n' '' ''; return 0; fi
+  if ! jq -e . >/dev/null 2>&1 <<<"${fp_probe:-null}"; then printf '%s|%s\n' '' ''; return 0; fi
   fp_raw="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_JQ" 2>/dev/null)" || fp_raw=''
   fp_prev="$(printf '%s' "$fp_probe" | jq -r "$STATE_FP_LAST_JQ" 2>/dev/null)" || fp_prev=''
   fp_cur=''
@@ -318,7 +318,7 @@ absorb_pending_rings() {
   ns="${SCAN_PHASE_NS:-}"
   { [ -n "$ns" ] && [ "$ns" != "unknown" ]; } || return 0   # jail/manual run — no workflow world
   if ! raw="$("$KUBECTL" $KUBE -n "$ns" get workflows -o json 2>/dev/null)" \
-     || ! jq -e . >/dev/null 2>&1 <<<"$raw"; then
+     || ! jq -e . >/dev/null 2>&1 <<<"${raw:-null}"; then
     echo "doorbell-collapse: workflow list PROBE-FAILED in ${ns} — absorbing nothing (extra wakes just queue)" >&2
     return 0
   fi
@@ -402,7 +402,7 @@ dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the calle
   local raw cron ts
   [ -n "$DISPATCH_PHASE_POD" ] || return 0
   raw="$("$KUBECTL" $KUBE -n "$DISPATCH_PHASE_NS" get workflow "$DISPATCH_PHASE_POD" -o json 2>/dev/null)" || return 0
-  jq -e . >/dev/null 2>&1 <<<"$raw" || return 0
+  jq -e . >/dev/null 2>&1 <<<"${raw:-null}" || return 0
   cron="$(jq -r '.metadata.labels["workflows.argoproj.io/cron-workflow"] // ""' <<<"$raw" 2>/dev/null)" || cron=""
   if [ -n "$cron" ]; then printf 'cron|'; return 0; fi
   ts="$(jq -r '(.metadata.creationTimestamp // "") | select(. != "") | fromdateiso8601' <<<"$raw" 2>/dev/null)" || ts=""
@@ -641,7 +641,7 @@ fast_unit_dispatch() {
     echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
     return 0
   fi
-  jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"$fprjson" \
+  jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"${fprjson:-null}" \
     && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
   if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
     echo "unit fast-path: capacity limited (FU-088) — no dispatch (cron sweep re-checks)"; return 0
@@ -651,7 +651,7 @@ fast_unit_dispatch() {
   fwip=1
   if FPODS="$("$KUBECTL" $KUBE -n "$frepo" get pods -l app=agent-session,project="$frepo" \
         --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
-     && jq -e . >/dev/null 2>&1 <<<"$FPODS"; then
+     && jq -e . >/dev/null 2>&1 <<<"${FPODS:-null}"; then
     flive="$(jq -r '[.items[] | select(([.status.containerStatuses[]? | select(.name == "agent")
         | .state.terminated | select(. != null)] | length) == 0)] | length' <<<"$FPODS")"
     case "${flive:-}" in ''|*[!0-9]*) flive=0;; esac
@@ -749,10 +749,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # non-dispatchable tracking state. Deriving beats a second call — the App's GraphQL pool is
     # what this loop actually runs out of (FU-084).
     openall="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,isPinned,blockedBy,parent 2>/dev/null)" || openall='[]'
-    jq -e . >/dev/null 2>&1 <<<"$openall" || openall='[]'
+    jq -e . >/dev/null 2>&1 <<<"${openall:-null}" || openall='[]'
     queued="$(printf '%s' "$openall" \
       | jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/queued")) and (($L|index("direction-change"))|not) and (($L|index("agent/error"))|not))] | sort_by(.number)' 2>/dev/null)" || queued='[]'
-    jq -e . >/dev/null 2>&1 <<<"$queued" || queued='[]'
+    jq -e . >/dev/null 2>&1 <<<"${queued:-null}" || queued='[]'
     # In-progress issues once per repo — the C4/C5 clause below AND the ADR-097 footprint
     # predicate (declared `Touches:` body lines; no line = exclusive `*`) read it.
     # NB agent/error stays IN this fetch (an error-flagged in-progress issue still holds its
@@ -764,7 +764,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # field that is not in --json comes back absent and silently matches nothing.
     inprog="$(gh issue list --repo "$slug" --state open --json number,title,labels,body,updatedAt \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and ($L|index("agent/in-progress")))]' 2>/dev/null || echo '[]')"
-    jq -e . >/dev/null 2>&1 <<<"$inprog" || inprog='[]'
+    jq -e . >/dev/null 2>&1 <<<"${inprog:-null}" || inprog='[]'
     # ADR-097: one line per in-progress issue = its declared footprint; missing Touches: → `*`
     # (exclusive). The queued predicate below holds any unit whose footprint intersects a line.
     busy_fps="$(printf '%s' "$inprog" | jq -r '.[]
@@ -792,7 +792,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # ADR-097 footprint holds, and widening those is a different decision.
     goalcand="$(gh issue list --repo "$slug" --state open --json number,title,labels,body \
       --jq '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|index("agent/in-progress")) or ($L|index("agent/review"))))]' 2>/dev/null || echo '[]')"
-    jq -e . >/dev/null 2>&1 <<<"$goalcand" || goalcand='[]'
+    jq -e . >/dev/null 2>&1 <<<"${goalcand:-null}" || goalcand='[]'
     goalbased="$(printf '%s' "$goalcand" | jq -r '.[]
       | select(((.labels|map(.name))|index("agent/error"))|not)
       | .number as $n
@@ -811,7 +811,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     if [ -n "$goalbased" ]; then
       gmerged="$(gh pr list --repo "$slug" --state merged --limit 40 --json number,body,baseRefName 2>/dev/null)" || gmerged='X'
       gopen="$(gh pr list --repo "$slug" --state open --json body --jq '[.[].body // ""]' 2>/dev/null)" || gopen='X'
-      if jq -e . >/dev/null 2>&1 <<<"$gmerged" && jq -e . >/dev/null 2>&1 <<<"$gopen"; then
+      if jq -e . >/dev/null 2>&1 <<<"${gmerged:-null}" && jq -e . >/dev/null 2>&1 <<<"${gopen:-null}"; then
         for gb in $goalbased; do
           gn="${gb%%|*}"; gbase="${gb#*|}"
           # ⚠ STRONG LINK REQUIRED, not a bare mention (incident 2026-08-06, the mirror of the
@@ -869,7 +869,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # agent-runtime#34 now guarantees, which is the only reliable PR-to-issue key (branch names
     # are not — circles#31 rode `fix/p0-bake-resolution`, #32 rode `fix/32-p0-page-sunburst`).
     prsjson="$(gh pr list --repo "$slug" --state open --json number,title,labels,reviewDecision,autoMergeRequest,mergeStateStatus,author,headRefName,body 2>/dev/null)" || prsjson='[]'
-    jq -e . >/dev/null 2>&1 <<<"$prsjson" || prsjson='[]'
+    jq -e . >/dev/null 2>&1 <<<"${prsjson:-null}" || prsjson='[]'
     # TRACKS rule 1 counts ARMED PRs only. The bound exists because updater churn is
     # O(open PRs x merges) — and the updater only ever touches armed PRs (the nudge below selects
     # autoMergeRequest != null; un-armed PRs are "invisible to the merge path", FU-079). Counting
@@ -895,7 +895,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       :
     elif WIPPODS_JSON="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" \
           --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
-      jq -e . >/dev/null 2>&1 <<<"$WIPPODS_JSON" || WIPPODS_JSON='{"items":[]}'
+      jq -e . >/dev/null 2>&1 <<<"${WIPPODS_JSON:-null}" || WIPPODS_JSON='{"items":[]}'
       # ZOMBIE REAP belt (2026-07-21 — the 3-day post-#56 stall): a pod whose agent container
       # terminated but whose sidecar lives (pre-native-sidecar dind) is phase=Running yet holds
       # no work — it wedges this hold AND the launcher WIP=1 forever. Reap when the agent
@@ -991,7 +991,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # >>>REPLAY:sprout-report>>>
     inert="$(gh issue list --repo "$slug" --state open \
       --json number,title,author,labels,createdAt,blockedBy 2>/dev/null)" || inert='[]'
-    jq -e . >/dev/null 2>&1 <<<"$inert" || inert='[]'
+    jq -e . >/dev/null 2>&1 <<<"${inert:-null}" || inert='[]'
     # Unlabelled = no `agent*` label at all, the same predicate meta-needs-attention.sh clause 3
     # uses on platform repos (no clause of any kind can reach such an issue). >24h so a chain
     # filed and labelled inside one working session never flickers through the report.
@@ -1001,7 +1001,7 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
          | select((.createdAt // "") < $cutoff)
          | select((((.blockedBy.nodes // []) | length) > 0)
               and (([(.blockedBy.nodes // [])[] | select(.state != "CLOSED")] | length) == 0)) ]' 2>/dev/null)" || unb='[]'
-    jq -e . >/dev/null 2>&1 <<<"$unb" || unb='[]'
+    jq -e . >/dev/null 2>&1 <<<"${unb:-null}" || unb='[]'
     unblines="$(printf '%s' "$unb" | jq -r '.[]
       | "  issue #\(.number) — \(.title) (by \(.author.login // "?"); blockers all closed: \([(.blockedBy.nodes // [])[] | "#\(.number)"] | join(", ")))"' 2>/dev/null)" || unblines=""
     [ -n "$unblines" ] && orphans="${orphans}[$repo] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent-fix[+queued] to adopt, or close it):\n${unblines}\n"
@@ -1233,7 +1233,7 @@ EOF_GUARDED
       # names what survives and the abandoned leg compares-then-writes on `agent/queued`. Extra
       # --json fields are free here (same request) and buying them with a second call would not be.
       kidsall="$(gh issue list --repo "$slug" --state all --limit 300 --json number,title,state,closedAt,parent,labels 2>/dev/null || echo '[]')"
-      jq -e . >/dev/null 2>&1 <<<"$kidsall" || kidsall='[]'
+      jq -e . >/dev/null 2>&1 <<<"${kidsall:-null}" || kidsall='[]'
       for g in $goals; do
         # FU-143 point 6: DESCENDANTS, not direct children — a sprout harvested from a child sits
         # at depth 2 (sub-issue of the CHILD), so a direct-children read neither re-fires this
@@ -1417,7 +1417,7 @@ EOF_GUARDED
           # match would announce a launch that never happened. No trailer, no transition — and a
           # merged goal/** PR that only MENTIONS the goal is reported rather than silently dropped.
           gmergedpr="$(gh pr list --repo "$slug" --state merged --limit 30 --json number,headRefName,body,mergedAt 2>/dev/null || echo '[]')"
-          jq -e . >/dev/null 2>&1 <<<"$gmergedpr" || gmergedpr='[]'
+          jq -e . >/dev/null 2>&1 <<<"${gmergedpr:-null}" || gmergedpr='[]'
           gasm="$(printf '%s' "$gmergedpr" | jq -r --argjson n "$g" \
             '[.[] | select((.headRefName // "") | startswith("goal/"))
                   | select((.body // "") | test("(?mi)^[ \\t]*assembly-for:[ \\t]*#\($n)\\b"))]
@@ -1561,7 +1561,7 @@ EOF_GUARDED
           | (.body // "")
           | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || pr_issue=""
       if [ -n "$pr_issue" ] && [ -n "$WIPPODS_JSON" ] \
-         && printf '%s' "$WIPPODS_JSON" | jq -e --arg pat "issue-${pr_issue}-" \
+         && printf \'%s\' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${pr_issue}-" \
               '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
         orphans="${orphans}[$repo] ⏳ changes-requested held — a worker is already riding issue #${pr_issue} (FU-146 per-item):\n  PR #${u}\n"
         continue
@@ -1572,7 +1572,7 @@ EOF_GUARDED
       # the hold above: no link, or issue not in openall → falls through unchanged; self-releases
       # the tick after the human clears the label (openall is re-fetched every tick).
       if [ -n "$pr_issue" ] \
-         && printf '%s' "$openall" | jq -e --argjson n "$pr_issue" \
+         && printf \'%s\' "${openall:-null}" | jq -e --argjson n "$pr_issue" \
               '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
         orphans="${orphans}[$repo] ⏳ changes-requested held — source issue #${pr_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
         continue
@@ -1788,7 +1788,7 @@ EOF_GUARDED
             # filters out, with their finish times. Both probes failing is the same story — hold.
             TPODS="$("$KUBECTL" $KUBE -n "$repo" get pods -l app=agent-session,project="$repo" -o json 2>/dev/null)" || TPODS=""
             c4c5_merged="$(gh pr list --repo "$slug" --state merged --limit 40 --json body --jq '[.[].body // ""]' 2>/dev/null)" || c4c5_merged=""
-            if ! jq -e . >/dev/null 2>&1 <<<"${TPODS:-}" || ! jq -e . >/dev/null 2>&1 <<<"${c4c5_merged:-}"; then
+            if ! jq -e . >/dev/null 2>&1 <<<"${TPODS:-null}" || ! jq -e . >/dev/null 2>&1 <<<"${c4c5_merged:-null}"; then
               orphans="${orphans}[$repo] ⚠ PROBE_FAILED (terminal pods / merged PRs) — the phantom-label belt held every candidate this tick; the C4/C5 report + unit below are unaffected (rule #6)\n"
             else
               for cand in $c4c5_cands; do
@@ -1938,7 +1938,7 @@ EOF_GUARDED
     # `body` rides this list for the FU-146 per-item hold below — without it the hold's issue-link
     # capture is always empty and the hold silently never fires (fail-safe, but useless).
     red_probe="$(gh pr list --repo "$slug" --state open --json number,labels,author,autoMergeRequest,headRefOid,headRefName,statusCheckRollup,body 2>/dev/null)" || red_probe=''
-    if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"$red_probe"; then
+    if [ -n "$red_probe" ] && jq -e . >/dev/null 2>&1 <<<"${red_probe:-null}"; then
       # MANDATE check (homelab#88, sleep-tracking#113 livelock 2026-08-03): red CI on a PR the
       # loop did NOT author is the author's to fix — the scan kept dispatching sessions at a
       # human's armed+red PR every tick until the coordinator breaker-labeled it. Same author
@@ -1971,7 +1971,7 @@ EOF_GUARDED
         red_issue="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")
             | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
         if [ -n "$red_issue" ] && [ -n "$WIPPODS_JSON" ] \
-           && printf '%s' "$WIPPODS_JSON" | jq -e --arg pat "issue-${red_issue}-" \
+           && printf \'%s\' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — a worker is already riding issue #${red_issue} (FU-146 per-item):\n  PR #${u}\n"
           continue
@@ -1979,7 +1979,7 @@ EOF_GUARDED
         # BLOCKED-SOURCE hold (2026-08-07) — same as the changes-requested clause's, same
         # fail-safes; this clause is where the churn was actually measured (circles PR#58).
         if [ -n "$red_issue" ] \
-           && printf '%s' "$openall" | jq -e --argjson n "$red_issue" \
+           && printf \'%s\' "${openall:-null}" | jq -e --argjson n "$red_issue" \
                 '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — source issue #${red_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
           continue
@@ -2113,7 +2113,7 @@ EOF_GUARDED
     # run meets history) with the overflow reported, 21-day window (older = archaeology).
     closed_ip="$(gh issue list --repo "$slug" --state closed --label agent-fix --limit 30 \
       --json number,title,labels,updatedAt 2>/dev/null)" || closed_ip='[]'
-    jq -e . >/dev/null 2>&1 <<<"$closed_ip" || closed_ip='[]'
+    jq -e . >/dev/null 2>&1 <<<"${closed_ip:-null}" || closed_ip='[]'
     c6_all="$(printf '%s' "$closed_ip" | jq -r --arg cutoff "$(date -u -d '-21 days' +%Y-%m-%dT%H:%M:%SZ)" \
       '[.[] | (.labels|map(.name)) as $L
              | select(($L|index("agent/error"))|not)
@@ -2155,8 +2155,8 @@ EOF_GUARDED
     # Meta-5 probe rule: a failed probe's stdout is NOT a value — validate or zero it.
     heads="$(gh api "repos/$slug/branches?per_page=100" --jq '[.[].name | select(test("^(fix|feat|agent)/"))]' 2>/dev/null)" || heads='[]'
     prheads="$(gh pr list --repo "$slug" --state open --json headRefName --jq '[.[].headRefName]' 2>/dev/null)" || prheads='[]'
-    jq -e . >/dev/null 2>&1 <<<"$heads" || heads='[]'
-    jq -e . >/dev/null 2>&1 <<<"$prheads" || prheads='[]'
+    jq -e . >/dev/null 2>&1 <<<"${heads:-null}" || heads='[]'
+    jq -e . >/dev/null 2>&1 <<<"${prheads:-null}" || prheads='[]'
     # A branch owned by a RUNNING ride is not stale — the worker pushes its branch before the PR
     # opens, and the flag fired on active rides' branches twice on 2026-07-26 (issues 129, 138).
     # Probe failure keeps run_iss empty → no exclusion → at worst the old (noisy) behavior.
@@ -2400,7 +2400,7 @@ EOF_GUARDED
         esac
         if [ -n "$hgoal" ]; then
           hgj="$(gh issue view "$hgoal" --repo "$hslug" --json title,state 2>/dev/null || echo '{}')"
-          jq -e . >/dev/null 2>&1 <<<"$hgj" || hgj='{}'
+          jq -e . >/dev/null 2>&1 <<<"${hgj:-null}" || hgj='{}'
           hgtitle="$(printf '%s' "$hgj" | jq -r '.title // ""')"
           hgstate="$(printf '%s' "$hgj" | jq -r '.state // "PROBE-FAILED"')"
           # ONE bucket, found by title under the goal's own sub-issue list — the container is a
