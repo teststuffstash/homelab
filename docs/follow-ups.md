@@ -234,32 +234,16 @@ the block needs pruning, not more headings.
       the merge not the launch. **Next:** the design session, fresh numbers in hand; single-run
       caveat — re-measure on a concurrent stack first if one is riding by then.
       Relates ADR-094, ADR-097, FU-145, FU-167, FU-090 (§M10 phase-not-clause), FU-165.
-- [ ] **FU-167** — **`agents/replay/**` is a growing serialization tax on the platform lane**
-      (operator catch 2026-08-11, mid-goal-#278): the ratchet rule mandates declaring the replay
-      tree on every clause-file child, so all such children mutually intersect and serialize —
-      tonight #285/#287/#290 queued serially (~1h tail) while their fixture FAMILIES are disjoint
-      subtrees. The real shared surface is `agents/replay/README.md`, a hand-appended family
-      register that also produced PR#275's genuine merge conflict (both-sides-append). Fix shape:
-      make the register DERIVED (fixture.yaml self-description or a run.sh-generated index), then
-      narrow the ratchet/authoring rule to `agents/replay/fixtures/<family>-*` — footprints
-      become truly disjoint. Third option (2026-08-12, from the FU-168 drift measurement): exempt
-      `agents/replay/**` from the scan's footprint intersection outright — new-directory adds are
-      conflict-free by construction, zero real conflicts measured over 41 PRs, the merge path owns
-      the residual; composes with the derived register. ⚠ Every FU-168 fix-round deliverable rides
-      this same lock (clause files) — land the derived register + exemption FIRST, or do the fix
-      round operator-lane. UNBLOCKED post-#278. Relates ADR-097, ADR-103, FU-165, FU-168.
-- [ ] **FU-166** — **Meta-session watches: codeowner-park invisible to Prometheus + poll-everything
-      cadences** (operator, 2026-08-11). Leg (a): parked PRs are bot-APPROVED so the reviewable
-      predicate/panel excludes them — only the watch's direct `gh` poll (600s, against the
-      one-poller doctrine) sees them. Fix: exporter park series off its existing `reviewDecision`
-      walk (zero API cost) + `CodeownerParkWaiting` warning >30m (the belt outside the session);
-      watch clause 4 reads Prometheus. Leg (b): **survey ALL `agents/meta-*.sh` watches/cadences
-      and go event-driven where a source exists** (Alertmanager webhooks, exporter series, Argo
-      Events) — the edge+level doctrine applied to the jail; polls remain as backstops only.
-      Survey must include the MISSING source found at #278's close (2026-08-12): no watch, polled
-      or edged, sees a User comment landing on an open `task/goal` issue — the goal's own charter
-      comment had no consumer but the operator re-reading it.
-      Post-goal-#278 (exporter is mid-goal traffic) — UNBLOCKED at the #278 verdict. Relates FU-150, FU-084, ADR-093.
+- [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
+      × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
+      duplication (0 worlds shared by reference, 23 forked world paths, 74 single-row fixtures
+      against the platform's own decision-table doctrine). Plan + evidence:
+      [`agents/replay/README.md`](../agents/replay/README.md) §The cleanup contract (7 moves:
+      world registry, table mode, generated register, pins metadata, family dirs, hermeticity,
+      suite fold-in). **Next:** execute moves 1–3 BEFORE the FU-168 fix round — its deliverables
+      ride this lock; the scan-side footprint exemption for `agents/replay/**` is decided with
+      FU-168. Relates ADR-097, ADR-103, FU-165, FU-168.
+
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell

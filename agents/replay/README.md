@@ -22,6 +22,75 @@ Run everything (what CI runs):
 devbox run -- bash agents/replay/run.sh
 ```
 
+## The cleanup contract (2026-08-12) — from 74 hand-copied fixtures to tables over named worlds
+
+The harness grew rule-free by design (grow, then refactor); this section is the refactor,
+designed from a full inventory during the goal-#278 postmortem session. **The doctrine core is
+NOT in scope** — extraction-never-transcription, reads-die/writes-succeed, action-stream-only
+assertions, PROBE-FAIL self-tests, seams-not-backdoors all stand. The mess is packaging, and it
+was measured before it was judged:
+
+- 74 fixtures, ~20 families existing only as name prefixes; ownership recorded in THREE places
+  (FSM `replay:` lists, this README's register prose, dir names) — the dup-keys drift class.
+- **Zero worlds shared by reference** (bridges have `file:../`, 19 uses; worlds have no
+  mechanism): 53 of 142 world files are byte-identical copies, and worse, **23 recurring world
+  paths have DIVERGED copies** (`gh/issue-list.json`: 11 fixtures, 9 variants) — intentional
+  row-delta and accidental drift are indistinguishable. Sharing already crosses family lines
+  (c4c5-infeasible × harvest-goal both copied the circles#29 world) with no name for the shared
+  thing. 48 bridge/post scripts are byte-identical; two expected streams are byte-identical.
+- The platform's own testing doctrine (docs/agents/README.md rule 2: decision tables, never N
+  near-duplicate tests) is violated by the harness that enforces it: a family IS a decision
+  table, stored as N copied directories.
+- No re-record path: worlds are recorded once by a hand-run `gh api … | tee`, provenance is
+  prose, and an upstream API change keeps every fixture green while the live clause breaks.
+
+**The seven moves, in dependency order** (execute 1–3 before the FU-168 fix round — its
+deliverables all ride the clause-lane serialization this removes; migration of existing families
+follows fix-density per ADR-103, never big-bang):
+
+1. **Named world registry** — `agents/replay/worlds/<name>/`, the tree's ~dozen real source
+   worlds (`circles-29-tree`, `homelab-alert-board`, …) as first-class named entities, each with
+   machine provenance (`recorded: {cmd, at, source}`). Fixtures/rows reference a world and patch
+   their delta onto it. Re-record becomes per-world and mechanical: `run.sh --rerecord <world>`
+   replays the stored commands, and every dependent row re-validates in one pass. A `record`
+   wrapper stamps provenance at capture time; `recorded` vs `constructed` becomes a field, not
+   a sentence.
+2. **Table mode** — `mode: table`: one fixture per family = family header (the contract prose,
+   once) + `bridge.sh` + `rows.psv` (a pipe-delimited decision table: id · world · patch · env ·
+   expect · params) + `expected/<verdict>.txt` templates parametrized by row. Base worlds are
+   CLEAN; a row's jq-patch ADDS its condition and **must change the base** (a no-op patch is
+   red). Rows report as `<family>/<row-id>` in CI. Overlay files (`patches/<row>/`) are the
+   exception for whole-file non-JSON deltas, same must-differ rule. Pilot: `fix-debounce`
+   (8 dirs → 1 family, 3 worlds, 2 templates; two of its inert rows share a byte-identical
+   stream today and will share a template structurally). The witness pattern becomes
+   structural: a constant like the SELFREF line lives once in the base world and every row
+   inherits it.
+3. **Generated register** — `run.sh --index --write` renders the family/world/row table from
+   fixture metadata (the `merge-path-lint --write` pattern, currency-checked in CI). The
+   hand-appended prose register below retires; this README keeps only doctrine — the ~8 seam
+   patterns distilled from the 11 family essays. Kills the both-sides-append conflict class
+   (PR#275).
+4. **Metadata one-homes ownership** — `fixture.yaml` gains `family:`, `pins:` (FSM transition
+   ids), `world:`, `requires:` (tools beyond bash/awk/jq). A bidirectional lint ties `pins:` ↔
+   the FSM `replay:` lists; **the FSM stays the model home** — the lint checks agreement, it
+   does not generate either side.
+5. **Families become directories** — `fixtures/<family>/…`, shared bridges at family root (ends
+   the 19 `../` reaches and the 48 script copies). One mechanical rename commit + FSM path
+   updates. This is also FU-167 leg (b): per-family footprint paths make clause-issue
+   `Touches:` declarations disjoint; the companion scan-side option (exempt `agents/replay/**`
+   from the footprint intersection outright — zero real conflicts measured over 41 PRs) is
+   FU-167/FU-168's call.
+6. **Hermeticity contract** (homelab#329) — default: a fixture runs anywhere bash+awk+jq exist;
+   anything more declares `requires:` and `run.sh` exits 2 naming the tool (the scan-wedge
+   precedent promoted to rule). The 5 non-hermetic fixtures get lines or fixes.
+7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
+   `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
+   has one runner and one index. Rolling, by fix-density.
+
+Until the moves land: new families SHOULD follow the target shape where cheap (name your world,
+share it by reference within the family, keep contract prose in ONE header) — and every
+deviation is one more directory the migration pays for later.
+
 ## When a clause depends on a sourced helper
 
 `fixtures/harvest-*` (ADR-102, homelab#207) are the worked example: the clause under replay calls
