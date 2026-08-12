@@ -375,11 +375,12 @@ the block needs pruning, not more headings.
 
 - [ ] **FU-161** — **Scout v3: variant filter + benchmark cross-check + typed cell-keyed canary
       verdicts.** Design: [`model-routing.md`](agents/model-routing.md) §M7 legs 1–5. Legs 1–2
-      SHIPPED 2026-08-11 (#282); `SCOUT_MCP_KEY` wired into the cron env (#299, goal #278) — leg
-      (a) DONE. **Next:** read the digest of the 2026-08-12 hand-fire (`model-scout-2psl6`,
-      fired at the FU sweep) — it settles `get-model`'s unprobed `arguments` envelope; then
-      legs 3–4 (typed rail-probe canary + pool curation), UNBLOCKED since FU-162's draw/store
-      shipped. Related: #235's PromQL scout-exclusion belt (machine lane owns it).
+      SHIPPED 2026-08-11 (#282); `SCOUT_MCP_KEY` wired (#299). **Envelope SETTLED 2026-08-12:**
+      hand-fire `model-scout-2psl6` ran KEYED (secret in env, digest #380, no JSON-RPC errors) —
+      all-`unbenched` is honest newcomer state, the call shape is right. The digest's canary
+      column still shows v2 bare `failed` on both free candidates — exactly what legs 3–4 fix.
+      **Next:** legs 3–4 (typed cell-keyed canary verdicts + contradiction rule + pool
+      curation), UNBLOCKED (FU-162 shipped). Related: #235's belt (machine lane owns it).
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
