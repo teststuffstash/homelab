@@ -331,8 +331,9 @@ homelab's own `CLAUDE.md` mixes jail-session procedure ("work directly on `maste
 repo-universal facts. Two costs already visible:
 
 - **Wrong-context instructions are READ AS APPLICABLE.** homelab has a live fixer lane, so agents
-  ride this repo — and `## How changes land (jail sessions)` tells the reader to push to master,
-  which is the opposite of a worker's contract. Structurally the ruleset rejects such a push, so
+  ride this repo — and `## How changes land (jail sessions)` used to tell the reader to push to
+  master, the opposite of a worker's contract (softened 2026-08-12: the jail default is now
+  PR-lane too; only the bookkeeping class stays direct). Structurally the ruleset rejects such a push, so
   the cost is confusion rather than damage — but the doc is the wrong place to be relying on
   branch protection to correct.
 - **The duplication now runs three ways, not two.** `render_env_card()` already restates CLAUDE.md
