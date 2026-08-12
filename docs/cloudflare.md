@@ -31,6 +31,22 @@ Files: `argocd/resources/publicroute/{xrd,composition}.yaml` (+ `example-claim.y
 the shape), app `argocd/platform/publicroute.yaml`, provider secret
 `argocd/resources/crossplane/cloudflare-ingress-externalsecret.yaml`.
 
+**Predicted shape — per-route API-vs-website classes (operator direction, 2026-08-12; not built,
+recorded so the build lands here and not ad hoc):** every shipped public hostname is one of two
+kinds, and the claim should say which — an **API** route (e.g. `mcp.minutark.ee`) or a
+**website** route (e.g. `www.minutark.ee`) — with the composition fanning out class-appropriate
+edge defaults the way ADR-101's zone classes fan out zone defaults. API class: an OpenAPI schema
+URL wired into Schema validation 2.0 (**all plans since ~2026-08**, live-verified on the free
+zone; ⚠ free validates bodies ≤1 KB only — oversize bypasses the action, so app-side validation
+stays the gate; OAS v3.0 only), and NEVER challenge-shaped mitigations (captchas/managed
+challenges break machine clients by construction — the Bot-Fight-Mode analysis above,
+generalized to a class invariant). Website class: cache/speed posture (edge caching rules,
+maybe RUM per the pages-exist ruling) and challenge-shaped mitigations become legal. The
+quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials,
+speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split —
+zone-wide toggles are the wrong altitude; the class default is per-route, in the claim.
+Naming + XRD field shape land with the build (glossary row in the coining commit, FU-163).
+
 **Completion state (2026-08-08):**
 
 | Piece | State |
