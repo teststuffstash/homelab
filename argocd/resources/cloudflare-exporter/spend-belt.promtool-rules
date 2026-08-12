@@ -8,10 +8,11 @@
 # argocd/resources and a non-manifest there would fail it.
 #
 # The FIRST fixture pair in this directory (FU-158's behaviour half, #334). It covers 3 of the
-# CR's 4 alerts; only CloudflareExporterDown has no behaviour test — honest remaining work, listed
-# in #334's PR body and swept by #351. (Was "3 of 5": CloudflareEdge5xx, the other untested one,
-# was DELETED in #350 rather than tested — its input series cannot be produced, reasoning in the
-# CR's header.)
+# CR's 4 alerts; the fourth, CloudflareExporterDown, got its own pair in #351 —
+# exporter-down.promtool-{rules,test} beside this file, a separate pair because promtool evaluates
+# every rule in a file at every step and its `up` inputs have no business here. (Was "3 of 5":
+# CloudflareEdge5xx, the other untested one, was DELETED in #350 rather than tested — its input
+# series cannot be produced, reasoning in the CR's header.)
 #
 # ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
 # `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
