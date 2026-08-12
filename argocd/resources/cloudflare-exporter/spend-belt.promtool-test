@@ -44,10 +44,13 @@
 # series on 2026-08-12. What does change for #231 is the alert's LABEL SET (no more pod/instance),
 # so ArgoCD's sync resolves the two firing instances and re-fires them once under the new identity.
 #
-# NOT covered here (honest remaining work, in #334's PR body): CloudflareExporterDown — deliberately
-# left in its per-target form, `up == 0` needs a live target and a replaced target is a genuinely
-# new attempt at being scraped — and CloudflareEdge5xx, which is a rate() over a 15m window and is
-# not in this class at all.
+# NOT covered here (honest remaining work, in #334's PR body, swept by #351): CloudflareExporterDown
+# — deliberately left in its per-target form, `up == 0` needs a live target and a replaced target is
+# a genuinely new attempt at being scraped. The other alert this paragraph used to name,
+# CloudflareEdge5xx, is GONE as of #350: it was never in this class either, but the reason it has no
+# behaviour test is that `cloudflare_zone_requests_status` cannot be produced for any zone this
+# account holds, so a fixture would only have asserted an expr against an invented series. The
+# evidence and the re-add condition live in prometheusrule.yaml's header where the alert was.
 rule_files:
   - spend-belt.promtool-rules
 

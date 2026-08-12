@@ -24,16 +24,40 @@ spec:
           annotations:
             summary: "Cloudflare exporter scrape target down/absent"
             description: "Prometheus cannot scrape the cloudflare-exporter for 30m — pod down, Service/ServiceMonitor broken, or the app undeployed. SYMPTOM ONLY. Check: pod + logs in monitoring (LOG_LEVEL=info logs every poll), ArgoCD app cloudflare-exporter, then token verify (docs/cloudflare.md §Token matrix)."
-        # Symptom alert for the future public endpoints (armed now, quiet on today's traffic):
-        # origin-side failures surface as 5xx at the edge before anything else user-visible.
-        - alert: CloudflareEdge5xx
-          expr: sum by (zone) (rate(cloudflare_zone_requests_status{status=~"5.."}[15m])) > 0.2
-          for: 15m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Edge 5xx on zone {{ $labels.zone }}"
-            description: "Sustained >0.2 rps of 5xx responses at the Cloudflare edge for zone {{ $labels.zone }} over 15m. SYMPTOM ONLY — origin (tunnel/backend) failure, or an edge rule misfire."
+        # ⚠ DELETED 2026-08-12 (#350) — do NOT re-add by symmetry with the alert above. There was a
+        # `CloudflareEdge5xx` here, `sum by (zone) (rate(cloudflare_zone_requests_status{status=~
+        # "5.."}[15m])) > 0.2`, described as "armed now, quiet on today's traffic". It was not quiet
+        # on today's traffic — its input series cannot be produced, so its silence was
+        # indistinguishable from a healthy edge. This is the same #132 finding that re-keyed
+        # `CloudflareExporterDown` above, recurring one alert down. What settled it, live:
+        #   • `cloudflare_zone_requests_status` has ZERO series over the whole TSDB retention (which
+        #     begins 2026-08-03), and scraping the exporter itself on 2026-08-12 returns exactly one
+        #     cloudflare_* family — `cloudflare_r2_storage_total_bytes`, an ACCOUNT metric. No
+        #     zone-scoped series exists at all, so nothing was merely waiting for traffic.
+        #   • The reason is structural, not incidental: the lablabs exporter's dataset is
+        #     `httpRequests1mGroups`, which answers "does not have access to the path" on FREE zones
+        #     (docs/cloudflare.md §Free-zone GraphQL matrix, validated live 2026-08-08). Both watched
+        #     product zones are free today — read off the belt's own gauge,
+        #     `cloudflare_zone_plan_is_free{zone="teststuff.net"} == 1` and `{zone="minutark.ee"} == 1`
+        #     — and teststuff.net is additionally hidden from the exporter by CF_EXCLUDE_ZONES
+        #     (#132 round 3). The one Pro zone, eid-demo.com, is out of scope by design (outside
+        #     every write token's zone map) and has no DNS records, so no request reaches its edge.
+        #   • Which makes the arming precondition "a watched zone left the free plan" — exactly what
+        #     `CloudflareZonePlanNotFree` below exists to page about. A belt whose input series can
+        #     only appear in a state the platform already alerts against is not a belt.
+        # NOT re-keyed onto the live edge signal, deliberately: `cloudflared_*` (the PodMonitor
+        # beside this file) is the plan-independent truth about the ha.teststuff.net path, but this
+        # cloudflared build exports no response-code breakdown — the tunnel families are
+        # `cloudflared_tunnel_total_requests` / `_request_errors` / `_concurrent_requests_per_tunnel`
+        # and friends, with no `status`/`code` dimension and no hostname label — so "5xx at the edge"
+        # cannot be re-expressed over it. A threshold on tunnel ERRORS would be a new alert on a
+        # different symptom, and there is no baseline to size it from: `cloudflared_tunnel_total_requests`
+        # reads 0 on both replicas right now.
+        # Where this belt actually belongs: FU-039's DIY GraphQL poller, on
+        # `httpRequestsAdaptiveGroups` — ✅ on free zones WITH host+status dims per the same matrix,
+        # which is the only path that can see the zone that carries our public traffic. It will
+        # export its own metric name, so this rule could not have been recycled into it either;
+        # re-add an edge-5xx alert when that poller lands, keyed to what IT produces.
         # ── spend-toggle drift belt (#217) ──────────────────────────────────────────────────────
         # The account has a payment card attached and Zone Settings WRITE — which the minutark
         # bootstrap legitimately needs, and which the jail wallet holds — is enough to enable
