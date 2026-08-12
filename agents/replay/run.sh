@@ -128,6 +128,9 @@ run_suite() {   # run_suite <fixture-dir> <name>
 psv_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
 run_table() {   # run_table <fixture-dir> <family-name>   (FXY = the family fixture, already parsed)
   local dir="$1" fam="$2"
+  # PR#384 review: rows reassign the global FXY; restore the FAMILY's parse on every exit, or a
+  # future `expect: fail` table family has its PROBE-FAIL verdict read the last ROW's fixture.
+  local FAMILY_FXY="$FXY"
   local rowsf fsrc fworld
   rowsf="$(fx_scalar rows)"; rowsf="${rowsf:-rows.psv}"
   [ -f "$dir/$rowsf" ] || { bad "$fam: rows file not found: $rowsf"; return 0; }
@@ -193,6 +196,7 @@ run_table() {   # run_table <fixture-dir> <family-name>   (FXY = the family fixt
     FXY="$(parse_fixture "$synth/fixture.yaml")"
     run_actions "$synth" "$rname"
   done < "$dir/$rowsf"
+  FXY="$FAMILY_FXY"
   return 0
 }
 
