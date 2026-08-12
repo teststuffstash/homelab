@@ -3750,3 +3750,12 @@ CLAUDE.md §How changes land (via PR#387 — the reversal dogfoods itself), role
 softened, NEW memory jail-pr-default (the reminded-multiple-times gap closed). Review rubric
 hardened same hour (PR#386: in-diff findings BLOCK; follow-ups = real new work only). The
 codeowner-economics objective recorded in spike/FU-168/charter.
+↳ (A3 design session, 2026-08-12 ~12:00Z, in-session — the corpus was already loaded, zero fresh
+cost) v1.2 DESIGNED and accepted → ADR-106 (PR#389): D1 ruled by the operator single-mode —
+feature goals only, the v1.1 per-child-master shape retired as a category error ("could have
+held the features back and merged once"); D2 origin lineage, bucket → ADR-102's original role;
+D3 findings store + checkpoints (count-keyed disposition marker); D4 fence → metadata +
+mechanical governance lint (the #379/#386 lesson); D5 doorbell collapse + mutex scope only,
+ADR-094 untouched, re-measure; D6 stack scope; D7 FU-090 gauge = native depth via D2.
+Consequences recorded: ADR-097 hold + #270 coupling retire; IL-T15/T17 master-lane disposition
+simplifies away. Charter updated (A3 done; A4 re-listed per ADR-106).
