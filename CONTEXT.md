@@ -102,6 +102,16 @@ when a decision trades one of them away:
    remote-management with vPro/AMT, WoL, smart plugs — not by buying IPMI servers.
 9. **Public by default** — this is a **public repo**, so: no secrets in git, write it like
    someone will read it.
+10. **Speed IS quality — two sides of one coin** (recorded 2026-08-12). Going slow finds bugs
+    slower; velocity is what makes bugs quick and cheap to fix, so total quality GROWS instead
+    of rotting — "nobody has time to fix anything" is how quality actually degrades. Never
+    weigh a decision as speed *versus* quality: a change that slows the delivery loop is a
+    quality regression too. Lived evidence in this repo: the 5-minute reviewed-PR cadence fixed
+    three latent defects within minutes of their discovery (2026-08-12); the dispatch famine
+    held 4.5h of work hostage for 14.5h — and every bug inside it (goal #278); years of
+    fast-but-unreviewed pushes accrued exactly the debt one thorough fast-review pass then
+    drained in a night. (The DORA finding, lived: speed and stability correlate — they were
+    never a trade.)
 
 ## Standing constraints for the homelab
 
