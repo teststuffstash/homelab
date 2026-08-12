@@ -88,6 +88,72 @@ def classify(issue, is_root):
     return "inert"
 
 
+# --- provenance -----------------------------------------------------------
+# The native tree files every post-launch sprout under the BUCKET (IL-T17), which erases the
+# derivation chain. The true origin survives only as body prose — the harvest play's
+# "Harvested from PR #N (issue #M)" grammar and the goal-review rides' "Found while verifying #K".
+# Best-effort parse, ordered patterns, first hit wins; unparsed stays None (the render falls
+# back to the native parent — honest, never guessed).
+
+_PR_REF = r"PR (?:([\w.-]+/[\w.-]+)#|#?)(\d+)"
+_ISSUE_REF = r"\(issue (?:([\w.-]+/[\w.-]+)#|#?)(\d+)\)"
+
+
+def _resolve_pr_issue(repo, pr):
+    """PR-only provenance: read the PR body's closing keyword for its issue."""
+    res = subprocess.run(["gh", "api", f"repos/{repo}/pulls/{pr}"],
+                         capture_output=True, text=True)
+    if res.returncode != 0:
+        return None
+    body = json.loads(res.stdout).get("body") or ""
+    m = re.search(r"(?:[Ff]ixes|[Cc]loses|[Ii]mplements|[Rr]esolves) #(\d+)", body)
+    return int(m.group(1)) if m else None
+
+
+def parse_provenance(body, repo, self_num, root_num=None):
+    if not body:
+        return None
+    # 1. arbitration deferral: "Deferred out of PR #325 (issue #309)"
+    m = re.search(r"[Dd]eferred out of " + _PR_REF + r" " + _ISSUE_REF, body)
+    if m:
+        return {"origins": [node_id(m.group(3) or repo, int(m.group(4)))],
+                "via_pr": int(m.group(2)), "kind": "arbitration-deferral"}
+    # 2. closeout: "Harvested from the merged-closeout of #299 (PR #306"
+    m = re.search(r"[Hh]arvested from the merged-closeout of #(\d+) \(PR #(\d+)", body)
+    if m:
+        return {"origins": [node_id(repo, int(m.group(1)))],
+                "via_pr": int(m.group(2)), "kind": "closeout-finding"}
+    # 3. the canonical shape: "Harvested from PR #310 review (issue #288)" — incl. cross-repo
+    m = re.search(r"[Hh]arvested from " + _PR_REF + r"[^\n]{0,200}?" + _ISSUE_REF, body)
+    if m:
+        return {"origins": [node_id(m.group(3) or repo, int(m.group(4)))],
+                "via_pr": int(m.group(2)), "kind": "harvest"}
+    # 4. goal-review / verification findings: collect the issue refs in the lead sentence,
+    #    minus PR numbers and the goal itself ("Found ... verifying children #334 / #333 / #335")
+    m = re.search(r"(?:[Hh]arvested from goal-review|[Ff]ound (?:while|by|at|on|during)|"
+                  r"[Ff]iled (?:by|at|during))[^\n]{0,260}", body)
+    if m:
+        span = re.sub(r"PR #\d+", "", m.group(0))
+        goal_hint = re.search(r"(?:goal|goal-review\S*(?: of| on| for)?) #(\d+)", span)
+        nums = [int(x) for x in re.findall(r"#(\d+)", span)]
+        drop = {self_num} | ({int(goal_hint.group(1))} if goal_hint else set())
+        if root_num is not None:
+            drop.add(root_num)  # the goal names itself in every ride sentence — never an origin
+        origins = sorted({n for n in nums if n not in drop})
+        if origins:
+            return {"origins": [node_id(repo, n) for n in origins],
+                    "via_pr": None, "kind": "goal-review-finding"}
+    # 5. last resort — a bare "from PR #328's sweep": resolve the PR's own issue
+    m = re.search(r"from " + _PR_REF + r"'s", body)
+    if m:
+        pr = int(m.group(2))
+        origin = _resolve_pr_issue(m.group(1) or repo, pr)
+        if origin:
+            return {"origins": [node_id(m.group(1) or repo, origin)],
+                    "via_pr": pr, "kind": "pr-body-finding"}
+    return None
+
+
 def fetch(repo, number, with_deps=True):
     nodes, edges = {}, []
     root_id = node_id(repo, number)
@@ -100,6 +166,11 @@ def fetch(repo, number, with_deps=True):
             continue  # cycle/diamond safety: first (shallowest) parent wins the tree edge
         seen.add(nid)
         issue = gh_issue(r, n)
+        prov = parse_provenance(issue.get("body"), r, n, number) if nid != root_id else None
+        if prov:
+            for o in prov["origins"]:
+                edges.append({"from": o, "to": nid, "type": "harvest",
+                              "via_pr": prov["via_pr"], "kind": prov["kind"]})
         nodes[nid] = {
             "id": nid,
             "repo": r,
@@ -110,6 +181,7 @@ def fetch(repo, number, with_deps=True):
             "labels": sorted(l["name"] for l in issue.get("labels", [])),
             "depth": depth,
             "status": classify(issue, nid == root_id),
+            "provenance": prov,
             "url": issue.get("html_url", ""),
         }
         if parent:
@@ -210,8 +282,10 @@ def render_mermaid(g):
                 continue  # containment already drawn as the subgraph box
             t2 = f"B_{t}" if e["to"] in buckets else t
             out.append(f"    {f} --> {t2}")
-        else:
+        elif e["type"] == "blocked_by":
             out.append(f"    {f} -. blocks .-> {t}")
+        # harvest (provenance) edges deliberately NOT drawn here: this view is what the
+        # goal MACHINERY sees (containment + gating deps); --view derivation draws them
     # grid-wrap wide sibling generations with invisible links — 46 edge-less bucket children
     # would otherwise share one rank and render a ~15000px-wide row (the GitHub-UI mess)
     cols = 4
@@ -219,6 +293,52 @@ def render_mermaid(g):
         kids = sorted(children, key=lambda i: by_id[i]["number"])
         for i in range(cols, len(kids)):
             out.append(f"    {mermaid_id(kids[i - cols])} ~~~ {mermaid_id(kids[i])}")
+    for name, style in MERMAID_CLASSES.items():
+        out.append(f'    classDef {name.replace("-", "_")} {style}')
+    return "\n".join(out) + "\n"
+
+
+def render_derivation(g):
+    """The TRUE lineage view: structural parent = the harvest-provenance origin where one
+    parses, native parent otherwise (goal children; unparsed sprouts fall back to the goal
+    with a dotted edge, never a guessed origin). The bucket container is dropped — it is
+    filing, not derivation. LR: ranks are generations."""
+    by_id = {n["id"]: n for n in g["nodes"]}
+    harvest = {}
+    for e in g["edges"]:
+        if e["type"] == "harvest" and e["from"] in by_id:
+            harvest.setdefault(e["to"], []).append(e)
+    buckets = {n["id"] for n in g["nodes"] if n["status"] == "bucket"}
+    native_parent = {e["to"]: e["from"] for e in g["edges"] if e["type"] == "sub"}
+    out = ["flowchart LR"]
+    for n in g["nodes"]:
+        if n["id"] in buckets:
+            continue
+        label = f'"#{n["number"]} {esc(n["title"], 40)}"'
+        if n["repo"] != g["root"].split("#")[0]:
+            label = f'"{n["repo"].split("/")[-1]}#{n["number"]} {esc(n["title"], 34)}"'
+        shape = f"[[{label}]]" if n["status"] == "goal" else (
+            f"[{label}]" if n["status"].startswith("closed") else f"([{label}])")
+        out.append(f'    {mermaid_id(n["id"])}{shape}:::{n["status"].replace("-", "_")}')
+    root = g["root"]
+    for n in g["nodes"]:
+        nid = n["id"]
+        if nid == root or nid in buckets:
+            continue
+        if nid in harvest:
+            for e in harvest[nid]:
+                via = f"|PR#{e['via_pr']}|" if e.get("via_pr") else ""
+                arrow = "-->" if e["kind"] in ("harvest", "pr-body-finding") else "-.->"
+                out.append(f"    {mermaid_id(e['from'])} {arrow}{via} {mermaid_id(nid)}")
+        else:
+            p = native_parent.get(nid)
+            if p in buckets:  # filed into the bucket, origin unparsed — honest fallback
+                out.append(f"    {mermaid_id(root)} -. origin unparsed .-> {mermaid_id(nid)}")
+            elif p:
+                out.append(f"    {mermaid_id(p)} --> {mermaid_id(nid)}")
+    for e in g["edges"]:
+        if e["type"] == "blocked_by":
+            out.append(f"    {mermaid_id(e['from'])} -. blocks .-> {mermaid_id(e['to'])}")
     for name, style in MERMAID_CLASSES.items():
         out.append(f'    classDef {name.replace("-", "_")} {style}')
     return "\n".join(out) + "\n"
@@ -255,6 +375,9 @@ def main():
     r = sub.add_parser("render", help="render a fetched JSON file")
     r.add_argument("file")
     r.add_argument("--format", choices=["mermaid", "dot"], default="mermaid")
+    r.add_argument("--view", choices=["containment", "derivation"], default="containment",
+                   help="containment = the native tree (bucket as a box); "
+                        "derivation = provenance origins as parents, bucket dropped")
     args = ap.parse_args()
 
     if args.cmd == "fetch":
@@ -274,7 +397,12 @@ def main():
     else:
         with open(args.file) as fh:
             g = json.load(fh)
-        sys.stdout.write(render_mermaid(g) if args.format == "mermaid" else render_dot(g))
+        if args.view == "derivation":
+            if args.format == "dot":
+                sys.exit("derivation view is mermaid-only for now")
+            sys.stdout.write(render_derivation(g))
+        else:
+            sys.stdout.write(render_mermaid(g) if args.format == "mermaid" else render_dot(g))
 
 
 if __name__ == "__main__":

@@ -3692,3 +3692,15 @@ siblings don't share one 15000px rank). Ran it on #278: 59 nodes / 58 sub + 1 bl
 (#309→#326); artifact "Goal #278 — sprout DAG" published. Two reads out of the drawing: the tree
 is exactly two generations (the depth-≥2 reviewer bar held), and #280/#292 sit OUTSIDE the tree
 (parented to #268/#269 per the master-lane harvest rule) so #278's close sweep never touches them.
+↳ (same session, provenance extension) Operator asked whether the loop is degenerate — the UI's
+2-generation tree looked flat only because IL-T17 files every sprout into bucket #295.
+`goal_graph.py` gained a body-provenance parser ("Harvested from PR #N (issue #M)" / "Found while
+verifying #K" → `harvest` edges) + `--view derivation`. #278's true shape: **5 generations**,
+flat inflow (12/13/11/13/8), ≈1.2 sprouts per closed ride, gen-5 tail 7/8 open — convergence was
+FORCED (budget cross $62>$60 at 02:07Z → IL-T15 filed inert; operator verdict gate), not decay.
+Channel split of the 52 derivation edges: worker PR-body findings 22 + goal-review ride findings
+17 (both depth-UNGATED) vs reviewer Follow-ups 10 (the only channel the depth-≥2 bar reads;
+it held). Both views published side-by-side on the artifact — operator framing: view 1 = what
+the machinery saw, view 2 = what happened; FU-165 is making them converge. Evidence exhibit for
+the recorded #295 bucket-semantics question + FU-090's sprout-RATE gauge (which today could only
+ever read depth 2).
