@@ -49,8 +49,11 @@ meant to avoid.)
    (#396, exporter open-set diff — the fleet-wide missing merge edge). REMAINING = the core:
    findings store + checkpoint clause + origin-parenting harvest + goal-review burn-down
    demotion — one coupled chunk, wants a fresh session (FSM + replay fixtures per ADR-103;
-   design: issue-authoring.md §v1.2 lifecycle) · A5 CODEOWNERS narrowing
-   (operator call, after A4's lint) · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
+   design: issue-authoring.md §v1.2 lifecycle) · A5 RULED 2026-08-12 (mapping session): leg 1 SHIPPED (#401 — sentinel shadows homelab; the
+   tier-1 scaffold line drops when IAC-G04 enforces there or on the operator's trust call);
+   further ownership/gate changes now BATCH into the governance-checkpoint pile
+   (iac-lane.md §The platform lane — one /design-agents sitting per batch, never per-event
+   one-liners); full narrowing stays blocked on an assembly single-tax replacement · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
    inert triage). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
    **Subagent trial RUN 1 recorded 2026-08-12** (goal-ancestor table-mode, PR#392 merged):
