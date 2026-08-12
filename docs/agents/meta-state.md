@@ -31,7 +31,10 @@ meant to avoid.)
    like A3/v1.2), no full /meta-coordinate (pay it only to resume the coordination ROLE). The
    charter carries the decisions; chunks name their files; CLAUDE.md/memory carry the process.
    **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
-   debt):** A0 verify the iac-sentinel soak is observable (`iac_sentinel_violations` = no-series!)
+   debt):** A0 ✅ VERIFIED 2026-08-12: the soak IS observable — reading rule: `iac_sentinel_violations`
+   no-series + FRESH `iac_sentinel_engine_seconds` (all 4 engines, per-repo, 786s at probe) =
+   genuinely ZERO violations; stale engine rows = blind. `probe_failed` absent. Gap noted:
+   `SENTINEL_REPOS` defaults to sleep-iac+oracle-iac only — circles-iac joins when unparked
    · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
    everything else rides its lock · A2 ✅ DONE 2026-08-12 (#393): receiver-side collapse
    (absorb-pending, zero lost edges) + FU-144 fan-out + `--detach` mutex scoping; the 017790c
@@ -41,8 +44,12 @@ meant to avoid.)
    feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
    ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
    governance lint, mutex scoped to the deterministic phase, stack scope ·
-   A4 v1.2 minimum build per ADR-106: findings store + checkpoint clause, origin-parenting
-   harvest change, the governance lint, sibling-repo doorbells · A5 CODEOWNERS narrowing
+   A4 v1.2 minimum build — 2 of 4 legs SHIPPED 2026-08-12: governance lint (operator-direct,
+   scripts/governance-lint.sh + ci.yaml, 4 arms live-tested) + sibling-repo merge doorbell
+   (#396, exporter open-set diff — the fleet-wide missing merge edge). REMAINING = the core:
+   findings store + checkpoint clause + origin-parenting harvest + goal-review burn-down
+   demotion — one coupled chunk, wants a fresh session (FSM + replay fixtures per ADR-103;
+   design: issue-authoring.md §v1.2 lifecycle) · A5 CODEOWNERS narrowing
    (operator call, after A4's lint) · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
    inert triage). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
@@ -110,14 +117,12 @@ meant to avoid.)
    legs 3–4 · FU-150 = quiet-month window opens ~2026-09-11 · FU-146/FU-147 soaks unchanged ·
    #289 launches at oracle unpark · snore#15 = FU-051 verdict work. (FU-140/145/158/160/162/165
    ARCHIVED by the sweep — crash-net proven 297/0, phase metrics live, pilot validated.)
-4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
-   `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
-   wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
-   taint (`kubernetes_node_taint.ephemeral["wk-metal-04"]`) was never applied. Neither is
-   today's work; operator decides the apply window.
+4b. ✅ DRIFT APPLIED 2026-08-12 (attended): wk-metal-04 ephemeral taint verified on the node;
+   ci-runner-01 REPLACED and verified up (guest agent: .55 on eth0, docker0 up, SSH over TCP —
+   ⚠ ICMP from the jail lies here, probe TCP).
 5. **docs-cleanup residue** (the comb ran + ~55 findings APPLIED 2026-08-11; what remains):
-   (a) cloudflare.md's two zone-classes sections merge (structural, one home); (b) the
-   network-physical re-capture (banner placed); (c) FU-001 ref scrubs when its archive entry
+   (a) ✅ merged 2026-08-12 (#395); (b) the network-physical re-capture — ci-runner-01/vmbr0
+   derivable, the wk-metal fleet + hp-01 cabling NEEDS OPERATOR (asked 2026-08-12); (c) FU-001 ref scrubs when its archive entry
    expires (~08-13); (d) the openrouter-proxy.py FU-021 comment repoint — rides the NEXT
    functional proxy change (a comment-only sync restarts the proxy and resets every for:
    window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
