@@ -651,6 +651,37 @@ the two read-honesty signals live in
 Implementation: the harvest/closeout clause changes ship WITH executed replays (ADR-103 —
 they are exactly the clause class that produced homelab#198/#204).
 
+## The v1.2 lifecycle (ADR-106) — the big picture
+
+One mode (feature goals), phase-keyed models, two authoring moments, one codeowner tax. The
+per-closure tick costs zero tokens; the reasoning tier runs only where work is CREATED. This
+diagram is the design view — the lint-checked FSM follows when the v1.2 machinery builds
+(Bucket A4).
+
+```mermaid
+flowchart TD
+  H(["HUMAN authors + queues the Goal<br/>Budget: · Acceptance · Production-leg:"]):::human
+  H -->|breaker #1, moved up| DEC
+  DEC["<b>DECOMPOSE</b> — reasoning tier<br/>(opus / the seat with corpus)<br/>AUTHORING MOMENT 1: the initial children<br/>native sub-issues, goal/&lt;n&gt;-&lt;slug&gt; branch"]:::reason
+  DEC --> RIDE
+  subgraph SUB["THE SUBTREE — autonomous, Σ caps ≤ Budget, cheap workers"]
+    RIDE["child ride (haiku / OR chain)<br/>PR into goal/** · bot review (sonnet)<br/>in-diff findings FIXED IN-PR"]:::cheap
+    RIDE --> MRG["merge into goal/** branch<br/>(deploys NOTHING — no tax)"]:::det
+    MRG --> HARV["harvest (deterministic)<br/>findings APPEND to the STORE<br/>never mints issues"]:::det
+    HARV --> TICK["goal-review tick — NO MODEL<br/>deterministic burn-down append"]:::det
+    TICK -->|"N≥5 piled · child-set done ·<br/>budget fraction · pre-verdict"| CKPT["<b>CHECKPOINT</b> — reasoning tier<br/>AUTHORING MOMENT 2:<br/>fold-by-footprint / mint real children / drop"]:::reason
+    CKPT -->|new children| RIDE
+  end
+  SUB -->|acceptance built| ASM["assembly-complete ruling (sonnet)<br/>assembly PR opened + armed<br/>bot review, REVIEW_GOAL_MODEL ≠ decomposer"]:::cheap
+  ASM --> TAX["🧾 <b>THE ONE CODEOWNER TAX</b><br/>human reads + merges goal → master<br/>every nit already solved in-tree"]:::human
+  TAX --> PL["POST-LAUNCH — goal stays OPEN<br/>ship-then-fix: sprouts → store → checkpoints<br/>children base master · Production-leg<br/>verified IN-TREE (deploy + KPIs)"]:::det
+  PL --> V{"VERDICT — human<br/>validated / reverted / abandoned"}:::human
+  classDef human fill:#4c1d95,stroke:#a78bfa,color:#ffffff
+  classDef reason fill:#7c2d12,stroke:#fb923c,color:#ffedd5
+  classDef cheap fill:#14532d,stroke:#4ade80,color:#dcfce7
+  classDef det fill:#27272a,stroke:#71717a,color:#e4e4e7
+```
+
 ## Goal lane versions — which design had which problems
 
 The lane redesigns wholesale (the scout's §M7 v1/v2/v3 pattern), so its history is versioned:
