@@ -148,6 +148,9 @@
       "pin-only-lint": [
         "bash scripts/pin-only-lint.sh \"$@\""
       ],
+      "goal-findings-self-test": [
+        "bash agents/goal-findings.sh --self-test"
+      ],
       "governance-lint": [
         "bash scripts/governance-lint.sh \"$@\""
       ],
