@@ -1,0 +1,75 @@
+# WITNESS PAIR for homelab#353 — the PUSHGATEWAY half of AgentCoordinateScanWedged. Two exprs on
+# identical series: the SHIPPED one and the pre-#353 one. Loaded by
+# scan-wedge-pgw-witness.promtool-test; not a manifest and applied to nothing.
+#
+# ⚠ THIS IS NOT A SECOND BEHAVIOUR HOME FOR THE ALERT, and the distinction is load-bearing.
+# agent-runs.promtool-rules refuses to hold AgentCoordinateScanWedged at all, on the ground that
+# `agents/scan-wedge-alert-test.sh` already pins it by EXTRACTING the expr out of the shipped
+# manifest at run time — a copy cannot rot there, and two homes means one of them will. That
+# refusal stands and this file does not compete with it: what is pinned here is the DIFFERENCE
+# between two exprs on one input, which is a statement about #353's decision and cannot be made in
+# a file that holds only one of them. The extracting test remains the authority — if this file ever
+# disagrees with it, it is this file that is wrong. Adding the shipped-side rows to that test is
+# #352's surface (`agents/**`, outside #353's Touches).
+#
+# ⚠ NOT DRIFT-PINNED (the same warning agent-runs.promtool-rules carries, #344 for the yq recipe):
+# the AgentCoordinateScanWedged copy below is a HAND COPY of the manifest, annotations stripped —
+# the manifest is their one home, and this pins firing behaviour, not prose. Re-copy after every
+# expr edit or the test passes vacuously. Verify by hand against the manifest, then run the
+# anti-vacuity check: revert one bridge here, confirm the test goes RED, restore it.
+#
+#   yq -o=json '{"groups":[{"name":"scan-wedge-pgw-witness","rules":[.spec.groups[].rules[] | select(.alert=="AgentCoordinateScanWedged") | del(.annotations)]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#
+# Named .promtool-rules, not .yaml: manifest-lint kubeconforms every *.yaml under
+# argocd/resources/ and a non-manifest there fails CI.
+groups:
+  - name: scan-wedge-pgw-witness
+    rules:
+      # ── the SHIPPED expr, verbatim out of prometheusrule.yaml (annotations stripped) ──────────
+      - alert: AgentCoordinateScanWedged
+        expr: |
+          (
+              (time() - max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))) > 900
+            and on(namespace,pod)
+              max by (namespace,pod,uid) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
+            and on(namespace,pod)
+              max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))
+                >= scalar(max(max_over_time(process_start_time_seconds{job="prometheus-pushgateway"}[5m])) or vector(0))
+            unless on(pod)
+              max_over_time(agent_scan_phase_start_timestamp[5m])
+          )
+          or
+          (
+              (time() - max_over_time(agent_scan_phase_start_timestamp[5m])) > 900
+            and on(pod)
+              last_over_time(agent_scan_in_deterministic[5m]) == 1
+            and on(pod)
+              max by (pod) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
+          )
+        for: 2m
+        labels:
+          severity: warning
+      # ── the PRE-#353 expr: the three pushgateway reads raw, no generation guard ───────────────
+      # Identical to the shipped one everywhere else — the KSM conjuncts carry #347's `[5m]` bridge
+      # and `max by (namespace,pod,uid)` unchanged, so every row below isolates the pushgateway
+      # reads and nothing else. This is the expr that shipped between PR #347 and #353.
+      - alert: AgentCoordinateScanWedgedPgwRaw
+        expr: |
+          (
+              (time() - max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))) > 900
+            and on(namespace,pod)
+              max by (namespace,pod,uid) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
+            unless on(pod)
+              agent_scan_phase_start_timestamp
+          )
+          or
+          (
+              (time() - agent_scan_phase_start_timestamp) > 900
+            and on(pod)
+              agent_scan_in_deterministic == 1
+            and on(pod)
+              max by (pod) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
+          )
+        for: 2m
+        labels:
+          severity: warning
