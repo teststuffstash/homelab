@@ -25,6 +25,10 @@ meant to avoid.)
 ## NEXT SESSION — the worklog (updated 2026-08-11 midday)
 
 0. **THE PLATFORM PLAN (chartered 2026-08-12) — two buckets.**
+   ⚑ **Session-type bootstrap rule (operator, 2026-08-12): a BUILD session reads THIS section +
+   §Re-arm and nothing heavy** — no design-agents corpus (145k; pay it only for a DESIGN sitting
+   like A3/v1.2), no full /meta-coordinate (pay it only to resume the coordination ROLE). The
+   charter carries the decisions; chunks name their files; CLAUDE.md/memory carry the process.
    **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
    debt):** A0 verify the iac-sentinel soak is observable (`iac_sentinel_violations` = no-series!)
    · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
