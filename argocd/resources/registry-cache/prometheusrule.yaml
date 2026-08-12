@@ -3,6 +3,44 @@
 # layer digest mismatches + 500s (homelab#48). So the alert must fire well before 100%: at
 # ~85% the write path still works and the fix is a purge/TTL decision, not an incident.
 # Prometheus picks up PrometheusRules cluster-wide (ruleSelectorNilUsesHelmValues=false).
+#
+# ── THE RESTART-GAP TEST, APPLIED TO A SHARED DEPENDENCY (homelab#333) ────────────────────────
+# #332's test is "DOES THE CONDITION OUTLIVE THE ROLL?" (the full statement lives in
+# argocd/resources/openrouter-proxy/prometheusrule.yaml — one home, this is the pointer). #333
+# asked it of kube-state-metrics, which is not this file's workload but is a `replicas: 1`
+# dependency SHARED by three alerts in two directories, and answered it once for all three:
+# the two `RegistryGCMirrors*` alerts below and `AgentCoordinateScanWedged` in
+# argocd/resources/pushgateway/prometheusrule.yaml.
+#
+#   VERDICT: BRIDGE, and the reason generalises to every KSM-derived alert in this repo. KSM is a
+#   MIRROR, not a source: its series describe OTHER objects (a CronJob's suspend flag, a pod's
+#   phase), so a fresh KSM re-lists the API and republishes the SAME values. The condition never
+#   stopped being true; only the measurement of it went away. That is the persisted/externally-
+#   true arm of #332's test in its purest form.
+#
+# Two halves, and #288 proved either alone still resets `for:` at one replica:
+#   (1) IDENTITY CHURN → `max by (namespace,cronjob)`. `kube_cronjob_*` has no `pod` of its own,
+#       so the scrape target's labels survive intact: `pod` and `instance` on these series are
+#       KUBE-STATE-METRICS' pod and IP, and they ride onto the alert. A KSM reschedule therefore
+#       turns a firing alert into a different alert instance — a spurious resolve plus a re-fire
+#       one full `for:` window later, on a CronJob that never stopped being suspended/stale.
+#   (2) A REAL HOLE → `max_over_time(...[10m])`. At `replicas: 1` a KSM reschedule empties every
+#       kube_* series — nothing is left to aggregate over — and the staleness markers make that
+#       instant rather than lookback-cushioned.
+# [10m] is #288's measured size for this class on this cluster (69-116s of raw-sample gap across
+# 10 pod generations, ~5x margin), carried unchanged: these two alerts wait 15m and 1h, so up to
+# 10m of lag on the CLEAR is immaterial, and their conditions move on a weekly/manual timescale.
+# `AgentCoordinateScanWedged` waits 2m and deliberately takes a smaller range — the sizing
+# argument is in its own manifest, not restated here.
+# CEILING, asserted rather than assumed: a KSM hole longer than 10m (crash-loop, cold image pull,
+# node drain) still resets the window. Same accepted ceiling as #313's.
+# NOT the #313 masking trade-off. There, aggregating meant one healthy exporter instance could
+# mask a stuck one, because the metric described the exporter ITSELF. A second KSM replica would
+# report the same `gc-mirrors` numbers as the first, so `max by` here discards duplicate mirrors
+# of one fact, not independent facts. Pinned as a test (gc-mirrors.promtool-test), not argued.
+# Behaviour for both alerts — bridge, ceiling, identity churn, and the asymmetry trap in the
+# `absent()` arm — is executed in gc-mirrors.promtool-test, against the pre-#333 exprs kept as a
+# regression witness in gc-mirrors-witness.promtool-{rules,test}.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -64,18 +102,42 @@ spec:
         # Note: absent() preserves its input selector's labels, so $labels.namespace
         # and $labels.cronjob are safe to reference — but they are fixed, so we
         # hardcode them for clarity.
+        #
+        # ⚠ KSM RESTART-GAP HARDENED (homelab#333 — see this file's header for the verdict and the
+        # [10m] sizing). `max_over_time` on `..._last_successful_time` costs nothing on the way
+        # down, exactly as in #313: the gauge only moves when a run SUCCEEDS, and `max` takes the
+        # NEWEST success in the window, so any success inside the last 10m already puts the age
+        # far under 8 days. It can neither delay this alert nor keep it ringing after a fix.
+        # ⚠ THE `absent()` ARM IS THE TRAP, and it is why bridging one side at a time is wrong.
+        # `absent()` fires when its input is EMPTY — which is precisely what a KSM hole produces.
+        # Bridge only `kube_cronjob_created` and this arm becomes a FALSE POSITIVE generator: on
+        # every KSM roll the created-side would persist while the absent-side flipped to 1, and a
+        # CronJob that succeeded an hour ago would page as "never succeeded". So the absent() input
+        # carries the SAME [10m] bridge — the arm then holds its shape across a hole in both
+        # directions. Bridging neither is the other consistent option and is what #333 rejected:
+        # a hole would empty the created-side and restart the 1h window.
+        # The operands are ALSO swapped relative to the pre-#333 form, and that is load-bearing
+        # rather than cosmetic: `absent(max_over_time(...))` is a function call, not a vector
+        # selector, so it no longer carries the selector's labels the note above relies on, and
+        # `and on()` keeps the LEFT side's. Putting the labelled `kube_cronjob_created` term on the
+        # left is what keeps `namespace`/`cronjob` on this arm's alert. Pinned in
+        # gc-mirrors.promtool-test.
         - alert: RegistryGCMirrorsStale
           expr: >
             (
-              kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}
-                < (time() - 8 * 24 * 3600)
+              max by (namespace,cronjob) (
+                max_over_time(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+              ) < (time() - 8 * 24 * 3600)
             )
             or
             (
-              absent(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"})
+              (
+                max by (namespace,cronjob) (
+                  max_over_time(kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+                ) < (time() - 8 * 24 * 3600)
+              )
               and on()
-                (kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}
-                   < (time() - 8 * 24 * 3600))
+                absent(max_over_time(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}[10m]))
             )
           for: 1h
           labels:
@@ -84,9 +146,18 @@ spec:
           annotations:
             summary: "gc-mirrors CronJob in registry-cache has not completed in >8 days"
             description: "The weekly mirror-GC CronJob (gc-mirrors, namespace registry-cache) has not reported a successful run in over 8 days. If this persists, mirror PVCs fill until pulls silently truncate. Check: (1) CronJob exists and is not suspended — kubectl -n registry-cache get cronjob gc-mirrors; (2) recent Jobs — kubectl -n registry-cache get jobs -l cronjob=gc-mirrors; (3) if RBAC or scheduling broke, the pods will show Backoff or RBAC errors in events."
+        # ⚠ KSM RESTART-GAP HARDENED (homelab#333 — verdict and [10m] sizing in this file's header).
+        # This one DOES pay for the bridge on the way down, and the price is stated rather than
+        # hidden: `max_over_time` means "suspended at any point in the last 10m", so un-suspending
+        # the CronJob leaves the alert ringing for up to 10m after the fix. Against `for: 15m` on a
+        # weekly GC that is the cheaper fault by a wide margin — the alternative is a suspension
+        # that goes unreported for another 15m every time KSM moves. Both directions are pinned in
+        # gc-mirrors.promtool-test.
         - alert: RegistryGCMirrorsSuspended
           expr: >
-            kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors"} == 1
+            max by (namespace,cronjob) (
+              max_over_time(kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+            ) == 1
           for: 15m
           labels:
             severity: warning
