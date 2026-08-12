@@ -180,6 +180,7 @@ is stale, so it cannot drift the way the prose register did.
 | `summary-comment-first-touch` | actions | - | `-` | - |
 | `unblocked-unlabeled-blocker-open` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
 | `unblocked-unlabeled-surfaces` | actions | - | `agents/coordinator-scan.sh` | IL-T01 |
+| `unit-fast-path-author` | actions | - | `agents/coordinator-scan.sh` | - |
 <!-- replay-index:end -->
 
 

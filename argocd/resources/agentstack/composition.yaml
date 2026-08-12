@@ -622,6 +622,17 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                # homelab#103 soft hostname spread — canonical copy + rationale on the `coordinate`
+                # WorkflowTemplate (agents/coordinator/coordinate-argo.yaml); mirrored here 2026-08-12
+                # (the #103 residual leg) so per-stack loop pods spread like the platform's own.
+                podSpecPatch: |
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchExpressions:
+                          - { key: workflows.argoproj.io/workflow, operator: Exists }
                 # Serialize the */10 cron tick against the doorbell edge's inline Workflow (both
                 # take this namespaced mutex) so a graduated stack can't double-scan itself. A
                 # no-op for a non-graduated stack (the cron is the sole contender). Per-stack
@@ -681,6 +692,17 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 1800
                 ttlStrategy: { secondsAfterCompletion: 3600, secondsAfterFailure: 86400 }
+                # homelab#103 soft hostname spread — canonical copy + rationale on the `coordinate`
+                # WorkflowTemplate (agents/coordinator/coordinate-argo.yaml); mirrored here 2026-08-12
+                # (the #103 residual leg) so per-stack loop pods spread like the platform's own.
+                podSpecPatch: |
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchExpressions:
+                          - { key: workflows.argoproj.io/workflow, operator: Exists }
                 entrypoint: main
                 volumes:
                   - { name: work, emptyDir: {} }
@@ -735,6 +757,17 @@ spec:
                 serviceAccountName: agentstack-loop
                 activeDeadlineSeconds: 3600
                 ttlStrategy: { secondsAfterCompletion: 21600, secondsAfterFailure: 86400 }
+                # homelab#103 soft hostname spread — canonical copy + rationale on the `coordinate`
+                # WorkflowTemplate (agents/coordinator/coordinate-argo.yaml); mirrored here 2026-08-12
+                # (the #103 residual leg) so per-stack loop pods spread like the platform's own.
+                podSpecPatch: |
+                  topologySpreadConstraints:
+                    - maxSkew: 1
+                      topologyKey: kubernetes.io/hostname
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchExpressions:
+                          - { key: workflows.argoproj.io/workflow, operator: Exists }
                 synchronization:
                   mutexes:
                     - name: coordinator-scan
