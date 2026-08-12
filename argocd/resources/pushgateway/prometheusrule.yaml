@@ -333,21 +333,100 @@ spec:
         # still `agent_scan_in_deterministic`, neither of which is a KSM series and neither of
         # which is bridged. Only the KSM liveness conjunct changed, in both arms.
         # The pushgateway's own restart gap is a DIFFERENT dependency and out of #333's scope —
-        # carried in the PR body as a finding, not silently folded in here.
+        # carried in the PR body as a finding, which became #353 and is decided directly below.
+        #
+        # ── THE PUSHGATEWAY HALF, DECIDED PER ARM (homelab#353) ─────────────────────────────────
+        # The markers are this alert's SECOND single-replica dependency (`replicas: 1`, store on an
+        # emptyDir behind `--persistence.interval=5m` — deployment.yaml), and #332's test gives them
+        # a different answer than it gave KSM, which is why #347 refused to fold them in.
+        # WHY THE KSM VERDICT DOES NOT TRANSFER: KSM is a MIRROR, so a fresh replica republishes the
+        # same facts and a range selector bridges a hole that ENDS. The gateway is a STORE and the
+        # scan pushes once per phase TRANSITION, so what the gateway loses nothing republishes. The
+        # failure therefore splits in two and only one half is bridgeable:
+        #   (a) SCRAPE GAP or CONTAINER RESTART — the data RETURNS, identical (the persistence file
+        #       survives a container restart, losing at most one 5m interval of pushes). #332's case
+        #       in its pure form; `max_over_time(...[5m])` is straightforwardly right. Measured
+        #       2026-08-12 over the 8d Prometheus retains: 11461 of 11461 scrape-minutes present,
+        #       ZERO gaps >60s, 0 restarts, one pod generation, process up 15.5d — quieter than KSM
+        #       itself (2x120s in the same window, #347). [5m] here is headroom, not a fit.
+        #   (b) POD RESCHEDULE — the emptyDir goes with the pod and every group is DESTROYED. No
+        #       range fixes that: [5m] postpones the consequence by five minutes and the data is
+        #       still gone, until a phase transition repushes it — which for a pod streaming a ride
+        #       can be the rest of its life. A range sized to "cover" (b) would be a fiction.
+        # [5m] and not [10m] for #347's reason unchanged: `for:` is 2m, and the range is also how
+        # long this alert rings after the pod it names is gone, while deleting the workflow is this
+        # alert's own containment.
+        #
+        # ARM 1 — THE EXCLUSION, WHICH FAILS **OPEN** (a false page). `unless on(pod) <marker>` is a
+        # GUARD, so losing the marker does not silence this alert, it removes the thing that keeps a
+        # healthy >15m ride from raising it — the exact pre-FU-145 behaviour #283 exists to kill
+        # (2026-08-06: two false issues, #120 and #134, in one hour). One mechanism per class:
+        #   (a) `max_over_time(agent_scan_phase_start_timestamp[5m])` — the exclusion outlives a gap.
+        #       ⚠ The wrinkle, stated: a marker that legitimately went away keeps suppressing arm 1
+        #       for up to 5m (a new scan's push REPLACES the namespace group — two generations of
+        #       platform-agents markers were visible in one 5m window, live 2026-08-12). That can
+        #       only DELAY a firing, and only for a pod that had already pushed a marker.
+        #   (b) `kube_pod_start_time >= <the gateway's own process start>` — for the destructive
+        #       class, because what (b) needs is not a longer range but a way to KNOW the store was
+        #       emptied. Absence of a marker is only EVIDENCE if the store has been up since before
+        #       the pod could have pushed into it; if the gateway's current process started after
+        #       the pod did, "no marker" means nothing and arm 1 must not read it as a wedge.
+        #       `process_start_time_seconds` moves on a container restart too, which is right — a
+        #       restart can lose one persistence interval of pushes.
+        #       ⚠ POSITIVE EVIDENCE ONLY: `or vector(0)` makes an ABSENT gateway self-metric read as
+        #       "no roll observed" — i.e. exactly today's behaviour — never as suppression. A guard
+        #       that silenced this alert whenever its own input went missing would trade a rare
+        #       false page for an unbounded silent one, and nothing watches the guard.
+        #       Cost of that choice, named rather than hidden: a gateway that is entirely GONE for
+        #       longer than the 5m bridge leaves arm 1 unguarded again. Expressing THAT wants
+        #       `absent()`, which cannot land here — it is true in every fixture that has no
+        #       pushgateway series, so it would turn agents/scan-wedge-alert-test.sh (this alert's
+        #       behaviour home, outside #353's Touches) red. Carried to the PR body; see #352.
+        #   The guard is arm 1's ALONE: arm 2 reads the markers positively, so a lost store silences
+        #   it rather than mis-firing it, and there is nothing for a guard to add.
+        # ARM 2 — THE CLOCK AND THE GATE, WHICH FAIL **CLOSED** (a missed page). Both are required
+        # conjuncts, so a hole means arm 2 cannot fire at all and a genuinely wedged deterministic
+        # scan goes unalerted. Bridged at [5m] for class (a) — the wedge outlives the gap and the
+        # marker comes back unchanged. For class (b) the bridge buys five minutes and no more, and
+        # this alert then goes SILENT for that pod: arm 2 has no data and arm 1 is suppressed by its
+        # own guard. That is the accepted cost, and it is ASSERTED rather than assumed
+        # (scan-wedge-pgw-witness.promtool-test row 4). It is bounded by the scan pod's own life
+        # (`activeDeadlineSeconds: 1800`) and every pod started after the new gateway generation is
+        # covered again. The alternative was refusing the guard — but then the SAME gateway roll
+        # pages on a healthy ride (witness row 1) and on this wedge (row 4) with identical
+        # gateway-side inputs, so that page cannot be told from the false one. Silence that ends
+        # with the pod beats a page that means nothing.
+        #   `last_over_time` on the GATE and `max_over_time` on the clock, deliberately: the clock is
+        #   a monotone epoch, so max IS the newest transition, while the gate is a STATE and
+        #   `max_over_time(...) == 1` would read "was deterministic at some point in the last 5m" —
+        #   a fail-open reading of the one conjunct that keeps a streaming ride out. Today the clock
+        #   conjunct masks the difference (both are pushed together, so a dispatch moves the
+        #   timestamp too and the >900s test fails first), so no fixture row can separate them: the
+        #   choice is made on meaning, not on a red row.
+        # NO `max by (...)` on the marker reads, and that is not an oversight — unlike KSM's series
+        # they carry NO `instance` (verified live 2026-08-12: the gateway serves pushed groups with
+        # an empty instance and honorLabels keeps it), so there is no #288 identity churn to
+        # aggregate away, and aggregating would drop `job` from the alert's published labels.
+        # The emptyDir itself is a DURABILITY defect rather than an expr defect; its home is
+        # AgentRunPhaseSlow's block above (#336), which names it instead of absorbing it into a
+        # range selector. #353 does the same and carries it to the PR body.
         - alert: AgentCoordinateScanWedged
           expr: |
             (
                 (time() - max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))) > 900
               and on(namespace,pod)
                 max by (namespace,pod,uid) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
+              and on(namespace,pod)
+                max by (namespace,pod,uid) (max_over_time(kube_pod_start_time{pod=~"coordinate-.*"}[5m]))
+                  >= scalar(max(max_over_time(process_start_time_seconds{job="prometheus-pushgateway"}[5m])) or vector(0))
               unless on(pod)
-                agent_scan_phase_start_timestamp
+                max_over_time(agent_scan_phase_start_timestamp[5m])
             )
             or
             (
-                (time() - agent_scan_phase_start_timestamp) > 900
+                (time() - max_over_time(agent_scan_phase_start_timestamp[5m])) > 900
               and on(pod)
-                agent_scan_in_deterministic == 1
+                last_over_time(agent_scan_in_deterministic[5m]) == 1
               and on(pod)
                 max by (pod) (max_over_time(kube_pod_status_phase{phase="Running"}[5m])) == 1
             )
@@ -356,4 +435,4 @@ spec:
             severity: warning
           annotations:
             summary: "coordinate scan {{ $labels.pod }} has been in its DETERMINISTIC phase >15m in {{ $labels.namespace }} (p99 of a whole scan is 5m)"
-            description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last."
+            description: "{{ $labels.pod }} has spent over 15 minutes in the deterministic pass — the cheap gh/kubectl half that should finish in seconds. SYMPTOM ONLY; this says nothing about any ride the pod may have dispatched (that phase is excluded by construction — FU-145). STEP 1, the pod's own log: near-zero bytes and stuck before/inside the `git clone` is the known wedge (homelab#103, 2026-08-05). STEP 2, `kubectl -n {{ $labels.namespace }} get wf` — a wedged scan holds the `coordinator-scan` mutex with twins Pending behind it, which is what makes ONE stuck pod stop the whole loop from dispatching. Containment: delete the workflow + its queued twins so the next cron tick takes the lock; the 1800s activeDeadlineSeconds is the belt behind that. `unit=-` with duplicate submissions → look upstream at the Sensor (AgentEventInfraSpinning, homelab#103). If the pod is instead streaming a dispatched session this alert is silent by design — read `agent_scan_in_deterministic{pod=\"{{ $labels.pod }}\"}` on the pushgateway to see which phase it reported last. If that marker is MISSING, check `time() - process_start_time_seconds{job=\"prometheus-pushgateway\"}` before concluding anything: a gateway younger than the pod means its emptyDir store was destroyed with its last pod, so the markers for pods older than it are gone and this alert is deliberately degraded for them until they end (homelab#353)."

@@ -1,0 +1,297 @@
+# REGRESSION WITNESS for homelab#353 — what the pushgateway bridge and the generation guard
+# actually buy on AgentCoordinateScanWedged, asserted as the DIFFERENCE between the shipped expr
+# and the pre-#353 one on identical series.
+#
+#   devbox run -- promtool test rules argocd/resources/pushgateway/scan-wedge-pgw-witness.promtool-test
+#   (and in CI: `devbox run prometheus-rules-lint` runs every *.promtool-test under argocd/)
+#
+# Read scan-wedge-pgw-witness.promtool-rules' header first: this file is NOT a second behaviour
+# home for the alert — `agents/scan-wedge-alert-test.sh` is, because it extracts the expr out of
+# the shipped manifest at run time. Every row here is a statement about a DIFFERENCE, which needs
+# both exprs in one place and so cannot be made there.
+#
+# ⚠ THE HOLES ARE WRITTEN `stale`, NOT `_`, AND THAT IS THE WHOLE TEST (the #352 lesson, restated
+# because it is just as load-bearing on this side): a `_` gap is only a missing sample, and an
+# unbridged instant selector still resolves it out of Prometheus' 5m lookback — so a `_`-shaped row
+# goes green with the bridge AND without it, pinning nothing. A pushgateway that goes away appends
+# a stale marker to every series it served, and a stale marker ends an instant selector on the spot
+# while `max_over_time(...[5m])` reads straight past it.
+#
+# CLOCK: promtool starts at 0, so a pod with `kube_pod_start_time 0` has age == `time()`, marker
+# values are the epoch of the phase transition, and `process_start_time_seconds 0` means "the
+# gateway has been up since before this test began" (the live steady state — one generation, 15.5
+# days, 2026-08-12).
+#
+# THE TWO GATEWAY FAILURE CLASSES, since every row below is one or the other:
+#   (a) the data RETURNS  — scrape gap / container restart (persistence file). `process_start` unchanged.
+#   (b) the data is DESTROYED — pod reschedule (emptyDir). `process_start` jumps to the new generation.
+rule_files:
+  - scan-wedge-pgw-witness.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ══ 1. CLASS (b) UNDER A HEALTHY RIDE — the FAIL-OPEN this issue exists for ═══════════════════
+  # A scan that dispatched at 3m and is streaming its ride (in_deterministic 0) is excluded from
+  # arm 1 by its marker. The gateway is rescheduled at 20m: the markers are destroyed and NOTHING
+  # republishes them — the next push is a phase transition that may be an hour away. The pre-#353
+  # expr loses an EXCLUSION, so it does not go quiet, it pages — the exact pre-FU-145 behaviour
+  # #283 killed (2026-08-06, two false issues in one hour: homelab#120, #134).
+  # The two evals after the roll separate the two mechanisms: at 23m the [5m] bridge is still
+  # holding, at 27m it is long exhausted and only the generation guard is keeping this silent.
+  - interval: 1m
+    name: "class (b): a gateway reschedule must not page on a healthy streaming ride"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="platform-agents",pod="coordinate-perstack-h1",uid="u1"}'
+        values: "0+0x40"
+      - series: 'kube_pod_status_phase{namespace="platform-agents",pod="coordinate-perstack-h1",uid="u1",phase="Running"}'
+        values: "1+0x40"
+      # dispatched at 3m; last scrape of the marker is 19m, gateway gone at 20m, never repushed.
+      - series: 'agent_scan_phase_start_timestamp{job="agent_scan_phase",namespace="platform-agents",pod="coordinate-perstack-h1"}'
+        values: "_ _ _ 180+0x16 stale"
+      - series: 'agent_scan_in_deterministic{job="agent_scan_phase",namespace="platform-agents",pod="coordinate-perstack-h1"}'
+        values: "_ _ _ 0+0x16 stale"
+      # the roll itself: a NEW gateway process, started at 21m, with an empty store.
+      - series: 'process_start_time_seconds{job="prometheus-pushgateway"}'
+        values: "0+0x19 stale 1260+0x19"
+    alert_rule_test:
+      # before the roll both forms agree: the marker excludes the pod, nothing fires.
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: []
+      # 3m after the roll: the bridge still holds the exclusion. The raw form fired at 22m.
+      - eval_time: 23m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 23m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: &pgw_false_page
+          - exp_labels:
+              severity: warning
+              namespace: platform-agents
+              pod: coordinate-perstack-h1
+              uid: u1
+      # 7m after the roll: the bridge is exhausted and the exclusion is gone for good. THIS row is
+      # the generation guard alone — remove it and the shipped expr becomes the raw one here.
+      - eval_time: 27m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 27m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: *pgw_false_page
+
+  # ══ 2. CLASS (a) UNDER A HEALTHY RIDE — the bridge earns its keep on its own ══════════════════
+  # No gateway restart at all: the target simply misses three scrapes (or the container restarts
+  # and reloads its persistence file), and the markers come back UNCHANGED at 23m. This is #332's
+  # case in its pure form, and it is the half a range selector genuinely fixes. Measured frequency
+  # on this cluster: zero gaps >60s in the 8 days Prometheus retains (2026-08-12) — the row is
+  # headroom, not a description of Tuesday.
+  - interval: 1m
+    name: "class (a): a scrape gap must not page on a healthy streaming ride"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="platform-agents",pod="coordinate-perstack-h2",uid="u2"}'
+        values: "0+0x40"
+      - series: 'kube_pod_status_phase{namespace="platform-agents",pod="coordinate-perstack-h2",uid="u2",phase="Running"}'
+        values: "1+0x40"
+      - series: 'agent_scan_phase_start_timestamp{job="agent_scan_phase",namespace="platform-agents",pod="coordinate-perstack-h2"}'
+        values: "_ _ _ 180+0x16 stale _ _ 180+0x17"
+      - series: 'agent_scan_in_deterministic{job="agent_scan_phase",namespace="platform-agents",pod="coordinate-perstack-h2"}'
+        values: "_ _ _ 0+0x16 stale _ _ 0+0x17"
+      # unchanged across the gap: this is NOT a new gateway generation, so the guard says nothing
+      # here and the bridge is doing all the work.
+      - series: 'process_start_time_seconds{job="prometheus-pushgateway"}'
+        values: "0+0x40"
+    alert_rule_test:
+      - eval_time: 22m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: platform-agents
+              pod: coordinate-perstack-h2
+              uid: u2
+      # the markers are back since 23m, so even the raw form recovers — the false page was a blip
+      # it could not have known was a blip.
+      - eval_time: 24m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 24m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: []
+
+  # ══ 3. CLASS (a) UNDER A REAL WEDGE — the FAIL-CLOSED half, and the re-key it breaks ══════════
+  # A deterministic pass wedged since 1m: arm 2 is firing from 19m. The same three-scrape gap now
+  # removes REQUIRED conjuncts, so the raw form cannot evaluate arm 2 at all. It does not merely go
+  # quiet: with the marker gone the pod also falls into arm 1, so one unbroken wedge is published
+  # as a RESOLVE, a fire under a different label set, another resolve, and a fire back on the
+  # original one — three notifications and two identities for a pod that never changed state.
+  - interval: 1m
+    name: "class (a): a scrape gap must not drop (or re-key) a firing wedge"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="agent-coordinator",pod="coordinate-perstack-w3",uid="u3"}'
+        values: "0+0x40"
+      - series: 'kube_pod_status_phase{namespace="agent-coordinator",pod="coordinate-perstack-w3",uid="u3",phase="Running"}'
+        values: "1+0x40"
+      - series: 'agent_scan_phase_start_timestamp{job="agent_scan_phase",namespace="agent-coordinator",pod="coordinate-perstack-w3"}'
+        values: "_ 60+0x18 stale _ _ 60+0x17"
+      - series: 'agent_scan_in_deterministic{job="agent_scan_phase",namespace="agent-coordinator",pod="coordinate-perstack-w3"}'
+        values: "_ 1+0x18 stale _ _ 1+0x17"
+      - series: 'process_start_time_seconds{job="prometheus-pushgateway"}'
+        values: "0+0x40"
+    alert_rule_test:
+      # baseline: both forms firing on arm 2, same identity.
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: &wedge_arm2_w3
+          - exp_labels:
+              severity: warning
+              job: agent_scan_phase
+              namespace: agent-coordinator
+              pod: coordinate-perstack-w3
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: *wedge_arm2_w3
+      # mid-gap: the bridge keeps arm 2 whole. The raw form has re-keyed onto arm 1 — a different
+      # alert for the same wedge, and the one whose exclusion it just lost.
+      - eval_time: 22m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: *wedge_arm2_w3
+      - eval_time: 22m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: agent-coordinator
+              pod: coordinate-perstack-w3
+              uid: u3
+      # markers back since 23m. The raw form's arm 2 is only PENDING again (re-armed at 23m, fires
+      # at 25m), so its wedge is unalerted here; the bridged one never stopped.
+      - eval_time: 24m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: *wedge_arm2_w3
+      - eval_time: 24m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: *wedge_arm2_w3
+      - eval_time: 26m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: *wedge_arm2_w3
+
+  # ══ 4. CLASS (b) UNDER A REAL WEDGE — THE ACCEPTED CEILING, asserted rather than assumed ══════
+  # The same wedge, but the gateway is RESCHEDULED at 20m: the markers are destroyed and the scan
+  # is wedged, so it will never push again. The bridge buys exactly five minutes and then this
+  # alert goes SILENT for this pod — arm 2 has no data and arm 1 is suppressed by the generation
+  # guard. That is the cost of #353's decision and this row is written to MEET it, not dodge it.
+  # It is bounded: the pod dies at `activeDeadlineSeconds: 1800`, and every scan pod started after
+  # the new gateway generation is covered again from its first evaluation.
+  # ⚠ READ THIS ROW AGAINST ROW 1. The raw form DOES page here, correctly — and its input is
+  # indistinguishable from row 1's, where the identical page is false. The marker was the only
+  # thing that told the two apart and the reschedule destroyed it. That is why "just leave arm 1
+  # unguarded" is not the cheaper trade it looks like: it buys a page that cannot be believed.
+  - interval: 1m
+    name: "class (b): a gateway reschedule silences a firing wedge after the bridge — the ceiling"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="agent-coordinator",pod="coordinate-perstack-w4",uid="u4"}'
+        values: "0+0x40"
+      - series: 'kube_pod_status_phase{namespace="agent-coordinator",pod="coordinate-perstack-w4",uid="u4",phase="Running"}'
+        values: "1+0x40"
+      - series: 'agent_scan_phase_start_timestamp{job="agent_scan_phase",namespace="agent-coordinator",pod="coordinate-perstack-w4"}'
+        values: "_ 60+0x18 stale"
+      - series: 'agent_scan_in_deterministic{job="agent_scan_phase",namespace="agent-coordinator",pod="coordinate-perstack-w4"}'
+        values: "_ 1+0x18 stale"
+      - series: 'process_start_time_seconds{job="prometheus-pushgateway"}'
+        values: "0+0x19 stale 1260+0x19"
+    alert_rule_test:
+      # inside the bridge: still firing, unbroken, on the wedge's own identity. 23m is the LAST
+      # minute that holds — a `[5m]` selector at time t reads (t-5m, t], left-open, so the 19m
+      # sample is already outside the window at 24m. The bridge is just under five minutes, not a
+      # tick over, and this row pins that rather than rounding it.
+      - eval_time: 23m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: agent_scan_phase
+              namespace: agent-coordinator
+              pod: coordinate-perstack-w4
+      # past it: silent, and it stays silent for as long as this pod lives. THE CEILING.
+      - eval_time: 26m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      # the raw form pages — with row 1's labels, on row 1's evidence, for the opposite condition.
+      - eval_time: 26m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: agent-coordinator
+              pod: coordinate-perstack-w4
+              uid: u4
+
+  # ══ 5. THE GUARD DEFAULTS OPEN — positive evidence only ══════════════════════════════════════
+  # No `process_start_time_seconds` series at all (the metric renamed, relabelled away, or a test
+  # harness that never had it). `or vector(0)` makes that read as "no roll observed", so the guard
+  # is a no-op and the 2026-08-05 wedge (homelab#103: nothing ever pushed) still fires exactly as
+  # it did before #353. This is not a courtesy row: it is the property that keeps
+  # agents/scan-wedge-alert-test.sh — which supplies no pushgateway series — green, and the reason
+  # a missing guard input can never turn this alert silent.
+  - interval: 1m
+    name: "the generation guard is a no-op when its own input is absent"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="agent-coordinator",pod="coordinate-perstack-n5",uid="u5"}'
+        values: "0+0x40"
+      - series: 'kube_pod_status_phase{namespace="agent-coordinator",pod="coordinate-perstack-n5",uid="u5",phase="Running"}'
+        values: "1+0x40"
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: &no_marker_wedge
+          - exp_labels:
+              severity: warning
+              namespace: agent-coordinator
+              pod: coordinate-perstack-n5
+              uid: u5
+      # unchanged from the pre-#353 expr, which is the point.
+      - eval_time: 19m
+        alertname: AgentCoordinateScanWedgedPgwRaw
+        exp_alerts: *no_marker_wedge
+
+  # ══ 6. THE STEADY STATE — a gateway OLDER than the pod guards nothing away ════════════════════
+  # The gateway has been up since before the pod existed (live: one generation, 15.5 days, while a
+  # scan pod lives ≤30m — so 36 of 36 running coordinate pods passed this guard when it was
+  # measured, 2026-08-12). The no-marker branch must therefore behave exactly as it always has, on
+  # a pod that starts mid-window: fires on POD age, 15m after the pod started, not after t=0.
+  - interval: 1m
+    name: "a gateway older than the pod leaves the no-marker branch untouched"
+    input_series:
+      - series: 'kube_pod_start_time{namespace="platform-agents",pod="coordinate-perstack-s6",uid="u6"}'
+        values: "_x10 600+0x30"
+      - series: 'kube_pod_status_phase{namespace="platform-agents",pod="coordinate-perstack-s6",uid="u6",phase="Running"}'
+        values: "_x10 1+0x30"
+      - series: 'process_start_time_seconds{job="prometheus-pushgateway"}'
+        values: "0+0x40"
+    alert_rule_test:
+      # pod age 14m — inside the measured tail, nothing yet.
+      - eval_time: 24m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts: []
+      # pod age 18m: >15m since 26m, `for: 2m` satisfied at 28m.
+      - eval_time: 28m
+        alertname: AgentCoordinateScanWedged
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: platform-agents
+              pod: coordinate-perstack-s6
+              uid: u6
