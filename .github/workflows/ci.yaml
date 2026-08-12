@@ -154,6 +154,18 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
 
+      # ADR-106 (4): the .agents/fix.yaml NEVER-TOUCH tier as a machine check — a WORKER-authored
+      # diff touching governance paths (.github/.agents/scripts/policy/devbox/CODEOWNERS) is red.
+      # Seat/renovate PRs pass (author-scoped); rationale + set live in the script (one home).
+      - name: Worker diffs may not touch governance paths (devbox run governance-lint)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          devbox run governance-lint FETCH_HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+
       # FU-158 (operator ruling 2026-08-11: promtool over more per-file self-tests): every
       # PrometheusRule's exprs must parse — kubeconform SKIPS the kind, so this is the only
       # form gate the ~44 alert rules have. Behaviour tests (promtool test rules) = the
