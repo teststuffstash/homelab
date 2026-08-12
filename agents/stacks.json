@@ -20,7 +20,8 @@
       ],
       "dockerRepos": [
         "sleep-tracking"
-      ]
+      ],
+      "coordinatorEnabled": true
     },
     {
       "_migrated": "MIRROR of the claim in agents/fixer/openrouter-operator/agentstack.yaml (see _comment).",
@@ -38,7 +39,8 @@
       "workerModelFallbacks": [],
       "modelDeny": [
         "deepseek/deepseek-v4-flash-0731"
-      ]
+      ],
+      "coordinatorEnabled": true
     },
     {
       "_chain_policy": "Paid-cached-fast FIRST (agents/README.md model strategy + TICK-LOG meta-2): free tiers rate-limit to a crawl (~8 rpm) and slow models outlive the platform's freshness windows (hy3:free died to the 60-min git-token TTL, paid hy3 to pace/budget at 75+ min). Free tiers are scout-canary material (FU-062 M7), never fix-chain entries.",
@@ -60,7 +62,8 @@
       ],
       "dockerRepos": [
         "oracle-fleet"
-      ]
+      ],
+      "coordinatorEnabled": true
     },
     {
       "_migrated": "MIRROR of the claim in circles-iac//circles/agent/agentstack.yaml (see _comment). Sync on claim changes.",
@@ -72,7 +75,8 @@
       "mainRepo": "circles",
       "coordinatorModel": "sonnet",
       "routerMode": "authoritative",
-      "graduated": true
+      "graduated": true,
+      "coordinatorEnabled": true
     }
   ]
 }
