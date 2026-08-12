@@ -127,9 +127,13 @@ meant to avoid.)
    functional proxy change (a comment-only sync restarts the proxy and resets every for:
    window); (e) the five EXPIRY-HELD archive ids (FU-014/021/022/025/041) need their own
    scrub pass or a ruling that foundational shorthand keeps its archive residue.
-6. **Standing from 08-10** (⚠ circles/oracle PARKED by operator 2026-08-11 — leave their
-   gates/parks alone until re-opened; incl. circles#77 ci-red park + oracle-fleet#259
-   codeowner park + oracle-fleet#225 ERT snapshot re-run, upstream healthy again):
+6. **Standing from 08-10** (⚠ PARKS LIFTED 2026-08-12: the circles/oracle parks were
+   goal-v1.1-window only (operator) — stack PRs run ARMED again. Residuals now live:
+   circles#77 ci-red triage · oracle-fleet#259 codeowner read (seat read posted 2026-08-12:
+   decline the .agents/ carve-out, de-dup the recipes' shared rules) · oracle-fleet#225 ERT
+   snapshot re-run · ⚠ circles deploy-bump generator writes the app CalVer into the -iac GIT
+   targetRevision (broke circles-infra; fix the workflow before the next circles build —
+   circles-iac#71/#68)):
    Composition podSpecPatch mirror (#103 residual leg, ~30 min) ·
    oracle-fleet#255 rework (attended-download constraint stands). The HOST-SIDE 4-step
    jail-read-all sequence: ✅ ALL DONE 2026-08-12 (argo verdict → PR#394; jail-read-all minted,

@@ -3810,3 +3810,26 @@ CI red itself was the responder harness's #239 stamped-set currency check catchi
 alert — the belts compose. Residue for next session: A0 (iac-sentinel observability), A4 (v1.2
 minimum build), check-#3 shadow showed two term-unlinked warnings (soak datum), FU-001 ref scrub
 due ~08-13.
+
+↳ (afternoon tail, 2026-08-12 ~15:00–16:45Z) **A4 completed all four legs**: governance lint
+(direct) · merge doorbell #396 (review round: unresolved-vanished retry fix) · the core as #398
+— findings store (goal-findings.sh), checkpoint clause, harvest=store, burn-down demotion;
+review round fixed 8 rename residuals + one-GET burn-down + shared parser + split guards; the
+positive checkpoint fixture caught a REAL @tsv multi-line store bug (ADR-103 paying twice in one
+PR). **⚠ DEAD EDGE FOUND (operator caught #398 sitting): CHANGES_REQUESTED ∧ BEHIND is a crack
+no machine covers** — the re-review reflex lifts only green+CURRENT PRs, the updater serves the
+head-of-line green PR, so a verdicted PR that falls behind waits forever; unblocked by hand
+(API update-branch); if it recurs the updater widens. **Stack sync (operator ask)**: #399
+merged — #397 fast-path author guard (fixture-pinned), #103 podSpecPatch mirror ×3 crons,
+circles-iac sentinel coverage, mirror currency. circles-infra Unknown diagnosed: auto-merged
+deploy bump #68 wrote the circles APP CalVer into the -iac GIT targetRevision (repo has no tags)
+→ circles-iac#71 + upstream-defect flag (the bump generator will repeat it — fix before real
+unpark). **Defaults drift (operator caught)**: all four fixer apps OutOfSync = XRD defaults
+materializing (storage zeros, goalModel, routerMode, modelDeny/fallbacks) — declared explicitly
+per the agent-fixer.yaml doctrine: homelab#400 MERGED, sleep-iac#66 + oracle-iac#369 +
+circles-iac#72 armed. **PARKS LIFTED (operator): circles/oracle were goal-v1.1-window parks
+only** — stack PRs run armed again. oracle-fleet#259: seat read posted (decline the .agents/
+carve-out — ADR-106 (4) direction; de-dup fix.yaml/build.yaml shared rules into a
+launcher-injected card, own issue). FU-051 step 1 found ALREADY APPLIED (operator's no-changes
+plan = evidence; tracker corrected). meta-events grew the CI-RED seat-PR clause (operator catch:
+#394 sat red invisibly) — caught #398's red on its first live chance the same hour.
