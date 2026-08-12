@@ -39,10 +39,8 @@ meant to avoid.)
 4. **GOAL #278: CLOSING SWEEP DELIVERED 2026-08-12 ~05:00Z** — burn-down report on the goal
    (comment 5262051051): 10/10 children dispositioned (9 merged+verified, #289 parked with
    oracle), ~20 sprouts landed incl. the estate-wide restart-gap eradication, 8 FU lines
-   advanced, #355 doctrine + all authoring lessons shipped. **VERDICT WAITS on the 5 in-flight
-   defect fixes queued at sweep** (#324 phase-row gap, #337 drift-pins, #348/#361/#367 the
-   goal-budget machinery defects — the pilot's own evidence). Then operator applies
-   goal/validated. The dispatch-concurrency DESIGN stays chartered on the goal (evidence
+   advanced, #355 doctrine + all authoring lessons shipped. **ALL FIVE defect fixes LANDED by 06:3xZ 2026-08-12 — the VERDICT GATE IS OPEN: operator
+   applies goal/validated on #278** (the scan terminal leg runs the close sweep on the label). The dispatch-concurrency DESIGN stays chartered on the goal (evidence
    re-mined; ADR-094 on the table). Post-goal inert 🌱 residue (~10 doc/promote items) triages
    ordinarily. FU-166/FU-167 are the seat-tooling follow-ups.
 4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
