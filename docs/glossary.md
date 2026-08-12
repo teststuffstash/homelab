@@ -36,6 +36,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **homelab (repo)** | `teststuffstash/homelab` — this repository | `README.md` |
 | **⚓ the platform stack** | the AgentStack claim named `platform`: {homelab, agent-runtime, agent-coordinator, openrouter-operator}. ⛔ never "homelab" — sense-1 scoping of a sense-2 duty left 5 agent-runtime issues unswept a month (2026-08-08). Duties scope by the CLAIM's repo list | [`agents/agentstack.md`](agents/agentstack.md); mirror `agents/stacks.json` |
 | **the homelab** | the physical lab / the cluster+network as a whole | `CONTEXT.md`, `ARCHITECTURE.md` |
+| **findings store** | ADR-106's one typed machine comment per Goal — harvest APPENDS findings (origin, surface, class, substance), a count-keyed marker tracks disposition; checkpoints consume it, never 1:1 issue mints | [`agents/issue-authoring.md`](agents/issue-authoring.md) (v1.2 build) |
 | **retro** (cluster) | the platform's batched self-improvement role — ledger worst-K → transcript slices → report + process PRs, Mondays | [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2 |
 | **skill-retro** (jail) | the jail twin of the retro for `.claude/skills/`: dialogue-only transcript slices → GAPS ledger sightings (ADR-105) | `.claude/skills/skill-retro/SKILL.md` |
 | **⚓ system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
