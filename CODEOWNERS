@@ -93,3 +93,8 @@
 # The ownership file owns itself — otherwise the first thing an agent could propose is its own
 # ungating (oracle-fleet's CODEOWNERS carries the same line for the same reason).
 /CODEOWNERS         @RasmusSoot
+
+# .agents/** — the fixer recipes AND the reviewer rubric (PR#386: the reviewer refused to gate a
+# change to its own rules — reads the rubric off the PR branch — and found this entry missing;
+# `agents/**` does not match `.agents/**`)
+/.agents/ @RasmusSoot
