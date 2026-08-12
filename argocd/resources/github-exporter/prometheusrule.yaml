@@ -82,9 +82,12 @@ spec:
         #      replaced target restarting the window is a genuinely new attempt at being scraped),
         #      GithubWorkflowRunFailed / AgentReviewLoop / AgentErrorFlagged (no `for:` — no
         #      window to restart), GithubStorageHeldHigh (`increase(…[24h])` already spans any
-        #      hole this class is about), CiDispatchStalled (homelab#335 — its `for: 10m` phantom-
-        #      pickup window interacts with a bridge and needs its own reasoning) and AgentQueueStalled
-        #      (#330 — bridged per conjunct, and deliberately not wholesale).
+        #      hole this class is about) and AgentQueueStalled (#330 — bridged per conjunct, and
+        #      deliberately not wholesale).
+        # (vi) PORTED AT A DIFFERENT SIZE: CiDispatchStalled (homelab#335) takes the hole half at
+        #      [5m], not [10m], because its `for: 10m` is itself sized on a phantom the bridge
+        #      extends. The range is not free there the way it is here — the arithmetic of that
+        #      interaction is written out at the alert.
         #
         # FU-098: fires while an App's LIVE permissions differ from docs/github-apps.yaml in
         # EITHER direction. This IS the change flow's turn signal: a permission PR rings it
@@ -187,8 +190,53 @@ spec:
         # queue this alert says is dead, and the remedies are imperative cluster surgery (rebuild
         # the listener, cordon/reboot a node) — not a manifest a fixer can PR. Fires in ns
         # `monitoring` with a non-`Agent*` name, so both older gate keys miss it.
+        #
+        # ⚠ RESTART-GAP HARDENED (homelab#335) — and NOT by the mechanical port. The identity half
+        # shipped with the alert (`max by (owner, runner)` above, #284); this adds the hole half at
+        # [5m] rather than the class's [10m], because the two interact. THE COMPOSITION QUESTION,
+        # ANSWERED: the bridge and the `for:` window neither compose freely nor multiply — the
+        # tails MAX rather than add, and the bridge SPENDS the window's phantom margin.
+        #   • The phantom tail is how long the last stale sample stays READABLE after the run is
+        #     really picked up: ≤120s of cached exposition (the run only leaves the body at the
+        #     next poll), plus whatever keeps the vanished series readable afterwards — nothing in
+        #     production (Prometheus staleness-marks it), the 5m lookback in the fixture's model.
+        #   • `min_over_time(…[B])` REPLACES that second term with exactly B: a range selector
+        #     takes the raw samples in (t−B, t] and no lookback applies to a range vector. So the
+        #     composed phantom is 120s + B — not 120s + 5m + B, and not the 10m + 10m = 20m the
+        #     issue asked about. The alert survives it iff `for:` > 120s + B, i.e. B < 8m here.
+        #   • At the class's [10m] that is 12m > 10m and the false positive #284 made
+        #     UNREPRESENTABLE becomes representable again: a run picked up just under the 30m
+        #     threshold pages ~11 min after CI recovered, when every check in the description below
+        #     reads healthy. Executed, not argued — `witness-bridge-10m` in the .promtool-rules
+        #     copy fires on exactly the pickup where the shipped expr stays silent.
+        #   • [5m] is the size that costs the window nothing it was not already priced for: it
+        #     reproduces EXACTLY the 5m-lookback tail the phantom guard has modelled since #284
+        #     (deliberately "a STRICTLY LONGER tail than production can produce"). That guard's
+        #     assertions do not move by one second under this expr, which is why `for: 10m` is
+        #     kept as measured rather than resized — the design point is unchanged, not restored.
+        #   • The fixture pins [5m] from BOTH sides, so the range is a checked interval rather than
+        #     a preference: at [10m] the late-pickup case goes red, at [3m] the roll case does (its
+        #     modelled hole is a 4-minute sample gap — one failed 120s poll plus scrape alignment).
+        # WHAT [5m] BUYS, i.e. the hole: `replicas: 1` (deployment.yaml), so a poller roll empties
+        # the vector outright (69-116s over 10 pod generations, #288) — and collect_workflow_runs
+        # is the FIRST collector and fails WHOLESALE, so one 5xx on any repo's runs page drops the
+        # entire queued family for a 120s poll cycle while the pod stays healthy and `up` stays 1.
+        # That failure is CORRELATED with the vendor outage half of what this alert exists to
+        # catch, which is what makes the hole worth bridging at all rather than merely possible.
+        # CEILING, asserted rather than assumed (#328's shape): a hole wider than 5m — two
+        # consecutive failed polls, a crash-loop, a cold-mirror image pull, a node drain — still
+        # empties the range and restarts `for: 10m`, so the page slips by hole + 10m. Accepted.
+        # PRICE, and the second half is unique to this alert: (1) a real stall resolves up to
+        # 120s+5m late; (2) `$value` does NOT freeze at the worst sample seen, the way it does for
+        # every other alert of this class — `time()` keeps advancing against a HELD timestamp, so
+        # through the tail the summary reports a queue age nobody ever observed and it keeps
+        # climbing. Both are asserted in queued-age.promtool-test.
+        # DIRECTION (class rule ii): this metric is a TIMESTAMP where LOW is bad, so the
+        # alert-preserving function is `min_over_time`, not the class's `max_over_time`. Per series
+        # the two coincide today — created_at never changes, so a run's gauge is constant — so this
+        # is the rule kept correct for the day that stops being true, not a bug fixed.
         - alert: CiDispatchStalled
-          expr: max by (owner, runner) (time() - github_workflow_run_queued_since_timestamp{runner!="hosted"}) > 1800
+          expr: max by (owner, runner) (time() - min_over_time(github_workflow_run_queued_since_timestamp{runner!="hosted"}[5m])) > 1800
           for: 10m
           labels:
             severity: warning
