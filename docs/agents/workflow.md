@@ -189,6 +189,7 @@ on cron minutes after its `AGENT_STRIKE` comment landed). The design, as built:
   | `merge-conflict` label appears | `update-pr-branch` — GitHub-hosted **by design** (see above); don't move it for this | exporter piggyback, BUILT 2026-08-11 (#285): `maybe_dispatch_conflict` rings `/coordinate` with `{stack, loop_ns}` — the label was already in the 120 s poll, nothing read it (PR#275 waited out the cron) | ≤2 min |
   | un-armed `major` PR appears | Renovate + `devbox-update.yaml` — **both self-hosted on ARC**, centralized in homelab `.github/workflows/` (not N repos) | one curl at the end of those two runs — `{repo}`-only, which is now ENOUGH: the global scan resolves repo → {stack, loop_ns} and re-rings the stack's own loop (FU-144 receiver-side fan-out, built with A2) | instant (one resolver hop) |
   | issue gains `agent/queued` | a **jail LLM session** authoring issues from specs (rarely a hand-labelling human) | the authoring session rings the doorbell itself: mono jail → `bash scripts/reflex-now.sh coordinate-<stack> <stack>-agents`; stack jails → curl `/coordinate` once it exists — the webhook needs **no RBAC into `agent-coordinator`**, exactly the FU-080 airlock shape | instant, author-fired |
+  | a PR MERGES (merged-closeout / the goal chain / sibling platform repos) | GitHub auto-merge — off-cluster by nature, minutes after the last in-cluster actor exited | exporter piggyback, BUILT 2026-08-12 (ADR-106 (6)): `maybe_dispatch_merged` — a number leaving the poll's open set is REST-checked once (`merged` authoritative) and rings with {stack, loop_ns}; before this NOTHING rang on merge anywhere (the v1.1 spike's finding 6 named the sibling repos; the gap was fleet-wide) | ≤2 min |
 
 ⚠ **That last row said `devbox run coordinate-now` until 2026-08-06 and was WRONG for every
 graduated stack** — `coordinate-now` fired the GLOBAL reflex, which skipped graduated stacks
@@ -209,8 +210,8 @@ from this repo's own code now carries `{stack, loop_ns}` for a graduated repo:
 [`agents/reviewer-session.sh`](../../agents/reviewer-session.sh),
 [`scripts/coordinate-ring.sh`](../../scripts/coordinate-ring.sh) (`devbox run ring <stack>`),
 `fix-debounce-argo.yaml` (from birth, `83907ea`), `.github/workflows/coordinate-doorbell.yaml`,
-and the github-exporter's three dispatchers — review (FU-100), CI-red (FU-115) and, since #285,
-`merge-conflict`. The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
+and the github-exporter's four dispatchers — review (FU-100), CI-red (FU-115), `merge-conflict`
+(#285) and, since 2026-08-12, PR-merge (ADR-106 (6)). The `{repo}`-only emitters — `.github/workflows/renovate.yaml`
 (`{"repo":"all"}`) and `.github/workflows/devbox-update.yaml` (`{"repo":"<matrix.repo>"}`) — are
 **served by the FU-144 receiver-side fan-out since 2026-08-12** (the ⚠ block above): repo-dumb
 payloads are the SUPPORTED shape now, and new emitters should prefer them over learning stack

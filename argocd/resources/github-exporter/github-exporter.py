@@ -106,6 +106,8 @@ _dupes = 0  # duplicate sample lines collapsed by dedupe_exposition (#153) — 0
 _review_dispatched = set()  # (repo, number, head_sha) already POSTed this process lifetime
 _cired_dispatched = set()   # (repo, number, head_sha) already red-doorbelled this lifetime (FU-115)
 _conflict_dispatched = set()  # (repo, number, head_sha) already conflict-doorbelled this lifetime (FU-144)
+_merged_rung = set()          # (repo, number) already merge-doorbelled this lifetime (ADR-106 (6))
+_open_prs_prev = {}           # repo -> open PR numbers last poll; a vanished number is a merge candidate
 
 
 def gh(path, token=None):
@@ -526,6 +528,52 @@ def maybe_dispatch_conflict(repo, number, head_sha, *, review_decision, labels):
         print(f"conflict-edge: POST failed for {repo}#{number}: {e}", flush=True)
 
 
+def maybe_dispatch_merged(repo, vanished):
+    """ADR-106 (6) merge doorbell: a MERGE previously woke nothing anywhere — reviewer rings at
+    verdict, the ride at its own exit, but auto-merge completes minutes later and the
+    merged-closeout/goal chain then waited out the cron (the v1.1 spike's finding 6 named the
+    sibling platform repos, where this was the ONLY missing edge; the gap was in fact
+    fleet-wide). The poll sees OPEN PRs, so the edge is a DISAPPEARANCE diff: a number gone from
+    the repo's open set is read once via REST (`merged` is authoritative; closed-unmerged rings
+    nothing and is remembered), and a merge POSTs /coordinate with the graduated pair so the
+    stack's own loop takes it. In-memory prev-set: a pod restart forgets one window and misses
+    merges during the outage — the cron backstop owns those, same best-effort contract as the
+    sibling dispatchers; over-ringing is legal (a doorbell costs a scan, and the receiver-side
+    collapse absorbs bursts)."""
+    if not COORDINATE_WEBHOOK_URL or not vanished:
+        return
+    for number in vanished:
+        key = (repo, str(number))
+        if key in _merged_rung:
+            continue
+        try:
+            pr = gh(f"/repos/{ORG}/{repo}/pulls/{number}")
+        except Exception as e:
+            print(f"merge-edge: read failed for {repo}#{number}: {e}", flush=True)
+            continue
+        if not (pr or {}).get("merged"):
+            _merged_rung.add(key)  # closed without merging: settled, never re-read
+            continue
+        payload = {"repo": repo, "number": str(number),
+                   "merged_sha": (pr.get("merge_commit_sha") or "")}
+        grad = graduated_loop_ns(repo)
+        if grad:
+            payload.update(grad)
+        body = json.dumps(payload).encode()
+        try:
+            req = urllib.request.Request(
+                COORDINATE_WEBHOOK_URL, data=body,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp.read()
+            _merged_rung.add(key)
+            print(f"merge-edge: POST /coordinate for merged {repo}#{number}"
+                  f"{' (loop_ns ' + grad['loop_ns'] + ')' if grad else ''}", flush=True)
+        except Exception as e:
+            print(f"merge-edge: POST failed for {repo}#{number}: {e}", flush=True)
+
+
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
                           labels, newest_commit_at="", newest_review_at="", bot_approved_at=""):
     """ADR-093 review edge-trigger: POST a reviewable PR to the Argo Events webhook so a review
@@ -741,9 +789,11 @@ def collect_open_prs(lines):
                     if lname.startswith("agent/"):
                         _AGENT_ISSUE_NUMBERS.setdefault(
                             (repo["name"], lname), set()).add(iss.get("number"))
+            open_now = set()
             for pr in (repo.get("pullRequests") or {}).get("nodes") or []:
                 if not pr:
                     continue
+                open_now.add(pr["number"])
                 # Null-safe: on private repos the forbidden statusCheckRollup nulls the whole
                 # commit list element (bubbles to the nullable list item), so any commits[i] can be
                 # None — fall through to the workflow-run join rather than crashing the collector.
@@ -850,6 +900,9 @@ def collect_open_prs(lines):
                         verdicts[login] = verdicts.get(login, 0) + 1
                 for login, count in verdicts.items():
                     lines.append(metric("github_pull_request_reviews_recent", {**ident, "author": login}, count))
+            # ADR-106 (6): PRs that LEFT the open set since last poll — the merge edge.
+            maybe_dispatch_merged(repo["name"], _open_prs_prev.get(repo["name"], set()) - open_now)
+            _open_prs_prev[repo["name"]] = open_now
         if not repos["pageInfo"]["hasNextPage"]:
             return
         cursor = repos["pageInfo"]["endCursor"]
