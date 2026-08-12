@@ -11,9 +11,20 @@
 # + `.github/**` — CI-invoked paths, outside the fixer lane's tier (homelab#288 ships the
 # fixtures; the wiring is the codeowner's follow-on). Until then: re-copy after editing the alert.
 #
-#   yq '{"groups": [{"name": "claude-subscription", "rules": [.spec.groups[] |
-#        select(.name == "claude-subscription") | .rules[]]}]}' \
-#     argocd/resources/openrouter-proxy/prometheusrule.yaml
+#   yq -o=json '{"groups": [{"name": "claude-subscription", "rules": [.spec.groups[] | select(.name == "claude-subscription") | .rules[]]}]}' argocd/resources/openrouter-proxy/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
+# input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
+# written (agent-router.promtool-rules' header states the same constraint). The `-o=json | yq -P`
+# round-trip is also new in #344: the previous plain-`yq` form carried the CR's comments into the
+# copy, a hand-stripping step that is itself a drift risk.
+#
+# ⚠ Unlike its two siblings, this recipe's output is NOT byte-identical to the body below — it is
+# SEMANTICALLY identical (canonical-JSON equal, so promtool parses the two the same). The body was
+# hand-massaged after the copy: `summary:`/`description:` keep the CR's quoting, the folded `>-`
+# expr stays wrapped, and there is a blank line between the rules; every yq form re-emits those
+# flattened. Re-copying is therefore correct but reformats — check the result canonically, e.g.
+#   diff <(yq -o=json '[.groups[] | select(.name == "claude-subscription")]' argocd/resources/openrouter-proxy/subscription.promtool-rules) <(yq -o=json '[{"name": "claude-subscription", "rules": [.spec.groups[] | select(.name == "claude-subscription") | .rules[]]}]' argocd/resources/openrouter-proxy/prometheusrule.yaml)
 groups:
   - name: claude-subscription
     rules:

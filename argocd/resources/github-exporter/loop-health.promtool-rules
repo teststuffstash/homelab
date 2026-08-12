@@ -15,12 +15,12 @@
 # checks): the general harness that would extract `.spec.groups` at run time lives in `scripts/**`
 # + `.github/**`, outside the fixer lane's tier (homelab#337). Re-copy after editing an alert:
 #
-#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] |
-#        select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or
-#               .alert == "GithubExporterStale" or .alert == "GithubAppPermissionDrift" or
-#               .alert == "GithubVendorOutage" or .alert == "GithubRateLimitLow" or
-#               .alert == "GithubPaidUsage" or .alert == "GithubActionsMinutesHigh")]}]}' \
-#     argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "github", "rules": [.spec.groups[].rules[] | select(.alert == "AgentQueueStalled" or .alert == "GithubExporterDown" or .alert == "GithubExporterStale" or .alert == "GithubAppPermissionDrift" or .alert == "GithubVendorOutage" or .alert == "GithubRateLimitLow" or .alert == "GithubPaidUsage" or .alert == "GithubActionsMinutesHigh")]}]}' argocd/resources/github-exporter/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
+# input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
+# written (agent-router.promtool-rules' header states the same constraint). Verified by RUNNING
+# the line above on 2026-08-12: its output is byte-identical to the `github` group below.
 #
 # …that command regenerates the `github` group ONLY. The `regression-witness-*` groups at the
 # bottom are not in the CR and must survive the re-copy — re-append them (see their own headers).
