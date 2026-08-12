@@ -120,8 +120,8 @@
     {
       "id": 13,
       "type": "bargauge",
-      "title": "Ride phase breakdown (launcher-owned)",
-      "description": "FU-160 — where THIS issue's wall-clock went, per round, from agents/agent-session.sh. dispatch-gates = the launcher's deterministic pre-flight; pod-spinup = schedule + image pull + container start (the number the 2026-08-09 spike could not recover after the fact); bookkeeping = the exit path. ⚠ `ride` is the WHOLE in-pod session as ONE bar and is deliberately not broken down here — clone, devbox, the LLM loop, the gates and pr-open are agent-finalize's timestamps and live in agent-runtime (FU-160's other half, no sibling issue yet). Absent bars mean the launcher could not reach the pushgateway (a jail-run dispatch), not a zero-length phase.",
+      "title": "Ride phase breakdown — launcher + in-pod",
+      "description": "FU-160 — where THIS issue's wall-clock went, per round. TWO emitters, joined by the phase name and split by the `source` label. The LAUNCHER (agents/agent-session.sh, no `source` label) owns exactly the two bars up to pod-Ready: dispatch-gates = its deterministic pre-flight; pod-spinup = schedule + image pull + container start (the number the 2026-08-09 spike could not recover after the fact). Everything after Ready carries `source=in-pod` and comes from agent-finalize (agent-runtime#66): clone, devbox-install, llm-loop, finalize. ⚠ The launcher used to publish a `ride` envelope and a `bookkeeping` bar as well; homelab#324 removed both — it is normally killed mid-follow, so those two landed on about one ride in five, and when they did, `ride` merely repeated the sum of the in-pod bars. Old rides still hold them until the pushgateway is rescheduled. An absent bar means its emitter could not reach the pushgateway (a jail-run dispatch has no route to the ClusterIP), not a zero-length phase.",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
       "options": { "orientation": "horizontal" },

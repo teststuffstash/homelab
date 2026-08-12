@@ -422,7 +422,7 @@ tests:
               phase: pod-spinup
             exp_annotations:
               summary: "Ride phase pod-spinup p50 is 300s — over 2× its own baseline"
-              description: "SYMPTOM ONLY, and deliberately so — this says a launcher-owned phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls; `bookkeeping` = the exit path (stats, arm, strike comment, router report); `ride` is the WHOLE in-pod session and its breakdown is NOT here (agent-finalize's timestamps, agent-runtime — FU-160's other half), so a `ride` bar says where to look, not what happened. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
+              description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
       # ONE alert, not two — `dispatch-gates` is 2.2× its baseline and the floor holds it out
       - eval_time: 55m
         alertname: AgentRunPhaseSlow
@@ -494,3 +494,63 @@ tests:
       - eval_time: 55m
         alertname: AgentRunPhaseSlow
         exp_alerts: []
+
+  # ── AgentRunPhaseSlow — the IN-POD rows are in scope, and the join survives their extra label ─
+  # homelab#324. The launcher stopped emitting `ride`/`bookkeeping` there, and the reason it costs
+  # nothing is that `agent-finalize` (agent-runtime#66) already publishes the interior — same
+  # metric, same job, a sibling group carrying one EXTRA grouping label, `source="in-pod"`. That
+  # made a PromQL claim the rule's comment now states out loud, so here it is executed instead of
+  # believed: `quantile by (phase)` groups the in-pod rows by their own phase names, and the
+  # `and on (project, issue, round, role)` freshness join still matches even though both sides
+  # carry a label that is not in the `on()` list. Get that wrong — write `and on (…, source)`, or
+  # aggregate `without (phase)` — and this alert goes blind to the four phases that are present on
+  # EVERY ride, while looking exactly as green as it does now.
+  # `llm-loop` is the phase chosen on purpose: it is the one that will realistically double (a slow
+  # provider), it is far above the 60s floor, and it is the row the launcher could never have seen.
+  - interval: 1m
+    name: an in-pod phase doubling fires the same alert as a launcher one
+    input_series:
+      # baseline: four rides pushed 2h before the test clock
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="90",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "180x90"
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="91",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "200x90"
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="92",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "200x90"
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="93",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "220x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="90",round="1",role="worker",source="in-pod"}'
+        values: "-7200x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="91",round="1",role="worker",source="in-pod"}'
+        values: "-7200x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="92",round="1",role="worker",source="in-pod"}'
+        values: "-7200x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="93",round="1",role="worker",source="in-pod"}'
+        values: "-7200x90"
+      # the last hour: three rides at 4× the baseline median
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="101",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "800x90"
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="102",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "800x90"
+      - series: 'agent_run_phase_seconds{project="oracle-fleet",issue="103",round="1",role="worker",phase="llm-loop",source="in-pod"}'
+        values: "820x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="101",round="1",role="worker",source="in-pod"}'
+        values: "0x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="102",round="1",role="worker",source="in-pod"}'
+        values: "0x90"
+      - series: 'push_time_seconds{job="agent_run_phase",project="oracle-fleet",issue="103",round="1",role="worker",source="in-pod"}'
+        values: "0x90"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgentRunPhaseSlow
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: AgentRunPhaseSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              phase: llm-loop
+            exp_annotations:
+              summary: "Ride phase llm-loop p50 is 800s — over 2× its own baseline"
+              description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
