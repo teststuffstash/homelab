@@ -128,22 +128,36 @@ src_famine() {
 # unseen: needs-meta reports STUCK states by design, so a healthy verdict→merge — and worse, a
 # CHANGES_REQUESTED the seat must act on — had no source). Set lines carry the phase, so a
 # verdict flip emits (old clears, new fires); merged PRs hold a line for 24h.
+# CI-RED belt (2026-08-12, operator catch: PR#394 sat CI-red UNSEEN — a red check parks a PR in
+# a state no review-decision edge crosses, because the reviewer only lifts green+current PRs, so
+# the phase line above never moves). For OPEN seat PRs the head commit's `CI` run conclusion is
+# read via `gh run list --commit` (Actions:read) — NEVER statusCheckRollup, which the jail PAT
+# hard-fails whole (no Checks scope). A red head emits a set-line, so it fires once and clears
+# on the green push. A failed conclusion read emits nothing — needs-meta's unreviewed-PR clause
+# is the level backstop underneath.
 SEAT_REPOS="${SEAT_REPOS:-homelab agent-runtime agent-coordinator openrouter-operator}"
 src_seatpr() {
   local tmp me; tmp="$(mktemp)"; : > "$tmp"
   me="$(cat "$STATE/seatpr.login" 2>/dev/null)" || me=""
   [ -n "$me" ] || { me="$(gh api user --jq .login 2>/dev/null)" && echo "$me" > "$STATE/seatpr.login"; }
   [ -n "$me" ] || { hold_source seatpr "cannot resolve own login"; rm -f "$tmp"; return; }
-  local r ok=1
+  local r ok=1 prs pr_sha n sha c
   for r in $SEAT_REPOS; do
+    prs="$(gh pr list -R "$ORG/$r" --state all --limit 15 \
+        --json number,author,state,reviewDecision,mergedAt,headRefOid 2>/dev/null)" || { ok=0; continue; }
     # pipe to REAL jq — `gh --jq` takes no --arg (the standing coordinator-scan rule)
-    gh pr list -R "$ORG/$r" --state all --limit 15 \
-        --json number,author,state,reviewDecision,mergedAt 2>/dev/null \
-      | jq -r --arg me "$me" --arg r "$r" \
+    printf '%s' "$prs" | jq -r --arg me "$me" --arg r "$r" \
         '.[] | select(.author.login==$me)
          | select(.state=="OPEN" or ((.mergedAt // "") > (now - 86400 | todate)))
          | "SEATPR|\($r)#\(.number)|\(if .state=="MERGED" then "MERGED" else (.reviewDecision // "AWAITING-REVIEW") end)"' \
         >> "$tmp" || ok=0
+    for pr_sha in $(printf '%s' "$prs" | jq -r --arg me "$me" \
+        '.[] | select(.author.login==$me and .state=="OPEN") | "\(.number):\(.headRefOid)"' 2>/dev/null); do
+      n="${pr_sha%%:*}"; sha="${pr_sha##*:}"
+      c="$(gh run list -R "$ORG/$r" --commit "$sha" --json name,conclusion \
+             --jq '[.[] | select(.name=="CI")][0].conclusion // ""' 2>/dev/null)" || c=""
+      case "$c" in failure|timed_out|startup_failure) echo "SEATPR|${r}#${n}|CI-RED" >> "$tmp";; esac
+    done
   done
   if [ "$ok" = 1 ]; then diff_source seatpr "$tmp"; else hold_source seatpr "gh pr list failed"; fi
   rm -f "$tmp"
