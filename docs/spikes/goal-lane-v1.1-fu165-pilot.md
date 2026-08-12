@@ -25,7 +25,16 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
    gated nothing — it silences the messenger, not the author. The platform's honesty rules
    (single-writer tracker, banned paths, `Touches:` ceiling) MAKE PR-body prose the findings
    channel; the harvest converts it 1:1 to issues with dedup as the only filter.
-3. **Near-critical branching, converged only by force.** Inflow per generation 12/13/11/13/8
+3. **Near-critical branching, converged only by force — but substantially a DEBT DRAIN, not
+   steady-state divergence** (operator reframe, 2026-08-12, classification by subject age):
+   ~30 of 46 sprouts were PRE-EXISTING defects the goal's first thorough review pass over
+   homelab surfaced — the broken-alert estate (~10, incl. a known meta-state warning class),
+   doc/tracker drift (~9), missing coverage + old code defects (~8), architecture fragility
+   (~3). ~11 were in-goal residue, ~5 first-use defects of the goal machinery itself. The
+   jail's verify-then-commit lane checks PRESENCE, not BEHAVIOR (an alert that applies passes;
+   one that cannot fire doesn't fail) — the debt source, now countered by the CI-required
+   behaviour fixtures the goal shipped. **Falsifiable prediction: the next platform goal's
+   sprouts-per-ride lands well under 1.2; if not, the degeneracy reading returns.** Inflow per generation 12/13/11/13/8
    (flat, no die-off), ≈1.2 sprouts per closed ride, generation 5 = 7-of-8 still open. The
    terminators were external: the budget gate ($18>$15 at 18:47Z, raised; $62>$60 at 02:07Z →
    sprouts filed inert) and the operator's verdict gate. Also per-event cadence everywhere:
