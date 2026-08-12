@@ -3759,3 +3759,15 @@ mechanical governance lint (the #379/#386 lesson); D5 doorbell collapse + mutex 
 ADR-094 untouched, re-measure; D6 stack scope; D7 FU-090 gauge = native depth via D2.
 Consequences recorded: ADR-097 hold + #270 coupling retire; IL-T15/T17 master-lane disposition
 simplifies away. Charter updated (A3 done; A4 re-listed per ADR-106).
+↳ (session close, 2026-08-12 ~12:40Z) The tail's rulings, all landed: ADR-106 merged (#389) +
+the lifecycle diagram in issue-authoring.md (#390, mermaid in git) + the #389 review nit folded
+in-flight; FU-144 RULED option (a) — receiver-side fan-out, emitters stay repo-dumb, map
+generated jail-side in the new-stack flow, builds with A2; "ALL EVENTS HAVE DOORBELLS" promoted
+to a no-exceptions rule (workflow.md §Triggers) with measured enforcement (edge-woken % via the
+ring-to-scan phase row; A2 acceptance = cron-woken ≈ 0); CONTEXT.md lens gained principle #10
+"Speed IS quality" (PR#391, riding at close) + operating-model memory line. Session totals:
+goal #278 VALIDATED (first terminal), the v1.1 postmortem + spike + version register, FU-168/166/
+167 + the plan chartered, meta-events built+armed (SEATPR added mid-flight), TEN seat PRs through
+the new lane, v1.2 DESIGNED (ADR-106), jail default reversed to PR-lane, review rubric hardened,
+.agents/** governance gap closed, codeowner economics recorded as THE objective. Next session:
+build A2 ∥ the subagent trial (prompt in meta-state §0's bootstrap rule).
