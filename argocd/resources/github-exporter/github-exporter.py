@@ -539,9 +539,13 @@ def maybe_dispatch_merged(repo, vanished):
     stack's own loop takes it. In-memory prev-set: a pod restart forgets one window and misses
     merges during the outage — the cron backstop owns those, same best-effort contract as the
     sibling dispatchers; over-ringing is legal (a doorbell costs a scan, and the receiver-side
-    collapse absorbs bursts)."""
+    collapse absorbs bursts). Returns the numbers it could NOT settle (failed read or failed
+    POST) so the caller folds them back into the tracked set and they re-diff next poll —
+    without that, one transient hiccup dropped the edge FOREVER (bot review, PR#396: the
+    edge-triggered diff has no natural retry, unlike the level-triggered siblings)."""
+    unresolved = set()
     if not COORDINATE_WEBHOOK_URL or not vanished:
-        return
+        return unresolved
     for number in vanished:
         key = (repo, str(number))
         if key in _merged_rung:
@@ -549,7 +553,8 @@ def maybe_dispatch_merged(repo, vanished):
         try:
             pr = gh(f"/repos/{ORG}/{repo}/pulls/{number}")
         except Exception as e:
-            print(f"merge-edge: read failed for {repo}#{number}: {e}", flush=True)
+            print(f"merge-edge: read failed for {repo}#{number}: {e} — retrying next poll", flush=True)
+            unresolved.add(number)
             continue
         if not (pr or {}).get("merged"):
             _merged_rung.add(key)  # closed without merging: settled, never re-read
@@ -571,7 +576,9 @@ def maybe_dispatch_merged(repo, vanished):
             print(f"merge-edge: POST /coordinate for merged {repo}#{number}"
                   f"{' (loop_ns ' + grad['loop_ns'] + ')' if grad else ''}", flush=True)
         except Exception as e:
-            print(f"merge-edge: POST failed for {repo}#{number}: {e}", flush=True)
+            print(f"merge-edge: POST failed for {repo}#{number}: {e} — retrying next poll", flush=True)
+            unresolved.add(number)
+    return unresolved
 
 
 def maybe_dispatch_review(repo, number, head_sha, *, ci_state, review_decision, armed, draft,
@@ -901,8 +908,11 @@ def collect_open_prs(lines):
                 for login, count in verdicts.items():
                     lines.append(metric("github_pull_request_reviews_recent", {**ident, "author": login}, count))
             # ADR-106 (6): PRs that LEFT the open set since last poll — the merge edge.
-            maybe_dispatch_merged(repo["name"], _open_prs_prev.get(repo["name"], set()) - open_now)
-            _open_prs_prev[repo["name"]] = open_now
+            # Unresolved numbers (transient read/POST failure) stay in the tracked set so they
+            # vanish AGAIN next poll and retry — the prev-set is the only memory this edge has.
+            _mdb_unresolved = maybe_dispatch_merged(
+                repo["name"], _open_prs_prev.get(repo["name"], set()) - open_now)
+            _open_prs_prev[repo["name"]] = open_now | _mdb_unresolved
         if not repos["pageInfo"]["hasNextPage"]:
             return
         cursor = repos["pageInfo"]["endCursor"]
