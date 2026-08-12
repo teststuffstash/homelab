@@ -212,14 +212,17 @@ the block needs pruning, not more headings.
 
 ### Dispatch & issue lifecycle — the scan's clauses, holds, doorbells, and how an item moves
 
-- [ ] **FU-144** — **Graduation killed three doorbell edges: POINTER.** Every `{repo}`-payload
-      emitter rings only the GLOBAL Sensor, and the global scan skips graduated stacks. Gap,
-      measured cost, workaround (`scripts/reflex-now.sh <ns>`), fix shape and the two-readers
-      trap: [`workflow.md`](agents/workflow.md) §Triggers.
-      **SHIPPED 2026-08-11 (goal #278 child #285/PR#305 — exporter conflict edge; the merge edge as
-      coordinate-doorbell.yaml same day):** remaining fork = fan the global trigger out (rewrites
-      the coordinator Sensor, sits on the two-readers trap) — operator call, recorded in the doc.
-      Relates FU-143, FU-145, ADR-094.
+- [ ] **FU-144** — **Doorbell fan-out RULED: option (a), receiver-side resolution** (operator,
+      2026-08-12): an emitter that edits a repo must NOT need to know stack mechanics or that a
+      namespace exists — `{repo}` is the honest payload; the global trigger RESOLVES repo→
+      {stack, loop_ns} and fans out. The map = one source of truth (the AgentStack claims, via
+      the stacks.json mirror), written out by a JAIL generator as part of the new-stack flow
+      (`scripts/new-agent-repo.sh` — the only birthplace of repos). Gap, cost, inventory:
+      [`workflow.md`](agents/workflow.md) §Triggers. **Next:** build WITH A2's doorbell-collapse
+      Sensor touch (same file, cheapest moment); simplest shape = the global workflow re-rings
+      `/coordinate` with the resolved pair (a resolver hop, no Sensor rewrite).
+      Relates FU-143, FU-145(arch), FU-168, ADR-094, ADR-106.
+
 - [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout (ADR-094 + ADR-097,
       all options open — the numbers decide; OBJECTIVE = codeowner-touch count first, wall-clock second, tokens third — spike §objective function).** Two coupled halves: (a) concurrency (scan mutex +
       session-streams-the-ride + the doorbell convoy, an ADR-093 regression — the fixed-name
