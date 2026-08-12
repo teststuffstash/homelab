@@ -43,6 +43,15 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
    mutex/stream serialization (sampled ring→scan-start ≈45 min), one-unit-per-pass dispatch
    (ADR-094), and the 3-slot subscription semaphore shared by workers + reviewers + the 21
    ruling sessions. At instant 3-wide dispatch the work fits ~4–5h; it took 14.5.
+   **The doorbell convoy is the visible half** (`argo_workflows_gauge{phase="Pending"}`):
+   pending workflows ramped to 20 by 20:00, cliffed on a mutex release, then climbed all night
+   to **56 at 03:15** and took 3.5h to drain. Argo collapses nothing — ~100–150 rings became
+   ~100–150 serial scan passes for 38 dispatches (~70–75% empty ticks), and a fresh event
+   queues BEHIND the stale wakes, so "a false wake costs a scan run" inverts into convoy-depth
+   × scan-duration of edge latency. This is an **ADR-093 regression**: the CronJob-era wake was
+   a fixed-name `kubectl create` (atomic, `AlreadyExists` = already reconciling, exit 0 — the
+   collapse); the Sensor submits `generateName` workflows. Re-applying the fixed-name key
+   composes with the mutex/stream fix: collapse ends the convoy, detach ends the hold.
 6. **Operator directives on the goal thread have no machine consumer.** The closeout charter
    comment was executed only because the seat re-read it; the close-time terminal (IL-T19) is
    deterministic and a closed goal draws no sessions. (Now FU-166 leg (b)'s named source.)
