@@ -96,11 +96,23 @@ spec:
             description: "Repeated infra-class terminals (auth-storm/no-artifact/harness-death/…) — check the strike comments on the active issue before more budget burns. Deliberate stops (exit_status=blocked-deliberate) and model-scout canary rides (issue=scout-*) are excluded by design and cannot raise this."
         # FU-160 (homelab#287; spike: docs/spikes/ride-latency-breakdown.md): ride phase timings
         # stopped being archaeology. `agents/agent-session.sh` pushes
-        # `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}` per ride,
-        # and this is the belt over them: a degraded image cache adding minutes to every dispatch
-        # otherwise presents only as "the loop feels slow", which is exactly what happened to the
-        # 2026-08-09 specimen — by the time anyone asked whether its image was node-cached, the
-        # pod events had aged out and the question was unanswerable.
+        # `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}` per ride, and this is the belt
+        # over them: a degraded image cache adding minutes to every dispatch otherwise presents
+        # only as "the loop feels slow", which is exactly what happened to the 2026-08-09 specimen
+        # — by the time anyone asked whether its image was node-cached, the pod events had aged out
+        # and the question was unanswerable.
+        #
+        # TWO EMITTERS, ONE METRIC, and the expr reads both. `agent-finalize` (agent-runtime#66)
+        # pushes `phase=clone|devbox-install|llm-loop|finalize` into a sibling group under the same
+        # job with `source="in-pod"`; `quantile by (phase)` therefore covers six phases, not two,
+        # and the `and on (project, issue, round, role)` join keeps matching because the extra
+        # label sits outside it. That is intended: the in-pod rows are the ones present on EVERY
+        # ride, so they are the better half of this alert's input, not an accident in it.
+        # ⚠ `ride` and `bookkeeping` were REMOVED from the launcher on 2026-08-12 (homelab#324) —
+        # the launcher is normally killed mid-follow and closed them on 5 of 24 measured rides, so
+        # their p50 here was a median over the rides that happened to let their launcher live. Old
+        # `ride`/`bookkeeping` groups linger in the gateway until it reschedules; with nothing fresh
+        # to compare, the left-hand side of the split is empty for them and they simply never fire.
         #
         # THE BASELINE IS THE GATEWAY'S OWN HISTORY, not a number someone guessed. There is no
         # measured baseline to hard-code: this alert ships in the same PR as the emitter, so every
@@ -118,9 +130,9 @@ spec:
         #   (2) `>= 3` FRESH RIDES. With one ride in the window the p50 IS that ride, and a single
         #       cold-node dispatch would fire this every time. Three is the same "a wall, not bad
         #       luck" line AgentRunInfraDeathBurst draws.
-        #   (3) A 60s FLOOR on the recent median. `dispatch-gates` and `bookkeeping` are seconds
-        #       long, so a 3s→7s wobble is a 2.3× ratio and means nothing. The floor keeps this
-        #       alert about phases that got slow in a way a human would notice.
+        #   (3) A 60s FLOOR on the recent median. `dispatch-gates`, `clone` and `finalize` are
+        #       seconds long, so a 3s→7s wobble is a 2.3× ratio and means nothing. The floor keeps
+        #       this alert about phases that got slow in a way a human would notice.
         # THE DISPATCH ROWS ABOVE THE LAUNCHER ARE NOT IN HERE, and that is a decision rather than
         # an omission (FU-160 coordinator half, homelab#319). They are a SEPARATE metric family,
         # `agent_dispatch_phase_seconds{phase=ring-to-scan|scan|coordinator-spinup|coordinator-
@@ -193,7 +205,7 @@ spec:
             platform_machinery: "true"
           annotations:
             summary: "Ride phase {{ $labels.phase }} p50 is {{ $value }}s — over 2× its own baseline"
-            description: "SYMPTOM ONLY, and deliberately so — this says a launcher-owned phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls; `bookkeeping` = the exit path (stats, arm, strike comment, router report); `ride` is the WHOLE in-pod session and its breakdown is NOT here (agent-finalize's timestamps, agent-runtime — FU-160's other half), so a `ride` bar says where to look, not what happened. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
+            description: "SYMPTOM ONLY, and deliberately so — this says a ride phase got slower, never why. `pod-spinup` = schedule + image pull + container start, and the first thing to check is whether the node had the image (a `:latest` tag defeats the node cache — agents/README.md pinned-versions warning, seen live 2026-08-09); `dispatch-gates` = the launcher's deterministic pre-flight, so a slow gh/kubectl API or a pre-flight that started making more calls. Those two are ALL the launcher emits (homelab#324) — everything after pod-Ready carries `source=\"in-pod\"` and is agent-finalize's: `clone`, `devbox-install` (the nix-cache mirror is the first suspect), `llm-loop` (the model, not the platform — a slow provider raises this and no infra change will lower it) and `finalize`. Compare against the fleet: `sum by (phase) (agent_run_phase_seconds)` and the `Ride phase breakdown` panel on the `agent-issue` dashboard. Baseline is this metric's own pre-1h history in the pushgateway, so a gateway reschedule (emptyDir) resets it and this alert goes quiet, not red."
         # FU-020 enforcement made loud: a worker egress miss under deny-all manifests as a HANG
         # (devbox install against a blocked FQDN — the nix-cache finding), which the run classifier
         # only names `timeout` much later. This alert names the CAUSE within minutes. `source` is
