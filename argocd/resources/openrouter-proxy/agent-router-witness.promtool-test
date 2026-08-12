@@ -1,0 +1,288 @@
+# The REGRESSION CONTRAST for homelab#332 — the same rolls as agent-router.promtool-test, run
+# against the shipped exprs AND the pre-#332 ones side by side at identical eval times. The
+# shipped alert keeps firing; the fossil goes silent; the two half-fixes each fail in their own
+# way. That contrast is the acceptance of #332, executed on every CI run rather than argued in a
+# PR body — the device #310 and #328 used and the codeowner named as the reason both read as
+# durable.
+#
+#   devbox run prometheus-rules-lint      # runs this alongside every other *.promtool-test
+#
+# WHY THIS IS A SEPARATE FILE and not a witness group appended to agent-router.promtool-rules the
+# way #288/#313 did it: promtool evaluates EVERY rule in EVERY loaded rule file at EVERY step of
+# EVERY test, not just the ones an assertion names. `OpenRouterKeyBudgetLowPre332` raises a
+# many-to-one error the instant two series share a `key`, which is precisely the input the shipped
+# fixture's §K5 masking case is built on — so co-locating them would have cost that case. The rule
+# THIS file must therefore keep: every roll below leaves ≥6m between pod generations, so the 5m
+# PromQL lookback expires and the fossil never sees two series at once.
+#
+# Same clock, label and staleness caveats as agent-router.promtool-test — read that header first.
+# The one that bites here: promtool has no staleness marker, so a hole shorter than the 5m lookback
+# is invisible to the un-bridged exprs and the silences below are LOWER BOUNDS on the production
+# ones. Where that changes what a case can prove, the case says so (§W1).
+rule_files:
+  - agent-router.promtool-rules
+  - agent-router-witness.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── W1 — the rotation roll, four exprs at the same eval times ────────────────────────────────
+  # Identical input to agent-router.promtool-test §R1: a 2m roll (the measured shape — 69-116s
+  # across 10 pod generations) in the middle of a 3-day-stale rankings feed.
+  - interval: 1m
+    name: W1 rotation roll — shipped rides through, pre-332 buys an hour of silence
+    input_series:
+      - series: 'router_rotation_age_seconds{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy",source="openrouter-daily-rankings"}'
+        values: "259500+60x70"
+      - series: 'router_rotation_age_seconds{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy",source="openrouter-daily-rankings"}'
+        values: "_x72 263820+60x70"
+    alert_rule_test:
+      # 61m — everything is firing, and the label sets are the tell: the shipped alert carries only
+      # `source`, the fossil carries the dying pod's identity.
+      - eval_time: 61m
+        alertname: RouterRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+              description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
+      - eval_time: 61m
+        alertname: RouterRotationStalePre332
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+              container: proxy
+              endpoint: http
+              instance: 10.244.2.71:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-8574bd8d9-r42tx
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+      # ── THE ROLL: last sample of r42tx at 70m, first of wm8kr at 72m ─────────────────────────
+      # 80m — the fossil is GONE. r42tx's lookback ran out at 75m and wm8kr's own hour only started
+      # at 72m. That is the whole bug: a stale feed, an operator who has been told, and then an
+      # hour of nothing because a ConfigMap re-hashed.
+      - eval_time: 80m
+        alertname: RouterRotationStalePre332
+        exp_alerts: []
+      # …while the shipped expr never noticed the roll — same instance as at 61m.
+      - eval_time: 80m
+        alertname: RouterRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+              description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 25m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
+      # RANGE WITHOUT `max by (source)` fails too, and differently: bridging the hole does nothing
+      # about the fact that a new pod is a NEW alert instance. r42tx's bridged instance expires at
+      # 80m (its last sample + [10m]) and wm8kr's hour does not end until 132m.
+      - eval_time: 100m
+        alertname: RouterRotationStaleRangeOnly
+        exp_alerts: []
+      # `max by (source)` WITHOUT the range is the half this 2m roll cannot condemn: promtool has
+      # no staleness marker, so r42tx stays readable for 5m and the 2m hole never becomes an empty
+      # vector here. It is still firing — asserted honestly rather than quietly omitted. §W2 uses
+      # a hole long enough to outlive the lookback and there it fails; in production, where the
+      # staleness marker empties the vector at the roll itself, ANY hole does this.
+      - eval_time: 100m
+        alertname: RouterRotationStaleIdentityOnly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+      # 133m — the fossil finally re-fires, under the NEW pod's identity: 72m + 1h. That hour is
+      # the cost #332 removes, and it is paid on every roll, not once.
+      - eval_time: 133m
+        alertname: RouterRotationStalePre332
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+              container: proxy
+              endpoint: http
+              instance: 10.244.2.83:8080
+              job: openrouter-proxy
+              namespace: agent-egress
+              pod: openrouter-proxy-cdc58fc45-wm8kr
+              service: openrouter-proxy
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+
+  # ── W2 — a 7m roll: now BOTH half-fixes fail, and only the pair survives ─────────────────────
+  # The single-replica part of the bug isolated. For 7 minutes there is no series at all, so
+  # `max by (source)` has nothing left to aggregate over — the #288 finding, re-executed on this
+  # alert. 7m is a slow cold-mirror image pull; it is also the shortest hole promtool can show
+  # this with, since anything under 5m is hidden by the lookback.
+  - interval: 1m
+    name: W2 rotation slow roll — identity-only and range-only both reset, the shipped pair does not
+    input_series:
+      - series: 'router_rotation_age_seconds{container="proxy",endpoint="http",instance="10.244.2.90:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-aaa-1",service="openrouter-proxy",source="openrouter-daily-rankings"}'
+        values: "259500+60x70"
+      - series: 'router_rotation_age_seconds{container="proxy",endpoint="http",instance="10.244.2.91:8080",job="openrouter-proxy",namespace="agent-egress",pod="openrouter-proxy-bbb-2",service="openrouter-proxy",source="openrouter-daily-rankings"}'
+        values: "_x77 264120+60x70"
+    alert_rule_test:
+      - eval_time: 61m
+        alertname: RouterRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+              description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 6m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
+      # 100m: all three broken forms are silent…
+      - eval_time: 100m
+        alertname: RouterRotationStalePre332
+        exp_alerts: []
+      - eval_time: 100m
+        alertname: RouterRotationStaleIdentityOnly
+        exp_alerts: []
+      - eval_time: 100m
+        alertname: RouterRotationStaleRangeOnly
+        exp_alerts: []
+      # …and only the shipped expr, which has both halves, is still the instance from 60m.
+      - eval_time: 100m
+        alertname: RouterRotationStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+            exp_annotations:
+              summary: "OpenRouter rankings rotation feed is stale (>3d)"
+              description: "The dailyish list-daily-model-rankings pull has not written rotation entries for 3d 1h 45m 0s — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret."
+      # the identity-only form re-fires an hour after the new pod's first sample (77m + 1h)
+      - eval_time: 138m
+        alertname: RouterRotationStaleIdentityOnly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: openrouter-daily-rankings
+
+  # ── W3 — the key-budget roll ─────────────────────────────────────────────────────────────────
+  # Identical input to agent-router.promtool-test §K1: a 7m hole, the shape these two series
+  # actually leave (pod gap + the 75s `_headroom_loop` settle + the auth/key call + a 60s scrape).
+  # Note which witness fails and which does not exist: identity was never this alert's problem
+  # (`/ on (key)` already reduced the result to `{key}`), so `OpenRouterKeyBudgetLowIdentityOnly`
+  # is indistinguishable from the fossil — and the mirror half-fix, range-without-aggregation,
+  # cannot be a rule here at all because it ERRORS rather than misfires. See the rules file.
+  - interval: 1m
+    name: W3 key-budget roll — the hole is the whole bug, and one bridged side would not have done it
+    input_series:
+      - series: 'router_openrouter_key_limit_remaining_usd{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "8+0x40"
+      - series: 'router_openrouter_key_limit_usd{container="proxy",endpoint="http",instance="10.244.2.71:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-8574bd8d9-r42tx",service="openrouter-proxy"}'
+        values: "100+0x40"
+      - series: 'router_openrouter_key_limit_remaining_usd{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy"}'
+        values: "_x47 8+0x80"
+      - series: 'router_openrouter_key_limit_usd{container="proxy",endpoint="http",instance="10.244.2.83:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-cdc58fc45-wm8kr",service="openrouter-proxy"}'
+        values: "_x47 100+0x80"
+    alert_rule_test:
+      # 31m — all three firing, all three carrying only `{key}`. The fossil's label set is the
+      # proof that copying #288's identity half verbatim here would have fixed nothing.
+      - eval_time: 31m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+      - eval_time: 31m
+        alertname: OpenRouterKeyBudgetLowIdentityOnly
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+      # 60m — both broken forms are silent. Their 30m window restarted at 47m and will not end
+      # until 77m; the shipped one is untouched.
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLowIdentityOnly
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+            exp_annotations:
+              summary: "OpenRouter key agent-egress/router-account-key below 10% of its spend limit"
+              description: "Standing key agent-egress/router-account-key has 8 USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties."
+      # 78m — the fossil re-fires, 30m late, having missed the window in which the key drained
+      - eval_time: 78m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+
+  # ── W4 — a gap on the REMAINING side alone ───────────────────────────────────────────────────
+  # Not a roll: one pod throughout, and OpenRouter's auth/key answering with a null
+  # `limit_remaining` (openrouter-proxy.py emits each field only when it is a number). Under
+  # `on (key)` a missing side does not degrade the match, it deletes it — so the alert resolved
+  # even though the pod was up and the limit was still being scraped. Half the acceptance of #332
+  # is that this case and its mirror both hold.
+  - interval: 1m
+    name: W4 key budget — a 9m gap on the remaining side alone was enough to reset the old window
+    input_series:
+      - series: 'router_openrouter_key_limit_remaining_usd{container="proxy",endpoint="http",instance="10.244.2.94:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-ggg-7",service="openrouter-proxy"}'
+        values: "8+0x40 _x8 8+0x72"
+      - series: 'router_openrouter_key_limit_usd{container="proxy",endpoint="http",instance="10.244.2.94:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-ggg-7",service="openrouter-proxy"}'
+        values: "100+0x120"
+    alert_rule_test:
+      - eval_time: 47m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+            exp_annotations:
+              summary: "OpenRouter key agent-egress/router-account-key below 10% of its spend limit"
+              description: "Standing key agent-egress/router-account-key has 8 USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties."
+
+  # ── W5 — a gap on the LIMIT side alone ───────────────────────────────────────────────────────
+  # The mirror, and the reason both are asserted: `on (key)` is symmetric, so a fix that bridged
+  # only the numerator would pass W4 and fail here. (`limit` is the field OpenRouter omits outright
+  # for an unlimited key, which makes this the likelier of the two in practice.)
+  - interval: 1m
+    name: W5 key budget — a 9m gap on the limit side alone did it too, which is why both sides are bridged
+    input_series:
+      - series: 'router_openrouter_key_limit_remaining_usd{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-hhh-8",service="openrouter-proxy"}'
+        values: "8+0x120"
+      - series: 'router_openrouter_key_limit_usd{container="proxy",endpoint="http",instance="10.244.2.95:8080",job="openrouter-proxy",key="agent-egress/router-account-key",namespace="agent-egress",pod="openrouter-proxy-hhh-8",service="openrouter-proxy"}'
+        values: "100+0x40 _x8 100+0x72"
+    alert_rule_test:
+      - eval_time: 47m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLowPre332
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: OpenRouterKeyBudgetLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              key: agent-egress/router-account-key
+            exp_annotations:
+              summary: "OpenRouter key agent-egress/router-account-key below 10% of its spend limit"
+              description: "Standing key agent-egress/router-account-key has 8 USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties."

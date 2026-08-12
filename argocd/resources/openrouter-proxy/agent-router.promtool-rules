@@ -1,0 +1,70 @@
+# The `agent-router` group, lifted VERBATIM out of prometheusrule.yaml (comments stripped — the
+# manifest is their one home) — the rules file that agent-router.promtool-test loads. Not a
+# manifest and not applied to anything: `promtool test rules` needs upstream-format rules
+# (top-level `groups:`), and a PrometheusRule keeps them under `.spec`, so the CR cannot be loaded
+# directly. Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY
+# *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# This is the SECOND fixture pair over openrouter-proxy/prometheusrule.yaml. The first,
+# subscription.promtool-{rules,test} (#288), covers the OTHER group — `claude-subscription` — and
+# its own re-copy recipe hard-selects `select(.name == "claude-subscription")`, so running THAT
+# header's command after editing an `agent-router` alert copies nothing you changed and the
+# fixture passes vacuously. One file per group is what keeps the two recipes honest; do not merge
+# them.
+#
+# ⚠ NOT DRIFT-PINNED (like both existing hand copies here and unlike github-exporter's
+# queued-age.promtool-rules, which `devbox run exporter-self-test` checks): the general harness
+# that would extract `.spec.groups` at run time and delete the hand copies altogether lives in
+# `scripts/**` + `.github/**`, CI-invoked paths outside the fixer lane's tier. Until it exists,
+# RE-COPY AFTER EVERY EXPR EDIT — a stale copy tests the OLD expr and passes vacuously:
+#
+#   yq -o=json '{"groups":[{"name":"agent-router","rules":[.spec.groups[] | select(.name == "agent-router") | .rules[]]}]}' argocd/resources/openrouter-proxy/prometheusrule.yaml | yq -P '.'
+#
+# …then re-attach this header. The command is deliberately ONE LINE: yq 4.x's lexer rejects a
+# newline inside the expression ("lexer: invalid input text"), so the pretty-wrapped form used in
+# github-exporter/loop-health.promtool-rules' header does not actually run as written. Verified
+# byte-identical against the body below on 2026-08-11 (homelab#332).
+#
+# The regression witnesses live in a SEPARATE pair, agent-router-witness.promtool-{rules,test},
+# rather than in a second group here the way #288/#313 did it. That is forced, not stylistic:
+# promtool evaluates every rule in every loaded rule file at every step of every test, and the
+# pre-#332 OpenRouterKeyBudgetLow expr ERRORS (many-to-one on `on (key)`) whenever two series
+# share a `key` — which is precisely the input of this file's §masking case. Keeping the witnesses
+# out lets the shipped-behaviour fixture model a scaled-out proxy at all. See that file's header.
+groups:
+  - name: agent-router
+    rules:
+      - alert: RouterDbEphemeral
+        expr: router_db_persistent == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Router store is running ephemeral (:memory:)
+          description: 'The openrouter-proxy router store failed to open its PVC and degraded to :memory: — strikes, provider events, generation costs and the persisted 429 latch are lost on every restart. Check the openrouter-proxy-data PVC / Longhorn volume in ns agent-egress.'
+      - alert: RouterRotationStale
+        expr: max by (source) (max_over_time(router_rotation_age_seconds{source="openrouter-daily-rankings"}[10m])) > 259200
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenRouter rankings rotation feed is stale (>3d)
+          description: The dailyish list-daily-model-rankings pull has not written rotation entries for {{ $value | humanizeDuration }} — check proxy logs for MCP/Cloudflare failures (the UA gotcha) and the router-account-key Secret.
+      - alert: OpenRouterKeyBudgetLow
+        expr: max by (key) (max_over_time(router_openrouter_key_limit_remaining_usd[10m])) / on (key) max by (key) (max_over_time(router_openrouter_key_limit_usd[10m])) < 0.10
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: OpenRouter key {{ $labels.key }} below 10% of its spend limit
+          description: Standing key {{ $labels.key }} has {{ with query (printf "max by (key) (max_over_time(router_openrouter_key_limit_remaining_usd{key='%s'}[10m]))" $labels.key) }}{{ . | first | value | humanize }}{{ end }} USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties.
+      - alert: OpenRouterCapacityDown
+        expr: router_openrouter_capacity_down == 1
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+        annotations:
+          summary: OpenRouter account is capacity-down
+          description: 'OpenRouter account-scope capacity has been latched for 30m — worker dispatch is degrading to the haiku subscription rail or deferring the OpenRouter rail. Probe: GET openrouter-proxy.agent-egress:8080/router-status → .openrouter_capacity (reason / remaining_s / recent_429_models) names which leg latched. The credit leg reads the openrouter-operator''s openrouter_account_credit_usd gauge (openrouter-operator-metrics.openrouter-operator:9090), NOT OpenRouter directly — .credit_poll_failures climbing there, or router_openrouter_credit_poll_failures_total here, means that leg is blind and only the data-plane legs (hard-402 / cross-model 429s) can still fire (homelab#180).'

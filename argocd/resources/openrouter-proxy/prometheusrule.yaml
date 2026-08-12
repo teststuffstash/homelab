@@ -1,6 +1,34 @@
 # FU-088 alerting: the latch/threshold state that defers agent dispatch should never sit
 # unnoticed (the 2026-07-12 and 2026-07-17 429 incidents were both discovered by a human reading
 # pod output). Alertmanager routes to the Home Assistant webhook (tofu/monitoring.tf).
+#
+# ── THE RESTART-GAP TEST (homelab#332) ────────────────────────────────────────────────────────
+# openrouter-proxy is `replicas: 1` with `strategy: Recreate` (deployment.yaml), so EVERY roll
+# leaves a real hole in every series this file alerts on, and a `for:` window spanning that hole
+# restarts from zero. The #288/#313 bridge — `max by (<a label that does not churn>)` PLUS
+# `max_over_time(...[10m])` — fixes that. It is not, however, automatically the right thing to do,
+# and five alerts here look identical on the "single replica + `for:`" surface while splitting
+# two-to-three on the question that actually decides it:
+#
+#   The test is not "single replica + `for:`". It is: DOES THE CONDITION OUTLIVE THE ROLL?
+#   Persisted or externally-true ⇒ BRIDGE IT — the hole is an artefact of the measurement, and
+#   the condition was continuously true across it.
+#   In-memory ⇒ the reset is CORRECT — bridging would make the alert claim state the new pod
+#   never had.
+#
+# Bridged, because the condition outlives the roll:
+#   RouterRotationStale     — the age is computed from the `rotation` table on the PVC-backed
+#                             store (router.py: `SELECT source, …, MAX(updated_ts) FROM rotation`),
+#                             so a fresh pod re-reads the same staleness and the age keeps growing.
+#   OpenRouterKeyBudgetLow  — EXTERNALLY true, which is the test's other arm: these are
+#                             OpenRouter's own auth/key numbers, so the new pod re-polls and gets
+#                             the same answer. (`_headroom` is an in-memory cache OF an external
+#                             fact — that distinction changes the hole's SIZE, not the verdict;
+#                             see that alert's comment.)
+# NOT bridged, deliberately, because the condition is in-memory state a roll genuinely resets:
+#   SubscriptionDispatchLimited, RouterDbEphemeral, OpenRouterCapacityDown. Each carries a
+#   one-line pointer back here, and their behaviour ACROSS a roll is pinned in
+#   agent-router.promtool-test as well — so "deliberately not bridged" is executed, not asserted.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -13,6 +41,11 @@ spec:
       rules:
         # Dispatch has been deferring (429 latch or ≥threshold utilization) for 15m — batch
         # work is parked; decide whether to wait out the window or pause interactive use.
+        #
+        # ⚠ Deliberately NOT restart-gap bridged (homelab#332) — the in-memory arm of the test in
+        # this file's header: the deferral verdict is the proxy's own live 429 latch + utilization
+        # read, so a roll genuinely resets the thing being measured and the fresh pod's `0` is a
+        # true reading, not a hole.
         - alert: SubscriptionDispatchLimited
           expr: anthropic_subscription_dispatch_limited == 1
           for: 15m
@@ -65,6 +98,12 @@ spec:
       rules:
         # ADR-096: the router store degraded to :memory: — decisions/strikes/costs are being
         # forgotten on every roll. Real fault (PVC/Longhorn), triage-able.
+        #
+        # ⚠ Deliberately NOT restart-gap bridged (homelab#332) — the in-memory arm of the test in
+        # this file's header, and the sharpest case of it: `router_db_persistent` is THIS pod's
+        # PVC-open result. A roll re-attempts the open, so bridging would report the dead pod's
+        # failure against a pod that may well have succeeded. The cost is the honest one — a
+        # persisting fault re-pays its full 30m after each roll, pinned in agent-router.promtool-test.
         - alert: RouterDbEphemeral
           expr: router_db_persistent == 0
           for: 30m
@@ -76,8 +115,33 @@ spec:
 
         # ADR-096 addendum 2: the MCP daily-rankings feed stopped landing. The git-curated
         # rotation_fallback belt still routes, but the "what's currently good" signal is stale.
+        #
+        # ⚠ RESTART-GAP HARDENED (homelab#332 — the #288/#313 class, PERSISTED arm of the test in
+        # this file's header). The plain
+        #   `router_rotation_age_seconds{source="openrouter-daily-rankings"} > 259200`
+        # form restarted its 1h window on every roll, while the staleness it measures sat in the
+        # `rotation` table on the PVC the whole time. TWO mechanisms, and the fix needs both
+        # halves — #288 proved either alone still resets the window at one replica:
+        #   (1) IDENTITY CHURN → `max by (source)`. `pod`/`instance` are scraped onto the series
+        #       and were therefore on the ALERT, so a new pod was a new alert instance with its
+        #       own clock. `source` is the metric's own label and the one that does not churn.
+        #   (2) A REAL HOLE → `max_over_time([10m])`. `replicas: 1` + `strategy: Recreate` means
+        #       the vector is genuinely EMPTY across a roll — there is no other series left to
+        #       aggregate over — and the staleness marker makes that instant rather than
+        #       lookback-cushioned.
+        # [10m] is #288's measured size (its 10 pod generations gapped 69-116s of raw samples),
+        # and this series needs no warm-up on the new pod — it is a store read, so it is back on
+        # the FIRST scrape — which leaves the full ~5x margin here. A roll longer than 10m still
+        # resets the window: the accepted ceiling, asserted in agent-router.promtool-test rather
+        # than assumed. `max` is the PESSIMISTIC direction for an age (it takes the worst reading
+        # in the window), so unlike OpenRouterKeyBudgetLow below the aggregation cannot mask a
+        # stuck source even if this is ever scaled out; the price is the mirror image — up to 10m
+        # of ringing after a rotation genuinely lands, also asserted.
+        # The description's `$value` reads the same bridged max, so it stays renderable and honest
+        # across the hole instead of going blank.
         - alert: RouterRotationStale
-          expr: router_rotation_age_seconds{source="openrouter-daily-rankings"} > 259200
+          expr: >-
+            max by (source) (max_over_time(router_rotation_age_seconds{source="openrouter-daily-rankings"}[10m])) > 259200
           for: 1h
           labels:
             severity: warning
@@ -87,16 +151,54 @@ spec:
 
         # ADR-096 P2: a standing project key is close to its OpenRouter spend limit — worker
         # dispatch on that rail will start failing with 402s when it empties.
+        #
+        # ⚠ RESTART-GAP HARDENED (homelab#332 — EXTERNALLY-TRUE arm of the test in this file's
+        # header): these are OpenRouter's own auth/key numbers, so the budget does not reset just
+        # because the proxy did; a fresh pod re-polls and gets the same answer. Three notes, and
+        # the middle one is the reason this alert is not a copy-paste of #288/#313:
+        #   (1) IDENTITY CHURN was ALREADY handled, uniquely in this file: a one-to-one `/ on (key)`
+        #       makes the RESULT carry only `key`, so `pod`/`instance` were never on this alert.
+        #       `max by (key)` is still required — for reason (3), not for identity.
+        #   (2) A REAL HOLE → `max_over_time([10m])` on BOTH sides. A gap on EITHER side kills the
+        #       `on (key)` match and empties the entire expression, so bridging one side is not a
+        #       partial fix, it is no fix. Both single-side gaps are in agent-router.promtool-test.
+        #   (3) `max by (key)` IS LOAD-BEARING ONCE (2) IS IN, and this is a trap rather than a
+        #       nicety: the [10m] lookback makes the OLD and NEW pod generations resolvable AT THE
+        #       SAME INSTANT, which the raw instant vector never did under `strategy: Recreate`.
+        #       Two series sharing a `key` on one side of `on (key)` is a many-to-one ERROR, not a
+        #       match, so the range WITHOUT the aggregation returns nothing at all for up to 10m
+        #       after every roll — strictly worse than shipping neither half. Verified with
+        #       promtool 3.13.1: `found duplicate series for the match group {key="…"} …
+        #       many-to-many matching not allowed`. It cannot be a fixture assertion (promtool has
+        #       no expect-error), so the fixture asserts the positive instead — exactly ONE alert
+        #       instance while both generations sit inside the range.
+        # HOLE SIZE, larger here than anywhere else in this file and the reason [10m] is not the
+        # same margin twice: these two series need the headroom poller, which sleeps 75s after
+        # start before its first auth/key tick (openrouter-proxy.py `_headroom_loop`), on top of
+        # the 69-116s pod gap, the ≤15s auth/key call and a 60s scrape interval. Worst case ≈4.5m,
+        # so [10m] is ~2x margin here versus #288's ~5x. Still the right number — widening it is
+        # equally how long a topped-up key would keep ringing.
+        # THE TRADE, accepted: `max` on the numerator is the OPTIMISTIC direction, so a second
+        # replica reading a healthier number would mask a low one. Unreachable at `replicas: 1`,
+        # and pinned as a test rather than argued (agent-router.promtool-test §masking) — scaling
+        # this Deployment out means flipping the numerator to `min by (key) (min_over_time(...))`
+        # first, and that test is what will have to be edited to notice.
         - alert: OpenRouterKeyBudgetLow
           expr: >-
-            router_openrouter_key_limit_remaining_usd / on(key) router_openrouter_key_limit_usd < 0.10
+            max by (key) (max_over_time(router_openrouter_key_limit_remaining_usd[10m]))
+            / on (key)
+            max by (key) (max_over_time(router_openrouter_key_limit_usd[10m]))
+            < 0.10
           for: 30m
           labels:
             severity: warning
             triage: none # capacity fact — topping up/raising the key limit is an operator move
           annotations:
             summary: "OpenRouter key {{ $labels.key }} below 10% of its spend limit"
-            description: 'Standing key {{ $labels.key }} has {{ with query (printf "router_openrouter_key_limit_remaining_usd{key=''%s''}" $labels.key) }}{{ . | first | value | humanize }}{{ end }} USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties.'
+            # homelab#332: the `query` is bridged the same way as the expr. Unbridged it read the
+            # raw gauge, which is exactly the series that is missing across a roll — so the alert
+            # would fire correctly and render "has  USD left". Same [10m], same reason.
+            description: 'Standing key {{ $labels.key }} has {{ with query (printf "max by (key) (max_over_time(router_openrouter_key_limit_remaining_usd{key=''%s''}[10m]))" $labels.key) }}{{ . | first | value | humanize }}{{ end }} USD left under its limit — OpenRouter-rail dispatch for that project will die on 402s when it empties.'
 
         # homelab#158/#163: the ACCOUNT-scope capacity latch (credit floor / hard-402 / 429s from
         # ≥2 distinct models) has held continuously for 30m — this is the whole OpenRouter leg,
@@ -109,6 +211,11 @@ spec:
         # the reverse ~30m re-arm blank after a roll during an ongoing outage (the known class
         # the #162 review flagged), which the multi-hour 2026-08-08 outage this alert exists for
         # still clears comfortably. Same window as the two capacity facts above.
+        #
+        # ⚠ Deliberately NOT restart-gap bridged (homelab#332) — the paragraph above IS the
+        # in-memory arm of the test in this file's header, written before the test had a name: it
+        # already prices the reverse ~30m re-arm blank and accepts it. Bridging would assert a
+        # latch the new pod never engaged. Pinned in agent-router.promtool-test.
         - alert: OpenRouterCapacityDown
           expr: router_openrouter_capacity_down == 1
           for: 30m
