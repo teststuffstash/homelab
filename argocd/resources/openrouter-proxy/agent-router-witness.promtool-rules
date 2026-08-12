@@ -1,0 +1,82 @@
+# ── REGRESSION WITNESSES — NOT deployed rules, and deliberately not in prometheusrule.yaml ─────
+# The pre-#332 exprs kept verbatim, plus one half-fix counterfactual, so agent-router-witness
+# .promtool-test can assert the FAILURE that was fixed instead of merely asserting the fix. Same
+# device as subscription.promtool-rules §regression-witness-pre-288 and github-exporter/
+# loop-health.promtool-rules §regression-witness-pre-313, and for the same reason: it makes the
+# contrast executed rather than claimed. It is also why a STALE hand copy of the shipped group
+# cannot pass vacuously — with the old expr in both places the two alerts would agree, and every
+# roll assertion in the witness test fails.
+#
+# If either shipped expr is ever revisited, these stay as they are: they are fossils of what must
+# not come back, not copies of the live rules. Nothing regenerates this file.
+#
+# ⚠ WHY THIS IS A SEPARATE FILE, unlike the two precedents that put the witness group at the
+# bottom of the shipped rules file. promtool evaluates EVERY rule in EVERY loaded rule file at
+# EVERY step of EVERY test in the file — not only the rules an assertion names (verified: an
+# unasserted rule's evaluation error still failed the run). `OpenRouterKeyBudgetLowPre332` errors
+# out — `found duplicate series for the match group {key="…"}; many-to-many matching not allowed`
+# — the instant two series share a `key`, which is exactly the input the shipped fixture's
+# §masking case needs. Co-locating them would have meant dropping that case. So: shipped
+# behaviour in agent-router.promtool-test, the contrast here, and every case in THIS file keeps
+# ≥6m between pod generations so the 5m PromQL lookback expires and the witness never sees two.
+groups:
+  - name: regression-witness-pre-332
+    rules:
+      # RouterRotationStale as it stood before #332. Both mechanisms are live in it: `pod`/
+      # `instance` ride the alert (identity churn) and there is no range to bridge the hole.
+      - alert: RouterRotationStalePre332
+        expr: router_rotation_age_seconds{source="openrouter-daily-rankings"} > 259200
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: OpenRouter rankings rotation feed is stale (>3d)
+
+      # THE TWO HALF-FIXES for RouterRotationStale, so #288's "either half alone still resets the
+      # window" is executed here rather than inherited as a claim. Identity-only survives the SHORT
+      # roll in the fixture and would not in production (no staleness marker here — see the test
+      # file's §W1 note); range-only fails at any hole size, because a new pod is still a new alert
+      # instance with its own clock.
+      - alert: RouterRotationStaleIdentityOnly
+        expr: max by (source) (router_rotation_age_seconds{source="openrouter-daily-rankings"}) > 259200
+        for: 1h
+        labels:
+          severity: warning
+
+      - alert: RouterRotationStaleRangeOnly
+        expr: max_over_time(router_rotation_age_seconds{source="openrouter-daily-rankings"}[10m]) > 259200
+        for: 1h
+        labels:
+          severity: warning
+
+      # OpenRouterKeyBudgetLow as it stood before #332. Note what it does NOT suffer from: a
+      # one-to-one `/ on (key)` already reduced the result to `{key}`, so identity churn was never
+      # this alert's problem. The hole is — and a hole on EITHER side empties the whole match.
+      - alert: OpenRouterKeyBudgetLowPre332
+        expr: >-
+          router_openrouter_key_limit_remaining_usd / on(key) router_openrouter_key_limit_usd < 0.10
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
+
+      # THE HALF-FIX, the one #288 warned about: identity handled, hole not. For this alert
+      # `max by (key)` on its own is a no-op on the result labels (see above), so it is a pure
+      # demonstration that the range is the half that matters here — it goes silent across the
+      # same roll the shipped expr rides through.
+      #
+      # The MIRROR half-fix — range without `max by (key)` — is not here because it cannot be:
+      # `max_over_time` makes both pod generations resolvable at one instant, two series share a
+      # `key`, and `on (key)` raises a many-to-one ERROR rather than returning nothing. promtool
+      # has no expect-error assertion, so that half is verified by hand (promtool 3.13.1) and
+      # recorded in the manifest comment; the shipped fixture asserts the positive instead.
+      - alert: OpenRouterKeyBudgetLowIdentityOnly
+        expr: >-
+          max by (key) (router_openrouter_key_limit_remaining_usd)
+          / on (key)
+          max by (key) (router_openrouter_key_limit_usd)
+          < 0.10
+        for: 30m
+        labels:
+          severity: warning
+          triage: none
