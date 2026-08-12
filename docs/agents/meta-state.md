@@ -34,10 +34,14 @@ meant to avoid.)
    · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
    everything else rides its lock · A2 famine fixes (doorbell fixed-name collapse, mutex
    scope/stream-detach) — ⚖ rail move REJECTED (workers stay subscription; ruling in
-   model-routing.md §M12) · A3 the v1.2 design session (FU-168 + #295 + findings store/§M10 +
-   stack scope + FU-090 gauge folded in) → ADR · A4 v1.2 minimum build (findings store,
-   checkpoints, fold-in rule, mechanical ❌ check) · A5 CODEOWNERS narrowing (operator call,
-   after A4's ❌ check) · A6 hygiene (goal-budget dash guard, #377, FU-166(a), inert triage).
+   model-routing.md §M12) · A3 ✅ DONE 2026-08-12 (the same-session sitting) → **ADR-106** (PR#389): single-mode
+   feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
+   ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
+   governance lint, mutex scoped to the deterministic phase, stack scope ·
+   A4 v1.2 minimum build per ADR-106: findings store + checkpoint clause, origin-parenting
+   harvest change, the governance lint, sibling-repo doorbells · A5 CODEOWNERS narrowing
+   (operator call, after A4's lint) · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
+   inert triage). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
    **Next-session shape (operator, 2026-08-12, calibrated): worktree-subagent TRIAL first, not
    adoption.** Suitability test = "would it need the design-agents corpus?" — if yes, it is
