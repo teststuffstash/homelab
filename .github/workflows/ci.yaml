@@ -146,6 +146,12 @@ jobs:
 
       # The two files carved OUT of CODEOWNERS so the arc-runner auto-bump stays hands-off keep a
       # gate — just a deterministic one instead of a human. Only pin lines may reach them via a PR.
+      # The findings-store parse/append/advance contract (ADR-106 (3)) — the sibling of
+      # exporter/spend-probe/router self-tests, wired for the same reason: an unexecuted
+      # assertion suite already bit this repo once (the estimator self-test, 2026-08-10 audit).
+      - name: Findings-store self-test (devbox run goal-findings-self-test)
+        run: devbox run goal-findings-self-test
+
       - name: Guarded files may only receive pin bumps (devbox run pin-only-lint)
         if: github.event_name == 'pull_request'
         run: |

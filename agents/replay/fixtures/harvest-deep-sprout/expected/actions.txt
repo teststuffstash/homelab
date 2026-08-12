@@ -10,7 +10,7 @@ CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
 CALL gh issue create --repo teststuffstash/circles --title post-launch: Goal: P0 complete — bake, page, evidence chain, and the kind system gate, from the harvested contract --body <bucket body — see agents/coordinator-scan.sh>
 CALL gh api repos/teststuffstash/circles/issues/999
 CALL gh api -X POST repos/teststuffstash/circles/issues/29/sub_issues -F sub_issue_id=999999999
-OUT   harvest disposition (ADR-102): circles issue-75 → goal #29, bucket 999, self-queue no — goal #29 is CLOSED — the self-queue right dies with the goal (ADR-102)
-OUT ITEM repo=circles item=issue-75 clause=merged-closeout goal=29 bucket=999 selfqueue=no
+OUT   harvest disposition (ADR-106): circles issue-75 → goal #29, bucket 999, harvest inert — goal #29 is CLOSED — findings from a dead goal land inert (ADR-102 terminals)
+OUT ITEM repo=circles item=issue-75 clause=merged-closeout goal=29 bucket=999 harvest=inert
 OUT REACHED: end
 RC 0

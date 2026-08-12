@@ -17,7 +17,7 @@
 #   3. `GACTED <none>` and `ORPHANS <none>` — a mention-only merge is not even reported, because
 #      the mention-but-no-trailer report is scoped to goal/** HEADs. #64 mentioning the goal must
 #      not put a line in front of a human every single tick;
-#   4. and the lane still WORKS: `goal-review` falls through and emits its ordinary unit, so this
+#   4. and the lane still WORKS: the demoted tail falls through, writes the burn-down, and emits NO per-closure unit (a `goal-checkpoint` only at thresholds — ADR-106 (3)), so this
 #      fixture proves the new legs are inert rather than proving the lane is dead.
 #
 # Without (d), (a) alone is satisfied by a probe that fires on any merged PR citing the goal —
