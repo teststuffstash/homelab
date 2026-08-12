@@ -242,8 +242,12 @@ the block needs pruning, not more headings.
       register that also produced PR#275's genuine merge conflict (both-sides-append). Fix shape:
       make the register DERIVED (fixture.yaml self-description or a run.sh-generated index), then
       narrow the ratchet/authoring rule to `agents/replay/fixtures/<family>-*` — footprints
-      become truly disjoint. Post-goal (the replay tree is mid-goal traffic). Relates ADR-097,
-      ADR-103, FU-165.
+      become truly disjoint. Third option (2026-08-12, from the FU-168 drift measurement): exempt
+      `agents/replay/**` from the scan's footprint intersection outright — new-directory adds are
+      conflict-free by construction, zero real conflicts measured over 41 PRs, the merge path owns
+      the residual; composes with the derived register. ⚠ Every FU-168 fix-round deliverable rides
+      this same lock (clause files) — land the derived register + exemption FIRST, or do the fix
+      round operator-lane. UNBLOCKED post-#278. Relates ADR-097, ADR-103, FU-165, FU-168.
 - [ ] **FU-166** — **Meta-session watches: codeowner-park invisible to Prometheus + poll-everything
       cadences** (operator, 2026-08-11). Leg (a): parked PRs are bot-APPROVED so the reviewable
       predicate/panel excludes them — only the watch's direct `gh` poll (600s, against the
