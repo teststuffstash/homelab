@@ -111,10 +111,17 @@ while true; do
   # one-poller doctrine). The gh loop below is DEMOTED to the probe-fail belt: it runs only
   # when Prometheus is unreachable/unparseable — never both. CodeownerParkWaiting (>30m) is
   # the alert-side twin; this clause stays as the fast jail surface.
+  # ⚠ "reachable + empty" is only trustworthy while the COLLECTOR proves itself: pre-#403 (or
+  # across an exporter outage) the park series does not exist at all, and an empty answer read
+  # as "no parks" made circles#80 FLAP clear/fire against the belt (2026-08-12 18:01 — partly
+  # the shared-tree branch-hop executing two versions, but the pre-rollout hole was real). The
+  # liveness key is a sibling series from the SAME collector walk (`github_pull_request_open` —
+  # present whenever the walk ran): sibling absent → the empty park set is a claim about the
+  # exporter, not the world → belt. The spend-probe probe_ok pattern, consumer-side.
   pk=$(curl -ksS --max-time 10 'https://prometheus.teststuff.net/api/v1/query' \
-        --data-urlencode 'query=github_pull_request_codeowner_park' 2>/dev/null)
-  if [ -n "$pk" ] && jq -e '.status == "success"' >/dev/null 2>&1 <<<"${pk:-null}"; then
-    pkl=$(jq -r '.data.result[]? | "NEEDS-META codeowner-gate: \(.metric.repo)#\(.metric.number) bot-approved + REVIEW_REQUIRED (workflows green) — a specs/.agents path needs the delegated codeowner read"' <<<"$pk" 2>/dev/null)
+        --data-urlencode 'query=github_pull_request_codeowner_park or (count(github_pull_request_open) * 0)' 2>/dev/null)
+  if [ -n "$pk" ] && jq -e '.status == "success" and (.data.result | length > 0)' >/dev/null 2>&1 <<<"${pk:-null}"; then
+    pkl=$(jq -r '.data.result[]? | select(.metric.repo != null) | "NEEDS-META codeowner-gate: \(.metric.repo)#\(.metric.number) bot-approved + REVIEW_REQUIRED (workflows green) — a specs/.agents path needs the delegated codeowner read"' <<<"$pk" 2>/dev/null)
     [ -n "$pkl" ] && out="$out$pkl"$'\n'
   else
     echo "needs-meta: prometheus unreachable — clause 4 falling back to the direct gh walk (belt)" >&2
