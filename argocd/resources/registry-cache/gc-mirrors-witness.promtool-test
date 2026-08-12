@@ -1,0 +1,152 @@
+# The regression witness for homelab#333, replayed on the SAME inputs as gc-mirrors.promtool-test.
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/gc-mirrors-witness.promtool-test
+#
+# Read the two files side by side: every eval_time below has a twin over there, on identical
+# series. Where the shipped alert holds, the pre-#333 expr is silent; where the shipped alert
+# stays quiet, the half-bridged form pages. That contrast is the only thing this file exists for —
+# without it "the bridge works" is a claim about code that was never executed in its broken form,
+# and both #310 and #328 were read as durable precisely because they carried one.
+#
+# The clock, label and staleness conventions are gc-mirrors.promtool-test's; they are not restated
+# here. One consequence is worth naming, because it makes the witness CONSERVATIVE: promtool
+# cannot inject staleness markers, so a `_` gap is lookback-cushioned. A real KSM reschedule
+# removes the target from service discovery and Prometheus writes explicit staleness markers, so
+# the pre-fix regressions below arrive SOONER in production than they do here.
+rule_files:
+  - gc-mirrors-witness.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── twin of "suspended CronJob survives a KSM reschedule" ─────────────────────────────────────
+  # Same series. The shipped alert is firing at every one of these four times with a stable
+  # {namespace,cronjob}. The pre-fix expr loses it twice over.
+  - interval: 1m
+    name: pre-fix — a KSM reschedule resolves the alert twice and re-mints it as a stranger
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x19"
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x27 1+0x60"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "0+0x90"
+    alert_rule_test:
+      # fires — and note WHAT it carries: kube-state-metrics' own pod and IP are on the alert.
+      # That is the identity churn, made visible.
+      - eval_time: 16m
+        alertname: RegistryGCMirrorsSuspendedPreFix
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+              job: kube-state-metrics
+              instance: 10.244.6.238:8080
+              pod: kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd
+              service: kube-prometheus-stack-kube-state-metrics
+              endpoint: http
+              container: kube-state-metrics
+      # THE RANGE HALF, missing: the vector is empty and the alert is simply gone.
+      # (shipped: still firing)
+      - eval_time: 26m
+        alertname: RegistryGCMirrorsSuspendedPreFix
+        exp_alerts: []
+      # THE IDENTITY HALF, missing: the metric came back at t=27 under a new instance, so this is
+      # a brand-new alert instance serving a fresh 15m. (shipped: still firing, uninterrupted)
+      - eval_time: 40m
+        alertname: RegistryGCMirrorsSuspendedPreFix
+        exp_alerts: []
+      # and when it does return it is a DIFFERENT alert — a resolve+refire on a CronJob that was
+      # suspended the entire time
+      - eval_time: 45m
+        alertname: RegistryGCMirrorsSuspendedPreFix
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+              job: kube-state-metrics
+              instance: 10.244.4.11:8080
+              pod: kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn
+              service: kube-prometheus-stack-kube-state-metrics
+              endpoint: http
+              container: kube-state-metrics
+
+  # ── twin of "stale gc-mirrors success survives a KSM reschedule mid-window" ───────────────────
+  # The expensive one: `for: 1h`. The shipped alert holds at 76m, 100m and 130m. The pre-fix expr
+  # drops at 76m and does not come back until t=137 — an hour and a quarter of silence on a GC
+  # that has not run in over eight days.
+  - interval: 1m
+    name: pre-fix — a KSM reschedule costs a full extra hour of silence
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-700000+0x69"
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x77 -700000+0x60"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-800000+0x69"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x77 -800000+0x60"
+    alert_rule_test:
+      - eval_time: 61m
+        alertname: RegistryGCMirrorsStalePreFix
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+              job: kube-state-metrics
+              instance: 10.244.6.238:8080
+              pod: kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd
+              service: kube-prometheus-stack-kube-state-metrics
+              endpoint: http
+              container: kube-state-metrics
+      # (shipped: firing) — the hole outlived lookback and took the alert with it
+      - eval_time: 76m
+        alertname: RegistryGCMirrorsStalePreFix
+        exp_alerts: []
+      # (shipped: firing) — new identity, the hour starts over from t=77
+      - eval_time: 100m
+        alertname: RegistryGCMirrorsStalePreFix
+        exp_alerts: []
+      # (shipped: firing) — still nothing, 54 minutes after the metric came back
+      - eval_time: 130m
+        alertname: RegistryGCMirrorsStalePreFix
+        exp_alerts: []
+
+  # ── twin of the ASYMMETRY TRAP ───────────────────────────────────────────────────────────────
+  # Identical series to the shipped fixture's trap case, where RegistryGCMirrorsStale is silent at
+  # every eval time. Here the half-bridged form — created bridged, absent() left raw — pages that
+  # a CronJob which succeeded 36 minutes ago has NEVER succeeded, purely because kube-state-metrics
+  # was rescheduled. This is the failure the shipped expr's symmetric bridge exists to prevent, and
+  # it is the reason "bridge one side" is worse than "bridge neither".
+  - interval: 1m
+    name: half-bridged — a KSM hole pages a healthy CronJob as never-succeeded
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "0+0x29 _x8 0+0x60"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-800000+0x98"
+    alert_rule_test:
+      # metric present — quiet, exactly like the shipped expr
+      - eval_time: 20m
+        alertname: RegistryGCMirrorsStaleHalfBridged
+        exp_alerts: []
+      # THE FALSE POSITIVE. (shipped: silent, because its absent() input is bridged too)
+      - eval_time: 36m
+        alertname: RegistryGCMirrorsStaleHalfBridged
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+      # KSM is back and it evaporates — which is what would make this class so hard to chase in
+      # production: the page is gone by the time anyone opens the CronJob
+      - eval_time: 45m
+        alertname: RegistryGCMirrorsStaleHalfBridged
+        exp_alerts: []

@@ -1,0 +1,59 @@
+# The two gc-mirrors alerts, lifted VERBATIM out of prometheusrule.yaml (comments AND annotations
+# stripped — the manifest is their one home) — the rules file that gc-mirrors.promtool-test loads.
+# Not a manifest and not applied to anything: `promtool test rules` needs upstream-format rules
+# (top-level `groups:`), and a PrometheusRule keeps them under `.spec`, so the CR cannot be loaded
+# directly. Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY
+# *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# ANNOTATIONS ARE STRIPPED deliberately, following agents/scan-wedge-alert-test.sh's rule: this
+# pins FIRING BEHAVIOUR, not prose. The descriptions are runbooks and change on their own
+# schedule; copying them here would give the runbook two homes and make every wording fix a
+# fixture edit.
+#
+# COVERAGE — the file's other three alerts (RegistryMirrorCacheAlmostFull, RegistryMirrorDanglingLinks,
+# RegistryMirrorWipedRepeatedly) are NOT here, and the omission is budget, not design: none of them
+# reads kube-state-metrics (they read kubelet volume stats and the mirror's own pushed counters), so
+# homelab#333 had no reason to touch them and no fixture existed to extend. Named here so it is a
+# known hole rather than an assumed pass.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED — same standing caveat as
+# argocd/resources/pushgateway/agent-runs.promtool-rules. A stale copy tests the OLD expr and
+# passes VACUOUSLY. Re-copy after editing either alert:
+#
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] |
+#        select(.alert == "RegistryGCMirrorsStale" or .alert == "RegistryGCMirrorsSuspended") |
+#        del(.annotations)]}]}' \
+#     argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: registry-cache
+    rules:
+      - alert: RegistryGCMirrorsStale
+        expr: >
+          (
+            max by (namespace,cronjob) (
+              max_over_time(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+            ) < (time() - 8 * 24 * 3600)
+          )
+          or
+          (
+            (
+              max by (namespace,cronjob) (
+                max_over_time(kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+              ) < (time() - 8 * 24 * 3600)
+            )
+            and on()
+              absent(max_over_time(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}[10m]))
+          )
+        for: 1h
+        labels:
+          severity: warning
+          triage: none
+      - alert: RegistryGCMirrorsSuspended
+        expr: >
+          max by (namespace,cronjob) (
+            max_over_time(kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+          ) == 1
+        for: 15m
+        labels:
+          severity: warning
+          triage: none

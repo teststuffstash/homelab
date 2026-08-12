@@ -1,0 +1,241 @@
+# Behaviour fixture for the two gc-mirrors alerts (homelab#333, the #288/#313/#332 restart-gap
+# class applied to kube-state-metrics — the SHARED single-replica dependency).
+#
+#   devbox run -- promtool test rules argocd/resources/registry-cache/gc-mirrors.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs this in CI (it executes `promtool test rules` over every
+# *.promtool-test under argocd/), so a red fixture here is a red required check. Named
+# .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources.
+#
+# WHAT IS BEING PINNED. Both alerts read kube-state-metrics, which is `replicas: 1` and one scrape
+# target. Before #333 a KSM reschedule restarted their `for:` windows — 15m and a full HOUR — on
+# CronJob state that never stopped being true. The bridge is two halves and both are exercised
+# separately below, because on THIS dependency they fail in visibly different ways:
+#   - the IDENTITY half (`max by (namespace,cronjob)`) — `kube_cronjob_*` carries no pod of its
+#     own, so the scrape target's `pod`/`instance` are KSM's and ride onto the alert. This is the
+#     half that matters even for a SHORT hole, because a same-labelled series is cushioned by
+#     lookback while a relabelled one is simply a different alert.
+#   - the RANGE half (`max_over_time([10m])`) — the half that matters once the hole outlives the
+#     5m lookback, when the vector is genuinely empty.
+#
+# ⚠ FIXTURE LIMIT, stated rather than papered over: promtool cannot inject STALENESS MARKERS, so a
+# `_` gap here behaves like a failed scrape (5m lookback cushion) and not like the target-removal
+# a real reschedule causes (instant, no cushion). Every hole below is therefore sized LONGER than
+# the 5m lookback, which is the conservative direction — the real hole bites sooner than these do.
+#
+# CLOCK: promtool's clock starts at 0, so `time()` at eval_time T is T seconds and the 8-day
+# threshold sits far in the future. Ages are therefore expressed as NEGATIVE timestamps, the same
+# convention as pushgateway/agent-runs.promtool-test: `-700000` is "8.1 days before t=0", and only
+# the difference `time() - value` is ever asserted.
+#
+# LABELS are the real live sets read off `kube_cronjob_*` on 2026-08-12, complete. The second
+# instance/pod pair is what a KSM reschedule produces. The witness contrast — the pre-#333 exprs
+# going silent on these same inputs, plus the half-bridged form's false positive — lives in
+# gc-mirrors-witness.promtool-{rules,test}, separate because promtool evaluates every loaded rule
+# at every step (homelab#332's lesson).
+rule_files:
+  - gc-mirrors.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Suspended: a KSM reschedule mid-alert (8m hole + new identity) does not restart `for: 15m` ─
+  # The hole outlives the 5m lookback (t=25,26 have NO series at all), then the metric comes back
+  # under a NEW instance/pod. Pre-#333 this was two resolutions in one event: an empty vector, then
+  # a relabelled alert with a fresh clock.
+  - interval: 1m
+    name: suspended CronJob survives a KSM reschedule — hole and identity change
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x19"
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x27 1+0x60"
+    alert_rule_test:
+      # `for: 15m` has not elapsed yet
+      - eval_time: 14m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: &suspended_alert
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+      # THE RANGE HALF: raw vector is genuinely empty here (last sample t=19, lookback dead at
+      # t=24). max_over_time([10m]) still sees t=17..19, so the window never restarts.
+      - eval_time: 26m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      # THE IDENTITY HALF: the metric is back under a new instance/pod and it is still ONE alert
+      # with the same labels — not a second alert instance with a fresh 15m clock.
+      - eval_time: 40m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      - eval_time: 80m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+
+  # ── Suspended: THE CEILING — a hole longer than [10m] still resets the window ────────────────
+  # Accepted, not fixed: a crash-loop / cold image pull / node drain outruns the bridge. Asserted
+  # here so the limit is executed rather than assumed (the #313 discipline).
+  - interval: 1m
+    name: a KSM hole longer than the [10m] bridge does reset the 15m window
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x19"
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x33 1+0x60"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      # still inside the bridge (t=19 is in (18,28])
+      - eval_time: 28m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      # past it — this is the ceiling, and the alert really does drop
+      - eval_time: 31m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: []
+      # the metric returns at t=33 and pays a fresh 15m
+      - eval_time: 46m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: []
+      - eval_time: 49m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+
+  # ── Suspended: the price of the bridge, paid on the way DOWN and stated in the manifest ───────
+  # `max_over_time` means "suspended at any point in the last 10m", so un-suspending leaves the
+  # alert ringing for up to 10m. Against `for: 15m` on a weekly GC that is the cheaper fault — but
+  # it is a real cost, so it is asserted rather than left as a claim in a comment.
+  - interval: 1m
+    name: un-suspending clears the alert, up to 10m late
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x29 0+0x40"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      # un-suspended at t=30 and STILL ringing: the bridge's cost, in the open
+      - eval_time: 35m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      # ...and gone once the range window clears, ~10m after the fix
+      - eval_time: 41m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: []
+
+  # ── The #313 masking trade-off does NOT arise on KSM, asserted rather than argued ─────────────
+  # There, aggregating meant one healthy exporter could mask a stuck one, because the metric
+  # described the exporter ITSELF. KSM is a MIRROR: a second replica reports the SAME gc-mirrors
+  # numbers, so `max by` collapses duplicate mirrors of one fact. Two replicas here produce exactly
+  # ONE alert, and losing one of them changes nothing at all.
+  - interval: 1m
+    name: two KSM replicas are one alert, and losing one is a non-event
+    input_series:
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x40"
+      - series: 'kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "1+0x25 _x20"
+    alert_rule_test:
+      # ONE alert, not two — the exp_alerts list length is the assertion
+      - eval_time: 16m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+      - eval_time: 40m
+        alertname: RegistryGCMirrorsSuspended
+        exp_alerts: *suspended_alert
+
+  # ── Stale, arm 1: a >8d-old success survives a KSM reschedule across the 1h window ────────────
+  # The longest window of the two, so the one with most to lose. `max_over_time` takes the NEWEST
+  # success in the range, which is why the bridge cannot delay this alert or keep it ringing after
+  # a real run lands (the #313 argument, same gauge shape).
+  - interval: 1m
+    name: stale gc-mirrors success survives a KSM reschedule mid-window
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-700000+0x69"
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x77 -700000+0x60"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-800000+0x69"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.4.11:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-t2qxn",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "_x77 -800000+0x60"
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: &stale_alert
+          - exp_labels:
+              severity: warning
+              triage: none
+              namespace: registry-cache
+              cronjob: gc-mirrors
+      # hole outliving lookback (last sample t=69, dead at t=74) — bridged, so no restart...
+      - eval_time: 76m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: *stale_alert
+      # ...and the new KSM identity does not mint a second alert with a fresh hour either
+      - eval_time: 100m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: *stale_alert
+      - eval_time: 130m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: *stale_alert
+
+  # ── Stale, arm 2: the never-succeeded branch still fires AND still carries its labels ─────────
+  # #333 swapped this arm's operands: `absent(max_over_time(...))` is a function call, not a vector
+  # selector, so it no longer donates `namespace`/`cronjob` the way the bare `absent(selector)` did,
+  # and `and on()` keeps the LEFT side's labels. This test is what makes that swap load-bearing
+  # rather than cosmetic — the exp_labels below are the whole point.
+  - interval: 1m
+    name: a CronJob created >8d ago that never succeeded fires, with namespace and cronjob intact
+    input_series:
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-800000+0x140"
+    alert_rule_test:
+      - eval_time: 59m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: *stale_alert
+      - eval_time: 120m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: *stale_alert
+
+  # ── Stale: THE ASYMMETRY TRAP — a healthy CronJob must stay silent through a KSM hole ─────────
+  # This is why bridging one side of the `absent()` arm is worse than bridging neither. `absent()`
+  # fires when its input is EMPTY, which is exactly what a KSM hole produces; bridge only
+  # `kube_cronjob_created` and a CronJob that succeeded MINUTES ago pages as "never succeeded" on
+  # every KSM roll. Here the success is fresh (arm 1 false) and the CronJob is old (arm 2's
+  # created-side true), so the ONLY thing keeping this quiet through t=30..37 is that the absent()
+  # input carries the same [10m] bridge. The half-bridged form firing on this exact input is
+  # asserted in gc-mirrors-witness.promtool-test.
+  - interval: 1m
+    name: a recently-succeeded CronJob does not page as never-succeeded during a KSM hole
+    input_series:
+      - series: 'kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "0+0x29 _x8 0+0x60"
+      - series: 'kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors",job="kube-state-metrics",instance="10.244.6.238:8080",pod="kube-prometheus-stack-kube-state-metrics-59f5bbb889-kp7vd",service="kube-prometheus-stack-kube-state-metrics",endpoint="http",container="kube-state-metrics"}'
+        values: "-800000+0x98"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []
+      # mid-hole, past lookback: the raw selector IS absent here. The bridged one is not.
+      - eval_time: 36m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: RegistryGCMirrorsStale
+        exp_alerts: []

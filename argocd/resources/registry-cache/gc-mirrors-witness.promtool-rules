@@ -1,0 +1,62 @@
+# REGRESSION WITNESS for homelab#333 — the PRE-#333 gc-mirrors exprs, kept only so the fix's
+# contrast is EXECUTED rather than claimed (the discipline #310 and #328 established, and the
+# reason the codeowner read both as durable). NOT deployed, NOT a manifest, NOT a copy to keep in
+# sync: these rules are frozen at their pre-fix text on purpose and must never be re-copied from
+# prometheusrule.yaml. If they ever start matching the shipped exprs, the witness has stopped
+# witnessing anything.
+#
+# SEPARATE FILE from gc-mirrors.promtool-rules because promtool evaluates EVERY loaded rule at
+# EVERY step, so witness and shipped rules sharing a file would collide on inputs written for one
+# of them (homelab#332 hit exactly this).
+#
+# Three rules, and the third is not a historical form at all:
+#   1/2. The pre-#333 exprs, verbatim, WITH their real `for:` — they show the 15m and 1h windows
+#        restarting on the same inputs where the shipped alerts hold.
+#   3.   `RegistryGCMirrorsStaleHalfBridged` — the plausible WRONG fix, bridging `kube_cronjob_created`
+#        but leaving the `absent()` input raw. It is here because that mistake is silent in review
+#        and loud in production: it converts a KSM hole into a "the CronJob never succeeded" page.
+#        It deliberately carries NO `for:`, because the pathology is an instantaneous condition
+#        flip a few minutes wide — a `for: 1h` would hide it behind a window no fixture can afford
+#        to run, which is precisely how it would reach production unnoticed.
+groups:
+  - name: registry-cache-witness
+    rules:
+      # ── pre-#333, verbatim ──────────────────────────────────────────────────────────────────
+      - alert: RegistryGCMirrorsStalePreFix
+        expr: >
+          (
+            kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"}
+              < (time() - 8 * 24 * 3600)
+          )
+          or
+          (
+            absent(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"})
+            and on()
+              (kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}
+                 < (time() - 8 * 24 * 3600))
+          )
+        for: 1h
+        labels:
+          severity: warning
+          triage: none
+      # ── pre-#333, verbatim ──────────────────────────────────────────────────────────────────
+      - alert: RegistryGCMirrorsSuspendedPreFix
+        expr: >
+          kube_cronjob_spec_suspend{namespace="registry-cache",cronjob="gc-mirrors"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          triage: none
+      # ── the plausible wrong fix: bridge the created side, leave absent() raw ─────────────────
+      - alert: RegistryGCMirrorsStaleHalfBridged
+        expr: >
+          (
+            max by (namespace,cronjob) (
+              max_over_time(kube_cronjob_created{namespace="registry-cache",cronjob="gc-mirrors"}[10m])
+            ) < (time() - 8 * 24 * 3600)
+          )
+          and on()
+            absent(kube_cronjob_status_last_successful_time{namespace="registry-cache",cronjob="gc-mirrors"})
+        labels:
+          severity: warning
+          triage: none
