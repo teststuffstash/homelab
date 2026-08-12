@@ -3742,3 +3742,11 @@ sprouts-per-ride < 1.2). ⚖ OPERATOR RULING recorded (model-routing §M12): pla
 subscription — the 5h/7d windows are caps independent of the cap-mechanics code platform rides
 can touch; rail move rejected; subscription budgets are the eventual build. Jail latency fix
 (meta-events.sh) ordered first, direct to master.
+↳ (jail default REVERSED, 2026-08-12 ~11:20Z, operator ruling) Substantive jail changes now ship
+PR + watch + fix (the day's evidence: 6 PRs, ~5-min cycles, 3 latent defects caught, required
+checks run, zero codeowner touches via the waiver); direct-to-master only for bookkeeping/
+quickfixes (meta-state, TICK-LOG, GAPS, FU tracker, memory, urgent one-liners). Homes updated:
+CLAUDE.md §How changes land (via PR#387 — the reversal dogfoods itself), roles.md sighting
+softened, NEW memory jail-pr-default (the reminded-multiple-times gap closed). Review rubric
+hardened same hour (PR#386: in-diff findings BLOCK; follow-ups = real new work only). The
+codeowner-economics objective recorded in spike/FU-168/charter.
