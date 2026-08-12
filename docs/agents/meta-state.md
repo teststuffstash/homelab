@@ -35,12 +35,17 @@ meant to avoid.)
    checkpoints, fold-in rule, mechanical ❌ check) · A5 CODEOWNERS narrowing (operator call,
    after A4's ❌ check) · A6 hygiene (goal-budget dash guard, #377, FU-166(a), inert triage).
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
-   **Next-session shape (operator, 2026-08-12): PARALLEL worktree subagents** for the remaining
-   Bucket-A chunks — Agent(isolation: worktree) per chunk (the harness primitive exists), briefs
-   self-contained (charter docs on disk ARE the context), disjoint declared scopes, Gate-A
-   mandated, verdicts routed to the owning subagent via SendMessage, 2-3 wide (subscription burn
-   is the limiter). Niche = operator-lane work the fixer lane cannot take; fixer-eligible chunks
-   queue as issues instead. First pair: doorbell collapse ∥ FU-166(a) park series.
+   **Next-session shape (operator, 2026-08-12, calibrated): worktree-subagent TRIAL first, not
+   adoption.** Suitability test = "would it need the design-agents corpus?" — if yes, it is
+   design mislabeled as build → SEAT work (doorbell collapse is seat work by this test; today's
+   chunks all had mid-build design calls). Suitable subset = mechanical-with-established-pattern,
+   loud verification: the remaining table-mode family conversions (harvest-goal, goal-ancestor,
+   c4c5), per-fixture `requires:` diagnosis, doc/register sweeps. Protocol: ONE subagent, ONE
+   family (goal-ancestor, 4 fixtures), **pre-push seat review of the worktree diff** (bounce via
+   SendMessage; only the seat opens the PR), then bot review — two decorrelated reads, zero
+   codeowner touches. Measure: defect rate by catch-point (seat/bot/post-merge), tokens vs
+   seat-does-it, wall-clock — the numbers decide adoption + width (≤2-3; subscription burn is
+   the limiter).
    **Bucket B (the next Goal, launches on v1.2):** FU-095 pilots (task-class routing legs a/c +
    strike-policy data) · FU-106 G01 flip chain (conditional on A0; the flip = the goal's
    `Production-leg:`) · G06 advisory lens + SLO error-budget teeth (roles.md; ex-FU-104) ·
