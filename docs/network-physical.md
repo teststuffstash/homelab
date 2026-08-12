@@ -4,7 +4,8 @@ _Part of the [homelab docs](README.md). Logical/IP view: [`/README.md`](../READM
 [`CLAUDE.md`](../CLAUDE.md); **IP allocation rules: [`ip-plan.md`](ip-plan.md)** (ADR-088);
 service exposure / BGP rationale: [`adr.md`](adr.md) ADR-021._
 
-Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03.
+Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03; re-captured
+2026-08-12 (operator cabling + live guest-agent reads: the wk-metal fleet, hp-01, ci-runner-01).
 
 ```
                          Internet (fibre)
@@ -20,42 +21,49 @@ Cabling/switch layout (distinct from the logical/IP view). Captured 2026-06-03.
               └───────────────┬─────────────────┘
                               │ LAN
                 ┌─────────────┴──────────────┐
-                │  TP-Link 10-port  (UNMANAGED) │   ← core LAN switch
-                └──┬────┬───────────┬─────────┬──┘
-                   │    │           │         │
-   ⚠ Captured 2026-06-03 — missing since then: ci-runner-01 (VM, ADR-082) + the wk-metal fleet;
-   re-capture pending.
-
-   Proxmox "pve" ◄─┘    │           │         └─► TP-Link PoE switch
-   (X99, .3)            │           │               └─► Basement AP (U6Lite, .63)
-   └ vmbr0:             │           │
-     ├ Talos VMs        │           └─► Ubiquiti PoE switch (.11, USW-Lite)
-     │  cp-01 .51       │                ├─► 2nd-floor AP (U6Lite, .12)
-     │  wk-01 .61       │                └─► Office: 5-port (UNMANAGED)
-     │  wk-02 .62       │                     ├─► Office AP (UAP-AC-Lite, .14)
-     └ Matchbox LXC .30 │                     └─► pop-os (.57)
-                        │
-   ThinkCentre Edge ◄───┘  (.53)
+                │ TP-Link 10-port (UNMANAGED) │   ← core LAN switch
+                └─┬───┬───┬───┬───┬───┬───┬──┘
+                  │   │   │   │   │   │   │
+   Proxmox "pve" ◄┘   │   │   │   │   │   └─► TP-Link PoE switch
+   (X99, .3)          │   │   │   │   │         └─► Basement AP (U6Lite, .63)
+   └ vmbr0:           │   │   │   │   │
+     ├ Talos VMs      │   │   │   │   └─► Ubiquiti PoE switch (.11, USW-Lite)
+     │  cp-01 .51     │   │   │   │        ├─► 2nd-floor AP (U6Lite, .12)
+     │  wk-01 .61     │   │   │   │        └─► Office: 5-port (UNMANAGED)
+     │  wk-02 .62     │   │   │   │             ├─► Office AP (UAP-AC-Lite, .14)
+     ├ ci-runner-01   │   │   │   │             ├─► pop-os (.57)
+     │  (VM 9001, .55)│   │   │   │             ├─► wk-metal-03 (.184)
+     └ Matchbox       │   │   │   │             └─► wk-metal-04 (.186)
+       LXC .30        │   │   │   │
+                      │   │   │   └─► hp-01 (.54)
+   ThinkCentre Edge ◄─┘   │   └─► wk-metal-02 (.183)
+   (.53)                  └─► wk-metal-01 (.182)
 ```
 
 ## Notes relevant to PXE / provisioning
 
-- **ThinkCentre and Proxmox share the same unmanaged TP-Link 10-port switch, one hop
-  from OPNsense LAN.** Matchbox (LXC on Proxmox, via `vmbr0`) is therefore on the **same
-  L2 segment** as the ThinkCentre — DHCP/PXE broadcasts reach it directly. (Its 2026-06
-  "flaky PXE" was ultimately a **bad NIC cable** — 100Mbps + link flapping — replaced
-  2026-06-11; PXE has worked since.)
+- **Everything above is ONE flat L2 domain** (every switch unmanaged or L2-only; no VLANs), so
+  DHCP/PXE broadcasts reach Matchbox (LXC on Proxmox `vmbr0`) from EVERY port — including
+  wk-metal-03/-04 two switch hops away in the office. Verified in practice: all four wk-metal
+  nodes + hp-01 PXE-provisioned through this layout.
+- **ThinkCentre, hp-01, wk-metal-01/-02 and Proxmox share the core TP-Link 10-port switch**, one
+  hop from OPNsense LAN. (The ThinkCentre's 2026-06 "flaky PXE" was ultimately a **bad NIC
+  cable** — 100Mbps + link flapping — replaced 2026-06-11; PXE has worked since.)
 - **Unmanaged switches** (TP-Link 10-port, office 5-port) → no STP forwarding delay to
   blame for a PXE-vs-STP race.
 - OPT1–OPT3 on the Intel card: not documented here yet (purpose/!connection TBD).
-- The managed UniFi switch (.11) is **downstream** of the core switch and not in the
-  ThinkCentre/Proxmox path.
+- The managed UniFi switch (.11) is **downstream** of the core switch; wk-metal-03/-04 and
+  pop-os (the jail host) sit below it on the office 5-port.
+
 ```mermaid
 graph TD
   ONT[Telia ONT] -->|WAN| OPN["Big Data — OPNsense (.1)"]
   OPN -->|LAN| SW10[TP-Link 10-port unmanaged]
   SW10 --> PVE["Proxmox pve (.3)"]
   SW10 --> TC["ThinkCentre (.53)"]
+  SW10 --> HP["hp-01 (.54)"]
+  SW10 --> WM1["wk-metal-01 (.182)"]
+  SW10 --> WM2["wk-metal-02 (.183)"]
   SW10 --> POE1[TP-Link PoE switch]
   SW10 --> UBNT["Ubiquiti PoE switch (.11)"]
   POE1 --> APB["Basement AP (.63)"]
@@ -63,5 +71,7 @@ graph TD
   UBNT --> SW5[Office 5-port unmanaged]
   SW5 --> APO["Office AP (.14)"]
   SW5 --> POP["pop-os (.57)"]
-  PVE --- VMS["Talos VMs .51/.61/.62 + Matchbox LXC .30 (vmbr0)"]
+  SW5 --> WM3["wk-metal-03 (.184)"]
+  SW5 --> WM4["wk-metal-04 (.186)"]
+  PVE --- VMS["Talos VMs .51/.61/.62 + ci-runner-01 .55 + Matchbox LXC .30 (vmbr0)"]
 ```
