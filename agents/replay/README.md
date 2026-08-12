@@ -104,6 +104,19 @@ Until the moves land: new families SHOULD follow the target shape where cheap (n
 share it by reference within the family, keep contract prose in ONE header) — and every
 deviation is one more directory the migration pays for later.
 
+## Version-sensitive contracts the harness cannot pin (ratchet disposition, 2026-08-12)
+
+The homelab#377 fix (`:-null` on every `jq -e 'type == …'` guard over a possibly-empty capture,
+plus goal-budget.sh's bash-only runtime guard) ships with NO fixture change, deliberately: the
+divergence it fixes exists only under the coordinator IMAGE's jq 1.6 (empty input exits 0,
+inverting the guard), while this harness runs on devbox's pinned jq ≥ 1.7 — where the fixtures
+pinning those guards (`goal-budget-refusal-unreadable`, `c4c5-infeasible-probe-fail`, …) already
+executed the fail-closed branch and keep doing so, byte-identically, after the fix. A fixture
+"for" the fix would assert nothing the suite doesn't already assert. The general gap — the
+harness pins version-sensitive contracts on whichever toolchain serves it, so a green fixture
+can invert in an image with older tools — is homelab#329's hermeticity territory (`requires:`
+grew for tools; versions are the unbuilt half).
+
 ## Index (generated — move 3, live)
 
 The derived register: every fixture, its mode/source, and the FSM transitions that pin it
