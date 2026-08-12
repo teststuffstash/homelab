@@ -105,24 +105,79 @@ spec:
   groups:
     - name: blackbox
       rules:
+        # ── THE #288 RESTART-GAP CLASS, AND THE #349 BOUND THAT SIZES IT (homelab#336) ──────────
+        # The class itself has one home — argocd/resources/openrouter-proxy/prometheusrule.yaml,
+        # whose test is "DOES THE CONDITION OUTLIVE THE ROLL?" — and its [10m] default is sized at
+        # GithubExporterStale in argocd/resources/github-exporter/prometheusrule.yaml. This block
+        # records only what applying them to EndpointProbeFailing needed BEYOND the substitution,
+        # and the answer is blunt: ONE of the two halves, at HALF the class's range, because the
+        # mechanical port would have paged twice in the last eight days.
+        #
+        # (i)   ONLY THE HOLE HALF. The identity half (`max by (<a label that does not churn>)`)
+        #       repairs nothing here. `probe_success` carries NO `pod`: the Probe's scrape goes to
+        #       the prober SERVICE and `instance` is the TARGET URL, so the live label set is
+        #       exactly {instance, job, namespace} (read off Prometheus 2026-08-12). Nothing on
+        #       this alert churns when blackbox-exporter moves, so there is no split `for:` clock
+        #       to repair — and an aggregation would only strip `instance`/`job` off the
+        #       annotations that name the failing endpoint.
+        # (ii)  THE HOLE IS REAL, and it is wider than one alert. `replicas: 1` (the Deployment
+        #       above), and EVERY probe in this file is scraped through that one pod — so a roll
+        #       does not gap one series, it empties every probe at once, staleness-marked instantly.
+        # (iii) THE DIRECTION IS `min_over_time`, NOT the class's `max_over_time`. LOW is the bad
+        #       reading here (`probe_success == 0`), so `max` would hold the healthiest sample of
+        #       the window and delay every page by the whole range — class rule (ii), the same trap
+        #       GithubRateLimitLow names.
+        # (iv)  [5m], AND THE CEILING IS MEASURED, NOT TASTE. It is #349's bound on this alert's
+        #       own data. Blackbox has no cached exposition (it probes at scrape time), so the
+        #       composed phantom is just B: the expr stays true for B after the endpoint recovers,
+        #       and the effective patience is `for: − B`. At the class's B = 10m that is ZERO — one
+        #       failed probe lands exactly on the `for:` boundary and TWO consecutive ones page.
+        #       Not hypothetical: on 2026-08-07 17:06Z every LAN front flaked together (argo,
+        #       specs, transcripts one probe each; grafana and mcp.oracle two). Replayed over the
+        #       8 days Prometheus retains, `[10m]` holds 11 continuous minutes on grafana and on
+        #       mcp.oracle and FIRES both — exactly the two that flaked twice, which is the
+        #       arithmetic above discriminating at its own boundary. `[5m]` peaks at 6 minutes and
+        #       fires nothing; `[3m]` at 4. So [5m] leaves five minutes of headroom over the worst
+        #       flake in the window while still covering a 69-116s roll (#288's measurement across
+        #       ten pod generations) with 2.6-4.3x margin.
+        #       WHAT IT COSTS, plainly: the alert now means "failed at least once in every 5m
+        #       window for 10m" instead of "failed ten probes in a row", so six consecutive
+        #       failures page where ten used to, and a recovered endpoint resolves up to 5m late.
+        #       On a warning-severity synthetic belt that is the cheap direction — the outage this
+        #       file was born from (meta-11) ran THIRTEEN HOURS, so 5m of lag is free and a
+        #       three-flakes-in-eight-minutes endpoint is not healthy either.
+        # CEILING, asserted rather than assumed: a hole wider than the range (crash-loop, cold
+        # image pull, node drain) still empties it and restarts `for: 10m`. Accepted, as in #313.
+        # NOT the #313 masking trade-off: there is no aggregation here, so nothing can mask
+        # anything — each target keeps its own series and its own alert.
+        # ⚠ TWO COPIES, AND THEY MOVE TOGETHER. The identical alert is templated per stack in
+        # argocd/resources/agentstack/composition.yaml (the `slo-<stack>` rules every AgentStack
+        # renders). #336 changed both; a later fix in one place only is drift. probes.promtool-test
+        # executes BOTH — the second as a hand-rendered copy of the template.
+        # Behaviour — the hole, the ceiling, the direction, the label survival, and the [10m]
+        # counter-witness replaying the 08-07 flake — is executed in probes.promtool-test against
+        # the pre-#336 expr kept as a regression witness in probes.promtool-rules.
+        #
         # Oracle-owned endpoints not yet on the claim: the mcp endpoint moved to the
         # claim-rendered slo-oracle rule (FU-104); specs.oracle stays hand-listed until the
         # claim grows an `slos` array (multi-endpoint). Explicit stack label = the responder's
         # routing precedence.
         - alert: EndpointProbeFailing
-          expr: probe_success{instance=~"https://specs\\.oracle\\..*"} == 0
+          expr: min_over_time(probe_success{instance=~"https://specs\\.oracle\\..*"}[5m]) == 0
           for: 10m
           labels:
             severity: warning
             stack: oracle
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
-            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
+        # ⚠ Same bridge, same reasoning as the rule above (this file's class block) — the two
+        # differ only in which targets they select, and a roll of the single prober empties both.
         - alert: EndpointProbeFailing
-          expr: probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*"} == 0
+          expr: min_over_time(probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*"}[5m]) == 0
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
-            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."

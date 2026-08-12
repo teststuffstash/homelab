@@ -71,6 +71,27 @@ spec:
         # it an OUTAGE was the in-memory descriptor cache answering for the deleted blob anyway,
         # and that cache is off as of #240 — see mirror-ghcr.yaml. So this alert demoted itself
         # from "invariant broken" to "housekeeping happened": read it, don't scramble for it.
+        #
+        # ⚠ DELIBERATELY NOT RESTART-GAP BRIDGED (homelab#336), and the reason is that the premise
+        # is wrong rather than that the price is too high. #336 listed this alert as a single-
+        # replica candidate on the grounds that "live labels carry pod, mirror; both mirror
+        # Deployments are replicas: 1". The `pod` label is NOT a mirror's. This metric is PUSHED
+        # (store-maintenance.yaml pushes it to prometheus-pushgateway on every mirror restart), so
+        # what Prometheus scrapes is the GATEWAY: live label set
+        # {container=pushgateway, endpoint, job="registry_mirror_maintenance", mirror, namespace,
+        # pod="prometheus-pushgateway-…", service="prometheus-pushgateway"} — read off Prometheus
+        # 2026-08-12. A mirror Deployment rolling cannot gap this series at all; the gateway serves
+        # every pushed group forever, which is measured here as 13076 samples in 7 days with a
+        # worst inter-sample age of 49s and no hole.
+        # So the only workload whose roll matters is the PUSHGATEWAY, `replicas: 1` with its
+        # persistence file on an emptyDir (argocd/resources/pushgateway/deployment.yaml) — and a
+        # reschedule there does not GAP the datum, it DESTROYS it until the next mirror restart
+        # pushes again, which can be weeks. A `max_over_time([B])` bridges B minutes of a permanent
+        # loss: it repairs nothing. The remaining case is an in-place container restart, which
+        # keeps the emptyDir and returns the same series after a sub-minute gap, costing `for: 5m`
+        # once on an alert whose own description says to read it rather than scramble for it.
+        # The pushgateway's own durability is a DIFFERENT bug from this class and is carried as a
+        # finding in #336's PR body rather than papered over with a range selector here.
         - alert: RegistryMirrorDanglingLinks
           expr: registry_mirror_dangling_links_repaired > 0
           for: 5m

@@ -1,0 +1,273 @@
+# Behaviour fixture for the two homeassistant-freshness alerts (homelab#336 — the #288/#313/#332
+# restart-gap class applied to a single static scrape target).
+#
+#   devbox run -- promtool test rules argocd/resources/homeassistant-alerts/freshness.promtool-test
+#
+# `devbox run prometheus-rules-lint` runs this in CI (it executes `promtool test rules` over every
+# *.promtool-test under argocd/), so a red fixture here is a red required check. Named
+# .promtool-test, not .yaml: manifest-lint kubeconforms every *.yaml under argocd/resources — and
+# it has NO schema for PrometheusRule, so it SKIPS the manifest edit these tests exist to check.
+# This file is the gate on that change, not manifest-lint.
+#
+# WHAT IS BEING PINNED:
+#   1. THE HOLE, at its measured size. Over the 8 days Prometheus retains, this metric was
+#      staleness-marked four times with the HA pod never restarting — worst 180s. Case 1 replays a
+#      hole of that size under `for: 30m`; case 5 replays it under `for: 2h`, where three minutes
+#      of missing scrape cost the un-bridged alert 103 minutes of detection.
+#   2. THE CEILING — a hole wider than [10m] still restarts the window. Accepted, so asserted.
+#   3. THE DIRECTION — `max_over_time`, which on this monotone gauge is free in BOTH directions
+#      (#313's result). Cases 3 and 4 assert the two halves of "free": it cannot hold an alert past
+#      a recovery, and it cannot delay one. The `min_over_time` reading is loaded as a witness and
+#      shown ringing nine minutes after the sensor came back.
+#   4. THE LABELS — there is no aggregation here (nothing churns on this target), and `entity` /
+#      `friendly_name` are the entire content of both annotations, so every exp_labels block below
+#      is also the assertion that the bridge did not strip them.
+#
+# ⚠ `stale` in an input series injects a REAL staleness marker — what Prometheus writes when a
+# scrape fails — so the holes below bite instantly with no 5m-lookback cushion, exactly as the
+# measured ones did. Sizes are literal, not modelled.
+#
+# CLOCK: promtool's clock starts at 0, so `time()` at eval_time T is T seconds and the 6h/24h
+# thresholds sit far in the future. Ages are therefore expressed as NEGATIVE timestamps, the same
+# convention as registry-cache/gc-mirrors.promtool-test: a value of -21660 is "6h1m before t=0",
+# and only the difference `time() - value` is ever asserted.
+#
+# LABELS are the real live sets read off `homeassistant_last_updated_time_seconds` on 2026-08-12,
+# complete — and the entities are real ones: sensor.plug_pve_power was frozen for 2.45 days at the
+# time of writing (the alert is firing in production), and sensor.nord_pool_ee_currency is one of
+# the entities HomeAssistantSensorStale currently holds.
+rule_files:
+  - freshness.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── 1. The hole this bridge exists for: a failed scrape mid-staleness, no HA restart ──────────
+  # The plug has been frozen since before t=0 and stays frozen throughout — a Tuya/LAN death, the
+  # exact shape this file was written for. At t=40 a scrape fails, Prometheus staleness-marks the
+  # target, and four minutes pass before a real sample lands. Nothing about the SENSOR changed.
+  # This is the measured hole (180s worst, four times in 8 days, zero HA restarts in the window),
+  # and it is why "an HA restart refreshes last_updated, so this is self-cancelling" does not
+  # dispose of the alert: the holes that happen here are not restarts.
+  - interval: 1m
+    name: a failed scrape mid-staleness no longer restarts the 30m window
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-21660+0x39 stale _x2 -21660+0x80"
+    alert_rule_test:
+      # `for: 30m` has not elapsed yet
+      - eval_time: 29m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: &pve_alert
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+      # mid-hole, past the staleness marker: the raw selector is EMPTY here. The bridged one still
+      # reaches the samples at t=33..39.
+      - eval_time: 41m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      - eval_time: 42m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      # …and it never stopped firing, so the scrape recovering is a non-event
+      - eval_time: 60m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      - eval_time: 110m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      # THE CONTRAST, same series, same instants: the un-bridged alert fired on schedule…
+      - eval_time: 30m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+      # …resolved on the staleness marker…
+      - eval_time: 41m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts: []
+      # …and was still serving out a fresh 30m window here, half an hour after it went quiet, on a
+      # plug that had not reported for six hours the whole time.
+      - eval_time: 72m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts: []
+      - eval_time: 73m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+
+  # ── 2. THE CEILING — a hole wider than [10m] does still restart the window ────────────────────
+  # Accepted, not fixed: an HA pod crash-loop, a cold image pull, a node drain or a LAN partition
+  # outruns the bridge. Asserted here so the limit is executed rather than assumed (#313/#333).
+  # Thirteen minutes of hole: last real sample t=39, first one after t=52.
+  - interval: 1m
+    name: a hole wider than the [10m] bridge does reset the 30m window (accepted ceiling)
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-21660+0x39 stale _x11 -21660+0x80"
+    alert_rule_test:
+      # still inside the bridge — t=39 is the newest sample in (38,48]
+      - eval_time: 48m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      # past it: (39,49] holds nothing at all, and the alert really does drop
+      - eval_time: 49m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      - eval_time: 51m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      # scraping resumes at t=52 and pays a full fresh 30m
+      - eval_time: 81m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      - eval_time: 82m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+
+  # ── 3. THE RANGE IS FREE ON THE WAY DOWN — and `min_over_time` would not have been ────────────
+  # The half of the direction argument that actually distinguishes the two functions. The plug
+  # starts reporting again at t=41 (last_updated tracks the clock from there). `max_over_time`
+  # takes the FRESHEST reading in the window, so the alert clears on the very first good sample —
+  # no tail, nothing held. `min_over_time` takes the oldest, so it keeps asserting a six-hour-old
+  # timestamp for the rest of the range: nine more minutes of a page for a sensor that is fine.
+  # This is why the class's "low is bad ⇒ min" pattern-match is wrong on a MONOTONE gauge, and it
+  # is the assertion behind the manifest's claim that the bridge costs nothing in either direction.
+  - interval: 1m
+    name: a sensor that starts reporting clears at once (min_over_time would ring 9m longer)
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_pve_power",friendly_name="Plug pve power",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-21660+0x40 2460+60x60"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: *pve_alert
+      # the first fresh sample lands at t=41 and the alert is gone in the same evaluation
+      - eval_time: 41m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      # the rejected direction, on the same series: still paging…
+      - eval_time: 41m
+        alertname: HomeAssistantPowerSensorStaleMinDirection
+        exp_alerts: &pve_min_alert
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_pve_power
+              friendly_name: Plug pve power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+      - eval_time: 49m
+        alertname: HomeAssistantPowerSensorStaleMinDirection
+        exp_alerts: *pve_min_alert
+      # …until the last stale sample finally falls out of its range
+      - eval_time: 50m
+        alertname: HomeAssistantPowerSensorStaleMinDirection
+        exp_alerts: []
+
+  # ── 4. THE RANGE IS FREE ON THE WAY UP TOO — no page is delayed by one second ─────────────────
+  # The other half of "free", and the one #313 argued for the same gauge shape: a fresh sample
+  # inside the window already puts the age under the threshold, so `max` cannot postpone a page.
+  # The sensor here crosses six hours of staleness one minute after t=0; bridged and un-bridged
+  # fire at the same evaluation, and both are silent at the one before it.
+  - interval: 1m
+    name: crossing the 6h threshold pages at the same instant, bridged or not
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.plug_laptop3_power",friendly_name="Plug laptop3 power",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-21599+0x80"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: HomeAssistantPowerSensorStale
+        exp_alerts: &laptop3_alert
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_laptop3_power
+              friendly_name: Plug laptop3 power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+      - eval_time: 30m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: HomeAssistantPowerSensorStalePre336
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              domain: sensor
+              entity: sensor.plug_laptop3_power
+              friendly_name: Plug laptop3 power
+              instance: 192.168.40.10:8123
+              job: home-assistant
+
+  # ── 5. THE SAME HOLE UNDER `for: 2h` — the widest window in this repo's low-severity set ──────
+  # HomeAssistantSensorStale is the one #336 called the weakest of the genuine set. By the measure
+  # that matters here it is the strongest: the hole is the same three minutes, but the window it
+  # destroys is two hours. The un-bridged form loses 103 minutes of detection to a scrape that
+  # failed twice — asserted below, at 222m and 223m, against a bridged alert that fired at 120m.
+  - interval: 1m
+    name: a 3m scrape gap costs the un-bridged 2h alert 103 minutes of detection
+    input_series:
+      - series: 'homeassistant_last_updated_time_seconds{domain="sensor",entity="sensor.nord_pool_ee_currency",friendly_name="Nord Pool EE Currency",instance="192.168.40.10:8123",job="home-assistant"}'
+        values: "-86460+0x99 stale _x2 -86460+0x200"
+    alert_rule_test:
+      - eval_time: 119m
+        alertname: HomeAssistantSensorStale
+        exp_alerts: []
+      # the bridged alert rode the hole and pages exactly 2h in, as designed
+      - eval_time: 120m
+        alertname: HomeAssistantSensorStale
+        exp_alerts: &nordpool_alert
+          - exp_labels:
+              severity: info
+              domain: sensor
+              entity: sensor.nord_pool_ee_currency
+              friendly_name: Nord Pool EE Currency
+              instance: 192.168.40.10:8123
+              job: home-assistant
+      - eval_time: 180m
+        alertname: HomeAssistantSensorStale
+        exp_alerts: *nordpool_alert
+      # the un-bridged one restarted at t=103 and is still counting here…
+      - eval_time: 120m
+        alertname: HomeAssistantSensorStalePre336
+        exp_alerts: []
+      - eval_time: 222m
+        alertname: HomeAssistantSensorStalePre336
+        exp_alerts: []
+      # …arriving 103 minutes late on a sensor that had been frozen for over a day throughout
+      - eval_time: 223m
+        alertname: HomeAssistantSensorStalePre336
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              domain: sensor
+              entity: sensor.nord_pool_ee_currency
+              friendly_name: Nord Pool EE Currency
+              instance: 192.168.40.10:8123
+              job: home-assistant

@@ -1,0 +1,104 @@
+# EndpointProbeFailing — BOTH COPIES — lifted out of their manifests (comments and annotations
+# stripped; the manifests are their one home) — the rules file that probes.promtool-test loads.
+# Not a manifest and not applied to anything: `promtool test rules` needs upstream-format rules
+# (top-level `groups:`), and a PrometheusRule keeps them under `.spec`, so the CR cannot be loaded
+# directly. Named .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY
+# *.yaml under argocd/resources and a non-manifest there would fail it.
+#
+# ANNOTATIONS ARE STRIPPED deliberately, following gc-mirrors.promtool-rules and
+# agents/scan-wedge-alert-test.sh: this pins FIRING BEHAVIOUR, not prose. The descriptions are
+# runbooks and change on their own schedule; copying them here would give the runbook two homes.
+#
+# ⚠ NEITHER COPY IS DRIFT-PINNED — `devbox run exporter-self-test` pins only CiDispatchStalled. A
+# stale copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing either alert:
+#
+#   yq -o=json '{"groups": [{"name": "blackbox", "rules": [.spec.groups[].rules[] |
+#        select(.alert == "EndpointProbeFailing") | del(.annotations)]}]}' \
+#     argocd/resources/blackbox/blackbox.yaml | yq -P '.'
+#
+# ⚠ THE `agentstack-slo-rendered` GROUP IS A HAND RENDER, and it is the one thing here a yq
+# re-copy cannot produce. Its source is a Go template inside
+# argocd/resources/agentstack/composition.yaml, which no tool in this repo can render offline
+# (crossplane's function-go-templating runs in-cluster). It is transcribed with
+# `$sloStack` = `oracle`, i.e. exactly what the live claim renders — `job="slo-oracle"`, verified
+# against Prometheus 2026-08-12. The two copies are ONE alert in two files (#336) and the whole
+# point of executing this group is that they cannot silently diverge; if you edit the template,
+# edit this by hand in the same commit.
+#
+# THE TWO SHIPPED SELECTORS PARTITION THEIR TARGETS, which is why they can share this file and the
+# alertname `EndpointProbeFailing` without colliding in exp_alerts: blackbox rule 1 takes
+# `specs.oracle.*` only, rule 2 takes everything that is NOT `mcp|specs.oracle.*`, and the rendered
+# composition rule takes `job="slo-oracle"` (the mcp endpoint). Every test below relies on that
+# partition and asserts it — a series is expected to raise exactly one of the three.
+groups:
+  - name: blackbox
+    rules:
+      - alert: EndpointProbeFailing
+        expr: min_over_time(probe_success{instance=~"https://specs\\.oracle\\..*"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          stack: oracle
+      - alert: EndpointProbeFailing
+        expr: min_over_time(probe_success{instance!~"https://(mcp|specs)\\.oracle\\..*"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+
+  # ── The templated lane, hand-rendered at $sloStack = oracle (see the header) ──────────────────
+  # ErrorBudgetBurnt and the stack:error_budget_burnt:bool recording rule that feeds it are NOT
+  # here: #336 did not touch them (a 30d avg_over_time is already immune to the hole this class is
+  # about, the same reason GithubStorageHeldHigh was left alone in #331). Named so the omission is
+  # a known hole rather than an assumed pass.
+  - name: agentstack-slo-rendered
+    rules:
+      - alert: EndpointProbeFailing
+        expr: min_over_time(probe_success{job="slo-oracle"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          stack: oracle
+
+  # ── REGRESSION WITNESS — NOT a deployed rule (the #310/#328/#335 device, homelab#336) ─────────
+  # EndpointProbeFailing exactly as it shipped before #336: no hole half, no identity half (it
+  # never needed one). It is the whole pre-fix alert, which is what keeps the contrast in
+  # probes.promtool-test attributable to the bridge alone.
+  # A FOSSIL, not a copy: if the shipped expr is revisited again, this stays as it is. It is also
+  # what stops a stale hand copy of the groups above from passing vacuously — with the old expr in
+  # both places the two agree and every hole assertion in the fixture fails.
+  # One rule covers both shipped selectors: the tests drive it with one target at a time.
+  - name: regression-witness-pre-336
+    rules:
+      - alert: EndpointProbeFailingPre336
+        expr: probe_success == 0
+        for: 10m
+        labels:
+          severity: warning
+
+  # ── COUNTER-WITNESS — the mechanical [10m] port, the one #336 REFUSED ─────────────────────────
+  # Not a fossil: this is the rule that would have shipped if the class block in
+  # argocd/resources/github-exporter/prometheusrule.yaml had been applied to this alert by
+  # substitution. It exists so #349's bound is EXECUTED rather than argued — on the 2026-08-07
+  # 17:06Z flake replayed in probes.promtool-test it PAGES for an endpoint that missed two probes,
+  # while the shipped [5m] expr stays silent through the same series. `for: 10m` is deliberately
+  # identical: the range is the only variable.
+  - name: counter-witness-bridge-10m
+    rules:
+      - alert: EndpointProbeFailingBridge10m
+        expr: min_over_time(probe_success[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+
+  # ── DIRECTION WITNESS — `max_over_time`, the class's default and the wrong function here ──────
+  # Class rule (ii) at GithubRateLimitLow: `max_over_time` is the alert-PRESERVING function only
+  # where HIGH is the bad reading. `probe_success == 0` is the opposite, so max holds the
+  # HEALTHIEST sample of the window and delays every page by the whole range. Executed in
+  # probes.promtool-test rather than asserted in a comment.
+  - name: direction-witness-max
+    rules:
+      - alert: EndpointProbeFailingMaxDirection
+        expr: max_over_time(probe_success[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
