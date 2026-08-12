@@ -405,7 +405,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
    `baseRefName` equals the declared base, and `ci` on the goal branch head is green
    (`gh run list --branch <goal-branch>`). The master/-iac checks below do NOT apply — this
    code is not on master yet; the assembly PR is where that gets judged. Do not reopen
-   anything here; a wrong-looking outcome is a comment on the GOAL for the next goal-review.
+   anything here; a wrong-looking outcome is a comment on the GOAL — the next goal-checkpoint reads it.
    **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
    definition of done is *reconciled-and-healthy*, so before flipping the label also check —
    the owning ArgoCD Application is Synced **at (or past) the merge revision** AND Healthy
@@ -419,8 +419,9 @@ job, in order (re-read live state first, exit clean if someone already closed it
    state closes still at `agent/review`; add-before-remove; compare-then-write per the label
    discipline above). **GOAL-CHILD leg: also CLOSE the issue** (`gh issue close <n> --comment
    "merged into <goal-branch> by PR #<N> — closed by the FU-143 closeout (keyword inert off
-   master)"`) — this close is what re-fires `goal-review` and unblocks `Depends-on:` siblings;
-   it is the entire point of the widened clause.
+   master)"`) — this close is what moves the goal's burn-down (deterministic, zero tokens since
+   ADR-106 (3)) and unblocks `Depends-on:` siblings; a `goal-checkpoint` session fires only when
+   the store/child-set thresholds are met. The close is still the entire point of the widened clause.
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
@@ -456,26 +457,25 @@ job, in order (re-read live state first, exit clean if someone already closed it
    `issue.parent`) and no `bucket=` was handed to you, you are harvesting at depth ≥2 — flag
    `⚠ deep sprout` in the closing comment so a human sees divergence early.
 
-   **⚖ THE GOAL LANE IS DECIDED FOR YOU (ADR-102, homelab#207) — read your unit, do not judge.**
-   The `--item` string carries `goal=<n>`, `bucket=<n>` and `selfqueue=yes|no` when the scan's
-   deterministic `harvest-disposition` block resolved a goal ancestor for this item. Those three
-   are ORDERS, not hints (ADR-094 — the session is told, never asked):
-   - `bucket=<n>` present → **every** sprout from this harvest is filed as a sub-issue of **#n**,
-     the goal's post-launch bucket, and NOT of the originating issue. Assembly merge is a
-     midpoint: the goal keeps shipping, and the bucket is the one container that work hangs off.
-     Post-launch children base **master** — carry NO `Base:` line into them, whatever the
-     originating issue says (the goal branch dies at the assembly squash; goal identity is the
-     issue, not the branch).
-   - `selfqueue=yes` → apply `agent-fix` + `agent/queued` to each sprout you file.
-   - `selfqueue=no`, or the field absent → file the sprout **UNLABELLED into the bucket**. The
-     goal is closed, out of budget, or unreadable, and the self-queue right dies with the goal.
-     Do not "help" by queueing anyway and do not raise it on the goal as a blocker; the 🌱 clause
-     surfaces the bucket's inert children for human triage exactly as on the master lane.
-   - **No `goal=` field at all** → this is a master-lane harvest. Inert, breaker #1, unchanged.
-   The old rule ("originating issue carries `Base: goal/**` → queue immediately") is RETIRED: it
-   queued sprouts against goals that had closed and budgets that were gone (the 2026-08-09
-   census; oracle-fleet goal-174 grew three generations 34h post-close). The responder-lane
-   `selfQueue` knob is unrelated and still has no reader here.
+   **⚖ THE GOAL LANE IS DECIDED FOR YOU (ADR-102 → ADR-106 (3), 2026-08-12) — read your unit,
+   do not judge.** The `--item` string carries `goal=<n>`, `bucket=<n>` and `harvest=store|inert`
+   when the scan's deterministic `harvest-disposition` block resolved a goal ancestor. ORDERS,
+   not hints (ADR-094):
+   - `harvest=store` → the goal is OPEN: **APPEND each finding to the goal's findings store —
+     mint NO issues.** One line per finding:
+     `bash /work/homelab/agents/goal-findings.sh append <owner/repo> <goal-n>
+     "origin=#<this item's issue/PR> surface=<path or area> class=<fold|child|drop-candidate>
+     — <one line of substance>"`. The CHECKPOINT play is the one minting moment (budget-gated
+     there); per-event minting is exactly the 46-mint/21-ruling debt v1.2 retires.
+   - `harvest=inert` → the goal is closed/terminal: findings from a dead goal land in your
+     closing comment as prose (a human triages); mint nothing, queue nothing.
+   - `bucket=<n>` present → the goal's post-launch strays container exists; you still APPEND to
+     the store (post-launch ships sprouts → store → checkpoints too, per the v1.2 lifecycle) —
+     the bucket is where the CHECKPOINT hangs post-assembly strays, not your write target.
+   - **No `goal=` field at all** → master-lane harvest. Inert, breaker #1, unchanged.
+   The retired `selfqueue=yes|no` grant queued sprouts per-event (52/52 worker-authored inflow
+   edges on goal #278); the responder-lane `selfQueue` knob is unrelated and still has no
+   reader here.
 4. **GOAL closeout only (the issue you are closing out IS a `task/goal`)**: the assembly PR
    merged and branch auto-delete killed the goal branch — sweep open DESCENDANTS (walk the
    sub-issue tree) whose `Base:` still names it and retarget them to master (edit the body:
@@ -488,7 +488,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
    (`goal/validated` / `goal/reverted` / `goal/abandoned` — the scan's goal lane, deterministic).
    Do the retarget sweep exactly as above if the tree is still live, and nothing else: the terminal
    already wrote its own audit comment and already disposed of the descendants per the verdict.
-   The retarget duty at assembly-merge time moved to the `goal-review` play's post-launch leg.
+   The retarget duty at assembly-merge time moved to the checkpoint play's post-launch leg.
    The post-launch bucket itself is NOT yours to create — the scan's `harvest-disposition` block
    creates and links it (idempotently, one per goal) and hands you its number in `bucket=`. If
    your unit resolved a goal and carries no `bucket=`, say so loudly in the closing comment: the
@@ -562,20 +562,28 @@ quiet. That backstop is the meta-coordinator's for now (operator, 2026-08-05: ob
 design the guard from evidence). If you see a goal whose children are all closed and whose
 acceptance is unmet, say so loudly in your report — that is the signal the guard will be built on.
 
-## The `goal-review` clause (FU-090 leg (c), built 2026-08-05)
+## The `goal-checkpoint` clause (ADR-106 (3), 2026-08-12 — the second AUTHORING moment; supersedes the per-closure goal-review play, FU-090 leg (c) 2026-08-05)
 
-A child of a GOAL closed. You are here to ask the only question the loop otherwise never asks
-again: **is the goal actually met?** Children closing is not the same as a goal being achieved,
-and nothing else in the machinery will notice the difference.
+You are here because judgment is actually DUE — not because a child closed. The per-closure tick
+(goal #278: 21 ruling sessions, 13 re-deriving "not complete") is now a deterministic burn-down
+line the scan writes into the goal's findings store; no session, no model. This clause fires on:
+(a) **≥ 5 undispositioned findings** in the store (`GOAL_CHECKPOINT_N`), or (b) **the child-set
+completing pre-launch** — the deadlock backstop the old clause carried (operator, 2026-08-05).
 
-It fires on EVERY child closure, not only the last (operator ruling: waiting for the last child
-"will deadlock too much when only child traffic causes the goal to move"). The predicate is
-stateless — a child closed more recently than your newest comment on the goal — so your comment
-IS what retires it until the next closure. Comment even when the answer is "not yet"; silence
-re-fires the clause forever.
+**FIRST, dispose the store** (this is what retires trigger (a) — leaving the marker unmoved
+re-fires the clause forever). Read the goal's findings-store comment; for every entry beyond
+`dispositioned-through:`, rule exactly one of — **fold** (the work belongs in an existing OPEN
+child: comment the fold target on the goal; the child's next round picks it up), **mint** (a
+REAL new child: native sub-issue of the finding's ORIGIN issue — `origin=#N` in the entry, ADR-106
+(2); never the bucket pre-launch — label `agent-fix`+`agent/queued` ONLY while the goal is OPEN
+and `Budget:` has room — the same goal_budget arithmetic the launcher pre-flight enforces; over
+budget = mint UNLABELLED and say so), or **drop** (one reason line in your goal comment). Then
+advance the marker: `bash /work/homelab/agents/goal-findings.sh advance <owner/repo> <goal-n>
+<total>`. A store you cannot read is a loud line on the goal, not a guess.
 
-Re-read the goal's acceptance criteria in full, then look at what actually shipped in the closed
-children — the merged diffs, not the issue titles. Rule exactly one of:
+**THEN, when trigger (b) or the burn-down says the tree is done**, re-read the goal's acceptance
+criteria in full and look at what actually shipped in the closed children — the merged diffs, not
+the issue titles. Rule exactly one of:
 
 - **Assembly-complete** (ADR-102, homelab#208 — this ruling was called "goal met" until
   2026-08-09, and the rename is the whole point: it measures **built as specified**, never *idea

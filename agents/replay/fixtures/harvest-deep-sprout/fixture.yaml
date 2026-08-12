@@ -29,7 +29,7 @@
 # four parked sprouts (#46, #67, #75, #76) are precisely the ones ADR-102 says should have been
 # living in a bucket, and this stream is what putting them there looks like.
 #
-# The verdict is `selfqueue=no` — goal #29 is closed, so its sprouts get a home but no queue
+# The verdict is `harvest=inert` (was `selfqueue=no` pre-ADR-106) — goal #29 is closed, so its sprouts get a home but no queue
 # labels. Fixture harvest-goal-closed pins that rule on a constructed world; this one shows it
 # ruling correctly on the real thing.
 name: harvest-deep-sprout
