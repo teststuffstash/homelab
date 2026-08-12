@@ -88,6 +88,17 @@ native lineage + budget walk + ride all held), but no sibling platform repo has 
 (the -iac bump) sits OUTSIDE the goal tree, so the goal effectively ends at the app-repo merge.
 v1.2 should make the Goal a STACK-scoped object: descendants across the claim's repos including
 `-iac`, the `Production-leg:` verified through the -iac deploy + KPIs in post-launch.
+**Design synthesis (operator session, 2026-08-12) — the typed findings STORE is the load-bearing
+piece**: one machine-readable pile per goal (ADR-103 shape: edited-in-place comment/check-run,
+entries = origin + surface + substance), dispositioned at checkpoints. It resolves findings 1+2+3
+at once (native provenance ⇒ the derivation DAG stops living in prose; the worker channel gets
+its gate; mints batch). Consequences: every dedup reader (janitor, harvest, responder) must read
+the pile as well as issues — under pile-up the duplicate window widens from search-lag to
+checkpoint-cadence unless the store is readable; the janitor files nothing whose evidence-walk
+resolves to an open goal with the substance already piled (annotate-not-attribute, one report
+line); and the janitor gains the checkpoint-LIVENESS belt (pile age vs checkpoint cadence —
+the outside goal-blind view watching the new machinery, #379's proven advantage), while its
+orphan-aging sweep measures piled findings against the checkpoint schedule, not birth.
 Single-run caveat throughout:
 platform repo, subscription rail, mostly-serialized dispatch — re-measure any fence/concurrency
 conclusion on a genuinely concurrent stack before generalizing.
