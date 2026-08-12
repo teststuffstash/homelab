@@ -45,7 +45,14 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
    counterfactual full-drift ≈ 1 trivial doc collision. Meanwhile ≥7 deferred wants of ≤60
    lines (one was 1 line) each cost a full ride cycle — ~7× against the fence for the
    small-fold class. Deliver-diff sizes split cleanly: ≤60-line folds vs 160–1114-line real
-   discovered work (which correctly stays issue-routed).
+   discovered work (which correctly stays issue-routed). **The flip side, found independently by
+   the post-run janitor (homelab#379, 06:33Z):** the ADR-097 escaped-diff belt — reviewer-rubric
+   PROSE — did not fire on 3 of the last 12 merges that wrote governance paths outside their
+   `Touches:`. The fence over-blocks the harmless class AND under-enforces the critical one;
+   both argue the same v1.2 shape — the ❌/governance boundary becomes a mechanical check
+   (pin-only-lint's shape), the non-governance fence relaxes to declared drift. NB the janitor
+   itself ran ONCE in the window (daily cron + queued behind the same scan mutex), so the goal
+   ran board-judgment-blind until 06:33.
 5. **The goal was dispatcher-bound, not work-bound.** Queue-wait 3,550 min vs pod time 605 min
    vs merge path 658 min (n=38 rides). Pods ran ≤1-wide for 743 of 870 min; 3-wide for 5 min
    total. **361 min of starvation** (queue>0, zero pods) — attributable to the scan
