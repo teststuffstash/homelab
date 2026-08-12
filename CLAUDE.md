@@ -260,24 +260,39 @@ Loose ends and deferred work are tracked **only** in `docs/follow-ups.md`, one s
 > would be actively wrong for them. Per-context guidance is an open design question the operator
 > owns; until it lands, this banner is the guard.
 
-Jail meta-sessions work **directly on `master`** — apply the change, verify it against the real
-thing, then commit and push. No feature branch, no PR, no review gate: a PR would add ceremony
-without adding the check that matters here, and the branch would only delay the verification that
-actually protects us. (Stack repos are the opposite — every agent change there is a strict PR
-through the reviewer gate. That asymmetry is deliberate: the operator IS the gate in this seat.)
-⚠ **"this repo has no CI" was the old justification and it is FALSE as of 2026-08** — homelab now
-has required checks (`ci`, plus `manifest-lint` / `pin-only-lint` / `router-self-test` inside it).
-The reason to stay on master is the operator-in-the-loop end-state check, not an absence of CI, and
-the distinction matters: a jail commit still has to pass those checks on the next PR that touches
-the same paths.
+**The default REVERSED 2026-08-12 (operator): jail sessions ship substantive changes as PRs —
+PR + watch + fix.** The old direct-to-master default predates the bot reviewer on the platform
+stack; measured on its first day (six PRs, ~5-min cycles), the PR lane caught three latent
+defects direct pushes would have shipped, ran the required checks on every change (a direct push
+BYPASSES them as OrgAdmin), and cost zero codeowner touches (the author==sole-codeowner waiver:
+bot approval completes the merge). The seat drives the whole cycle itself: branch `fix/<slug>`,
+arm auto-merge at open, the meta-events watcher surfaces the verdict, findings are fixed IN the
+PR (the review rubric blocks in-diff findings on this repo — nits never accumulate for a goal or
+land as issues), merge lands, back to master.
 
-- **Verify, then commit** — never the reverse, and never commit a change that was not applied. The
-  end-state check IS the gate here, so it must be an isolated probe against the live thing, not a
-  re-reading of the diff.
-- **Commit in coherent units and push right away.** An unpushed jail commit is invisible to the
-  agent loop: the coordinator/worker pods `git clone --depth 1 master`, so anything still sitting in
-  the jail's working tree simply does not exist for them.
-- Uncommitted work from a previous session may be in the tree — check `git status` before you start
-  and leave what isn't yours alone.
+**Direct to master remains ONLY for the bookkeeping-and-quickfix class** — the writes where a PR
+is pure ceremony:
+
+- session state: `docs/agents/meta-state.md`, `agents/coordinator/TICK-LOG.md`, `.claude/skills/GAPS.md`
+- the single-writer tracker: `docs/follow-ups.md` + archive (and glossary/register one-liners of
+  the same shape)
+- genuine quickfixes: one-line corrections, incident response, un-wedging live state — small,
+  urgent, operational
+- jail-only seat tooling when the operator orders it direct (rare; say so in the commit)
+- **governance files the bot cannot gate**: `.agents/review.md` (the reviewer executes the PR
+  branch's rubric — it correctly refused to review a change to its own rules, PR#386),
+  CODEOWNERS, `.github/workflows/**` — self-gating is impossible, so these are operator-direct
+  by necessity, not convenience
+
+Both lanes keep the standing discipline:
+
+- **Verify, then commit** — never the reverse, and never commit a change that was not applied. An
+  isolated probe against the live thing, not a re-reading of the diff.
+- **Coherent units, pushed (or PR'd) right away.** An unpushed jail commit is invisible to the
+  agent loop: the coordinator/worker pods `git clone --depth 1 master`.
+- Uncommitted work from a previous session may be in the tree — check `git status` before you
+  start and leave what isn't yours alone.
+- **Never pipe-filter a gate's exit** (`lint | tail -1 &&` masked a failing lint once); verify
+  pushes by fetch-compare.
 
 More detail and the full set of operational recipes live in **`docs/runbook.md`**.
