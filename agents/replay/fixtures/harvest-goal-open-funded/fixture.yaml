@@ -22,6 +22,7 @@
 # would then spend budget the gate cannot see, which is the goal-174 failure one level down.
 name: harvest-goal-open-funded
 mode: actions
+world: circles-29-tree
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh

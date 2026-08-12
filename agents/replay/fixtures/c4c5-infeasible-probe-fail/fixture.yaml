@@ -23,6 +23,7 @@
 # 403-shaped production failure this clause has to survive.
 name: c4c5-infeasible-probe-fail
 mode: actions
+world: circles-29-tree
 source: agents/coordinator-scan.sh
 parts:
   - block:c4c5-selector

@@ -16,6 +16,7 @@
 # refactor that reorders those two would show up here as added CALL lines, which is the point.
 name: harvest-goal-closed
 mode: actions
+world: circles-29-tree
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh

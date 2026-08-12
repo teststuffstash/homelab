@@ -27,6 +27,7 @@
 # the marker, and an issue a human already blocked. Both must stay inert.
 name: c4c5-infeasible-parks
 mode: actions
+world: circles-29-tree
 source: agents/coordinator-scan.sh
 parts:
   - block:c4c5-selector

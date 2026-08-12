@@ -121,6 +121,22 @@ run_actions() {   # run_actions <fixture-dir> <name>
   cp "$STUBS/gh" "$STUBS/kubectl" "$bin/" && chmod +x "$bin/gh" "$bin/kubectl"
 
   src="$(fx_scalar source)"
+
+  # ── named world (cleanup move 1) ── `world: <name>` references agents/replay/worlds/<name>;
+  # the fixture's effective world is MATERIALIZED (base copied, fixture-local world/ overlaid on
+  # top, fixture file wins) into $TMP, so stubs AND seam-reading bridges see one plain directory —
+  # no search paths, no reader changes. A named world that does not exist is a hard fixture error.
+  local wname effworld="$dir/world"
+  wname="$(fx_scalar world)"
+  if [ -n "$wname" ]; then
+    [ -d "$HERE/worlds/$wname" ] || { bad "$name: named world not found: agents/replay/worlds/$wname"; return 0; }
+    effworld="$TMP/$name.world"
+    mkdir -p "$effworld"
+    cp -r "$HERE/worlds/$wname/." "$effworld/"
+    rm -f "$effworld/provenance.yaml"   # registry metadata, never a recording
+    [ -d "$dir/world" ] && cp -r "$dir/world/." "$effworld/"
+  fi
+
   # Every composition opens with the scan's own `set -euo pipefail`, so "this survives -e" is
   # asserted by every fixture rather than claimed once.
   printf 'set -euo pipefail\n' > "$comp"
@@ -158,7 +174,7 @@ run_actions() {   # run_actions <fixture-dir> <name>
   local -a envs=()
   while IFS= read -r e; do [ -n "$e" ] && envs+=("$e"); done <<< "$(fx_list env)"
   ( cd "$dir" && env "${envs[@]+"${envs[@]}"}" \
-      REPLAY_WORLD="$dir/world" REPLAY_ACTIONS="$act" REPLAY_STUB_DIR="$STUBS" \
+      REPLAY_WORLD="$effworld" REPLAY_ACTIONS="$act" REPLAY_STUB_DIR="$STUBS" \
       REPLAY_FIXTURE="$dir" REPLAY_ROOT="$ROOT" PATH="$bin:$PATH" \
       bash "$comp" ) > "$TMP/$name.out" 2> "$TMP/$name.err"
   rc=$?
@@ -251,8 +267,8 @@ gen_index() {
            line=$0; sub(/.*agents\/replay\/fixtures\//,"",line); sub(/[^A-Za-z0-9_-].*/,"",line)
            if (line != "" && id != "") print line "\t" id }' "$y"
   done | sort -u > "$pins"
-  printf '| fixture | mode | source | pinned by (FSM) |\n|---|---|---|---|\n'
-  local d n mode src ids FXY
+  printf '| fixture | mode | world | source | pinned by (FSM) |\n|---|---|---|---|---|\n'
+  local d n mode src w ids FXY
   for d in "$FIXROOT"/*/; do
     [ -d "$d" ] || continue
     n="$(basename "$d")"
@@ -263,8 +279,9 @@ gen_index() {
     FXY="$(parse_fixture "$d/fixture.yaml" 2>/dev/null)" || FXY=""
     mode="$(fx_scalar mode)"
     src="$(fx_scalar source)"
+    w="$(fx_scalar world)"
     ids="$(awk -F'\t' -v n="$n" '$1==n{print $2}' "$pins" | sort -u | paste -sd' ' -)"
-    printf '| `%s` | %s | `%s` | %s |\n' "$n" "${mode:--}" "${src:--}" "${ids:--}"
+    printf '| `%s` | %s | %s | `%s` | %s |\n' "$n" "${mode:--}" "${w:--}" "${src:--}" "${ids:--}"
   done
   rm -f "$pins"
 }
