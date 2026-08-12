@@ -54,7 +54,9 @@ follows fix-density per ADR-103, never big-bang):
    their delta onto it. Re-record becomes per-world and mechanical: `run.sh --rerecord <world>`
    replays the stored commands, and every dependent row re-validates in one pass. A `record`
    wrapper stamps provenance at capture time; `recorded` vs `constructed` becomes a field, not
-   a sentence. **v1 LIVE 2026-08-12 (PR after #382):** `world: <name>` in fixture.yaml +
+   a sentence. **Maintenance half LIVE (same PR as move 2):** `--record <world> <rel> -- <cmd>`
+   stores + stamps in one act; `--rerecord <world> [--write]` replays stamped commands and diffs
+   — upstream drift stops being invisible. **v1 LIVE 2026-08-12 (PR after #382):** `world: <name>` in fixture.yaml +
    materialized overlay (base copied, fixture files win — stubs AND seam-reading bridges see one
    plain directory), first registry entry `worlds/circles-29-tree/` (6 fixtures dedup'd, 6 shared
    files, provenance.yaml with the reconstruction note). Remaining half: the `record` wrapper +
@@ -68,7 +70,12 @@ follows fix-density per ADR-103, never big-bang):
    (8 dirs → 1 family, 3 worlds, 2 templates; two of its inert rows share a byte-identical
    stream today and will share a template structurally). The witness pattern becomes
    structural: a constant like the SELFREF line lives once in the base world and every row
-   inherits it.
+   inherits it. **PILOT LIVE 2026-08-12 (same PR as moves 1b/6):** `mode: table` in run.sh —
+   rows synthesize ordinary actions fixtures at run time (the table is sugar over the proven
+   machinery, not a second path); `fix-debounce` converted 8 dirs → 1 family (2 worlds, 2 shared
+   templates + 3 per-row, 2 named jq patches, all 8 original streams reproduced exactly).
+   Patches are named files (`patches/*.jq`) — raw jq in a cell collides with the psv delimiter
+   and a named patch reads as the condition it encodes.
 3. **Generated register** — `run.sh --index --write` renders the family/world/row table from
    fixture metadata (the `merge-path-lint --write` pattern, currency-checked in CI). The
    hand-appended prose register below retires; this README keeps only doctrine — the ~8 seam
@@ -87,6 +94,8 @@ follows fix-density per ADR-103, never big-bang):
 6. **Hermeticity contract** (homelab#329) — default: a fixture runs anywhere bash+awk+jq exist;
    anything more declares `requires:` and `run.sh` exits 2 naming the tool (the scan-wedge
    precedent promoted to rule). The 5 non-hermetic fixtures get lines or fixes.
+   **Mechanism LIVE (same PR as move 2):** `requires:` in fixture.yaml, checked before dispatch,
+   loud absence. Declaring the #329 set awaits its per-fixture diagnosis (that issue's work).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
    has one runner and one index. Rolling, by fix-density.
@@ -120,14 +129,7 @@ is stale, so it cannot drift the way the prose register did.
 | `depends-on-retired-format` | actions | - | `agents/coordinator-scan.sh` | IL-T04 |
 | `dispatch-phase-scan` | actions | - | `agents/coordinator-scan.sh` | - |
 | `dispatch-phase-session` | actions | - | `agents/coordinator-session.sh` | - |
-| `fix-debounce-anchored-marker-queues` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 |
-| `fix-debounce-blocked-inert` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
-| `fix-debounce-currency-note-once` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
-| `fix-debounce-currency-refired-inert` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
-| `fix-debounce-currency-resolved-inert` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | - |
-| `fix-debounce-in-progress-inert` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 |
-| `fix-debounce-quoted-marker-inert` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 |
-| `fix-debounce-unblocked-queues` | actions | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
 | `goal-ancestor-bucket-child` | actions | - | `agents/agent-session.sh` | - |
 | `goal-ancestor-direct-child` | actions | - | `agents/agent-session.sh` | - |

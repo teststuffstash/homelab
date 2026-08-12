@@ -110,6 +110,92 @@ run_suite() {   # run_suite <fixture-dir> <name>
   return 0
 }
 
+# ── mode: table ─────────────────────────────────────────────────────────────────────────────────
+# The decision-table mode (cleanup move 2): ONE fixture per family = the contract prose once, one
+# bridge, named/family worlds, and rows.psv — a pipe-delimited table (the platform's own testing
+# doctrine, applied to the harness that enforces it). Each row synthesizes an ordinary actions
+# fixture in $TMP (family parts + row env + materialized world + rendered template) and runs
+# through run_actions UNCHANGED — the table is sugar over the proven machinery, not a second path.
+#
+# rows.psv columns:  id | world | patch | env | expect | params
+#   world   names $dir/worlds/<w> (family-local) or $HERE/worlds/<w> (registry); empty = family default
+#   patch   "relpath ! jq-expr" over the materialized world — MUST change the target (no-op = red;
+#           base worlds are CLEAN, a row adds its condition and has to earn its delta)
+#   env     space-separated K=V appended after family env
+#   expect  expected/<name>.txt template; params fill {{k}} — an unfilled {{k}} is red
+# Row overlay dir rows/<id>/ (whole-file deltas, non-JSON) merges over the world after the base,
+# before the patch.
+psv_trim() { printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+run_table() {   # run_table <fixture-dir> <family-name>   (FXY = the family fixture, already parsed)
+  local dir="$1" fam="$2"
+  local rowsf fsrc fworld
+  rowsf="$(fx_scalar rows)"; rowsf="${rowsf:-rows.psv}"
+  [ -f "$dir/$rowsf" ] || { bad "$fam: rows file not found: $rowsf"; return 0; }
+  fsrc="$(fx_scalar source)"; fworld="$(fx_scalar world)"
+  local FPARTS FENV FSCRUB
+  FPARTS="$(fx_list parts)"; FENV="$(fx_list env)"; FSCRUB="$(fx_list scrub)"
+  local line rid rworld rpatch renv rexpect rparams
+  while IFS= read -r line; do
+    case "$line" in ''|'#'*) continue ;; esac
+    rid="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f1)")"
+    rworld="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f2)")"
+    rpatch="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f3)")"
+    renv="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f4)")"
+    rexpect="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f5)")"
+    rparams="$(psv_trim "$(printf '%s' "$line" | cut -d'|' -f6)")"
+    [ -n "$rid" ] || continue
+    local rname="$fam/$rid" synth="$TMP/$fam.$rid.fx" w base tgt prel pexpr kv
+    mkdir -p "$synth/expected" "$synth/world"
+    cp "$dir"/*.sh "$synth/" 2>/dev/null || true    # family bridges keep their file: names
+    w="${rworld:-$fworld}"
+    if [ -n "$w" ]; then
+      if   [ -d "$dir/worlds/$w"  ]; then base="$dir/worlds/$w"
+      elif [ -d "$HERE/worlds/$w" ]; then base="$HERE/worlds/$w"
+      else bad "$rname: world not found: $w (family worlds/ then registry)"; continue; fi
+      cp -r "$base/." "$synth/world/"; rm -f "$synth/world/provenance.yaml"
+    fi
+    [ -d "$dir/rows/$rid" ] && cp -r "$dir/rows/$rid/." "$synth/world/"
+    if [ -n "$rpatch" ]; then
+      # "relpath @ patchfile.jq" — the expr lives in a named family file (raw jq in a cell would
+      # collide with the psv delimiter, and a named patch reads as the condition it encodes)
+      prel="$(psv_trim "${rpatch%%@*}")"; local pfile; pfile="$(psv_trim "${rpatch#*@}")"
+      tgt="$synth/world/$prel"
+      [ -f "$tgt" ] || { bad "$rname: patch target missing in world: $prel"; continue; }
+      [ -f "$dir/$pfile" ] || { bad "$rname: patch file not found: $pfile"; continue; }
+      if ! jq -f "$dir/$pfile" "$tgt" > "$tgt.new" 2>"$TMP/$fam.$rid.jqerr"; then
+        bad "$rname: patch jq failed ($pfile)" "$(cat "$TMP/$fam.$rid.jqerr")"; continue
+      fi
+      cmp -s "$tgt" "$tgt.new" && { bad "$rname: patch is a NO-OP — a row must earn its delta"; continue; }
+      mv "$tgt.new" "$tgt"
+    fi
+    [ -n "$rexpect" ] || { bad "$rname: empty expect column"; continue; }
+    [ -f "$dir/expected/$rexpect.txt" ] || { bad "$rname: template not found: expected/$rexpect.txt"; continue; }
+    cp "$dir/expected/$rexpect.txt" "$synth/expected/actions.txt"
+    for kv in $rparams; do
+      sed -i "s|{{${kv%%=*}}}|${kv#*=}|g" "$synth/expected/actions.txt"
+    done
+    if grep -q '{{' "$synth/expected/actions.txt"; then
+      bad "$rname: unfilled {{param}} in expected template"; continue
+    fi
+    {
+      printf 'name: %s\nmode: actions\n' "$rname"
+      [ -n "$fsrc" ] && printf 'source: %s\n' "$fsrc"
+      printf 'parts:\n'; printf '%s\n' "$FPARTS" | while IFS= read -r p; do [ -n "$p" ] && printf '  - %s\n' "$p"; done
+      if [ -n "$FENV$renv" ]; then
+        printf 'env:\n'
+        printf '%s\n' "$FENV" | while IFS= read -r p; do [ -n "$p" ] && printf '  - %s\n' "$p"; done
+        for kv in $renv; do printf '  - %s\n' "$kv"; done
+      fi
+      if [ -n "$FSCRUB" ]; then
+        printf 'scrub:\n'; printf '%s\n' "$FSCRUB" | while IFS= read -r p; do [ -n "$p" ] && printf '  - %s\n' "$p"; done
+      fi
+    } > "$synth/fixture.yaml"
+    FXY="$(parse_fixture "$synth/fixture.yaml")"
+    run_actions "$synth" "$rname"
+  done < "$dir/$rowsf"
+  return 0
+}
+
 # ── mode: actions ───────────────────────────────────────────────────────────────────────────────
 # Recorded world in, expected actions out. The clause is COMPOSED at run time from blocks extracted
 # out of the shipped script by sentinel — never transcribed, because a transcribed clause pins a
@@ -224,12 +310,22 @@ run_fixture() {
   fi
   name="$(fx_scalar name)"; [ -n "$name" ] || name="$(basename "$dir")"
   mode="$(fx_scalar mode)"; expect="$(fx_scalar expect)"; expect="${expect:-pass}"
+  # hermeticity contract (cleanup move 6, homelab#329): default = bash/awk/jq/sed anywhere;
+  # anything more is DECLARED and its absence is loud — never a silent skip, never a mystery red.
+  local rt
+  for rt in $(fx_list requires); do
+    command -v "$rt" >/dev/null 2>&1 || {
+      bad "$name: requires \`$rt\` — declared dependency absent (hermeticity contract; run under devbox)"
+      return 0
+    }
+  done
   [ "$expect" = fail ] && { EXPECT_FAIL=1; SELFTEST_HIT=0; SELFTEST_DETAIL=''; }
   case "$mode" in
     suite)   run_suite   "$dir" "$name" ;;
     actions) run_actions "$dir" "$name" ;;
-    '')      bad "$name: fixture.yaml has no \`mode:\` (want \`suite\` or \`actions\`)" ;;
-    *)       bad "$name: unknown mode \`$mode\` (want \`suite\` or \`actions\`)" ;;
+    table)   run_table   "$dir" "$name" ;;
+    '')      bad "$name: fixture.yaml has no \`mode:\` (want \`suite\`, \`actions\` or \`table\`)" ;;
+    *)       bad "$name: unknown mode \`$mode\` (want \`suite\`, \`actions\` or \`table\`)" ;;
   esac
   [ "$expect" = fail ] || return 0
 
@@ -317,10 +413,45 @@ index_check() {   # red when the committed block is stale — same ratchet spiri
   rm -f "$idx" "$cur"
 }
 
+# ── record / re-record (cleanup move 1, the maintenance half) ──────────────────────────────────
+# `--record <world> <relpath> -- <cmd...>` runs the command, stores its stdout as the world file,
+# and appends a machine `recorded:` block to provenance.yaml — capture and provenance are one act.
+# `--rerecord <world>` replays every stamped command and DIFFS against the stored files (add
+# `--write` to adopt); an upstream API change stops being invisible the day someone re-records.
+do_record() {
+  local w="$1" rel="$2"; shift 2
+  [ "$1" = "--" ] && shift
+  local wdir="$HERE/worlds/$w"
+  mkdir -p "$wdir/$(dirname "$rel")"
+  "$@" > "$wdir/$rel" || { echo "record: command failed, nothing stored" >&2; exit 1; }
+  { echo "recorded:"; printf '  - path: %s\n    cmd: %s\n    at: %s\n' \
+      "$rel" "$*" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } >> "$wdir/provenance.yaml"
+  echo "→ recorded $w/$rel (provenance stamped)"
+}
+do_rerecord() {
+  local w="$1" write="${2:-}" wdir="$HERE/worlds/$w" drift=0
+  [ -f "$wdir/provenance.yaml" ] || { echo "rerecord: no provenance.yaml under worlds/$w" >&2; exit 2; }
+  # replay only MACHINE-stamped entries (path+cmd pairs); reconstructed prose is not executable
+  paste -d'\t' <(awk -F': ' '/^  - path: /{print $2}' "$wdir/provenance.yaml") \
+               <(awk -F': ' '/^    cmd: /{sub(/^[^:]*: /,""); print}' "$wdir/provenance.yaml") \
+  | while IFS=$'\t' read -r rel cmd; do
+      [ -n "$rel" ] && [ -n "$cmd" ] || continue
+      echo "── $rel  ($cmd)"
+      if ! sh -c "$cmd" > "$TMPDIR_RR/new" 2>&1; then echo "   PROBE-FAIL: command failed"; continue; fi
+      if diff -u "$wdir/$rel" "$TMPDIR_RR/new" > "$TMPDIR_RR/diff"; then echo "   unchanged"
+      else drift=1; echo "   DRIFTED:"; head -12 "$TMPDIR_RR/diff" | sed 's/^/   /'
+        [ "$write" = "--write" ] && cp "$TMPDIR_RR/new" "$wdir/$rel" && echo "   → adopted (--write)"
+      fi
+    done
+  echo "(a drifted world adopted with --write re-runs every dependent fixture next suite pass)"
+}
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -v|--verbose) VERBOSE=1; shift ;;
     --index) shift; if [ "${1:-}" = "--write" ]; then index_write; else gen_index; fi; exit 0 ;;
+    --record) shift; do_record "$@"; exit 0 ;;
+    --rerecord) shift; TMPDIR_RR="$(mktemp -d)"; trap 'rm -rf "$TMPDIR_RR"' EXIT; do_rerecord "$@"; exit 0 ;;
     -h|--help) sed -n '2,8p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) break ;;
   esac

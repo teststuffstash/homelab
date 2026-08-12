@@ -145,11 +145,7 @@ transitions:
       whole set and the rest exit empty."
     status: guarded
     replay:
-      - agents/replay/fixtures/fix-debounce-blocked-inert      # blocked ∧ error stay OUT — set 0, not one write in the stream
-      - agents/replay/fixtures/fix-debounce-unblocked-queues   # same world, block lifted — the set is 1, and error is not COUNTED either
-      - agents/replay/fixtures/fix-debounce-in-progress-inert  # in-flight pair excluded too (PR#250 — the whole agent/* namespace test)
-      - agents/replay/fixtures/fix-debounce-quoted-marker-inert   # a body QUOTING alert-fp: mid-line is not lane-member (PR#271 anchor)
-      - agents/replay/fixtures/fix-debounce-anchored-marker-queues # same world, marker on its own line — set 1, one bell (PR#271)
+      - agents/replay/fixtures/fix-debounce   # THE TABLE (cleanup move 2 pilot): rows blocked-inert / unblocked-queues / in-progress-inert (the agent/* namespace legs A-C) + quoted/anchored-marker (the PR#271 anchoring pair) + the currency trio — per-row intent in rows.psv
     guards:
       - desc: "ALERT-LANE ONLY (`alert-fp:` in the body) — a stack loop's own agent-fix-without-queued hold is not this lane's to queue (the 2026-08-07 dry run swept circles#42, an issue meta-state recorded as held)"
         anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "ALERT-LANE ONLY" }
@@ -178,8 +174,7 @@ transitions:
       than cron-bound. Fail, or a refused label write → the issue stays inert and says why."
     status: guarded
     replay:
-      - agents/replay/fixtures/fix-debounce-unblocked-queues   # the whole leg: body read → agent/queued → exactly one doorbell
-      - agents/replay/fixtures/fix-debounce-blocked-inert      # the same block composed but UNREACHED — the ABSENCE of the POST is the assertion
+      - agents/replay/fixtures/fix-debounce   # table row — see rows.psv
     guards:
       - desc: "queue-time deny is the ❌ table ONLY — authoring is not effect, CODEOWNERS gates the merge (operator correction 2026-08-07)"
         anchor: { file: agents/coordinator/fix-debounce-argo.yaml, pattern: "SQ_DENY=" }
