@@ -1,0 +1,36 @@
+# homelab#361 — THE REGRESSION. A goal-review comment lands between two refusals and the second
+# refusal must still find the first.
+#
+# CONDITION UNDER REPLAY. The world the issue was filed from. Goal #29 carries, in order:
+#   5231000042  the refusal from an earlier scan, marked, numbers $1.50 > $1
+#   5231000077  a `goal-review` ruling — ordinary goal traffic, and the reason `last` is the wrong
+#               window: every goal-review ride posts one, and merged-closeout posts too
+#   5231000088  a hand-written comment that QUOTES `AGENT_BUDGET_REFUSED:` while discussing the
+#               mechanism (#361's own thread does exactly this, in its dispatch notice)
+# The pre-flight refuses again, with numbers that have since moved to $1.75 > $1.
+#
+# THE CONTRACT:
+#   1. ONE PATCH, NO POST. This is the whole deliverable. The shipped code read
+#      `[.comments[].body] | last`, so #5231000077 hid #5231000042 and this scan posted a fourth
+#      comment — one more per interleaved goal-review, forever, on the busiest thread the platform
+#      has. A POST in this stream is the bug, restored.
+#   2. The PATCH targets 5231000042 — the OLDEST marked comment, not the newest. Ties break on
+#      `created_at` so a stray second refusal comment converges back onto the first instead of
+#      alternating (mc_event's rule, and this block reuses its seams rather than re-deriving it).
+#   3. The patched body carries the NEW numbers ($1.75), not the old ($1.50). One comment AND
+#      current arithmetic is the property option 3 was chosen for; a fixture that only counted
+#      comments would go green on the stale-numbers variant.
+#   4. #5231000088 draws nothing. The dedup key is an HTML marker precisely because the
+#      `AGENT_BUDGET_REFUSED:` prefix is prose that appears in issues ABOUT this mechanism, and a
+#      substring test cannot tell a marker from a mention — the lesson of
+#      fixtures/fix-debounce-quoted-marker-inert, paid for once on homelab#238. Nobody quotes an
+#      HTML comment: it is invisible in rendered markdown, which is the same ground MC_MARKER
+#      stands on.
+#   5. `RC 1` and no `REACHED:` line — commenting never softens the refusal.
+name: goal-budget-refusal-interleaved
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-budget-refusal
+  - file:post.sh
