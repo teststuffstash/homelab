@@ -597,6 +597,7 @@ fanout_stack() {   # $1 = a graduated stack the global scan is skipping — ring
 # changes-requested — the high-volume edge; in-flight clauses are exempt from the ADR-097
 # new-work predicates (footprint/PR-cap), so the scoped checks match the main path exactly:
 # breaker label, capacity latch, WIP probe.
+# >>>REPLAY:unit-fast-path>>>
 fast_unit_dispatch() {
   fu="$1"
   fclause="${fu%%|*}"; frest="${fu#*|}"; frepo="${frest%%|*}"; fitem="${frest#*|}"
@@ -625,10 +626,21 @@ fast_unit_dispatch() {
   # Re-validate the item live (at-least-once delivery): still open, still CHANGES_REQUESTED,
   # no breaker label. Probe failure → full scan decides (conservative).
   # `body` rides this existing call for the FU-146 per-item hold below — no extra request.
-  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body 2>/dev/null)" \
+  fprjson="$(gh pr view "${fitem#pr-}" --repo "${ORG}/${frepo}" --json state,reviewDecision,labels,body,author 2>/dev/null)" \
     || { echo "unit fast-path: PR probe FAILED"; return 1; }
   [ "$(jq -r .state <<<"$fprjson")" = "OPEN" ] || { echo "unit fast-path: PR not open"; return 0; }
   [ "$(jq -r .reviewDecision <<<"$fprjson")" = "CHANGES_REQUESTED" ] || { echo "unit fast-path: verdict moved on"; return 0; }
+  # homelab#397 (rule #6 — the compound was WEAKER than the scan on exactly this predicate): the
+  # main path scopes changes-requested to the WORKER author (671a053 — the snore#15 per-tick
+  # sonnet leak), and the reviewer rings on EVERY verdict citing "the scan re-applies the full
+  # predicate". This path re-validated everything BUT author, so each human/jail PR verdict
+  # burned a no-mandate session — hot since the PR-lane reversal (#387: #386/#396 both drew one
+  # on day one). Guard sits BEFORE the latch/WIP probes: no spend on a unit with no mandate.
+  fauthor="$(jq -r '.author.login // ""' <<<"$fprjson")"
+  if [ "$fauthor" != "${WORKER_AUTHOR:-app/homelab-agents-1234}" ]; then
+    echo "unit fast-path: PR author '${fauthor}' is not the worker lane — no fix-round mandate (homelab#397); settled"
+    return 0
+  fi
   jq -e '.labels|map(.name)|index("agent/error")' >/dev/null <<<"$fprjson" \
     && { echo "unit fast-path: agent/error breaker on the PR — human-first"; return 0; }
   if ! SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh"; then
@@ -681,6 +693,7 @@ fast_unit_dispatch() {
   scan_phase deterministic
   return 0
 }
+# <<<REPLAY:unit-fast-path<<<
 case "${SCAN_UNIT:-}" in ""|"-") ;; *)
   if [ -n "$SPAWN" ]; then
     if fast_unit_dispatch "$SCAN_UNIT"; then exit 0; fi

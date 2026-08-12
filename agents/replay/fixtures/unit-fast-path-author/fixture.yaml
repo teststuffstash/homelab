@@ -1,0 +1,21 @@
+# unit-fast-path-author (homelab#397) — the doorbell fast-path's WORKER-AUTHOR scope, the
+# rule-#6 parity guard: "the compound may only ever be cheaper, never weaker" was WEAKER on
+# exactly this predicate. The reviewer rings on EVERY verdict citing "the scan re-applies the
+# full predicate"; the MAIN path scopes changes-requested to the worker author (671a053 — the
+# snore#15 per-tick sonnet leak); the fast path re-validated state/verdict/breaker/latch/WIP —
+# but not author — so each human/jail PR verdict burned a full no-mandate coordinator session.
+# Hot since the PR-lane reversal (#387): #386 and #396 both drew one on day one.
+#
+# THE CONTRACT: a CHANGES_REQUESTED unit whose PR author is NOT the worker App settles (exit 0,
+# "no fix-round mandate") BEFORE any spend — no subscription-latch probe, no kubectl WIP read,
+# no session. The action stream ends at the one PR view; that absence IS the assertion.
+name: unit-fast-path-author
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=circles
