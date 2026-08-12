@@ -35,6 +35,12 @@ meant to avoid.)
    checkpoints, fold-in rule, mechanical ❌ check) · A5 CODEOWNERS narrowing (operator call,
    after A4's ❌ check) · A6 hygiene (goal-budget dash guard, #377, FU-166(a), inert triage).
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
+   **Next-session shape (operator, 2026-08-12): PARALLEL worktree subagents** for the remaining
+   Bucket-A chunks — Agent(isolation: worktree) per chunk (the harness primitive exists), briefs
+   self-contained (charter docs on disk ARE the context), disjoint declared scopes, Gate-A
+   mandated, verdicts routed to the owning subagent via SendMessage, 2-3 wide (subscription burn
+   is the limiter). Niche = operator-lane work the fixer lane cannot take; fixer-eligible chunks
+   queue as issues instead. First pair: doorbell collapse ∥ FU-166(a) park series.
    **Bucket B (the next Goal, launches on v1.2):** FU-095 pilots (task-class routing legs a/c +
    strike-policy data) · FU-106 G01 flip chain (conditional on A0; the flip = the goal's
    `Production-leg:`) · G06 advisory lens + SLO error-budget teeth (roles.md; ex-FU-104) ·
