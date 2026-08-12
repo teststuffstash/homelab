@@ -1,0 +1,74 @@
+# The two homeassistant-freshness alerts, lifted VERBATIM out of prometheusrule.yaml (comments AND
+# annotations stripped — the manifest is their one home) — the rules file that
+# freshness.promtool-test loads. Not a manifest and not applied to anything: `promtool test rules`
+# needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under `.spec`,
+# so the CR cannot be loaded directly. Named .promtool-rules rather than .yaml on purpose —
+# manifest-lint kubeconforms EVERY *.yaml under argocd/resources and a non-manifest there would
+# fail it.
+#
+# ANNOTATIONS ARE STRIPPED deliberately, following gc-mirrors.promtool-rules: this pins FIRING
+# BEHAVIOUR, not prose. The descriptions are runbooks and change on their own schedule.
+#
+# ⚠ THIS COPY IS NOT DRIFT-PINNED — same standing caveat as gc-mirrors.promtool-rules and
+# pushgateway/agent-runs.promtool-rules (`devbox run exporter-self-test` pins only
+# CiDispatchStalled). A stale copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing
+# either alert:
+#
+#   yq -o=json '{"groups": [{"name": "homeassistant-freshness", "rules": [.spec.groups[].rules[] |
+#        del(.annotations)]}]}' \
+#     argocd/resources/homeassistant-alerts/prometheusrule.yaml | yq -P '.'
+groups:
+  - name: homeassistant-freshness
+    rules:
+      - alert: HomeAssistantPowerSensorStale
+        expr: |
+          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"}[10m]) > 21600
+        for: 30m
+        labels:
+          severity: warning
+      - alert: HomeAssistantSensorStale
+        expr: |
+          time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
+        for: 2h
+        labels:
+          severity: info
+
+  # ── REGRESSION WITNESS — NOT deployed rules (the #310/#328/#335 device, homelab#336) ──────────
+  # The two alerts exactly as they shipped before #336: no bridge at all. They are what make the
+  # contrast in freshness.promtool-test executed rather than claimed — on the same series, at the
+  # same instants, these resolve on a staleness marker and pay a fresh 30m / 2h window while the
+  # shipped pair never stops firing.
+  # FOSSILS, not copies: if the shipped exprs are revisited again, these stay as they are. They are
+  # also what stops a stale hand copy of the group above from passing vacuously — with the old expr
+  # in both places the pairs agree and every hole assertion in the fixture fails.
+  - name: regression-witness-pre-336
+    rules:
+      - alert: HomeAssistantPowerSensorStalePre336
+        expr: |
+          time() - homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"} > 21600
+        for: 30m
+        labels:
+          severity: warning
+      - alert: HomeAssistantSensorStalePre336
+        expr: |
+          time() - homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"} > 86400
+        for: 2h
+        labels:
+          severity: info
+
+  # ── DIRECTION WITNESS — `min_over_time`, the reading of class rule (ii) that #336 REJECTED ────
+  # Not a fossil either: this is the rule that would have shipped if "a timestamp where LOW is bad
+  # ⇒ min_over_time" had been applied by pattern-match from CiDispatchStalled. It bridges the hole
+  # just as well — during a hole there are no fresher samples, so min and max agree — and then
+  # costs what max does not: it holds the pre-recovery value for the whole range, so a sensor that
+  # starts reporting again keeps the alert ringing for the better part of ten minutes. That is the
+  # only difference between the two functions on a monotone gauge, and it is asserted rather than
+  # argued in the manifest.
+  - name: direction-witness-min
+    rules:
+      - alert: HomeAssistantPowerSensorStaleMinDirection
+        expr: |
+          time() - min_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"}[10m]) > 21600
+        for: 30m
+        labels:
+          severity: warning

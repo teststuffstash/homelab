@@ -198,7 +198,7 @@ spec:
                         stack: {{ $sloStack }}
                       annotations:
                         summary: "Synthetic probe failing: {{ "{{" }} $labels.instance {{ "}}" }}"
-                        description: "SLO endpoint has failed its blackbox probe for 10m. Symptom only."
+                        description: "SLO endpoint has failed its blackbox probe for 10m. Symptom only. ⚠ homelab#336: the expr reads a 5m range, so this is at least one failure in every 5m window across those ten minutes and up to 5m may have passed since the last — check probe_success before concluding it is still down."
                     - alert: ErrorBudgetBurnt
                       expr: stack:error_budget_burnt:bool{stack="{{ $sloStack }}"} == 1
                       for: 30m

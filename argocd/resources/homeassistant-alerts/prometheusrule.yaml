@@ -43,10 +43,18 @@ spec:
         #       {domain, entity, friendly_name, instance, job}, read off Prometheus 2026-08-12.
         #       Nothing churns, so `max by (...)` would repair nothing and would cost `entity` and
         #       `friendly_name`, which is the entire content of both annotations.
-        # (iii) THE DIRECTION IS `min_over_time`. This metric is a TIMESTAMP where LOW is bad
-        #       (old = stale), so the alert-preserving function is `min`, as at CiDispatchStalled.
-        #       `max_over_time` would take the FRESHEST last_updated in the window and delay every
-        #       page by the range.
+        # (iii) THE DIRECTION IS `max_over_time`, AND THE CLASS'S RULE (ii) DOES NOT DECIDE IT.
+        #       Read naively this is a TIMESTAMP where LOW is bad, which is how CiDispatchStalled
+        #       reasons its way to `min_over_time` — but that alert's gauge is CONSTANT per series
+        #       (a run's created_at never moves), so there min and max coincide and min is merely
+        #       the conservative spelling. This gauge is not constant: it only ever moves FORWARD,
+        #       one step per update. That monotonicity is what makes the choice, and it makes it
+        #       the other way. `max_over_time` = "the freshest reading we have", which equals the
+        #       current value whenever a current sample exists and equals the frozen pre-hole value
+        #       when one does not — truthful AND hole-bridging, with no tail either way. `min` would
+        #       take the value from 10m ago, firing up to 10m early and ringing 10m after a sensor
+        #       recovers. This is GithubExporterStale's shape exactly (a last-success timestamp
+        #       under `time() - … > threshold`, #313) and it takes GithubExporterStale's function.
         # (iv)  THE HOLE IS MEASURED, and it is not the one the issue expected. Over the 8 days
         #       Prometheus retains, the HA pod never restarted (0 restarts, 3.6d old at the time of
         #       writing) — yet `homeassistant_last_updated_time_seconds` was staleness-marked four
@@ -56,20 +64,21 @@ spec:
         #       covers only the RESTART case: the holes that actually happen here are failed
         #       scrapes against a running HA, and they leave the sensor exactly as frozen as it was
         #       while resetting a 30m and a 2h `for:` window from zero.
-        # (v)   [10m], the class's own size, and #349's bound is SLACK here rather than binding.
-        #       HA renders /api/prometheus on request, so there is no cached exposition and the
-        #       composed phantom is just B; the bound `for: > cache + B` is 30m > 10m and 2h > 10m,
-        #       both with room. Sizing: 3.3x the worst measured hole (180s) and 5-8x #288's
-        #       69-116s roll.
-        #       THE PRICE, both faces: a sensor that starts updating again keeps reading stale for
-        #       ≤10m, and — the CiDispatchStalled quirk, because this is a timestamp — `{{ $value }}`
-        #       does not merely freeze, it keeps CLIMBING through that tail, since `time()` advances
-        #       against a held value. Both are ≤10m of slack on conditions whose thresholds are 6h
-        #       and 24h, and the alert cannot invent one: firing still needs a genuinely 6h/24h-old
-        #       timestamp to have been observed.
+        # (v)   [10m], the class's own size, and #349's bound is SLACK here rather than binding —
+        #       which is worth checking rather than assuming, since it is what forced [5m] on the
+        #       probes in argocd/resources/blackbox/blackbox.yaml. HA renders /api/prometheus on
+        #       request, so there is no cached exposition and the composed phantom is `cache + B`
+        #       = B; the bound `for: > cache + B` reads 30m > 10m and 2h > 10m, both with room.
+        #       Sizing: 3.3x the worst measured hole (180s), 5-8x #288's 69-116s roll.
+        #       AND THE RANGE COSTS NOTHING IN EITHER DIRECTION, for (iii)'s reason — the #313
+        #       result, carried: `max` takes the NEWEST reading in the window, so it can neither
+        #       delay a page (a fresh sample inside the window already puts the age under the
+        #       threshold) nor keep one ringing after a sensor starts reporting again. The bridge
+        #       buys the hole and nothing else changes, which is why both alerts take the same one.
         # CEILING, asserted rather than assumed: a hole wider than 10m still restarts the window.
-        # Both alerts, both halves of the price, the ceiling and the label survival are executed in
-        # freshness.promtool-test, against the pre-#336 exprs kept as a witness in
+        # Both alerts, the hole, the ceiling, the free-in-both-directions claim in (v), the wrong
+        # direction from (iii), and the label survival from (ii) are executed in
+        # freshness.promtool-test, against the pre-#336 exprs kept as a regression witness in
         # freshness.promtool-rules.
         #
         # Power plugs report continuously (they are the perf/W evidence base — machines/README.md,
@@ -79,7 +88,7 @@ spec:
         # ⚠ RESTART-GAP BRIDGED (homelab#336 — this group's class block above).
         - alert: HomeAssistantPowerSensorStale
           expr: |
-            time() - min_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"}[10m]) > 21600
+            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor.plug_.*_(power|voltage)"}[10m]) > 21600
           for: 30m
           labels:
             severity: warning
@@ -102,7 +111,7 @@ spec:
         # weakest, whatever its severity says.
         - alert: HomeAssistantSensorStale
           expr: |
-            time() - min_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
+            time() - max_over_time(homeassistant_last_updated_time_seconds{entity=~"sensor\\..*",entity!~"sensor\\.(smart_plug|aquarium|konditsioneer).*"}[10m]) > 86400
           for: 2h
           labels:
             severity: info

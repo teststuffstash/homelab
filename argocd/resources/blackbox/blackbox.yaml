@@ -170,7 +170,7 @@ spec:
             stack: oracle
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
-            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
         # ⚠ Same bridge, same reasoning as the rule above (this file's class block) — the two
         # differ only in which targets they select, and a roll of the single prober empties both.
         - alert: EndpointProbeFailing
@@ -180,4 +180,4 @@ spec:
             severity: warning
           annotations:
             summary: "Synthetic probe failing: {{ $labels.instance }}"
-            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster."
+            description: "{{ $labels.instance }} has failed its blackbox probe for 10m (job {{ $labels.job }}). Symptom only — the endpoint is not answering as expected from in-cluster. ⚠ Since homelab#336 the expr reads a 5m range, so this means at least one failed probe in every 5m window across those ten minutes, and up to 5m may have passed since the last one — check probe_success{instance=\"{{ $labels.instance }}\"} before concluding it is still down."
