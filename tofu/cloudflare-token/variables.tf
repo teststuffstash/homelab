@@ -40,6 +40,10 @@ variable "allowed_ips" {
 
 variable "user_id" {
   type        = string
-  description = "Cloudflare user id (FU-156 inventory-read token; user-scoped). Empty = token not minted."
-  default     = ""
+  description = "Cloudflare user id (user-scoped policies: FU-156 inventory-read + jail-read-all). Empty = those tokens not minted."
+  # Settled 2026-08-12 from the legacy "Read all resources" token's own user policy
+  # (uploads/step3.json — the operator's admin-token dump); a user id is a non-secret
+  # identifier, same class as account_id/zone_id above. Setting it un-stages the FU-156
+  # inventory-read mint on the next apply, deliberately.
+  default = "8a359786af8c19d1798fa532026e0860"
 }

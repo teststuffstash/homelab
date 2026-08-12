@@ -12,17 +12,22 @@
 # interval and is gone at T+10m. Every boundary claim below is pinned by a promql_expr_test rather
 # than counted in a comment.
 #
-# ✅ WHAT THIS FILE RESOLVES (homelab#334): all three spend-belt alerts sit on gauges scraped from
+# ✅ WHAT THIS FILE RESOLVES (homelab#334): both spend-belt alerts sit on gauges scraped from
 # `replicas: 1` Deployments (cloudflare-exporter and cloudflare-spend-probe — both confirmed
-# `kube_deployment_spec_replicas == 1` live on 2026-08-12), so every one of them carried BOTH
+# `kube_deployment_spec_replicas == 1` live on 2026-08-12), so each of them carried BOTH
 # halves of the #288 defect: `pod`/`instance` on the series gave the alert a churning identity, and
 # a single replica means the vector empties outright while the new pod starts. A roll therefore
-# restarted a `for:` window measuring a condition that never stopped being true — a billing toggle
-# and a plan change persist until a human reverts them, and a blind probe stays blind.
-# Fixed with the #288 two-part shape, `max|min by (zone)` + `max|min_over_time([10m])`.
+# restarted a `for:` window measuring a condition that never stopped being true — a plan change
+# persists until a human reverts it, and a blind probe stays blind.
+# Fixed with the #288 two-part shape, `min by (zone)` + `min_over_time([10m])`.
+# (The group was three alerts until 2026-08-12: `CloudflareZoneSpendToggleEnabled` over an argo
+# gauge — HIGH-is-bad, bridged `max` — retired WITH the probe's argo leg when the host-side
+# admin-token session proved the argo endpoint entitlement-gated for every mintable scope, i.e.
+# permanently unreadable AND unwritable by any credential we hold. Its fossils left with it;
+# the CR's spend-belt header carries the verdict pointer.)
 #
-# THREE things here are NOT a mechanical port of #328, and each is a test rather than a comment:
-#   (i)   DIRECTION. Two of the three alerts are LOW-is-bad (`plan_is_free == 0`,
+# TWO things here are NOT a mechanical port of #328, and each is a test rather than a comment:
+#   (i)   DIRECTION. Both alerts are LOW-is-bad (`plan_is_free == 0`,
 #         `spend_probe_ok == 0`), so they bridge with `min_over_time`. The mechanical `max` port
 #         reads the healthiest sample in the window and delays a real plan upgrade by the whole
 #         range — CloudflareZonePlanNotFreeMaxDirection, asserted 10 minutes late in test 2.
@@ -31,18 +36,15 @@
 #         `{}` and back, which is a window restart with no change in the underlying condition.
 #         Bridging the arm (`absent(min_over_time(…[10m]))`) is what removes it; test 3 pins the
 #         transition itself with a promql assertion, not just the resulting alert.
-#   (iii) THE COST OF DROPPING IDENTITY is NOT the masking #313 accepted. Both aggregations here
-#         were chosen alert-preserving (`max` on a HIGH-is-bad gauge, `min` on LOW-is-bad ones), so
-#         a healthy replica cannot hide a stuck one — the stuck one wins and the belt fires. What
-#         is actually lost is the pod NAME in the alert's labels, and what is gained is a zone-wide
-#         page when only one replica is affected. Test 6 asserts exactly that, and is the test to
-#         change first if either Deployment is ever scaled out.
+#   Also asserted (test 6): THE COST OF DROPPING IDENTITY is NOT the masking #313 accepted — `min`
+#         on LOW-is-bad gauges is alert-preserving, so a healthy replica cannot hide a stuck one;
+#         what is actually lost is the pod NAME in the alert's labels, and what is gained is a
+#         zone-wide page when only one replica is affected. Test 6 is the one to change first if
+#         either Deployment is ever scaled out.
 #
-# ⚠ CloudflareSpendProbeBlind is FIRING IN PRODUCTION for a real cause while this lands (#231 —
-# argo/smart_routing 401s, code 1015, both product zones blind). That is a different problem and
-# #334 does not touch it: the same two zones fire before and after, verified against the live
-# series on 2026-08-12. What does change for #231 is the alert's LABEL SET (no more pod/instance),
-# so ArgoCD's sync resolves the two firing instances and re-fires them once under the new identity.
+# (Historical: CloudflareSpendProbeBlind was firing in production while #334 landed, for the
+# argo-1015 cause — the very leg since retired. With the leg gone the probe reads clean and the
+# alert resolves; the #334 identity/bridge analysis is unchanged by that.)
 #
 # NOT covered here, and no longer uncovered anywhere: CloudflareExporterDown — deliberately left in
 # its per-target form, `up == 0` needs a live target and a replaced target is a genuinely new
@@ -60,25 +62,16 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
-  # ── 1/7 — ONE spend-probe roll, all three alerts, both zones ─────────────────────────────────
+  # ── 1/7 — ONE spend-probe roll, both alerts, both zones ──────────────────────────────────────
   # The roll shape #288 measured (70-120s of vector-empty; a 2m hole here, with an explicit `stale`
   # marker — that is what kube SD writes when the old target disappears, and a plain end-of-series
   # would let PromQL's 5m lookback flatter the pre-fix form). Every gauge the pod exports gaps at
   # the same instant, because it is one pod: that is the whole reason this class exists.
-  # One drift per zone, mirroring spend-probe.py's `_FLIPPED` fixture, so the test also proves
-  # `by (zone)` selects the RIGHT zone instead of collapsing the two into one alert.
+  # One drifted zone and one decoy, mirroring spend-probe.py's `_FLIPPED` fixture, so the test
+  # also proves `by (zone)` selects the RIGHT zone instead of collapsing the two into one alert.
   - interval: 1m
-    name: "a spend-probe roll no longer re-clocks the two toggle alerts' `for: 5m`"
+    name: "a spend-probe roll no longer re-clocks the plan alert's `for: 5m`"
     input_series:
-      # Argo Smart Routing: ON for teststuff.net (the drift), off for minutark.ee (the decoy)
-      - series: 'cloudflare_zone_argo_smart_routing{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
-        values: "1+0x2 stale"
-      - series: 'cloudflare_zone_argo_smart_routing{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.171:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-6b8d5c9f42-q7x2n",service="cloudflare-spend-probe"}'
-        values: "_x5 1+0x120"
-      - series: 'cloudflare_zone_argo_smart_routing{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
-        values: "0+0x2 stale"
-      - series: 'cloudflare_zone_argo_smart_routing{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.171:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-6b8d5c9f42-q7x2n",service="cloudflare-spend-probe"}'
-        values: "_x5 0+0x120"
       # plan: minutark.ee has been moved off free (the drift), teststuff.net is free (the decoy)
       - series: 'cloudflare_zone_plan_is_free{zone="minutark.ee",container="probe",endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
         values: "0+0x2 stale"
@@ -110,24 +103,11 @@ tests:
         eval_time: 4m
         exp_samples: []
     alert_rule_test:
-      # `for: 5m` is honoured — the bridge does not make either toggle fire early
-      - eval_time: 4m
-        alertname: CloudflareZoneSpendToggleEnabled
-        exp_alerts: []
+      # `for: 5m` is honoured — the bridge does not make the alert fire early
       - eval_time: 4m
         alertname: CloudflareZonePlanNotFree
         exp_alerts: []
       # on time at 5m, straight through the hole, and on the drifted zone only
-      - eval_time: 6m
-        alertname: CloudflareZoneSpendToggleEnabled
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              platform_machinery: "true"
-              zone: teststuff.net
-            exp_annotations:
-              summary: "Usage-billed toggle enabled on Cloudflare zone teststuff.net"
-              description: "Argo Smart Routing is no longer \"off\" on zone teststuff.net — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value."
       - eval_time: 6m
         alertname: CloudflareZonePlanNotFree
         exp_alerts:
@@ -138,17 +118,6 @@ tests:
             exp_annotations:
               summary: "Cloudflare product zone minutark.ee is no longer on the free plan"
               description: "Zone minutark.ee reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
-      # one continuous instance each, not two
-      - eval_time: 20m
-        alertname: CloudflareZoneSpendToggleEnabled
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              platform_machinery: "true"
-              zone: teststuff.net
-            exp_annotations:
-              summary: "Usage-billed toggle enabled on Cloudflare zone teststuff.net"
-              description: "Argo Smart Routing is no longer \"off\" on zone teststuff.net — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value."
       # a healthy probe never trips the blind alert, and the bridged absent() arm does not invent
       # one out of the roll
       - eval_time: 6m
@@ -157,34 +126,16 @@ tests:
       - eval_time: 45m
         alertname: CloudflareSpendProbeBlind
         exp_alerts: []
-      # THE WITNESSES: both pre-#334 forms are silent when the shipped alerts page…
-      - eval_time: 6m
-        alertname: CloudflareZoneSpendToggleEnabledPre334
-        exp_alerts: []
+      # THE WITNESS: the pre-#334 form is silent when the shipped alert pages…
       - eval_time: 6m
         alertname: CloudflareZonePlanNotFreePre334
         exp_alerts: []
       - eval_time: 9m
-        alertname: CloudflareZoneSpendToggleEnabledPre334
+        alertname: CloudflareZonePlanNotFreePre334
         exp_alerts: []
-      # …and page only 5m after the NEW pod's first sample (5m + 5m), under a per-pod identity that
-      # no longer matches the one that was pending. 5 minutes lost to a 2-minute roll, on a window
-      # that is only 5 minutes long.
-      - eval_time: 11m
-        alertname: CloudflareZoneSpendToggleEnabledPre334
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              zone: teststuff.net
-              container: probe
-              endpoint: http-metrics
-              instance: 10.244.2.171:9505
-              job: cloudflare-spend-probe
-              namespace: monitoring
-              pod: cloudflare-spend-probe-6b8d5c9f42-q7x2n
-              service: cloudflare-spend-probe
-            exp_annotations:
-              summary: "Usage-billed toggle enabled on Cloudflare zone teststuff.net"
+      # …and pages only 5m after the NEW pod's first sample (5m + 5m), under a per-pod identity
+      # that no longer matches the one that was pending. 5 minutes lost to a 2-minute roll, on a
+      # window that is only 5 minutes long.
       - eval_time: 11m
         alertname: CloudflareZonePlanNotFreePre334
         exp_alerts:
@@ -282,9 +233,11 @@ tests:
             exp_annotations:
               summary: "Cloudflare product zone minutark.ee is no longer on the free plan"
 
-  # ── 3/7 — THE absent() ARM TRANSITION, in the live #231 shape ────────────────────────────────
-  # Today's production state (2026-08-12): both product zones blind, `spend_probe_ok == 0` on each,
-  # CloudflareSpendProbeBlind firing for a real cause (#231 — argo/smart_routing 401s, code 1015).
+  # ── 3/7 — THE absent() ARM TRANSITION, in the shape #231 was firing in ───────────────────────
+  # The production state #334 landed into (2026-08-12): both product zones blind,
+  # `spend_probe_ok == 0` on each, CloudflareSpendProbeBlind firing for a real cause — the
+  # argo-1015 refusals, i.e. the leg retired later that same day; the SHAPE (a real blind zone
+  # rolled underneath) remains the arm-transition case regardless of what blinded it.
   # Now roll the probe pod underneath that. The pre-#334 expr does something worse than gap: the
   # `== 0` arm empties AND the `absent()` arm turns true, so the alert trades two `{zone=…}`
   # instances for one label-less `{}` instance and back again — an identity change with no change
@@ -338,15 +291,15 @@ tests:
               platform_machinery: "true"
               zone: minutark.ee
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone minutark.ee"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind on zone minutark.ee"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
           - exp_labels:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
       # THE WITNESS: silent at the same moment — its two zone windows died with the old pod and the
       # 3-minute `{}` instance the absent() arm raised in their place never reached `for: 30m`
       - eval_time: 31m
@@ -371,7 +324,7 @@ tests:
               pod: cloudflare-spend-probe-6b8d5c9f42-q7x2n
               service: cloudflare-spend-probe
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone minutark.ee"
+              summary: "Cloudflare spend belt is blind on zone minutark.ee"
           - exp_labels:
               severity: warning
               zone: teststuff.net
@@ -383,7 +336,7 @@ tests:
               pod: cloudflare-spend-probe-6b8d5c9f42-q7x2n
               service: cloudflare-spend-probe
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
 
   # ── 4/7 — the probe VANISHES (FU-150), and the price the bridged absent() arm charges ────────
   # The other half of the absent() arm's job, and the one place bridging it costs something: pod
@@ -424,7 +377,7 @@ tests:
           - exp_labels:
               severity: warning
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind"
+              summary: "Cloudflare spend belt is blind"
       # the shipped alert waits out the range first: 20m + `for: 30m` = 50m. The price, in full.
       - eval_time: 49m
         alertname: CloudflareSpendProbeBlind
@@ -438,8 +391,8 @@ tests:
               severity: warning
               platform_machinery: "true"
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
 
   # ── 5/7 — THE CEILING, asserted rather than assumed ──────────────────────────────────────────
   # [10m] is a bridge, not immunity — the same accepted limit #288 measured (ten pod generations,
@@ -498,15 +451,15 @@ tests:
               platform_machinery: "true"
               zone: minutark.ee
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone minutark.ee"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind on zone minutark.ee"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
           - exp_labels:
               severity: warning
               platform_machinery: "true"
               zone: teststuff.net
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
       # the witness lands in the same minute — at the ceiling the two forms are indistinguishable,
       # which is exactly what "a bridge, not immunity" means
       - eval_time: 55m
@@ -523,7 +476,7 @@ tests:
               pod: cloudflare-spend-probe-6b8d5c9f42-q7x2n
               service: cloudflare-spend-probe
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone minutark.ee"
+              summary: "Cloudflare spend belt is blind on zone minutark.ee"
           - exp_labels:
               severity: warning
               zone: teststuff.net
@@ -535,14 +488,15 @@ tests:
               pod: cloudflare-spend-probe-6b8d5c9f42-q7x2n
               service: cloudflare-spend-probe
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
 
   # ── 6/7 — THE PRICE OF DROPPING IDENTITY, which is not the price #313 paid ───────────────────
   # #313 accepted masking: `max by (job)` over a HIGH-is-bad staleness gauge lets a healthy instance
   # hide a stuck one. That does NOT happen here, and copying the claim across would have been wrong.
-  # Both aggregations in #334 were chosen alert-preserving — `max` on the HIGH-is-bad Argo toggle,
-  # `min` on the LOW-is-bad `plan_is_free`/`spend_probe_ok` — so the BAD replica always wins the
-  # aggregation and the belt still fires. Two real costs remain, and both are asserted below:
+  # The aggregation is alert-preserving — `min` on the LOW-is-bad `plan_is_free`/`spend_probe_ok`
+  # — so the BAD replica always wins the aggregation and the belt still fires. (The group's one
+  # HIGH-is-bad gauge, the argo toggle bridged with `max`, left with the retired leg — the
+  # direction argument was the same, from the other end.) Two real costs remain, asserted below:
   #   • the alert can no longer name the pod (the operator's first `kubectl logs` target is gone
   #     from the labels; the runbook line in the description is what replaces it), and
   #   • one stuck replica pages for the whole zone, where the per-pod form paged for one pod.
@@ -557,11 +511,6 @@ tests:
         values: "0+0x120"
       - series: 'cloudflare_zone_spend_probe_ok{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.171:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-6b8d5c9f42-q7x2n",service="cloudflare-spend-probe"}'
         values: "1+0x120"
-      # …and the same split on the HIGH-is-bad gauge: one replica has read the drift, one has not
-      - series: 'cloudflare_zone_argo_smart_routing{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.166:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-7946494648-mp24c",service="cloudflare-spend-probe"}'
-        values: "1+0x120"
-      - series: 'cloudflare_zone_argo_smart_routing{zone="teststuff.net",container="probe",endpoint="http-metrics",instance="10.244.2.171:9505",job="cloudflare-spend-probe",namespace="monitoring",pod="cloudflare-spend-probe-6b8d5c9f42-q7x2n",service="cloudflare-spend-probe"}'
-        values: "0+0x120"
     alert_rule_test:
       # LOW-is-bad: `min` keeps the stuck replica's 0, so the belt fires — no masking
       - eval_time: 31m
@@ -572,20 +521,9 @@ tests:
               platform_machinery: "true"
               zone: teststuff.net
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
-      # HIGH-is-bad: `max` keeps the drifted replica's 1, same result from the other direction
-      - eval_time: 6m
-        alertname: CloudflareZoneSpendToggleEnabled
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              platform_machinery: "true"
-              zone: teststuff.net
-            exp_annotations:
-              summary: "Usage-billed toggle enabled on Cloudflare zone teststuff.net"
-              description: "Argo Smart Routing is no longer \"off\" on zone teststuff.net — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value."
-      # what is actually lost: the pre-#334 forms named the offending pod, and only that pod
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
+      # what is actually lost: the pre-#334 form named the offending pod, and only that pod
       - eval_time: 31m
         alertname: CloudflareSpendProbeBlindPre334
         exp_alerts:
@@ -600,26 +538,11 @@ tests:
               pod: cloudflare-spend-probe-7946494648-mp24c
               service: cloudflare-spend-probe
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
-      - eval_time: 6m
-        alertname: CloudflareZoneSpendToggleEnabledPre334
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              zone: teststuff.net
-              container: probe
-              endpoint: http-metrics
-              instance: 10.244.2.166:9505
-              job: cloudflare-spend-probe
-              namespace: monitoring
-              pod: cloudflare-spend-probe-7946494648-mp24c
-              service: cloudflare-spend-probe
-            exp_annotations:
-              summary: "Usage-billed toggle enabled on Cloudflare zone teststuff.net"
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
 
   # ── 7/7 — the SYMMETRY of the range: a fixed condition keeps ringing for ≤10m ────────────────
   # The mirror image of the bridge, and the reason the range cannot simply be widened. For up to a
-  # range window after the probe recovers (the token is re-scoped, #231 is fixed) `min_over_time`
+  # range window after the probe recovers `min_over_time`
   # still reports the blind sample, so the alert clears late. Bounded and exact: the last `0`
   # (t=40m) leaves the range at t=50m.
   # Accepted for the same reason as everywhere else in this class — an alert that rings 10 minutes
@@ -654,8 +577,8 @@ tests:
               platform_machinery: "true"
               zone: teststuff.net
             exp_annotations:
-              summary: "Cloudflare spend-toggle belt is blind on zone teststuff.net"
-              description: "The spend-toggle probe has not read a zone's plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix)."
+              summary: "Cloudflare spend belt is blind on zone teststuff.net"
+              description: "The spend probe has not read a zone's plan state for 30m — the gauge above is UNKNOWN, not safe, and a plan change now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token's zone reads on both product zones (docs/cloudflare.md §Token matrix)."
       # …bounded by the range, not open-ended
       - eval_time: 51m
         alertname: CloudflareSpendProbeBlind

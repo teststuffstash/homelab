@@ -98,7 +98,8 @@ own domain) is a claim migration, not Cloudflare surgery.
 | `homelab-acme-dns` | one zone, DNS write | wallet `cloudflare-acme-token`; OPNsense env (`ACME_CF_TOKEN` when running the ACME playbook) | acme.sh DNS-01 |
 | `homelab-observability-read` | ALL zones read (analytics/zone/WAF-config) + account read (analytics, tunnel, **audit logs via `Account Settings Read`** — fixed 2026-08-08, see the gotcha) | KeePass → `~/.claude/cloudflare/observability-read` (jail) + Infisical `CLOUDFLARE_OBSERVABILITY_READ` (→ ESO) | jail LLM sessions (GraphQL + audit), the CF exporter, responder triage later |
 | `homelab-ingress-write` | DNS (both product zones) + Tunnel write only | KeePass → Infisical `CLOUDFLARE_INGRESS_WRITE` → ESO **`cf-api-proxy/cf-api-token`** — the PROXY holds it (2026-08-09 custody move); provider-terraform is TOKENLESS (`base_url` → the proxy). Never in claims, never the reconciler. | **cf-api-proxy** (§below), on behalf of PublicRoute Workspaces. |
-| `homelab-inventory-read` (staged) | token inventory read, for the FU-156 expiry belt | `inventory-read.tf`, gated on `var.user_id` — applies are a no-op until the operator supplies it | the token-expiry exporter (future) |
+| `homelab-inventory-read` (staged) | token inventory read, for the FU-156 expiry belt | `inventory-read.tf`; `var.user_id` DEFAULTED 2026-08-12 (settled by the legacy-token dump) — mints on the next operator apply | the token-expiry exporter (future) |
+| `homelab-jail-read-all` | EVERY read group per scope, filtered live from the catalog (`\bRead\b` — 43 zone + ~117 account + 2 user groups at mint); zones `*`, account `*`, user | `jail-read-all.tf` → KeePass → `~/.claude/cloudflare/jail-read-all` via wallet-files.sh. **Replaced the dashboard "Read all resources" token (deleted at apply, 2026-08-12)** | jail LLM sessions' ad-hoc read-everything archaeology (token audits, settings dumps, permission probes) |
 
 **Operator-applied tofu = exactly one root, one command**: `devbox run cloudflare-token-tofu
 plan|apply` (`scripts/cloudflare-token-tf.sh`, the github-tofu twin). Minted tokens flow into
@@ -140,22 +141,36 @@ apex; consumer #1 is the minutark placeholder claim in oracle-iac). The zone map
 constant in the PublicRoute composition; the zone BOOTSTRAP (records, TLS floor, DNSSEC) is
 `tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
 
-**Spend surface**: the account has a payment card attached (eid-demo.com is Pro), and some
-usage-billed features are toggled by ordinary zone Write groups — the assumed case was **Argo
-Smart Routing (per-GB) via `PATCH /zones/{id}/argo/smart_routing`, gated by Zone Settings
-Write** — ⚠ **UNPROVEN as of 2026-08-09 (PR#220 live-verify): the argo setting refuses BOTH our
-Zone Settings Read and Write tokens (HTTP 401 code 1015 `Cause(s): smart_routing`), and the docs'
-zone-permission catalog names no Argo group at all** — settle it with the admin token
-(`GET /user/tokens/permission_groups | grep -i argo`) at the next host-side token apply; until
-then the spend-probe's argo leg is blind (its Blind alert says so) and the write vector may not
-exist. Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries —
-verify anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES;
-plans show hex only). Containment: the autonomous path can't reach those endpoints (allowlist);
-the jail token can, so the drift belt (homelab#217, **built** — §Observability) alerts on any
-usage-toggle/plan change on the product zones. Doctrine (the mTLS/audit-logs lesson, generalized): **permission semantics
-come from the target ENDPOINT's "accepted permissions" docs line — the catalog names document
-nothing, the dashboard shows a subset, and any `*Write` group is presumed entitlement-toggling
-until the endpoint list says otherwise.**
+**Spend surface**: the account has a payment card attached (eid-demo.com is Pro), and the
+assumed usage-toggle case was **Argo Smart Routing (per-GB) via
+`PATCH /zones/{id}/argo/smart_routing`, gated by Zone Settings Write** — flagged ⚠ UNPROVEN at
+PR#220 and **SETTLED 2026-08-12 by the host-side admin-token session: the argo setting is
+ENTITLEMENT-gated, not permission-gated.** The evidence chain, complete:
+
+| Token | Relevant groups | `GET/PATCH …/argo/smart_routing` |
+|---|---|---|
+| admin | Zone Read only | 10000 Authentication error |
+| `observability-read` | Zone Read + Zone Settings Read | 1015 `Cause(s): smart_routing` |
+| `tofu-apply` | Zone Settings **Write** | 1015 `Cause(s): smart_routing` |
+| legacy "Read all resources" | every read group incl. Billing Read | 1015 `Cause(s): smart_routing` |
+
+…and no Argo permission group exists in the full catalog, and the endpoint's docs name no
+accepted-permissions line. **No mintable token scope can read OR write it on these zones** — the
+metered-spend toggle effectively can't be reached by any credential we hold, jail token
+included, which is good news for containment. Consequences: the spend-probe's **argo leg was
+RETIRED** (not reinterpreted — "1015 ⇒ off on a free zone" is plausible but unverifiable without
+buying the entitlement; conservative option taken), so the belt is now the PLAN gauge +
+probe-health, and a dashboard-side Argo toggle lands in the **audit log** (`Account Settings
+Read` on the observability token — an on-demand jail read, `accounts/{id}/logs/audit`).
+Purchase-shaped spend (plans, subscriptions) needs Billing groups no token carries — verify
+anytime with `devbox run cloudflare-token-audit` (renders minted policies with NAMES; plans show
+hex only). Containment: the autonomous path can't reach those endpoints (allowlist); the jail
+token can, so the drift belt (homelab#217, **built** — §Observability) alerts on any plan change
+on the product zones. Doctrine (the mTLS/audit-logs lesson, generalized, now with the argo
+verdict as its sharpest instance): **permission semantics come from the target ENDPOINT's
+"accepted permissions" docs line — the catalog names document nothing, the dashboard shows a
+subset, and any `*Write` group is presumed entitlement-toggling until the endpoint list says
+otherwise; a group can also gate NOTHING, because the gate may not be a permission at all.**
 
 ## Observability
 
@@ -168,20 +183,20 @@ keyed to scrape-target health (`CloudflareExporterDown`), not data presence. End
 edge-data absence becomes the DIY poller's belt when built (FU-039 open leg: a ConfigMap-python
 GraphQL poller, github-exporter pattern, targeting the four ✅ rows below).
 
-**Spend-toggle drift belt** (homelab#217, 2026-08-09): `cloudflare-spend-probe` — a
-ConfigMap-python poller beside the exporter in the same app/namespace, on the same ESO-delivered
-`CLOUDFLARE_OBSERVABILITY_READ` token (Zone Settings **Read** is all it needs), polling the
-zone-settings REST surface the exporter doesn't touch. Two gauges per product zone —
-`cloudflare_zone_argo_smart_routing` and `cloudflare_zone_plan_is_free` — plus
+**Spend drift belt** (homelab#217, 2026-08-09; argo leg retired 2026-08-12 — §Spend surface):
+`cloudflare-spend-probe` — a ConfigMap-python poller beside the exporter in the same
+app/namespace, on the same ESO-delivered `CLOUDFLARE_OBSERVABILITY_READ` token, polling the
+zone REST surface the exporter doesn't touch. One gauge per product zone —
+`cloudflare_zone_plan_is_free` — plus
 `cloudflare_zone_spend_probe_ok`, so a blind belt is loud rather than reassuring
-(`CloudflareZoneSpendToggleEnabled` / `CloudflareZonePlanNotFree` / `CloudflareSpendProbeBlind`,
-all `severity: warning` into the normal responder path). Unlike the exporter it watches
+(`CloudflareZonePlanNotFree` / `CloudflareSpendProbeBlind`,
+both `severity: warning` into the normal responder path). Unlike the exporter it watches
 `teststuff.net` too — `CF_EXCLUDE_ZONES` hides that zone from the exporter (#132) and the belt
 must not inherit that blind spot. `eid-demo.com` is out of scope: legitimately Pro, outside every
 write token's zone map. Why a belt and not a guard is §Spend surface above; the mechanism and its
 `--self-test` (recorded API shapes replayed through the committed alert exprs) live in
 `argocd/resources/cloudflare-exporter/spend-probe.py`. That self-test evaluates ONE instant; the
-three alerts' behaviour over time — the `for:` windows, and the fact that none of them restarts one
+alerts' behaviour over time — the `for:` windows, and the fact that neither restarts one
 when the single-replica probe rolls (homelab#334) — is the promtool fixture beside it,
 `spend-belt.promtool-test`, run by `devbox run prometheus-rules-lint` in CI.
 
