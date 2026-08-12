@@ -140,6 +140,28 @@ spec:
         # belt that invents a baseline is worse than one that waits for it. `platform_machinery`
         # for the homelab#239 reason: the subject IS the launcher, so a responder may author a PR
         # here and must never auto-merge one.
+        #
+        # ⚠ DELIBERATELY NOT RESTART-GAP BRIDGED (homelab#336). This alert was listed as a
+        # single-replica candidate for the #288 bridge, and the honest answer is that the bridge
+        # does not fit the hole — twice over:
+        #   (1) THE DEPENDENCY IS THE PUSHGATEWAY, and its failure is DESTRUCTION, not a gap. A
+        #       group pushed into the gateway is served forever, so nothing here goes stale on a
+        #       ride's own timescale; what removes the data is a gateway RESCHEDULE, which empties
+        #       the emptyDir-backed persistence file outright. `max_over_time(…[10m])` over an
+        #       emptied gateway is still empty — the range would bridge ten minutes of a loss that
+        #       lasts until an hour of new rides has rebuilt both halves of the split.
+        #   (2) THE HOLE FAILS IN THE SAFE DIRECTION ALREADY, and it is documented above as such:
+        #       no older half means an empty right-hand vector and NO alert. This one goes quiet,
+        #       not red — so the `for: 30m` window it restarts was never protecting a firing alert,
+        #       and there is no false resolve to repair. Compare AgentCoordinateScanWedged below,
+        #       which #333 DID bridge: its conjuncts read kube-state-metrics, a mirror that
+        #       republishes the same facts after a restart, so the condition genuinely outlived the
+        #       hole. Nothing here does.
+        # The emptyDir is a real defect and it is NOT this class's: it is a DURABILITY bug in
+        # argocd/resources/pushgateway/deployment.yaml that silently resets this alert's baseline
+        # (and destroys RegistryMirrorDanglingLinks' datum, see that file). #336 names it as its
+        # own finding in the PR body instead of absorbing it into a range selector, which is what
+        # that issue's acceptance asks for.
         - alert: AgentRunPhaseSlow
           expr: |
             (
