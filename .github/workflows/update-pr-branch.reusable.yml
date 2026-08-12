@@ -64,6 +64,29 @@ jobs:
           sort: created
           direction: asc # FIFO
 
+      # ── the CR∧BEHIND crack (2026-08-12, found on homelab#398 twice in one hour) ────────────
+      # The action above skips CHANGES_REQUESTED PRs (its documented changesRequested shape), and
+      # the review reflex only lifts green+CURRENT PRs — so an armed PR that gets a verdict, a
+      # fix push, and then watches master move sits in a state NO machine serves: the reflex
+      # waits for current, the updater waits for the verdict to clear. On a busy master day the
+      # crack re-opens after every merge. This belt updates exactly that class via the API;
+      # over-updating is harmless (strict checks re-run and still gate the merge — the same
+      # argument as require_passed_checks: false above).
+      - name: Unstrand changes-requested PRs (the CR-and-behind crack)
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,mergeStateStatus,autoMergeRequest,reviewDecision \
+          | jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
+                                and .reviewDecision == "CHANGES_REQUESTED") | .number' \
+          | while read -r n; do
+              echo "unstrand: updating CR-and-behind PR #$n"
+              gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$n/update-branch" \
+                || echo "unstrand: update of #$n failed (conflict? next run retries)"
+            done
+
       - name: Flag conflicted PRs (updater can't auto-resolve these)
         env:
           GH_TOKEN: ${{ github.token }}
