@@ -1,0 +1,27 @@
+# fix-debounce — THE FAMILY, as one decision table (cleanup move 2's pilot; was 8 copied dirs).
+#
+# THE CONTRACT (consolidated from the eight fixture essays; the per-leg intent is the rows file):
+# The debouncer's pending set is `open ∧ agent-fix ∧ line-anchored alert-fp: ∧ NO agent/* label`,
+# derived LIVE per repo (REST, no search lag). Legs A–C pin the lifecycle-NAMESPACE exclusion
+# (homelab#238 → #244): every lifecycle label is applied by removing agent/queued, so the label
+# meaning "somebody has this" is exactly what would re-admit it — blocked (a human gate), error
+# (the breaker's own output), in-progress (a live ride) must all stay out, and the ordinary queue
+# path must survive the exclusion (leg B: same world, label lifted → queued + ONE doorbell).
+# Legs D–E pin the marker ANCHORING (homelab#249/PR#271): `test("(^|\n)alert-fp:")` — a body
+# QUOTING the marker mid-line is not lane membership, a real mid-body marker IS (an anchoring that
+# also silenced the lane would be worse than the bug). The currency rows pin FU-133 leg (c): a
+# RESOLVED alert must not queue (endsAt in the past), a silenced-but-firing one MUST (homelab#253
+# — the state word is never consulted), and the "alert resolved, holding" note posts ONCE (the
+# comment-dedup read). #226 (self-referential: true) is the family WITNESS in every world: its
+# SELFREF line can only be printed by a served list read, so an empty world can never fake a pass.
+#
+# Worlds: lifecycle (clean #237 + #229 agent/error + #226 SELFREF) · anchoring (#249 mid-body
+# marker + #226). Currency rows overlay their alert-store/comment state on lifecycle (rows/<id>/).
+name: fix-debounce
+mode: table
+source: agents/coordinator/fix-debounce-argo.yaml
+parts:
+  - file:bridge.sh
+  - block:fix-debounce-pending-set
+  - block:fix-debounce-gates
+rows: rows.psv
