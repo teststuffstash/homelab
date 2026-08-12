@@ -8,6 +8,27 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-140** *(archived 2026-08-12)* — per-loop-ns transcript crash-net (#286/PR#294, goal #278).
+  First nightly PROVEN 2026-08-12 04:23Z: all four `transcripts-crashnet` jobs Succeeded;
+  platform-agents log: `297 uploaded, 0 already marked, 0 failed` to `s3://agent-transcripts/...`.
+- **FU-145** *(archived 2026-08-12)* — `AgentCoordinateScanWedged` re-keyed on the deterministic
+  scan phase (#283/PR#300 + KSM/pushgateway halves #347/#370), fixture-pinned; the Forbid-cron
+  suppression second symptom is FU-168's design. Doc survives: observability-and-retro.md §Part A″.
+- **FU-158** *(archived 2026-08-12)* — promtool rules-lint + 13 behaviour fixtures CI-required
+  (#288/PR#310 + the estate sweep #331-#336/#351-#353 eradicated the restart-gap class; drift-pin
+  #337, yq recipe #344). The presence-vs-behavior blind spot of the jail lane is closed.
+- **FU-160** *(archived 2026-08-12)* — ride/dispatch phase metrics end-to-end (goal #278: #287/
+  PR#317 launcher, #319/PR#339 dispatch rows, agent-runtime#66/PR#67 in-pod, #324/PR#373 the
+  two-dark-phases fix). Live-verified 2026-08-12: all four launcher phases + clone/devbox/llm-loop/
+  finalize + ring-to-scan/scan/coordinator-* families in Prometheus. Doc survives: the
+  ride-latency spike (shave candidates stay there).
+- **FU-162** *(archived 2026-08-12)* — router draw verb + curated pools shipped (#290: draw_slot,
+  pools table + edit-time self-test, research-fanout converted, `research-draw-roster` fixture).
+  Acceptance ride = FU-126's run 2 (its ordinary work; a defer there files fresh).
+- **FU-165** *(archived 2026-08-12)* — the pilot RAN: goal #278 closed VALIDATED 2026-08-12
+  (first validated terminal). Evidence dossier = docs/spikes/goal-lane-v1.1-fu165-pilot.md +
+  issue-authoring.md §Goal lane versions; v1.2 design = FU-168 + #295 + §M10; the subscription
+  budget blind spot (gap a) is chartered post-FU-131 on #278.
 - **FU-133** *(archived 2026-08-11)* — Alert-lane correlation, all legs shipped: resolve/dedup/
   dispatch halves earlier; leg (a) filing-side `group_by: [alertname]` pinned (PR#263 — proved
   already-inherited, pinned against root-route drift); leg (c) queue-time currency gate in

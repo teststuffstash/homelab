@@ -3723,3 +3723,13 @@ call), #289 + 14 inert = ordinary triage. FU-166/167/168 unblocked. New from the
 ruling: goal-budget.sh fail-opens under dash (probe artifact, one shebang from live) and the
 budget closed cap-phantom ($76/$60, ~$0 real spend) — both routed to the fix-round list in
 meta-state §4.
+↳ (scoped fu-sweep, 2026-08-12 ~09:30Z) Over the goal-touched FUs: ARCHIVED 6 — FU-140
+(crash-net first nightly PROVEN: 4/4 jobs Succeeded, 297 uploaded/0 failed), FU-145 (re-key
+shipped; design → FU-168), FU-158 (13 behaviour fixtures CI-required; restart-gap estate done),
+FU-160 (both phase-metric families live-verified in Prometheus), FU-162 (#290; acceptance rides
+FU-126 run 2), FU-165 (pilot VALIDATED; dossier = spike + register). FU-161 refreshed (key wired
+via #299; hand-fire model-scout-2psl6 FIRED at the sweep; legs 3–4 unblocked). FU-168/166/150
+trimmed to pointers. STILL-VALID: FU-146/147 (soaks, no eligible traffic yet), FU-150 (window
+~09-11), FU-102 (parked). OPERATOR: FU-144 fork. ⚠ Sweep also REPAIRED a self-inflicted loss:
+the FU-167 pointer-ize regex had swallowed the FU-166 item (a `| tail -1` masked the lint's
+exit) — restored from its authoring commit; lesson: never pipe-filter a gate's exit.

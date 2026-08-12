@@ -221,19 +221,15 @@ the block needs pruning, not more headings.
       the coordinator Sensor, sits on the two-readers trap) — operator call, recorded in the doc.
       Relates FU-143, FU-145, ADR-094.
 - [ ] **FU-168** — **The dispatch design revisit chartered at #278's closeout (ADR-094 + ADR-097,
-      all options open — the numbers decide).** Operator charter (#278 comment 5257393726): re-mine
-      done (burn-down 5262051051 + meta-state §4); the DESIGN is the deferral. Two coupled halves,
-      one revisit: (a) **concurrency** — the scan mutex + session-streams-the-ride shape caps
-      parallelism (peak 3, 1-worker windows while streams hold the mutex; the Forbid-cron symptom
-      FU-145 points here); (b) **the `Touches:` fence** — measured 2026-08-12 over all 41 goal PRs:
-      ONE overlapping same-file write (auto-merged), ZERO merge-conflict 422s, counterfactual
-      full-drift ≈ 1 trivial collision, while ≥7 sub-60-line deferred wants each cost a full ride
-      (~7× margin for size-discriminated declared fold-in; evidence + method: the goal-278 sprout-DAG
-      artifact, `agents/goal_graph.py`). Candidate directions recorded on #278: detach the stream /
-      rethink item-scoped dispatch; demote `Touches:` to metadata + static ❌/pin-only checks, gate
-      the merge not the launch. **Next:** the design session, fresh numbers in hand; single-run
-      caveat — re-measure on a concurrent stack first if one is riding by then.
-      Relates ADR-094, ADR-097, FU-145, FU-167, FU-090 (§M10 phase-not-clause), FU-165.
+      all options open — the numbers decide).** Two coupled halves: (a) concurrency (scan mutex +
+      session-streams-the-ride + the doorbell convoy, an ADR-093 regression — the fixed-name
+      collapse was lost); (b) the `Touches:` fence (over-blocks small folds ~7×, under-enforces
+      governance — #379). Evidence + candidate directions:
+      [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](spikes/goal-lane-v1.1-fu165-pilot.md)
+      findings 4–5 + #278's charter comments. **Next:** the design session — AFTER FU-167
+      moves 1–3 land (its deliverables ride the replay lock).
+      Relates ADR-094, ADR-097, FU-145(arch), FU-167, FU-090, FU-165(arch).
+
 - [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
       × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
       duplication (0 worlds shared by reference, 23 forked world paths, 74 single-row fixtures
@@ -244,6 +240,15 @@ the block needs pruning, not more headings.
       ride this lock; the scan-side footprint exemption for `agents/replay/**` is decided with
       FU-168. Relates ADR-097, ADR-103, FU-165, FU-168.
 
+- [ ] **FU-166** — **Meta-session watches: event-driven survey + the codeowner-park blind spot**
+      (operator, 2026-08-11). Leg (a): exporter park series off its `reviewDecision` walk +
+      `CodeownerParkWaiting` >30m; watch clause 4 reads Prometheus (today: a 600s direct `gh`
+      poll against the one-poller doctrine). Leg (b): survey ALL `agents/meta-*.sh` cadences and
+      go event-driven where a source exists — polls demoted to backstops. The survey MUST include
+      the source found at #278's close: nothing watches a User comment landing on an open
+      `task/goal` issue (the charter comment had no consumer but the operator).
+      UNBLOCKED at the #278 verdict. Relates FU-150, FU-084, ADR-093.
+
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
@@ -251,14 +256,7 @@ the block needs pruning, not more headings.
       changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch carry
       state-fp, post-08-07 clauses emit no dispatch units. **Next:** SOAK ONLY — the first live
       doorbell-path hold, then archive. Not an FU-165 goal child (built, nothing to ride).
-- [ ] **FU-145** — **`AgentCoordinateScanWedged` measures the wrong thing: POINTER.** It keys on
-      scan-pod LIFETIME, but the pod blocks on its item session, which blocks on the ride — so it
-      fires on any ride >15m, on every stack (twice in one hour on 2026-08-06, both healthy, both
-      self-resolving). Evidence, the two remedies ruled OUT, and why the `fc7e9fb` calibration
-      cannot be reused: [`observability-and-retro.md`](agents/observability-and-retro.md) §Part A″.
-      Minted TWO false issues (#120, #134 — the #134 ride's disproof is the class writeup).
-      Description fixed 2026-08-08 (leads with the FP class + the early-death-vs-reached-clones
-      discriminator; the log-compare test is retired). **SHIPPED 2026-08-11 (goal #278 child #283/PR#300 + KSM/pushgateway halves #347/#370):** re-keyed on the scan phase with fixtures. ⚠ the Forbid-cron suppression second symptom remains (dispatch holds the scan pod open — the #278 closeout deliverable owns the design). **Next:** archive — the design is **FU-168** now. Relates homelab#103 (containment `fc7e9fb`), FU-090, FU-144.
+
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
       `changes-requested` round that pushes nothing was invisible (circles PR#39 r3: died on a
@@ -336,15 +334,13 @@ the block needs pruning, not more headings.
       waits for a human — for a class of red that should be retried. **Operator direction
       2026-08-07:** give each stack coordinator both levers, and make the lever REVEAL which
       environment is telling the truth. Relates FU-148, FU-072 (kata networking), ADR-097.
-- [ ] **FU-150** — **Nothing alerts on "CI cannot dispatch": POINTER.** 5h of `queued`-forever
-      runs with every belt green — full analysis:
-      [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md).
-      Vendor half SHIPPED 2026-08-07 (`72c3a42`: githubstatus.com poll → `GithubVendorOutage`).
-      **SHIPPED 2026-08-11 (goal #278 child #284/PR#298):** `CiDispatchStalled` queued-age alert
-      live with promtool fixtures replaying BOTH incidents (2026-08-07 listener wedge + the
-      [route-loss](incidents/2026-08-11-wk-metal-02-default-route-loss.md)); its [5m] hole half
-      landed via #335/PR#349. **Next:** archive after it survives its first real firing or a
-      quiet month.
+- [ ] **FU-150** — **"CI cannot dispatch" alerting: POINTER.** Analysis + both halves' history:
+      [`docs/incidents/2026-08-07-arc-listener-wedge.md`](incidents/2026-08-07-arc-listener-wedge.md);
+      `GithubVendorOutage` (vendor half) + `CiDispatchStalled` queued-age alert (OURS half,
+      goal #278 child #284, promtool-fixtured against both incidents) are live.
+      **Next:** archive after `CiDispatchStalled` survives its first real firing or a quiet month
+      (shipped 2026-08-11 — window opens ~2026-09-11).
+
 - [ ] **FU-046** — **Prove the reviewable-dep-bump path E2E on a real major bump.** The split is
       decided and built — `automerge` = mechanical CI-only approval, `deps-review`/major = the LLM
       review path ([`docs/agents/merge-path.md`](agents/merge-path.md) §Decisions;
@@ -378,24 +374,13 @@ the block needs pruning, not more headings.
 ### Models, cost & routing
 
 - [ ] **FU-161** — **Scout v3: variant filter + benchmark cross-check + typed cell-keyed canary
-      verdicts.** Trigger, design and build order:
-      [`docs/agents/model-routing.md`](agents/model-routing.md) §M7 legs 1–5 (digest #234's
-      `:batch` rollout and the three bogus canary verdicts that tripped #235). Legs 1–2 SHIPPED
-      2026-08-11 (homelab#282): the base-id diff replays #234's own world 22→2 and the digest
-      carries AA columns + a rank (`agents/replay/fixtures/scout-*`). **Next:** (a) an OpenRouter
-      account key in the scout CronWorkflow env as `SCOUT_MCP_KEY` — without it leg 2 degrades to
-      all-`unbenched` by design; (b) hand-fire the scout once and link the digest (settles
-      `get-model`'s unprobed `arguments` envelope); legs 3–4 then ride FU-162's store change.
-      Related: #235's PromQL scout-exclusion belt (machine lane owns it).
-- [ ] **FU-162** — **Router draw verb + curated class pools (ADR-104).** `/route` consumes
-      `class` + `slot` + `jitter:false` deterministically against scout-curated ranked pools
-      (`regular`/`premium`/`ultra`/`instrument`, family-deduped, disjoint by convention);
-      response names the pool version; idempotent relaunch. Contract:
-      [`model-routing.md`](agents/model-routing.md) §M13; process consumer:
-      [`research-and-specs.md`](agents/research-and-specs.md). **Next:** pool table + curation in
-      the scout tick (FU-161 leg 5), then the router.py slot/jitter path, then
-      `research-fanout.sh` reads slots instead of hand-picked models (the circles flash/pro
-      slip). Acceptance = the second research run (FU-126).
+      verdicts.** Design: [`model-routing.md`](agents/model-routing.md) §M7 legs 1–5. Legs 1–2
+      SHIPPED 2026-08-11 (#282); `SCOUT_MCP_KEY` wired into the cron env (#299, goal #278) — leg
+      (a) DONE. **Next:** read the digest of the 2026-08-12 hand-fire (`model-scout-2psl6`,
+      fired at the FU sweep) — it settles `get-model`'s unprobed `arguments` envelope; then
+      legs 3–4 (typed rail-probe canary + pool curation), UNBLOCKED since FU-162's draw/store
+      shipped. Related: #235's PromQL scout-exclusion belt (machine lane owns it).
+
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
       2026-08-03; §M10 the unrouted coordinator lane); decision record ADR-096 (P1–P3+P5 live).
@@ -454,37 +439,7 @@ the block needs pruning, not more headings.
       (`s3://agent-transcripts`, path normalization, jail/cluster separate + combined views —
       operator requirement), which also delivers context-repos.md's measurement sweep.
       Relates FU-117, FU-163, FU-058, FU-140.
-- [ ] **FU-160** — **Ride phase timings are archaeology, not metrics — a bad cache adding 10 min
-      to every ride would be invisible.** One specimen fully reconstructed 2026-08-09
-      ([spike](spikes/ride-latency-breakdown.md)): 8m46s floor-case ride ≈ 25% dispatch, 60%
-      pod/clone/LLM overhead, ~0% "the work"; whether its image was node-cached is UNKNOWABLE
-      after the fact. **SHIPPED 2026-08-11/12 (goal #278: launcher half #287/PR#317, dispatch rows #319/PR#339):**
-      `agent_run_phase_seconds` + `agent_dispatch_phase_seconds`, panels, self-baselined
-      `AgentRunPhaseSlow`. Remaining: the agent-finalize IN-POD half (agent-runtime repo — no
-      sibling issue yet) + #324 (launcher never emits ride/bookkeeping rows — queued). Shave
-      candidates (fast-path, pr-open script, image pin) live in the spike, not here.
 
-- [ ] **FU-158** — **PrometheusRule behaviour gates — promtool RULED + check-half SHIPPED
-      2026-08-11** (operator: promtool over more per-file self-tests; the pattern's third
-      instance — exporter, spend-probe, responder-behaviour-test — settled the ≥2 rule).
-      Shipped: `prometheus` (cli output) in devbox, `devbox run prometheus-rules-lint`
-      (spec.groups → `promtool check rules`, fail-on-nothing-validated; 8 files / 44 rules,
-      all parse) + the ci step. **SHIPPED 2026-08-11/12 (goal #278 child #288/PR#310 + the estate sweep):** 13 behaviour
-      fixtures run in CI (`prometheus-rules-lint` hook, jail-landed); the WeeklyPoolLow
-      restart-gap expr fixed with a permanent regression witness; the sweep then eradicated the
-      restart-gap class estate-wide (#331-#336/#351-#353 arc). **Next:** archive.
-      Origin: PR#220 findings + the #237 gate-miss (more evidence 2026-08-11).
-
-- [ ] **FU-140** — **The per-stack loop transcripts have no crash-net — only the exit trap.**
-      `transcripts-sync` (nightly, agent-coordinator) covers ONE PVC: `agent-coordinator/
-      coordinator-transcripts`. The four `<stack>-agents` loop PVCs rely entirely on
-      coordinator-session.sh's exit trap, so a tick that dies before it (OOM kill, node reboot,
-      DeadlineExceeded) loses its transcript, which IS the log for an exec-run session. Found while
-      checking FU-132's premise; harmless that time (267/267 files were already in Garage) by luck.
-      **SHIPPED 2026-08-11 (goal #278 child #286/PR#294 + the batch/cronjobs RBAC grant):** crash-net renders in all four loop namespaces, verified live. **Next:** archive after the first nightly runs land transcripts (verify one run, then archive). ⚠ the loop-ns S3 secret is
-      WRITE-ONLY (no reader key), so it cannot list-then-upload like the coordinator's does — either
-      upload unconditionally (S3 PUT is idempotent per path) or keep a marker file on the PVC.
-      Relates FU-132 (archived), FU-058, ADR-089.
 - [ ] **FU-058** — **Retro P3: POINTER.** Design, runs 1+2, run-3 shape and the 2026-08-03
       unsuspend: [`docs/agents/observability-and-retro.md`](agents/observability-and-retro.md)
       §B2. ⚠ CORRECTED 2026-08-11: the "guard-refused, pod running" reading of the 08-10 fire
@@ -618,16 +573,7 @@ the block needs pruning, not more headings.
 
 ## One-time ops
 
-- [ ] **FU-165** — **The platform stack does not dogfood the Goal lane** (operator observation
-      2026-08-11, from the #237→#245 chain): ADR-102's invariant — *every dispatchable issue
-      belongs to a goal* — is unmet on platform repos; fixes have no lineage/budget/convergence
-      trail and finding-sprouts were filed flat until hand-linked. Two machinery gaps block
-      blind adoption: (a) goal-budget sums OpenRouterKey caps — subscription rides mint none,
-      so Σ(child caps)=0 (relates model-routing §M11 rail costs); (b) REACTIVE alert chains
-      belong to FU-133's subject/root-cause containers, not Goals — only PROACTIVE
-      multi-deliverable efforts (e.g. today's retro-lane rebuild) are Goal-shaped.
-      **Next:** pilot ONE platform Goal on the next proactive effort; meanwhile finding-sprouts
-      always get native sub-issue lineage (started: #244/#245 → #238). Relates FU-090, FU-133.
+
 - [ ] **FU-157** — **Cloudflare platform tokens are USER tokens; migrate to ACCOUNT tokens
       opportunistically.** All of tofu/cloudflare-token mints `cloudflare_api_token` (tied to the
       operator's user). Account tokens (`cloudflare_account_token`) are org-owned, have a coarser

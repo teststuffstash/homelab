@@ -52,11 +52,11 @@ meant to avoid.)
    #354 (agents/** tier rationale question — operator-shaped), #360/#362/#364 (doc staleness),
    #363 (FU-039 absorbs CloudflareEdge5xx), #365 (promote the #349 bound to the class block),
    #369 (FU-042 pre-flight mention-widening).
-4c. **Pending verifies/soaks from the goal:** FU-140 = one nightly crash-net run lands
-   transcripts → archive · FU-161 = hand-fire the scout ONCE before Mon 06:00Z cron (needs the
-   synced SCOUT_MCP_KEY) · FU-150 = archive after first real firing or a quiet month · FU-146
-   soak unchanged · #289 launches at oracle unpark · snore#15 = FU-051 verdict work (green CI,
-   CHANGES_REQUESTED outstanding).
+4c. **Pending verifies/soaks from the goal (post-sweep 2026-08-12):** FU-161 = read the digest
+   of hand-fire `model-scout-2psl6` (fired at the sweep; settles the `arguments` envelope), then
+   legs 3–4 · FU-150 = quiet-month window opens ~2026-09-11 · FU-146/FU-147 soaks unchanged ·
+   #289 launches at oracle unpark · snore#15 = FU-051 verdict work. (FU-140/145/158/160/162/165
+   ARCHIVED by the sweep — crash-net proven 297/0, phase metrics live, pilot validated.)
 4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
    `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
    wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
