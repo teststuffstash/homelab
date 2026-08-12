@@ -23,10 +23,23 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
   check. A guessed cause in an alert is how a wrong diagnosis gets institutionalised — this
   platform has paid for that twice (#94, #103).
 
-## NOT blocking — follow-ups instead
+## In-diff findings BLOCK — fix them in THIS PR (codeowner economics, operator 2026-08-12)
 
-Naming, comment gaps, non-load-bearing duplication, a lint that exists but was not run when the
-diff plainly does not touch its surface.
+A correctness or robustness finding the PR's own branch can absorb — a state leak, a fail-open
+guard, a parser divergence, a missing edge-case the diff itself introduces — is
+**CHANGES_REQUESTED**, never a follow-up. The author (seat or fixer round) pushes the fix, you
+re-review; convergence is bounded by the round machinery. Why this repo differs from the stack
+rubrics: master here IS the platform (merge = deploy), a follow-up costs a whole extra PR cycle,
+and on the operator lane the `Follow-ups:` channel has NO machine harvester — deferral here is a
+lossy channel to the most expensive resource there is (the codeowner's read time). "PR better
+than master" almost never favours deferring an in-diff defect when master is load-bearing.
+
+## NOT blocking — follow-ups, sparingly
+
+Genuinely NEW scoped work only: a finding whose fix would materially grow the diff or leave the
+PR's declared footprint — real work, filed as work (during a Goal it lands in the goal's findings
+pile, never a 1:1 issue). Pure style (naming, comment polish) may stay a comment with no bullet
+at all. What no longer qualifies as a follow-up: anything the branch could have fixed.
 
 ## Judge these carefully rather than by rule
 
