@@ -148,6 +148,9 @@
       "pin-only-lint": [
         "bash scripts/pin-only-lint.sh \"$@\""
       ],
+      "governance-lint": [
+        "bash scripts/governance-lint.sh \"$@\""
+      ],
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
       ],
