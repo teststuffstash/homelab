@@ -24,6 +24,27 @@ meant to avoid.)
 
 ## NEXT SESSION — the worklog (updated 2026-08-11 midday)
 
+0. **THE PLATFORM PLAN (chartered 2026-08-12) — two buckets.**
+   **Bucket A (pre-goal, PR-lane with the bot reviewer — the seat stops accumulating unreviewed
+   debt):** A0 verify the iac-sentinel soak is observable (`iac_sentinel_violations` = no-series!)
+   · A1 FU-167 moves 1–3 (replay world registry, table-mode pilot, generated register) — FIRST,
+   everything else rides its lock · A2 famine fixes (doorbell fixed-name collapse, mutex
+   scope/stream-detach) — ⚖ rail move REJECTED (workers stay subscription; ruling in
+   model-routing.md §M12) · A3 the v1.2 design session (FU-168 + #295 + findings store/§M10 +
+   stack scope + FU-090 gauge folded in) → ADR · A4 v1.2 minimum build (findings store,
+   checkpoints, fold-in rule, mechanical ❌ check) · A5 CODEOWNERS narrowing (operator call,
+   after A4's ❌ check) · A6 hygiene (goal-budget dash guard, #377, FU-166(a), inert triage).
+   Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
+   **Bucket B (the next Goal, launches on v1.2):** FU-095 pilots (task-class routing legs a/c +
+   strike-policy data) · FU-106 G01 flip chain (conditional on A0; the flip = the goal's
+   `Production-leg:`) · G06 advisory lens + SLO error-budget teeth (roles.md; ex-FU-104) ·
+   FU-090(b) janitor spec-drafts · cross-repo children by design (agent-runtime#36, or-op items).
+   Goal-body skeleton: Verdict-authority: human · Production-leg: sentinel ENFORCING on the -iac
+   repos + pilot evidence in the ledger · KPI: sprouts-per-ride < 1.2 (the debt-drain
+   prediction) · Budget: subscription-window capped (subscription budgets = later work).
+   **Launch criteria:** doorbell Pending gauge flat under load · v1.2 legs replay-pinned ·
+   7d utilization headroom (74% at charter) · A0 green.
+
 1. **PR queue DRAINED 2026-08-11 (~11:30Z)**: #250/#251/#254/#255/#260 all merged (findings
    harvested; residues: FSM dup keys + fixture registration + FU-106 third residue — all in the
    same-day jail batch). The day's "FU-130 WAN class" reds were actually **wk-metal-02 losing

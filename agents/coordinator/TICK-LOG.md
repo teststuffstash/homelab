@@ -3733,3 +3733,12 @@ trimmed to pointers. STILL-VALID: FU-146/147 (soaks, no eligible traffic yet), F
 ~09-11), FU-102 (parked). OPERATOR: FU-144 fork. ⚠ Sweep also REPAIRED a self-inflicted loss:
 the FU-167 pointer-ize regex had swallowed the FU-166 item (a `| tail -1` masked the lint's
 exit) — restored from its authoring commit; lesson: never pipe-filter a gate's exit.
+↳ (plan chartered, 2026-08-12 ~10:00Z) Two buckets written to meta-state §0: Bucket A pre-goal
+(A0 sentinel-soak observability — iac_sentinel_violations is NO-SERIES, flagged; A1 FU-167 moves
+1–3 first; A2 famine fixes; A3 v1.2 design; A4 v1.2 min build; A5 CODEOWNERS narrowing; A6
+hygiene) in PR-lane with the bot reviewer; Bucket B = the next Goal on v1.2 (FU-095 pilots, G01
+flip chain as Production-leg, SLO teeth + G06 lens, FU-090(b), cross-repo children; KPI
+sprouts-per-ride < 1.2). ⚖ OPERATOR RULING recorded (model-routing §M12): platform workers STAY
+subscription — the 5h/7d windows are caps independent of the cap-mechanics code platform rides
+can touch; rail move rejected; subscription budgets are the eventual build. Jail latency fix
+(meta-events.sh) ordered first, direct to master.

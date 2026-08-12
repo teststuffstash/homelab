@@ -552,6 +552,16 @@ homelab#158 shape (OpenRouter capacity down → served *defers* while the ladder
 the coordinator/reviewer safety net" — §M10). The separation survives; what changes is that it is
 now a separation under *normal* conditions rather than an absolute.
 
+⚖ **Platform workers STAY on the subscription (operator ruling, 2026-08-12, v1.2 planning).**
+The rail-move option (platform workers → OpenRouter, freeing the pool and making `Budget:` real
+money) was considered and REJECTED for now: the subscription's 5h/7d windows are budget caps that
+live OUTSIDE anything a platform ride can edit, and platform workers are exactly the rides that
+can introduce bugs into the OpenRouter cap mechanics themselves (the operator, the proxy, the key
+CRs). Independence-from-the-code-under-change is the property that decides it. Consequences: goal
+budgets on the platform stack stay cap-phantom until SUBSCRIPTION budgets are built (the "get
+subscription budgets working" direction — rides the post-FU-131 rail-aware-summation charter on
+#278), and the FU-168 famine fixes carry the throughput load alone.
+
 **§M11 above is the general case; this is the emergency one, and it is what actually shipped**
 (homelab#158, in the launcher + the proxy). M11's ladder makes the subscription an ordinary
 route candidate priced at ~0 while it has headroom; this section only answers "the OpenRouter rail
