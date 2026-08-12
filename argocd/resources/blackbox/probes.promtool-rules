@@ -12,9 +12,12 @@
 # ⚠ NEITHER COPY IS DRIFT-PINNED — `devbox run exporter-self-test` pins only CiDispatchStalled. A
 # stale copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing either alert:
 #
-#   yq -o=json '{"groups": [{"name": "blackbox", "rules": [.spec.groups[].rules[] |
-#        select(.alert == "EndpointProbeFailing") | del(.annotations)]}]}' \
+#   yq eval-all -o=json '[.] | map(select(.kind == "PrometheusRule")) | .[0] | {"groups": [{"name": "blackbox", "rules": [.spec.groups[].rules[] | select(.alert == "EndpointProbeFailing") | del(.annotations)]}]}' \
 #     argocd/resources/blackbox/blackbox.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug; and eval-all +
+#   kind-select because blackbox.yaml is MULTI-DOC — the old bare `.spec.groups[]` form silently
+#   produced `rules: []` against it. Both verified by running the recipe and canonically diffing
+#   against this file's blackbox group, 2026-08-12.)
 #
 # ⚠ THE `agentstack-slo-rendered` GROUP IS A HAND RENDER, and it is the one thing here a yq
 # re-copy cannot produce. Its source is a Go template inside

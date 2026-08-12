@@ -14,9 +14,10 @@
 # CiDispatchStalled). A stale copy tests the OLD expr and passes VACUOUSLY. Re-copy after editing
 # either alert:
 #
-#   yq -o=json '{"groups": [{"name": "homeassistant-freshness", "rules": [.spec.groups[].rules[] |
-#        del(.annotations)]}]}' \
+#   yq -o=json '{"groups": [{"name": "homeassistant-freshness", "rules": [.spec.groups[].rules[] | del(.annotations)]}]}' \
 #     argocd/resources/homeassistant-alerts/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug; reason at
+#   argocd/resources/openrouter-proxy/agent-router.promtool-rules)
 groups:
   - name: homeassistant-freshness
     rules:
