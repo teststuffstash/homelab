@@ -3671,3 +3671,9 @@ phase-not-clause, FU-166/167 seat tooling. Peak 3 concurrent rides / 120min ≥2
 concurrency design chartered with ADR-094 open. The lane reviewed its own machinery changes,
 blocked its own footprint escape, and turned two authoring lessons into structural guards —
 the loop develops itself like a stack now, evidenced.
+↳ (session close, ~07:00Z, context-limit write-down) Verdict gate opened on #278 after PR#373/
+#374/#376/#378 + the operator-lane #337 drift-pin; PR#378's ancestor walk was the finale — the
+budget gate + card resolve the GOAL not the bucket, red-cased on the live defect tree. Post-goal
+inert residue enumerated in meta-state 4a, pending verifies in 4c. Monitors (needs-meta v3 +
+heartbeat) die with the session — re-arm per meta-state §Re-arm. The seat's own session lessons
+went durable earlier: GAPS G1 resight (full review bodies), the bulk-queue error owned on #337.

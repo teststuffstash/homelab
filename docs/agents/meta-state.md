@@ -36,13 +36,26 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **GOAL #278: CLOSING SWEEP DELIVERED 2026-08-12 ~05:00Z** — burn-down report on the goal
-   (comment 5262051051): 10/10 children dispositioned (9 merged+verified, #289 parked with
-   oracle), ~20 sprouts landed incl. the estate-wide restart-gap eradication, 8 FU lines
-   advanced, #355 doctrine + all authoring lessons shipped. **ALL FIVE defect fixes LANDED by 06:3xZ 2026-08-12 — the VERDICT GATE IS OPEN: operator
-   applies goal/validated on #278** (the scan terminal leg runs the close sweep on the label). The dispatch-concurrency DESIGN stays chartered on the goal (evidence
-   re-mined; ADR-094 on the table). Post-goal inert 🌱 residue (~10 doc/promote items) triages
-   ordinarily. FU-166/FU-167 are the seat-tooling follow-ups.
+4. **GOAL #278 COMPLETE — VERDICT GATE OPEN (2026-08-12 06:3xZ): operator applies
+   `goal/validated`** (scan terminal leg reacts to the human label, runs the close sweep;
+   burn-down = comment 5262051051, gate-open = 5263079426). 10/10 children + ~25 sprouts +
+   ALL five sweep-queued defect fixes landed (#324/#337/#348/#361/#367 — last was PR#378's
+   ancestor walk). Chartered post-goal design (all recorded on #278): dispatch-concurrency
+   evidence re-mine done, DESIGN open incl. ADR-094; rail-aware budget summation + the
+   "budgeted-unledgered" panel signal (PR#374's named residue) ride post-FU-131; §M10
+   phase-not-clause (FU-090); ADR-102 master-lane variant question (bucket semantics, #295
+   reader-noted). Seat tooling: FU-166 (watch event-driven survey), FU-167 (replay register).
+4a. **Post-goal INERT 🌱 residue (deliberately unqueued; ordinary triage):** #280 (replay-README
+   FSM wording — verdict posted), #292 (retro byte-identical cells), #297 (ratchet → model-scout),
+   #303 (generate.py currency check), #329 (5 non-hermetic fixtures — sandbox-only, CI green),
+   #354 (agents/** tier rationale question — operator-shaped), #360/#362/#364 (doc staleness),
+   #363 (FU-039 absorbs CloudflareEdge5xx), #365 (promote the #349 bound to the class block),
+   #369 (FU-042 pre-flight mention-widening).
+4c. **Pending verifies/soaks from the goal:** FU-140 = one nightly crash-net run lands
+   transcripts → archive · FU-161 = hand-fire the scout ONCE before Mon 06:00Z cron (needs the
+   synced SCOUT_MCP_KEY) · FU-150 = archive after first real firing or a quiet month · FU-146
+   soak unchanged · #289 launches at oracle unpark · snore#15 = FU-051 verdict work (green CI,
+   CHANGES_REQUESTED outstanding).
 4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
    `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
    wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
