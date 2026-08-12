@@ -124,9 +124,35 @@ src_famine() {
   diff_source famine "$tmp"; rm -f "$tmp"
 }
 
+# SEATPR — the fix-on-feedback loop's own events (added 2026-08-12 after PR#381's approval went
+# unseen: needs-meta reports STUCK states by design, so a healthy verdict→merge — and worse, a
+# CHANGES_REQUESTED the seat must act on — had no source). Set lines carry the phase, so a
+# verdict flip emits (old clears, new fires); merged PRs hold a line for 24h.
+SEAT_REPOS="${SEAT_REPOS:-homelab agent-runtime agent-coordinator openrouter-operator}"
+src_seatpr() {
+  local tmp me; tmp="$(mktemp)"; : > "$tmp"
+  me="$(cat "$STATE/seatpr.login" 2>/dev/null)" || me=""
+  [ -n "$me" ] || { me="$(gh api user --jq .login 2>/dev/null)" && echo "$me" > "$STATE/seatpr.login"; }
+  [ -n "$me" ] || { hold_source seatpr "cannot resolve own login"; rm -f "$tmp"; return; }
+  local r ok=1
+  for r in $SEAT_REPOS; do
+    # pipe to REAL jq — `gh --jq` takes no --arg (the standing coordinator-scan rule)
+    gh pr list -R "$ORG/$r" --state all --limit 15 \
+        --json number,author,state,reviewDecision,mergedAt 2>/dev/null \
+      | jq -r --arg me "$me" --arg r "$r" \
+        '.[] | select(.author.login==$me)
+         | select(.state=="OPEN" or ((.mergedAt // "") > (now - 86400 | todate)))
+         | "SEATPR|\($r)#\(.number)|\(if .state=="MERGED" then "MERGED" else (.reviewDecision // "AWAITING-REVIEW") end)"' \
+        >> "$tmp" || ok=0
+  done
+  if [ "$ok" = 1 ]; then diff_source seatpr "$tmp"; else hold_source seatpr "gh pr list failed"; fi
+  rm -f "$tmp"
+}
+
 tick() {
   TICK=$((TICK+1))
   [ $((TICK % 2)) -eq 1 ] && src_needsmeta
+  src_seatpr
   src_goalcmt
   src_alert
   src_famine
