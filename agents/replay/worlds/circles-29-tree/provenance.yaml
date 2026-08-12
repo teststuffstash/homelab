@@ -1,0 +1,27 @@
+# provenance — the named world `circles-29-tree` (cleanup move 1, first registry entry)
+#
+# WHAT THIS WORLD IS. The live circles goal #29 tree as the harvest/c4c5 fixture families
+# recorded it (ADR-102 build era, homelab#207/#208): the goal issue, its children, the
+# post-launch shapes, the merged-PR bodies, and the pushgateway ledger scrape. It was the
+# platform's most-copied recording — two families, six fixtures, byte-identical — before this
+# registry entry named it.
+#
+# PROVENANCE CLASS: reconstructed. These files were recorded live during fixture authoring
+# (2026-08-07..09) but the exact commands were not stamped at capture time — this entry is the
+# 2026-08-12 reconstruction. Files recorded AFTER the registry existed carry `recorded:` blocks
+# with the literal command; this world's re-record commands below are DERIVED from the file
+# names (the stub key grammar) and the world may no longer match the live tree — that is fine
+# and expected: a world pins a MOMENT, re-recording it is a deliberate act that re-reviews every
+# dependent fixture (see README §The cleanup contract, move 1).
+world: circles-29-tree
+class: reconstructed
+reconstructed: 2026-08-12
+source: the live circles#29 goal tree (teststuffstash/circles), ~2026-08-07..09
+used_by: c4c5-infeasible-* (3), harvest-goal-* (3)   # regenerate the truth: run.sh --index
+rerecord:
+  - "gh api repos/teststuffstash/circles/issues/35/parent > gh/api-repos-teststuffstash-circles-issues-35-parent.json"
+  - "gh api repos/teststuffstash/circles/issues/77 > gh/api-repos-teststuffstash-circles-issues-77.json"
+  - "gh issue list --repo teststuffstash/circles --json ... > gh/issue-list.json   # match the stub key's call shape"
+  - "gh issue view 35 --repo teststuffstash/circles --json ... > gh/issue-view-35.json"
+  - "gh pr list --repo teststuffstash/circles --json body,... > gh/pr-list-bodies.json"
+  - "ledger.txt: the pushgateway agent_run_cost scrape the gb_ledger seam serves — see the harvest bridges"

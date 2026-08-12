@@ -18,6 +18,7 @@
 # goal, one container, however many closeouts run through it.
 name: harvest-goal-open-exhausted
 mode: actions
+world: circles-29-tree
 source: agents/coordinator-scan.sh
 parts:
   - file:bridge.sh

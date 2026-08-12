@@ -19,5 +19,5 @@ HERE="$REPLAY_ROOT/agents"
 #              ledger, which is the conservative cap-sum path the helper documents)
 #   gb_cap     the estimator → a fixed cap. estimate_budget.py prices against a LIVE OpenRouter
 #              registry; a price move must not red a fixture that pins HARVEST behaviour.
-gb_ledger() { if [ -f "$REPLAY_FIXTURE/world/ledger.txt" ]; then cat "$REPLAY_FIXTURE/world/ledger.txt"; fi; }
+gb_ledger() { if [ -f "$REPLAY_WORLD/ledger.txt" ]; then cat "$REPLAY_WORLD/ledger.txt"; fi; }
 gb_cap()    { echo "$IN_CAP"; }
