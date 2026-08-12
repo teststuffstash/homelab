@@ -252,7 +252,10 @@ the block needs pruning, not more headings.
       watch clause 4 reads Prometheus. Leg (b): **survey ALL `agents/meta-*.sh` watches/cadences
       and go event-driven where a source exists** (Alertmanager webhooks, exporter series, Argo
       Events) — the edge+level doctrine applied to the jail; polls remain as backstops only.
-      Post-goal-#278 (exporter is mid-goal traffic). Relates FU-150, FU-084, ADR-093.
+      Survey must include the MISSING source found at #278's close (2026-08-12): no watch, polled
+      or edged, sees a User comment landing on an open `task/goal` issue — the goal's own charter
+      comment had no consumer but the operator re-reading it.
+      Post-goal-#278 (exporter is mid-goal traffic) — UNBLOCKED at the #278 verdict. Relates FU-150, FU-084, ADR-093.
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
