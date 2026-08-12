@@ -3715,3 +3715,11 @@ directives; budget machinery self-fixed in-run). issue-authoring.md gained §Goa
 FU-166(b)). FU-168 filed this session (charter's design half, pre-verdict); FU-166(b) gained the
 goal-thread comment source; FU-145 repointed. Close procedure handed to the operator: apply
 goal/validated → IL-T19 closes + report-first sweep; FU-166/167/168 unblock at the verdict.
+↳ (verdict, 2026-08-12 08:40Z) Operator applied `goal/validated` to #278 from the seat (User
+actor, IL-T22 clean); the terminal leg closed it 41s later — BEFORE the belt ring landed —
+with the audit comment and ZERO descendant writes (goal-validated replay behavior, live).
+First VALIDATED terminal in the registry. #295 left open (report-first sweep; operator's
+call), #289 + 14 inert = ordinary triage. FU-166/167/168 unblocked. New from the final
+ruling: goal-budget.sh fail-opens under dash (probe artifact, one shebang from live) and the
+budget closed cap-phantom ($76/$60, ~$0 real spend) — both routed to the fix-round list in
+meta-state §4.

@@ -36,15 +36,16 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **GOAL #278 COMPLETE — VERDICT GATE OPEN (2026-08-12 06:3xZ): operator applies
-   `goal/validated`** (scan terminal leg reacts to the human label, runs the close sweep;
-   burn-down = comment 5262051051, gate-open = 5263079426). 10/10 children + ~25 sprouts +
-   ALL five sweep-queued defect fixes landed (#324/#337/#348/#361/#367 — last was PR#378's
-   ancestor walk). Chartered post-goal design (all recorded on #278): dispatch-concurrency
-   evidence re-mine done, DESIGN open incl. ADR-094; rail-aware budget summation + the
-   "budgeted-unledgered" panel signal (PR#374's named residue) ride post-FU-131; §M10
-   phase-not-clause (FU-090); ADR-102 master-lane variant question (bucket semantics, #295
-   reader-noted). Seat tooling: FU-166 (watch event-driven survey), FU-167 (replay register).
+4. **GOAL #278 CLOSED VALIDATED (2026-08-12 08:40:37Z — first VALIDATED terminal; 41s
+   label→close, zero descendant writes, report-first sweep as pinned).** Bucket #295 left OPEN
+   (sweep proposed "close with the goal" — operator's call); #289 park-deferred; 14 inert
+   sprouts = ordinary triage. The v1.2 design dossier is
+   [`docs/spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) +
+   the version register (issue-authoring.md §Goal lane versions); FU-166/167/168 UNBLOCKED at
+   the verdict. Small fix-round candidates before the next platform Goal: doorbell fixed-name
+   collapse, stream/mutex scope, platform-worker rail/semaphore, goal-budget.sh dash fail-open
+   (one-shebang #377 class, named in the 06:24Z ruling), #379 triage (hold as FU-168 evidence).
+   Rail-aware budget summation rides post-FU-131 (cap-phantom $76/$60 at close, ~$0 real).
 4a. **Post-goal INERT 🌱 residue (deliberately unqueued; ordinary triage):** #280 (replay-README
    FSM wording — verdict posted), #292 (retro byte-identical cells), #297 (ratchet → model-scout),
    #303 (generate.py currency check), #329 (5 non-hermetic fixtures — sandbox-only, CI green),
