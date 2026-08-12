@@ -1,0 +1,20 @@
+[
+  {
+    "id": 5231000042,
+    "created_at": "2026-08-12T02:07:00Z",
+    "user": { "login": "homelab-agents-1234" },
+    "body": "<!-- agent-budget-refusal -->\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $1.50 > Budget $1\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n    #35 → $0.50 (cap reservation, live key)\n    #36 → $1.00 (cap reservation, live key)\n\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._"
+  },
+  {
+    "id": 5231000077,
+    "created_at": "2026-08-12T03:10:00Z",
+    "user": { "login": "homelab-agents-1234" },
+    "body": "## goal-review — #29\n\n**Verdict: exhausted.** Three children queued, none dispatchable. The acceptance rows are unmet; the goal is not abandoned, it is out of funding."
+  },
+  {
+    "id": 5231000088,
+    "created_at": "2026-08-12T03:44:00Z",
+    "user": { "login": "an-operator" },
+    "body": "For the record: the `AGENT_BUDGET_REFUSED:` line above is the launcher pre-flight, not the reviewer. Do not re-scope until we know whether the $ is a cap reservation or real ledger spend."
+  }
+]

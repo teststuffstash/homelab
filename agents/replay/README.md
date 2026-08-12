@@ -186,6 +186,22 @@ halves are two fixtures that must be read together. Three things worth copying:
   all — a single-shot family that was not newline-TERMINATED, i.e. a body that would have 400'd on
   every real dispatch while every unit-level reading of the code said it was fine.
 
+`fixtures/goal-budget-refusal-*` (homelab#361) are the tenth family and the plainest shape the
+sourced-helper rule takes: the bridge sources `agents/machine-comment.sh` and redefines **nothing**.
+The block under replay is `agent-session.sh`'s budget pre-flight refusal, which reaches GitHub only
+through that helper's three I/O seams, and those go to the PATH-shim `gh` — so find-or-create lands
+in the action stream for free and no seam needs shadowing. Two things worth copying:
+
+- **Hold the invocation constant and vary the WORLD.** All five bridges set the same six launcher
+  variables; what differs is what the goal's timeline already carries. That is where the bug was
+  (the dedup read only the LAST comment, so one interleaved `goal-review` re-admitted the refusal),
+  and a family that varied the call instead would have pinned five call sites and no world.
+- **A level-triggered clause needs its SILENT arms pinned, not just its loud one.** The interesting
+  streams here are the four that add no comment: the edit when the numbers move, the adoption of a
+  pre-marker refusal left by the old code, the no-op when nothing moved, and the fail-closed when
+  the timeline is unreadable (`STUB_GH=fail`, hence no `world/` in that directory). Pin only the
+  first-touch create and every re-spam regression is free to come back.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

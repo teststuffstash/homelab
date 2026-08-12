@@ -1,0 +1,9 @@
+CALL gh api repos/teststuffstash/circles/issues/29/comments --paginate
+ERR → Goal budget: could not read #29's comments — refusal NOT posted (fail closed), the refusal still stands
+ERR PREFLIGHT REFUSED: the decomposition of goal #29 overruns its Budget.
+ERR   Σ(spend + reservations) = $1.75  >  Budget: $1
+ERR     #35 → $0.75 (actual spend, ledger)
+ERR     #36 → $1.00 (cap reservation, live key)
+ERR   This is deterministic and not the ride's to argue with: re-scope the children or raise
+ERR   the goal's Budget: line — both are human edits. (leg (c), docs/agents/issue-authoring.md)
+RC 1

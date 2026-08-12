@@ -713,25 +713,87 @@ if [ -n "${RECIPE:-}" ]; then
     if [ -n "$GOAL_PARENT" ]; then
       goal_budget_read "${ORG:-teststuffstash}/${PROJECT}" "$GOAL_PARENT" "$MODEL" "${ISSUE_N:-}"
       if [ "$GB_VERDICT" = "exhausted" ]; then
+        # >>>REPLAY:goal-budget-refusal>>>
         # SAY IT WHERE A HUMAN LOOKS. Exiting 1 puts the reason in a failed tool call, and whether
         # it reaches the goal then depends on the coordinator session choosing to relay it — a
         # prose dependency, which is the failure class this platform keeps paying for. Comment on
-        # the GOAL directly, deduped on the marker so a re-tick cannot spam it: the refusal is
-        # level-triggered and will recur every scan until a human re-scopes or refunds.
-        _mark="AGENT_BUDGET_REFUSED: Σ(spend + reservations) \$${GB_SUM} > Budget \$${GB_BUDGET}"
-        if ! gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --json comments \
-               --jq '[.comments[].body] | last // ""' 2>/dev/null | grep -qF "$_mark"; then
-          printf '%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n' \
-            "$_mark" "$GB_ROWS" \
-            | gh issue comment "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" --body-file - >/dev/null 2>&1 \
-            && echo "→ Goal budget: refusal posted to #${GOAL_PARENT}" >&2 \
-            || echo "→ Goal budget: refusal comment FAILED to post (token scope?) — the refusal still stands" >&2
+        # the GOAL directly: the refusal is level-triggered and recurs every scan until a human
+        # re-scopes or refunds, so the ONLY question is what the second, third and tenth refusal do.
+        #
+        # ONE COMMENT, EDITED IN PLACE — option 3 of homelab#361, chosen explicitly, with the two
+        # rejected options recorded here rather than left to be re-litigated:
+        #   (1) dedupe on the `AGENT_BUDGET_REFUSED:` PREFIX → one comment ever, but its numbers
+        #       freeze at the first refusal, and a goal's sum moves every time a child settles or a
+        #       key goes live. A human re-reading a stale $62.0 to decide a re-scope is worse than
+        #       no comment: it looks current and is not.
+        #   (2) dedupe on the FULL marker (numbers in it) over the whole thread → numbers always
+        #       current, but one comment per distinct sum, and on this platform's busiest thread the
+        #       sum moves constantly. That is the residue ADR-103 rule 2 exists to end, arriving by
+        #       a slower road.
+        # Editing keeps BOTH properties — one comment, current numbers — and is the shape the rest
+        # of the loop converged on (agents/machine-comment.sh). It is NOT `mc_event`: that appends
+        # one LINE to the `<!-- agent-summary -->` index, and a level-triggered refusal would grow
+        # that index by a line per scan, while this body is a multi-line per-child cap table. The
+        # detail channel (`mc_check_run`) is not available either — the pre-flight refuses BEFORE a
+        # branch or head SHA exists, so there is nothing to hang a check-run on. Hence a comment of
+        # its own, on its own marker, through the same three I/O seams.
+        #
+        # THE MARKER IS AN HTML COMMENT, not the `AGENT_BUDGET_REFUSED:` prefix. The prefix is
+        # prose that appears in issues, dispatch notices and reviews ABOUT this mechanism (#361's
+        # own thread quotes it), and a substring test cannot tell a marker from a mention —
+        # fixtures/fix-debounce-quoted-marker-inert is the same lesson, paid for on homelab#238.
+        # The human-readable `AGENT_BUDGET_REFUSED:` line stays in the body, where it is a label
+        # rather than a predicate.
+        #
+        # NO TIMESTAMP IN THE BODY, on purpose: a clock in it would make every scan a distinct body
+        # and turn "edit in place" into an edit per scan (GitHub stamps the edit itself — the
+        # comment carries "edited …" and its own history).
+        _gbr_slug="${ORG:-teststuffstash}/${PROJECT}"
+        _gbr_mark='<!-- agent-budget-refusal -->'
+        _gbr_body="$(printf '%s\nAGENT_BUDGET_REFUSED: Σ(spend + reservations) $%s > Budget $%s\n\nThe launcher refused to dispatch a child of this goal — deterministic pre-flight, not a model judgement (FU-090 leg (c)).\n\nPer-child caps:\n\n%b\nThis is a human decision either way: **re-scope the children** so their caps fit, or **raise the `Budget:` line** on this issue. Until one of those happens the refusal repeats every scan and no child of this goal dispatches.\n\nThe sum is ACTUAL spend for settled children (the per-row notes name each charge) plus cap reservations for live keys and this dispatch; a ridden child with no ledger entry is charged its cap, conservatively.\n\n_Level-triggered: this is ONE comment, re-edited as the numbers move (ADR-103 rule 2) — not one comment per refusal._' \
+          "$_gbr_mark" "$GB_SUM" "$GB_BUDGET" "$GB_ROWS")"
+        _gbr_listed="$(mc_gh_comments "$_gbr_slug" "$GOAL_PARENT")" || _gbr_listed=''
+        if ! printf '%s' "$_gbr_listed" | jq -e 'type == "array"' >/dev/null 2>&1; then
+          # FAIL CLOSED, exactly as mc_event does: an unreadable timeline plus a create is one new
+          # comment per scan — the failure this whole block is about, reached through the error path
+          # instead of the happy one. The refusal still stands; it just goes unsaid this tick.
+          echo "→ Goal budget: could not read #${GOAL_PARENT}'s comments — refusal NOT posted (fail closed), the refusal still stands" >&2
+        else
+          # Oldest marked comment wins the tie, per mc_event: if a second one ever appears (a race,
+          # a human paste), every later refusal converges back onto the first instead of alternating.
+          #
+          # The `startswith` arm ADOPTS a pre-marker refusal — the bodies the shipped code posted,
+          # which carry no HTML marker at all. Without it the first refusal after this lands would
+          # post a duplicate onto exactly the threads the fix exists to protect (goal #278 is
+          # carrying one right now), and the fix would open by doing the thing it forbids. Adopting
+          # it patches the marker IN, so this arm matches once per goal and never again; it can be
+          # deleted when no live goal carries a pre-marker refusal. ANCHORED on purpose —
+          # `startswith`, never `contains`: the prefix is prose in every issue about this mechanism,
+          # and only the machine writes it as the first characters of a comment (the same rule
+          # `AGENT_ERROR:`/`AGENT_INFEASIBLE:` are read under).
+          _gbr_id="$(printf '%s' "$_gbr_listed" | jq -r --arg m "$_gbr_mark" \
+            '[ .[] | select((.body // "") | (contains($m) or startswith("AGENT_BUDGET_REFUSED:"))) ]
+             | sort_by(.created_at) | .[0].id // empty' 2>/dev/null || true)"
+          if [ -z "$_gbr_id" ]; then
+            mc_gh_comment_create "$_gbr_slug" "$GOAL_PARENT" "$_gbr_body" \
+              && echo "→ Goal budget: refusal posted to #${GOAL_PARENT}" >&2 \
+              || echo "→ Goal budget: refusal comment FAILED to post (token scope?) — the refusal still stands" >&2
+          elif [ "$(printf '%s' "$_gbr_listed" | jq -r --argjson i "$_gbr_id" '.[] | select(.id == $i) | .body')" = "$_gbr_body" ]; then
+            # Same numbers, same decision — the comment already says it. A PATCH here would buy an
+            # "edited" badge per scan, which is the same noise in a different column.
+            echo "→ Goal budget: refusal on #${GOAL_PARENT} already current (comment ${_gbr_id}) — untouched" >&2
+          else
+            mc_gh_comment_patch "$_gbr_slug" "$_gbr_id" "$_gbr_body" \
+              && echo "→ Goal budget: refusal on #${GOAL_PARENT} re-stated in place (comment ${_gbr_id})" >&2 \
+              || echo "→ Goal budget: refusal comment FAILED to update (token scope?) — the refusal still stands" >&2
+          fi
         fi
         printf 'PREFLIGHT REFUSED: the decomposition of goal #%s overruns its Budget.\n' "$GOAL_PARENT" >&2
         printf '  Σ(spend + reservations) = $%s  >  Budget: $%s\n' "$GB_SUM" "$GB_BUDGET" >&2
         printf '%b' "$GB_ROWS" >&2
         printf '  This is deterministic and not the ride'"'"'s to argue with: re-scope the children or raise\n  the goal'"'"'s Budget: line — both are human edits. (leg (c), docs/agents/issue-authoring.md)\n' >&2
         exit 1
+        # <<<REPLAY:goal-budget-refusal<<<
       elif [ "$GB_VERDICT" = "within" ]; then
         echo "→ Goal budget: Σ(spend + reservations) \$${GB_SUM} ≤ Budget \$${GB_BUDGET} on #${GOAL_PARENT} — within funding"
       fi
