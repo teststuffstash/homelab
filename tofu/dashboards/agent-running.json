@@ -1,140 +1,938 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 1,
   "links": [],
   "title": "Agents — running & stalls",
   "uid": "agent-running",
-  "tags": ["agents", "fu-057", "fu-091"],
+  "tags": [
+    "agents",
+    "fu-057",
+    "fu-091"
+  ],
   "schemaVersion": 39,
-  "time": { "from": "now-12h", "to": "now" },
+  "time": {
+    "from": "now-12h",
+    "to": "now"
+  },
   "refresh": "30s",
-  "templating": { "list": [] },
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
-      "id": 1, "type": "stat", "title": "Workers live",
+      "id": 1,
+      "type": "stat",
+      "title": "Workers live",
       "description": "Worker pods, Running OR Pending (kata boot outlives a tick interval). Deterministic task-key names + legacy timestamp names; the always-on Argo Events infra pods (eventsource/sensor) deliberately do not match.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "instant": true }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
     },
     {
-      "id": 2, "type": "stat", "title": "Reviewers live",
+      "id": 2,
+      "type": "stat",
+      "title": "Reviewers live",
       "description": "reviewer-<repo>-<pr> session pods (reflex tick or Argo review Sensor dispatch).",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "instant": true }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
     },
     {
-      "id": 3, "type": "stat", "title": "Coordinator sessions live",
+      "id": 3,
+      "type": "stat",
+      "title": "Coordinator sessions live",
       "description": "LLM coordinator/item sessions (coordinator-HHMMSS) in ANY namespace — the global reflex home and the FU-080 per-stack <stack>-agents homes. The Sensor deployment pod does not match.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)", "instant": true }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
     },
     {
-      "id": 4, "type": "stat", "title": "Queued issues",
+      "id": 4,
+      "type": "stat",
+      "title": "Queued issues",
       "description": "Open agent/queued issues fleet-wide (github-exporter, FU-091). Nonzero here with zeros everywhere else for 2h fires AgentQueueStalled.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)", "instant": true }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 5 }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
     },
     {
-      "id": 5, "type": "stat", "title": "Green PRs waiting for review",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "instant": true }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 2 }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "id": 5,
+      "type": "stat",
+      "title": "Reflex queue (green, unreviewed)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(github_pull_request_reflex_wait) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Green, undrafted, REVIEW_REQUIRED PRs with NO bot approval yet — the review reflex's own queue (FU-166(a) split; the old panel folded the codeowner park into this number)."
     },
     {
-      "id": 6, "type": "stat", "title": "Oldest waiting PR (age)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
-      "targets": [{ "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"})", "instant": true }],
-      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 3600 }, { "color": "red", "value": 10800 }] } }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "id": 6,
+      "type": "stat",
+      "title": "Oldest waiting PR (age)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - min(github_pull_request_updated_timestamp{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"})",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 10800
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
     },
     {
-      "id": 7, "type": "timeseries", "title": "Agent pods by role (live = Running + Pending)",
+      "id": 13,
+      "type": "stat",
+      "title": "Codeowner park",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(github_pull_request_codeowner_park) or vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Bot-APPROVED + green, yet still REVIEW_REQUIRED — only the delegated codeowner read moves these; CodeownerParkWaiting alerts at 30m (FU-166(a))."
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Queued issues — click through",
+      "description": "One row per agent/queued issue (exporter FU-108 walk). The number column links to GitHub — the Goal-run cockpit's issue list.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "github_agent_issue{label=\"agent/queued\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "owner": true,
+              "instance": true,
+              "job": true,
+              "container": true,
+              "endpoint": true,
+              "namespace": true,
+              "pod": true,
+              "service": true
+            },
+            "indexByName": {
+              "repo": 0,
+              "number": 1,
+              "label": 2
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "open on GitHub",
+                    "targetBlank": true,
+                    "url": "https://github.com/teststuffstash/${__data.fields.repo}/issues/${__data.fields.number}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "PRs waiting — reflex queue + codeowner park",
+      "description": "Value 1 = reflex queue (green, unreviewed); value 2 = CODEOWNER PARK (bot-approved, needs the human read). number links to GitHub.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "github_pull_request_reflex_wait or (github_pull_request_codeowner_park * 2)",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": false,
+              "__name__": true,
+              "owner": true,
+              "instance": true,
+              "job": true,
+              "container": true,
+              "endpoint": true,
+              "namespace": true,
+              "pod": true,
+              "service": true
+            },
+            "indexByName": {
+              "repo": 0,
+              "number": 1,
+              "Value": 2
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "number"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "open on GitHub",
+                    "targetBlank": true,
+                    "url": "https://github.com/teststuffstash/${__data.fields.repo}/issues/${__data.fields.number}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "queue"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "reflex queue",
+                        "index": 0
+                      },
+                      "2": {
+                        "text": "CODEOWNER PARK",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Agent pods by role (live = Running + Pending)",
       "description": "Sessions only — Argo Events infra excluded; the deterministic reflex ticks (Argo workflow pods) get their own series so LLM work and mechanical work read separately.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "legendFormat": "workers" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "legendFormat": "reviewers" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)", "legendFormat": "coordinator sessions" },
-        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"(coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+)\"}) or vector(0)", "legendFormat": "reflex ticks (argo)" }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)",
+          "legendFormat": "workers"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)",
+          "legendFormat": "reviewers"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"coordinator-[0-9]{6}\"}) or vector(0)",
+          "legendFormat": "coordinator sessions"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"(coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+)\"}) or vector(0)",
+          "legendFormat": "reflex ticks (argo)"
+        }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "id": 8, "type": "timeseries", "title": "Queue by agent state (FU-091)",
+      "id": 8,
+      "type": "timeseries",
+      "title": "Queue by agent state (FU-091)",
       "description": "github_agent_issue_labels — the board as Prometheus sees it. blocked/error are human-first states and should trend to zero; queued climbing while workers stay flat is the stall shape.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (label) (github_agent_issue_labels)", "legendFormat": "{{label}}" }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (label) (github_agent_issue_labels)",
+          "legendFormat": "{{label}}"
+        }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "id": 9, "type": "timeseries", "title": "Argo loop — workflows by phase (fleet-wide)",
+      "id": 9,
+      "type": "timeseries",
+      "title": "Argo loop — workflows by phase (fleet-wide)",
       "description": "argo_workflows_gauge from the workflow-controller (no per-namespace split in the gauge). Failed/Error creeping = ticks dying; sustained Pending = semaphore/mutex queueing (FU-088 pool).",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (phase) (argo_workflows_gauge{phase=~\"Running|Pending|Failed|Error\"})", "legendFormat": "{{phase}}" }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (phase) (argo_workflows_gauge{phase=~\"Running|Pending|Failed|Error\"})",
+          "legendFormat": "{{phase}}"
+        }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "id": 10, "type": "timeseries", "title": "Reflex firings per hour (CronWorkflows)",
+      "id": 10,
+      "type": "timeseries",
+      "title": "Reflex firings per hour (CronWorkflows)",
       "description": "Schedule adherence per reflex (argo_workflows_cronworkflows_triggered_total). A flatlined series = that cron stopped firing (suspended / controller trouble). coordinate-<stack> = the FU-080 per-stack loops.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (name) (increase(argo_workflows_cronworkflows_triggered_total[1h]))", "legendFormat": "{{name}}" }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (name) (increase(argo_workflows_cronworkflows_triggered_total[1h]))",
+          "legendFormat": "{{name}}"
+        }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5, "spanNulls": true } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 5,
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "id": 11, "type": "timeseries", "title": "Stall detectors",
+      "id": 11,
+      "type": "timeseries",
+      "title": "Stall detectors",
       "description": "Review stall: green-unapproved PRs vs reviewers acting (the 2.5h-silence class). Queue stall: queued issues vs live workers (the 3-day class — AgentQueueStalled pages at 2h).",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)", "legendFormat": "green PRs unreviewed" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)", "legendFormat": "reviewers live" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)", "legendFormat": "queued issues" },
-        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)", "legendFormat": "workers live" }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(github_pull_request_open{review_decision=\"review_required\", ci_state=~\"success|none\", draft=\"false\"}) or vector(0)",
+          "legendFormat": "green PRs unreviewed"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"reviewer-.+\"}) or vector(0)",
+          "legendFormat": "reviewers live"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(github_agent_issue_labels{label=\"agent/queued\"}) or vector(0)",
+          "legendFormat": "queued issues"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}\"}) or vector(0)",
+          "legendFormat": "workers live"
+        }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "lineInterpolation": "stepAfter", "spanNulls": false } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "lineInterpolation": "stepAfter",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
     },
     {
-      "id": 12, "type": "table", "title": "Active agent pods (sessions + reflex ticks; Argo Events infra excluded)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 20 },
+      "id": 12,
+      "type": "table",
+      "title": "Active agent pods (sessions + reflex ticks; Argo Events infra excluded)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}|reviewer-.+|coordinator-[0-9]{6}|coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+\"} == 1", "format": "table", "instant": true }
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_pod_status_phase{phase=~\"Running|Pending\", pod=~\"agent-.+-(issue|pr)-[0-9]+-r[0-9]+|agent-.+-[0-9]{6}|reviewer-.+|coordinator-[0-9]{6}|coordinate-.+|review-reflex-.+|coordinator-reflex-.+|ledger-reflex-.+|model-scout-.+\"} == 1",
+          "format": "table",
+          "instant": true
+        }
       ],
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "options": {},
       "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "service": true, "uid": true }, "indexByName": { "namespace": 0, "pod": 1, "phase": 2 } } }
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "container": true,
+              "endpoint": true,
+              "instance": true,
+              "job": true,
+              "service": true,
+              "uid": true
+            },
+            "indexByName": {
+              "namespace": 0,
+              "pod": 1,
+              "phase": 2
+            }
+          }
+        }
       ]
     }
   ]

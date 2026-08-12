@@ -8,6 +8,15 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-166** *(archived 2026-08-12)* — meta-watches event-driven, both legs. (a) BUILT: the
+  codeowner park is a first-class exporter series (`github_pull_request_codeowner_park` +
+  `_reflex_wait`, predicate incl. green baked in) + `CodeownerParkWaiting` >30m alert +
+  needs-meta clause 4 reads Prometheus (gh walk demoted to the unreachable-belt) + the
+  agent-running cockpit split with clickable repo#N tables. (b) survey VERDICTS: needs-meta →
+  absorbed as meta-events source (--once); goal-thread User comments → src_goalcmt (built at
+  FU-166(b) filing); alerts/famine → event sources; throughput + alert-crosscheck → heartbeat
+  BACKSTOPS by design; handoff-watch → rollout-only; watch-loop → optional. Polls that remain
+  are declared backstops. Same-day belts: SEATPR CI-RED clause + CR verdict-timestamp edges.
 - **FU-144** *(archived 2026-08-12)* — doorbell fan-out, ruled option (a) receiver-side and BUILT
   same day (the A2 famine PR): the edge-woken global scan resolves a repo-dumb `{repo}` ring to
   {stack, loop_ns} off `stacks_json()` and re-rings `/coordinate` (`coordinator-scan.sh`
