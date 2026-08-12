@@ -3850,3 +3850,11 @@ branch-hopping ran two versions of needs-meta and manufactured the circles#80 fl
 collector-liveness key + staying on master when idle); (2) clause-4's Prometheus-first read
 trusted "reachable+empty" pre-rollout — absence is a claim about the exporter, now keyed on a
 sibling series. Residual: wk-metal-04 longhorn-label plan flap (meta-state 4b′).
+↳ (stand-down tail, 2026-08-12 ~19:10Z) Post-close additions: A5 leg 1 landed (#401) + the
+governance-checkpoint pile seeded; CodeownerParkWaiting gained `triage: "none"` (#404 —
+operator: never wake an LLM for a human-only remedy); circles#81 opened (the §Maturity ↔
+steps-1-4 disposition mapping from #79's merge comment — awaits the operator read); the park→
+read flow ran live twice (circles#79/#80 surfaced → read → cleared); renovate's 18:53 red =
+ghcr blob EOF, rerun green, alert self-resolved. Session totals: 12 homelab PRs merged
+(#392-#404 less #397-as-issue), 4 stack-repo PRs, ~10 direct commits, two monitors' worth of
+new watcher clauses, Bucket A closed.

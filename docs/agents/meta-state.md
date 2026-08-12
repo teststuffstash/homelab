@@ -23,7 +23,18 @@ meant to avoid.)
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
   ONE approval per head; check-#3 shadow warnings stay zero.
 
-## NEXT SESSION — the worklog (updated 2026-08-11 midday)
+## NEXT SESSION — the worklog (updated 2026-08-12 wind-down: BUCKET A COMPLETE)
+
+⚑ **Fresh-session pickup (2026-08-12 ~19:10Z stand-down):** re-arm per §Re-arm (the meta-events
+monitor died with this session). Then the order is: (1) **circles#81** — the §Maturity
+disposition-mapping PR awaits the OPERATOR codeowner read (armed, bot will approve); (2)
+**homelab#365** — the one stack-sweep leftover (promote the #349 bridge bound to the class
+block); (3) **Bucket B launch gate** — the pre-Goal issue sweep (the inert 🌱 set: #280/#292/
+#295/#297/#303/#329/#354/#360-364/#369 — operator wants them decided BEFORE the next Goal) +
+launch criteria (A0 ✓ green; Pending gauge flat = watch post-A2; v1.2 legs replay-pinned ✓);
+then the Goal per Bucket B. Small residuals: 4b′ label flap · FU-051 E2E = organic watch ·
+circles deploy-bump generator fix before the next circles build (item 6) · A5 pile grows in
+iac-lane.md §governance checkpoint.
 
 0. **THE PLATFORM PLAN (chartered 2026-08-12) — two buckets.**
    ⚑ **Session-type bootstrap rule (operator, 2026-08-12): a BUILD session reads THIS section +
