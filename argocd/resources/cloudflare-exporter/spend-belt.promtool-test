@@ -44,9 +44,12 @@
 # series on 2026-08-12. What does change for #231 is the alert's LABEL SET (no more pod/instance),
 # so ArgoCD's sync resolves the two firing instances and re-fires them once under the new identity.
 #
-# NOT covered here (honest remaining work, in #334's PR body, swept by #351): CloudflareExporterDown
-# — deliberately left in its per-target form, `up == 0` needs a live target and a replaced target is
-# a genuinely new attempt at being scraped. The other alert this paragraph used to name,
+# NOT covered here, and no longer uncovered anywhere: CloudflareExporterDown — deliberately left in
+# its per-target form, `up == 0` needs a live target and a replaced target is a genuinely new
+# attempt at being scraped. #351 gave it its own pair, exporter-down.promtool-{rules,test} beside
+# this file, which EXECUTES that sentence: it carries the bridge ported onto `up == 0` as a
+# regression witness and shows it paging on an exporter that is being scraped successfully.
+# The other alert this paragraph used to name,
 # CloudflareEdge5xx, is GONE as of #350: it was never in this class either, but the reason it has no
 # behaviour test is that `cloudflare_zone_requests_status` cannot be produced for any zone this
 # account holds, so a fixture would only have asserted an expr against an invented series. The

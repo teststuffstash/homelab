@@ -16,6 +16,9 @@ spec:
         # forever by construction. Scrape-target health is what the exporter can actually prove;
         # END-TO-END edge-data absence becomes the DIY poller's belt (FU-039), which has real
         # data to lose. The cloudflared_* series (PodMonitor) are today's live edge signal.
+        # Behaviour fixture: exporter-down.promtool-{rules,test} beside this file (#351) — the
+        # `for: 30m`, the absent() arm's label-less identity, and the restart-gap exemption noted
+        # in the spend-belt block below are all executed there.
         - alert: CloudflareExporterDown
           expr: up{job=~".*cloudflare-exporter.*"} == 0 or absent(up{job=~".*cloudflare-exporter.*"})
           for: 30m
@@ -84,7 +87,10 @@ spec:
         # good is noticed ≤10m later than before (FU-150's "absence is the alert" still holds, it
         # just holds 10m slower). `CloudflareExporterDown` above is deliberately NOT in this class
         # — `up == 0` needs a live target, and a replaced target is a genuinely new attempt at
-        # being scraped, so its reset is correct.
+        # being scraped, so its reset is correct. Since #351 that is executed, not argued: the
+        # bridged port exists as a regression witness and both forms run over the same roll in
+        # exporter-down.promtool-test — §4 has the bridged one paging at 30m about an exporter that
+        # has been scraping successfully for three minutes, §5 has it 9m late on a real absence.
         # ⚠ All three spend-belt alerts carry `platform_machinery: "true"` (homelab#239): they
         # fire in ns `monitoring`, which is in no claim and in no self-referential namespace set,
         # and their names are not `Agent*` — so the responder's gate saw them as ordinary
