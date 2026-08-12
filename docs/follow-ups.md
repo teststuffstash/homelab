@@ -161,10 +161,11 @@ six OVERSIZE items pointer-ized into
       auto-merged). **snore-recorder leg BUILT 2026-08-02** (most of it had landed earlier via
       sleep-iac#13-16 — hook, cron, ESO, known_hosts): the residue shipped as snore-recorder#15
       (CalVer + deploy-pin.sh, `ci` script, `.agents/` recipes, dup ansible deleted) +
-      sleep-iac#57 (fixer block — snore is IN THE LOOP). **Remaining:** (1) operator:
-      `devbox run github-tofu apply` (deploy_repos += snore-recorder — committed, wallet is
-      host-side) then observe one real build → pin PR → Pi converge E2E; (2) the first half
-      (operator-chart + pod-image shapes). Relates FU-097, ADR-084.
+      sleep-iac#57 (fixer block — snore is IN THE LOOP). Step (1)'s apply turned out ALREADY DONE:
+      the operator's 2026-08-12 host-side plan read "No changes" with snore-recorder committed in
+      deploy_repos — it rode an earlier apply (~2026-08-04, the circles-secret fix) unrecorded.
+      **Remaining:** (1) observe one real snore build → pin PR → Pi converge E2E (organic);
+      (2) the first half (operator-chart + pod-image shapes). Relates FU-097, ADR-084.
 - [ ] **FU-125** — **Renovate silently REGRESSED to zero dependency PRs — while reporting success.**
       Real bumps flowed 2026-07-05/06 (FU-014's rollout evidence); measured 2026-08-01 (run #115)
       all 10 autodiscovered repos abort — 4 `integration-unauthorized` (incl. sleep-tracking, where
