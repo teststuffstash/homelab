@@ -3658,3 +3658,16 @@ agent-base/devbox.{json,lock} (84f3a42); BOTH replaced by scripts/deps-pin-guard
 required ci check (pure version/hash diff, nothing else — pin-only-lint doctrine, regexes
 executed against evil/benign lines pre-push). agent-coordinator keeps whole-repo (no dep lane
 observed; carve on first park). Host-side github-tofu apply still owed.
+
+### 2026-08-12 — meta (overnight): goal #278 ran end-to-end; closing sweep delivered
+The pilot goal's whole arc in one seat-session: 10/10 children dispositioned (9 merged+verified
+same-day, #289 parked-by-cause), ~20 sprouts incl. the estate-wide restart-gap eradication (every
+for:-bearing alert dispositioned per #332's outlive-the-roll test, witnesses executed), three
+cannot-fire alerts fixed/deleted, 13 behaviour fixtures CI-enforced. Sweep: 8 FU advances (#341's
+worklist), #355 firing-alert-rekey doctrine into the class home, 5 defect fixes queued (budget
+machinery = the pilot's own findings), burn-down report posted, verdict gated on those five.
+Findings routed: budget gap INVERTED (cap-phantoms), bucket-semantics variant question, §M10
+phase-not-clause, FU-166/167 seat tooling. Peak 3 concurrent rides / 120min ≥2; the scan-mutex
+concurrency design chartered with ADR-094 open. The lane reviewed its own machinery changes,
+blocked its own footprint escape, and turned two authoring lessons into structural guards —
+the loop develops itself like a stack now, evidenced.

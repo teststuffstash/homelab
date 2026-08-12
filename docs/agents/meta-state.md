@@ -36,17 +36,15 @@ meant to avoid.)
    by sanction: #221 (HA, meta chain above), #231 (single Cloudflare anchor — host session).
 3. **snore-recorder#15**: CI GREEN after the m02 fix (the "environmental red" was the route
    loss). Remaining: address the review verdict (FU-051 deploy-pin enablement).
-4. **THE FU BUILD-OUT GOAL IS LIVE: homelab#278** (launched 2026-08-11 ~15:30Z). **5 of 10
-   children MERGED+verified by ~18:30Z**: #282 (scout legs), #286 (crash-net — incl. the
-   batch/cronjobs RBAC grant the closeout caught missing, all claims re-verified Synced),
-   #291 (inventory-yaml — generated blocks live in README/CLAUDE), #284 (CiDispatchStalled
-   queued-age), #283 (FU-145 re-key). Queued: #285/#287/#288/#290; #289 parked with oracle.
-   FU-151 meta-delivered for sleep-tracking (`5b8c384`). Jail seat: quiet-goal backstop +
-   closing sweep (per-child live re-probe + the two authoring lessons → issue-authoring §Touches:
-   ratchet-clause files bring agents/replay/** [done]; Composition-new-kind brings rbac.yaml [at
-   sweep] + **the dispatch-concurrency deliverable, operator-chartered on #278**: re-mine the
-   full goal window (mutex-held vs ride time, Pending-doorbell depth, footprint-vs-mutex
-   attribution), then design open to ALL options incl. rethinking ADR-094 — numbers decide).
+4. **GOAL #278: CLOSING SWEEP DELIVERED 2026-08-12 ~05:00Z** — burn-down report on the goal
+   (comment 5262051051): 10/10 children dispositioned (9 merged+verified, #289 parked with
+   oracle), ~20 sprouts landed incl. the estate-wide restart-gap eradication, 8 FU lines
+   advanced, #355 doctrine + all authoring lessons shipped. **VERDICT WAITS on the 5 in-flight
+   defect fixes queued at sweep** (#324 phase-row gap, #337 drift-pins, #348/#361/#367 the
+   goal-budget machinery defects — the pilot's own evidence). Then operator applies
+   goal/validated. The dispatch-concurrency DESIGN stays chartered on the goal (evidence
+   re-mined; ADR-094 on the table). Post-goal inert 🌱 residue (~10 doc/promote items) triages
+   ordinarily. FU-166/FU-167 are the seat-tooling follow-ups.
 4b. **⚠ Pre-existing UNAPPLIED tofu drift on master** (found exercising #296's plan gate):
    `ci-runner-01` plans as a REPLACE (cloud-init `source_raw.data` drifted since last apply —
    wants an attended window, it rebuilds the ADR-082 runner VM) and wk-metal-04's ephemeral/kata
