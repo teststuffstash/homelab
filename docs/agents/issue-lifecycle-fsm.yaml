@@ -328,7 +328,7 @@ transitions:
     guards:
       - desc: "Base:-keyed detection — goal/** only, never any non-default base (the #32 mirror)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "a goal child cannot self-close" }
-      - desc: "the play CLOSES the still-open issue (re-fires goal-review, unblocks siblings)"
+      - desc: "the play CLOSES the still-open issue (moves the burn-down, unblocks siblings — a checkpoint session only at thresholds, ADR-106 (3))"
         anchor: { file: agents/coordinator/README.md, pattern: "GOAL-CHILD leg: also CLOSE the issue" }
       - desc: "merge doorbell: a merged circles PR rings /coordinate (was: wait for the */10 cron)"
         anchor: { repo: circles, file: .github/workflows/coordinate-doorbell.yaml, pattern: "coordinate-doorbell" }
@@ -642,8 +642,8 @@ gaps:
       #208 removes the one path that could have covered it by accident. The post-launch bucket is the
       obvious target and IL-T18 already resolves its number; what is missing is a clause that fires on
       the assembly merge itself rather than on an issue close."
-    accepted: "the goal-review post-launch leg reads the merged assembly PR and can raise the bullets in
-      its burn-down report meanwhile; build the clause when a real assembly review actually emits
+    accepted: "the goal-checkpoint post-launch leg reads the merged assembly PR and can raise the bullets
+      at its next threshold-fired session meanwhile; build the clause when a real assembly review actually emits
       Follow-ups (none has yet), so the fixture can be recorded from a live payload rather than invented"
 
   - id: IL-G05

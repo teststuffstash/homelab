@@ -1488,20 +1488,20 @@ EOF_GUARDED
         gclosed_n="$(printf '%s' "$kidsall" | jq -r --arg d "$gdesc" \
           '(($d | split(" ") | map(select(. != "") | tonumber))) as $D
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
-        case "$gopen_n$gclosed_n" in *[!0-9]*|"") continue ;; esac
+        # Each count validated on its own — concatenation would let ("", "3") read as the
+        # valid-looking "3" and fail later as a swallowed arithmetic error (bot review, PR#398).
+        case "$gopen_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
+        case "$gclosed_n" in ''|*[!0-9]*) echo "  [$repo] ⚠ goal #${g}: descendant-count probe unreadable — burn-down/checkpoint skipped this pass" >&2; continue ;; esac
         set -- $gdesc; gtotal_n=$#
         _gf_find "$slug" "$g" || true
         gfbody="$GF_BODY"
         gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
         gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"
         if [ "$gcur" != "$gbd" ]; then
-          gf_burndown "$slug" "$g" "$gbd" >/dev/null 2>&1 \
+          gf_burndown "$slug" "$g" "$gbd" "${GF_ID:--}" "$gfbody" >/dev/null 2>&1 \
             || echo "  [$repo] ⚠ goal #${g}: burn-down write refused — store stale, checkpoint counting unaffected" >&2
         fi
-        gcounts="$(printf '%s\n' "$gfbody" | awk '
-          /^[0-9]+\. / { n = $1 + 0 }
-          /^dispositioned-through:/ { d = $2 + 0 }
-          END { printf "%d %d\n", n, d }')"
+        gcounts="$(printf '%s\n' "$gfbody" | gf_parse_counts)"
         gtot="${gcounts% *}"; gdisp="${gcounts#* }"
         gundisp=$(( gtot - gdisp ))
         gck=""
@@ -1553,8 +1553,8 @@ EOF_GUARDED
     # same absorbing-belt class as the WIP-hold jq-null bug).
     # FU-143: an ASSEMBLY PR (head goal/**) with changes-requested is EXCLUDED — a fix round
     # pushes to the PR head, and the head IS the protected goal/** integration branch (the push
-    # would be refused; the mandate is a NEW child on the goal — coordinator README goal-review
-    # play). Report-only line below so it never rots silently.
+    # would be refused; the mandate is a NEW child on the goal — coordinator README
+    # goal-checkpoint play). Report-only line below so it never rots silently.
     for u in $(printf '%s' "$prsjson" | jq -r '.[]|select(((.headRefName // "")|startswith("goal/")) and (.reviewDecision=="CHANGES_REQUESTED"))|.number'); do
       orphans="${orphans}[$repo] ⚠ ASSEMBLY PR #${u} has changes-requested (FU-143) — route as a NEW child on the goal; a fix round cannot push to the protected goal/** head\n"
     done
@@ -2139,8 +2139,8 @@ EOF_GUARDED
     c6_n=0
     # FU-143 point 1: the goal children detected above (OPEN, merged into their declared goal/**
     # base, keyword inert) — same unit, same play, same cap; emitted FIRST because C4/C5 was told
-    # to stand aside for exactly these, and the closeout unblocks goal-review + blocked-by
-    # siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
+    # to stand aside for exactly these, and the closeout moves the burn-down + unblocks
+    # blocked-by siblings. The play closes the ISSUE too (README §merged-closeout, goal-child leg).
     for gb in $(printf '%b' "${c6g:-}"); do
       gn="${gb%%|*}"; gbase="${gb#*|}"
       if [ "$c6_n" -lt 3 ]; then
@@ -2379,7 +2379,7 @@ EOF_GUARDED
     # same reason the state-fp marker sits directly above), so the ancestry probe + budget read
     # cost one unit's worth of calls per scan instead of the emission cap's three.
     #
-    # BUCKET CREATION IS IDEMPOTENT and fires at the goal-review/closeout site, which is where
+    # BUCKET CREATION IS IDEMPOTENT and fires at the goal-checkpoint/closeout site, which is where
     # ADR-102 puts it. It fires EARLIER than "at assembly merge" on purpose: deliverable 2 files
     # open-goal sprouts into the bucket, so the container must exist while the goal is still
     # pre-launch. One container per goal either way — the search below is what makes a second call

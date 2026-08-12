@@ -55,12 +55,16 @@ _gf_empty_body() {
   printf '%s\ndispositioned-through: 0\nburn-down: —\n' "$MARK"
 }
 
-gf_counts() {   # $1 slug, $2 issue → "total dispositioned" ("" on unreadable — caller must gate)
-  _gf_find "$1" "$2" || { echo ""; return 0; }
-  printf '%s\n' "$GF_BODY" | awk '
+gf_parse_counts() {   # store body on stdin → "total dispositioned" — THE one parse of the shape
+  awk '
     /^[0-9]+\. / { n = $1 + 0 }
     /^dispositioned-through:/ { d = $2 + 0 }
     END { printf "%d %d\n", n, d }'
+}
+
+gf_counts() {   # $1 slug, $2 issue → "total dispositioned" ("" on unreadable — caller must gate)
+  _gf_find "$1" "$2" || { echo ""; return 0; }
+  printf '%s\n' "$GF_BODY" | gf_parse_counts
 }
 
 gf_append() {   # $1 slug, $2 issue, $3 entry-line (no leading number)
@@ -80,9 +84,14 @@ gf_advance() {   # $1 slug, $2 issue, $3 new marker value
   echo "goal-findings: ${1}#${2} dispositioned-through → ${3}"
 }
 
-gf_burndown() {   # $1 slug, $2 issue, $3 burn-down text — the demoted goal-review's whole write
+gf_burndown() {   # $1 slug, $2 issue, $3 text [, $4 id, $5 body — pre-fetched: skips the re-GET
+  # (the goal lane already holds GF_ID/GF_BODY from its own read; a second identical comments GET
+  # per changed tick is pure FU-084 API-pool burn — bot review, PR#398)]
   local id body
-  if _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"; else id=""; body="$(_gf_empty_body)"; fi
+  if [ $# -ge 5 ] && [ "$4" = "-" ]; then id=""; body="$(_gf_empty_body)"   # cached: store known absent → create, no re-GET
+  elif [ $# -ge 5 ] && [ -n "$4" ]; then id="$4"; body="$5"
+  elif _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"
+  else id=""; body="$(_gf_empty_body)"; fi
   printf '%s\n' "$body" | awk -v t="$3" '{ if ($0 ~ /^burn-down:/) print "burn-down: " t; else print }' \
     | _gf_put "$1" "$id" "$2"
   echo "goal-findings: ${1}#${2} burn-down updated"

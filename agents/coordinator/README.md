@@ -405,7 +405,7 @@ job, in order (re-read live state first, exit clean if someone already closed it
    `baseRefName` equals the declared base, and `ci` on the goal branch head is green
    (`gh run list --branch <goal-branch>`). The master/-iac checks below do NOT apply — this
    code is not on master yet; the assembly PR is where that gets judged. Do not reopen
-   anything here; a wrong-looking outcome is a comment on the GOAL for the next goal-review.
+   anything here; a wrong-looking outcome is a comment on the GOAL — the next goal-checkpoint reads it.
    **-iac repos verify the CLUSTER, not GitHub (IAC-G03, 2026-08-02):** in an `*-iac` repo the
    definition of done is *reconciled-and-healthy*, so before flipping the label also check —
    the owning ArgoCD Application is Synced **at (or past) the merge revision** AND Healthy
@@ -419,8 +419,9 @@ job, in order (re-read live state first, exit clean if someone already closed it
    state closes still at `agent/review`; add-before-remove; compare-then-write per the label
    discipline above). **GOAL-CHILD leg: also CLOSE the issue** (`gh issue close <n> --comment
    "merged into <goal-branch> by PR #<N> — closed by the FU-143 closeout (keyword inert off
-   master)"`) — this close is what re-fires `goal-review` and unblocks `Depends-on:` siblings;
-   it is the entire point of the widened clause.
+   master)"`) — this close is what moves the goal's burn-down (deterministic, zero tokens since
+   ADR-106 (3)) and unblocks `Depends-on:` siblings; a `goal-checkpoint` session fires only when
+   the store/child-set thresholds are met. The close is still the entire point of the widened clause.
 3. **Harvest the review `Follow-ups:` bullets (FU-090a).** Read every review on the merged PR
    (`gh pr view <PR> --json reviews`); each bullet under a `Follow-ups:` heading becomes ONE
    issue on the SAME repo — title from the bullet, body = the bullet verbatim + provenance
