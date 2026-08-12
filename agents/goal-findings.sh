@@ -26,9 +26,20 @@ _gf_comments() {   # $1 slug, $2 issue → full comments json (id+body) or ""
   gh api "repos/$1/issues/$2/comments?per_page=100" --paginate 2>/dev/null || true
 }
 
-_gf_find() {   # $1 slug, $2 issue → "id<TAB>body" of the store comment, or empty
-  _gf_comments "$1" "$2" | jq -r --arg m "$MARK" \
-    '[.[] | select((.body // "") | startswith($m))] | first // empty | [(.id|tostring), .body] | @tsv' 2>/dev/null || true
+GF_ID=""; GF_BODY=""
+_gf_find() {   # $1 slug, $2 issue → sets GF_ID/GF_BODY; rc 1 when absent/unreadable.
+  # Two jq passes over one fetch, NOT @tsv: tsv escapes embedded newlines to literal \n, which
+  # flattened every real multi-line store into one unparseable line — counts read 0/0 and the
+  # burn-down compare always missed (caught by the goal-checkpoint-due fixture, 2026-08-12).
+  GF_ID=""; GF_BODY=""
+  local js; js="$(_gf_comments "$1" "$2")" || js=""
+  [ -n "$js" ] || return 1
+  GF_ID="$(printf '%s' "$js" | jq -r --arg m "$MARK" \
+    '[.[] | select((.body // "") | startswith($m))] | first // empty | .id' 2>/dev/null)" || GF_ID=""
+  [ -n "$GF_ID" ] || return 1
+  GF_BODY="$(printf '%s' "$js" | jq -r --arg m "$MARK" \
+    '[.[] | select((.body // "") | startswith($m))] | first.body' 2>/dev/null)" || { GF_ID=""; return 1; }
+  return 0
 }
 
 _gf_put() {   # $1 slug, $2 comment-id ('' = create on issue $3), $3 issue, body on stdin
@@ -45,39 +56,33 @@ _gf_empty_body() {
 }
 
 gf_counts() {   # $1 slug, $2 issue → "total dispositioned" ("" on unreadable — caller must gate)
-  local row body
-  row="$(_gf_find "$1" "$2")" || row=""
-  [ -n "$row" ] || { echo ""; return 0; }
-  body="${row#*	}"
-  printf '%s\n' "$body" | awk '
+  _gf_find "$1" "$2" || { echo ""; return 0; }
+  printf '%s\n' "$GF_BODY" | awk '
     /^[0-9]+\. / { n = $1 + 0 }
     /^dispositioned-through:/ { d = $2 + 0 }
     END { printf "%d %d\n", n, d }'
 }
 
 gf_append() {   # $1 slug, $2 issue, $3 entry-line (no leading number)
-  local row id body next
-  row="$(_gf_find "$1" "$2")" || row=""
-  if [ -n "$row" ]; then id="${row%%	*}"; body="${row#*	}"; else id=""; body="$(_gf_empty_body)"; fi
+  local id body next
+  if _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"; else id=""; body="$(_gf_empty_body)"; fi
   next="$(printf '%s\n' "$body" | awk '/^[0-9]+\. /{n=$1+0} END{print n+1}')"
   printf '%s\n%s. %s\n' "$body" "$next" "$3" | _gf_put "$1" "$id" "$2"
   echo "goal-findings: appended entry ${next} to ${1}#${2}"
 }
 
 gf_advance() {   # $1 slug, $2 issue, $3 new marker value
-  local row id body
-  row="$(_gf_find "$1" "$2")" || row=""
-  [ -n "$row" ] || { echo "goal-findings: no store on ${1}#${2} — nothing to advance" >&2; return 1; }
-  id="${row%%	*}"; body="${row#*	}"
+  local id body
+  _gf_find "$1" "$2" || { echo "goal-findings: no store on ${1}#${2} — nothing to advance" >&2; return 1; }
+  id="$GF_ID"; body="$GF_BODY"
   printf '%s\n' "$body" | awk -v n="$3" '{ if ($0 ~ /^dispositioned-through:/) print "dispositioned-through: " n; else print }' \
     | _gf_put "$1" "$id" "$2"
   echo "goal-findings: ${1}#${2} dispositioned-through → ${3}"
 }
 
 gf_burndown() {   # $1 slug, $2 issue, $3 burn-down text — the demoted goal-review's whole write
-  local row id body
-  row="$(_gf_find "$1" "$2")" || row=""
-  if [ -n "$row" ]; then id="${row%%	*}"; body="${row#*	}"; else id=""; body="$(_gf_empty_body)"; fi
+  local id body
+  if _gf_find "$1" "$2"; then id="$GF_ID"; body="$GF_BODY"; else id=""; body="$(_gf_empty_body)"; fi
   printf '%s\n' "$body" | awk -v t="$3" '{ if ($0 ~ /^burn-down:/) print "burn-down: " t; else print }' \
     | _gf_put "$1" "$id" "$2"
   echo "goal-findings: ${1}#${2} burn-down updated"

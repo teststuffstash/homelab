@@ -4,7 +4,7 @@
 # CONDITION UNDER REPLAY. Identical world to fixture (a) with one number changed: the goal's
 # `Budget:` line reads $1 against Σ(spend + reservations) $1.75. The goal is still OPEN, #35 still
 # carries `Base: goal/29-p0-complete`, and under the pre-ADR-102 rule that combination queued.
-# Here it comes out `selfqueue=no` — the right to queue is a GRANT from a FUNDED goal, and this
+# Here it comes out `harvest=inert` (was `selfqueue=no` pre-ADR-106) — the right to queue is a GRANT from a FUNDED goal, and this
 # one has nothing left to grant.
 #
 # WHY THE SAME HELPER AND NOT A SECOND SUM. The ⚖ line on #207 is explicit: the launcher pre-flight

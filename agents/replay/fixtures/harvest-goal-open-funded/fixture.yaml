@@ -9,7 +9,7 @@
 #      merge because deliverable 2 files open-goal sprouts into it, so the container must exist
 #      while the goal is still pre-launch,
 #   3. the SAME arithmetic the launcher pre-flight enforces with (agents/goal-budget.sh, sourced
-#      by the bridge, not transcribed) rules `within` — Σ $1.75 of $12 — so `selfqueue=yes` rides
+#      by the bridge, not transcribed) rules `within` — Σ $1.75 of $12 — so `harvest=store` (was `selfqueue=yes` — the queue right moved to the checkpoint, ADR-106 (3)) rides
 #      the `--item` string to the coordinator play.
 #
 # WHAT IT PINS THAT PROSE DID NOT. The old rule queued a sprout whenever the ORIGINATING issue

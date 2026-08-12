@@ -1490,8 +1490,8 @@ EOF_GUARDED
            | [.[] | select(.number as $n | $D | index($n)) | select(.state == "CLOSED")] | length' 2>/dev/null || echo "")"
         case "$gopen_n$gclosed_n" in *[!0-9]*|"") continue ;; esac
         set -- $gdesc; gtotal_n=$#
-        gfrow="$(_gf_find "$slug" "$g")" || gfrow=""
-        gfbody=""; [ -n "$gfrow" ] && gfbody="${gfrow#*	}"
+        _gf_find "$slug" "$g" || true
+        gfbody="$GF_BODY"
         gbd="${gopen_n} open / ${gclosed_n} closed of ${gtotal_n} descendants"
         gcur="$(printf '%s\n' "$gfbody" | awk '/^burn-down:/{sub(/^burn-down: /,""); print; exit}')"
         if [ "$gcur" != "$gbd" ]; then

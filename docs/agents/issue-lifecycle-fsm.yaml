@@ -40,11 +40,11 @@ diagram: |
       state GoalLane {
           [*] --> GoalQueued: human authors AND queues (breaker up, IL-T10)
           GoalQueued --> GoalTracking: goal-decompose authors+queues children (IL-T11)
-          GoalTracking --> GoalTracking: goal-review on any DESCENDANT close (IL-T12)
+          GoalTracking --> GoalTracking: burn-down / goal-checkpoint on triggers (IL-T12)
           GoalTracking --> GoalTracking: post-launch bucket ensured, one per goal (IL-T17)
           GoalTracking --> AssemblyOpen: assembly-complete → assembly PR armed (IL-T13)
           AssemblyOpen --> PostLaunch: codeowner + human merge — a MIDPOINT, goal stays OPEN (IL-T14/IL-T18)
-          PostLaunch --> PostLaunch: goal-review on any DESCENDANT close (IL-T12)
+          PostLaunch --> PostLaunch: burn-down / goal-checkpoint on triggers (IL-T12)
           PostLaunch --> [*]: goal/validated → closed met + close sweep (IL-T19)
           PostLaunch --> [*]: goal/reverted → closed refuted, descendants close with it (IL-T20)
           PostLaunch --> [*]: goal/abandoned → closed not-planned, descendants inert (IL-T21)
@@ -84,7 +84,7 @@ events:
   worker_terminal: "the ride died with no open PR referencing the issue"
   worker_infeasible: "the ride ENDED ON PURPOSE with no open PR: the deliverable needs a path its recipe bans or a resource outside the pod, and the worker said so in one `AGENT_INFEASIBLE: <path/resource>` comment (retro r3 F4)"
   descendant_closed: "any issue in the goal's sub-issue closure closes"
-  assembly_complete: "goal-review rules the acceptance BUILT AS SPECIFIED (renamed from goal_met, ADR-102 — it never meant 'idea validated')"
+  assembly_complete: "the goal-checkpoint play rules the acceptance BUILT AS SPECIFIED (renamed from goal_met, ADR-102 — it never meant 'idea validated')"
   assembly_merged: "the goal→master PR merges (human codeowner act) — a MIDPOINT, not the end"
   verdict_applied: "the goal's Verdict-authority applies goal/validated | goal/reverted | goal/abandoned"
 
@@ -380,23 +380,26 @@ transitions:
       - desc: "the worker's slice is BOUNDED — Goal+Acceptance card only, never the spec tree"
         anchor: { file: agents/agent-session.sh, pattern: "GOAL CONTEXT" }
       - desc: "the reasoning-tier model map (launcher-owned, ADR-094)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: 'goal-decompose\) cmodel' }
+        anchor: { file: agents/coordinator-scan.sh, pattern: 'goal-decompose.goal-checkpoint\) cmodel' }
 
   - id: IL-T12
-    name: goal-review on every descendant close (tracking AND post-launch)
-    owner: scan goal-review clause → coordinator item session
-    when: "a DESCENDANT (not just direct child — sprouts sit at depth 2) closed after the loop's newest
-      comment on the goal. Keeps firing after IL-T18: the goal is still open and still shipping, which
-      is what makes the terminal a separate, later transition rather than a merge-time guess."
+    name: goal burn-down (deterministic) + goal-checkpoint on triggers (ADR-106 (3), was per-closure goal-review)
+    owner: scan goal lane (burn-down, zero tokens) → coordinator goal-checkpoint session (reasoning tier)
+    when: "descendant state changed → the scan writes the burn-down line into the findings store
+      (compare-then-write, no session). A `goal-checkpoint` unit fires ONLY on: ≥ GOAL_CHECKPOINT_N
+      undispositioned store findings, or the child-set completing pre-launch (the 2026-08-05
+      deadlock backstop, carried from the retired per-closure clause). Keeps working after IL-T18:
+      the goal is still open and still shipping."
     status: guarded
     replay:
-      - agents/replay/fixtures/goal-nonassembly-merge-inert     # the ordinary unit still emits
-      - agents/replay/fixtures/goal-assembly-complete           # …but NOT for a goal the lifecycle just acted on
+      - agents/replay/fixtures/goal-checkpoint-due              # the positive trigger (findings ≥ N)
+      - agents/replay/fixtures/goal-nonassembly-merge-inert     # burn-down written, NO per-closure unit
+      - agents/replay/fixtures/goal-assembly-complete           # …and none for a goal the lifecycle just acted on
     guards:
       - desc: "descendant fixpoint walk (the budget-gate bug-shape, fixed here too)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "FU-143 point 6: DESCENDANTS" }
-      - desc: "the play: assembly-complete / children cover / author the missing child / retro checkpoint"
-        anchor: { file: agents/coordinator/README.md, pattern: "goal-review. clause" }
+      - desc: "the play: dispose the store (fold/mint-to-origin/drop + advance), then assembly-complete / children cover / author the missing child / retro checkpoint"
+        anchor: { file: agents/coordinator/README.md, pattern: "goal-checkpoint. clause" }
       - desc: "a goal the lifecycle legs just moved does not ALSO draw a review unit this pass (replay: goal-assembly-complete)"
         anchor: { file: agents/coordinator-scan.sh, pattern: "is DONE for this pass" }
       - desc: "the post-launch leg of the play: burn-down report, retarget stranded Base: children, recommend a verdict — never apply one"
@@ -404,7 +407,7 @@ transitions:
 
   - id: IL-T13
     name: assembly-complete → assembly PR opened ARMED
-    owner: goal-review session (App-authored, at assembly-complete time — never at decompose)
+    owner: goal-checkpoint session (App-authored, at assembly-complete time — never at decompose)
     when: "assembly_complete → gh pr create goal→master non-draft + a line-anchored `Assembly-for: #<goal>`
       trailer + coverage map body, then armed. NOT a closing keyword (ADR-102): the merge is IL-T18's
       midpoint, and `Fixes` here restores the #17 bug the rename exists to kill."
@@ -530,25 +533,25 @@ transitions:
         anchor: { file: argocd/resources/agentstack/composition.yaml, pattern: 'name. .goal/validated' }
 
   - id: IL-T15
-    name: goal-lane sprouts queue at harvest — only while the goal is open AND funded
+    name: goal-lane findings APPEND to the store at harvest — minting is the checkpoint's (ADR-106 (3); was the selfqueue grant)
     owner: scan harvest-disposition block (decides) → merged-closeout play (obeys)
     when: "the scan resolved a goal ancestor (task/goal label OR a machine-readable Budget: line —
-      homelab#367) for the closeout item → the sprout is filed into
-      that goal's post-launch bucket (IL-T17) and gets agent-fix+agent/queued ONLY when the goal is
-      OPEN and the shared Budget: read rules `within`. Closed goal, exhausted or unparseable budget,
-      unresolved bucket, or no goal ancestor at all → filed with NO queue labels."
+      homelab#367) for the closeout item → `harvest=store` while the goal is OPEN (the play appends
+      findings to the goal's findings store, mints NOTHING); closed/terminal goal → `harvest=inert`
+      (prose in the closing comment, human triage). The queue right moved to the goal-checkpoint
+      play — budget-gated THERE, children parented to the finding's ORIGIN (ADR-106 (2))."
     status: guarded
     replay:
-      - agents/replay/fixtures/harvest-goal-open-funded       # open + funded → queued
-      - agents/replay/fixtures/harvest-goal-open-exhausted    # open + out of money → inert
-      - agents/replay/fixtures/harvest-goal-closed            # closed → inert, budget never read
+      - agents/replay/fixtures/harvest-goal-open-funded       # open → store (budget NOT read here anymore)
+      - agents/replay/fixtures/harvest-goal-open-exhausted    # open → store — same verdict, the checkpoint gates money
+      - agents/replay/fixtures/harvest-goal-closed            # closed → inert
     guards:
       - desc: "the verdict is DETERMINISTIC and rides --item; the play is ordered, never asked (replay: harvest-goal-open-funded / -exhausted / -closed)"
-        anchor: { file: agents/coordinator-scan.sh, pattern: "no grant, no self-queue right" }
-      - desc: "the play obeys selfqueue=; the pre-ADR-102 `Base: goal/**` exception is retired"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "harvest APPENDS, never mints" }
+      - desc: "the play obeys harvest=; the pre-ADR-102 `Base: goal/**` exception stays retired"
         anchor: { file: agents/coordinator/README.md, pattern: "THE GOAL LANE IS DECIDED FOR YOU" }
-      - desc: "ONE Budget: read, shared with the enforcing launcher pre-flight — never a second sum"
-        anchor: { file: agents/goal-budget.sh, pattern: "goal_budget_read" }
+      - desc: "the store format has ONE home (append/counts/advance/burndown + the scan's sourced fns)"
+        anchor: { file: agents/goal-findings.sh, pattern: "goal-findings v1" }
       - desc: "…and ONE ancestor walk under it, the same one the launcher pre-flight resolves with: until homelab#367 this block answered goal #278 for rides the launcher was gating against bucket #295"
         anchor: { file: agents/coordinator-scan.sh, pattern: "goal_resolve_ancestor" }
       - desc: "the reviewer emits NO Follow-ups at depth ≥2 — the tree is capped at sprouts-of-children"
@@ -560,7 +563,7 @@ transitions:
   - id: IL-T17
     name: post-launch bucket — merge is a midpoint, the container is a sub-issue
     owner: scan harvest-disposition block (deterministic; no LLM in the path)
-    when: "a merged-closeout or goal-review unit resolves a task/goal ancestor → find-or-create ONE
+    when: "a merged-closeout or goal-checkpoint unit resolves a task/goal ancestor → find-or-create ONE
       `post-launch: <goal title>` sub-issue under the goal and link it with the native edge. Created
       at the first closeout/review rather than strictly at assembly merge: IL-T15 files open-goal
       sprouts into it, so the container must exist while the goal is still pre-launch. Post-launch
