@@ -279,6 +279,10 @@ is pure ceremony:
 - genuine quickfixes: one-line corrections, incident response, un-wedging live state — small,
   urgent, operational
 - jail-only seat tooling when the operator orders it direct (rare; say so in the commit)
+- **governance files the bot cannot gate**: `.agents/review.md` (the reviewer executes the PR
+  branch's rubric — it correctly refused to review a change to its own rules, PR#386),
+  CODEOWNERS, `.github/workflows/**` — self-gating is impossible, so these are operator-direct
+  by necessity, not convenience
 
 Both lanes keep the standing discipline:
 
