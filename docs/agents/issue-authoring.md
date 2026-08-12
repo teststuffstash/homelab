@@ -651,6 +651,37 @@ the two read-honesty signals live in
 Implementation: the harvest/closeout clause changes ship WITH executed replays (ADR-103 —
 they are exactly the clause class that produced homelab#198/#204).
 
+## The v1.2 lifecycle (ADR-106) — the big picture
+
+One mode (feature goals), phase-keyed models, two authoring moments, one codeowner tax. The
+per-closure tick costs zero tokens; the reasoning tier runs only where work is CREATED. This
+diagram is the design view — the lint-checked FSM follows when the v1.2 machinery builds
+(Bucket A4).
+
+```mermaid
+flowchart TD
+  H(["HUMAN authors + queues the Goal<br/>Budget: · Acceptance · Production-leg:"]):::human
+  H -->|breaker #1, moved up| DEC
+  DEC["<b>DECOMPOSE</b> — reasoning tier<br/>(opus / the seat with corpus)<br/>AUTHORING MOMENT 1: the initial children<br/>native sub-issues, goal/&lt;n&gt;-&lt;slug&gt; branch"]:::reason
+  DEC --> RIDE
+  subgraph SUB["THE SUBTREE — autonomous, Σ caps ≤ Budget, cheap workers"]
+    RIDE["child ride (haiku / OR chain)<br/>PR into goal/** · bot review (sonnet)<br/>in-diff findings FIXED IN-PR"]:::cheap
+    RIDE --> MRG["merge into goal/** branch<br/>(deploys NOTHING — no tax)"]:::det
+    MRG --> HARV["harvest (deterministic)<br/>findings APPEND to the STORE<br/>never mints issues"]:::det
+    HARV --> TICK["goal-review tick — NO MODEL<br/>deterministic burn-down append"]:::det
+    TICK -->|"N≥5 piled · child-set done ·<br/>budget fraction · pre-verdict"| CKPT["<b>CHECKPOINT</b> — reasoning tier<br/>AUTHORING MOMENT 2:<br/>fold-by-footprint / mint real children / drop"]:::reason
+    CKPT -->|new children| RIDE
+  end
+  SUB -->|acceptance built| ASM["assembly-complete ruling (sonnet)<br/>assembly PR opened + armed<br/>bot review, REVIEW_GOAL_MODEL ≠ decomposer"]:::cheap
+  ASM --> TAX["🧾 <b>THE ONE CODEOWNER TAX</b><br/>human reads + merges goal → master<br/>every nit already solved in-tree"]:::human
+  TAX --> PL["POST-LAUNCH — goal stays OPEN<br/>ship-then-fix: sprouts → store → checkpoints<br/>children base master · Production-leg<br/>verified IN-TREE (deploy + KPIs)"]:::det
+  PL --> V{"VERDICT — human<br/>validated / reverted / abandoned"}:::human
+  classDef human fill:#4c1d95,stroke:#a78bfa,color:#ffffff
+  classDef reason fill:#7c2d12,stroke:#fb923c,color:#ffedd5
+  classDef cheap fill:#14532d,stroke:#4ade80,color:#dcfce7
+  classDef det fill:#27272a,stroke:#71717a,color:#e4e4e7
+```
+
 ## Goal lane versions — which design had which problems
 
 The lane redesigns wholesale (the scout's §M7 v1/v2/v3 pattern), so its history is versioned:
@@ -663,5 +694,5 @@ Add the row in the same commit as the superseding decision.
 | version | era / exemplars | defining design | measured problems (evidence) | superseded by |
 |---|---|---|---|---|
 | **v1** | 2026-08-05..08 — circles#17→#29, oracle-fleet goal-174 | FU-090 leg (c) + `Base: goal/**` branches; close = "goal met" ruling | machine-ruled "met" 100 min before operator refutation (#17); 19-sprout tree growing 3 generations 34h post-close (goal-174); `Base:` rot + self-queue outliving the goal (the 2026-08-09 census) | ADR-102 |
-| **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | v1.2 (open) |
+| **v1.1** | 2026-08-11..12 — homelab#278 (the FU-165 pilot) | ADR-102: budget-funded container, post-launch bucket, midpoint merge, human verdict terminals | bucket flattens the derivation DAG (2 vs 5 generations); worker-findings inflow ungated (52 edges, all worker/ride-authored); per-event cadence (21 rulings, 46 singleton mints); `Touches:` fence ~7× against small folds; dispatcher-bound throughput (queue 3,550 min vs pod 605, 361 min starvation); no consumer for goal-thread operator directives — all in [`../spikes/goal-lane-v1.1-fu165-pilot.md`](../spikes/goal-lane-v1.1-fu165-pilot.md) | ADR-106 |
 | **v1.2** | design ACCEPTED 2026-08-12 (ADR-106); build = Bucket A4/A2 + the next platform Goal | FU-168 (ADR-094 concurrency + ADR-097 fence, numbers decide) · #295 bucket semantics · typed findings disposition · §M10 checkpoints · FU-166(b) · **stack-scoped goals** (operator, 2026-08-12: the tree spans the claim's repos incl. `-iac` — a Goal belongs to a STACK; v1.1 proved cross-repo lineage/budget/ride on ONE agent-runtime child, but sibling repos have no merge doorbell and `-iac` descendants were never exercised, so "done means deployed" stops at the app-repo merge everywhere homelab isn't its own -iac) | — | — |
