@@ -48,6 +48,33 @@ machine has a post-merge half, and that half is the primary gate, not a belt.
 | `renovate` | Renovate | existing classification (renovate.md) | |
 
 ## The platform lane — homelab is one repo, so the gate is per PATH
+### Governance changes batch into a CHECKPOINT — the A5 process (operator, 2026-08-12)
+
+Ownership/gate changes (CODEOWNERS lines, ruleset knobs like `required reviews = 2`, a second
+review identity for parts of `docs/`, carve-out lints) follow the goal lane's checkpoint shape,
+not per-event edits: **any single one-line edit makes local sense; ten of them are a different
+process.** Candidates PILE UP in the list below instead of landing one at a time, and the pile is
+reviewed in ONE `/design-agents`-context sitting (full corpus — these changes interact with the
+whole gate architecture) when the operator calls it or the pile grows past a handful. Today the
+operator hand-drives this batching through jail sessions; this section is the process home so it
+stops being a memory.
+
+**The pile (dated candidates, NOT decided):**
+- required reviews = 2 on some tier (2026-08-12).
+- a second review identity for parts of `docs/` (2026-08-12).
+- drop the tier-1 `/argocd/resources/` scaffold line — its own condition: IAC-G04 enforcing on
+  homelab (shadow coverage shipped 2026-08-12, A5 leg 1) or the operator's trust call.
+- docs/ split: release per-service docs, keep the memory core (`follow-ups*.md`, `adr.md`,
+  `incidents/`, `docs/agents/`) owned; optionally machine-enforce the tracker's single-writer
+  contract via the governance-lint set (2026-08-12 mapping).
+- the full agent-runtime-style narrowing stays BLOCKED on a replacement single-tax point for
+  assembly merges (ADR-106 — homelab has no `/specs/`-invariant in assembly diffs).
+
+⚠ Known structural debt, deliberately parked (operator, 2026-08-12): `scripts/` has no internal
+structure that would make path-based rules easy — CI-invoked checks (governance-class: the
+governance-lint treats ALL of `scripts/` as such) sit beside operational one-shots in one flat
+directory. Restructuring it is its own future candidate, not part of any current leg.
+
 
 Every stack splits an app repo (behavior; CI carries the evidence) from `-iac` (form + post-merge
 truth). **homelab has no such split.** It *is* the platform's own `-iac` — ArgoCD watches
