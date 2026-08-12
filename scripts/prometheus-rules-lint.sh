@@ -53,4 +53,37 @@ done << EOF
 $(find argocd -name '*.promtool-test' 2>/dev/null | sort)
 EOF
 [ "$tests" -gt 0 ] && echo "prometheus-rules-lint: $tests behaviour fixture(s) run"
+
+# DRIFT PIN (homelab#337, operator-lane): every *.promtool-rules file is a HAND COPY of its CR's
+# groups, and a stale copy makes the behaviour fixtures pass vacuously. For each directory with a
+# rules copy: extract every alert from every PrometheusRule doc in that dir's *.yaml (eval-all —
+# blackbox.yaml is MULTI-DOC), and for each alert name present in BOTH the CR and the copy, assert
+# expr+for equality. Witness groups (Pre335, MaxDirection, …) exist only copy-side, so the
+# intersection skips them with no name convention needed; annotations are legitimately deleted by
+# some recipes, so only expr+for are pinned.
+pins=0
+for rf in $(find argocd -name '*.promtool-rules' | sort); do
+  d=$(dirname "$rf")
+  crs=$(find "$d" -maxdepth 1 -name '*.yaml' | sort)
+  [ -n "$crs" ] || continue
+  cr_json="$tmp/cr-alerts.json"; cp_json="$tmp/cp-alerts.json"
+  # shellcheck disable=SC2086
+  yq eval-all -o=json '[.] | map(select(.kind == "PrometheusRule")) | map(.spec.groups[].rules[]) | flatten | map(select(.alert)) | map({"alert": .alert, "expr": .expr, "for": .for})' $crs 2>/dev/null | jq -s 'flatten | unique_by(.alert)' > "$cr_json" || continue
+  yq -o=json '[.groups[].rules[] | select(.alert)] | map({"alert": .alert, "expr": .expr, "for": .for})' "$rf" 2>/dev/null > "$cp_json" || continue
+  # ANY-match per alert name: the copy may carry extra same-named variants (probes' hand-rendered
+  # SLO group) and witness groups; the pin asserts the CR's exact (expr, for) appears among the
+  # copy's entries for every alert name both sides share.
+  drift=$(jq -n --slurpfile cr "$cr_json" --slurpfile cp "$cp_json" '
+    ($cp[0] | map(.alert) | unique) as $names
+    | $cr[0] | map(select(.alert as $a | $names | index($a)))
+    | map(select(. as $want | $cp[0] | map(select(. == $want)) | length == 0) | .alert)
+    | unique | join(" ")')
+  drift=$(printf '%s' "$drift" | tr -d '"')
+  if [ -n "$drift" ]; then
+    echo "  DRIFT $rf: alert(s) [$drift] differ from the CR in $d — re-run the header's yq recipe"
+    rc=1
+  fi
+  pins=$((pins+1))
+done
+[ "$pins" -gt 0 ] && echo "prometheus-rules-lint: $pins hand-copy file(s) drift-pinned against their CRs"
 exit $rc
