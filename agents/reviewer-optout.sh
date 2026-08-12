@@ -73,7 +73,7 @@ say() { printf 'reviewer-optout: %s\n' "$*" >&2; }
 CLAIMS=""
 probe_claims() {
   CLAIMS="$("$KUBECTL" $KUBE get "$CRD" -o json 2>/dev/null)" || return 1
-  printf '%s' "$CLAIMS" | jq -e 'type == "object" and (.items | type == "array")' >/dev/null 2>&1 || return 1
+  printf '%s' "${CLAIMS:-null}" | jq -e 'type == "object" and (.items | type == "array")' >/dev/null 2>&1 || return 1   # :-null — jq 1.6 exits 0 on EMPTY input (homelab#377)
   return 0
 }
 

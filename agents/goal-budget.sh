@@ -1,5 +1,10 @@
 # goal-budget.sh — the goal `Budget:` read, ONE implementation, two callers (ADR-102, homelab#207).
 #
+# ⚠ BASH ONLY, refused loudly otherwise (the 2026-08-12 06:24Z ruling: a probe one shebang from
+# live ran this under dash and the budget guards failed OPEN — a mis-summed budget admits rides
+# against money that is gone; a refusal only defers one dispatch). Sourcing makes the shebang
+# decorative, so the guard is a runtime check, not a header.
+#
 # Sourced by agent-session.sh (the ENFORCING launcher pre-flight) and by coordinator-scan.sh's
 # harvest-disposition block (an ADVISORY read: may this sprout self-queue?). It was inline launcher
 # shell until #207 needed the same number at harvest time, and the ⚖ pre-decided line on that issue
@@ -27,6 +32,10 @@
 # real arithmetic against a recorded world with no network and no estimator drift in the action
 # stream. Everything between them is pure shell over one `gh issue list`.
 
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "goal-budget.sh: bash required — budget guards FAIL OPEN under sh/dash (06:24Z ruling, homelab#377 class); refusing" >&2
+  return 1 2>/dev/null || exit 1
+fi
 GB_HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # The spend ledger: what the subtree ACTUALLY spent. The pushgateway the finalize leg pushes to is

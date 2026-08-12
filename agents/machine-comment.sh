@@ -90,7 +90,7 @@ mc_event() {   # mc_event <slug> <number> <kind> <line-markdown>
   entry="- \`${ts}\` · ${line} <!-- agent-event kind=${kind} ts=${ts} -->"
 
   listed="$(mc_gh_comments "$slug" "$num")" || listed=''
-  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$listed"; then
+  if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${listed:-null}"; then   # :-null — jq 1.6 exits 0 on EMPTY input, inverting the guard (homelab#377)
     # Unreadable timeline. Creating a comment here is the one thing that must NOT happen: a probe
     # failure would mint a second summary comment on every event, which is the exact residue this
     # file exists to end. Fail closed and say so.
