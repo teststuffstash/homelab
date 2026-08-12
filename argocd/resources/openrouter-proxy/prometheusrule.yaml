@@ -16,6 +16,12 @@
 #   In-memory ⇒ the reset is CORRECT — bridging would make the alert claim state the new pod
 #   never had.
 #
+#   ⚠ SHIPPING a bridge (any expr change) to a currently-FIRING alert resolves-and-restarts it
+#   once: the label set IS the instance identity, so the deploy delivers a spurious `resolved`
+#   and the new identity starts `for:` at zero (measured on CloudflareSpendProbeBlind, 01:04Z
+#   2026-08-12 — 28min notification gap on a live incident, absorbed by the responder's subject
+#   dedup; homelab#355). One-time per change; check the firing set before merging expr edits.
+#
 # Bridged, because the condition outlives the roll:
 #   RouterRotationStale     — the age is computed from the `rotation` table on the PVC-backed
 #                             store (router.py: `SELECT source, …, MAX(updated_ts) FROM rotation`),
