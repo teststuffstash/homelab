@@ -734,6 +734,10 @@ def collect_open_prs(lines):
     is skipped (the poll's try/except isolates it — billing + workflow-runs keep flowing,
     github_exporter_errors_total ticks). Grant it via scripts/github-exporter-pat-bootstrap.sh."""
     lines += [
+        "# TYPE github_pull_request_codeowner_park gauge",
+        "# HELP github_pull_request_codeowner_park One row per green undrafted PR the bot APPROVED while GitHub still says REVIEW_REQUIRED — only the delegated codeowner read moves it (FU-166(a): the needs-meta clause-4 predicate on the one-poller; reviews[], never latestReviews[] — the PR#235 aside trap).",
+        "# TYPE github_pull_request_reflex_wait gauge",
+        "# HELP github_pull_request_reflex_wait One row per green undrafted REVIEW_REQUIRED PR with NO bot approval yet — the review reflex's own queue (the dashboard split's other half).",
         "# TYPE github_pull_request_open gauge",
         "# HELP github_pull_request_open 1 per open PR; review_decision (approved|changes_requested|"
         "review_required|none) + ci_state (success|failure|pending|error|none) + draft ride as labels.",
@@ -891,6 +895,16 @@ def collect_open_prs(lines):
                     review_decision=(pr["reviewDecision"] or "none").lower(),
                     labels=label_names,
                 )
+                # FU-166(a): the codeowner-park vs reflex-wait split, first-class series (was a
+                # 600s direct-gh poll in meta-needs-attention.sh clause 4 — against the one-poller
+                # doctrine and FU-084's API pool). ci green folds INTO the predicate here, so the
+                # consumer needs no run-state annotation at all.
+                if (pr["reviewDecision"] or "") == "REVIEW_REQUIRED" and not pr["isDraft"] \
+                        and ci_state in ("success", "none"):
+                    if bot_approved_at:
+                        lines.append(metric("github_pull_request_codeowner_park", ident, 1))
+                    else:
+                        lines.append(metric("github_pull_request_reflex_wait", ident, 1))
                 # Trailing-1h window, NOT reviews-since-head-commit: the commit OBJECT is
                 # forbidden to this PAT (needs Contents:read — found live 2026-07-12, the whole
                 # commits node nulls regardless of which sub-fields are selected), and a dispatch
@@ -938,6 +952,16 @@ def collect_agent_issues(lines):
     for (repo, label), numbers in sorted(_AGENT_ISSUE_NUMBERS.items()):
         lines.append(metric("github_agent_issue_labels",
                             {"owner": ORG, "repo": repo, "label": label}, len(numbers)))
+    # FU-166 dashboard tables: one row PER issue so the cockpit can render clickable repo#N
+    # links (cardinality = open agent-labelled issues, dozens at worst — same walk, no calls).
+    lines += [
+        "# TYPE github_agent_issue gauge",
+        "# HELP github_agent_issue One row per open agent-state-labelled issue (link tables; source: the FU-108 walk).",
+    ]
+    for (repo, label), numbers in sorted(_AGENT_ISSUE_NUMBERS.items()):
+        for n in sorted(numbers):
+            lines.append(metric("github_agent_issue",
+                                {"owner": ORG, "repo": repo, "label": label, "number": n}, 1))
 
 
 _GOAL_TREES = {}  # repo -> {"goals": [...], "parent": {n: p}, "issue": {n: {...}}, "truncated": bool}

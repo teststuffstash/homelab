@@ -104,35 +104,50 @@ while true; do
   # Actions:read, and every required check here IS a workflow run — so the head sha's state
   # comes from `gh run list --commit`. The park signature alone is strong enough to emit; the
   # run state is an ANNOTATION, and an unreadable one says so instead of suppressing.
-  for r in $CODEOWNER_REPOS; do
-    parks=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
-             --json number,reviewDecision,reviews,isDraft 2>/dev/null | tail -1 \
-           | jq -r '.[] | select(.isDraft|not)
-               | select(.reviewDecision == "REVIEW_REQUIRED")
-               | select([.reviews[]? | select(.state == "APPROVED")] | length > 0)
-               | .number' 2>/dev/null)
-    for n in $parks; do
-      cstate="run state unreadable"
-      hsha=$(devbox run -- gh pr view "$n" -R "teststuffstash/$r" --json headRefOid 2>/dev/null | tail -1 | jq -r '.headRefOid // ""' 2>/dev/null)
-      if [ -n "$hsha" ]; then
-        cj=$(devbox run -- gh run list -R "teststuffstash/$r" --commit "$hsha" --json status,conclusion 2>/dev/null | tail -1)
-        if [ -n "$cj" ] && jq -e . >/dev/null 2>&1 <<<"$cj"; then
-          # ⚠ jq precedence trap (caught live 2026-08-09, PR#256 park invisible ~1h45m): piping the
-          # FILTERED array into `length == 0 and length > 0` tests BOTH lengths on the filtered
-          # array — false forever, so every green PR fell into the red-path `continue` and clause 4
-          # could never emit when workflows were readable. Keep the original array in $all.
-          if jq -e '. as $all | [ $all[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")) ] | length == 0 and ($all | length) > 0' >/dev/null 2>&1 <<<"$cj"; then
-            cstate="workflows green"
-          elif jq -e 'length > 0' >/dev/null 2>&1 <<<"$cj"; then
-            continue # red/pending workflows — auto-merge or the ci-red lane owns it, not a park
-          else
-            cstate="no workflow runs on head" # zero runs ≠ red: the park signature still emits
+  # FU-166(a) 2026-08-12: Prometheus is PRIMARY for the park set — the exporter's
+  # github_pull_request_codeowner_park series bakes the entire predicate (bot-approved +
+  # REVIEW_REQUIRED + green + undrafted; reviews[] not latestReviews[]), so ONE instant query
+  # replaces the per-repo gh walks this clause ran every 600s against FU-084's API pool (the
+  # one-poller doctrine). The gh loop below is DEMOTED to the probe-fail belt: it runs only
+  # when Prometheus is unreachable/unparseable — never both. CodeownerParkWaiting (>30m) is
+  # the alert-side twin; this clause stays as the fast jail surface.
+  pk=$(curl -ksS --max-time 10 'https://prometheus.teststuff.net/api/v1/query' \
+        --data-urlencode 'query=github_pull_request_codeowner_park' 2>/dev/null)
+  if [ -n "$pk" ] && jq -e '.status == "success"' >/dev/null 2>&1 <<<"${pk:-null}"; then
+    pkl=$(jq -r '.data.result[]? | "NEEDS-META codeowner-gate: \(.metric.repo)#\(.metric.number) bot-approved + REVIEW_REQUIRED (workflows green) — a specs/.agents path needs the delegated codeowner read"' <<<"$pk" 2>/dev/null)
+    [ -n "$pkl" ] && out="$out$pkl"$'\n'
+  else
+    echo "needs-meta: prometheus unreachable — clause 4 falling back to the direct gh walk (belt)" >&2
+    for r in $CODEOWNER_REPOS; do
+      parks=$(devbox run -- gh pr list -R "teststuffstash/$r" --state open \
+               --json number,reviewDecision,reviews,isDraft 2>/dev/null | tail -1 \
+             | jq -r '.[] | select(.isDraft|not)
+                 | select(.reviewDecision == "REVIEW_REQUIRED")
+                 | select([.reviews[]? | select(.state == "APPROVED")] | length > 0)
+                 | .number' 2>/dev/null)
+      for n in $parks; do
+        cstate="run state unreadable"
+        hsha=$(devbox run -- gh pr view "$n" -R "teststuffstash/$r" --json headRefOid 2>/dev/null | tail -1 | jq -r '.headRefOid // ""' 2>/dev/null)
+        if [ -n "$hsha" ]; then
+          cj=$(devbox run -- gh run list -R "teststuffstash/$r" --commit "$hsha" --json status,conclusion 2>/dev/null | tail -1)
+          if [ -n "$cj" ] && jq -e . >/dev/null 2>&1 <<<"$cj"; then
+            # ⚠ jq precedence trap (caught live 2026-08-09, PR#256 park invisible ~1h45m): piping the
+            # FILTERED array into `length == 0 and length > 0` tests BOTH lengths on the filtered
+            # array — false forever, so every green PR fell into the red-path `continue` and clause 4
+            # could never emit when workflows were readable. Keep the original array in $all.
+            if jq -e '. as $all | [ $all[] | select(.status != "completed" or (.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")) ] | length == 0 and ($all | length) > 0' >/dev/null 2>&1 <<<"$cj"; then
+              cstate="workflows green"
+            elif jq -e 'length > 0' >/dev/null 2>&1 <<<"$cj"; then
+              continue # red/pending workflows — auto-merge or the ci-red lane owns it, not a park
+            else
+              cstate="no workflow runs on head" # zero runs ≠ red: the park signature still emits
+            fi
           fi
         fi
-      fi
-      out="$out""NEEDS-META codeowner-gate: ${r}#${n} bot-approved + REVIEW_REQUIRED (${cstate}) — a specs/.agents path needs the delegated codeowner read"$'\n'
+        out="$out""NEEDS-META codeowner-gate: ${r}#${n} bot-approved + REVIEW_REQUIRED (${cstate}) — a specs/.agents path needs the delegated codeowner read"$'\n'
+      done
     done
-  done
+  fi
   blocked=$(devbox run -- gh api "search/issues?q=org:teststuffstash+is:issue+is:open+label:agent/blocked" 2>/dev/null | tail -1 \
     | jq -r '.items[]? | "NEEDS-META blocked: \(.repository_url | sub(".*/";""))#\(.number) \(.title[:60])"' 2>/dev/null)
   [ -n "$blocked" ] && out="$out$blocked"$'\n'

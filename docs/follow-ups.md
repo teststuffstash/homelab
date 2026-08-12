@@ -234,15 +234,6 @@ the block needs pruning, not more headings.
       ride this lock; the scan-side footprint exemption for `agents/replay/**` is decided with
       FU-168. Relates ADR-097, ADR-103, FU-165, FU-168.
 
-- [ ] **FU-166** — **Meta-session watches: event-driven survey + the codeowner-park blind spot**
-      (operator, 2026-08-11). Leg (a): exporter park series off its `reviewDecision` walk +
-      `CodeownerParkWaiting` >30m; watch clause 4 reads Prometheus (today: a 600s direct `gh`
-      poll against the one-poller doctrine). Leg (b): survey ALL `agents/meta-*.sh` cadences and
-      go event-driven where a source exists — polls demoted to backstops. The survey MUST include
-      the source found at #278's close: nothing watches a User comment landing on an open
-      `task/goal` issue (the charter comment had no consumer but the operator).
-      UNBLOCKED at the #278 verdict. Relates FU-150, FU-084, ADR-093.
-
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
