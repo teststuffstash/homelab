@@ -20,10 +20,10 @@
 # argocd/resources/pushgateway/agent-runs.promtool-rules. A stale copy tests the OLD expr and
 # passes VACUOUSLY. Re-copy after editing either alert:
 #
-#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] |
-#        select(.alert == "RegistryGCMirrorsStale" or .alert == "RegistryGCMirrorsSuspended") |
-#        del(.annotations)]}]}' \
+#   yq -o=json '{"groups": [{"name": "registry-cache", "rules": [.spec.groups[].rules[] | select(.alert == "RegistryGCMirrorsStale" or .alert == "RegistryGCMirrorsSuspended") | del(.annotations)]}]}' \
 #     argocd/resources/registry-cache/prometheusrule.yaml | yq -P '.'
+#   (one line on purpose — a wrapped yq program string is the #344 lexer bug; reason at
+#   argocd/resources/openrouter-proxy/agent-router.promtool-rules)
 groups:
   - name: registry-cache
     rules:

@@ -20,11 +20,12 @@
 # lives in `scripts/**` + `.github/**` — CI-invoked paths outside the fixer lane's tier, so it is
 # the codeowner's follow-on. Until then: re-copy after editing an alert.
 #
-#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] |
-#        select(.alert == "RetroReportOverdue" or .alert == "AgentRunNegativeCost" or
-#               .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunPhaseSlow" or
-#               .alert == "AgentEventInfraSpinning")]}]}' \
-#     argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#   yq -o=json '{"groups": [{"name": "agent-runs", "rules": [.spec.groups[].rules[] | select(.alert == "RetroReportOverdue" or .alert == "AgentRunNegativeCost" or .alert == "AgentRunInfraDeathBurst" or .alert == "AgentRunPhaseSlow" or .alert == "AgentEventInfraSpinning")]}]}' argocd/resources/pushgateway/prometheusrule.yaml | yq -P '.'
+#
+# ONE LINE on purpose — yq 4.x's lexer rejects a newline inside the expression ("lexer: invalid
+# input text"), so the pretty-wrapped form this header carried until homelab#344 did not run as
+# written (agent-router.promtool-rules' header states the same constraint). Verified by RUNNING
+# the line above on 2026-08-12: its output is byte-identical to the body below.
 groups:
   - name: agent-runs
     rules:
