@@ -1689,7 +1689,7 @@ EOF_GUARDED
             # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
             # `set -euo pipefail` that aborts the ENTIRE scan mid-repo, starving every later clause
             # and every other stack. The same shape the belt's `if`/`|| true` exist for.
-            if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-}"; then
+            if ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"${icmt:-null}"; then   # :-null, not :- — jq 1.6 exits 0 on EMPTY input, silencing this PROBE_FAILED line (homelab#377)
               orphans="${orphans}[$repo] ⚠ PROBE_FAILED reading issue #${icand}'s comments — the infeasible-terminal check was SKIPPED for it this tick; it keeps today's C4/C5 behaviour (rule #6)\n"
               continue
             fi
