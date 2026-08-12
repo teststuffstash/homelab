@@ -1592,7 +1592,7 @@ EOF_GUARDED
           | (.body // "")
           | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || pr_issue=""
       if [ -n "$pr_issue" ] && [ -n "$WIPPODS_JSON" ] \
-         && printf \'%s\' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${pr_issue}-" \
+         && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${pr_issue}-" \
               '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
         orphans="${orphans}[$repo] ⏳ changes-requested held — a worker is already riding issue #${pr_issue} (FU-146 per-item):\n  PR #${u}\n"
         continue
@@ -1603,7 +1603,7 @@ EOF_GUARDED
       # the hold above: no link, or issue not in openall → falls through unchanged; self-releases
       # the tick after the human clears the label (openall is re-fetched every tick).
       if [ -n "$pr_issue" ] \
-         && printf \'%s\' "${openall:-null}" | jq -e --argjson n "$pr_issue" \
+         && printf '%s' "${openall:-null}" | jq -e --argjson n "$pr_issue" \
               '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
         orphans="${orphans}[$repo] ⏳ changes-requested held — source issue #${pr_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
         continue
@@ -2002,7 +2002,7 @@ EOF_GUARDED
         red_issue="$(printf '%s' "$red_probe" | jq -r --argjson n "$u" '.[]|select(.number==$n)|(.body // "")
             | (capture("(?i)(implements|closes|closed|fixes|fixed|resolves|resolved)[ \t]+#(?<i>[0-9]+)") | .i) // ""' 2>/dev/null)" || red_issue=""
         if [ -n "$red_issue" ] && [ -n "$WIPPODS_JSON" ] \
-           && printf \'%s\' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
+           && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — a worker is already riding issue #${red_issue} (FU-146 per-item):\n  PR #${u}\n"
           continue
@@ -2010,7 +2010,7 @@ EOF_GUARDED
         # BLOCKED-SOURCE hold (2026-08-07) — same as the changes-requested clause's, same
         # fail-safes; this clause is where the churn was actually measured (circles PR#58).
         if [ -n "$red_issue" ] \
-           && printf \'%s\' "${openall:-null}" | jq -e --argjson n "$red_issue" \
+           && printf '%s' "${openall:-null}" | jq -e --argjson n "$red_issue" \
                 '[.[] | select(.number == $n) | .labels[].name] | index("agent/blocked") != null' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — source issue #${red_issue} is agent/blocked (human-gated):\n  PR #${u}\n"
           continue
