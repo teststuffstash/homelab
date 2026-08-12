@@ -58,6 +58,9 @@ derive_split() {
 # note assumed platform PRs never got a bot review; that assumption died with the enable.
 CODEOWNER_REPOS="${CODEOWNER_REPOS:-oracle-fleet circles homelab agent-runtime openrouter-operator agent-coordinator}"
 seen=""
+# --once (meta-events.sh, FU-166(b)): run ONE pass and exit — the consolidated event loop absorbs
+# this script as a source; the standing `while true` mode remains for a standalone Monitor.
+ONCE=0; [ "${1:-}" = "--once" ] && ONCE=1
 while true; do
   out=""
   derive_split
@@ -150,5 +153,6 @@ while true; do
     [ -z "$line" ] && continue
     case "$seen" in *"|$line|"*) ;; *) echo "$line"; seen="$seen|$line|";; esac
   done <<< "$out"
+  [ "$ONCE" = 1 ] && exit 0
   sleep 600
 done

@@ -198,7 +198,11 @@ meant to avoid.)
 
 ## Re-arm on a fresh session
 
-- **needs-meta watch (REQUIRED)**: `Monitor` (persistent) `bash agents/meta-needs-attention.sh`
+- **meta-events loop (REQUIRED, replaces the standalone needs-meta arm)**: `Monitor` (persistent)
+  `bash agents/meta-events.sh` — the FU-166(b) consolidated 120s edge-detected loop (needs-meta
+  absorbed as a source via `--once`, + goal-thread User comments, aggregated alert set, doorbell
+  famine gauge). Cold state re-emits the standing set = the fresh-session bootstrap view.
+- **needs-meta watch (legacy standalone — do NOT double-arm beside meta-events)**: `Monitor` (persistent) `bash agents/meta-needs-attention.sh`
   — unreviewed platform PRs, `agent/blocked` issues, unlabeled>24h, AND (clause 4, 2026-08-08)
   stack-repo codeowner parks (bot-approved+green+REVIEW_REQUIRED on oracle-fleet/circles — it
   caught circles PR#54 on its first pass; oracle PR#217 had sat 17h). ⚠ verify by process AFTER arming
