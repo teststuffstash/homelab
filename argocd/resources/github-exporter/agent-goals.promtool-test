@@ -1,0 +1,231 @@
+# Behaviour fixture for the `agent-goals` recording group (homelab#348) — the goal registry's
+# budget burn-down arithmetic, executed against the shapes that broke it.
+#
+#   devbox run -- promtool test rules argocd/resources/github-exporter/agent-goals.promtool-test
+#   devbox run prometheus-rules-lint      # CI-enforced since 2026-08-11; finds this file itself
+#
+# `prometheus-rules-lint`'s first leg checks that every rule PARSES. The plain-match bug this
+# fixture pins parsed perfectly for months and returned nothing, which is exactly the gap a
+# behaviour test closes: `goal_spent_usd` is a `sum by (…)` aggregate carrying 4 labels,
+# `goal_budget_usd` is scraped straight off the exporter and carries 11, and a plain binary
+# operator matches on the FULL label set of both sides. No pair ever matched. The panel read
+# "No data" while the registry table beside it — which reads the two families separately — looked
+# healthy for every goal (argocd/resources/github-exporter/dashboard-agent-goals.json:212).
+#
+# So every case that asserts a shipped series ALSO asserts the pre-#348 witness empty at the same
+# eval time (regression-witness-pre-348 in the rules file). The contrast is executed, not claimed.
+#
+# THE TARGET LABELS BELOW ARE NOT DECORATION. They are copied off the live exposition
+# (192.168.40.13:9090, 2026-08-12) — container/endpoint/instance/job/namespace/pod/service, the
+# seven the ServiceMonitor attaches. A fixture that fed a bare `goal_budget_usd{goal,owner,
+# project,stack}` would pass against the BROKEN expr, because it would hand the plain match the
+# label set the manifest wrongly claimed it had. Reproducing the real label set is the test.
+#
+# CLOCK: promtool's test clock starts at 0. Nothing here reads `time()`, so the values below are
+# plain dollars.
+rule_files:
+  - agent-goals.promtool-rules
+
+evaluation_interval: 1m
+
+tests:
+  # ── Case 1 — a goal with both a budget and a spend series (the circles#29 shape) ──────────────
+  # The intersection #348 measured as non-empty and the rules as empty anyway. Also exercises the
+  # two things the goal_spent_usd join exists for, so a later edit cannot break them silently:
+  # the goal ITSELF at depth 0 is a member of its own tree (a ride charged to the goal issue is
+  # the goal's spend), and the inner `sum by (project, issue)` collapses the pushgateway's
+  # job/role/round/model dimensions BEFORE the match, so two rounds on one child are one term.
+  - interval: 1m
+    name: budget + spend — ratio and remaining carry one series per goal
+    input_series:
+      # scraped: goal-registry identity PLUS the seven target labels the ServiceMonitor attaches
+      - series: 'goal_budget_usd{goal="29",owner="teststuffstash",project="circles",stack="circles",container="exporter",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "16+0x30"
+      # membership: the goal at depth 0 and one child at depth 1
+      - series: 'goal_descendant_info{goal="29",issue="29",depth="0",owner="teststuffstash",project="circles",stack="circles"}'
+        values: "1+0x30"
+      - series: 'goal_descendant_info{goal="29",issue="31",depth="1",owner="teststuffstash",project="circles",stack="circles"}'
+        values: "1+0x30"
+      # money, pushed per RUN — two rounds on child #31 plus one ride on the goal issue itself
+      - series: 'agent_run_cost_usd{project="circles",issue="31",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "2+0x30"
+      - series: 'agent_run_cost_usd{project="circles",issue="31",job="agent-run",role="fix",round="2",model="deepseek/deepseek-v4-flash"}'
+        values: "1+0x30"
+      - series: 'agent_run_cost_usd{project="circles",issue="29",job="agent-run",role="goal-review",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "1+0x30"
+    promql_expr_test:
+      # the aggregate: $2 + $1 (two rounds, one child) + $1 (the goal issue itself) = $4
+      - expr: goal_spent_usd
+        eval_time: 5m
+        exp_samples:
+          - labels: 'goal_spent_usd{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 4
+      # THE FIX. $4 of $16 = 0.25 burn, on the aggregate's clean label set — the scraped side's
+      # seven target labels are collapsed away by `max by (…)` and must not appear here.
+      - expr: goal_budget_ratio
+        eval_time: 5m
+        exp_samples:
+          - labels: 'goal_budget_ratio{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 0.25
+      - expr: goal_budget_remaining_usd
+        eval_time: 5m
+        exp_samples:
+          - labels: 'goal_budget_remaining_usd{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 12
+      # THE REGRESSION WITNESS — the shipped-until-#348 exprs, on this exact input, at this exact
+      # eval time. Empty. This is the bug reproduced rather than described: restore either plain
+      # match in prometheusrule.yaml and the three assertions above go empty while these two stay
+      # empty, so the pair can only both pass on the fixed expr.
+      - expr: goal_budget_ratio_pre348
+        eval_time: 5m
+        exp_samples: []
+      - expr: goal_budget_remaining_usd_pre348
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 2 — a budget with NO spend series at all (the homelab#278 shape) ─────────────────────
+  # THE DECIDED CASE (#348's second-order question). Goal #278 carries `Budget: $60` and has no
+  # goal_spent_usd series, because all ~26 of its rides were `claude/haiku` on the subscription
+  # rail: the launcher's finalize leg pushes agent_run_total for those rides but no
+  # agent_run_cost_usd (measured live 2026-08-12 — agent_run_total{project="homelab"} is 100
+  # series, 99 of them model="haiku"; agent_run_cost_usd{project="homelab"} is 1).
+  #
+  # DECISION: stay ABSENT. Not inherited from the pre-#348 behaviour — chosen, for a reason this
+  # case models: the ride DID happen (agent_run_total below) and the cost series is missing anyway,
+  # which is indistinguishable from a ride whose cost push was LOST (the FU-131 harvest gap —
+  # killed pods). agents/goal-budget.sh, the arithmetic that actually gates a dispatch, prices that
+  # same state fail-CONSERVATIVELY at the child's full cap. An `or vector(0)` here would paint 0%
+  # burn on precisely the state the gate prices at maximum, and the two would contradict each other
+  # on one operator screen. Absent is the honest reading; it is also invisible, which is #348's
+  # PR-body residue and not something a fabricated zero fixes.
+  #
+  # The registry TABLE must keep showing the goal regardless — it reads goal_budget_usd directly,
+  # so a funded goal never vanishes from the registry, only from the derived gauge.
+  - interval: 1m
+    name: budget but no ledgered spend (subscription rail) — ratio and remaining stay ABSENT
+    input_series:
+      - series: 'goal_budget_usd{goal="278",owner="teststuffstash",project="homelab",stack="platform",container="exporter",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "60+0x30"
+      - series: 'goal_descendant_info{goal="278",issue="278",depth="0",owner="teststuffstash",project="homelab",stack="platform"}'
+        values: "1+0x30"
+      - series: 'goal_descendant_info{goal="278",issue="348",depth="1",owner="teststuffstash",project="homelab",stack="platform"}'
+        values: "1+0x30"
+      # the rides happened — and pushed NO cost series, which is the whole point of this case
+      - series: 'agent_run_total{project="homelab",issue="348",job="agent-run",role="fix",round="1",model="haiku"}'
+        values: "1+0x30"
+    promql_expr_test:
+      - expr: goal_spent_usd
+        eval_time: 5m
+        exp_samples: []
+      # the decision, asserted
+      - expr: goal_budget_ratio
+        eval_time: 5m
+        exp_samples: []
+      - expr: goal_budget_remaining_usd
+        eval_time: 5m
+        exp_samples: []
+      # …and the goal is still IN the registry: the table reads this series, not the derived pair
+      - expr: goal_budget_usd
+        eval_time: 5m
+        exp_samples:
+          - labels: 'goal_budget_usd{goal="278", owner="teststuffstash", project="homelab", stack="platform", container="exporter", endpoint="http-metrics", instance="10.244.2.91:9504", job="github-exporter", namespace="monitoring", pod="github-exporter-5c6d9f4f76-kcmdn", service="github-exporter"}'
+            value: 60
+      # the fix changed nothing here — the pre-#348 exprs were empty for this goal too, so this
+      # case is NOT evidence for the join and must not be read as such
+      - expr: goal_budget_ratio_pre348
+        eval_time: 5m
+        exp_samples: []
+
+  # ── Case 3 — the poller roll, i.e. WHY `max by (…)` and not `group_left ()` ───────────────────
+  # #348 offered both shapes and left the choice to the PR. They are identical on a steady-state
+  # scrape (case 1 passes under either) and they differ HERE, which is why the rejected form is
+  # kept runnable in the rules file rather than argued in a comment.
+  #
+  # deployment.yaml is `replicas: 1` with no strategy set, so the default RollingUpdate applies:
+  # maxUnavailable computes to 0 at one replica, so Kubernetes SURGES — the new pod must go Ready
+  # before the old one is terminated. Both are scraped in that window, and goal_budget_usd briefly
+  # carries two series per goal, differing only in `pod`/`instance`.
+  #
+  #   max by (…)      → the generations collapse; one series per goal, correct value.
+  #   group_left ()   → two series in one match group on the "one" side = a duplicate-match error,
+  #                     and a recording rule that errors records NOTHING — for every goal in the
+  #                     rule, not just the doubled one.
+  #
+  # This is claim (iii) of the restart-gap block in prometheusrule.yaml's `github` group, in the
+  # recording lane: a label set you did not collapse is one a pod roll can double.
+  #
+  # WHAT CI HOLDS HERE AND WHAT IT DOES NOT. The rejected shape is not a rule in this fixture's
+  # rules file, because promtool fails a run on any rule-evaluation error whether or not that rule
+  # is asserted — so a rule whose whole point is to error cannot be kept green. The error was
+  # measured once, by adding it and running; it is quoted verbatim in agent-goals.promtool-rules.
+  # Standing here instead is the PRECONDITION plus the collapse: two series really do land in one
+  # match group during the surge, and `max by (…)` really does reduce them to one. Those two
+  # assertions are what would go red if someone "simplified" the collapse away.
+  - interval: 1m
+    name: two pod generations mid-roll — max by (…) collapses them, group_left () records nothing
+    input_series:
+      # the outgoing pod: scraped through minute 10, then gone (staleness marker)
+      - series: 'goal_budget_usd{goal="29",owner="teststuffstash",project="circles",stack="circles",container="exporter",endpoint="http-metrics",instance="10.244.2.91:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-5c6d9f4f76-kcmdn",service="github-exporter"}'
+        values: "16+0x10 stale"
+      # the incoming pod: Ready from minute 8, so minutes 8-10 are scraped TWICE
+      - series: 'goal_budget_usd{goal="29",owner="teststuffstash",project="circles",stack="circles",container="exporter",endpoint="http-metrics",instance="10.244.3.17:9504",job="github-exporter",namespace="monitoring",pod="github-exporter-7f9c8b6d54-p2xqz",service="github-exporter"}'
+        values: "_x8 16+0x22"
+      - series: 'goal_descendant_info{goal="29",issue="31",depth="1",owner="teststuffstash",project="circles",stack="circles"}'
+        values: "1+0x30"
+      - series: 'agent_run_cost_usd{project="circles",issue="31",job="agent-run",role="fix",round="1",model="deepseek/deepseek-v4-flash"}'
+        values: "4+0x30"
+    promql_expr_test:
+      # before the surge: one generation
+      - expr: count by (goal) (goal_budget_usd)
+        eval_time: 5m
+        exp_samples:
+          - labels: '{goal="29"}'
+            value: 1
+      - expr: goal_budget_ratio
+        eval_time: 5m
+        exp_samples:
+          - labels: 'goal_budget_ratio{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 0.25
+      # THE PRECONDITION, asserted: mid-surge the scraped gauge really does carry TWO series for
+      # one goal. This is the input that makes an un-collapsed `group_left ()` a duplicate-match
+      # error — the state the shipped expr has to be immune to, held here so it cannot quietly
+      # stop being modelled.
+      - expr: count by (goal) (goal_budget_usd)
+        eval_time: 9m
+        exp_samples:
+          - labels: '{goal="29"}'
+            value: 2
+      # …and the collapse, asserted: `max by (…)` reduces the two generations to one series.
+      - expr: count by (goal) (max by (owner, project, stack, goal) (goal_budget_usd))
+        eval_time: 9m
+        exp_samples:
+          - labels: '{goal="29"}'
+            value: 1
+      # so the shipped rules are unmoved through the surge: one series each, still 0.25 / $12
+      - expr: goal_budget_ratio
+        eval_time: 9m
+        exp_samples:
+          - labels: 'goal_budget_ratio{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 0.25
+      - expr: goal_budget_remaining_usd
+        eval_time: 9m
+        exp_samples:
+          - labels: 'goal_budget_remaining_usd{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 12
+      # after the roll completes, one generation again and nothing changed — the surge left no
+      # trace in the derived series, which is the point.
+      - expr: count by (goal) (goal_budget_usd)
+        eval_time: 15m
+        exp_samples:
+          - labels: '{goal="29"}'
+            value: 1
+      - expr: goal_budget_ratio
+        eval_time: 15m
+        exp_samples:
+          - labels: 'goal_budget_ratio{goal="29", owner="teststuffstash", project="circles", stack="circles"}'
+            value: 0.25
+      # the pre-#348 expr is empty here too — the roll case is about the CHOICE of fix, not about
+      # the bug, and must not be read as evidence for the join
+      - expr: goal_budget_ratio_pre348
+        eval_time: 9m
+        exp_samples: []

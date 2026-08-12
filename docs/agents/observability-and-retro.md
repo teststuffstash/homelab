@@ -321,10 +321,35 @@ extra API calls** against the pool that drained on 2026-07-17.
 credentials and must not grow an S3 read of `_ledger.jsonl` to restate a series Prometheus already
 has. Worker spend is already pushed per run as `agent_run_cost_usd{project,issue,…}`, so
 `goal_spent_usd` is a **recording rule** (`argocd/resources/github-exporter/prometheusrule.yaml`,
-group `agent-goals`) joining cost to membership on `(project, issue)`; `goal_budget_ratio` and
-`goal_budget_remaining_usd` follow from it. The membership side is deliberately the "many" side of
-the match, so a goal nested under another goal attributes its spend to **both** ancestors instead
-of failing the rule.
+group `agent-goals`) joining cost to membership on `(project, issue)`. The membership side is
+deliberately the "many" side of the match, so a goal nested under another goal attributes its spend
+to **both** ancestors instead of failing the rule.
+
+`goal_budget_ratio` and `goal_budget_remaining_usd` follow from it — **but only across an explicit
+join, and that is not a detail**. `goal_spent_usd` is the aggregate above and carries exactly
+`(owner, project, stack, goal)`; `goal_budget_usd` is *scraped*, so it also carries the seven
+target labels (`pod`, `instance`, `job`, …). A plain binary operator matches on the FULL label set
+of both sides, so the two never paired: both derived rules evaluated to **nothing, for every goal,
+from #209 until homelab#348** — while the registry table beside the gauge, which reads the two
+families separately, looked healthy. Silent in the #312/#330 way, because an expr that evaluates
+to nothing is indistinguishable from a condition that is not happening. Both rules now collapse the
+scraped side with `max by (owner, project, stack, goal) (goal_budget_usd)` — preferred over an
+explicit `group_left ()` because a single-replica rollout **surges** to two Ready pods, and two
+series in one match group would be a duplicate-match error that records nothing at all. Behaviour
+is pinned in `agent-goals.promtool-test` (with the pre-#348 exprs kept runnable as a regression
+witness and asserted empty), and the fixture's copy of the three rules is drift-pinned by
+`devbox run exporter-self-test`.
+
+**A budgeted goal with no ledgered spend stays ABSENT from both derived series** — decided in
+#348, not inherited. homelab#278 is the live case: a `$60` budget and no `goal_spent_usd` at all,
+because every one of its rides was `claude/haiku` on the subscription rail, which pushes
+`agent_run_total` but no `agent_run_cost_usd`. An `or vector(0)` default would render that as 0%
+burn, and this rule cannot tell a subscription-rail goal from one whose cost pushes were **lost**
+(the FU-131 harvest gap) — while [`agents/goal-budget.sh`](../../agents/goal-budget.sh), the
+arithmetic that actually gates a dispatch, prices that same state *fail-conservatively* at the
+child's full cap. A panel printing 0% for precisely the state the gate prices at maximum would put
+the two in contradiction on one screen. The goal still appears in the registry **table** (that
+reads `goal_budget_usd` directly); it is only the derived gauge that has nothing to say.
 
 **Panel:** `agent-goals` (Grafana uid `agent-goals`), shipped as a ConfigMap beside the collector
 in `argocd/resources/github-exporter/` — not in `tofu/dashboards/`, which needs a `for_each` entry
