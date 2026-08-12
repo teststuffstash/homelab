@@ -44,8 +44,12 @@ meant to avoid.)
    family (goal-ancestor, 4 fixtures), **pre-push seat review of the worktree diff** (bounce via
    SendMessage; only the seat opens the PR), then bot review — two decorrelated reads, zero
    codeowner touches. Measure: defect rate by catch-point (seat/bot/post-merge), tokens vs
-   seat-does-it, wall-clock — the numbers decide adoption + width (≤2-3; subscription burn is
-   the limiter).
+   seat-does-it, wall-clock. ⚠ The corpus-read test is a PRIOR, not a classifier (operator):
+   the dangerous class is context-poverty defects that pass BOTH reviews and surface later —
+   invisible to one run by construction. So this is an A/B over MULTIPLE comparable chunks
+   (seat-authored vs subagent-authored), post-merge defects tracked with a time lag, no
+   adoption verdict from run 1. Exploratory: better than speculation, decided by accumulation.
+   Width if adopted ≤2-3 (subscription burn is the limiter).
    **Bucket B (the next Goal, launches on v1.2):** FU-095 pilots (task-class routing legs a/c +
    strike-policy data) · FU-106 G01 flip chain (conditional on A0; the flip = the goal's
    `Production-leg:`) · G06 advisory lens + SLO error-budget teeth (roles.md; ex-FU-104) ·
