@@ -42,6 +42,25 @@ spec:
         # belts. Series come from cloudflare-spend-probe (spend-probe.py beside this file), whose
         # --self-test replays THESE exprs against a flipped fixture — rename an alert or a metric
         # on one side only and that test fails. severity: warning because info is inhibited here.
+        # ⚠ All three carry the #288/#313 RESTART-GAP shape as of homelab#334: `max by (zone)` /
+        # `min by (zone)` to drop the churning `pod`/`instance` identity, plus a
+        # `max_over_time`/`min_over_time` `[10m]` bridge over the hole a `replicas: 1` roll leaves.
+        # Both halves are needed — #288 measured that either alone still restarts the `for:` window
+        # at one replica — and the sizing is #288's (ten pod generations, gapped 69-116s); a hole
+        # longer than the range still costs the whole window, which is accepted and asserted.
+        # The part that is NOT a copy of #328: two of these three are LOW-is-bad
+        # (`plan_is_free == 0`, `spend_probe_ok == 0`), so they bridge with `min_over_time`.
+        # The mechanical `max` port reads the HEALTHIEST sample in the window and would delay the
+        # very drift the belt exists to catch by up to 10m — executed, not argued, in
+        # spend-belt.promtool-test (CloudflareZonePlanNotFreeMaxDirection).
+        # `CloudflareSpendProbeBlind`'s `absent()` arm is bridged too, and that is the whole point
+        # of its case: unbridged, a roll empties the series, the alert swaps a `{zone=…}` identity
+        # for the label-less one the `absent()` arm produces, and THAT is a window restart with no
+        # change in the underlying condition. The price is the mirror: a probe that vanishes for
+        # good is noticed ≤10m later than before (FU-150's "absence is the alert" still holds, it
+        # just holds 10m slower). `CloudflareExporterDown` above is deliberately NOT in this class
+        # — `up == 0` needs a live target, and a replaced target is a genuinely new attempt at
+        # being scraped, so its reset is correct.
         # ⚠ All three spend-belt alerts carry `platform_machinery: "true"` (homelab#239): they
         # fire in ns `monitoring`, which is in no claim and in no self-referential namespace set,
         # and their names are not `Agent*` — so the responder's gate saw them as ordinary
@@ -51,7 +70,7 @@ spec:
         # change applied out-of-band. Triage still runs and still files — what the label caps is
         # the auto-merge, per the gate in agents/coordinator/responder-argo.yaml.
         - alert: CloudflareZoneSpendToggleEnabled
-          expr: cloudflare_zone_argo_smart_routing > 0
+          expr: max by (zone) (max_over_time(cloudflare_zone_argo_smart_routing[10m])) > 0
           for: 5m
           labels:
             severity: warning
@@ -60,7 +79,7 @@ spec:
             summary: "Usage-billed toggle enabled on Cloudflare zone {{ $labels.zone }}"
             description: "Argo Smart Routing is no longer \"off\" on zone {{ $labels.zone }} — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value."
         - alert: CloudflareZonePlanNotFree
-          expr: cloudflare_zone_plan_is_free == 0
+          expr: min by (zone) (min_over_time(cloudflare_zone_plan_is_free[10m])) == 0
           for: 5m
           labels:
             severity: warning
@@ -69,7 +88,7 @@ spec:
             summary: "Cloudflare product zone {{ $labels.zone }} is no longer on the free plan"
             description: "Zone {{ $labels.zone }} reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design."
         - alert: CloudflareSpendProbeBlind
-          expr: cloudflare_zone_spend_probe_ok == 0 or absent(cloudflare_zone_spend_probe_ok)
+          expr: min by (zone) (min_over_time(cloudflare_zone_spend_probe_ok[10m])) == 0 or absent(min_over_time(cloudflare_zone_spend_probe_ok[10m]))
           for: 30m
           labels:
             severity: warning
