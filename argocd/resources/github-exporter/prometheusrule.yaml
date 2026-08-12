@@ -530,6 +530,12 @@ spec:
             # homelab#239: the remedy is a delegated codeowner READ — an operator act by
             # construction; a worker dispatched at this alert could only re-conclude that.
             platform_machinery: "true"
+            # …and BECAUSE the remedy is purely operator-side, no LLM should even look:
+            # `triage: "none"` (the FU-156 pattern — do-not-investigate; composes with the
+            # machinery cap per roles.md). The alert still notifies and the meta-events ALERT
+            # clause still wakes the seat; what it never does is burn a sonnet session to
+            # conclude "a human must click" (operator, 2026-08-12).
+            triage: "none"
           annotations:
             summary: "Codeowner park: {{ $labels.repo }}#{{ $labels.number }} bot-approved + green for 30m+"
             description: "PR {{ $labels.repo }}#{{ $labels.number }} is bot-APPROVED with CI green, yet reviewDecision stays REVIEW_REQUIRED — a CODEOWNERS path needs the delegated human read; no machinery can move it (the reflex refuses approved heads by design). https://github.com/{{ $labels.owner }}/{{ $labels.repo }}/pull/{{ $labels.number }}"
