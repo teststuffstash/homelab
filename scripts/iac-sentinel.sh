@@ -18,7 +18,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ORG="${ORG:-teststuffstash}"
-SENTINEL_REPOS="${SENTINEL_REPOS:-sleep-iac oracle-iac circles-iac}"  # circles-iac added 2026-08-12 (A0 gap — the stack graduated with no sentinel coverage)
+SENTINEL_REPOS="${SENTINEL_REPOS:-sleep-iac oracle-iac circles-iac homelab}"  # circles-iac added 2026-08-12 (A0 gap); homelab added same day (A5 leg 1: shadow the platform tier-1 lane BEFORE the CODEOWNERS scaffold drops — argocd/resources is -iac-shaped and the tier-1 line's own removal condition is "when IAC-G04 enforces for homelab")
 WORKER_AUTHOR="${WORKER_AUTHOR:-app/homelab-agents-1234}"
 PUSHGATEWAY="${PUSHGATEWAY:-}"   # e.g. http://prometheus-pushgateway.monitoring.svc:9091 — empty = log-only
 POLICY_DIR="${POLICY_DIR:-${HERE}/../policy/iac}"
