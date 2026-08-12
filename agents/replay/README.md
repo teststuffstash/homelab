@@ -202,6 +202,28 @@ in the action stream for free and no seam needs shadowing. Two things worth copy
   the timeline is unreadable (`STUB_GH=fail`, hence no `world/` in that directory). Pin only the
   first-touch create and every re-spam regression is free to come back.
 
+`fixtures/goal-ancestor-*` (homelab#367) are the eleventh family and the first whose subject is a
+LOOKUP rather than a computation: which of a ride's ancestors is the goal, walked by
+`goal_resolve_ancestor` (`agents/goal-budget.sh`) and consumed by both the budget pre-flight and
+the goal card. The bridge sources that helper and redefines **nothing** — the walk is pure shell
+over `gh`, so every hop goes through the PATH-shim and the hop SEQUENCE is the assertion. Three
+things worth copying:
+
+- **When the defect is which rows you read, the CALL stream is the whole test.** The shipped code
+  computed everything correctly about the wrong issue: one `/parent` hop landed on the ADR-102
+  post-launch bucket, which has no `Budget:` line, so the gate read `no-budget` and waved the ride
+  through while the goal was `exhausted`. No output changed; nothing was miscalculated. Only the
+  reads moved, and only a fixture over the reads can see that.
+- **Print the variable the NEXT clause consumes.** `post.sh` emits `GATE SUBJECT: #<n>` — the
+  argument the pre-flight is about to pass to `goal_budget_read`. The observation-point trick that
+  `goal-budget-refusal-first-touch` uses for "execution continued", pointed at a value instead of
+  at control flow; it is what lets a resolution fixture assert on enforcement it does not run.
+- **Pin every arm of a stop condition, including the one no live tree exercises.** The walk stops on
+  a `task/goal` label OR a `Budget:` line, and three of the four fixtures stop on the label — so
+  `goal-ancestor-unlabelled-budget` exists purely to keep the OR from decaying into an AND. Its
+  world is CONSTRUCTED and says so: a mis-authored goal is exactly the shape you cannot count on
+  finding live, which is why the untested half was the funded one.
+
 ## When the clause lives inside a manifest
 
 `fixtures/responder-reopen-*` (homelab#228) are the first pair whose `source:` is not a `.sh` file

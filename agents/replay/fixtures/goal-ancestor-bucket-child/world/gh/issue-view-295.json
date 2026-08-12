@@ -1,0 +1,6 @@
+{
+  "body": "Post-launch bucket for goal #278 — created by `agents/coordinator-scan.sh`, not by a session (ADR-102, homelab#207).\n\n**What lands here.** Every sprout harvested from a review of a PR descended from this goal. Assembly merge is a MIDPOINT, not the end: the goal keeps shipping to production at its own pace, and this issue is the one container that work hangs off — so the burn-down is a query, not archaeology.\n\n**Children base `master`.** The goal branch dies at the assembly squash; goal identity is this issue plus its `Budget:` line, never the branch. Children here therefore carry NO `Base:` line.\n\n**They spend the goal's money.** This bucket is a sub-issue of the goal, so its children are goal DESCENDANTS and the launcher pre-flight already counts them against the goal's `Budget:` (`agents/goal-budget.sh`). A sprout self-queues only while the goal is OPEN and that sum still fits; otherwise it lands here inert for human triage.\n\nClosing this issue does not close the goal, and closing the goal kills this tree with it (ADR-102 terminals).",
+  "labels": [],
+  "number": 295,
+  "title": "post-launch: Goal: platform FU build-out — the designed-but-unbuilt blitz (FU-165 pilot)"
+}

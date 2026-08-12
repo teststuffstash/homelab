@@ -20,9 +20,11 @@
 #
 # THE WORLD IS RECORDED FROM LIVE circles STATE (2026-08-09) — the ancestry edges, the labels, the
 # goal's CLOSED state and its ten sub-issues are all real, which is what makes the depth claim
-# evidence rather than a hypothesis. Two deliberate edits: issue bodies are elided (the clause
-# reads none of them on this path — the goal is CLOSED, so the budget read short-circuits before
-# the `--json body` call), and the `gh issue create` response is SYNTHESISED as #999, because
+# evidence rather than a hypothesis. Two deliberate edits: issue bodies are elided (since
+# homelab#367 the walk DOES read each one — `--json labels,body`, testing for a `Budget:` line
+# beside the `task/goal` label — but none of these four carries one, and the goal is CLOSED so the
+# budget arithmetic short-circuits before its own body read), and the `gh issue create` response is
+# SYNTHESISED as #999, because
 # circles#29 has no post-launch bucket yet. That synthesis is the whole point of the dry-run: these
 # four parked sprouts (#46, #67, #75, #76) are precisely the ones ADR-102 says should have been
 # living in a bucket, and this stream is what putting them there looks like.

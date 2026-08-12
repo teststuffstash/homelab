@@ -1,0 +1,8 @@
+{
+  "number": 61,
+  "title": "epic: the evidence chain, end to end",
+  "labels": [
+    { "name": "agent-fix" }
+  ],
+  "body": "## Goal\n\nEvery P0 claim on the page traces back to a test that ran.\n\n## Acceptance\n\n- a reader can click from claim to evidence in one hop\n\nTouches: evidence/**\n"
+}

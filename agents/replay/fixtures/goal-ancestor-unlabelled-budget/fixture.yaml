@@ -1,0 +1,35 @@
+# homelab#367 — the SECOND discriminator, which is the one nothing else pins.
+#
+# CONDITION UNDER REPLAY. Issue #90's parent #62 is funded but unlabelled: `Budget: 8` in the body,
+# no `task/goal`. Every other fixture in this family stops the walk on the LABEL, so without this
+# one the `Budget:`-line half of the stop condition ships untested — and an untested half of an OR
+# is an OR that can quietly become an AND.
+#
+#     #90 (this ride) → #62 (NO task/goal, Budget: 8)
+#
+# WHY EITHER DISCRIMINATOR ALONE STOPS THE WALK. docs/agents/issue-authoring.md authors a goal as
+# label AND `Budget:` line — "labels route, body lines parameterise". A READER of that tree cannot
+# assume both are present: the label is what the goal lane routes on, the `Budget:` line is what
+# this pre-flight spends against, and an issue carrying one without the other is a mis-authored
+# goal that must still be FOUND. Walking past a funded ancestor is precisely how money goes
+# unwatched — the failure #367 is about, reached by the other road. Conversely a labelled goal with
+# no `Budget:` line still resolves (its sibling fixtures) and reads `no-budget`, which is the
+# pre-ADR-102 world and a deliberate gate-off.
+#
+# THE CONTRACT:
+#   1. `GATE SUBJECT: #62` — the funded issue, from its body alone. No hop line: it is the parent.
+#   2. The card is #62's Goal + Acceptance, so the ride is not goal-blind either.
+#   3. One `issue view`, no `/parent` read. The walk stops the moment a stop condition matches;
+#      a stream that climbed past #62 would be the AND-instead-of-OR regression, in one line.
+#
+# THE WORLD IS CONSTRUCTED, not recorded — circles has no such issue (a mis-authored goal is the
+# shape you cannot count on finding live, which is the point of pinning it). `Budget: 8` is written
+# in the exact grammar `gb_budget_line` parses, since that parser is now shared between this walk
+# and the sum it feeds.
+name: goal-ancestor-unlabelled-budget
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-ancestor
+  - file:post.sh
