@@ -85,12 +85,13 @@ GUARDED_PATHS="$(guarded_paths || true)"
 
 # ── SCAN PHASE MARKER (FU-145) ──────────────────────────────────────────────────────────────────
 # `AgentCoordinateScanWedged` keyed on POD LIFETIME, and this pod's lifetime is not the thing that
-# alert names. The moment the scan dispatches, `coordinator-session.sh` streams the item session
-# synchronously, so a perfectly healthy ride >15m read as a wedge: twice in one hour on 2026-08-06
-# (the goal-decompose, then #30's ride), both healthy, both self-resolving, two false issues minted
-# (#120, #134). Evidence, the two remedies ruled OUT (raising the threshold, special-casing
-# goal-decompose) and why `fc7e9fb`'s calibration cannot be reused:
-# docs/agents/observability-and-retro.md §Part A″.
+# alert names. When the scan dispatched it used to stream the item session synchronously, so a
+# perfectly healthy ride >15m read as a wedge: twice in one hour on 2026-08-06 (the goal-decompose,
+# then #30's ride), both healthy, both self-resolving, two false issues minted (#120, #134).
+# Evidence, the two remedies ruled OUT (raising the threshold, special-casing goal-decompose) and
+# why `fc7e9fb`'s calibration cannot be reused: docs/agents/observability-and-retro.md §Part A″.
+# (Since ADR-106 (5) the launcher DETACHES at pod-Ready, so the `dispatch` phase is minutes of
+# spin-up at most — the marker machinery stays because the phases are still real, just shorter.)
 #
 # So the scan PUBLISHES the phase it is in and the alert keys on that instead of on the pod:
 #   agent_scan_phase_start_timestamp   epoch at which the CURRENT phase began
@@ -289,6 +290,57 @@ if [ -n "$OWN_NS" ]; then
   done
 fi
 
+# ── DOORBELL COLLAPSE (ADR-106 (5) — the goal-#278 convoy) ──────────────────────────────────────
+# Argo collapses nothing: every /coordinate ring became one `generateName` Workflow queued on the
+# `coordinator-scan` mutex, and the goal night turned ~100–150 rings into 56 Pending workflows
+# draining serially — a fresh edge queued BEHIND stale wakes (ADR-093 regression; the CronJob era
+# collapsed via fixed-name `kubectl create`). The collapse is RECEIVER-side, not Sensor-side:
+# a fixed name at the Sensor silently drops any ring that lands while a same-named workflow is
+# Running or awaiting TTL — each a lost edge the cron must service, i.e. a defect by 017790c's
+# accounting. Instead, at scan start — STRICTLY BEFORE the first GitHub listing — this scan
+# absorbs every PENDING sibling ring in its namespace: any state that caused those rings is by
+# definition older than this moment and therefore visible to the re-list that follows; any ring
+# arriving AFTER the sweep creates a fresh workflow that survives and runs next. Zero lost edges.
+#   - FULL scans only. A unit fast-path scan (SCAN_UNIT set) is NARROWER than a pending full
+#     sweep — absorbing one would silently drop work (rule #6).
+#   - Name prefix `coordinate` catches the Sensor's `coordinate-`/`coordinate-perstack-` and the
+#     per-stack `coordinate-<stack>` cron children; it deliberately misses `coordinator-reflex`
+#     (different spelling), `review-*`, `janitor-*` — those are different functions, not rings.
+#   - Fail-open, loudly: an unreadable list or refused delete absorbs nothing and the extra
+#     workflow just runs behind the mutex — today's behavior, never a lost edge.
+# >>>REPLAY:doorbell-collapse>>>
+DOORBELL_WF_SELF="${DOORBELL_WF_SELF:-${HOSTNAME:-}}"
+absorb_pending_rings() {
+  case "${SCAN_UNIT:-}" in ""|"-") ;; *) return 0;; esac
+  [ -n "$SPAWN" ] || return 0
+  [ -n "$DOORBELL_WF_SELF" ] || return 0
+  local ns raw names n
+  ns="${SCAN_PHASE_NS:-}"
+  { [ -n "$ns" ] && [ "$ns" != "unknown" ]; } || return 0   # jail/manual run — no workflow world
+  if ! raw="$("$KUBECTL" $KUBE -n "$ns" get workflows -o json 2>/dev/null)" \
+     || ! jq -e . >/dev/null 2>&1 <<<"$raw"; then
+    echo "doorbell-collapse: workflow list PROBE-FAILED in ${ns} — absorbing nothing (extra wakes just queue)" >&2
+    return 0
+  fi
+  # No .status yet (the controller hasn't touched it) counts as Pending — that is the freshest
+  # kind of sibling ring and exactly the one worth absorbing.
+  names="$(jq -r --arg self "$DOORBELL_WF_SELF" '.items[]?
+      | select((.metadata.name // "") != $self)
+      | select((.metadata.name // "") | startswith("coordinate"))
+      | select((.status.phase // "Pending") == "Pending")
+      | .metadata.name' <<<"$raw" 2>/dev/null)" || names=""
+  for n in $names; do
+    if "$KUBECTL" $KUBE -n "$ns" delete workflow "$n" --ignore-not-found >/dev/null 2>&1; then
+      echo "doorbell-collapse: absorbed pending ring ${ns}/${n} — this scan's re-list covers it"
+    else
+      echo "doorbell-collapse: could not delete ${ns}/${n} (RBAC?) — it runs behind the mutex instead" >&2
+    fi
+  done
+  return 0
+}
+# <<<REPLAY:doorbell-collapse<<<
+absorb_pending_rings
+
 # ── DISPATCH PHASE TIMINGS — the rows ABOVE the launcher (FU-160 coordinator half, homelab#319) ──
 # `agent_run_phase_seconds` (agents/agent-session.sh, homelab#287) opens at `dispatch-gates`, which
 # is the moment the LAUNCHER starts. Everything before that stayed archaeology, and it is not
@@ -325,10 +377,10 @@ fi
 DISPATCH_PHASE_PGW="${AGENT_PUSHGATEWAY_URL-http://prometheus-pushgateway.monitoring.svc.cluster.local:9091}"
 DISPATCH_PHASE_POD="${SCAN_PHASE_POD:-${HOSTNAME:-}}"
 DISPATCH_PHASE_NS="${SCAN_PHASE_NS:-$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo unknown)}"
-DISPATCH_PHASE_RING=""       # the ring edge as an epoch — probed at most once per scan
+DISPATCH_PHASE_WAKE=""       # "<source>|<ring-epoch>" — probed at most once per scan (retried while unreadable)
 DISPATCH_PHASE_WARNED=""
 dp_now() { date -u +%s; }    # replay seam: the wall clock
-# replay seam: WHEN THE DOORBELL RANG, read off this scan's own Workflow object rather than plumbed
+# replay seam: HOW THIS SCAN WAS WOKEN, read off its own Workflow object rather than plumbed
 # through the CronWorkflow spec — that spec lives in agents/coordinator/, which pin-only-lint guards
 # and which homelab#309 holds this issue's whole footprint on. `creationTimestamp` is the moment the
 # Sensor (or the cron) submitted the Workflow, so the row it feeds includes the `coordinator-scan`
@@ -336,11 +388,25 @@ dp_now() { date -u +%s; }    # replay seam: the wall clock
 # dispatch latency, whatever caused it. Argo names a single-template Workflow's pod after the
 # workflow (`coordinate-perstack-mnhzm`, the spike's specimen), so the pod name is the key; if that
 # naming ever changes the read misses, the row is simply absent, and nothing else moves.
-dp_ring() {
-  local raw=""
+#
+# THE WAKE SOURCE decides two things (017790c: ALL events have doorbells, cron demoted to failure
+# detector — MEASURED, not promised): a cron-submitted Workflow carries the controller's
+# `workflows.argoproj.io/cron-workflow` label and its creationTimestamp is a schedule, not a ring,
+# so (1) the `ring-to-scan` row is emitted for EDGE wakes only — a row exists ⇔ edge-woken — and
+# (2) each dispatch stamps an epoch-valued wake gauge below, TWO metric NAMES rather than one
+# `source` label because a pushgateway POST replaces per metric name within a group: one name per
+# source is what lets an edge dispatch land without deleting the record of the last cron one.
+# `changes()` over an epoch gauge counts dispatches, so "% edge-woken" is a query and a recurring
+# cron-woken dispatch is an alert (AgentDispatchCronWoken), not an anecdote.
+dp_wake() {   # → "edge|<ring-epoch>" | "cron|" | "" (unreadable — the caller retries next dispatch)
+  local raw cron ts
   [ -n "$DISPATCH_PHASE_POD" ] || return 0
   raw="$("$KUBECTL" $KUBE -n "$DISPATCH_PHASE_NS" get workflow "$DISPATCH_PHASE_POD" -o json 2>/dev/null)" || return 0
-  printf '%s' "$raw" | jq -r '(.metadata.creationTimestamp // "") | select(. != "") | fromdateiso8601' 2>/dev/null || true
+  jq -e . >/dev/null 2>&1 <<<"$raw" || return 0
+  cron="$(jq -r '.metadata.labels["workflows.argoproj.io/cron-workflow"] // ""' <<<"$raw" 2>/dev/null)" || cron=""
+  if [ -n "$cron" ]; then printf 'cron|'; return 0; fi
+  ts="$(jq -r '(.metadata.creationTimestamp // "") | select(. != "") | fromdateiso8601' <<<"$raw" 2>/dev/null)" || ts=""
+  printf 'edge|%s' "$ts"
 }
 # TWO marks, and conflating them is the bug this comment exists to prevent. `SECONDS` is bash's own
 # count since this shell started, so T0 is the SCRIPT's start rather than this line — the janitor
@@ -349,8 +415,8 @@ dp_ring() {
 # segment and moves at every dispatch (see below).
 DISPATCH_PHASE_T0="$(( $(dp_now) - SECONDS ))"
 DISPATCH_PHASE_MARK="$DISPATCH_PHASE_T0"
-dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side rows, at a dispatch
-  local project="${1:-}" now ring family=""
+dispatch_phase() {   # $1 = the stack's MAIN repo — publish the scan-side rows, at a dispatch
+  local project="${1:-}" now ring family="" wake=""
   now="$(dp_now)"
   # A scan that dispatches twice (the global instance sweeping two stacks) measures the SECOND
   # dispatch from the first one's end, not from the pod's start — otherwise stack B's `scan` row
@@ -360,12 +426,12 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side 
   # No gateway (explicitly disabled) or no project (a caller with nothing to key on) → nothing is
   # published. Never a failure: this is a report, not a gate.
   [ -n "$DISPATCH_PHASE_PGW" ] && [ -n "$project" ] || return 0
-  [ -n "$DISPATCH_PHASE_RING" ] || DISPATCH_PHASE_RING="$(dp_ring)"
-  if [ -n "$DISPATCH_PHASE_RING" ]; then
+  [ -n "$DISPATCH_PHASE_WAKE" ] || DISPATCH_PHASE_WAKE="$(dp_wake)"
+  if [ "${DISPATCH_PHASE_WAKE%%|*}" = "edge" ] && [ -n "${DISPATCH_PHASE_WAKE#edge|}" ]; then
     # T0, NOT the moving mark: this row is "how long from the doorbell until the scan pod was
     # running", a property of the POD. Measuring it to the mark instead would make a second
     # dispatch report the ring as having happened one whole session earlier than it did.
-    ring=$(( DISPATCH_PHASE_T0 - DISPATCH_PHASE_RING ))
+    ring=$(( DISPATCH_PHASE_T0 - ${DISPATCH_PHASE_WAKE#edge|} ))
     # A ring AFTER the pod started is a clock disagreement, not a negative duration. Clamp: a
     # gauge that goes negative is the AgentRunNegativeCost class, and it is never informative.
     [ "$ring" -ge 0 ] || ring=0
@@ -379,10 +445,24 @@ dispatch_phase() {   # $1 = the stack's MAIN repo — publish the two scan-side 
   # launcher's accumulator gets this for free by appending; a single-shot family has to say it.
   family="${family}agent_dispatch_phase_seconds{phase=\"scan\"} ${scan}
 "
-  printf '%s\n%s\n%s' \
+  # The 017790c invariant rows (rationale at dp_wake): the wake source of THIS dispatch, as an
+  # epoch so `changes()` counts dispatches. An unreadable Workflow (a jail run) stamps neither —
+  # absence of both is "not measured", never "edge".
+  case "${DISPATCH_PHASE_WAKE%%|*}" in
+    edge) wake="# TYPE agent_dispatch_edge_woken_timestamp gauge
+# HELP agent_dispatch_edge_woken_timestamp Epoch of this stack's last EDGE-woken dispatch (017790c: changes() over this counts them).
+agent_dispatch_edge_woken_timestamp ${now}
+" ;;
+    cron) wake="# TYPE agent_dispatch_cron_woken_timestamp gauge
+# HELP agent_dispatch_cron_woken_timestamp Epoch of this stack's last CRON-woken dispatch — each one is a dead doorbell edge with an id (017790c).
+agent_dispatch_cron_woken_timestamp ${now}
+" ;;
+  esac
+  printf '%s\n%s\n%s%s' \
     "# TYPE agent_dispatch_phase_seconds gauge" \
     "# HELP agent_dispatch_phase_seconds Seconds one dispatch spent in a COORDINATOR-owned phase above the launcher (FU-160)." \
     "$family" \
+    "$wake" \
     | curl -fsS --max-time 5 --data-binary @- \
         "${DISPATCH_PHASE_PGW}/metrics/job/agent_dispatch_phase/project/${project}/role/coordinator-scan" >/dev/null 2>&1 \
     || { [ -n "$DISPATCH_PHASE_WARNED" ] \
@@ -443,6 +523,72 @@ stacks_json() {
 # an assignment would not survive. One cluster read per scan, not one per jq lookup.
 STACKS_CACHE="$(stacks_json)"
 
+# ── FU-144 RECEIVER-SIDE FAN-OUT (ruled 2026-08-12; builds with the collapse per ADR-106 (5)) ───
+# An emitter that edits a repo must not need to know stack mechanics — `{repo}` is the honest
+# payload (the two live holdouts: renovate.yaml `{"repo":"all"}`, devbox-update.yaml
+# `{"repo":"<repo>"}`). Before this, such a ring woke the GLOBAL scan, which printed
+# "graduated — skipped" for every stack and dispatched nothing (circles#29 waited out the cron,
+# 8m35s measured). Now the RECEIVER resolves: the global scan maps repo → {stack, loop_ns} off
+# stacks_json() — the AgentStack claims merged over the committed mirror, the same one source the
+# scan already trusts (generating the mirror FROM claims stays FU-049) — and re-rings /coordinate
+# with the resolved pair, so the per-stack trigger fires and the stack's own loop takes it.
+# Loop-break, twice over: the re-ring carries loop_ns, so the junk global workflow it also spawns
+# (a graduated POST satisfies both Sensor deps, the tolerated shape) arrives with SCAN_RING_NS
+# set and fans out nothing — and the collapse above absorbs it while Pending anyway. Gates:
+#   - EDGE-woken scans only (dp_wake): the cron backstop fanning out would re-launder every
+#     */10 tick as a fresh edge and the 017790c metric would read 100% edge-woken while lying.
+#   - SCAN_RING_NS empty/"-" only: an emitter that already carried loop_ns was already routed.
+#   - Latch-gated like every ring (coordinate-ring.sh is the reference): a woken scan could only
+#     dispatch work that defers for the same reason. Fail-open — an unreadable latch rings.
+# >>>REPLAY:doorbell-fanout>>>
+AGENT_LOOP_WEBHOOK="${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}"
+FANOUT_LATCH=""; FANOUT_LATCH_SAID=""
+fanout_clear() {   # seam: the FU-088 latch probe (fail-open by the script's own design)
+  SUBSCRIPTION_TIER=dispatch bash "${HERE}/subscription-latch.sh" 2>/dev/null
+}
+fanout_eligible() {   # the gates common to both call sites; caller passes nothing
+  [ -n "$SPAWN" ] || return 1
+  [ -z "${SCAN_STACK:-}" ] || return 1                       # per-stack instances never fan out
+  case "${SCAN_RING_NS:-}" in ""|"-") ;; *) return 1;; esac  # emitter already carried loop_ns
+  [ -n "$DISPATCH_PHASE_WAKE" ] || DISPATCH_PHASE_WAKE="$(dp_wake)"
+  case "$DISPATCH_PHASE_WAKE" in edge*) ;; *) return 1;; esac
+  if [ -z "$FANOUT_LATCH" ]; then
+    if fanout_clear; then FANOUT_LATCH=clear; else FANOUT_LATCH=latched; fi
+  fi
+  if [ "$FANOUT_LATCH" != "clear" ]; then
+    # Once per scan, not once per skipped stack — a line per stack is the noise floor that hid
+    # a spinning Sensor for ~50 minutes (homelab#103).
+    if [ -z "$FANOUT_LATCH_SAID" ]; then
+      echo "  fan-out: SKIPPED — subscription latched; a woken scan would only re-defer (cron backstop owns it)"
+      FANOUT_LATCH_SAID=1
+    fi
+    return 1
+  fi
+  return 0
+}
+fanout_ring() {   # $1 = stack, $2 = unit ("-"/empty = none) — one POST, the resolved pair
+  local body
+  body="{\"stack\":\"$1\",\"loop_ns\":\"$1-agents\",\"unit\":\"${2:--}\"}"
+  if curl -m 5 -s -X POST -H "Content-Type: application/json" -d "$body" \
+       "${AGENT_LOOP_WEBHOOK}/coordinate" >/dev/null 2>&1; then
+    echo "  fan-out: doorbell rung for graduated stack $1 (${body})"
+  else
+    echo "  fan-out: RING FAILED for $1 — its */30 cron backstop owns the edge (a defect if recurring, 017790c)" >&2
+  fi
+  return 0
+}
+fanout_stack() {   # $1 = a graduated stack the global scan is skipping — ring it iff in scope
+  fanout_eligible || return 0
+  # Repo scope: "all"/empty rings every graduated stack; a named repo rings only its stack.
+  case "${SCAN_REPO:-all}" in
+    all|"") ;;
+    *) stacks_json | jq -e --arg n "$1" --arg r "${SCAN_REPO}" \
+         '.stacks[]|select(.name==$n)|.repos|index($r)' >/dev/null 2>&1 || return 0 ;;
+  esac
+  fanout_ring "$1" "-"
+}
+# <<<REPLAY:doorbell-fanout<<<
+
 # FU-085/FU-086(1) compound: an edge that already KNOWS its unit (a reviewer verdict is
 # item-shaped — reviewer-session.sh computes `changes-requested|repo|pr-N` in SCRIPT code,
 # never the LLM) skips the full multi-repo sweep. The fast path re-validates everything it
@@ -464,6 +610,14 @@ fast_unit_dispatch() {
   if [ -n "${SCAN_STACK:-}" ]; then
     [ "$fstack" = "$SCAN_STACK" ] || { echo "unit fast-path: ${frepo} not in scoped stack ${SCAN_STACK}"; return 1; }
   elif [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
+    # FU-144: a repo-dumb unit doorbell for a graduated repo is LEGITIMATE now — resolve and
+    # delegate to the stack's own loop (which re-validates everything: delegation, never a
+    # weaker check). Ineligible (cron wake / already-routed / latched) keeps the old rejection.
+    if fanout_eligible; then
+      fanout_ring "$fstack" "$fu"
+      echo "unit fast-path: delegated to ${fstack}'s own loop (FU-144 receiver-side fan-out)"
+      return 0
+    fi
     echo "unit fast-path: ${fstack} graduated — global instance won't dispatch it"; return 1
   fi
   [ "$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorEnabled // false')" = "true" ] \
@@ -516,11 +670,13 @@ fast_unit_dispatch() {
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
   fmodel="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.coordinatorModel // "sonnet"')"
   echo "→ unit fast-path dispatch for ${fstack}: ${frepo} ${fitem} (${fclause}, model ${fmodel}, wip ${fwip})"
-  # FU-145: everything below this line is the session's stream, not the deterministic pass.
+  # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
+  # spin-up only, and the `coordinator-scan` mutex now spans just the deterministic pass (the
+  # session pod uploads, pushes its own row, and rings the doorbell itself).
   dispatch_phase "$fmain"   # FU-160: same boundary, the coordinator-owned rows above the launcher
   scan_phase dispatch
   bash "${HERE}/coordinator-session.sh" --stack "$fstack" --repos "${frepos% }" --main-repo "$fmain" \
-    --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" \
+    --model "$fmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$fwip" --detach \
     --item "repo=${frepo} item=${fitem} clause=${fclause}"
   scan_phase deterministic
   return 0
@@ -545,6 +701,9 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
   if [ -z "${SCAN_STACK:-}" ] \
      && [ "$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.graduated // false')" = "true" ]; then
     echo "  [$name] graduated — owned by its per-stack loop; skipped in the global scan" >&2
+    # FU-144: skipped is no longer dropped — an edge-woken repo-dumb ring resolves here and
+    # re-rings the stack's own loop (gates + rationale at the fan-out block above).
+    fanout_stack "$name"
     continue
   fi
   repos="$(stacks_json | jq -r --arg n "$name" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
@@ -2022,7 +2181,7 @@ EOF_GUARDED
     dispatch_phase "$mainrepo"   # FU-160
     scan_phase dispatch   # FU-145
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --janitor
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --janitor --detach
     scan_phase deterministic
     continue
   fi
@@ -2068,7 +2227,7 @@ EOF_GUARDED
       echo "→ spawning headless coordinator tick for ${name} (SCAN_ITEM_MODE=0 whole-stack mode)…"
       dispatch_phase "$mainrepo"   # FU-160
       scan_phase dispatch   # FU-145
-      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick
+      bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" --run-tick --detach
       scan_phase deterministic
       continue
     fi
@@ -2292,12 +2451,13 @@ EOF_GUARDED
     echo "→ dispatching item unit for ${name}: ${urepo} ${uitem} (${uclause}${uclass:+, class ${uclass}}${uparent:+, child of goal #${uparent}}, model ${cmodel}, wip ${uwip})…"
     # FU-080 perStack: under a stack-scoped instance the item session runs in the loop home
     # (<stack>-agents, SA agentstack-loop, broker git creds) instead of agent-coordinator.
-    # FU-145: the deterministic pass ends HERE. What follows is the item session streaming the
-    # ride, which is WORK — bounded by the workflow's activeDeadlineSeconds, not by this alert.
+    # FU-145/ADR-106 (5): the launcher DETACHES at pod-Ready — the dispatch phase below is pod
+    # spin-up, not the streamed ride, and the `coordinator-scan` mutex now spans only the
+    # deterministic pass (the pod uploads, pushes its own session row, rings the doorbell itself).
     dispatch_phase "$mainrepo"   # FU-160: the ring→scan and scan rows close on the same boundary
     scan_phase dispatch
     bash "${HERE}/coordinator-session.sh" --stack "$name" --repos "${repos% }" --main-repo "$mainrepo" \
-      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" \
+      --model "$cmodel" ${LOOP_NS:+--loop-ns "$LOOP_NS"} --wip "$uwip" --detach \
       --item "repo=${urepo} item=${uitem} clause=${uclause}${uclass:+ class=${uclass}}${uparent:+ parent=${uparent}}${uharvest}"
     scan_phase deterministic
   else

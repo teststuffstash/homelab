@@ -1,0 +1,32 @@
+# doorbell-collapse (ADR-106 (5)) — a starting FULL scan absorbs every PENDING sibling
+# `coordinate*` Workflow in its namespace, strictly BEFORE its GitHub re-list.
+#
+# CONDITION UNDER REPLAY. The goal-#278 convoy: rings pile up as Pending workflows behind the
+# `coordinator-scan` mutex (56 at 03:15, draining serially), while a fresh edge queues behind
+# stale wakes. The collapse is receiver-side — a fixed name at the Sensor would silently drop
+# rings landing mid-run (each a cron-serviced defect by 017790c) — and its correctness argument
+# is an ORDERING: absorb first, list GitHub second, so any state that caused an absorbed ring is
+# older than the re-list that follows and nothing is lost.
+#
+# THE CONTRACT, one leg each:
+#   absorbs           the Pending sibling AND the not-yet-reconciled one (no .status = the
+#                     freshest kind of ring) die; the Running self, a Pending `review-*`, the
+#                     `coordinator-reflex-*` cron child (different function, different SPELLING —
+#                     the prefix is `coordinate`, not `coordina`), and a Succeeded twin all
+#                     survive. Deletes land in the action stream — they ARE the collapse.
+#   unit-scan-inert   SCAN_UNIT set = a fast-path scan NARROWER than any pending full sweep:
+#                     absorbing one would drop work (rule #6). No list, no deletes.
+#   report-mode-inert no --spawn, no writes — a jail report run must never delete workflows.
+#   probe-fail-inert  an unreadable list absorbs NOTHING, loudly; the extra wakes just queue
+#                     (today's behavior — the failure mode is latency, never a lost edge).
+#   jail-inert        no workflow identity (DOORBELL_WF_SELF empty) or no real namespace —
+#                     nothing to absorb against, nothing touched.
+name: doorbell-collapse
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - block:doorbell-collapse
+  - file:drive.sh
+env:
+  - KUBECTL=kubectl
+  - KUBE=
