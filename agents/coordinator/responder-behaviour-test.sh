@@ -167,11 +167,14 @@ want "source=openrouter-operator files platform-side" "stack=platform repo=tests
 # ────────────────────────────────────────────────────────────────────────────────────────────────
 section "ROUND-2 REGRESSION — the source fallback is scoped to ONE alert"
 # Round 1 read `.labels.namespace // .labels.source` for EVERY alert, justified by the claim that
-# no other rule uses `source`. False: RouterRotationStale
-# (argocd/resources/openrouter-proxy/prometheusrule.yaml:58-59) is a bare selector on
-# router_rotation_age_seconds{source="openrouter-daily-rankings"} and carries no `triage: none`,
-# so it flows through here with a `source` that is a FEED name. Unscoped, its subject flipped to
-# ns:openrouter-daily-rankings — a marker discontinuity that files a duplicate on the next fire.
+# no other rule uses `source`. False: alert RouterRotationStale (in
+# argocd/resources/openrouter-proxy/prometheusrule.yaml — cited by NAME, not by line: its expr has
+# already moved once, homelab#342) fires on router_rotation_age_seconds with
+# source="openrouter-daily-rankings" and carries no `triage: none`, so it flows through here with a
+# `source` that is a FEED name. Unscoped, its subject flipped to ns:openrouter-daily-rankings — a
+# marker discontinuity that files a duplicate on the next fire. What decides that is the LABEL, not
+# the expr's shape: #342's restart-gap bridge aggregates with `max by (source)`, which preserves it,
+# so the assertions below are unchanged by that rewrite.
 
 scenario router-rotation-stale
 go "$(alert f5 '{"alertname":"RouterRotationStale","source":"openrouter-daily-rankings","severity":"warning"}')"
