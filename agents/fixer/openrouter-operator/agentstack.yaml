@@ -13,6 +13,7 @@ spec:
   # platform-agents. Thin by design — only openrouter-operator has a fixer block, and little
   # agentic activity happens here yet (operator note). coordinator.enabled + loop.perStack render
   # the loop; loop.graduated cuts over (global scan skips platform, doorbell + per-stack review in-ns).
+  routerMode: shadow    # declared-not-defaulted (ADR-096; same drift class)
   coordinator:
     enabled: true # RESUMED 2026-07-28 (meta-15, operator "enable the world" after Phase 4)
   # Bot review ON (operator directive 2026-08-11: platform PRs get the bot read BEFORE the
@@ -25,6 +26,7 @@ spec:
   # window accepted 2026-08-11, guards staged in tofu/github/variables.tf + repo CODEOWNERS.
   reviewer:
     enabled: true
+    goalModel: sonnet   # declared-not-defaulted (M10; the server default drifted the app 2026-08-12)
   loop:
     perStack: true
     graduated: true
@@ -68,6 +70,9 @@ spec:
       labels: { extra: [] } # explicit (server default) — bare {} gets stamped to {extra: []}, ArgoCD drifts
       storage:
         standard: "5Gi" # docker:false → no per-ride scratch; flipping docker later must add it (ADR-089)
+        bulk: "0"       # ⚠ defaulted fields must be DECLARED or the server stamps them and the
+        fast: "0"       #   app sits OutOfSync forever (agent-fixer.yaml doctrine; drift seen live
+        scratch: "0"    #   2026-08-12 when the storage/router/goalModel defaults landed)
       fixer:
         budgetUSD: 5
         resetInterval: weekly
@@ -102,6 +107,9 @@ spec:
       # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
       storage:
         standard: "5Gi"
+        bulk: "0"
+        fast: "0"
+        scratch: "0" # declared-not-defaulted (agent-fixer.yaml doctrine, 2026-08-12 drift)
       # FIXER BLOCK 2026-08-04 — homelab becomes a dispatch target. The gate it lands behind is
       # PATH-based, not repo-based (docs/agents/iac-lane.md §The platform lane): CODEOWNERS owns
       # the governance tiers, and tier 1 (argocd/resources/) is owned as a temporary scaffold until
@@ -155,6 +163,9 @@ spec:
       # is the point: capacity becomes a declared decision instead of a silent draw on the pool.
       storage:
         standard: "5Gi"
+        bulk: "0"
+        fast: "0"
+        scratch: "0" # declared-not-defaulted (agent-fixer.yaml doctrine, 2026-08-12 drift)
       fixer:
         budgetUSD: 5 # USD/week standing ceiling (carried over)
         resetInterval: weekly
