@@ -1,0 +1,109 @@
+# The three cloudflare spend-belt alerts (#217) that carry a `for:` window over a single-replica
+# scrape — the class #288/#313/#328 hardened elsewhere and homelab#334 ports here — lifted
+# VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is their one home).
+# This is the rules file that spend-belt.promtool-test loads. Not a manifest and not applied to
+# anything: `promtool test rules` needs upstream-format rules (top-level `groups:`), and a
+# PrometheusRule keeps them under `.spec`, so the CR cannot be loaded directly. Named
+# .promtool-rules rather than .yaml on purpose — manifest-lint kubeconforms EVERY *.yaml under
+# argocd/resources and a non-manifest there would fail it.
+#
+# The FIRST fixture pair in this directory (FU-158's behaviour half, #334). It covers 3 of the
+# CR's 5 alerts; CloudflareExporterDown and CloudflareEdge5xx have no behaviour test yet — honest
+# remaining work, listed in #334's PR body.
+#
+# ⚠ NOT DRIFT-PINNED (the general harness that would extract `.spec.groups` at run time lives in
+# `scripts/**` + `.github/**`, outside the fixer lane's tier — homelab#337). A stale hand copy
+# tests the OLD expr and passes VACUOUSLY. Re-copy after every expr edit:
+#
+#   yq -o=json '{"groups": [{"name": "cloudflare-spend-belt", "rules": [.spec.groups[].rules[] | select(.alert == "CloudflareZoneSpendToggleEnabled" or .alert == "CloudflareZonePlanNotFree" or .alert == "CloudflareSpendProbeBlind")]}]}' argocd/resources/cloudflare-exporter/prometheusrule.yaml | yq -P '.'
+#
+# …that command regenerates the `cloudflare-spend-belt` group ONLY. The `regression-witness-pre-334`
+# group at the bottom is not in the CR and must survive the re-copy — re-append it (see its header).
+# (One line on purpose: `devbox run` executes scripts under dash, which mangles a multi-line
+# quoted argument — CLAUDE.md §Environment.)
+#
+# The OTHER check over these same exprs is `devbox run spend-probe-self-test`, which reads them out
+# of the committed CR and replays them against fixtures built by the real collector. It evaluates
+# ONE instant, so it cannot see a `for:` window or a scrape hole — it pins the metric names, the
+# polarity, the thresholds, the zone selection and (since #334) the bridge's direction and range.
+# Behaviour over time is this file's job. Neither subsumes the other.
+groups:
+  - name: cloudflare-spend-belt
+    rules:
+      - alert: CloudflareZoneSpendToggleEnabled
+        expr: max by (zone) (max_over_time(cloudflare_zone_argo_smart_routing[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: Usage-billed toggle enabled on Cloudflare zone {{ $labels.zone }}
+          description: 'Argo Smart Routing is no longer "off" on zone {{ $labels.zone }} — a per-GB usage-billed feature, which bills the card attached to the account. SYMPTOM ONLY. Check: Cloudflare audit log for who/when (docs/cloudflare.md §Token matrix lists which tokens carry Zone Settings Write), then GET /zones/{id}/argo/smart_routing to confirm the live value.'
+      - alert: CloudflareZonePlanNotFree
+        expr: min by (zone) (min_over_time(cloudflare_zone_plan_is_free[10m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: Cloudflare product zone {{ $labels.zone }} is no longer on the free plan
+          description: 'Zone {{ $labels.zone }} reports a plan other than free — a recurring charge on the card attached to the account. SYMPTOM ONLY (a deliberate upgrade looks identical to an accidental one). Check: Cloudflare audit log, and whether the change was intended; the two watched zones are the product zones only, eid-demo.com is out of scope by design.'
+      - alert: CloudflareSpendProbeBlind
+        expr: min by (zone) (min_over_time(cloudflare_zone_spend_probe_ok[10m])) == 0 or absent(min_over_time(cloudflare_zone_spend_probe_ok[10m]))
+        for: 30m
+        labels:
+          severity: warning
+          platform_machinery: "true"
+        annotations:
+          summary: Cloudflare spend-toggle belt is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}
+          description: 'The spend-toggle probe has not read a zone''s plan/Argo state for 30m — the gauges above are UNKNOWN, not safe, and a toggle flipped now would go unnoticed. SYMPTOM ONLY. Check: pod + logs (deploy/cloudflare-spend-probe in monitoring, it logs every failed read), the cloudflare-exporter-token Secret (ESO ← Infisical CLOUDFLARE_OBSERVABILITY_READ), then the token''s Zone Settings Read on both product zones (docs/cloudflare.md §Token matrix).'
+
+  # ── REGRESSION WITNESS — NOT deployed rules, and deliberately not in prometheusrule.yaml ──────
+  # The three pre-#334 exprs, verbatim, plus one alert that never shipped at all. Each is checked
+  # at the SAME eval times as its shipped twin in spend-belt.promtool-test, so every claim the
+  # manifest makes about the class ("the roll restarted this window", "the absent() arm swapped the
+  # alert's identity") is executed against the form that had the defect rather than asserted about
+  # it. `for:`, thresholds and `severity` are carried unchanged — only the expr differs, which is
+  # what keeps the contrast attributable to the bridge alone. Annotations are trimmed to `summary`,
+  # the convention the openrouter-proxy and github-exporter witness groups already use: the fixture
+  # asserts WHEN each witness fires, and the description templates are pinned on the shipped side.
+  # Fossils, not copies: if any of the three exprs is revisited, this group stays as it is. It is
+  # also what stops a STALE hand copy of the group above from passing vacuously — with the old expr
+  # in both places the pairs would agree and every roll assertion below fails.
+  - name: regression-witness-pre-334
+    rules:
+      - alert: CloudflareZoneSpendToggleEnabledPre334
+        expr: cloudflare_zone_argo_smart_routing > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Usage-billed toggle enabled on Cloudflare zone {{ $labels.zone }}
+      - alert: CloudflareZonePlanNotFreePre334
+        expr: cloudflare_zone_plan_is_free == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cloudflare product zone {{ $labels.zone }} is no longer on the free plan
+      - alert: CloudflareSpendProbeBlindPre334
+        expr: cloudflare_zone_spend_probe_ok == 0 or absent(cloudflare_zone_spend_probe_ok)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cloudflare spend-toggle belt is blind{{ if $labels.zone }} on zone {{ $labels.zone }}{{ end }}
+      # NOT a pre-fix form and NOT a proposal: the MECHANICAL PORT, i.e. what CloudflareZonePlanNotFree
+      # would be if #328's idiom had been copied without asking which direction preserves the alert.
+      # `plan_is_free == 0` is LOW-is-bad, so `max_over_time` reads the healthiest sample of the last
+      # 10m and delays a genuine plan upgrade by the whole range. The fixture's direction case shows
+      # it paging 10 minutes after the shipped alert — two of its `for: 5m` windows — on a belt whose
+      # entire job is to notice a charge starting. Kept here so that claim is executed.
+      # CloudflareSpendProbeBlind shares the direction and the argument; it is asserted once.
+      - alert: CloudflareZonePlanNotFreeMaxDirection
+        expr: max by (zone) (max_over_time(cloudflare_zone_plan_is_free[10m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Cloudflare product zone {{ $labels.zone }} is no longer on the free plan
