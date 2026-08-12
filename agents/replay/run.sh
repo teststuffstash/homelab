@@ -252,12 +252,17 @@ gen_index() {
            if (line != "" && id != "") print line "\t" id }' "$y"
   done | sort -u > "$pins"
   printf '| fixture | mode | source | pinned by (FSM) |\n|---|---|---|---|\n'
-  local d n mode src ids
+  local d n mode src ids FXY
   for d in "$FIXROOT"/*/; do
     [ -d "$d" ] || continue
     n="$(basename "$d")"
-    mode="$(awk -F': *' '$1=="mode"{print $2; exit}' "$d/fixture.yaml" 2>/dev/null)"
-    src="$(awk -F': *' '$1=="source"{print $2; exit}' "$d/fixture.yaml" 2>/dev/null)"
+    # the harness's OWN parser (PR#381 review): a bespoke awk here would render a future quoted
+    # `source: "…"` differently than the harness reads it — one parser, one truth. `local FXY`
+    # shadows the global bash-dynamically, so fx_scalar reads this fixture, and a run_fixture
+    # loop's own FXY is untouched.
+    FXY="$(parse_fixture "$d/fixture.yaml" 2>/dev/null)" || FXY=""
+    mode="$(fx_scalar mode)"
+    src="$(fx_scalar source)"
     ids="$(awk -F'\t' -v n="$n" '$1==n{print $2}' "$pins" | sort -u | paste -sd' ' -)"
     printf '| `%s` | %s | `%s` | %s |\n' "$n" "${mode:--}" "${src:--}" "${ids:--}"
   done
@@ -267,7 +272,10 @@ gen_index() {
 index_write() {
   local idx readme="$ROOT/agents/replay/README.md"
   idx="$(mktemp)"; gen_index > "$idx"
-  grep -qF "$INDEX_BEGIN" "$readme" || { echo "run.sh: README lacks the index markers" >&2; exit 2; }
+  grep -qF "$INDEX_BEGIN" "$readme" || { echo "run.sh: README lacks the index BEGIN marker" >&2; exit 2; }
+  # PR#381 review: without this, a lost END marker makes the splice's skip flag never clear and
+  # it silently swallows the README from the marker to EOF — fail loud instead.
+  grep -qF "$INDEX_END" "$readme" || { echo "run.sh: README lacks the index END marker" >&2; exit 2; }
   awk -v begin="$INDEX_BEGIN" -v end="$INDEX_END" -v f="$idx" '
     $0==begin {print; while ((getline l < f) > 0) print l; skip=1; next}
     $0==end {skip=0}
