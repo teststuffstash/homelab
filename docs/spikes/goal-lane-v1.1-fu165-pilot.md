@@ -65,6 +65,13 @@ exhibit is a claude.ai artifact ("Goal #278 — sprout DAG") — THIS file is th
 The v1.2 design session (FU-168: ADR-094 concurrency + ADR-097 fence, "no pre-committed shape;
 the numbers decide"), plus the sibling decisions it composes with: #295 bucket semantics
 (finding 1), the typed worker-findings disposition gate (finding 2), §M10 checkpoint cadence
-(finding 3), FU-166(b) event-driven seat watches (finding 6). Single-run caveat throughout:
+(finding 3), FU-166(b) event-driven seat watches (finding 6). Plus the stack-scope question
+(operator, 2026-08-12): v1.1 ran ONE cross-repo child end-to-end (agent-runtime#66 → its PR#67,
+native lineage + budget walk + ride all held), but no sibling platform repo has a merge doorbell
+(cron-only edge) and no `-iac` descendant was ever exercised — on consumer stacks the deploy leg
+(the -iac bump) sits OUTSIDE the goal tree, so the goal effectively ends at the app-repo merge.
+v1.2 should make the Goal a STACK-scoped object: descendants across the claim's repos including
+`-iac`, the `Production-leg:` verified through the -iac deploy + KPIs in post-launch.
+Single-run caveat throughout:
 platform repo, subscription rail, mostly-serialized dispatch — re-measure any fence/concurrency
 conclusion on a genuinely concurrent stack before generalizing.
