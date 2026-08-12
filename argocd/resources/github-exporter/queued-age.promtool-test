@@ -172,6 +172,12 @@ tests:
   # On the rule's own 1m evaluation grid that leaves at most four consecutive pending evaluations
   # (31m…34m; at 35m the lookback is spent), so any `for:` above 5m is structurally safe and
   # `for: 10m` has margin. `for: 3m` fires here — that is the assertion below doing its job.
+  #
+  # homelab#335 did not touch a character of this case, and that is the POINT rather than an
+  # omission: `min_over_time(…[5m])` reproduces exactly the 5m tail modelled here, so the phantom
+  # boundary this case pins is the same boundary after the bridge. The evidence that the range
+  # composes with `for: 10m` is these assertions still passing unchanged; the evidence that [10m]
+  # would NOT is the late-pickup case further down.
   - interval: 10s
     name: a pickup at 27m50s (worst-case phantom tail) never fires
     input_series:
@@ -192,3 +198,161 @@ tests:
       - eval_time: 45m
         alertname: CiDispatchStalled
         exp_alerts: []
+
+  # ── Guard 3 — THE LATEST a healthy pickup can be, and why the bridge is [5m] (homelab#335) ─────
+  # The composition ruling, executed. Same shape as guard 2 with the pickup moved as late as it can
+  # go while still being healthy BY THIS ALERT'S OWN DEFINITION: the run is picked up at 29m50s, a
+  # queue shorter than the 1800s threshold, so it never deserved a page at all. The cached
+  # exposition advertises it as queued for 120s more, to 31m50s — and the apparent age crosses
+  # 1800s at 30m, i.e. entirely inside that phantom. This is the worst input the design has to
+  # survive, and it is what sets the ceiling on the bridge range.
+  #
+  #   phantom tail = 120s of cached exposition + B (the range REPLACES the 5m lookback; a range
+  #                  selector reads raw samples in (t−B, t] and no lookback applies to it)
+  #   fires iff  120s + B ≥ for:   ⇒  B < 8m is the whole budget at `for: 10m`
+  #
+  # [5m] → true 31m…36m, five pending evaluations, never fires (the shipped assertions below).
+  # [10m] → true 31m…41m, eleven, and it PAGES at 41m — eleven minutes after the run started
+  # running, reporting a 41-minute queue that never happened. That is not a tuning nit: it is the
+  # #284 false positive coming back, and the counter-witness below is the assertion that catches it
+  # if anyone ever "completes" this port to the class's [10m].
+  - interval: 10s
+    name: a pickup at 29m50s — [5m] stays silent, the mechanical [10m] port pages after recovery
+    input_series:
+      - series: 'github_workflow_run_queued_since_timestamp{owner="teststuffstash",repo="homelab",workflow="CI",branch="renovate/actions-checkout",event="pull_request",number="89",attempt="1",id="31700000000",status="queued",conclusion="",runner="self-hosted"}'
+        values: "0+0x191"
+    alert_rule_test:
+      # pending at its longest under the shipped range, still not firing
+      - eval_time: 36m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      # …and the range is spent one evaluation later, without the alert ever having fired
+      - eval_time: 37m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      # THE assertion of the ruling: 41m is the instant the [10m] port pages (below), and the
+      # shipped range must be silent there. Widening [5m] toward the class's [10m] turns this line
+      # red — which is the only reason the ceiling B < 8m is a check and not a paragraph.
+      - eval_time: 41m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      # The pre-#335 alert is silent here too — the bridge is what changes this case, not the
+      # identity half, so the shipped expr must be paired against BOTH witnesses to attribute it.
+      - eval_time: 41m
+        alertname: CiDispatchStalledPre335
+        exp_alerts: []
+      # The mechanical port, firing on a healthy pickup. `$value` is the second price in one
+      # reading: 41m of queue for a run that started at 29m50s — `time()` advancing against a held
+      # timestamp reports an age nobody ever observed, and it climbs for as long as the range holds.
+      - eval_time: 41m
+        alertname: CiDispatchStalledBridge10m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 41m 0s"
+
+  # ── The hole this bridge exists for — a poller roll mid-stall (homelab#335) ────────────────────
+  # A genuine 2026-08-07-shaped stall, interrupted at 36m by the single-replica hole: `replicas: 1`
+  # (deployment.yaml), so a roll empties the vector outright, and one 5xx inside collect_workflow_runs
+  # (the FIRST collector, and it fails wholesale) drops the whole queued family for a 120s poll
+  # cycle with the pod healthy and `up` still 1. `stale` IS that marker — Prometheus writes it when
+  # the series leaves the exposition — and it is the thing promtool's bare `_` gap cannot model,
+  # because a plain gap stays readable through the 5m lookback and no expr would notice it.
+  #
+  # Three minutes of hole cost the un-bridged alert EIGHT minutes of detection: not the hole, the
+  # `for: 10m` window it restarts on the way out. The second `stale` at 60m is the remediation
+  # draining the queue, and it prices the bridge in the other direction — the shipped alert keeps
+  # ringing for the range's length after the queue is genuinely healthy, on a $value that is still
+  # climbing (1h 3m at 63m, for a run picked up at 60m).
+  - interval: 1m
+    name: a 3m poller roll mid-stall no longer restarts the window (and resolves ≤5m late for it)
+    input_series:
+      - series: 'github_workflow_run_queued_since_timestamp{owner="teststuffstash",repo="homelab",workflow="CI",branch="master",event="push",number="43",attempt="1",id="31811111111",status="queued",conclusion="",runner="self-hosted"}'
+        values: "0+0x35 stale _x2 0+0x20 stale"
+    alert_rule_test:
+      # 41m: the shipped alert pages on the same schedule it would have with no hole at all —
+      # threshold crossed at 31m, ten unbroken minutes of `for:` across the roll.
+      - eval_time: 41m
+        alertname: CiDispatchStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 41m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 41m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+      # …the pre-#335 alert is still silent at 41m: the marker resolved it at 36m and its window
+      # restarted from scratch when the exposition came back at 39m.
+      - eval_time: 41m
+        alertname: CiDispatchStalledPre335
+        exp_alerts: []
+      # It pages at 49m instead — eight minutes of a dead CI queue bought by a three-minute roll.
+      - eval_time: 49m
+        alertname: CiDispatchStalledPre335
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 49m 0s"
+      # The price, executed: the queue drains at 60m and the shipped alert believes it for the
+      # range's length, reporting an age that keeps climbing past anything ever sampled…
+      - eval_time: 63m
+        alertname: CiDispatchStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 1h 3m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 1h 3m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
+      # …while the un-bridged one resolves on the marker. This is the whole trade, in two lines.
+      - eval_time: 63m
+        alertname: CiDispatchStalledPre335
+        exp_alerts: []
+      # …and the tail is bounded by the range, not open-ended.
+      - eval_time: 65m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+
+  # ── The accepted CEILING — a hole wider than the bridge still restarts the window ──────────────
+  # #328's assertion, carried: [5m] is sized on the holes that actually happen (69-116s of roll over
+  # ten pod generations, #288; one 120s poll cycle), not on every hole imaginable. Two consecutive
+  # failed polls, a crash-loop, a cold-mirror image pull or a node drain empties the range too, and
+  # then this alert pages hole+10m late exactly like the un-bridged one. Asserted rather than
+  # assumed, because the ceiling is the honest half of the claim: 8m of hole here costs 13m.
+  - interval: 1m
+    name: an 8m hole is wider than the range and does restart the window (accepted ceiling)
+    input_series:
+      - series: 'github_workflow_run_queued_since_timestamp{owner="teststuffstash",repo="homelab",workflow="CI",branch="master",event="push",number="44",attempt="1",id="31911111111",status="queued",conclusion="",runner="self-hosted"}'
+        values: "0+0x35 stale _x7 0+0x100"
+    alert_rule_test:
+      # would have fired at 41m; the range ran dry at 40m and the window restarted at 44m
+      - eval_time: 41m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      - eval_time: 53m
+        alertname: CiDispatchStalled
+        exp_alerts: []
+      - eval_time: 54m
+        alertname: CiDispatchStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              platform_machinery: "true"
+              owner: teststuffstash
+              runner: self-hosted
+            exp_annotations:
+              summary: "CI cannot dispatch: self-hosted runs queued 54m 0s"
+              description: 'The oldest self-hosted workflow run in teststuffstash has waited 54m 0s for a runner (normal pickup ~20s). A queued run never fails, so no CI-failure alert can see this. Which runs: github_workflow_run_queued_since_timestamp{runner!="hosted"}. Check in this order: (1) githubstatus.com / GithubVendorOutage — vendor-side, and do NOT re-run queued work; (2) saturation vs breakage — a saturated pool has jobs RUNNING, a broken one has workers WAITING (maxRunners is 4, argocd/platform/arc-runners.yaml); (3) kubectl -n arc-runners get pods,ephemeralrunnersets,autoscalinglisteners, then the LISTENER POD''s own log — the 2026-08-07 wedge (docs/incidents/2026-08-07-arc-listener-wedge.md) was visible ONLY there; (4) WAN reachability from each runner node — 2026-08-11 (docs/incidents/2026-08-11-wk-metal-02-default-route-loss.md) was one node''s missing default route with the listener healthy.'
