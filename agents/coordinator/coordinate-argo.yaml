@@ -15,6 +15,12 @@
 # SAME template) mutually exclusive — Cron `Forbid` alone does NOT see Sensor submissions. The
 # Sensor trigger rateLimit is the dumb outer belt. Cron demotes */10 → */30 after the edge proves
 # itself in live use (FU-084 GraphQL burn).
+# ADR-106 (5) — the goal-#278 famine fixes, both receiver-side (coordinator-scan.sh):
+#   COLLAPSE: a starting full scan absorbs every PENDING sibling `coordinate*` workflow in its
+#   namespace before it lists GitHub (those rings are older than the re-list, so nothing is
+#   lost), which ends the generateName convoy without the fixed-name race of dropping rings that
+#   land mid-run. DETACH: coordinator-session.sh exits at pod-Ready (--detach), so this mutex
+#   spans only the deterministic pass — never a streamed session (the famine's 45-min holds).
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
@@ -73,12 +79,19 @@ spec:
                     # FU-085 compound: "-" = no unit (full scan); a unit-carrying doorbell
                     # (reviewer verdict) runs the scan's scoped fast-path instead of the sweep.
                     - { name: unit, value: "-" }
+                    # FU-144 loop-break: the emitter's loop_ns, surfaced to the scan as
+                    # SCAN_RING_NS. Non-empty = this POST was already routed per-stack (the
+                    # perstack trigger fired beside this one), so the global scan must NOT
+                    # fan it out again — that includes the scan's own fan-out re-rings.
+                    - { name: ring_ns, value: "-" }
           parameters:
             # dataKey missing from the POST body → the static `value` above stays (unscoped scan).
             - src: { dependencyName: coordinate-dep, dataKey: body.repo, value: "all" }
               dest: spec.arguments.parameters.0.value
             - src: { dependencyName: coordinate-dep, dataKey: body.unit, value: "-" }
               dest: spec.arguments.parameters.1.value
+            - src: { dependencyName: coordinate-dep, dataKey: body.loop_ns, value: "-" }
+              dest: spec.arguments.parameters.2.value
     # FU-080: submit an inline coordinate Workflow INTO <loop_ns> as agentstack-loop (SCAN_STACK
     # scoped, broker-fetch role=coordinator). Inlined rather than referencing a per-stack
     # WorkflowTemplate so the composition cron stays byte-identical per stack; the coordinator-scan
@@ -204,6 +217,7 @@ spec:
     parameters:
       - { name: repo, value: "all" }
       - { name: unit, value: "-" } # FU-085 compound: "-" = full scan; else the scoped fast-path
+      - { name: ring_ns, value: "-" } # FU-144: the POST's loop_ns ("-" = repo-dumb ring → the scan may fan out; the cron backstop inherits the default and never fans out anyway — its wake source is cron)
   entrypoint: main
   volumes:
     - { name: work, emptyDir: {} }
@@ -218,10 +232,14 @@ spec:
         args:
           - |
             set -e
-            echo "coordinate: doorbell scope={{workflow.parameters.repo}} unit={{workflow.parameters.unit}} (unit '-' = full scan)"
+            echo "coordinate: doorbell scope={{workflow.parameters.repo}} unit={{workflow.parameters.unit}} ring_ns={{workflow.parameters.ring_ns}} (unit '-' = full scan)"
             rm -rf /work/homelab
             git clone --depth 1 -b master https://github.com/teststuffstash/homelab.git /work/homelab
             export SCAN_UNIT='{{workflow.parameters.unit}}'
+            # FU-144 receiver-side fan-out inputs: the ring's repo scope + whether it was
+            # already routed per-stack (coordinator-scan.sh §doorbell-fanout reads both).
+            export SCAN_REPO='{{workflow.parameters.repo}}'
+            export SCAN_RING_NS='{{workflow.parameters.ring_ns}}'
             exec bash /work/homelab/agents/coordinator-scan.sh --spawn
         env:
           - { name: HOME, value: "/home/node" }

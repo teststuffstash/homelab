@@ -104,3 +104,33 @@ subjects:
   - kind: ServiceAccount
     name: agent-coordinator
     namespace: agent-coordinator
+---
+# ADR-106 (5) doorbell collapse + FU-160 wake source: the scan reads its OWN Workflow object
+# (edge-vs-cron + the ring epoch — `dp_wake`; this read had silently failed fail-open since
+# FU-160 shipped, no workflows grant existed) and DELETES pending sibling `coordinate*`
+# workflows at scan start (`absorb_pending_rings`). NAMESPACED on purpose: the global scan only
+# ever touches agent-coordinator's own workflows; the per-stack mirror is the Composition's
+# agentstack-loop-workflow Role.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coordinator-scan-workflows
+  namespace: agent-coordinator
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coordinator-scan-workflows
+  namespace: agent-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coordinator-scan-workflows
+subjects:
+  - kind: ServiceAccount
+    name: agent-coordinator
+    namespace: agent-coordinator

@@ -1,0 +1,20 @@
+CALL kubectl -n circles-agents get workflows -o json
+CALL kubectl -n circles-agents delete workflow coordinate-perstack-abc12 --ignore-not-found
+CALL kubectl -n circles-agents delete workflow coordinate-xyz99 --ignore-not-found
+CALL kubectl -n circles-agents get workflows -o json
+OUT REACHED: full scan absorbs pending siblings (and only them)
+OUT doorbell-collapse: absorbed pending ring circles-agents/coordinate-perstack-abc12 — this scan's re-list covers it
+OUT doorbell-collapse: absorbed pending ring circles-agents/coordinate-xyz99 — this scan's re-list covers it
+OUT RETURN 0
+OUT REACHED: unit fast-path scan is narrower — absorbs nothing
+OUT RETURN 0
+OUT REACHED: report mode (no --spawn) — absorbs nothing
+OUT RETURN 0
+OUT REACHED: unreadable workflow list — absorbs nothing, loudly
+OUT RETURN 0
+OUT REACHED: jail run — no workflow identity, then no real namespace
+OUT RETURN 0
+OUT RETURN 0
+OUT REACHED: end
+ERR doorbell-collapse: workflow list PROBE-FAILED in circles-agents — absorbing nothing (extra wakes just queue)
+RC 0
