@@ -39,8 +39,8 @@ edge defaults the way ADR-101's zone classes fan out zone defaults. API class: a
 URL wired into Schema validation 2.0 (**all plans since ~2026-08**, live-verified on the free
 zone; ⚠ free validates bodies ≤1 KB only — oversize bypasses the action, so app-side validation
 stays the gate; OAS v3.0 only), and NEVER challenge-shaped mitigations (captchas/managed
-challenges break machine clients by construction — the Bot-Fight-Mode analysis above,
-generalized to a class invariant). Website class: cache/speed posture (edge caching rules,
+challenges are browser interstitials a machine client structurally cannot solve — the reason
+Bot Fight Mode was declined, generalized to a class invariant). Website class: cache/speed posture (edge caching rules,
 maybe RUM per the pages-exist ruling) and challenge-shaped mitigations become legal. The
 quick-start wizard's zone-wide knobs (Bot Fight Mode, client-side security, leaked-credentials,
 speed optimizations) were DECLINED 2026-08-12 precisely because they cannot see this split —
@@ -80,13 +80,6 @@ that convergence is the acceptance test that the XRD generalizes.
 
 ### Zone classes: two kinds + a delegation verb (operator design, 2026-08-08)
 
-> ⚑ **STRUCTURAL DEBT (operator, 2026-08-11):** zone classes are defined TWICE in this doc —
-> here and in §"Zone classes + spend surface" below — and the merge is deliberately parked for
-> the **minutark.ee onboarding**: that work adds enough new knobs that this doc needs a rethink
-> (likely a split: edge capability/PublicRoute vs tokens/custody vs zones/spend) rather than a
-> line-level merge. Until then: THIS section is the class definitions; the one below owns the
-> spend surface. Don't sync them — merge them when the onboarding lands.
-
 **The Cloudflare zone is the real tenancy boundary** (tokens, WAF baseline, rulesets, cache
 config are zone-scoped; Free/Pro has no finer grain), so a zone has exactly ONE owner:
 
@@ -104,6 +97,14 @@ delegated to it.** Cloudflare cannot enforce subtrees (zone tokens are its fines
 Enterprise) — and that costs nothing, because the privilege boundary is the XRD: claims never
 touch tokens, the composition validates the grant. Promotion (tenant outgrows the subtree →
 own domain) is a claim migration, not Cloudflare surgery.
+
+**The live zone map** (merged here from the old §"Zone classes + spend surface" header,
+2026-08-12 — the parked structural debt, closed when the minutark onboarding landed):
+`teststuff.net` = **platform zone** (any ns claims in its delegated subtree); `minutark.ee` =
+**product zone, owner `oracle-fleet`** (the owning ns claims anywhere incl. the apex; consumer
+#1 is the minutark placeholder claim in oracle-iac). The zone map is a platform constant in the
+PublicRoute composition; a product zone's BOOTSTRAP (records, TLS floor, DNSSEC) is
+`tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
 
 ## Token matrix (who holds what, 2026-08-08 — the ONE table; drafts died here)
 
@@ -149,13 +150,10 @@ NOT route through it: jail applies are operator-plan-gated, and the bootstrap ne
 - Re-resolution: `resolver <kube-dns> valid=30s` + variable `proxy_pass` (the ert-egress-proxy
   pin-forever lesson).
 
-## Zone classes + spend surface (2026-08-09)
+## Spend surface (2026-08-09; argo verdict 2026-08-12)
 
-**Zones** (ADR-101): `teststuff.net` = platform zone (any ns claims in its delegated subtree);
-`minutark.ee` = **product zone, owner `oracle-fleet`** (the owning ns claims anywhere incl. the
-apex; consumer #1 is the minutark placeholder claim in oracle-iac). The zone map is a platform
-constant in the PublicRoute composition; the zone BOOTSTRAP (records, TLS floor, DNSSEC) is
-`tofu/cloudflare/minutark.tf` until the composition grows a product-zone bootstrap class.
+Zone-class definitions + the live zone map: §Zone classes above (one home — the duplicate
+header this section used to carry was merged up 2026-08-12).
 
 **Spend surface**: the account has a payment card attached (eid-demo.com is Pro), and the
 assumed usage-toggle case was **Argo Smart Routing (per-GB) via

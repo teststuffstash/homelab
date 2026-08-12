@@ -4,7 +4,7 @@
 WHY this exists: the Cloudflare account has a payment card attached, and with a card on file a
 plan change bills silently. This is the BELT: it cannot prevent the change, it makes it loud.
 Purchase-shaped spend is otherwise closed — no token carries Billing groups (`devbox run
-cloudflare-token-audit`). Design + doctrine: docs/cloudflare.md §Zone classes + spend surface.
+cloudflare-token-audit`). Design + doctrine: docs/cloudflare.md §Spend surface.
 
 ⚠ THE ARGO LEG WAS RETIRED 2026-08-12 (it shipped assuming `PATCH /zones/{id}/argo/smart_routing`
 was gated by Zone Settings Write). The host-side admin-token session settled it: the argo
