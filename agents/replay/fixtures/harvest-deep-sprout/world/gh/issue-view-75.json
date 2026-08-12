@@ -3,5 +3,5 @@
   "title": "generate-evidence.py: _extract_case_id docstring still describes the removed method-name fallback",
   "state": "OPEN",
   "labels": [],
-  "body": "‹elided — the clause reads no body on this path; see the fixture header›"
+  "body": "‹elided — the walk reads this body only to test it for a `Budget:` line, and it carries none; see the fixture header›"
 }

@@ -1,0 +1,15 @@
+CALL gh api repos/teststuffstash/homelab/issues/367/parent --jq .number
+CALL gh issue view 295 --repo teststuffstash/homelab --json labels,body
+CALL gh api repos/teststuffstash/homelab/issues/295/parent
+CALL gh issue view 278 --repo teststuffstash/homelab --json labels,body
+CALL gh issue view 278 --repo teststuffstash/homelab --json number,title,body --jq "#\(.number) — \(.title)\n" +\n          ( ((.body // "") | split("\n")) as $l\n            | [ range(0; ($l|length)) | select($l[.] | test("^#+ *(Goal|Acceptance)"; "i")) ] as $starts\n            | if ($starts|length) == 0 then ""\n              else [ $starts[] as $s\n                     | ( [ range($s+1; ($l|length)) | select($l[.] | test("^#+ ")) ] | first ) as $end\n                     | $l[$s : (if $end == null then ($l|length) else $end end)] | join("\n") ]\n                   | join("\n\n")\n              end )
+OUT → Goal context: #367's parent #295 is not the goal — walked 1 hop(s) up to goal #278 (post-launch lane, ADR-102)
+OUT → Goal context: child of #278 — injecting its Goal + Acceptance (bounded) into the env card
+OUT GATE SUBJECT: #278
+OUT CARD | #278 — Goal: platform FU build-out — the designed-but-unbuilt blitz (FU-165 pilot)
+OUT CARD | ## Acceptance
+OUT CARD | 
+OUT CARD | - Each child: its FU's **Next** action shipped through the full lane, the child's own gate green against the live cluster, the FU advanced or archived in the same arc.
+OUT CARD | - Goal: all launched children closed + the closing sweep (jail seat) re-probes each shipped belt once — alerts fire/clear on synthetic cause where testable, panels render, fixtures hold. Then the burn-down report goes to the operator for the `goal/validated` verdict.
+OUT CARD | - The pilot's second deliverable is the machinery findings themselves: goal-budget's subscription blind spot (gap (a)), the phase/model checkpoint question (§M10 ⚖), and whatever else the lane surfaces — each routed per the routing table, none silently absorbed.
+RC 0

@@ -1,6 +1,6 @@
-CALL gh issue view 35 --repo teststuffstash/circles --json labels
+CALL gh issue view 35 --repo teststuffstash/circles --json labels,body
 CALL gh api repos/teststuffstash/circles/issues/35/parent
-CALL gh issue view 29 --repo teststuffstash/circles --json labels
+CALL gh issue view 29 --repo teststuffstash/circles --json labels,body
 CALL gh issue view 29 --repo teststuffstash/circles --json title,state
 CALL gh api repos/teststuffstash/circles/issues/29/sub_issues
 OUT   harvest disposition (ADR-102): circles issue-35 → goal #29, bucket 77, self-queue no — goal #29 is CLOSED — the self-queue right dies with the goal (ADR-102)

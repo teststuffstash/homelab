@@ -370,8 +370,9 @@ transitions:
     owner: coordinator item session (reasoning tier — GOAL_MODEL, default opus)
     when: "queued goal → children authored as native sub-issues (Base: inherited, Touches: narrowed, coverage map) and QUEUED; parent → agent/blocked tracking"
     status: guarded
-    unreplayed: "decompose is an LLM play; the deterministic budget legs are exercised through goal-budget.sh by the harvest fixtures"
-    unreplayed: "decompose is an LLM play; the deterministic budget legs are exercised through goal-budget.sh by the harvest fixtures"
+    unreplayed: "decompose is an LLM play; its deterministic legs are replayed elsewhere — the budget
+      sum through goal-budget.sh by the harvest fixtures, the goal RESOLUTION the sum is asked about
+      by goal-ancestor-* (homelab#367)"
     guards:
       - desc: "the play (coverage map, seams pinned, Σ budgets fit)"
         anchor: { file: agents/coordinator/README.md, pattern: "goal-decompose" }
@@ -379,6 +380,8 @@ transitions:
         anchor: { file: agents/agent-session.sh, pattern: "PREFLIGHT REFUSED" }
       - desc: "…over the shared read (extracted for #207's harvest gate; one sum, two callers, one enforcer)"
         anchor: { file: agents/goal-budget.sh, pattern: "DESCENDANTS, not direct children" }
+      - desc: "…asked about the goal ANCESTOR, walked transitively and by the SAME walk the scan uses — a post-launch sprout's parent is the bucket, and the one-hop read left that whole lane ungated and goal-blind (replay: goal-ancestor-bucket-child, -direct-child, -none-fallback, -unlabelled-budget)"
+        anchor: { file: agents/goal-budget.sh, pattern: "goal_resolve_ancestor" }
       - desc: "the worker's slice is BOUNDED — Goal+Acceptance card only, never the spec tree"
         anchor: { file: agents/agent-session.sh, pattern: "GOAL CONTEXT" }
       - desc: "the reasoning-tier model map (launcher-owned, ADR-094)"
@@ -534,7 +537,8 @@ transitions:
   - id: IL-T15
     name: goal-lane sprouts queue at harvest — only while the goal is open AND funded
     owner: scan harvest-disposition block (decides) → merged-closeout play (obeys)
-    when: "the scan resolved a task/goal ancestor for the closeout item → the sprout is filed into
+    when: "the scan resolved a goal ancestor (task/goal label OR a machine-readable Budget: line —
+      homelab#367) for the closeout item → the sprout is filed into
       that goal's post-launch bucket (IL-T17) and gets agent-fix+agent/queued ONLY when the goal is
       OPEN and the shared Budget: read rules `within`. Closed goal, exhausted or unparseable budget,
       unresolved bucket, or no goal ancestor at all → filed with NO queue labels."
@@ -550,6 +554,8 @@ transitions:
         anchor: { file: agents/coordinator/README.md, pattern: "THE GOAL LANE IS DECIDED FOR YOU" }
       - desc: "ONE Budget: read, shared with the enforcing launcher pre-flight — never a second sum"
         anchor: { file: agents/goal-budget.sh, pattern: "goal_budget_read" }
+      - desc: "…and ONE ancestor walk under it, the same one the launcher pre-flight resolves with: until homelab#367 this block answered goal #278 for rides the launcher was gating against bucket #295"
+        anchor: { file: agents/coordinator-scan.sh, pattern: "goal_resolve_ancestor" }
       - desc: "the reviewer emits NO Follow-ups at depth ≥2 — the tree is capped at sprouts-of-children"
         anchor: { file: agents/reviewer-session.sh, pattern: "depth-conditional half of the harvest bar" }
     incidents:

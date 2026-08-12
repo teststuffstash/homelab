@@ -1,0 +1,29 @@
+# homelab#367 — the OTHER half of the same walk: the lane that was already correct must stay so.
+#
+# CONDITION UNDER REPLAY. Issue #291 is a DIRECT child of goal #278 — one hop, the decompose lane,
+# the case the shipped single-hop read got right. Same goal, same recorded body as its bucket-child
+# sibling fixture; only the entry point differs.
+#
+#     #291 (this ride) → #278 (task/goal, Budget: 60)
+#
+# WHY IT IS WORTH A FIXTURE. A transitive walk is a change to EVERY dispatch, not only to the
+# sprouts it was written for, and the cheapest way to break the common lane is to make the walk
+# clever about it. What this pins:
+#   1. `GATE SUBJECT: #278` and #278's card — identical to the pre-#367 behaviour.
+#   2. The walk stops IMMEDIATELY: exactly one `issue view` and NO second `/parent` read. A goal
+#      that answers on the first test costs one extra read over the old code, and that read is the
+#      whole price of the fix; a stream with a hop in it here would mean the walk climbs past goals.
+#   3. NO "walked N hop(s)" line. The launcher says something only when the goal is NOT the parent —
+#      log noise on the busiest lane is how a useful line stops being read.
+#
+# THE WORLD IS RECORDED FROM LIVE homelab STATE (2026-08-12): the #291 → #278 edge is real, and
+# `issue-view-278.json` is the same verbatim recording the bucket-child fixture serves. Same
+# deliberate edit as there — the `/parent` payload is trimmed to the `{id, number, title}` the
+# clause reads.
+name: goal-ancestor-direct-child
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:goal-ancestor
+  - file:post.sh

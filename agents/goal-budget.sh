@@ -49,21 +49,86 @@ gb_cap() {   # gb_cap <issue-chars> <model> [agent-budget/* label]
 
 gb_add() { python3 -c "import sys;print(round(float(sys.argv[1])+float(sys.argv[2]),4))" "$1" "$2"; }
 
+# The `Budget:` GRAMMAR, one home (stdin: an issue body → stdout: the USD number, or empty).
+# Both readers below need it — the sum parses the goal's line, the walk tests an ancestor for one —
+# and a second copy of a parser this load-bearing is how a currency symbol disabled the whole gate
+# once already (see goal_budget_read). Currency symbols are stripped and the NUMBER IS READ AS USD:
+# the estimator prices in USD (cap_usd) because OpenRouter does, so a `Budget: €5` funds $5, not €5.
+# A deliberate, stated approximation — the alternative is an FX rate this platform has no business
+# carrying. Write the number you mean in dollars.
+gb_budget_line() {
+  sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 | sed 's/^[^0-9]*//' | tr -d '[:space:]' \
+    | grep -E '^[0-9]+(\.[0-9]+)?$' || true
+}
+
+# ── WHICH issue is the goal — the question the sum is asked ABOUT (homelab#367) ──────────────────
+#
+#   goal_resolve_ancestor <slug> <issue> [max-hops]
+#     → GB_GOAL  the goal issue this one belongs to ('' = none within the bound)
+#       GB_HOPS  parent hops walked to reach it (0 = <issue> IS the goal)
+#
+# `goal_budget_read` answers "what has this goal spent". It cannot answer "which of my ancestors IS
+# the goal", and until #367 the two callers answered that differently: coordinator-scan.sh climbed
+# the native `parent` chain, agent-session.sh read `/issues/<n>/parent` ONCE. One hop is right for a
+# direct child and wrong for everything ADR-102 files post-launch — a sprout's parent is the
+# post-launch BUCKET, which carries no `Budget:` line, so the launcher pre-flight read `no-budget`
+# (gate off by design) and the goal card came from the bucket (no Goal/Acceptance headings ⇒ a
+# goal-blind ride, the exact forgetting FU-090 leg (c) built the card to end). Measured live on
+# homelab #367 → #295 → #278: the gate was reading the bucket while goal #278 sat at $76 of $60
+# `exhausted`, and #351 dispatched straight through it. Worse than "one lane is ungated": the
+# DOWNWARD sum is transitive, so bucket children were adding to the sum while exempt from the gate
+# that sum feeds.
+#
+# So the walk lives HERE, beside the sum, and both callers use it. The ⚖ line on #207 that moved
+# the arithmetic into this file ("do not duplicate it, call the same helper") applies with more
+# force to the question it is asked about: two components disagreeing on WHICH issue is the goal is
+# the same defect class as two components summing it differently, reached one indirection earlier.
+#
+# STOP CONDITION: a `task/goal` label OR a machine-readable `Budget:` line — the two discriminators
+# docs/agents/issue-authoring.md names ("labels route, body lines parameterise"), read in ONE
+# `gh issue view --json labels,body` per hop. EITHER alone stops the walk, on purpose: the label is
+# what the goal lane routes on, the `Budget:` line is what the gate spends against, and an ancestor
+# carrying one without the other is a mis-authored goal that must still be FOUND — walking past a
+# funded issue is precisely how money goes unwatched.
+#
+# THE BOUND IS 6, measured rather than guessed, and it travels with the walk instead of being
+# re-argued at each caller: the reviewer's depth-≥2 bar suggested 4, until #207's dry-run walked the
+# real circles#29 tree and found #75 → #47 → #18 → #29 — four hops on a tree that exists today
+# (agents/replay/fixtures/harvest-deep-sprout pins it). ADR-102's other case, oracle-fleet goal-174,
+# grew THREE generations post-close. Cost is two reads per hop, only until the goal answers.
+#
+# SILENT-SAFE, like every read on this path: an API that does not answer ends the walk with GB_GOAL
+# empty, and each caller states its own degrade (the launcher keeps the direct parent for the card;
+# the scan files the sprout inert). ⚠ PIPE TO A REAL jq, never `gh --jq` — the standing rule in this
+# lane, and what lets a replay fixture record the actual API payload rather than a post-jq scalar.
+goal_resolve_ancestor() {   # <slug> <issue> [max-hops]
+  _gr_slug="$1"; _gr_cur="$2"; _gr_max="${3:-6}"
+  GB_GOAL=""; GB_HOPS=0
+  case "$_gr_cur" in ''|*[!0-9]*) return 0 ;; esac
+  while [ -n "$_gr_cur" ] && [ "$GB_HOPS" -lt "$_gr_max" ]; do
+    _gr_view="$(gh issue view "$_gr_cur" --repo "$_gr_slug" --json labels,body 2>/dev/null || true)"
+    _gr_lbl="$(printf '%s' "$_gr_view" | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)"
+    _gr_bud="$(printf '%s' "$_gr_view" | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
+    if [ "$_gr_lbl" = "true" ] || [ -n "$_gr_bud" ]; then GB_GOAL="$_gr_cur"; return 0; fi
+    _gr_par="$(gh api "repos/${_gr_slug}/issues/${_gr_cur}/parent" 2>/dev/null \
+                | jq -r '.number // ""' 2>/dev/null || true)"
+    case "$_gr_par" in ''|*[!0-9]*) return 0 ;; esac
+    _gr_cur="$_gr_par"; GB_HOPS=$((GB_HOPS + 1))
+  done
+  return 0
+}
+
 goal_budget_read() {   # <slug> <goal-issue> <model> [dispatch-issue]
   _gb_slug="$1"; _gb_goal="$2"; _gb_model="$3"; _gb_dispatch="${4:-}"
   _gb_proj="${_gb_slug#*/}"
   GB_BUDGET=""; GB_SUM=0; GB_ROWS=""; GB_VERDICT="no-budget"
 
-  # Currency symbols are stripped, and the NUMBER IS READ AS USD — the estimator prices in USD
-  # (cap_usd) because OpenRouter does. A `Budget: €5` therefore funds $5, not €5. That is a
-  # deliberate, stated approximation rather than a silent one: the alternative is an FX rate
-  # this platform has no business carrying. Write the number you mean in dollars.
-  # (Before this, a € sign parsed to empty and DISABLED the gate — fail-open, found 2026-08-05.)
+  # The grammar is `gb_budget_line` above — ONE home, shared with the ancestor walk (currency
+  # stripping, USD, and why a € sign once disabled the whole gate are all stated there).
   # ⚠ a REAL jq, not `gh --jq` — the standing rule in this lane, and what lets the #207 replay
   # fixtures record the actual API payload rather than a post-jq scalar.
   GB_BUDGET="$(gh issue view "$_gb_goal" --repo "$_gb_slug" --json body 2>/dev/null \
-    | jq -r '.body // ""' 2>/dev/null | sed -n 's/^[Bb]udget:[[:space:]]*//p' | head -1 \
-    | sed 's/^[^0-9]*//' | tr -d '[:space:]' | grep -E '^[0-9]+(\.[0-9]+)?$' || true)"
+    | jq -r '.body // ""' 2>/dev/null | gb_budget_line)"
   [ -n "$GB_BUDGET" ] || return 0
 
   # DESCENDANTS, not direct children (2026-08-05). A goal that overruns does it by sprouting

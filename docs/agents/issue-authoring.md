@@ -164,10 +164,13 @@ behaviour if its read is removed:
    unit (a 5th field — FU-114 L3 widened it to 4 for the task class, same move). Any child's unit
    arrives as *"child of goal #N"* and the item brief re-reads the goal before acting.
 2. **The worker gets a BOUNDED slice.** The launcher injects a `GOAL CONTEXT` block into the
-   environment card from the native parent — **Goal + Acceptance sections only**. ⚠ Injecting the
+   environment card from the goal — **Goal + Acceptance sections only**. ⚠ Injecting the
    whole parent re-imports the context cost decomposition exists to remove; that is precisely how
    circles#17 r1 died. Never the spec tree — children carry their own narrowed `Touches:` and cite
-   their own spec rows.
+   their own spec rows. ⚠ **The goal is an ANCESTOR, not necessarily the parent** (homelab#367):
+   this read was one hop until 2026-08-12, so every ADR-102 post-launch sprout — whose parent is
+   the *bucket* — got the bucket's (nonexistent) Goal/Acceptance and dispatched goal-blind, the
+   exact forgetting this leg exists to end. Same one-hop line fed the gate below; see leg (c).
 3. **The goal is re-evaluated, not merely survived.** A `goal-review` clause fires when a child
    closes (not only when the last one does): re-read the goal's acceptance against what actually
    shipped, then close, author more children, or stop at the **retro checkpoint** (rung 3 — a
@@ -191,7 +194,8 @@ gets designed from observed behaviour rather than guessed at.
 | `goal-decompose` trigger | `coordinator-scan.sh` — emitted instead of `queued-dispatch`, before recipe selection |
 | both plays | `agents/coordinator/README.md` §`goal-decompose`, §`goal-review` |
 | `task/goal` label | the claim taxonomy (Composition). ⚠ GitHub caps label descriptions at **100 chars** and `IssueLabels` is authoritative — one over-long description freezes the taxonomy for every claim-owned repo |
-| bounded goal context | `agent-session.sh` reads the native parent, injects **Goal + Acceptance only** |
+| bounded goal context | `agent-session.sh` reads the goal, injects **Goal + Acceptance only** |
+| which ancestor IS the goal | `goal_resolve_ancestor` in `agents/goal-budget.sh` — ONE walk, both callers (launcher pre-flight + scan harvest), bound 6, stopping at a `task/goal` label **or** a machine-readable `Budget:` line. Added by homelab#367, which found the launcher reading one hop: a post-launch sprout resolved to its ADR-102 bucket, so the gate below read `no-budget` (off) while the goal sat `exhausted`, and the card came from an issue with no Goal/Acceptance in it |
 | parent on child units | `coordinator-scan.sh` 5th unit field → `parent=<n>` in the item brief |
 | Σ(child caps) ≤ `Budget:` | `agent-session.sh` pre-flight, over open AND closed children, summing `cap_usd` (what the key ALLOWS, not what it forecasts) |
 | `goal-review` | `coordinator-scan.sh`, stateless: a child closed after the loop's newest comment on the goal |

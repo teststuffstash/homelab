@@ -677,9 +677,45 @@ if [ -n "${RECIPE:-}" ]; then
     # decomposition exists to remove, which is exactly how circles#17 r1 died (read 91
     # requirements, wrote nothing). The child's own Touches:/spec rows carry the detail.
     # Failure is SILENT-SAFE: no parent, or an API that does not answer, dispatches as before.
-    GOAL_PARENT="$(gh api "repos/${ORG:-teststuffstash}/${PROJECT}/issues/${ISSUE_N}/parent" \
+    #
+    # THE GOAL IS AN ANCESTOR, NOT NECESSARILY THE PARENT (homelab#367). This read used to be one
+    # hop — `/issues/<n>/parent`, and whatever came back was treated as the goal. Right for a
+    # direct child of a decompose; wrong for every post-launch sprout, whose parent is the ADR-102
+    # BUCKET: no `Budget:` line ⇒ the gate below read `no-budget` and waved the ride through, and
+    # no Goal/Acceptance headings ⇒ the card said "no heading found" and the ride went goal-blind.
+    # Both halves came off this one line. The walk is `goal_resolve_ancestor` (agents/goal-budget.sh)
+    # — the SAME one coordinator-scan.sh's harvest uses, which is the point: the scan was already
+    # resolving `goal=278 bucket=295` for the very rides this pre-flight was gating against #295.
+    #
+    # IT STARTS AT THE PARENT, NEVER AT THIS ISSUE, and that is load-bearing: a `goal-review` ride
+    # is dispatched with the goal itself as ISSUE_N, and a walk that tested the issue first would
+    # gate a goal's own review behind that goal's exhausted budget — locking out the one ride that
+    # can re-scope, refund or close it. The scan's caller DOES test its item first, because there
+    # the item is a closeout and a goal's own closeout must resolve to itself; same walk, different
+    # entry point, each stated where it is chosen.
+    # >>>REPLAY:goal-ancestor>>>
+    GOAL_PARENT=""
+    _gp_direct="$(gh api "repos/${ORG:-teststuffstash}/${PROJECT}/issues/${ISSUE_N}/parent" \
       --jq '.number' 2>/dev/null || true)"
-    case "$GOAL_PARENT" in ''|*[!0-9]*) GOAL_PARENT="";; esac
+    case "$_gp_direct" in ''|*[!0-9]*) _gp_direct="";; esac
+    if [ -n "$_gp_direct" ]; then
+      goal_resolve_ancestor "${ORG:-teststuffstash}/${PROJECT}" "$_gp_direct"
+      if [ -n "$GB_GOAL" ]; then
+        GOAL_PARENT="$GB_GOAL"
+        if [ "$GB_HOPS" -gt 0 ]; then
+          echo "→ Goal context: #${ISSUE_N}'s parent #${_gp_direct} is not the goal — walked ${GB_HOPS} hop(s) up to goal #${GOAL_PARENT} (post-launch lane, ADR-102)"
+        fi
+      else
+        # DEGRADE TO THE PRE-#367 BEHAVIOUR, never to nothing: an unlabelled, unfunded parent that
+        # happens to carry Goal/Acceptance headings produced a card before this change, and a walk
+        # that finds no goal must not take that away. It cannot weaken the GATE either — any
+        # ancestor with a machine-readable `Budget:` line is a stop condition of the walk, so a
+        # parent reached by this arm has none by construction and `goal_budget_read` returns
+        # `no-budget` on it exactly as it did before.
+        GOAL_PARENT="$_gp_direct"
+        echo "→ Goal context: no task/goal or Budget: ancestor above #${ISSUE_N} within the walk's bound — using the direct parent #${_gp_direct} for the card only (no funded goal ⇒ nothing to gate)"
+      fi
+    fi
     if [ -n "$GOAL_PARENT" ]; then
       GOAL_CARD="$(gh issue view "$GOAL_PARENT" --repo "${ORG:-teststuffstash}/${PROJECT}" \
         --json number,title,body --jq '"#\(.number) — \(.title)\n" +
@@ -697,6 +733,7 @@ if [ -n "${RECIPE:-}" ]; then
         echo "→ Goal context: child of #${GOAL_PARENT}, but no Goal/Acceptance heading found — dispatching without it"
       fi
     fi
+    # <<<REPLAY:goal-ancestor<<<
     # ── Σ(spend + live reservations) ≤ the goal's `Budget:` — leg (c)'s deterministic gate ─────
     # "Enforced in the LAUNCHER pre-flight — deterministic, beside WIP=1, NEVER LLM-honored"
     # (docs/agents/issue-authoring.md §Leg (c)). A decomposition that overruns its goal's funding

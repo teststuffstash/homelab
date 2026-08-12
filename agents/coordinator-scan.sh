@@ -2210,33 +2210,19 @@ EOF_GUARDED
           goal-review) hgoal="${uitem#issue-}" ;;
           # A closeout item is the GOAL itself (the assembly PR's own closeout), a goal CHILD
           # (depth 1), or a sprout of one (depth 2+). Test the item, then climb the native
-          # sub-issue chain. Testing the ITEM first is what puts the bucket under a goal whose own
-          # closeout is the unit; a walk that only looks upward would miss exactly the
-          # assembly-merge case ADR-102 names.
+          # sub-issue chain — `goal_resolve_ancestor` (agents/goal-budget.sh). Testing the ITEM
+          # first is what puts the bucket under a goal whose own closeout is the unit; a walk that
+          # only looks upward would miss exactly the assembly-merge case ADR-102 names, so this
+          # caller passes the item and the launcher pre-flight passes the PARENT (stated there).
           #
-          # THE BOUND IS 6, and it is measured, not guessed. The reviewer's depth-≥2 bar says
-          # chains should stop at three, so 4 looked generous — until the #207 dry-run walked the
-          # real circles#29 tree and found #75 → #47 → #18 → #29, which consumes all four. ADR-102's
-          # other case, oracle-fleet goal-174, grew THREE generations post-close. A bound that a
-          # live tree already touches is a bound that silently drops the deepest sprouts back onto
-          # the master lane — the exact class of loss this clause exists to stop — so it sits well
-          # clear of the observed maximum. The cost is two reads per hop, only until the goal
-          # answers; a non-goal item hits the top of its tree and stops long before this bites.
-          *) hcur="${uitem#issue-}"; hdepth=0
-             case "$hcur" in ''|*[!0-9]*) hcur="";; esac
-             # ⚠ PIPE TO A REAL jq, never `gh --jq`, on every read below (the standing rule in this
-             # file — `gh --jq` takes only an expression and silently degrades). It is also what
-             # lets the replay fixtures record REAL API payloads instead of post-jq scalars.
-             while [ -n "$hcur" ] && [ "$hdepth" -lt 6 ]; do
-               if [ "$(gh issue view "$hcur" --repo "$hslug" --json labels 2>/dev/null \
-                        | jq -r '[.labels[].name]|index("task/goal")!=null' 2>/dev/null || echo false)" = "true" ]; then
-                 hgoal="$hcur"; break
-               fi
-               hp="$(gh api "repos/${hslug}/issues/${hcur}/parent" 2>/dev/null \
-                      | jq -r '.number // ""' 2>/dev/null || true)"
-               case "$hp" in ''|*[!0-9]*) break;; esac
-               hcur="$hp"; hdepth=$((hdepth+1))
-             done ;;
+          # THE WALK MOVED into the helper (homelab#367) and did not change: same order, same two
+          # reads per hop, same bound of 6 — all of it argued where it now lives, beside the sum it
+          # feeds. It moved because agent-session.sh was answering the same question with ONE hop,
+          # so this block resolved `goal=278 bucket=295` for rides the launcher was gating against
+          # #295 — a bucket with no `Budget:` line, i.e. no gate at all.
+          *) command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
+             goal_resolve_ancestor "$hslug" "${uitem#issue-}"
+             hgoal="$GB_GOAL" ;;
         esac
         if [ -n "$hgoal" ]; then
           hgj="$(gh issue view "$hgoal" --repo "$hslug" --json title,state 2>/dev/null || echo '{}')"

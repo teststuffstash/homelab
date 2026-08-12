@@ -1,4 +1,4 @@
-CALL gh issue view 50 --repo teststuffstash/circles --json labels
+CALL gh issue view 50 --repo teststuffstash/circles --json labels,body
 CALL gh api repos/teststuffstash/circles/issues/50/parent
 OUT ITEM repo=circles item=issue-50 clause=merged-closeout
 OUT REACHED: end
