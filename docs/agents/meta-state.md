@@ -44,17 +44,17 @@ meant to avoid.)
    feature goals (master-lane variant RETIRED — not a Goal), origin lineage (bucket back to
    ADR-102's strays-only role), findings store + checkpoints, fence → metadata + MECHANICAL
    governance lint, mutex scoped to the deterministic phase, stack scope ·
-   A4 v1.2 minimum build — 2 of 4 legs SHIPPED 2026-08-12: governance lint (operator-direct,
-   scripts/governance-lint.sh + ci.yaml, 4 arms live-tested) + sibling-repo merge doorbell
-   (#396, exporter open-set diff — the fleet-wide missing merge edge). REMAINING = the core:
-   findings store + checkpoint clause + origin-parenting harvest + goal-review burn-down
-   demotion — one coupled chunk, wants a fresh session (FSM + replay fixtures per ADR-103;
-   design: issue-authoring.md §v1.2 lifecycle) · A5 RULED 2026-08-12 (mapping session): leg 1 SHIPPED (#401 — sentinel shadows homelab; the
+   A4 ✅ ALL FOUR LEGS DONE 2026-08-12: governance lint (direct) + merge doorbell (#396) +
+   the core (#398, 3 review rounds): findings store (goal-findings.sh, CI self-test) +
+   goal-checkpoint clause + harvest=store + burn-down demotion; FSM IL-T12/T15 rewritten · A5 RULED 2026-08-12 (mapping session): leg 1 SHIPPED (#401 — sentinel shadows homelab; the
    tier-1 scaffold line drops when IAC-G04 enforces there or on the operator's trust call);
    further ownership/gate changes now BATCH into the governance-checkpoint pile
    (iac-lane.md §The platform lane — one /design-agents sitting per batch, never per-event
-   one-liners); full narrowing stays blocked on an assembly single-tax replacement · A6 hygiene (goal-budget dash guard, #377, FU-166(a),
-   inert triage). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
+   one-liners); full narrowing stays blocked on an assembly single-tax replacement · A6: #377 class ✅ (#402, 4 rounds — 27 :-null guards + goal-budget bash guard; ⚠ lesson:
+   a mechanical sweep regex corrupted 4 printf sites, bot caught the regression) · FU-166 ✅
+   WHOLE (#403 + archived: park/reflex split series, CodeownerParkWaiting, Prometheus-first
+   watch w/ collector-liveness key, the Goal-run cockpit — dashboard tf-APPLIED) · inert 🌱
+   triage → Bucket B (operator: decide with the pre-Goal issue sweep). FU-168's design half = DELIVERED by ADR-106; its build half rides A2/A4.
    Jail latency fix (meta-events.sh, FU-166(b)) DONE first, direct to master.
    **Subagent trial RUN 1 recorded 2026-08-12** (goal-ancestor table-mode, PR#392 merged):
    defects by catch-point seat 0 / bot 0 / post-merge = watch with lag; 148.5k subagent tokens;
@@ -120,6 +120,9 @@ meant to avoid.)
    legs 3–4 · FU-150 = quiet-month window opens ~2026-09-11 · FU-146/FU-147 soaks unchanged ·
    #289 launches at oracle unpark · snore#15 = FU-051 verdict work. (FU-140/145/158/160/162/165
    ARCHIVED by the sweep — crash-net proven 297/0, phase metrics live, pilot validated.)
+4b′. ⚠ NEW small drift: `kubernetes_labels.longhorn_bulk_zone["wk-metal-04"]` flaps in the
+   plan (applied, then reads changed again — something node-side rewrites it); chase when next
+   in tofu, not urgent.
 4b. ✅ DRIFT APPLIED 2026-08-12 (attended): wk-metal-04 ephemeral taint verified on the node;
    ci-runner-01 REPLACED and verified up (guest agent: .55 on eth0, docker0 up, SSH over TCP —
    ⚠ ICMP from the jail lies here, probe TCP).

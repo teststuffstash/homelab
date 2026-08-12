@@ -3833,3 +3833,20 @@ carve-out — ADR-106 (4) direction; de-dup fix.yaml/build.yaml shared rules int
 launcher-injected card, own issue). FU-051 step 1 found ALREADY APPLIED (operator's no-changes
 plan = evidence; tracker corrected). meta-events grew the CI-RED seat-PR clause (operator catch:
 #394 sat red invisibly) — caught #398's red on its first live chance the same hour.
+
+↳ (evening close, 2026-08-12 ~18:30Z) **Bucket A COMPLETE** (A6's inert triage → B by ruling).
+The evening's chain: A5 ruled + leg 1 (#401 — sentinel shadows homelab; governance-checkpoint
+pile is the process now, iac-lane.md); A6 #377-class (#402, FOUR rounds: instances → the class
+sweep → the sweep's own regex corrupted 4 printf sites into unconditional guard failure — the
+bot caught a real regression I authored; lesson: a mechanical regex sweep is a DIFF to review,
+not a substitution to trust) + goal-budget bash guard; FU-166 WHOLE (#403 + archive) — park
+series + alert + Prometheus-first watch + the operator's Goal-run cockpit (split stats,
+clickable repo#N tables; tf-applied). A4 core merged (#398, 3 rounds — r3 wired the self-test
+into CI). Machinery proven live within hours of shipping: the unstrand belt served #398, the
+CI-RED clause caught 3 reds, the @ts clause surfaced 3 same-verdict rounds, the merge doorbell
++ #402's edge review ran end-to-end (dispatch 18:12:44 → verdict 18:14:59, beating the cron).
+⚠ Two self-inflicted finds worth carrying: (1) the meta watcher EXECUTES THE WORKING TREE —
+branch-hopping ran two versions of needs-meta and manufactured the circles#80 flap (fix: the
+collector-liveness key + staying on master when idle); (2) clause-4's Prometheus-first read
+trusted "reachable+empty" pre-rollout — absence is a claim about the exporter, now keyed on a
+sibling series. Residual: wk-metal-04 longhorn-label plan flap (meta-state 4b′).
