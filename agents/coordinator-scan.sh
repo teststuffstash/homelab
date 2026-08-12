@@ -2215,11 +2215,13 @@ EOF_GUARDED
           # only looks upward would miss exactly the assembly-merge case ADR-102 names, so this
           # caller passes the item and the launcher pre-flight passes the PARENT (stated there).
           #
-          # THE WALK MOVED into the helper (homelab#367) and did not change: same order, same two
-          # reads per hop, same bound of 6 — all of it argued where it now lives, beside the sum it
-          # feeds. It moved because agent-session.sh was answering the same question with ONE hop,
-          # so this block resolved `goal=278 bucket=295` for rides the launcher was gating against
-          # #295 — a bucket with no `Budget:` line, i.e. no gate at all.
+          # THE WALK MOVED into the helper (homelab#367): same order, same two reads per hop, same
+          # bound of 6, all of it argued where it now lives — beside the sum it feeds. One thing
+          # widened: the per-hop read is `--json labels,body` and a machine-readable `Budget:` line
+          # ALSO stops the walk, so a funded-but-unlabelled ancestor resolves here too (the reason
+          # is at the helper). It moved because agent-session.sh was answering the same question
+          # with ONE hop, so this block resolved `goal=278 bucket=295` for rides the launcher was
+          # gating against #295 — a bucket with no `Budget:` line, i.e. no gate at all.
           *) command -v goal_resolve_ancestor >/dev/null 2>&1 || . "${HERE}/goal-budget.sh"
              goal_resolve_ancestor "$hslug" "${uitem#issue-}"
              hgoal="$GB_GOAL" ;;
