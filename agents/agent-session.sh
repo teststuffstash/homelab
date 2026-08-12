@@ -73,19 +73,35 @@ done
 # minutes to every ride would present as "the loop feels slow" and nothing in the platform would
 # say otherwise. So the launcher publishes the phases IT owns, as each one closes:
 #
-#   agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}
+#   agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}
 #
-# ⚠ THIS IS THE LAUNCHER HALF ONLY. clone, `devbox install`, the LLM loop, the in-pod gates and
-# pr-open all happen inside the pod, and their timestamps belong to `agent-finalize` — a different
-# repo (agent-runtime). `ride` here is the ENVELOPE around all of them: one number, not a
-# breakdown. Splitting it is FU-160's other half and it has no sibling issue yet, so a `ride` bar
-# that grows tells you WHERE to look, not what happened.
+# ⚠ TWO PHASES, AND THE LIST ENDS AT pod-Ready. This is the corrected shape (homelab#324); #287
+# shipped `ride` and `bookkeeping` here too, and both had to go. The launcher closes them only if
+# the LAUNCHER PROCESS outlives the ride, and in the cluster dispatch path it usually does not —
+# the seat that runs this script is a coordinator session whose shell invocation is time-bounded,
+# so the launcher is killed mid-follow and the last thing it ever pushed is `pod-spinup`.
+# MEASURED on the live gateway at 2026-08-12T04:0xZ, 24 ride groups:
+#   • `ride` was present on 5 of 24 — and the survivors are not the short rides (892s survived,
+#     292s did not), so it is a race with the seat's remaining lifetime, not a threshold anyone
+#     can tune. A metric that lands one time in five is not a slow metric, it is a biased one.
+#   • On all 5 where it did land, `ride` equalled the sum of the IN-POD rows to within 1.0–2.7s
+#     (892 vs 889.3, 268 vs 267.0, 215 vs 213.3, 339 vs 338.0, 200 vs 197.3). The envelope carries
+#     no fact those rows do not — the delta IS the Ready→container-clock seam, and nothing else.
+#   • `bookkeeping` was 0.0 on 5 of 5. It never measured anything, because FU-064/FU-043 moved the
+#     work it was named for (arm, stats comment, strike) INTO the pod; what is left in the exit
+#     path here is the fallback-not-taken, plus the router report and the doorbell.
+# So the honest family is the two phases the launcher can always close, and the interior belongs
+# to whoever survives to see it. That is `agent-finalize` (agent-runtime#66), which since
+# 2026-08-11 pushes `clone|devbox-install|llm-loop|finalize` under this same metric and job with
+# one extra grouping label, `source="in-pod"` — a distinct group, so neither side clobbers the
+# other. Launcher rows carry no `source` label; `agent_run_phase_seconds{source=""}` selects
+# exactly the two below. Together the chain is gapless from dispatch to PR-open.
 #
 # THE FAMILY IS RE-PUSHED WHOLE, every time, and that is not redundancy. The pushgateway replaces
 # per METRIC NAME within a group, so a push carrying only `phase="pod-spinup"` would DELETE the
 # `phase="dispatch-gates"` series pushed a minute earlier — every ride would end holding exactly
-# one phase, the last one. Accumulating and re-pushing also means a ride that dies mid-flight
-# leaves the phases it did complete, which is the case the metric exists for.
+# one phase, the last one. Accumulating and re-pushing also means a ride that dies before Ready
+# leaves the phase it did complete, which is the case the metric exists for.
 #
 # ITS OWN JOB, never `agent_run`: agent-finalize PUTs the run group at end-of-ride, and a PUT
 # replaces the group WHOLESALE. Phases pushed into that group would be alive for the length of the
@@ -103,10 +119,14 @@ RUN_PHASE_FAMILY=""      # every phase closed so far, in exposition format — r
 RUN_PHASE_WARNED=""
 rp_now() { date -u +%s; }     # replay seam: the wall clock
 RUN_PHASE_MARK="$(rp_now)"    # start of the OPEN phase; every close moves it forward
-run_phase() {   # $1 = dispatch-gates | pod-spinup | ride | bookkeeping — close the open phase, publish, open the next
+run_phase() {   # $1 = dispatch-gates | pod-spinup — close the open phase, publish, open the next
   local phase="${1:-}" now rp_issue
   case "$phase" in
-    dispatch-gates|pod-spinup|ride|bookkeeping) ;;
+    # The set is CLOSED at pod-Ready, deliberately (homelab#324). `ride` and `bookkeeping` land
+    # here as unknown phases now — that is the guard, not an oversight: re-adding a call after the
+    # log-follow re-introduces a series that exists on one ride in five and duplicates the in-pod
+    # rows when it does. The interior is `source="in-pod"`, agent-finalize's.
+    dispatch-gates|pod-spinup) ;;
     *) echo "run_phase: unknown phase '${phase}' — nothing pushed" >&2; return 0 ;;
   esac
   now="$(rp_now)"
@@ -1284,7 +1304,7 @@ case "$TASK" in issue-[0-9]*|pr-[0-9]*)
       exit 3;;
   esac
 ;; esac
-# FU-160 phase 1 of 4. Everything above this line is the launcher's DETERMINISTIC dispatch cost —
+# FU-160 phase 1 of 2. Everything above this line is the launcher's DETERMINISTIC dispatch cost —
 # the router consult, the rail probe, the card + recipe build, the pre-flight guards, the
 # subscription latch, the credit gate, the stack-cache probe, the argv ceiling. It closes here
 # because past this point a pod exists and the cost stops being ours.
@@ -1478,8 +1498,10 @@ EOF
 
 echo "→ waiting for ${POD} (a cold node may pull the image + nix store for minutes)…"
 "$KUBECTL" $KUBE -n "$NS" wait --for=condition=Ready pod/"${POD}" --timeout=600s || true
-# FU-160 phase 2 of 4, and the one the spike was written for: schedule + image pull + container
-# start. `|| true` above means a pod that never became Ready closes this phase at the 600s timeout
+# FU-160 phase 2 of 2 — the LAST phase the launcher owns, and the one the spike was written for:
+# schedule + image pull + container start. Everything after this line is measured from INSIDE the
+# pod (`source="in-pod"`), because that is the only process guaranteed to still be alive for it.
+# `|| true` above means a pod that never became Ready closes this phase at the 600s timeout
 # rather than never closing it — a 600s bar is itself the finding, so the value is kept, not
 # suppressed. This is the number that makes "was the image node-cached?" answerable while it is
 # still true, instead of after the events have aged out.
@@ -1511,11 +1533,12 @@ if [ -n "$RUN_CMD" ]; then
   # classification below has something to read.
   [ -s "$RUNLOG" ] || "$KUBECTL" $KUBE -n "$NS" logs "${POD}" > "$RUNLOG" 2>/dev/null || true
   echo "→ run finished. delete with: kubectl -n ${NS} delete pod ${POD}"
-  # FU-160 phase 3 of 4 — the in-pod ENVELOPE, deliberately unsplit here (see the emitter's header:
-  # clone / devbox / LLM loop / gates / pr-open are agent-finalize's timestamps, in agent-runtime).
-  # A ride that outran AGENT_LOG_DEADLINE_S closes this phase at the give-up, not at the pod's real
-  # end — the launcher stopped watching, and the metric says what the launcher saw.
-  run_phase ride
+  # FU-160 / homelab#324: NO `run_phase ride` here, and the absence is the fix. Reaching this line
+  # means the launcher outlived the ride — which happened on 5 of 24 measured rides, so a phase
+  # closed here would be a sample of the rides that let the launcher live, presented as a fleet
+  # median. The interior of the envelope arrives from inside the pod instead
+  # (`agent_run_phase_seconds{source="in-pod"}`, agent-runtime#66) on every ride, including the
+  # ones this process never sees the end of. Emitter header has the measurements.
 
   # End-of-session stats: agent-finalize emitted one AGENT_RUN_STATS json line into the logs (cost,
   # duration, model, and the recipe's outcome). Echo it, and if a PR was opened, post it as a PR
@@ -1719,11 +1742,13 @@ if [ -n "$RUN_CMD" ]; then
       "${AGENT_LOOP_WEBHOOK:-http://agent-loop-eventsource-svc.agent-coordinator.svc.cluster.local:12000}/coordinate" \
       >/dev/null 2>&1 && echo "→ coordinator doorbell rung (/coordinate ${_door})" || true
   fi
-  # FU-160 phase 4 of 4: the launcher's exit path — stats parse, the arm/comment fallback, the
-  # strike classification and comment, the router report, the doorbell. Small when everything
-  # works and a GitHub API stall is exactly the kind of thing it exists to make visible. Last
-  # push of the run, so it is also the one that carries the complete family.
-  run_phase bookkeeping
+  # FU-160 / homelab#324: no `run_phase bookkeeping` either. It measured 0s on 5 of the 5 rides
+  # that ever reached it, and that is correct rather than broken — FU-064/FU-043 moved arming, the
+  # stats comment and the strike INTO the pod, so everything above is the fallback-not-taken plus
+  # a router report and a doorbell. The in-pod `finalize` row (~11s, on every ride) is where that
+  # work now is. What this drops is the ability to see a GitHub API stall in the launcher's own
+  # exit path; the *_by_pod flags on the stats line say whether the fallback ran at all, and a
+  # stall in the leg that matters is inside `finalize`.
   rm -f "$RUNLOG"
 else
   ATTACH="kubectl --kubeconfig tofu/kubeconfig -n ${NS} exec -it ${POD} -- bash -c 'cd /work/repo; exec bash -l'"

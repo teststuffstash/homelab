@@ -1,23 +1,31 @@
-# FU-160 / homelab#287 — the LAUNCHER half of the ride phase metrics.
+# FU-160 / homelab#287, corrected by homelab#324 — the LAUNCHER half of the ride phase metrics.
 #
-# CONDITION UNDER REPLAY. One dispatch of `openrouter-operator` issue #42 round 2 walks all four
-# phases in order, then the degenerate calls that must never cost a dispatch: an unknown phase, a
-# task-less (interactive) session, a disabled gateway, and a gateway that refuses the push twice.
+# CONDITION UNDER REPLAY. Five launcher processes dispatching `openrouter-operator` issue #42
+# round 2. Run A is killed mid-follow (the production path — 19 of 24 measured rides); run B
+# survives the whole ride and must be INDISTINGUISHABLE from A; then the degenerate calls that
+# must never cost a dispatch: an unknown phase, a task-less (interactive) session, a disabled
+# gateway, and a gateway that refuses the push twice.
 #
 # THE CONTRACT:
+#   0. THE LAUNCHER OWNS TWO PHASES AND THE LIST ENDS AT pod-Ready (#324). `ride` and
+#      `bookkeeping` were removed because the launcher usually does not live long enough to close
+#      them — and on the rides where it did, `ride` reproduced the sum of the in-pod rows to
+#      within 1–3s and `bookkeeping` was 0.0 every single time. Runs A and B are that decision as
+#      an assertion: the metric must not encode whether the launcher survived. Everything past
+#      Ready is agent-finalize's, under the same metric and job with `source="in-pod"`.
 #   1. THE FAMILY IS RE-PUSHED WHOLE. The pushgateway replaces per metric NAME within a group, so
 #      a push carrying only the phase that just closed would delete every earlier phase and each
 #      ride would end holding exactly one number. The growing STDIN block below is that rule as an
 #      assertion — drop the accumulator and the fixture reds on push #2, not in six weeks on a
-#      dashboard that quietly only ever shows `bookkeeping`.
+#      dashboard that quietly only ever shows `pod-spinup`.
 #   2. ITS OWN JOB (`agent_run_phase`), keyed (project, issue, round, role) — asserted in the URL.
 #      agent-finalize PUTs the `agent_run` group at end-of-ride and a PUT replaces a group
 #      wholesale, so phases pushed there would vanish at the exact moment the ride got
 #      interesting. `issue` drops a leading `issue-` and nothing else, so a `pr-<n>` task keeps its
 #      prefix and joins the run ledger's own label.
 #   3. THE CLOCK ADVANCES EVEN WHEN NOTHING IS PUSHED. A task-less session publishes no series but
-#      must not fold two phases into one for whoever calls it next — pinned here by the
-#      task-less/gateway-less calls landing between real ones and the durations staying honest.
+#      must not fold two phases into one for whoever calls it next — pinned in run C by a silent
+#      call landing between the mark and a real push, and the duration staying honest.
 #   4. Every degenerate path RETURNs 0 and the unreachable-gateway warning is LATCHED to one line.
 #      A launcher that refused to dispatch because a metrics sink was down would be a strictly
 #      worse bug than the invisibility this metric exists to fix, and four warnings per jail run

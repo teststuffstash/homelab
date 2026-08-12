@@ -68,29 +68,52 @@ the existing `agent_run_*` cost panels, and a degradation alert — e.g. p50 of 
 exceeding its baseline by minutes (a cold/bad cache shows up as pod-spinup/gates inflation long
 before anyone notices rides "feel slow"). One specimen is a spike; a time series is a belt.
 
-### The launcher half, shipped 2026-08-11 (homelab#287)
+### Standing metrics, shipped 2026-08-11 (homelab#287, #319, agent-runtime#66; corrected by #324)
 
-`agents/agent-session.sh` now pushes `agent_run_phase_seconds{phase=…}` per ride for the four
-phases the LAUNCHER's own timestamps cover, keyed like the run ledger (project, issue, round,
-role) under its own pushgateway job `agent_run_phase`:
+`agent_run_phase_seconds{phase=…}` is pushed per ride, keyed like the run ledger
+(project, issue, round, role) under its own pushgateway job `agent_run_phase`. **Two emitters
+write it**, in two sibling groups told apart by one label:
 
-| phase | what it measures | the specimen above |
-|---|---|---|
-| `dispatch-gates` | router consult, rail probe, card + recipe build, pre-flight guards, subscription latch, credit gate, cache probe, argv ceiling — everything deterministic before a pod exists | part of the 47s "coordinator session" row |
-| `pod-spinup` | `create` → `condition=Ready`: schedule + image pull + container start | 34s (worker) / 51s (coordinator) |
-| `ride` | Ready → the log stream ends — the whole in-pod session as ONE number | ~5m18s |
-| `bookkeeping` | stats parse, arm/comment fallback, strike, router report, doorbell | part of the 72s to merge |
+| phase | `source` | emitter | what it measures | the specimen above |
+|---|---|---|---|---|
+| `dispatch-gates` | *(none)* | `agents/agent-session.sh` | router consult, rail probe, card + recipe build, pre-flight guards, subscription latch, credit gate, cache probe, argv ceiling — everything deterministic before a pod exists | part of the 47s "coordinator session" row |
+| `pod-spinup` | *(none)* | `agents/agent-session.sh` | `create` → `condition=Ready`: schedule + image pull + container start | 34s (worker) / 51s (coordinator) |
+| `clone` | `in-pod` | `agent-finalize` | the repo clone inside the pod | ~3s |
+| `devbox-install` | `in-pod` | `agent-finalize` | `devbox install` against the nix-cache mirror | (not separated in the reconstruction) |
+| `llm-loop` | `in-pod` | `agent-finalize` | end of prep → finalize's first statement: the harness/LLM loop, the model's own `devbox run ci` invocations included | ~3m37s + the ~67s post-push |
+| `finalize` | `in-pod` | `agent-finalize` | usage settle, salvage push, PR arm + issue link, summary/strike comments | part of the 72s to merge |
+
+The launcher's list **ends at pod-Ready, and that is the whole of it** (homelab#324). #287 shipped
+a `ride` envelope and a `bookkeeping` phase here too, on the assumption that the launcher process
+survives the ride. In the cluster dispatch path it usually does not — the seat running it is a
+coordinator session whose shell invocation is time-bounded, so it is killed mid-follow. Measured on
+the live gateway 2026-08-12, 24 ride groups:
+
+- `ride` was present on **5 of 24**, and not the short ones (892s survived, 292s did not) — it is a
+  race with the seat's remaining lifetime, not a threshold anyone can tune.
+- on those 5, `ride` equalled **the sum of the in-pod rows to within 1.0–2.7s** (892 vs 889.3,
+  339 vs 338.0, 268 vs 267.0, 215 vs 213.3, 200 vs 197.3). The delta is the Ready→container-clock
+  seam; the envelope carried no fact the in-pod rows do not.
+- `bookkeeping` was **0.0 on 5 of 5** — correct, not broken: FU-064/FU-043 moved arming, the stats
+  comment and the strike into the pod, so what the launcher had left to time was the
+  fallback-not-taken. That work is the `finalize` row now.
+
+So the two were removed rather than taught to survive: a phase that lands one ride in five is not a
+slow metric but a biased one, and the fleet p50 it fed was a median over the rides that happened to
+let their launcher live. **What was given up**: a stall in the launcher's *own* exit path (router
+report, doorbell) is no longer timed — the `*_by_pod` flags on the stats line say whether the
+fallback ran, and the leg that can actually stall is inside `finalize`.
 
 Read them on the `agent-issue` dashboard (`Ride phase breakdown` + `Ride phase p50 — FLEET`);
 `AgentRunPhaseSlow` (argocd/resources/pushgateway/prometheusrule.yaml) fires when a phase's
-last-hour p50 doubles against its own older history, with a 60s floor and a ≥3-ride minimum.
+last-hour p50 doubles against its own older history, with a 60s floor and a ≥3-ride minimum — over
+**both** sources, since it aggregates `by (phase)` and joins on labels that exclude `source`.
 
-**The rows this does NOT cover, and why.** Everything inside the pod — clone, `devbox install`,
-the LLM loop, the in-pod gates, pr-open — has its timestamps in `agent-finalize`, which lives in
-**agent-runtime**, a different repo; `ride` is the envelope around all of it, so a `ride` bar that
-grows says where to look and nothing more. The dispatch rows ABOVE the launcher (ring → scan pod,
-scan pod, coordinator pod spin-up, coordinator session) are the coordinator's, not the launcher's,
-and are likewise unmeasured. Both are FU-160's remaining halves and neither has a sibling issue
-yet. Also unchanged by this: **whether the image was node-cached** is still not a fact anyone
-emits — `pod-spinup` makes a cold pull VISIBLE as a number, which is what the alert keys on, but
-attributing it still means reading pod events while they exist.
+**The rows still NOT covered, and why.** The dispatch rows ABOVE the launcher — ring → scan pod,
+scan pod, coordinator pod spin-up, coordinator session — are the coordinator's. They are measured
+(homelab#319) but as a **separate family**, `agent_dispatch_phase_seconds`, keyed per STACK and
+overwritten each dispatch, so they have their own panel and no alert: see the rule's comment for
+why every guard in `AgentRunPhaseSlow` would misfire on them. Also unchanged by any of this:
+**whether the image was node-cached** is still not a fact anyone emits — `pod-spinup` makes a cold
+pull VISIBLE as a number, which is what the alert keys on, but attributing it still means reading
+pod events while they exist.

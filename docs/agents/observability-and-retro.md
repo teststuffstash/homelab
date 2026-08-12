@@ -158,11 +158,13 @@ caching problems.
 pod lifetimes, and the second one ([`spikes/ride-latency-breakdown.md`](../spikes/ride-latency-breakdown.md),
 2026-08-09) hit the wall that shape always hits: its most useful question — was that pod's image
 node-cached? — was unanswerable, because the events had aged out. Since 2026-08-11 the launcher
-emits `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup|ride|bookkeeping}` per ride to the
-same pushgateway as `agent_run_*` (FU-160, homelab#287), with a breakdown panel on the
-`agent-issue` dashboard and the `AgentRunPhaseSlow` deviation alert behind it. Phase list, what
-each one covers and what it deliberately does not (the in-pod breakdown is `agent-finalize`'s, in
-agent-runtime) live in the spike; this paragraph is the pointer.
+emits `agent_run_phase_seconds{phase=dispatch-gates|pod-spinup}` per ride to the
+same pushgateway as `agent_run_*` (FU-160, homelab#287), and `agent-finalize` adds the ride's
+interior to the same metric under `source="in-pod"` (agent-runtime#66), with a breakdown panel on
+the `agent-issue` dashboard and the `AgentRunPhaseSlow` deviation alert behind it. The launcher's
+list ends at pod-Ready because the launcher itself usually does not outlive the ride (homelab#324).
+Phase list, what each one covers and what it deliberately does not live in the spike; this
+paragraph is the pointer.
 
 ## Part A″ — the goal-lane ledger: WORK vs PLATFORM WAIT (circles#29, 2026-08-06)
 

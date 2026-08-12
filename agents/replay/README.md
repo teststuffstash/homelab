@@ -135,10 +135,11 @@ prose) and replays series through `promtool test rules`. Two rules worth copying
   ride the old rule fired on twice. `promtool` and `yq` come from devbox, so the suite exits 2
   naming the missing tool rather than skipping when run outside it.
 
-`fixtures/run-phase-metric` (FU-160, homelab#287) is the eighth family and the launcher-side twin
-of `scan-phase-marker` — the same emitter shape (a `>>>REPLAY:run-phase-metric>>>` block, clock and
-transport shadowed in the bridge), pinning `agent_run_phase_seconds{phase=…}`. Two differences are
-the reason it is worth reading rather than copied from its twin:
+`fixtures/run-phase-metric` (FU-160, homelab#287; reshaped by homelab#324) is the eighth family and
+the launcher-side twin of `scan-phase-marker` — the same emitter shape (a
+`>>>REPLAY:run-phase-metric>>>` block, clock and transport shadowed in the bridge), pinning
+`agent_run_phase_seconds{phase=…}`. Three differences are the reason it is worth reading rather
+than copied from its twin:
 
 - **The clock is pinned PER CALL, not advanced by the seam.** `run_phase` reads `rp_now` inside a
   command substitution, and a subshell cannot write back — a self-advancing clock would hand out
@@ -151,7 +152,14 @@ the reason it is worth reading rather than copied from its twin:
   earlier one and each ride would end holding a single number. The growing STDIN block in
   `expected/actions.txt` is that rule under assertion — a fixture pinning only the URL would go
   green on exactly that bug, and it would surface as a dashboard that had quietly only ever shown
-  `bookkeeping`.
+  `pod-spinup`.
+- **Two runs that must be IDENTICAL are an assertion in their own right.** Runs A and B differ only
+  in whether the launcher process survived the ride — the thing homelab#324 found the metric was
+  silently encoding — and the fixture's claim is that their action streams match byte for byte.
+  When a clause's contract is "X must not be observable", the shape that pins it is a pair of runs
+  that differ in X, not a comment saying so; the calls the surviving run makes past the divergence
+  point (`run_phase ride`, `run_phase bookkeeping`) are then the regression guard, and they assert
+  by being REJECTED.
 
 `fixtures/dispatch-phase-scan` + `fixtures/dispatch-phase-session` (FU-160, homelab#319) are the
 ninth family and the second **pair split across two files**: `agent_dispatch_phase_seconds` is
