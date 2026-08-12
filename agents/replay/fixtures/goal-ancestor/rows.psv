@@ -1,0 +1,8 @@
+# goal-ancestor — the decision table (family contract in fixture.yaml; per-row intent below).
+# One walk, four arms: the defect on the tree it was found in, the busy lane that must not get
+# clever, the no-goal degrade, and the funded-but-unlabelled stop nothing live exercises.
+# id              | world                       | patch (relpath @ patches/*.jq)                          | env                         | expect            | params
+bucket-child      | homelab-278-tree            |                                                         | PROJECT=homelab ISSUE_N=367 | bucket-child      |
+direct-child      | homelab-278-tree            |                                                         | PROJECT=homelab ISSUE_N=291 | direct-child      |
+none-fallback     | circles-constructed-parents |                                                         | PROJECT=circles ISSUE_N=88  | none-fallback     |
+unlabelled-budget | circles-constructed-parents | gh/issue-view-62.json @ patches/add-unlabelled-budget.jq | PROJECT=circles ISSUE_N=90  | unlabelled-budget |
