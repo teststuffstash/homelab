@@ -13,7 +13,7 @@
 # ConfigMap-python poller riding the same namespace, the same ExternalSecret token and the same
 # `cloudflare-edge` rule group — one Cloudflare observability app, two API surfaces (GraphQL
 # analytics vs the zone-settings REST reads). It also covers the zone CF_EXCLUDE_ZONES hides from
-# the exporter above. Design: docs/cloudflare.md §Zone classes + spend surface.
+# the exporter above. Design: docs/cloudflare.md §Spend surface (zone classes: §Zone classes).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: monitoring
