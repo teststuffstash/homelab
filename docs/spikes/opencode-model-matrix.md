@@ -31,7 +31,11 @@ is why the Cost column still shows list ×1). It also decodes the docs' Usage co
 pool × 2x = $30 effective ("Twice the usage would be $30", ibid.). Unverified by us at the
 limit boundary (window internals are unobservable); the tell is now the reverse — a badged
 model NOT latching when its billed $ says it should. Effective window-draw for badged models =
-list ÷ 2: flash cR ≈ $0.0014/M effective. Bonus from the same dump: cached
+list ÷ 2: flash cR ≈ $0.0014/M effective. ⚠ Wording trap (operator, 2026-08-13): the wider
+industry convention ("Nx" in Cursor/Copilot premium-request multipliers) means N× COST — but
+opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same token, opposite
+signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
+Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 
 ## OpenCode Go (subscription rail, `https://opencode.ai/zen/go/v1`)
