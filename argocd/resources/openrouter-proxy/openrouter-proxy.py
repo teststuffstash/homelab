@@ -2187,79 +2187,91 @@ def main() -> int:
     # ADR-108: start the Go usage ingest listener on port 8081 (daemon thread, fire-and-forget).
     # Token-gated: requires X-Ingest-Token header matching GO_USAGE_INGEST_TOKEN env.
     # Fail-closed: token unset -> 503 "ingest disabled", wrong token -> 401, bad body -> 400.
-    ingest_token = os.environ.get("GO_USAGE_INGEST_TOKEN")
-    if ingest_token:
-        def ingest_handler(handler: BaseHTTPRequestHandler) -> None:
-            """Handle POST /go-usage-report -> router.go_usage_add(ts, stack, model, usd)."""
-            if handler.path != "/go-usage-report" or handler.command != "POST":
-                handler.send_response(404)
-                handler.send_header("Connection", "close")
-                handler.end_headers()
-                return
-            # Check token
-            presented = handler.headers.get("X-Ingest-Token", "")
-            if presented != ingest_token:
-                status = 401 if presented else 403
-                body = json.dumps({"error": "unauthorized" if presented else "token required"}).encode()
-                handler.send_response(status)
-                handler.send_header("Content-Type", "application/json")
-                handler.send_header("Content-Length", str(len(body)))
-                handler.send_header("Connection", "close")
-                handler.end_headers()
-                handler.wfile.write(body)
-                handler.close_connection = True
-                log(f"go-ingest: {status} (token={'missing' if not presented else 'wrong'})")
-                return
-            # Parse body
-            length = int(handler.headers.get("Content-Length") or 0)
-            body = handler.rfile.read(length) if length else b""
-            try:
-                data = json.loads(body)
-                ts = float(data.get("ts") or time.time())
-                stack = str(data["stack"])
-                model = str(data["model"])
-                usd = float(data["usd"])
-                if usd < 0:
-                    raise ValueError("usd must be >= 0")
-            except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
-                resp = json.dumps({"error": f"bad body: {e}"}).encode()
-                handler.send_response(400)
-                handler.send_header("Content-Type", "application/json")
-                handler.send_header("Content-Length", str(len(resp)))
-                handler.send_header("Connection", "close")
-                handler.end_headers()
-                handler.wfile.write(resp)
-                handler.close_connection = True
-                log(f"go-ingest: 400 bad body: {e}")
-                return
-            # Accept the row
-            router.go_usage_add(ts, stack, model, usd)
-            handler.send_response(204)
+    # Start unconditionally (not gated on token) so the port is always observable (503 on unset,
+    # not connection-refused) — enables self-test c and keeps the LB Service backed by a live port.
+    # Re-read env per-request (not captured here) so tests can flip it, and a future ESO Secret
+    # arriving after pod start wouldn't need restart (even though prod injects via secretKeyRef).
+    def ingest_handler(handler: BaseHTTPRequestHandler) -> None:
+        """Handle POST /go-usage-report -> router.go_usage_add(ts, stack, model, usd)."""
+        if handler.path != "/go-usage-report" or handler.command != "POST":
+            handler.send_response(404)
             handler.send_header("Connection", "close")
             handler.end_headers()
-            log(f"go-ingest: stack={stack} model={model} ${usd:.6f}")
+            return
+        # Check token (read env per-request for testability + future ESO hot-reload)
+        ingest_token = os.environ.get("GO_USAGE_INGEST_TOKEN")
+        presented = handler.headers.get("X-Ingest-Token", "")
+        if not ingest_token:
+            body = json.dumps({"error": "ingest disabled — token not configured"}).encode()
+            handler.send_response(503)
+            handler.send_header("Content-Type", "application/json")
+            handler.send_header("Content-Length", str(len(body)))
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+            handler.wfile.write(body)
+            handler.close_connection = True
+            log("go-ingest: 503 (token not configured)")
+            return
+        if presented != ingest_token:
+            status = 401 if presented else 403
+            body = json.dumps({"error": "unauthorized" if presented else "token required"}).encode()
+            handler.send_response(status)
+            handler.send_header("Content-Type", "application/json")
+            handler.send_header("Content-Length", str(len(body)))
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+            handler.wfile.write(body)
+            handler.close_connection = True
+            log(f"go-ingest: {status} (token={'missing' if not presented else 'wrong'})")
+            return
+        # Parse body
+        length = int(handler.headers.get("Content-Length") or 0)
+        body = handler.rfile.read(length) if length else b""
+        try:
+            data = json.loads(body)
+            ts = float(data.get("ts") or time.time())
+            stack = str(data["stack"])
+            model = str(data["model"])
+            usd = float(data["usd"])
+            if usd < 0:
+                raise ValueError("usd must be >= 0")
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+            resp = json.dumps({"error": f"bad body: {e}"}).encode()
+            handler.send_response(400)
+            handler.send_header("Content-Type", "application/json")
+            handler.send_header("Content-Length", str(len(resp)))
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+            handler.wfile.write(resp)
+            handler.close_connection = True
+            log(f"go-ingest: 400 bad body: {e}")
+            return
+        # Accept the row
+        router.go_usage_add(ts, stack, model, usd)
+        handler.send_response(204)
+        handler.send_header("Connection", "close")
+        handler.end_headers()
+        log(f"go-ingest: stack={stack} model={model} ${usd:.6f}")
 
-        class IngestHandler(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-            def log_message(self, *_):
-                pass
-            def do_POST(self):
-                ingest_handler(self)
-            def do_GET(self):
-                self.send_response(404)
-                self.send_header("Connection", "close")
-                self.end_headers()
-            def do_PUT(self):
-                self.do_GET()
-            def do_DELETE(self):
-                self.do_GET()
+    class IngestHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+        def log_message(self, *_):
+            pass
+        def do_POST(self):
+            ingest_handler(self)
+        def do_GET(self):
+            self.send_response(404)
+            self.send_header("Connection", "close")
+            self.end_headers()
+        def do_PUT(self):
+            self.do_GET()
+        def do_DELETE(self):
+            self.do_GET()
 
-        ingest_port = int(os.environ.get("INGEST_PORT", "8081"))
-        ingest_server = ThreadingHTTPServer(("0.0.0.0", ingest_port), IngestHandler)
-        threading.Thread(target=ingest_server.serve_forever, daemon=True).start()
-        log(f"go-ingest: listening on :{ingest_port} (token-gated; 503 if unset)")
-    else:
-        log("go-ingest: disabled — GO_USAGE_INGEST_TOKEN not set (ingest will 503)")
+    ingest_port = int(os.environ.get("INGEST_PORT", "8081"))
+    ingest_server = ThreadingHTTPServer(("0.0.0.0", ingest_port), IngestHandler)
+    threading.Thread(target=ingest_server.serve_forever, daemon=True).start()
+    log(f"go-ingest: listening on :{ingest_port} (token-gated; 503 if unset)")
 
     log(f"openrouter-proxy: listening :{PORT} -> {UPSTREAM} "
         f"(h={CACHE_HIT}, uptime>={UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
@@ -2718,6 +2730,89 @@ data: [DONE]
     g = seen.get("go") or {}
     check(g.get("user_agent") == "homelab-openrouter-proxy",
           f"Go-leg User-Agent: homelab-openrouter-proxy (got {g.get('user_agent')})")
+
+    # ── ADR-108 ingest self-tests (§4) ───────────────────────────────────────────────────────────
+    print("\n=== Ingest endpoint tests ===")
+    INGEST_PORT = 8081  # default ingest port
+    # Test 18: ingest round-trip — POST a valid row, assert /opencode-limit by_stack gains it
+    # Expected: $0.05 for stack "test-ingest" at ts now, model "kimi-k3"
+    ingest_test_token = "ingest-test-token-xyz"
+    os.environ["GO_USAGE_INGEST_TOKEN"] = ingest_test_token
+    # Give the listener time to see the env change (it reads per-request, but give it a moment)
+    time.sleep(0.1)
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"ts": time.time(), "stack": "test-ingest",
+                               "model": "kimi-k3", "usd": 0.05}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": ingest_test_token})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 204, f"ingest round-trip: 204 on valid POST (got {r.status})")
+    # Assert /opencode-limit by_stack gained exactly $0.05 for test-ingest
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    limit_data = json.loads(r.read())
+    c.close()
+    by_stack = limit_data.get("by_stack", {})
+    # Expected: by_stack["test-ingest"] == 0.05 (the row we just posted)
+    check(abs(by_stack.get("test-ingest", 0) - 0.05) < 0.001,
+          f"ingest round-trip: by_stack['test-ingest'] ≈ $0.05 (got {by_stack.get('test-ingest')})")
+
+    # Test 19: 401 on wrong token
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"stack": "x", "model": "x", "usd": 0.01}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": "wrong-token"})
+    r = c.getresponse()
+    body = r.read()
+    c.close()
+    check(r.status == 401, f"ingest wrong token: 401 (got {r.status})")
+    check(b"unauthorized" in body.lower(), "ingest wrong token: body says 'unauthorized'")
+
+    # Test 20: 503 on token-unset (save/restore env)
+    old_token = os.environ.get("GO_USAGE_INGEST_TOKEN")
+    del os.environ["GO_USAGE_INGEST_TOKEN"]
+    time.sleep(0.1)  # let per-request read see the change
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"stack": "x", "model": "x", "usd": 0.01}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": "any-token"})
+    r = c.getresponse()
+    body = r.read()
+    c.close()
+    check(r.status == 503, f"ingest token-unset: 503 (got {r.status})")
+    check(b"ingest disabled" in body, "ingest token-unset: body says 'ingest disabled'")
+    # Restore token for cleanup (tests after this don't use ingest, but be clean)
+    if old_token:
+        os.environ["GO_USAGE_INGEST_TOKEN"] = old_token
+
+    # Test 21: 400 on malformed body (non-JSON, then negative usd)
+    os.environ["GO_USAGE_INGEST_TOKEN"] = ingest_test_token
+    # Non-JSON body
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=b"not-json-at-all",
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": ingest_test_token})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 400, f"ingest non-JSON body: 400 (got {r.status})")
+    # Negative usd
+    c = http.client.HTTPConnection("127.0.0.1", INGEST_PORT, timeout=10)
+    c.request("POST", "/go-usage-report",
+              body=json.dumps({"stack": "x", "model": "x", "usd": -1.0}),
+              headers={"Content-Type": "application/json",
+                       "X-Ingest-Token": ingest_test_token})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 400, f"ingest negative usd: 400 (got {r.status})")
 
     print()
     if not fails:

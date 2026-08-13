@@ -45,11 +45,18 @@ from http.client import HTTPConnection, HTTPSConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ADR-108: import gometer from the proxy (sys.path insert so the shim can use it).
-# The proxy ConfigMap puts gometer.py beside this script's runtime path when mounted.
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROXY_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "argocd", "resources", "openrouter-proxy")
-sys.path.insert(0, _PROXY_DIR)
-import gometer  # ADR-108: shared Go-rail pricing/usage module
+# The shim imports it from the repo checkout at argocd/resources/openrouter-proxy/ —
+# the single home. Wrapped in try/except so metering failure never breaks the jail.
+_gometer = None
+try:
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PROXY_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "argocd", "resources", "openrouter-proxy")
+    sys.path.insert(0, _PROXY_DIR)
+    import gometer
+    _gometer = gometer
+except Exception as e:
+    print(f"shim: gometer import failed ({e}) — metering disabled, proxy untouched",
+          file=sys.stderr, flush=True)
 
 PORT = int(os.environ.get("SHIM_PORT", "18091"))
 GO_BASE = os.environ.get("SHIM_GO_BASE", "https://opencode.ai/zen/go")
@@ -148,13 +155,16 @@ def _meter_go_usage(model: str, head: bytes, tail: bytes) -> None:
     On push failure OR unset token: append to spool file.
     On successful push: opportunistically drain spool.
     Wrapped in try/except — metering MUST NOT raise into the proxy path.
+    Short-circuits if gometer import failed (None) — proxy untouched.
     """
+    if _gometer is None:
+        return  # gometer import failed — proxy must not be affected
     try:
-        merged = gometer.extract_usage(head, tail)
+        merged = _gometer.extract_usage(head, tail)
         if not (merged.get("input_tokens") or merged.get("output_tokens")):
             return  # no usage to report
         bare_model = model.removeprefix(GO_PREFIX).split(":")[0]
-        usd, warning = gometer.price(bare_model, merged)
+        usd, warning = _gometer.price(bare_model, merged)
         if warning:
             print(f"shim: METER {warning}", file=sys.stderr, flush=True)
         row = {"ts": __import__("time").time(), "stack": "jail", "model": bare_model, "usd": usd}
