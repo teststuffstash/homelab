@@ -3917,3 +3917,14 @@ than-author survives fully; the `reviewer ≥ author` TIER inequality is the que
 If ever acted on: a FU-095(b) review-class cell pilot (shadow sonnet, escaped-defect metric) —
 doctrine edits (reviewer-session.sh header, research-and-specs step ladder, platform-and-stacks
 overflow line) follow the data. Operator: leave banked.
+↳ (Go-rail leg, ~11:30Z) **Jail model-splitting shim SHIPPED (PR#409)** — path B of the Go trial:
+scripts/claude-model-shim.py (stdlib local proxy, routes by body model id: opencode-go/* → Go's
+Anthropic-compat endpoint with auth SWAPPED + prefix stripped; else → api.anthropic.com verbatim)
++ scripts/claude-go.sh (claude-or pattern: launch-time slot map, wallet key, CLAUDE_GO_ALL=1 pure
+trial). Whole mechanism proven WITHOUT a key: self-test 10/10 (oauth never reaches Go; streaming
+relay), live nested-claude passthrough (200s, ?beta=true preserved), live alias-slot routing
+(haiku slot → opencode-go id in body → Go-leg DENY, as designed). Also answered: subagent model
+FARMING is native + mid-session (Agent tool per-call model:); only the slot MAPPING is
+launch-time env. Direction set (operator): the chainless/routing redesign gets built by JAIL
+subagents (Go models on the slots once keyed), platform loop = PR reviews only. BLOCKED on the
+one operator step: mint `opencode-go-api-key` (opencode.ai/auth — third-party console class).
