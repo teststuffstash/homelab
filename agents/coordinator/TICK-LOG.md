@@ -3972,3 +3972,18 @@ pr-wait from a session worktree — the two-seat de-confliction protocol live: t
 belongs to the operator's homelab-go session, which owns the shim translator leg). Ledger
 seeded: seat baseline 2/6 bot round-1 catches; PR review flow declared reliable enough that
 jail work no longer fixes the reflex itself.
+↳ (crash recovery, ~14:25Z) **The homelab-go session's death gutted devbox.lock — recovered.**
+Chain: the session died mid-edit; a devbox write in the dying/relaunching container truncated
+the SHARED tree's devbox.lock to 1 line (1,220 deletions — mounted tree, so the damage crossed
+containers) → every devbox run failed "Output cli not found" (the prometheus cli-output
+resolution died with the lock body) → claude-go's _kp read empty → its error MISATTRIBUTED the
+failure to a missing wallet entry (a fail-open message conflating probe-failure with absence —
+the FU-108 class, in the launcher's own words this time). Fixed: lock restored from HEAD
+(single-file git restore; gutted copy + corrupt .devbox + both dirty scripts backed up to
+scratchpad); the Go key MATERIALIZED into .opencode-go.env (FU-001 cache pattern) so launch no
+longer depends on devbox at all. The dead session's work is INTACT and substantial: per-model
+tool probing REVISES the "Go Anthropic-compat = text-only" verdict — qwen3.5-plus/kimi-k3/
+qwen3.8-max tool-call CLEANLY (tool_use round-trip), glm-5.2 422s tools per-model, deepseek
+region-locked (403); + SHIM_MODEL_REWRITE (un-wedge frozen alias maps live) + key-token
+sanitization after a traceback echoed the key into a log. Charter §Go rail amendment (translator
+may be OPTIONAL for the right models) rides THEIR session's PR, not this seat.
