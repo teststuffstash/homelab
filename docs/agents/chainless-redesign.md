@@ -95,6 +95,15 @@ migrate through).
   pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
   models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
   in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
+  ⚠ **The "Nx usage" SEMANTICS are UNRESOLVED** (operator challenge, 2026-08-13): the docs'
+  *"$10 → 6x that in usage… for some models the multiplier is lower"* reads as a per-model
+  VALUE-POOL ratio (badge = downgraded pool, $20/mo instead of $60 — also decodes the table's
+  $15/$60 "Usage" column as 1.5×/6× pools, with picker↔docs drift = live ops tuning), but
+  "you get 2× usage" (a discount perk) is equally consistent with the badge text alone. The
+  tell leaning pool-reading: the badges sit on CHEAP models (Luna, flash), not the expensive
+  ones. DECIDED BY: the console's per-model usage-$ against list-price token math on a known
+  request (operator console glance — no API). Do not build window accounting on either reading
+  until that datum lands.
   Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
   **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
   our own per-model canary matrix — with windows self-metered from per-request usage.
@@ -105,8 +114,8 @@ migrate through).
   rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
   400) — canary before any slot use.
 - **Slot economics (curated 2026-08-13; unit = 1M cacheRead + 100k output, the subagent shape):**
-  mimo-v2.5 ≈ $0.031 (cheapest priced, 1× — but tools 400 on the compat path today) ·
-  deepseek-v4-flash ≈ $0.031×2 AND **region-locked 403 for us — out regardless of math** ·
+  mimo-v2.5 ≈ $0.031 (cheapest priced, unbadged — but tools 400 on the compat path today) ·
+  deepseek-v4-flash ≈ $0.031 at list AND **region-locked 403 for us — out regardless of math** ·
   qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70 (tool-broken) · kimi-k3 ≈ $1.80
   (sparse big calls only) — against $12/5h·$30/wk·$60/mo usage-value windows. The haiku slot
   KEEPS `qwen3.5-plus` — it is the one proven tool-caller in the cheap class, though **unpriced
