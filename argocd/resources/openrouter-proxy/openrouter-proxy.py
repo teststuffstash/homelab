@@ -93,6 +93,14 @@ GO_PRICES = {
 # Fallback: use the most expensive known row when a model is unseen (fail conservative).
 _GO_MAX_PRICE = max((p[0] + p[1] for p in GO_PRICES.values()), default=10.0)
 _GO_PRICED_MODELS = frozenset(GO_PRICES.keys())
+# Long-context price tiers (matrix §long-context; trigger = input_tokens threshold per pricing pages).
+# qwen3.7-plus >256k: 1.20/4.80/0.12/1.50, qwen3.6-plus >256k: 2.00/6.00/0.20/2.50,
+# gpt-5.6-luna >272k: 0.40/1.80/0.04/0.50. Half flag inherited from base row.
+GO_PRICES_LONG = {
+    "qwen3.7-plus": (256000, (1.20, 4.80, 0.12, 1.50)),
+    "qwen3.6-plus": (256000, (2.00, 6.00, 0.20, 2.50)),
+    "gpt-5.6-luna": (272000, (0.40, 1.80, 0.04, 0.50)),
+}
 
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
@@ -1424,11 +1432,17 @@ class Proxy(BaseHTTPRequestHandler):
                     # Unknown model: use most expensive known row + warn (fail conservative)
                     log(f"WARN Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M")
                     price_row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
-                in_p, out_p, cr_p, _cw_p, half = price_row
+                in_p, out_p, cr_p, cw_p, half = price_row
+                # Long-context tier override: input_tokens > threshold → use long-context rates (half flag unchanged)
+                if bare_model in GO_PRICES_LONG:
+                    threshold, long_rates = GO_PRICES_LONG[bare_model]
+                    if merged["input_tokens"] > threshold:
+                        in_p, out_p, cr_p, cw_p = long_rates  # half stays from base row
                 in_usd = merged["input_tokens"] * in_p / 1e6
                 out_usd = merged["output_tokens"] * out_p / 1e6
                 cr_usd = merged.get("cache_read_input_tokens", 0) * cr_p / 1e6 if cr_p else 0.0
-                usd = (in_usd + out_usd + cr_usd) * (0.5 if half else 1.0)
+                cw_usd = merged.get("cache_creation_input_tokens", 0) * cw_p / 1e6 if cw_p else 0.0
+                usd = (in_usd + out_usd + cr_usd + cw_usd) * (0.5 if half else 1.0)
                 # Stack attribution: ref:<ns>/<name> → stack=<ns>, else "jail"
                 auth_hdr = next((v for k, v in self.headers.items() if k.lower() == "authorization"), "")
                 if auth_hdr.startswith("Bearer ref:"):
@@ -1437,7 +1451,10 @@ class Proxy(BaseHTTPRequestHandler):
                     stack = "jail"
                 router.go_usage_add(time.time(), stack, bare_model, usd)
                 log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
-                    f"{merged['output_tokens']}out{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''} → ${usd:.6f}")
+                    f"{merged['output_tokens']}out"
+                    f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
+                    f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
+                    f" → ${usd:.6f}")
             else:
                 log(f"Go leg: no usage found in response body for {or_model}")
         if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg:
@@ -2595,6 +2612,49 @@ data: [DONE]
     check(abs(w3["by_stack"].get("fallback-stack", 0) - expected) < 0.01,
           f"fallback: fallback-stack ≈${expected}, got {w3['by_stack'].get('fallback-stack')}")
 
+    # Test 14b: cache-write pricing — gpt-5.6-luna has cW=0.25 AND half=True (compound case)
+    # Usage: 100k in + 100k out + 1M cache_creation → (0.02 + 0.12 + 0.25) × 0.5 = $0.195
+    # Keep input below 272k threshold to test base rates
+    _go_response["body"] = json.dumps({
+        "id": "gen-cw", "model": "gpt-5.6-luna",
+        "usage": {"input_tokens": 100000, "output_tokens": 100000, "cache_creation_input_tokens": 1000000}
+    }).encode()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/gpt-5.6-luna",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:cw-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "cache-write request: HTTP 200 returned")
+    w_cw = router.go_usage_window(60)
+    expected_cw = 0.195  # (0.02 + 0.12 + 0.25) × 0.5
+    check(abs(w_cw["by_stack"].get("cw-stack", 0) - expected_cw) < 0.01,
+          f"cache-write: cw-stack ≈${expected_cw}, got {w_cw['by_stack'].get('cw-stack')}")
+
+    # Test 14c: long-context pricing — qwen3.7-plus >256k uses 1.20/4.80/0.12/1.50 rates
+    # 300k input + 100k output → 300k×1.20/1e6 + 100k×4.80/1e6 = 0.36 + 0.48 = $0.84
+    _go_response["body"] = json.dumps({
+        "id": "gen-long", "model": "qwen3.7-plus",
+        "usage": {"input_tokens": 300000, "output_tokens": 100000}
+    }).encode()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/qwen3.7-plus",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:long-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "long-context request: HTTP 200 returned")
+    w_long = router.go_usage_window(60)
+    expected_long = 0.84  # 300k×1.20/1e6 + 100k×4.80/1e6
+    check(abs(w_long["by_stack"].get("long-stack", 0) - expected_long) < 0.01,
+          f"long-context: long-stack ≈${expected_long}, got {w_long['by_stack'].get('long-stack')}")
+
     # Test 15: ledger prune — rows older than 45d are deleted
     old_ts = now - 50 * 86400
     router.go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
@@ -2603,7 +2663,7 @@ data: [DONE]
     check(w4["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted")
     check(w4["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained")
 
-    # Test 15: /metrics TYPE dedup — each opencode_ TYPE line appears exactly once
+    # Test 16: /metrics TYPE dedup — each opencode_ TYPE line appears exactly once
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("GET", "/metrics")
     r = c.getresponse()
@@ -2613,7 +2673,7 @@ data: [DONE]
         count = metrics.count(f"# TYPE {metric}")
         check(count == 1, f"/metrics: # TYPE {metric} appears exactly once (got {count})")
 
-    # Test 16: Go-leg User-Agent — stub must see "homelab-openrouter-proxy"
+    # Test 17: Go-leg User-Agent — stub must see "homelab-openrouter-proxy"
     seen.clear()
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     c.request("POST", "/api/v1/chat/completions",
