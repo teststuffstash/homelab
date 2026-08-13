@@ -48,7 +48,7 @@ GO_AUTH_STYLE = os.environ.get("SHIM_GO_AUTH_STYLE", "both")  # both|bearer|x-ap
 GO_PREFIX = "opencode-go/"
 # SHIM_MODEL_REWRITE="old=new,old2=new2" (bare Go ids, applied after the prefix strip): the CLI
 # freezes its alias→model map at LAUNCH, so when a slot model turns out broken mid-session
-# (glm-5.2 422s every function tool; deepseek-v4-pro region-locks — both found 2026-08-13),
+# (glm-5.2 422s every function tool; deepseek-* 403'd pre-opt-in — both found 2026-08-13),
 # restarting the shim with a rewrite un-wedges live sessions that a slot-map fix can't reach.
 GO_REWRITE = {k.strip(): v.strip() for k, v in
               (p.split("=", 1) for p in
