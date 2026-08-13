@@ -190,6 +190,9 @@
       "ring": [
         "bash scripts/coordinate-ring.sh \"$@\""
       ],
+      "pr-wait": [
+        "bash scripts/pr-wait.sh \"$@\""
+      ],
       "k9s": [
         "KUBECONFIG=$PWD/tofu/kubeconfig k9s"
       ],
