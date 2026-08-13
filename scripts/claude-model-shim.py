@@ -77,6 +77,26 @@ class Handler(BaseHTTPRequestHandler):
                 parsed = None
         if model.startswith(GO_PREFIX):
             parsed["model"] = model[len(GO_PREFIX):]
+            # Go's Anthropic-compat layer mishandles the STRING shorthand for message content on
+            # some models (probed 2026-08-13: glm-5.2 dropped the prompt and free-associated,
+            # 12 input tokens counted; the array-of-blocks form answered correctly). claude-code
+            # always sends blocks, but normalize here so shorthand clients can't hit it.
+            for msg in parsed.get("messages") or []:
+                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                    msg["content"] = [{"type": "text", "text": msg["content"]}]
+            # Go rejects Anthropic SERVER tools (bisected 2026-08-13: claude-code's WebSearch
+            # entry 422s the whole request — `tools.0…WebSearchTool.type`). Client tools are
+            # function-shaped (input_schema present / type "custom"); server tools carry a
+            # versioned `type` and cannot be served by Go's models anyway — drop only those,
+            # so Bash/Edit/MCP tools keep working and the model simply isn't offered WebSearch.
+            tools = parsed.get("tools")
+            if isinstance(tools, list):
+                kept = [t for t in tools if isinstance(t, dict)
+                        and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
+                if len(kept) != len(tools):
+                    print(f"shim: go-leg dropped {len(tools) - len(kept)} server tool(s)",
+                          file=sys.stderr, flush=True)
+                parsed["tools"] = kept
             return GO_BASE, json.dumps(parsed).encode(), True, model
         return ANTHROPIC_BASE, body, False, model
 
@@ -104,8 +124,21 @@ class Handler(BaseHTTPRequestHandler):
         headers["Connection"] = "close"
         headers["Accept-Encoding"] = "identity"
 
+        path = self.path
+        if go_leg:
+            # Go's compat endpoint 422s on claude-code's decorations (probed 2026-08-13, empty
+            # body): send it a plain Anthropic request — no ?beta=true query, no anthropic-beta
+            # feature headers. The Anthropic leg keeps both untouched.
+            path = path.split("?", 1)[0]
+            headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
+        if os.environ.get("SHIM_DEBUG_BODY") and go_leg:
+            dbg = os.path.join(os.environ.get("TMPDIR", "/tmp"),
+                               f"shim-go-body-{threading.get_ident()}-{os.getpid()}.json")
+            with open(dbg, "ab") as f:
+                f.write(body + b"\n")
+            print(f"shim: DEBUG go body -> {dbg} ({len(body)}b)", file=sys.stderr, flush=True)
         try:
-            conn.request(self.command, prefix + self.path, body=body or None, headers=headers)
+            conn.request(self.command, prefix + path, body=body or None, headers=headers)
             resp = conn.getresponse()
         except OSError as e:
             self._reply(502, json.dumps({"error": f"upstream unreachable: {e}"}).encode())
