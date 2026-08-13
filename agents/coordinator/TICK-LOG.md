@@ -3858,3 +3858,25 @@ read flow ran live twice (circles#79/#80 surfaced → read → cleared); renovat
 ghcr blob EOF, rerun green, alert self-resolved. Session totals: 12 homelab PRs merged
 (#392-#404 less #397-as-issue), 4 stack-repo PRs, ~10 direct commits, two monitors' worth of
 new watcher clauses, Bucket A closed.
+
+## 2026-08-13 (~08:00–08:35Z) — HA #221: the banked tuya probe ran; 4 of 5 devices revived
+
+- **Hypothesis refuted, defect found, fleet revived.** The protocol_version comparison (banked
+  2026-08-09) ran both sides: HA `.storage` entries MATCH device negotiation exactly (jail
+  tinytuya sweep 3.1–3.5 per device) — nothing to fix in the entries. Real defect: tuya_local
+  (2026.7.2) **receive loop dies silently and never retries** — "receive loop has terminated"
+  warnings pre-restart, then 3.8 days of total log silence for pve/laptop4 while their TCP slot
+  sat free. Remedy: per-entry REST reload **while the device answers a jail probe** — all four
+  plugs revived (pve/laptop4 straight away; aquarium/konditsioneer's "device-side dead" Err-901
+  verdict was TRANSIENT — the single-TCP-slot race vs HA's own retries — both answered 3.3
+  minutes later and revived on reload; NO aquarium power-cycle needed). End-state isolated:
+  Prometheus `plug_*` >1h-stale = 0, >24h set 19→9 (all 9 = the known static false-positives).
+- **Operator's fence question** ("tuya egress cut → devices refuse local?"): fence FU-038 went
+  live 08-07, wedge appeared at the 08-08 restart — plausible TRIGGER (cloud-reconnect churn +
+  hardcoded-NTP starvation → more session drops → more rolls against the receive-loop bug), but
+  the strong form is REFUTED by observation: all four plugs accept local sessions while fenced,
+  and laptop3/opnsense (same model, same fence) never wedged.
+- **Residual legs** (in #221): gaas power-cycle (operator; 914 on correct key+version since the
+  08-09 restart — the "power cycle needed" firmware state; if it persists, key rotated →
+  re-extract via the tuya-egress.py pairing door) · alert exclusion for the 9 static sensors
+  (what still re-fires #221) · optional tuya_local 2026.8.0 bump. Debug logging reset to warning.

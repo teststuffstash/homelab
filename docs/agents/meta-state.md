@@ -13,11 +13,13 @@ meant to avoid.)
   stored) but oracle is PARKED (operator 2026-08-11) — pick up at unpark; acceptance =
   drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
   long DS digests — `tr -d ' '` before grepping.
-- **HA #221 (meta lane, resumable)**: 3 tuya_local devices wedged since 08-08. Devices HEALTHY
-  via jail tinytuya; HA wedge survives reload/WS-cycle/core-restart — leading hypothesis:
-  protocol_version mismatch in config entries vs negotiation; next probe = compare + fix
-  entries. aquarium = DEVICE-side (physical cycle, operator). tuya frozen-accepted otherwise
-  (silence c73baef2 → ~08-22 re-triage).
+- **HA #221 (meta lane)**: probe RAN 2026-08-13 — protocol_version hypothesis REFUTED (entries
+  match negotiation); real defect = tuya_local receive loop dies silently, no retry. **All 4
+  plugs REVIVED** by per-entry REST reload while the device answers (aquarium needed NO physical
+  cycle — the 901s were the single-TCP-slot race). Full findings in the #221 comment. Remaining:
+  gaas = OPERATOR power-cycle (914 on correct key+version since 08-09; if persists → key rotated,
+  re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
+  (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
   2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
