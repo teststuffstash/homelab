@@ -63,6 +63,37 @@ ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic
 GO_UPSTREAM = os.environ.get("OPENCODE_GO_BASE", "https://opencode.ai/zen/go")
 GO_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
 GO_PREFIX = "opencode-go/"
+# GO_PRICES: OpenCode Go model pricing matrix (snapshot: docs/spikes/opencode-model-matrix.md 2026-08-13).
+# Keys are bare model ids (prefix/suffix stripped); values: $/M tokens for in/out/cR/cW + half flag.
+# "half=True" = (2x usage) badge models — they draw subscription windows at HALF list price
+# (community-confirmed: "double the api worth" / "50 percent discounted").
+# Prices curated from console billing (2026-08-13); no pricing API exists on this rail.
+GO_PRICES = {
+    # model              in       out      cR       cW       half
+    "qwen3.5-plus":    (0.25,   1.00,   0.025,   None,  False),  # console-derived (2026-08-13)
+    "kimi-k3":         (3.00,  15.00,   0.30,    None,  False),  # $15 pool
+    "qwen3.8-max":     (2.00,   6.00,   0.25,    2.50,  False),  # $15 pool
+    "glm-5.2":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
+    "glm-5.1":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
+    "deepseek-v4-flash": (0.14, 0.28,  0.0028,  None,  True),   # $60 pool, 2x badge
+    "deepseek-v4-pro": (0.435,  0.87,  0.003625, None,  False),  # $15 pool
+    "mimo-v2.5":       (0.14,   0.28,   0.0028,  None,  False),  # $60 pool
+    "mimo-v2.5-pro":   (0.435,  0.87,  0.003625, None,  False),  # $15 pool
+    "kimi-k2.7-code":  (0.95,   4.00,   0.19,    None,  False),  # $60 pool
+    "kimi-k2.6":       (0.95,   4.00,   0.16,    None,  False),  # $60 pool
+    "minimax-m3":      (0.30,   1.20,   0.06,    None,  False),  # $60 pool
+    "minimax-m2.7":    (0.30,   1.20,   0.06,    0.375, False),  # $60 pool
+    "qwen3.7-max":     (2.50,   7.50,   0.50,    3.125, False),  # $60 pool
+    "qwen3.7-plus":    (0.40,   1.60,   0.04,    0.50,  False),  # ≤256k; >256k = 1.20/4.80/0.12/1.50
+    "qwen3.6-plus":    (0.50,   3.00,   0.05,    0.625, False),  # ≤256k; >256k = 2.00/6.00/0.20/2.50
+    "gpt-5.6-luna":    (0.20,   1.20,   0.02,    0.25,  True),   # ≤272k; 2x badge
+    "grok-4.5":        (2.00,   6.00,   0.30,    None,  False),  # $15 pool
+    "hy3":             (0.14,   0.58,   0.035,   None,  False),  # $60 pool
+}
+# Fallback: use the most expensive known row when a model is unseen (fail conservative).
+_GO_MAX_PRICE = max((p[0] + p[1] for p in GO_PRICES.values()), default=10.0)
+_GO_PRICED_MODELS = frozenset(GO_PRICES.keys())
+
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
 OAUTH_BETA = "oauth-2025-04-20"
@@ -96,6 +127,13 @@ ANTHROPIC_UTIL_THRESHOLD = float(os.environ.get("ANTHROPIC_UTIL_THRESHOLD", "0.8
 def _window_threshold(w: str) -> float:
     return float(os.environ.get(f"ANTHROPIC_UTIL_THRESHOLD_{w.upper()}", ANTHROPIC_UTIL_THRESHOLD))
 ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW = {w: _window_threshold(w) for w in ("5h", "7d")}
+# homelab#422: OpenCode Go subscription thresholds (default 0.80, per-window overrides allowed).
+OPENCODE_UTIL_THRESHOLD = float(os.environ.get("OPENCODE_UTIL_THRESHOLD", "0.80"))
+def _opencode_window_threshold(w: str) -> float:
+    return float(os.environ.get(f"OPENCODE_UTIL_THRESHOLD_{w.upper()}", OPENCODE_UTIL_THRESHOLD))
+OPENCODE_UTIL_THRESHOLD_BY_WINDOW = {w: _opencode_window_threshold(w) for w in ("5h", "7d", "30d")}
+# Go windows: 5h/$12, 7d/$30, 30d/$60 (list prices; badge models draw at half).
+OPENCODE_WINDOW_BUDGETS = {"5h": 12.0, "7d": 30.0, "30d": 60.0}
 _latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
           "windows": {}, "count_429": 0}
 _latch_lock = threading.Lock()
@@ -594,6 +632,27 @@ def market_for(model: str, permaslug: str | None) -> dict | None:
     with _market_lock:
         _market[model] = (now + (MARKET_TTL_S if rows else 1800), rows)
     return rows
+
+
+def _strip_beta_query(path: str) -> str:
+    """Strip only the `beta=true` query parameter from a URL path, preserving all others.
+
+    Uses urllib.parse to handle arbitrary query param order (not just ?beta=true in isolation).
+    Used on the Go leg only — Go's compat API 422s on claude-code's beta decorations.
+    """
+    if "beta" not in path:
+        return path
+    # Split path and query
+    path_only, _, query = path.partition("?")
+    if not query:
+        return path
+    # Parse, remove 'beta' key, re-encode
+    params = urllib.parse.parse_qsl(query, keep_blank_values=True)
+    filtered = [(k, v) for k, v in params if k != "beta"]
+    if len(filtered) == len(params):
+        return path  # beta was not actually present
+    new_query = urllib.parse.urlencode(filtered)
+    return path_only + ("?" + new_query if new_query else "")
 
 
 def log(msg: str) -> None:
@@ -1186,9 +1245,8 @@ class Proxy(BaseHTTPRequestHandler):
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
         # When /anthropic/* carries an opencode-go/ model, Go wins (claude CLI --model).
         if go_leg:  # Go rail — swap upstream, replace auth with Go key
-            # Strip ?beta=true query specifically on Go leg only — Go's compat API 422s on
-            # claude-code's decorations (probed 2026-08-13). Other query params are preserved.
-            path = self.path.replace("?beta=true", "") if "?beta=true" in self.path else self.path
+            # Strip ?beta=true query using the proper helper (preserves other params).
+            path = _strip_beta_query(self.path)
             url = GO_UPSTREAM + path
             note += "+go"
             # Deny if no Go key configured — refuse loudly, never forward without credential.
@@ -1229,11 +1287,6 @@ class Proxy(BaseHTTPRequestHandler):
             allowed["x-api-key"] = go_key
             allowed["Authorization"] = f"Bearer {go_key}"
             headers = allowed
-            # Strip ?beta=true query specifically — Go's compat API 422s on claude-code's
-            # decorations (probed 2026-08-13). Only the beta param is stripped; other
-            # query params (if any client adds them) are preserved.
-            if "?beta=true" in self.path:
-                url = url.split("?beta=true")[0]
             # Also strip anthropic-beta headers (they're Anthropic-specific, not Go's).
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
             note += "+go-auth-swap"
@@ -1307,6 +1360,7 @@ class Proxy(BaseHTTPRequestHandler):
         self.end_headers()
         sent = 0
         head = b""  # first bytes of the response — the generation id lives here (JSON and SSE both)
+        tail = b""  # last 16KB for Go-leg usage extraction (non-stream JSON puts usage at the end)
         # homelab#22: the absolute wall. A slow-drip upstream keeps every read under
         # READ_TIMEOUT_S forever; this severs at started+deadline regardless.
         try:
@@ -1325,6 +1379,9 @@ class Proxy(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if or_model and len(head) < 16384:
                     head += chunk
+                # Go leg: keep a rolling tail buffer (last 16KB) for usage extraction
+                if go_leg and 200 <= status < 300:
+                    tail = (tail + chunk)[-16384:]
                 sent += len(chunk)
                 if deadline and time.time() > deadline:
                     with _inflight_lock:
@@ -1339,6 +1396,47 @@ class Proxy(BaseHTTPRequestHandler):
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
             resp.close()
+        # homelab#422: Go-leg usage extraction from response body (no headroom headers on this rail).
+        # Extract usage from head+tail via regex (SSE stream: message_start/messsage_delta events;
+        # non-stream JSON: usage object at the end). Max-merge all matches (idempotent across overlap).
+        if go_leg and 200 <= status < 300 and or_model:
+            usage_text = (head + tail).decode("utf-8", errors="replace")
+            usage_re = re.compile(r'"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})')
+            merged = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+                      "cache_creation_input_tokens": 0}
+            for m in usage_re.finditer(usage_text):
+                try:
+                    u = json.loads(m.group(1))
+                    for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
+                              "cache_creation_input_tokens"):
+                        if k in u:
+                            merged[k] = max(merged.get(k, 0), u[k])
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            # Compute usage-$ from tokens × list prices (badged models at 0.5×)
+            if merged["input_tokens"] or merged["output_tokens"]:
+                bare_model = or_model.removeprefix(GO_PREFIX).split(":")[0]  # strip prefix + any :tag
+                price_row = GO_PRICES.get(bare_model)
+                if price_row is None:
+                    # Unknown model: use most expensive known row + warn (fail conservative)
+                    log(f"WARN Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE/M}")
+                    price_row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
+                in_p, out_p, cr_p, _cw_p, half = price_row
+                in_usd = merged["input_tokens"] * in_p / 1e6
+                out_usd = merged["output_tokens"] * out_p / 1e6
+                cr_usd = merged.get("cache_read_input_tokens", 0) * cr_p / 1e6 if cr_p else 0.0
+                usd = (in_usd + out_usd + cr_usd) * (0.5 if half else 1.0)
+                # Stack attribution: ref:<ns>/<name> → stack=<ns>, else "jail"
+                auth_hdr = next((v for k, v in self.headers.items() if k.lower() == "authorization"), "")
+                if auth_hdr.startswith("Bearer ref:"):
+                    stack = auth_hdr[len("Bearer ref:"):].strip().split("/")[0]
+                else:
+                    stack = "jail"
+                router.go_usage_add(time.time(), stack, bare_model, usd)
+                log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
+                    f"{merged['output_tokens']}out{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''} → ${usd:.6f}")
+            else:
+                log(f"Go leg: no usage found in response body for {or_model}")
         if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg:
             # ADR-096 cost harvest: fire the /generation lookup for this completion. A client
             # that dropped mid-stream still spent money — harvest regardless of how we exited.
@@ -1391,6 +1489,39 @@ class Proxy(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
             return
+        if self.path.split("?", 1)[0] == "/opencode-limit":
+            # homelab#422: Go-rail subscription headroom probe — same JSON shape as /anthropic-limit.
+            # Windows: 5h/$12, 7d/$30, 30d/$60; threshold deferral when any window's utilization ≥ threshold.
+            # `by_stack` for the 7d window (the scheduler's consumption view).
+            now = time.time()
+            windows_data = {}
+            by_stack = {}
+            limited = False
+            threshold_composite = {}
+            for w, budget in OPENCODE_WINDOW_BUDGETS.items():
+                w_seconds = {"5h": 5 * 3600, "7d": 7 * 86400, "30d": 30 * 86400}[w]
+                snap = router.go_usage_window(w_seconds)
+                util = snap["total_usd"] / budget if budget > 0 else 0.0
+                thr = OPENCODE_UTIL_THRESHOLD_BY_WINDOW.get(w, OPENCODE_UTIL_THRESHOLD)
+                threshold_composite[w] = thr
+                windows_data[w] = {"usage_usd": snap["total_usd"], "budget_usd": budget,
+                                   "utilization": util}
+                if w == "7d":
+                    by_stack = snap["by_stack"]
+                if util >= thr:
+                    limited = True
+            payload = json.dumps({
+                "limited": limited,
+                "thresholds": threshold_composite,
+                "windows": windows_data,
+                "by_stack": by_stack,
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path == "/metrics":
             # FU-088 observability: subscription headroom → Prometheus (ServiceMonitor in this
             # app). Window gauges only exist once a subscription request has flowed — absent
@@ -1429,6 +1560,26 @@ class Proxy(BaseHTTPRequestHandler):
                 f"anthropic_subscription_dispatch_limited {1 if limited else 0}",
                 "# TYPE anthropic_subscription_429_total counter",
                 f"anthropic_subscription_429_total {count_429}",
+            ]
+            # homelab#422: OpenCode Go subscription windows — usage gauges + threshold + limited verdict.
+            go_limited = False
+            for w, budget in OPENCODE_WINDOW_BUDGETS.items():
+                w_seconds = {"5h": 5 * 3600, "7d": 7 * 86400, "30d": 30 * 86400}[w]
+                snap = router.go_usage_window(w_seconds)
+                util = snap["total_usd"] / budget if budget > 0 else 0.0
+                thr = OPENCODE_UTIL_THRESHOLD_BY_WINDOW.get(w, OPENCODE_UTIL_THRESHOLD)
+                if util >= thr:
+                    go_limited = True
+                lines += [
+                    "# TYPE opencode_subscription_usage_usd gauge",
+                    f'opencode_subscription_usage_usd{{window="{w}"}} {snap["total_usd"]:.6f}',
+                    "# TYPE opencode_subscription_usage_threshold gauge",
+                    f'opencode_subscription_usage_threshold{{window="{w}"}} {thr}',
+                ]
+            lines += [
+                "# TYPE opencode_subscription_dispatch_limited gauge",
+                "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
+                f"opencode_subscription_dispatch_limited {1 if go_limited else 0}",
             ]
             # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
             semaphore = _semaphore_state()
@@ -2290,6 +2441,47 @@ def _self_test() -> int:
           "only-free: zero upstream traffic (guardrail fires pre-forward)")
     # Clean up the seeded ref
     _refs.pop("test-only-free/test-secret", None)
+
+    print("\n=== Go usage meter tests (homelab#422) ===")
+    # Test 10: window arithmetic — ledger rows at controlled timestamps, per-window totals + by_stack
+    now = time.time()
+    router.go_usage_add(now - 100, "sleep", "kimi-k3", 0.005)
+    router.go_usage_add(now - 50, "sleep", "qwen3.5-plus", 0.002)
+    router.go_usage_add(now - 25, "circles", "deepseek-v4-flash", 0.001)
+    w5m = router.go_usage_window(300)  # 5 minutes
+    check(abs(w5m["total_usd"] - 0.008) < 1e-9, f"window 5m: total_usd={w5m['total_usd']}")
+    check(w5m["by_stack"].get("sleep", 0) == 0.007, f"by_stack sleep={w5m['by_stack'].get('sleep')}")
+    check(w5m["by_stack"].get("circles", 0) == 0.001, f"by_stack circles={w5m['by_stack'].get('circles')}")
+
+    # Test 11: /opencode-limit latch flip — utilization crossing threshold flips limited
+    # Seed the ledger to cross the 5h threshold (default 0.80, budget $12)
+    for _ in range(100):
+        router.go_usage_add(now - 100, "test", "kimi-k3", 0.10)  # $10 total → 83% util
+    # Hit the endpoint
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    resp = json.loads(r.read())
+    c.close()
+    check(resp["limited"] is True, f"/opencode-limit: limited={resp['limited']} (should be True at 83%)")
+    check("5h" in resp["windows"], "/opencode-limit: 5h window present")
+    check(resp["by_stack"].get("test", 0) > 0, "/opencode-limit: by_stack includes test")
+
+    # Test 12: badge division — half=True model meters at 0.5× list
+    # deepseek-v4-flash has half=True, list 0.14/0.28 $/M
+    # 1M in + 1M out at list = $0.42; at half = $0.21
+    router.go_usage_add(now, "badge-test", "deepseek-v4-flash", 0.21)  # simulate 0.5× draw
+    w = router.go_usage_window(60)
+    # The 0.21 we added is the already-halved figure — the meter stores the final usd
+    check(w["by_stack"].get("badge-test", 0) == 0.21, f"badge test: stored 0.21 (halved)")
+
+    # Test 13: beta strip — ?beta=true&other=1 preserves other=1; plain ?beta=true strips clean
+    check(_strip_beta_query("/path?beta=true") == "/path", "beta strip: plain ?beta=true → clean")
+    check(_strip_beta_query("/path?beta=true&other=1") == "/path?other=1",
+          "beta strip: ?beta=true&other=1 → ?other=1")
+    check(_strip_beta_query("/path?x=1&beta=true&y=2") == "/path?x=1&y=2",
+          "beta strip: middle beta removed, neighbours joined")
+    check(_strip_beta_query("/path?x=1") == "/path?x=1", "beta strip: no beta → unchanged")
 
     print()
     if not fails:
