@@ -3960,3 +3960,15 @@ worktree: first devbox run 40s → 3.6s (no-op verification against shared /nix)
 position-independent (no absolute paths in gen/state.json) and self-correcting (config-hash
 keyed — an edited devbox.json re-realizes itself). Protocol step-0 = one cp line in the
 dispatch prompt; folds into the charter build-mode write-up at adoption.
+↳ (mode directive, ~14:10Z) **Operator locks the bootstrap build mode + pauses the Goal lane.**
+The method, stated as standing doctrine: jail-first → platform piece → platform-stack dogfood →
+stack rollout (the Goal loop bootstrapped this way; opencode-go is doing it now — can't be a
+platform reviewer before it was jail tooling). Goal lane PAUSED: v1.1's meta-coordination did
+not stop the 46 sprouts, cost ~16h hands-on, and the weekly pool is blown — resume gated on
+v1.2 machinery + budget recovery (meta-state ⚑). Current mode: fast jail subagent chunks,
+DOUBLE-reviewed (seat pre-push + reflex), every miss logged in
+docs/spikes/subagent-handover-misses.md as a decomposition rule (PR#413, merged in 90s via
+pr-wait from a session worktree — the two-seat de-confliction protocol live: the shared tree
+belongs to the operator's homelab-go session, which owns the shim translator leg). Ledger
+seeded: seat baseline 2/6 bot round-1 catches; PR review flow declared reliable enough that
+jail work no longer fixes the reflex itself.

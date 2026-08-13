@@ -25,11 +25,20 @@ meant to avoid.)
   tooling LIVE (`homelab-go` alias → `scripts/claude-go.sh` + shim; wallet key
   `opencode-go-api-key` minted; `.opencode-go.env` written — everything except fable mapped).
   Go TEXT completions work end-to-end; tools are BOUNDED by Go's half-baked Anthropic compat
-  (charter §Go rail — bisect evidence). **NEXT CONCRETE STEP: the shim's translator leg**
-  (Anthropic⟷OpenAI + SSE, target /chat/completions) → tool-capable Go subagents → then the
-  charter's build order (jail subagents author, platform loop reviews). Also pending from the
-  same day: PR#407 live verify (next platform ride's OTLP model = claude-haiku-4-5-*), and the
-  first elastic shadow cells accumulating since PR#408.
+  (charter §Go rail — bisect evidence). **The translator leg (Anthropic⟷OpenAI + SSE) is OWNED
+  BY THE OPERATOR'S homelab-go SESSION** (live 2026-08-13, editing the shim in the shared tree —
+  this seat keeps hands off scripts/claude-{go.sh,model-shim.py} and works from worktrees).
+  Build mode locked (operator): subagent chunks DOUBLE-REVIEWED (seat pre-push + reflex), every
+  miss → [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md) (the
+  decomposition-rules ledger, PR#413); PR cycle = `devbox run pr-wait` (PR#412); warm devbox =
+  cp .devbox (40s→3.6s). Pending verifies: PR#407 (next platform ride's OTLP model =
+  claude-haiku-4-5-*), elastic shadow cells since PR#408.
+- **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
+  the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
+  plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d
+  ~0.87–0.89). No new Goal until the v1.2 machinery (ADR-106 checkpoints + FU-168 famine fixes)
+  is complete AND the budget recovers; Bucket B's launch gate inherits this as a further
+  precondition. Current mode instead: fast double-reviewed subagent chunks (bullet above).
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
   2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
