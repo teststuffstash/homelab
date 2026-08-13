@@ -30,7 +30,10 @@
 
 ## Write boundaries (the recipe-tier rules, jail edition)
 
-- Branch `fix/<slug>` inside your worktree only. **Never push and never open a PR unless your
+- Branch `fix/<slug>` **created with your worktree as cwd** (`git checkout -b` there — never
+  `git -C /workspace/homelab …`). Branch refs are repo-GLOBAL across worktrees: a checkout
+  aimed at the shared tree escapes your boundary even if your commit lands here (the run-1
+  violation, PR#418 / ledger row). **Never push and never open a PR unless your
   dispatch prompt explicitly grants it** — the default contract is commit → STOP → report
   (the seat reviews your diff pre-push; double-review mode, ADR-107 §6).
 - Never touch: `.github/**`, `.agents/review.md` (the reviewer cannot gate its own rules —
