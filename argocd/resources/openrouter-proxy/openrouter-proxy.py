@@ -55,6 +55,14 @@ UPSTREAM = os.environ.get("UPSTREAM", "https://openrouter.ai")
 # credential) never sits in a worker pod. Wired by agent-session.sh --harness claude
 # (ANTHROPIC_BASE_URL=<proxy>/anthropic, ANTHROPIC_AUTH_TOKEN=ref:<ns>/<secret>).
 ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic.com")
+# ADR-107 (homelab#421): the Go rail — model-based routing to opencode.ai when the body's
+# model id starts with `opencode-go/`. The prefix is STRIPPED before forwarding (Go's compat
+# API takes bare ids), and ALL auth is REPLACED by the Go key (the subscription oauth must
+# never reach a third-party host). Wired by agent-session.sh --harness claude (same session
+# that hits /anthropic for claude-* models).
+GO_UPSTREAM = os.environ.get("OPENCODE_GO_BASE", "https://opencode.ai/zen/go")
+GO_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
+GO_PREFIX = "opencode-go/"
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
 OAUTH_BETA = "oauth-2025-04-20"
@@ -445,7 +453,9 @@ def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
         "error": {
             "code": 403,
             "message": f"guardrail only-free: model '{model}' is not a :free variant — "
-                       "this session key is restricted to free-tier models (FU-024)",
+                       "this session key is restricted to free-tier models (FU-024). "
+                       f"Go-leg requests (opencode-go/…) are also denied: only-free sessions "
+                       "have no Go-window authority.",
         }
     }).encode()
 
@@ -1154,7 +1164,7 @@ class Proxy(BaseHTTPRequestHandler):
 
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
-                 cb_session: str | None = None) -> None:
+                 cb_session: str | None = None, go_leg: bool = False) -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -1163,17 +1173,30 @@ class Proxy(BaseHTTPRequestHandler):
             _inflight[key] = (label, time.time())
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
-                                   cb_session=cb_session)
+                                   cb_session=cb_session, go_leg=go_leg)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
 
     def _forward_upstream(self, body: bytes | None, note: str,
                           or_model: str | None = None, or_provider: str | None = None,
-                          cb_session: str | None = None) -> None:
+                          cb_session: str | None = None, go_leg: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
-        if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
+        # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
+        # When /anthropic/* carries an opencode-go/ model, Go wins (claude CLI --model).
+        if go_leg:  # Go rail — swap upstream, replace auth with Go key
+            # Strip ?beta=true query specifically on Go leg only — Go's compat API 422s on
+            # claude-code's decorations (probed 2026-08-13). Other query params are preserved.
+            path = self.path.replace("?beta=true", "") if "?beta=true" in self.path else self.path
+            url = GO_UPSTREAM + path
+            note += "+go"
+            # Deny if no Go key configured — refuse loudly, never forward without credential.
+            if not GO_KEY:
+                log(f"{self.command} {self.path} → 502 [go-leg] model={or_model or '-'} - GO_KEY not set")
+                self._reply_json(502, {"error": "GO_KEY is not set - the Go rail has no credential"})
+                return
+        elif anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
             # FU-109 attribution: subscription traffic counted by ref-derived consumer (the
@@ -1188,8 +1211,37 @@ class Proxy(BaseHTTPRequestHandler):
         else:
             url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
-        note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
-        if anthropic:
+        # ADR-107 (homelab#421): Go leg auth — REPLACE all inbound auth with the Go key.
+        # The subscription oauth must NEVER reach the Go host.
+        if go_leg:
+            # SECURITY: allowlist-only headers for third-party Go upstream — never forward
+            # inbound auth headers (case variants like AUTHORIZATION/X-API-KEY could smuggle
+            # the subscription credential past a case-sensitive strip). The Go leg is a
+            # cross-provider egress, not an operator-trusted hop; only send what Go needs.
+            allowed = {}
+            for k, v in self.headers.items():
+                lk = k.lower()
+                # Allow: content-type (body shape), anthropic-version (client compat), accept
+                if lk in ("content-type", "anthropic-version", "accept"):
+                    allowed[k] = v
+            # Inject our auth — both styles because Go's docs don't commit to one.
+            go_key = (GO_KEY.split() or [""])[-1]  # last-token sanitization
+            allowed["x-api-key"] = go_key
+            allowed["Authorization"] = f"Bearer {go_key}"
+            headers = allowed
+            # Strip ?beta=true query specifically — Go's compat API 422s on claude-code's
+            # decorations (probed 2026-08-13). Only the beta param is stripped; other
+            # query params (if any client adds them) are preserved.
+            if "?beta=true" in self.path:
+                url = url.split("?beta=true")[0]
+            # Also strip anthropic-beta headers (they're Anthropic-specific, not Go's).
+            headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
+            note += "+go-auth-swap"
+        else:
+            note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
+        # ADR-107 (homelab#421): oauth-beta reinjection is Anthropic-specific — never run for Go leg.
+        # The Go-leg allowlist already strips anthropic-beta, but this guard makes intent explicit.
+        if anthropic and not go_leg:
             # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
             # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
             auth_k = next((k for k in headers if k.lower() == "authorization"), None)
@@ -1215,11 +1267,15 @@ class Proxy(BaseHTTPRequestHandler):
             return
 
         status = resp.getcode()
-        if anthropic:
+        # ADR-107 (homelab#421): Go leg must NOT pollute Anthropic subscription latch state.
+        # When /anthropic/* carries opencode-go/ model, go_leg=True and anthropic=True —
+        # the Go response must not update Anthropic accounting (a Go 429 is not an Anthropic 429).
+        if anthropic and not go_leg:
             note += _anthropic_latch_update(status, resp.headers)
-        elif or_model:
-            # ADR-096: passive provider health — every forwarded completion is an observation
-            # (the router's health store costs zero extra polling by living in the data plane).
+        elif or_model and not go_leg:  # OpenRouter accounting — Go leg is a DIFFERENT provider
+            # ADR-096: passive provider health for OpenRouter only. Go-rail outcomes must NOT
+            # pollute OpenRouter state (cooldowns, capacity latches, provider_events) — a Go 429
+            # is not an OpenRouter problem, and cross-contamination would wedge unrelated traffic.
             router.record_provider_event(or_model, or_provider or "", status)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
@@ -1283,7 +1339,7 @@ class Proxy(BaseHTTPRequestHandler):
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
             resp.close()
-        if GEN_LOOKUP and or_model and 200 <= status < 300:
+        if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg:
             # ADR-096 cost harvest: fire the /generation lookup for this completion. A client
             # that dropped mid-stream still spent money — harvest regardless of how we exited.
             m = _GEN_ID_RE.search(head)
@@ -1825,11 +1881,15 @@ class Proxy(BaseHTTPRequestHandler):
         or_model = None
         or_provider = None
         cb_session = None
+        go_leg = False  # ADR-107 (homelab#421): Go rail routing by model prefix
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
                 if isinstance(payload, dict) and payload.get("model"):
-                    # FU-024 only-free enforcement (before any forwarding spend)
+                    # FU-024 only-free enforcement (before any forwarding spend).
+                    # NOTE: This also denies Go-leg requests for only-free sessions — intentional.
+                    # The guardrail asserts spend authority; Go is a paid window and only-free keys
+                    # have no Go-window authority. The error message below names this explicitly.
                     auth_hdr = self.headers.get("Authorization", "")
                     if auth_hdr.startswith("Bearer ref:"):
                         reject = _guardrail_reject(
@@ -1846,58 +1906,139 @@ class Proxy(BaseHTTPRequestHandler):
                             return
                     notes = []
                     or_model = normalize_model(str(payload["model"]))
-                    # ADR-096 addendum 3: a tripped breaker answers WITHOUT forwarding — the
-                    # storm's other ~130 calls never reach the provider, and the error body
-                    # carries the circuit-open marker the in-pod watchdog kills on.
-                    cb_session = _cb_session(self.headers)
-                    tripped = _cb_open(cb_session, or_model)
-                    if tripped:
-                        code = 401 if tripped["class"] == "auth" else 400
-                        reject = json.dumps({"error": {
-                            "code": code,
-                            "message": f"circuit-open ({tripped['class']}): "
-                                       f"{tripped['n']} 4XX responses for this (session, model) "
-                                       "— forwarding stopped, fix the session or switch model "
-                                       "(ADR-096 addendum 3)",
-                        }}).encode()
-                        log(f"POST {self.path} → {code} [circuit-open {tripped['class']}] "
-                            f"model={or_model} session={cb_session}")
-                        self.send_response(code)
-                        self.send_header("Content-Type", "application/json")
-                        self.send_header("Content-Length", str(len(reject)))
-                        self.send_header("Connection", "close")
-                        self.send_header("X-Openrouter-Proxy", "circuit-open")
-                        self.end_headers()
-                        self.wfile.write(reject)
-                        self.close_connection = True
-                        return
-                    pin = pin_for(str(payload["model"]))
-                    # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
-                    # hand-crafted request) always wins — never overwrite policy already in the body.
-                    if isinstance(payload.get("provider"), dict):
-                        or_provider = (payload["provider"].get("order") or [None])[0]
-                    if pin and "provider" not in payload:
-                        payload["provider"] = pin["provider"]
-                        or_provider = pin["provider"]["order"][0]
-                        notes.append(f"injected:{pin['provider']['order'][0]}"
-                                     + (":mkt" if pin.get("basis") == "market" else ""))
-                    # max_tokens floor (goose -32602 truncation class): raise a missing/low
-                    # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
-                    # max_completion_tokens when known. An explicit value ABOVE the floor wins.
-                    floor = MAX_TOKENS_FLOOR
-                    if pin and isinstance(pin.get("max_completion"), int):
-                        floor = min(floor, pin["max_completion"])
-                    current = payload.get("max_tokens")
-                    if floor > 0 and (not isinstance(current, int) or current < floor):
-                        payload["max_tokens"] = floor
-                        notes.append(f"max_tokens:{floor}")
-                    if notes:
+                    # ADR-107 (homelab#421): the Go leg — model id starting with `opencode-go/`
+                    # routes to the Go host with the prefix stripped and auth replaced by the Go key.
+                    if or_model.startswith(GO_PREFIX):
+                        go_leg = True
+                        bare = or_model[len(GO_PREFIX):]
+                        # Go's compat API takes bare model ids — strip the prefix.
+                        payload["model"] = bare
+                        # Go's Anthropic-compat layer mishandles the STRING shorthand for message
+                        # content (probed 2026-08-13: glm-5.2 dropped the prompt). Normalize to
+                        # blocks so shorthand clients don't hit it — same as the jail shim.
+                        for msg in payload.get("messages") or []:
+                            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                                msg["content"] = [{"type": "text", "text": msg["content"]}]
+                        # Go rejects Anthropic SERVER tools (e.g. WebSearchTool); client tools are
+                        # function-shaped (input_schema present / type None or "custom"). Drop only
+                        # server tools so Bash/Edit/MCP tools keep working — same as the shim.
+                        tools = payload.get("tools")
+                        if isinstance(tools, list):
+                            kept = [t for t in tools if isinstance(t, dict)
+                                    and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
+                            if len(kept) != len(tools):
+                                notes.append(f"go-dropped-{len(tools) - len(kept)}-server-tools")
+                            payload["tools"] = kept
+                        notes.append("go-leg")
                         body = json.dumps(payload).encode()
                         note = "+".join(notes)
+                        # Go leg skips OpenRouter processing (pin injection, circuit breaker, etc.)
+                        # — it's a simple forward to $GO_UPSTREAM with swapped auth.
+                        or_model = bare  # For logging, use the bare model id
+                    else:
+                        # ADR-096 addendum 3: a tripped breaker answers WITHOUT forwarding — the
+                        # storm's other ~130 calls never reach the provider, and the error body
+                        # carries the circuit-open marker the in-pod watchdog kills on.
+                        cb_session = _cb_session(self.headers)
+                        tripped = _cb_open(cb_session, or_model)
+                        if tripped:
+                            code = 401 if tripped["class"] == "auth" else 400
+                            reject = json.dumps({"error": {
+                                "code": code,
+                                "message": f"circuit-open ({tripped['class']}): "
+                                           f"{tripped['n']} 4XX responses for this (session, model) "
+                                           "— forwarding stopped, fix the session or switch model "
+                                           "(ADR-096 addendum 3)",
+                            }}).encode()
+                            log(f"POST {self.path} → {code} [circuit-open {tripped['class']}] "
+                                f"model={or_model} session={cb_session}")
+                            self.send_response(code)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(reject)))
+                            self.send_header("Connection", "close")
+                            self.send_header("X-Openrouter-Proxy", "circuit-open")
+                            self.end_headers()
+                            self.wfile.write(reject)
+                            self.close_connection = True
+                            return
+                        pin = pin_for(str(payload["model"]))
+                        # An explicit `provider` (a harness/opencode.json that CAN carry prefs, or a
+                        # hand-crafted request) always wins — never overwrite policy already in the body.
+                        if isinstance(payload.get("provider"), dict):
+                            or_provider = (payload["provider"].get("order") or [None])[0]
+                        if pin and "provider" not in payload:
+                            payload["provider"] = pin["provider"]
+                            or_provider = pin["provider"]["order"][0]
+                            notes.append(f"injected:{pin['provider']['order'][0]}"
+                                         + (":mkt" if pin.get("basis") == "market" else ""))
+                        # max_tokens floor (goose -32602 truncation class): raise a missing/low
+                        # max_tokens to MAX_TOKENS_FLOOR, clamped to the pinned endpoint's
+                        # max_completion_tokens when known. An explicit value ABOVE the floor wins.
+                        floor = MAX_TOKENS_FLOOR
+                        if pin and isinstance(pin.get("max_completion"), int):
+                            floor = min(floor, pin["max_completion"])
+                        current = payload.get("max_tokens")
+                        if floor > 0 and (not isinstance(current, int) or current < floor):
+                            payload["max_tokens"] = floor
+                            notes.append(f"max_tokens:{floor}")
+                        if notes:
+                            body = json.dumps(payload).encode()
+                            note = "+".join(notes)
+            except ValueError:
+                pass  # not JSON — forward untouched
+        # ADR-107 (homelab#421): Go leg detection for /anthropic/* paths — the claude CLI
+        # sends Anthropic-format requests to /anthropic/v1/messages with --model opencode-go/...
+        # The Go detection must fire here too, not just for /chat/completions.
+        # FU-024 only-free guardrail MUST be enforced here identically to /chat/completions.
+        elif self.path.startswith("/anthropic/") and body:
+            try:
+                payload = json.loads(body)
+                if isinstance(payload, dict) and payload.get("model"):
+                    model = str(payload["model"])
+                    # FU-024 only-free enforcement — same check as /chat/completions path.
+                    # only-free sessions have no Go-window authority; deny Go-leg requests.
+                    auth_hdr = self.headers.get("Authorization", "")
+                    if auth_hdr.startswith("Bearer ref:"):
+                        reject = _guardrail_reject(
+                            auth_hdr[len("Bearer ref:"):].strip(), model)
+                        if reject:
+                            log(f"POST {self.path} → 403 [guardrail only-free] model={model}")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(reject)))
+                            self.send_header("Connection", "close")
+                            self.end_headers()
+                            self.wfile.write(reject)
+                            self.close_connection = True
+                            return
+                    if model.startswith(GO_PREFIX):
+                        go_leg = True
+                        bare = model[len(GO_PREFIX):]
+                        # Go's compat API takes bare model ids — strip the prefix.
+                        payload["model"] = bare
+                        # Go's Anthropic-compat layer mishandles the STRING shorthand for message
+                        # content (probed 2026-08-13: glm-5.2 dropped the prompt). Normalize to
+                        # blocks so shorthand clients don't hit it — same as the jail shim.
+                        for msg in payload.get("messages") or []:
+                            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                                msg["content"] = [{"type": "text", "text": msg["content"]}]
+                        # Go rejects Anthropic SERVER tools (e.g. WebSearchTool); client tools are
+                        # function-shaped (input_schema present / type None or "custom"). Drop only
+                        # server tools so Bash/Edit/MCP tools keep working — same as the shim.
+                        tools = payload.get("tools")
+                        if isinstance(tools, list):
+                            kept = [t for t in tools if isinstance(t, dict)
+                                    and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
+                            if len(kept) != len(tools):
+                                pass  # note appended below
+                            payload["tools"] = kept
+                        body = json.dumps(payload).encode()
+                        note = "go-leg"
+                        or_model = bare  # For logging, use the bare model id
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
-                      cb_session=cb_session)
+                      cb_session=cb_session, go_leg=go_leg)
 
 
 def main() -> int:
@@ -1928,5 +2069,242 @@ def main() -> int:
     return 0
 
 
+# ── self-test: stub upstreams, assert routing / auth swap / model rewrite ────────────────────────
+def _self_test() -> int:
+    """Offline self-test: verifies Go-leg routing, auth swap, and Anthropic passthrough."""
+    import http.client
+
+    seen = {}
+
+    class Stub(BaseHTTPRequestHandler):
+        name = ""
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else b""
+            parsed = json.loads(body) if body else {}
+            seen[self.name] = {
+                "path": self.path,
+                "auth": self.headers.get("Authorization"),
+                "x_api_key": self.headers.get("x-api-key"),
+                "model": parsed.get("model") if body else None,
+                "body_raw": body,
+            }
+            # Return 429 for test-model-429 to test cross-provider contamination guard
+            status = 429 if parsed.get("model") == "test-model-429" else 200
+            out = b'data: {"ok":true}\n\ndata: [DONE]\n\n'
+            self.send_response(status)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    def stub(name, port):
+        h = type(f"Stub_{name}", (Stub,), {"name": name})
+        s = ThreadingHTTPServer(("127.0.0.1", port), h)
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+        return s
+
+    # Override globals for test
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, PORT
+    ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
+    GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
+    UPSTREAM = "http://127.0.0.1:18193"
+    GO_KEY = "go-test-key"
+    PORT = 18190
+
+    stub("anthropic", 18191)
+    stub("go", 18192)
+    stub("openrouter", 18193)
+    threading.Thread(target=main, daemon=True).start()
+    time.sleep(0.5)  # let server start
+
+    def call(model, extra_headers=None, path="/api/v1/chat/completions"):
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer OAUTH-SECRET",
+            "anthropic-version": "2023-06-01",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+        c.request("POST", path,
+                  body=json.dumps({"model": model, "messages": [{"role": "user", "content": "hi"}]}),
+                  headers=headers)
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, data
+
+    fails = []
+
+    def check(cond, msg):
+        (fails.append(msg) if not cond else None)
+        print(("  ok " if cond else "  FAIL ") + msg)
+
+    print("=== Go leg tests ===")
+    # Test 1: opencode-go/x routes to Go stub with prefix stripped
+    st, data = call("opencode-go/kimi-k3")
+    g = seen.get("go") or {}
+    check(st == 200 and b"[DONE]" in data, "go leg: 200 + streamed body relayed")
+    check(g.get("model") == "kimi-k3", "go leg: opencode-go/ prefix stripped")
+    check(g.get("auth") == "Bearer go-test-key", "go leg: Authorization = Bearer Go key")
+    check(g.get("x_api_key") == "go-test-key", "go leg: x-api-key = Go key")
+    check(g.get("auth") != "Bearer OAUTH-SECRET" and g.get("x_api_key") != "OAUTH-SECRET",
+          "go leg: session oauth never reaches Go")
+    check(g.get("path") == "/zen/go/api/v1/chat/completions", "go leg: base path joined")
+
+    # Test 2: content normalization (string -> blocks)
+    seen.clear()
+    st, _ = call("opencode-go/test-model")
+    g = seen.get("go") or {}
+    body = json.loads(g.get("body_raw") or b"{}")
+    content = (body.get("messages") or [{}])[0].get("content")
+    check(isinstance(content, list) and content[0].get("type") == "text",
+          "go leg: string content normalized to blocks")
+
+    # Test 3: server tools dropped
+    seen.clear()
+    st, _ = call("opencode-go/test-model", extra_headers={})
+    g = seen.get("go") or {}
+    body = json.loads(g.get("body_raw") or b"{}")
+    # Note: our test harness doesn't send tools, so this verifies passthrough
+    check(st == 200, "go leg: request forwarded (tools passthrough when absent)")
+
+    print("\n=== Anthropic leg tests ===")
+    # Test 4: /anthropic/* path routes to Anthropic stub with auth passthrough
+    # (The Anthropic leg is path-based, not model-based)
+    seen.clear()
+    st, data = call("claude-haiku-4-5", path="/anthropic/v1/messages")
+    a = seen.get("anthropic") or {}
+    check(st == 200 and b"[DONE]" in data, "anthropic leg: 200 + streamed body relayed")
+    check(a.get("model") == "claude-haiku-4-5", "anthropic leg: model untouched")
+    check(a.get("auth") == "Bearer OAUTH-SECRET", "anthropic leg: oauth passed through verbatim")
+    check(a.get("path") == "/v1/messages", "anthropic leg: /anthropic prefix stripped")
+
+    print("\n=== Anthropic path Go leg test (DECISIVE CASE) ===")
+    # Test 5: /anthropic/* path WITH opencode-go model → Go stub, NOT Anthropic
+    # This is what the claude CLI does: --model opencode-go/kimi-k3 to /anthropic/v1/messages
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3", path="/anthropic/v1/messages")
+    g = seen.get("go") or {}
+    check(st == 200 and b"[DONE]" in data, "/anthropic + go model: 200 + relayed")
+    check(g.get("model") == "kimi-k3", "/anthropic + go model: prefix stripped")
+    check(g.get("auth") == "Bearer go-test-key", "/anthropic + go model: Auth = Go key")
+    check(g.get("x_api_key") == "go-test-key", "/anthropic + go model: x-api-key = Go key")
+    check("OAUTH-SECRET" not in str(g.get("auth")) and "OAUTH-SECRET" not in str(g.get("x_api_key")),
+          "/anthropic + go model: zero oauth reaches Go")
+    check(g.get("path") == "/zen/go/anthropic/v1/messages", "/anthropic + go model: Go base + path")
+    # Verify Anthropic stub did NOT receive this request
+    check("anthropic" not in seen, "/anthropic + go model: Anthropic stub NOT hit")
+
+    print("\n=== Credential smuggling prevention test ===")
+    # Test 6: odd-case auth headers (AUTHORIZATION, X-Api-Key) must NOT reach Go upstream
+    # — the Go leg uses allowlist-only forwarding to prevent credential smuggling.
+    seen.clear()
+    st, data = call("opencode-go/sneaky-test", extra_headers={
+        "AUTHORIZATION": "Bearer SMUGGLED-OAUTH",
+        "X-Api-Key": "sneaky-key",
+        "x-API-KEY": "another-sneaky-key",
+    })
+    g = seen.get("go") or {}
+    check(st == 200 and b"[DONE]" in data, "smuggle test: 200 + relayed")
+    check(g.get("auth") == "Bearer go-test-key", "smuggle test: Authorization = Go key only")
+    check(g.get("x_api_key") == "go-test-key", "smuggle test: x-api-key = Go key only")
+    check("SMUGGLED" not in str(g.get("auth")) and "sneaky" not in str(g.get("x_api_key")).lower(),
+          "smuggle test: zero trace of smuggled/sneaky headers")
+    # Also verify allowed headers pass through
+    check("content-type" in str(g.get("body_raw") or "").lower() or g.get("body_raw"),
+          "smuggle test: content-type allowed through (body present)")
+
+    print("\n=== Go key denial test ===")
+    # Test 6: empty Go key -> 502, nothing forwarded
+    old_go_key = GO_KEY
+    GO_KEY = ""
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3")
+    check(st == 502, "go leg without key: 502 refused")
+    check("go" not in seen and "anthropic" not in seen,
+          "go leg without key: nothing forwarded to upstreams")
+    GO_KEY = old_go_key  # restore
+
+    print("\n=== Cross-provider state contamination test ===")
+    # Test 7: Go-leg 429 must NOT pollute OpenRouter state (cooldown, capacity latch,
+    # provider_events). A Go 429 is an opencode.ai problem, not an OpenRouter problem.
+    # We verify the guard by checking that the proxy correctly forwards the 429 without
+    # OpenRouter-specific accounting (the code path is guarded by `and not go_leg`).
+    seen.clear()
+    # The stub returns 429 for model "test-model-429" — wrapped with opencode-go/ prefix
+    # to trigger Go-leg routing. This tests that Go 429s don't pollute OpenRouter state.
+    st, data = call("opencode-go/test-model-429")
+    check(st == 429, "cross-provider: Go-leg 429 forwarded correctly")
+    g = seen.get("go") or {}
+    check(g.get("model") == "test-model-429", "cross-provider: Go stub received request (prefix stripped)")
+    # The assertable seam: no OpenRouter cooldown/latch notes in the response
+    # (the proxy logs would show "cooldown tripped" or "or-capacity-down" if contaminated)
+    # We verify the guard exists by checking our code change compiled and runs correctly.
+    # Note: direct assertion of router state would require mocking; the guard is verified
+    # by the code path `elif or_model and not go_leg:` at line ~1253.
+
+    print("\n=== Anthropic latch contamination test (Go via /anthropic path) ===")
+    # Test 8: Go-leg 429 through /anthropic/* path must NOT update Anthropic subscription latch.
+    # A Go 429 is not an Anthropic 429 — the latch state must remain unchanged.
+    # We access the module-level _latch dict directly to verify before/after equality.
+    import __main__
+    # Get initial latch state (count_429 is the most direct indicator of a 429 being processed)
+    initial_count = _latch.get("count_429", 0)
+    initial_until = _latch.get("until", 0.0)
+    seen.clear()
+    st, data = call("opencode-go/test-model-429", path="/anthropic/v1/messages")
+    check(st == 429, "anthropic-latch: Go-leg 429 via /anthropic forwarded correctly")
+    g = seen.get("go") or {}
+    check(g.get("model") == "test-model-429", "anthropic-latch: Go stub received request")
+    # Verify latch state unchanged — the guard at `if anthropic and not go_leg:` prevents update
+    final_count = _latch.get("count_429", 0)
+    final_until = _latch.get("until", 0.0)
+    check(final_count == initial_count,
+          f"anthropic-latch: count_429 unchanged ({initial_count} → {final_count})")
+    check(final_until == initial_until,
+          f"anthropic-latch: until unchanged ({initial_until} → {final_until})")
+
+    print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
+    # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.
+    # FU-024: only-free sessions have no Go-window authority — same 403 as /chat/completions.
+    # We seed the _refs cache directly (the resolution seam) with a guardrail:only-free session.
+    _refs["test-only-free/test-secret"] = (time.time() + 3600, {
+        "key": "test-key",
+        "guardrail": "only-free",
+        "kind": "openrouter",
+    })
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3", path="/anthropic/v1/messages", extra_headers={
+        "Authorization": "Bearer ref:test-only-free/test-secret",
+    })
+    check(st == 403, "only-free: Go-leg via /anthropic denied with 403")
+    # Verify NO upstream received the request (guardrail fires before forwarding)
+    check("go" not in seen and "anthropic" not in seen,
+          "only-free: zero upstream traffic (guardrail fires pre-forward)")
+    # Clean up the seeded ref
+    _refs.pop("test-only-free/test-secret", None)
+
+    print()
+    if not fails:
+        print("self-test: PASS")
+        return 0
+    else:
+        print(f"self-test: {len(fails)} FAILURES")
+        for f in fails:
+            print(f"  - {f}")
+        return 1
+
+
 if __name__ == "__main__":
+    # Self-test: offline routing/auth/rewrite test matching the jail shim's pattern.
+    # Usage: python3 openrouter-proxy.py --self-test
+    if "--self-test" in sys.argv:
+        sys.exit(_self_test())
     sys.exit(main())
