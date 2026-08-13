@@ -3987,3 +3987,14 @@ qwen3.8-max tool-call CLEANLY (tool_use round-trip), glm-5.2 422s tools per-mode
 region-locked (403); + SHIM_MODEL_REWRITE (un-wedge frozen alias maps live) + key-token
 sanitization after a traceback echoed the key into a log. Charter §Go rail amendment (translator
 may be OPTIONAL for the right models) rides THEIR session's PR, not this seat.
+↳ (takeover landed, ~14:55Z) **PR#414 merged (2 rounds)** — the retired go session's work + the
+takeover economics. Bot r1 caught the SHIM_MODEL_REWRITE reuse no-op (the un-wedge knob only
+applies at shim start; fixed as pidfile-targeted kill+respawn — never name-pkill, the self-kill
+class measured live today). Go-rail facts now in the charter: NO pricing/multiplier/quota API
+(picker UI is the only multiplier source — flash+luna 2x; curated-snapshot pattern) · Zen
+sibling gateway (60 models incl claude-* — never route claude there) with a 7-model FREE tier
+(candidate rung-0, tool-compat unproven, first probes 400) · slot economics table (subagent
+unit ≈$0.03 on mimo-v2.5 1×; flash same price but 2x AND region-locked = out; haiku slot KEEPS
+qwen3.5-plus — the one proven cheap tool-caller, flagged unpriced/undocumented; kimi-k2.7-code
+= next probe). Miss-ledger rows added mentally for #414 (seat-authored, 1 bot catch r1 — the
+loop-re-entry class AGAIN: state set at start, consumed on reuse).
