@@ -1,0 +1,4 @@
+CALL curl http://openrouter-proxy.agent-egress.svc.cluster.local:8080/opencode-limit
+OUT opencode-go/kimi-k3
+ERR → Anthropic latched — Go rail clear (opencode-go/kimi-k3)
+RC 0

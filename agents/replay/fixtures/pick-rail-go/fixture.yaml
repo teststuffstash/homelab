@@ -1,0 +1,12 @@
+# pick-rail-go (homelab#439) — Anthropic latched, Go rail clear.
+#
+# CONDITION: _anthropic_clear returns 1 (latched), curl serves {limited:false} for /opencode-limit.
+# EXPECTED: curl call recorded, stdout "opencode-go/kimi-k3", stderr log line, exit 0.
+name: pick-rail-go
+mode: actions
+source: agents/subscription-latch.sh
+parts:
+  - file:bridge.sh
+  - block:pick-rail-ladder
+env:
+  - STUB_ANTHROPIC_CLEAR=1

@@ -1,0 +1,12 @@
+# pick-rail-clear (homelab#439) — Anthropic is clear, no Go probe needed.
+#
+# CONDITION: _anthropic_clear returns 0 (Anthropic clear).
+# EXPECTED: stdout "anthropic", exit 0, NO curl call to /opencode-limit.
+name: pick-rail-clear
+mode: actions
+source: agents/subscription-latch.sh
+parts:
+  - file:bridge.sh
+  - block:pick-rail-ladder
+env:
+  - STUB_ANTHROPIC_CLEAR=1

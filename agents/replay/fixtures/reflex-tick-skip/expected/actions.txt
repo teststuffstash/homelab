@@ -1,0 +1,2 @@
+HH:MM:SS tick skipped — both rails latched (FU-088 latch)
+RC 0

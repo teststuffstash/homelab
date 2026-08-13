@@ -1,0 +1,12 @@
+# pick-rail-both (homelab#439) — both rails latched.
+#
+# CONDITION: _anthropic_clear returns 1, curl serves {limited:true} for /opencode-limit.
+# EXPECTED: curl call recorded, stderr "both rails latched", exit 1.
+name: pick-rail-both
+mode: actions
+source: agents/subscription-latch.sh
+parts:
+  - file:bridge.sh
+  - block:pick-rail-ladder
+env:
+  - STUB_ANTHROPIC_CLEAR=1
