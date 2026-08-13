@@ -162,14 +162,16 @@ for snapshot_path in $FILTERED; do
 
   # Parse reviews to find matching one (author.login contains reviewer login, submitted_at >= snapshot)
   recorded_verdict=$(echo "$reviews_json" | jq -r --arg login "$REVIEWER_LOGIN" --arg ts "$snap_iso" '
-    [.[] | select((.author.login | contains($login)) and (.submitted_at >= $ts))]
+    [.[] | select((.user.login | contains($login)) and (.submitted_at >= $ts)
+           and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))]
     | sort_by(.submitted_at)
     | .[0]
     | .state // ""
   ' 2>/dev/null || true)
 
   recorded_body=$(echo "$reviews_json" | jq -r --arg login "$REVIEWER_LOGIN" --arg ts "$snap_iso" '
-    [.[] | select((.author.login | contains($login)) and (.submitted_at >= $ts))]
+    [.[] | select((.user.login | contains($login)) and (.submitted_at >= $ts)
+           and (.state == "APPROVED" or .state == "CHANGES_REQUESTED"))]
     | sort_by(.submitted_at)
     | .[0]
     | .body // ""
