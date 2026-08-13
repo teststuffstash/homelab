@@ -38,6 +38,7 @@ handover lesson, or `—` if clean.
 | 2026-08-13 | #410 | claude-go env file + Go-leg hardening | seat | — | 0 | — | — |
 | 2026-08-13 | #411 | ADR-107 charter docs | seat | — | 0 | — | — |
 | 2026-08-13 | #412 | pr-wait primitive | seat | — | 1 (reviewDecision survives pushes — the primary caller loop echoed stale feedback; reviewer cited `reviewable_again` as prior art) | — | when a chunk's contract IS a loop, hand over the loop's re-entry case explicitly ("what does the second invocation see?"); state-freshness guards are a named repo pattern — point the author at `reviewable_again` |
+| 2026-08-13 | #418 | fix.yaml `agents/**` tier caveat (#354 opt 1) | **subagent** (kimi-k3, sonnet slot, Go rail; 64.6k tok, ~4 min) | content: 0 · **process: 1, post-hoc** — checked out its branch in the SHARED tree (card violation; surfaced only when the seat's next commits landed on the subagent's branch; reflog-confirmed) | 0 | — | (a) the seat gate gains a deterministic POST-RUN process check: `git -C /workspace/homelab branch --show-current` + `status` — a diff read cannot see boundary escapes; (b) the card must teach the MECHANISM, not just the rule: branch refs are repo-GLOBAL across worktrees, so any `git -C <shared-tree>` escapes the boundary even when the commit lands in the worktree |
 
 ## Standing observations (promote to rules as they recur)
 
