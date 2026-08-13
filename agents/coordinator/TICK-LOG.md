@@ -3906,3 +3906,14 @@ banked (no decision yet): OpenCode Go ($10/mo, $12/5h-$30/wk-$60/mo, 18 OSS mode
 retro-proven audit tier, Anthropic-compat API, cached-read pricing published) as a 4th rail +
 the generalized multi-SUBSCRIPTION ladder (codex/copilot too; "most available subscription
 first", capacity doorbell on window reset) — M11 §amendment territory, opinion delivered in-session.
+↳ (banked, ~10:45Z) **Operator thesis revision, evidence-backed, NO decision — banked only:** the
+monotone model ladder ("class goes up each level") reads wrong for SMALL tasks — sonnet keeps
+finding real defects in opus/fable work (sleep#9, both goal-review sonnet runs, the #402 regex
+catch, PR#407 r1 — where sonnet RAN model_id.py rather than out-reasoning the author). Reading:
+review leverage = decorrelation + fresh context + tool-grounded verification, not tier; capability
+escalates with AUTHORING leverage (the M10/ADR-106 axis), not chain position. Different-model-
+than-author survives fully; the `reviewer ≥ author` TIER inequality is the questioned half, and
+"cheap reviewer" is an audit-BAND claim (deepseek-v4-pro/hy3 proven; gpt-oss/nemotron fabricate).
+If ever acted on: a FU-095(b) review-class cell pilot (shadow sonnet, escaped-defect metric) —
+doctrine edits (reviewer-session.sh header, research-and-specs step ladder, platform-and-stacks
+overflow line) follow the data. Operator: leave banked.
