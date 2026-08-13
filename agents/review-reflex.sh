@@ -104,10 +104,14 @@ log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 # 0a. FU-088(a) reactive latch: the first 429 anywhere on the subscription latches the egress
 #     proxy — skip the whole tick while latched (this reflex only ever spawns subscription
 #     reviewers; level-triggered, so the next tick simply re-checks).
-if ! bash "$HERE/subscription-latch.sh"; then
-  log "tick skipped — subscription rate-limited (FU-088 latch)"
+#     homelab#439: --pick-rail mode — when ANY rail is clear the tick proceeds; each
+#     reviewer-session it dispatches runs its own #424 ladder downstream.
+rail="$(SUBSCRIPTION_TIER=dispatch bash "$HERE/subscription-latch.sh" --pick-rail 2>/dev/null)" || rail=""
+if [ -z "$rail" ]; then
+  log "tick skipped — both rails latched (FU-088 latch)"
   exit 0
 fi
+log "rail clear: $rail — tick proceeds (each dispatched session picks its own rail downstream)"
 
 # 0b. Honor the per-stack `reviewer.enabled` knob — the first CONSUMED slice of FU-080 (found
 #     live 2026-07-17: the oracle claim synced `reviewer: {enabled: false}` but nothing read it,

@@ -19,9 +19,46 @@
 # exit 0 = clear to dispatch. exit 1 = deferred (reason printed to stderr).
 # FAIL-OPEN by design: proxy unreachable (jail/manual run — the ClusterIP svc doesn't cross the
 # BGP boundary), kubectl/RBAC missing, or a malformed reply reads as clear. Burn-saver, not a gate.
+#
+# --pick-rail mode (homelab#439): when the Anthropic subscription is latched (exit 1), probe the
+# Go rail via ${PROXY}/opencode-limit and print the rail name if clear. Backward-compatible:
+# no flag = boolean contract (exit 0 = clear, exit 1 = latched).
 set -u
 PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 TIER="${SUBSCRIPTION_TIER:-}"
+
+# >>>REPLAY:pick-rail-ladder>>>
+# --pick-rail mode: compose the ladder, print the rail name on success
+if [ "${1:-}" = "--pick-rail" ]; then
+  # First check Anthropic (the original probe)
+  reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
+  limited="false"
+  if [ -n "$reply" ]; then
+    limited="$(printf '%s' "$reply" | jq -r '.limited // false' 2>/dev/null)" || limited="false"
+  fi
+  if [ "$limited" != "true" ]; then
+    # Anthropic clear → print "anthropic" and exit 0
+    echo "anthropic"
+    exit 0
+  fi
+  # Anthropic latched → probe Go rail
+  go_reply="$(curl -fsS --max-time 5 "$PROXY/opencode-limit" 2>/dev/null)" || go_reply=""
+  go_limited="true"
+  if [ -n "$go_reply" ]; then
+    go_limited="$(printf '%s' "$go_reply" | jq -r '.limited // false' 2>/dev/null)" || go_limited="true"
+  fi
+  if [ "$go_limited" = "false" ]; then
+    # Go rail clear → print rail name, log to stderr, exit 0
+    echo "opencode-go/kimi-k3"
+    echo "→ Anthropic latched — Go rail clear (opencode-go/kimi-k3)" >&2
+    exit 0
+  fi
+  # Both latched → exit 1 with stderr naming both
+  echo "both rails latched (Anthropic: 429/utilization, Go: ${go_reply:+limited / }unreachable)" >&2
+  exit 1
+fi
+# <<<REPLAY:pick-rail-ladder<<<
+
 reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
 server_semaphore="false"
 if [ -n "$reply" ]; then
