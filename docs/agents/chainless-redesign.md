@@ -247,3 +247,13 @@ generalizes, M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095
 pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (accounting) · FU-168
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
+
+## Rollout status (2026-08-13)
+
+**Chunks A–D shipped/live** (PR#429/#433/#434/#435/#436); two live-DOA lessons: (1) requested≠served
+belt needed from day one (PR#407's class: 23-day harness drift unnoticed), (2) workspace opt-in
+gates model access (glm-5.2 403s until toggled). First organic Go-served review: PR#437 (kimi-k3,
+snapshot recorded). Weekly latch back at 0.95 with failover armed for latched weeks. Meter scope:
+cluster-dispatched only until #438 lands (jail self-metering + push per [ADR-108](../adr.md)).
+Open: E (#425 time-travel re-review), F (#426 dashboards+currency), G (#438 jail self-metering),
+H (#439 cost-retype/fair-scheduling).
