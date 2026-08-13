@@ -88,7 +88,8 @@ migrate through).
   dropped, models tool-calling fine on `/chat/completions`. The homelab-go session's per-model
   probing then split it: **qwen3.5-plus, qwen3.8-max and kimi-k3 accept Anthropic-shaped tools
   and return proper `tool_use` blocks** (`stop_reason: tool_use` — re-verified independently at
-  takeover), while glm-5.2 422s every function tool and deepseek-* is region-locked (403). Two
+  takeover), while glm-5.2 422s every function tool (deepseek-* 403'd too until the
+  China-hosting workspace opt-in was toggled — both pass post-toggle, matrix §quirks). Two
   quirks stay normalized in the jail shim: string-shorthand message content (glm drops it;
   blocks form fine) and claude-code's `?beta=true` + `anthropic-beta` decorations (422).
 - **Metadata surface (probed 2026-08-13): registry-POOR.** `/v1/models` returns ids only — no
