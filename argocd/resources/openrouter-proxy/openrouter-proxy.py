@@ -48,6 +48,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import router  # ADR-096 control plane — sibling file in the same ConfigMap/dir
+import gometer  # ADR-108: shared Go-rail pricing/usage module (single home for proxy + jail shim)
 
 UPSTREAM = os.environ.get("UPSTREAM", "https://openrouter.ai")
 # FU-066 (claude+haiku worker tier): requests under /anthropic/* forward to the Anthropic API
@@ -63,44 +64,12 @@ ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic
 GO_UPSTREAM = os.environ.get("OPENCODE_GO_BASE", "https://opencode.ai/zen/go")
 GO_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
 GO_PREFIX = "opencode-go/"
-# GO_PRICES: OpenCode Go model pricing matrix (snapshot: docs/spikes/opencode-model-matrix.md 2026-08-13).
-# Keys are bare model ids (prefix/suffix stripped); values: $/M tokens for in/out/cR/cW + half flag.
-# "half=True" = (2x usage) badge models — they draw subscription windows at HALF list price
-# (community-confirmed: "double the api worth" / "50 percent discounted").
-# Prices curated from console billing (2026-08-13); no pricing API exists on this rail.
-GO_PRICES = {
-    # model              in       out      cR       cW       half
-    "qwen3.5-plus":    (0.25,   1.00,   0.025,   None,  False),  # console-derived (2026-08-13)
-    "kimi-k3":         (3.00,  15.00,   0.30,    None,  False),  # $15 pool
-    "qwen3.8-max":     (2.00,   6.00,   0.25,    2.50,  False),  # $15 pool
-    "glm-5.2":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
-    "glm-5.1":         (1.40,   4.40,   0.26,    None,  False),  # $60 pool
-    "deepseek-v4-flash": (0.14, 0.28,  0.0028,  None,  True),   # $60 pool, 2x badge
-    "deepseek-v4-pro": (0.435,  0.87,  0.003625, None,  False),  # $15 pool
-    "mimo-v2.5":       (0.14,   0.28,   0.0028,  None,  False),  # $60 pool
-    "mimo-v2.5-pro":   (0.435,  0.87,  0.003625, None,  False),  # $15 pool
-    "kimi-k2.7-code":  (0.95,   4.00,   0.19,    None,  False),  # $60 pool
-    "kimi-k2.6":       (0.95,   4.00,   0.16,    None,  False),  # $60 pool
-    "minimax-m3":      (0.30,   1.20,   0.06,    None,  False),  # $60 pool
-    "minimax-m2.7":    (0.30,   1.20,   0.06,    0.375, False),  # $60 pool
-    "qwen3.7-max":     (2.50,   7.50,   0.50,    3.125, False),  # $60 pool
-    "qwen3.7-plus":    (0.40,   1.60,   0.04,    0.50,  False),  # ≤256k; >256k = 1.20/4.80/0.12/1.50
-    "qwen3.6-plus":    (0.50,   3.00,   0.05,    0.625, False),  # ≤256k; >256k = 2.00/6.00/0.20/2.50
-    "gpt-5.6-luna":    (0.20,   1.20,   0.02,    0.25,  True),   # ≤272k; 2x badge
-    "grok-4.5":        (2.00,   6.00,   0.30,    None,  False),  # $15 pool
-    "hy3":             (0.14,   0.58,   0.035,   None,  False),  # $60 pool
-}
-# Fallback: use the most expensive known row when a model is unseen (fail conservative).
-_GO_MAX_PRICE = max((p[0] + p[1] for p in GO_PRICES.values()), default=10.0)
-_GO_PRICED_MODELS = frozenset(GO_PRICES.keys())
-# Long-context price tiers (matrix §long-context; trigger = input_tokens threshold per pricing pages).
-# qwen3.7-plus >256k: 1.20/4.80/0.12/1.50, qwen3.6-plus >256k: 2.00/6.00/0.20/2.50,
-# gpt-5.6-luna >272k: 0.40/1.80/0.04/0.50. Half flag inherited from base row.
-GO_PRICES_LONG = {
-    "qwen3.7-plus": (256000, (1.20, 4.80, 0.12, 1.50)),
-    "qwen3.6-plus": (256000, (2.00, 6.00, 0.20, 2.50)),
-    "gpt-5.6-luna": (272000, (0.40, 1.80, 0.04, 0.50)),
-}
+# ADR-108: Go pricing moved to gometer.py (single home for proxy + jail shim).
+# Re-export for backwards compatibility within this file.
+GO_PRICES = gometer.GO_PRICES
+GO_PRICES_LONG = gometer.GO_PRICES_LONG
+_GO_MAX_PRICE = gometer._GO_MAX_PRICE
+_GO_PRICED_MODELS = gometer._GO_PRICED_MODELS
 
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
@@ -1417,54 +1386,27 @@ class Proxy(BaseHTTPRequestHandler):
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
             resp.close()
-        # homelab#422: Go-leg usage extraction from response body (no headroom headers on this rail).
-        # Extract usage from head+tail via regex (SSE stream: message_start/messsage_delta events;
-        # non-stream JSON: usage object at the end). Max-merge all matches (idempotent across overlap).
+        # ADR-108: Go-leg usage extraction and pricing via gometer (single home).
+        # head+tail buffer (16KB each) passed to extract_usage; price returns (usd, warning_or_None).
         if go_leg and 200 <= status < 300 and or_model:
-            usage_text = (head + tail).decode("utf-8", errors="replace")
-            usage_re = re.compile(r'"usage"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})')
-            merged = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
-                      "cache_creation_input_tokens": 0}
-            for m in usage_re.finditer(usage_text):
-                try:
-                    u = json.loads(m.group(1))
-                    for k in ("input_tokens", "output_tokens", "cache_read_input_tokens",
-                              "cache_creation_input_tokens"):
-                        if k in u:
-                            merged[k] = max(merged.get(k, 0), u[k])
-                except (json.JSONDecodeError, KeyError):
-                    pass
-            # Compute usage-$ from tokens × list prices (badged models at 0.5×)
+            merged = gometer.extract_usage(head, tail)
+            bare_model = or_model.removeprefix(GO_PREFIX).split(":")[0]  # strip prefix + any :tag
+            usd, warning = gometer.price(bare_model, merged)
+            if warning:
+                log(f"WARN {warning}")
+            # Stack attribution: ref:<ns>/<name> -> stack=<ns>, else "jail"
+            auth_hdr = next((v for k, v in self.headers.items() if k.lower() == "authorization"), "")
+            if auth_hdr.startswith("Bearer ref:"):
+                stack = auth_hdr[len("Bearer ref:"):].strip().split("/")[0]
+            else:
+                stack = "jail"
             if merged["input_tokens"] or merged["output_tokens"]:
-                bare_model = or_model.removeprefix(GO_PREFIX).split(":")[0]  # strip prefix + any :tag
-                price_row = GO_PRICES.get(bare_model)
-                if price_row is None:
-                    # Unknown model: use most expensive known row + warn (fail conservative)
-                    log(f"WARN Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M")
-                    price_row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
-                in_p, out_p, cr_p, cw_p, half = price_row
-                # Long-context tier override: input_tokens > threshold → use long-context rates (half flag unchanged)
-                if bare_model in GO_PRICES_LONG:
-                    threshold, long_rates = GO_PRICES_LONG[bare_model]
-                    if merged["input_tokens"] > threshold:
-                        in_p, out_p, cr_p, cw_p = long_rates  # half stays from base row
-                in_usd = merged["input_tokens"] * in_p / 1e6
-                out_usd = merged["output_tokens"] * out_p / 1e6
-                cr_usd = merged.get("cache_read_input_tokens", 0) * cr_p / 1e6 if cr_p else 0.0
-                cw_usd = merged.get("cache_creation_input_tokens", 0) * cw_p / 1e6 if cw_p else 0.0
-                usd = (in_usd + out_usd + cr_usd + cw_usd) * (0.5 if half else 1.0)
-                # Stack attribution: ref:<ns>/<name> → stack=<ns>, else "jail"
-                auth_hdr = next((v for k, v in self.headers.items() if k.lower() == "authorization"), "")
-                if auth_hdr.startswith("Bearer ref:"):
-                    stack = auth_hdr[len("Bearer ref:"):].strip().split("/")[0]
-                else:
-                    stack = "jail"
                 router.go_usage_add(time.time(), stack, bare_model, usd)
                 log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
                     f"{merged['output_tokens']}out"
                     f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
                     f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
-                    f" → ${usd:.6f}")
+                    f" -> ${usd:.6f}")
             else:
                 log(f"Go leg: no usage found in response body for {or_model}")
         if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg:
@@ -2242,12 +2184,89 @@ def main() -> int:
         threading.Thread(target=_rankings_loop, daemon=True).start()
     if HEADROOM_POLL_S > 0:  # ADR-096 P2: per-key OpenRouter headroom (enrolled refs)
         threading.Thread(target=_headroom_loop, daemon=True).start()
-    log(f"openrouter-proxy: listening :{PORT} → {UPSTREAM} "
-        f"(h={CACHE_HIT}, uptime≥{UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
+    # ADR-108: start the Go usage ingest listener on port 8081 (daemon thread, fire-and-forget).
+    # Token-gated: requires X-Ingest-Token header matching GO_USAGE_INGEST_TOKEN env.
+    # Fail-closed: token unset -> 503 "ingest disabled", wrong token -> 401, bad body -> 400.
+    ingest_token = os.environ.get("GO_USAGE_INGEST_TOKEN")
+    if ingest_token:
+        def ingest_handler(handler: BaseHTTPRequestHandler) -> None:
+            """Handle POST /go-usage-report -> router.go_usage_add(ts, stack, model, usd)."""
+            if handler.path != "/go-usage-report" or handler.command != "POST":
+                handler.send_response(404)
+                handler.send_header("Connection", "close")
+                handler.end_headers()
+                return
+            # Check token
+            presented = handler.headers.get("X-Ingest-Token", "")
+            if presented != ingest_token:
+                status = 401 if presented else 403
+                body = json.dumps({"error": "unauthorized" if presented else "token required"}).encode()
+                handler.send_response(status)
+                handler.send_header("Content-Type", "application/json")
+                handler.send_header("Content-Length", str(len(body)))
+                handler.send_header("Connection", "close")
+                handler.end_headers()
+                handler.wfile.write(body)
+                handler.close_connection = True
+                log(f"go-ingest: {status} (token={'missing' if not presented else 'wrong'})")
+                return
+            # Parse body
+            length = int(handler.headers.get("Content-Length") or 0)
+            body = handler.rfile.read(length) if length else b""
+            try:
+                data = json.loads(body)
+                ts = float(data.get("ts") or time.time())
+                stack = str(data["stack"])
+                model = str(data["model"])
+                usd = float(data["usd"])
+                if usd < 0:
+                    raise ValueError("usd must be >= 0")
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+                resp = json.dumps({"error": f"bad body: {e}"}).encode()
+                handler.send_response(400)
+                handler.send_header("Content-Type", "application/json")
+                handler.send_header("Content-Length", str(len(resp)))
+                handler.send_header("Connection", "close")
+                handler.end_headers()
+                handler.wfile.write(resp)
+                handler.close_connection = True
+                log(f"go-ingest: 400 bad body: {e}")
+                return
+            # Accept the row
+            router.go_usage_add(ts, stack, model, usd)
+            handler.send_response(204)
+            handler.send_header("Connection", "close")
+            handler.end_headers()
+            log(f"go-ingest: stack={stack} model={model} ${usd:.6f}")
+
+        class IngestHandler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+            def log_message(self, *_):
+                pass
+            def do_POST(self):
+                ingest_handler(self)
+            def do_GET(self):
+                self.send_response(404)
+                self.send_header("Connection", "close")
+                self.end_headers()
+            def do_PUT(self):
+                self.do_GET()
+            def do_DELETE(self):
+                self.do_GET()
+
+        ingest_port = int(os.environ.get("INGEST_PORT", "8081"))
+        ingest_server = ThreadingHTTPServer(("0.0.0.0", ingest_port), IngestHandler)
+        threading.Thread(target=ingest_server.serve_forever, daemon=True).start()
+        log(f"go-ingest: listening on :{ingest_port} (token-gated; 503 if unset)")
+    else:
+        log("go-ingest: disabled — GO_USAGE_INGEST_TOKEN not set (ingest will 503)")
+
+    log(f"openrouter-proxy: listening :{PORT} -> {UPSTREAM} "
+        f"(h={CACHE_HIT}, uptime>={UPTIME_FLOOR}, max_price×{MAX_PRICE_FACTOR}, "
         f"deadline={REQUEST_DEADLINE_S}s, "
         f"max_tokens_floor={MAX_TOKENS_FLOOR}, market={'on' if MARKET_ENABLE else 'off'}, "
         f"rankings={'on' if ROUTER_ACCOUNT_REF and RANKINGS_POLL_S > 0 else 'off'}, "
-        f"semaphore≤{SUBSCRIPTION_MAX_RUNNING}, headroom={HEADROOM_POLL_S}s, "
+        f"semaphore<={SUBSCRIPTION_MAX_RUNNING}, headroom={HEADROOM_POLL_S}s, "
         f"breaker=auth:{_cb_config()['auth']}/generic:{_cb_config()['generic']})")
     ThreadingHTTPServer(("", PORT), Proxy).serve_forever()
     return 0
