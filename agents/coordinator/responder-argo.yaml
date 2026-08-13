@@ -317,12 +317,16 @@ spec:
             # NOT satisfy the triage dedup or consume the cap) — a silent defer/skip was
             # indistinguishable from a drop (2026-07-27 postmortem). (b): a latch defer exits 1
             # so Argo's retryStrategy re-runs THIS workflow — never trust the edge to refire.
-            if ! SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh; then
+            # homelab#439: --pick-rail mode — when ANY rail is clear the triage proceeds.
+            rail="$(SUBSCRIPTION_TIER=dispatch bash /work/homelab/agents/subscription-latch.sh --pick-rail 2>/dev/null)" || rail=""
+            if [ -z "$rail" ]; then
               jq -r '.alerts[]? | select(.status == "firing") | .fingerprint // empty' /tmp/alerts.json \
                 | while read -r dfp; do [ -n "$dfp" ] && kubectl -n agent-coordinator patch cm responder-seen \
                     --type merge -p "{\"data\":{\"fp-$dfp\":\"deferred-$TODAY\"}}" >/dev/null 2>&1 || true; done
-              echo "triage DEFERRED — subscription limited (FU-088); markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1
+              echo "triage DEFERRED — both rails latched (FU-088); markers written, exit 1 → Argo retries with backoff (FU-113b)"; exit 1
             fi
+            # Log which rail we're on (Go rail only when Anthropic is latched)
+            case "$rail" in opencode-go/*) echo "→ Anthropic latched — serving triage on the Go rail ($rail)";; esac
 
             # ── FU-149: THE DAILY BUDGET, CHECKED FIRST AND BINDING ─────────────────────────
             # This runs BEFORE any per-alert work because it is the only gate that bounds the DAY.
@@ -652,7 +656,7 @@ spec:
             (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
             HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
-                --model sonnet --permission-mode bypassPermissions --max-turns 40 </dev/null \
+                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) echo sonnet;; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
               # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────

@@ -164,6 +164,11 @@ is stale, so it cannot drift the way the prose register did.
 | `harvest-goal-open-exhausted` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-goal-open-funded` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-master-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `pick-rail-both` | actions | - | `agents/subscription-latch.sh` | - |
+| `pick-rail-clear` | actions | - | `agents/subscription-latch.sh` | - |
+| `pick-rail-go` | actions | - | `agents/subscription-latch.sh` | - |
+| `reflex-tick-proceed` | actions | - | `agents/review-reflex.sh` | - |
+| `reflex-tick-skip` | actions | - | `agents/review-reflex.sh` | - |
 | `research-draw-roster` | actions | - | `agents/research-fanout.sh` | - |
 | `responder-reopen-fix-verdict` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
 | `responder-reopen-report-only` | actions | - | `agents/coordinator/responder-argo.yaml` | IL-T03 |
