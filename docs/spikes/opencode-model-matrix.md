@@ -42,7 +42,7 @@ rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 
 | model | $/M in/out/cR/cW | Usage | badge | anthropic-compat tools | text (compat) | notes |
 |---|---|---|---|---|---|---|
-| **qwen3.5-plus** | undocumented — **DERIVED from console billing 08-13**: ≈0.25/1.00/0.025/? (three 40k-in rows → $0.0102 ⇒ in $0.25/M; cached 41k row → $0.0010 ⇒ cR $0.025/M; 265-out row → $0.0003 ⇒ out ≈$1/M) | ? | — | ✅ `tool_use` round-trip (raw 08-13) + **live subagent w/ Bash tool** (claude 08-13) | ✅ | current **haiku slot** + subagent default; undocumented id — pricing may surprise |
+| **qwen3.5-plus** | undocumented — **DERIVED from console billing 08-13**: ≈0.25/1.00/0.025/? (three 40k-in rows → $0.0102 ⇒ in $0.25/M; cached 41k row → $0.0010 ⇒ cR $0.025/M; 265-out row → $0.0003 ⇒ out ≈$1/M) | ? | — | ✅ `tool_use` round-trip (raw 08-13) + **live subagent w/ Bash tool** (claude 08-13) | ✅ | PRIOR haiku slot + subagent default (superseded by the flash promotion, 2026-08-13 — launch-frozen sessions may still ride it); undocumented id, rates now console-derived |
 | **kimi-k3** | 3.00/15.00/0.30/– | $15 | — | ✅ `tool_use` (raw 08-13) | ✅ | current **sonnet slot**; expensive output — sparse big calls |
 | **qwen3.8-max** | 2.00/6.00/0.25/2.50 | $15 | — | ✅ (go-session probe 08-13; not independently re-verified) | ✅ | current **opus slot** |
 | glm-5.2 | 1.40/4.40/0.26/– | $60 | — | ✗ **422 on EVERY function tool** (raw+claude 08-13) | ✅ but ⚠ drops STRING-shorthand content (free-associates; blocks form fine — shim normalizes) | serves the CLI's auxiliary calls fine; tools work OpenAI-shaped on `/chat/completions` (raw 08-13, `tool_calls`) |
