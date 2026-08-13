@@ -909,11 +909,15 @@ if [ -n "${RECIPE:-}" ]; then
   # ride since the harness landed (103 on the platform stack in the last 7d alone, ~$419
   # API-equivalent) ran opus-tier against the subscription while agent_run said haiku; found by
   # joining OTLP served-model to agent_run on session count. MODEL is FINAL here (routed /
-  # degraded / model_id-parsed to the bare alias); an openrouter/*-shaped leftover — the legacy
-  # launcher default when --harness claude is passed with no --model — resolves to the haiku
-  # tier, the same answer the late GOOSE_MODEL shim gives it.
+  # degraded / model_id-parsed to the bare alias). A VENDOR-SLASH id reaching this arm — the
+  # legacy launcher default when --harness claude is passed with no --model, which the model_id
+  # parse strips to deepseek/deepseek-v4-flash (reviewer catch, PR#407: an openrouter/* pattern
+  # here can never match the post-parse id) — is a model the claude CLI cannot run at all, so it
+  # resolves to the haiku tier, the same answer the late GOOSE_MODEL shim gives it. The SHAPE is
+  # the predicate, not MODEL_RAIL: a bare-alias operator override (--model sonnet) parses
+  # rail=openrouter too (the parser's catch-all), and rail-keying would coerce it away.
   _claude_model="${MODEL:-haiku}"
-  case "$_claude_model" in openrouter/*) _claude_model="haiku";; esac
+  case "$_claude_model" in */*) _claude_model="haiku";; esac
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
