@@ -89,46 +89,55 @@ _SKIP_RESP = {"content-length", "connection", "keep-alive", "transfer-encoding"}
 _AUTH = {"authorization", "x-api-key"}
 
 # ADR-108: spool helpers — write on push failure, drain on success.
+# One lock over BOTH spool operations: append during a drain's read-then-rewrite would be
+# silently wiped otherwise (bot review, PR#442). Held across the drain's pushes deliberately —
+# they are 1s-timeout and the only contender is another daemon metering thread; brief blocking
+# beats a lost row.
+_SPOOL_LOCK = threading.Lock()
+
+
 def _spool_append(row: dict) -> None:
     """Append one JSON line to the spool file (mkdir -p, tolerate failures)."""
     try:
-        os.makedirs(os.path.dirname(SPOOL_FILE), exist_ok=True)
-        with open(SPOOL_FILE, "a") as f:
-            f.write(json.dumps(row) + "\n")
+        with _SPOOL_LOCK:
+            os.makedirs(os.path.dirname(SPOOL_FILE), exist_ok=True)
+            with open(SPOOL_FILE, "a") as f:
+                f.write(json.dumps(row) + "\n")
     except Exception as e:
         print(f"shim: spool append failed: {e}", file=sys.stderr, flush=True)
 
 def _spool_drain() -> None:
     """Opportunistically push spooled rows; keep survivors on failure."""
-    if not os.path.exists(SPOOL_FILE):
-        return
-    survivors = []
-    try:
-        with open(SPOOL_FILE, "r") as f:
-            lines = f.readlines()
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue  # skip corrupt line
-            if _push_usage(row):  # success
-                continue
-            survivors.append(line)  # keep for next time
-    except Exception as e:
-        print(f"shim: spool drain failed: {e}", file=sys.stderr, flush=True)
-        return
-    # Rewrite with survivors
-    try:
-        with open(SPOOL_FILE, "w") as f:
-            for line in survivors:
-                f.write(line + "\n")
-        if not survivors:
-            os.remove(SPOOL_FILE)  # clean up empty file
-    except Exception as e:
-        print(f"shim: spool rewrite failed: {e}", file=sys.stderr, flush=True)
+    with _SPOOL_LOCK:
+        if not os.path.exists(SPOOL_FILE):
+            return
+        survivors = []
+        try:
+            with open(SPOOL_FILE, "r") as f:
+                lines = f.readlines()
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # skip corrupt line
+                if _push_usage(row):  # success
+                    continue
+                survivors.append(line)  # keep for next time
+        except Exception as e:
+            print(f"shim: spool drain failed: {e}", file=sys.stderr, flush=True)
+            return
+        # Rewrite with survivors
+        try:
+            with open(SPOOL_FILE, "w") as f:
+                for line in survivors:
+                    f.write(line + "\n")
+            if not survivors:
+                os.remove(SPOOL_FILE)  # clean up empty file
+        except Exception as e:
+            print(f"shim: spool rewrite failed: {e}", file=sys.stderr, flush=True)
 
 def _push_usage(row: dict) -> bool:
     """POST one row to the ingest endpoint. Returns True on success, False on failure."""
@@ -203,7 +212,11 @@ class Handler(BaseHTTPRequestHandler):
                 parsed = None
         if model.startswith(GO_PREFIX):
             bare = model[len(GO_PREFIX):]
-            parsed["model"] = GO_REWRITE.get(bare, bare)
+            # The RESOLVED id is what upstream serves and bills — return it (not the inbound
+            # alias), or metering prices a slot alias that GO_PRICES has never heard of and
+            # falls to the most-expensive fallback on every row (bot review, PR#442).
+            resolved = GO_REWRITE.get(bare, bare)
+            parsed["model"] = resolved
             # Go's Anthropic-compat layer mishandles the STRING shorthand for message content on
             # some models (probed 2026-08-13: glm-5.2 dropped the prompt and free-associated,
             # 12 input tokens counted; the array-of-blocks form answered correctly). claude-code
@@ -224,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
                     print(f"shim: go-leg dropped {len(tools) - len(kept)} server tool(s)",
                           file=sys.stderr, flush=True)
                 parsed["tools"] = kept
-            return GO_BASE, json.dumps(parsed).encode(), True, model
+            return GO_BASE, json.dumps(parsed).encode(), True, GO_PREFIX + resolved
         return ANTHROPIC_BASE, body, False, model
 
     def _forward(self):
