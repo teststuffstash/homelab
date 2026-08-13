@@ -34,6 +34,9 @@
 ## Write boundaries (the recipe-tier rules, jail edition)
 
 - Branch `fix/<slug>` with your clone as cwd — inside a clone this is safe by construction.
+  **Create the branch FIRST and verify with `git branch --show-current` before your first
+  commit** (a prior run committed on its clone's `master` while reporting a branch that did
+  not exist — the report must name a ref that is real).
   You never push and never open PRs (unless granted): the seat integrates by fetching your
   branch FROM your clone path. **Never push and never open a PR unless your
   dispatch prompt explicitly grants it** — the default contract is commit → STOP → report
@@ -48,10 +51,23 @@
   editing or removing an EXISTING assertion is a red flag you must call out explicitly in your
   report (homelab#354).
 
+## Tests you write must be able to fail
+
+- **If your test contains a copy of the logic under test, or reads back an expected value the
+  test itself inserted, it tests nothing** (4 sightings on 2026-08-13 alone: constants seeded
+  into the store then asserted; a replay bridge carrying a paste of the gate instead of
+  `block:` composition). Drive the real code path through its seams; compute every expected
+  value in a comment FROM the inputs and the contract source (and cite that source — an
+  expectation derived by running the code pins the code's bugs).
+- When rewriting a test block, existing assertions move — they never vanish. Diff your own
+  block for deleted `check(`/`assert` lines before committing.
+
 ## Before you report
 
 - Run every verification your dispatch prompt names (lints, self-tests, replay fixtures) and
   include their real output — **never report done on red**, and never pipe-filter an exit code.
+- **"Pre-existing failure" is a claim, not an observation**: it requires a clean-master
+  baseline run in the same report. A red you cannot reproduce on master is YOURS.
 - Report: outcome · `git diff --stat` · verification transcript tails · any deviation from the
   prompt · anything you lacked or guessed at (verbatim — it becomes a decomposition rule in
   `docs/spikes/subagent-handover-misses.md`).
