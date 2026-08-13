@@ -35,11 +35,15 @@ spec:
           env:
             # FU-088 per-window thresholds (operator direction 2026-07-28): 5h stays at the base
             # 0.80 (finish-in-progress guard — deny spawns that can't complete before the short
-            # window flips); 7d is the operator's personal weekly headroom preference, set higher
-            # so the loop keeps ticking deeper into the week before backing off. Base default
-            # (ANTHROPIC_UTIL_THRESHOLD, unset here) = 0.80 governs 5h.
+            # window flips); 7d is the operator's personal weekly headroom preference. Base
+            # default (ANTHROPIC_UTIL_THRESHOLD, unset here) = 0.80 governs 5h.
+            # 1.0 = the weekly latch is OFF (operator ruling 2026-08-13, direct-to-master): the
+            # review reflex must keep ticking on the blown week while the opencode-subscription
+            # reviewer is built out (ADR-107). The 5h window, the 429 latch and the semaphore
+            # remain the guards; Anthropic's own hard 429 is the real weekly stop. Tier
+            # composition is max(window, tier), so 1.0 disables the 7d deferral for EVERY tier.
             - name: ANTHROPIC_UTIL_THRESHOLD_7D
-              value: "0.95"
+              value: "1.0"
             # FU-088 concurrency semaphore, EXPLICIT since 2026-08-08 (was the code default 3):
             # operator upgraded the subscription Max 5x → Max 20x and raised this to 5. The
             # utilization thresholds above need NO recalibration — they read Anthropic's own
