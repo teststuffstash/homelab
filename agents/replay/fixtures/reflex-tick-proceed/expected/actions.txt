@@ -1,0 +1,2 @@
+HH:MM:SS rail clear: anthropic — tick proceeds (each dispatched session picks its own rail downstream)
+RC 0

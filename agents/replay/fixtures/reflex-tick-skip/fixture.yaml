@@ -1,0 +1,12 @@
+# reflex-tick-skip (homelab#439) — tick gate skips when both rails latched.
+#
+# CONDITION: subscription-latch.sh --pick-rail exits 1 with empty stdout.
+# EXPECTED: log line "tick skipped — both rails latched", exit 0.
+name: reflex-tick-skip
+mode: actions
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:reflex-tick-gate
+scrub:
+  - s/[0-2][0-9]:[0-5][0-9]:[0-5][0-9]/HH:MM:SS/g
