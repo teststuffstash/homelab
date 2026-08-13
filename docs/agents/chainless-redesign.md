@@ -42,7 +42,14 @@ an env var only goose read (PR#407).
    the **capacity doorbell**: the proxy knows every window's reset epoch and rings `/coordinate`
    on a latch's limited→ok transition, so 🧊 CAPACITY waits convert to edge-woken resumes
    ("ALL EVENTS HAVE DOORBELLS" applied to windows).
-6. **Build mode: jail subagents author, the platform loop only reviews.** The redesign is built
+6. **Build mode: jail subagents author, the platform loop only reviews.** Bootstrap-phase
+   refinement (operator, 2026-08-13): chunks are **double-reviewed** — the seat reads the
+   worktree diff pre-push, then the review reflex reads the PR — and every miss lands in the
+   [decomposition-rules ledger](../spikes/subagent-handover-misses.md), which is what earns the
+   seat gate's later narrowing. The rollout ladder for every piece of this program is the
+   standing method: **jail-first → platform piece → platform-stack dogfood → stack rollout**
+   (the Goal loop bootstrapped the same way; opencode-go cannot be a platform reviewer before
+   it has been jail tooling). The redesign is built
    from jail sessions fanning mechanical chunks to Go-slot subagents (`homelab-go`); the cluster
    loop's role is bot PR review. Slot mapping is launch-time env; per-call slot selection
    (Agent tool `model:`) is the size-tiering mechanism.
