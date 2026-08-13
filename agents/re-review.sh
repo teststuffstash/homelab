@@ -60,8 +60,13 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 echo "→ re-review: discovering snapshots..."
 
 # Step 1: Discover snapshots from S3
-if [ -n "$PR" ]; then
-  # Filter to specific project+pr if provided
+if [ -n "$PR" ] && [ -z "$PROJECT" ]; then
+  # An empty project would build s3://agent-transcripts// — a prefix that silently matches
+  # nothing (bot review r3). Fail loud: evidence tools never exit 0 on a vacuous query.
+  echo "re-review: --pr requires --project (the bucket is keyed <project>/<task>/...)" >&2
+  exit 2
+fi
+if [ -n "$PROJECT" ]; then
   S3_PREFIX="s3://agent-transcripts/${PROJECT}/"
 else
   S3_PREFIX="s3://agent-transcripts/"
@@ -286,7 +291,12 @@ EOF
     APPROVED) recorded_norm="APPROVE";;
     CHANGES_REQUESTED) recorded_norm="REQUEST_CHANGES";;
   esac
-  if [ "$recorded_norm" = "$sonnet_verdict" ]; then
+  # UNKNOWN on EITHER side (verdict unrecoverable / sonnet output unparseable) is not a model
+  # disagreement — give it its own outcome so the evidence channel never dresses a parse
+  # failure as a DISAGREE row (bot review r3).
+  if [ "$recorded_verdict" = "UNKNOWN" ] || [ "$sonnet_verdict" = "UNKNOWN" ]; then
+    compare_result="INCOMPARABLE"
+  elif [ "$recorded_norm" = "$sonnet_verdict" ]; then
     compare_result="AGREE"
   else
     compare_result="DISAGREE"
@@ -314,6 +324,12 @@ $idem_tag
 | Recorded | Sonnet Re-review |
 |----------|------------------|
 | $recorded_model / $recorded_verdict | $MODEL / $sonnet_verdict |
+
+<details><summary>Recorded review body (as submitted)</summary>
+
+$recorded_body
+
+</details>
 
 ### Sonnet Findings
 
