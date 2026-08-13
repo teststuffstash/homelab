@@ -81,9 +81,20 @@ spec:
                   name: opencode-go-key
                   key: api-key
                   optional: true
+            # ADR-108: the Go usage ingest token — gates POST /go-usage-report on port 8081.
+            # optional: true — the pod serves the data plane even before the seat writes the
+            # Infisical value; ingest 503s until then (fail closed: no token = no ingest).
+            - name: GO_USAGE_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: opencode-ingest-token
+                  key: token
+                  optional: true
           ports:
             - name: http
               containerPort: 8080
+            - name: ingest
+              containerPort: 8081
           readinessProbe:
             httpGet:
               path: /healthz

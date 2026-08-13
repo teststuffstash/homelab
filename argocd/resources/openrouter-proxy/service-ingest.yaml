@@ -1,0 +1,21 @@
+# ADR-108 — the ingest-only surface for Go-rail usage metering.
+# The jail shim pushes usage rows to this VIP; the 8080 data plane (credential injection)
+# deliberately stays ClusterIP. Token-gated: requires X-Ingest-Token header.
+# VIP 192.168.40.30 from the cluster LB range (docs/ip-plan.md).
+apiVersion: v1
+kind: Service
+metadata:
+  name: openrouter-proxy-ingest
+  labels:
+    app: openrouter-proxy
+    bgp: advertise
+  annotations:
+    lbipam.cilium.io/ips: "192.168.40.30"
+spec:
+  type: LoadBalancer
+  selector:
+    app: openrouter-proxy
+  ports:
+    - name: ingest
+      port: 8081
+      targetPort: ingest

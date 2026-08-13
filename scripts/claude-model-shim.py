@@ -26,6 +26,12 @@ carries the mapped id by the time it arrives here. Per-call model choice (Agent 
 Auth style: Go's docs don't name the header (Bearer vs x-api-key), so both are sent by
 default; narrow with SHIM_GO_AUTH_STYLE=bearer|x-api-key once observed.
 
+ADR-108 (homelab#438): This shim also meters its own Go-rail usage and pushes rows to the
+ingest listener at $SHIM_INGEST_URL (default http://192.168.40.30:8081/go-usage-report).
+Token-gated: requires $SHIM_INGEST_TOKEN. On push failure OR unset token: rows spill to
+~/.claude/homelab-go-usage-spool.jsonl; successful pushes opportunistically drain the spool.
+Metering is fire-and-forget (daemon thread) and NEVER raises into the proxy path.
+
 Run:  python3 scripts/claude-model-shim.py            # serve (foreground)
       python3 scripts/claude-model-shim.py --self-test # offline routing/auth/rewrite test
 """
@@ -34,8 +40,23 @@ import os
 import sys
 import threading
 import urllib.parse
+import urllib.request
 from http.client import HTTPConnection, HTTPSConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# ADR-108: import gometer from the proxy (sys.path insert so the shim can use it).
+# The shim imports it from the repo checkout at argocd/resources/openrouter-proxy/ —
+# the single home. Wrapped in try/except so metering failure never breaks the jail.
+_gometer = None
+try:
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PROXY_DIR = os.path.join(os.path.dirname(_SCRIPT_DIR), "argocd", "resources", "openrouter-proxy")
+    sys.path.insert(0, _PROXY_DIR)
+    import gometer
+    _gometer = gometer
+except Exception as e:
+    print(f"shim: gometer import failed ({e}) — metering disabled, proxy untouched",
+          file=sys.stderr, flush=True)
 
 PORT = int(os.environ.get("SHIM_PORT", "18091"))
 GO_BASE = os.environ.get("SHIM_GO_BASE", "https://opencode.ai/zen/go")
@@ -54,6 +75,11 @@ GO_REWRITE = {k.strip(): v.strip() for k, v in
               (p.split("=", 1) for p in
                os.environ.get("SHIM_MODEL_REWRITE", "").split(",") if "=" in p)}
 
+# ADR-108: self-metering config — ingest VIP + token; spool for failure fallback.
+INGEST_URL = os.environ.get("SHIM_INGEST_URL", "http://192.168.40.30:8081/go-usage-report")
+INGEST_TOKEN = os.environ.get("SHIM_INGEST_TOKEN")  # unset -> spool-only
+SPOOL_FILE = os.path.expanduser("~/.claude/homelab-go-usage-spool.jsonl")
+
 # End-to-end and hop-by-hop headers we must own rather than forward. Content-Length is
 # recomputed (the body may be rewritten); the response side is re-framed connection-close
 # (SSE-safe without re-chunking).
@@ -61,6 +87,105 @@ _SKIP_REQ = {"host", "content-length", "connection", "keep-alive", "transfer-enc
              "proxy-connection", "accept-encoding", "expect"}
 _SKIP_RESP = {"content-length", "connection", "keep-alive", "transfer-encoding"}
 _AUTH = {"authorization", "x-api-key"}
+
+# ADR-108: spool helpers — write on push failure, drain on success.
+# One lock over BOTH spool operations: append during a drain's read-then-rewrite would be
+# silently wiped otherwise (bot review, PR#442). Held across the drain's pushes deliberately —
+# they are 1s-timeout and the only contender is another daemon metering thread; brief blocking
+# beats a lost row.
+_SPOOL_LOCK = threading.Lock()
+
+
+def _spool_append(row: dict) -> None:
+    """Append one JSON line to the spool file (mkdir -p, tolerate failures)."""
+    try:
+        with _SPOOL_LOCK:
+            os.makedirs(os.path.dirname(SPOOL_FILE), exist_ok=True)
+            with open(SPOOL_FILE, "a") as f:
+                f.write(json.dumps(row) + "\n")
+    except Exception as e:
+        print(f"shim: spool append failed: {e}", file=sys.stderr, flush=True)
+
+def _spool_drain() -> None:
+    """Opportunistically push spooled rows; keep survivors on failure."""
+    with _SPOOL_LOCK:
+        if not os.path.exists(SPOOL_FILE):
+            return
+        survivors = []
+        try:
+            with open(SPOOL_FILE, "r") as f:
+                lines = f.readlines()
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # skip corrupt line
+                if _push_usage(row):  # success
+                    continue
+                survivors.append(line)  # keep for next time
+        except Exception as e:
+            print(f"shim: spool drain failed: {e}", file=sys.stderr, flush=True)
+            return
+        # Rewrite with survivors
+        try:
+            with open(SPOOL_FILE, "w") as f:
+                for line in survivors:
+                    f.write(line + "\n")
+            if not survivors:
+                os.remove(SPOOL_FILE)  # clean up empty file
+        except Exception as e:
+            print(f"shim: spool rewrite failed: {e}", file=sys.stderr, flush=True)
+
+def _push_usage(row: dict) -> bool:
+    """POST one row to the ingest endpoint. Returns True on success, False on failure."""
+    if not INGEST_TOKEN:
+        return False  # token unset -> spool-only
+    try:
+        data = json.dumps(row).encode()
+        req = urllib.request.Request(
+            INGEST_URL, data=data, method="POST",
+            headers={"Content-Type": "application/json",
+                     "X-Ingest-Token": INGEST_TOKEN,
+                     "User-Agent": "claude-model-shim/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=1) as resp:
+            if 200 <= resp.status < 300:
+                return True
+    except Exception:
+        pass  # any failure -> spool
+    return False
+
+def _meter_go_usage(model: str, head: bytes, tail: bytes) -> None:
+    """ADR-108: extract Go-leg usage and push to ingest (daemon thread, never block response).
+
+    On push failure OR unset token: append to spool file.
+    On successful push: opportunistically drain spool.
+    Wrapped in try/except — metering MUST NOT raise into the proxy path.
+    Short-circuits if gometer import failed (None) — proxy untouched.
+    """
+    if _gometer is None:
+        return  # gometer import failed — proxy must not be affected
+    try:
+        merged = _gometer.extract_usage(head, tail)
+        if not (merged.get("input_tokens") or merged.get("output_tokens")):
+            return  # no usage to report
+        bare_model = model.removeprefix(GO_PREFIX).split(":")[0]
+        usd, warning = _gometer.price(bare_model, merged)
+        if warning:
+            print(f"shim: METER {warning}", file=sys.stderr, flush=True)
+        row = {"ts": __import__("time").time(), "stack": "jail", "model": bare_model, "usd": usd}
+        if _push_usage(row):
+            # Success — drain spool opportunistically
+            threading.Thread(target=_spool_drain, daemon=True).start()
+        else:
+            # Push failed or token unset -> spool
+            _spool_append(row)
+    except Exception as e:
+        print(f"shim: metering failed: {e}", file=sys.stderr, flush=True)
+        # Never raise — best-effort metering
 
 
 def _upstream(base: str):
@@ -87,7 +212,11 @@ class Handler(BaseHTTPRequestHandler):
                 parsed = None
         if model.startswith(GO_PREFIX):
             bare = model[len(GO_PREFIX):]
-            parsed["model"] = GO_REWRITE.get(bare, bare)
+            # The RESOLVED id is what upstream serves and bills — return it (not the inbound
+            # alias), or metering prices a slot alias that GO_PRICES has never heard of and
+            # falls to the most-expensive fallback on every row (bot review, PR#442).
+            resolved = GO_REWRITE.get(bare, bare)
+            parsed["model"] = resolved
             # Go's Anthropic-compat layer mishandles the STRING shorthand for message content on
             # some models (probed 2026-08-13: glm-5.2 dropped the prompt and free-associated,
             # 12 input tokens counted; the array-of-blocks form answered correctly). claude-code
@@ -108,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
                     print(f"shim: go-leg dropped {len(tools) - len(kept)} server tool(s)",
                           file=sys.stderr, flush=True)
                 parsed["tools"] = kept
-            return GO_BASE, json.dumps(parsed).encode(), True, model
+            return GO_BASE, json.dumps(parsed).encode(), True, GO_PREFIX + resolved
         return ANTHROPIC_BASE, body, False, model
 
     def _forward(self):
@@ -163,6 +292,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "close")
         self.end_headers()
         n = 0
+        head = b""  # ADR-108: first 16KB for usage extraction (Go-leg 2xx)
+        tail = b""  # ADR-108: rolling last 16KB for usage extraction (Go-leg 2xx)
         while True:
             chunk = resp.read(8192)
             if not chunk:
@@ -170,11 +301,19 @@ class Handler(BaseHTTPRequestHandler):
             n += len(chunk)
             self.wfile.write(chunk)
             self.wfile.flush()  # SSE latency: relay each chunk as it lands
+            # ADR-108: capture head+tail for Go-leg 2xx responses
+            if go_leg and 200 <= resp.status < 300:
+                if len(head) < 16384:
+                    head += chunk
+                tail = (tail + chunk)[-16384:]
         conn.close()
         self.close_connection = True
         rail = "go" if go_leg else "anthropic"
         print(f"shim: {rail} {resp.status} model={model or '-'} path={self.path} bytes={n}",
               file=sys.stderr, flush=True)
+        # ADR-108: meter Go-leg 2xx responses (daemon thread, never block response path)
+        if go_leg and 200 <= resp.status < 300:
+            threading.Thread(target=_meter_go_usage, args=(model, head, tail), daemon=True).start()
 
     def _reply(self, status: int, body: bytes):
         self.send_response(status)
