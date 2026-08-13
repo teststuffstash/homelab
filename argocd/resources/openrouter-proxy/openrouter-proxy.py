@@ -1239,7 +1239,9 @@ class Proxy(BaseHTTPRequestHandler):
             note += "+go-auth-swap"
         else:
             note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
-        if anthropic:
+        # ADR-107 (homelab#421): oauth-beta reinjection is Anthropic-specific — never run for Go leg.
+        # The Go-leg allowlist already strips anthropic-beta, but this guard makes intent explicit.
+        if anthropic and not go_leg:
             # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
             # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
             auth_k = next((k for k in headers if k.lower() == "authorization"), None)
@@ -1265,7 +1267,10 @@ class Proxy(BaseHTTPRequestHandler):
             return
 
         status = resp.getcode()
-        if anthropic:
+        # ADR-107 (homelab#421): Go leg must NOT pollute Anthropic subscription latch state.
+        # When /anthropic/* carries opencode-go/ model, go_leg=True and anthropic=True —
+        # the Go response must not update Anthropic accounting (a Go 429 is not an Anthropic 429).
+        if anthropic and not go_leg:
             note += _anthropic_latch_update(status, resp.headers)
         elif or_model and not go_leg:  # OpenRouter accounting — Go leg is a DIFFERENT provider
             # ADR-096: passive provider health for OpenRouter only. Go-rail outcomes must NOT
@@ -2227,6 +2232,27 @@ def _self_test() -> int:
     # We verify the guard exists by checking our code change compiled and runs correctly.
     # Note: direct assertion of router state would require mocking; the guard is verified
     # by the code path `elif or_model and not go_leg:` at line ~1253.
+
+    print("\n=== Anthropic latch contamination test (Go via /anthropic path) ===")
+    # Test 8: Go-leg 429 through /anthropic/* path must NOT update Anthropic subscription latch.
+    # A Go 429 is not an Anthropic 429 — the latch state must remain unchanged.
+    # We access the module-level _latch dict directly to verify before/after equality.
+    import __main__
+    # Get initial latch state (count_429 is the most direct indicator of a 429 being processed)
+    initial_count = _latch.get("count_429", 0)
+    initial_until = _latch.get("until", 0.0)
+    seen.clear()
+    st, data = call("opencode-go/test-model-429", path="/anthropic/v1/messages")
+    check(st == 429, "anthropic-latch: Go-leg 429 via /anthropic forwarded correctly")
+    g = seen.get("go") or {}
+    check(g.get("model") == "test-model-429", "anthropic-latch: Go stub received request")
+    # Verify latch state unchanged — the guard at `if anthropic and not go_leg:` prevents update
+    final_count = _latch.get("count_429", 0)
+    final_until = _latch.get("until", 0.0)
+    check(final_count == initial_count,
+          f"anthropic-latch: count_429 unchanged ({initial_count} → {final_count})")
+    check(final_until == initial_until,
+          f"anthropic-latch: until unchanged ({initial_until} → {final_until})")
 
     print()
     if not fails:
