@@ -20,6 +20,16 @@ meant to avoid.)
   gaas = OPERATOR power-cycle (914 on correct key+version since 08-09; if persists → key rotated,
   re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
   (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
+- **ADR-107 / Go-rail chain (2026-08-13 — the durable record is
+  [`chainless-redesign.md`](chainless-redesign.md), read it FIRST):** charter accepted; jail
+  tooling LIVE (`homelab-go` alias → `scripts/claude-go.sh` + shim; wallet key
+  `opencode-go-api-key` minted; `.opencode-go.env` written — everything except fable mapped).
+  Go TEXT completions work end-to-end; tools are BOUNDED by Go's half-baked Anthropic compat
+  (charter §Go rail — bisect evidence). **NEXT CONCRETE STEP: the shim's translator leg**
+  (Anthropic⟷OpenAI + SSE, target /chat/completions) → tool-capable Go subagents → then the
+  charter's build order (jail subagents author, platform loop reviews). Also pending from the
+  same day: PR#407 live verify (next platform ride's OTLP model = claude-haiku-4-5-*), and the
+  first elastic shadow cells accumulating since PR#408.
 - **Soaks**: iac-sentinel shadow (FU-106); router shadow (FU-095); retro first UNATTENDED fire
   2026-08-17 (FU-058); FU-148 acceptance (first organic env-red self-retry); FU-149 datum
   ~08-20; or-op#34 (first daily-429); renovate-approve fix (#114) = next Renovate wave shows
