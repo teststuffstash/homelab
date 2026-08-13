@@ -232,7 +232,11 @@ the block needs pruning, not more headings.
       world registry, table mode, generated register, pins metadata, family dirs, hermeticity,
       suite fold-in). **Next:** execute moves 1–3 BEFORE the FU-168 fix round — its deliverables
       ride this lock; the scan-side footprint exemption for `agents/replay/**` is decided with
-      FU-168. Relates ADR-097, ADR-103, FU-165, FU-168.
+      FU-168. **Post-refactor acceptance (operator, 2026-08-13, from #354):** one adversarial
+      run — a PR that removes an existing assertion for no stated reason; the ORDINARY review
+      reflex (armed with the review.md worlds-are-extraordinary rule) must catch it unaided.
+      One run suffices (operator: not 1000 — residual risk = git blame + an eventual larger
+      periodic review). Relates ADR-097, ADR-103, FU-165, FU-168, #354.
 
 - [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
       (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:

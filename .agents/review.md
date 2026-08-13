@@ -22,6 +22,14 @@ judged PER PATH (`docs/agents/iac-lane.md` §The platform lane) rather than per 
 - **An alert rule whose `description` asserts a CAUSE.** Descriptions state the SYMPTOM and what to
   check. A guessed cause in an alert is how a wrong diagnosis gets institutionalised — this
   platform has paid for that twice (#94, #103).
+- **An edit or removal of an EXISTING replay assertion or recorded world** —
+  `agents/replay/**` (worlds, `expected/actions.txt`) and the `agents/*-test.sh` behaviour pins.
+  CI executes these from the PR branch, so weakening one changes what the required `ci` check
+  PROVES before any human looks (#354 — the `agents/**` "authoring is not effect" rationale is
+  false for exactly this subset). **Editing worlds is extraordinary**: additive rows are
+  ordinary work; an edit/removal is acceptable ONLY when the same PR deliberately changes the
+  pinned behaviour (the ADR-103 ratchet flow) and the body says so explicitly — an unexplained
+  weakened assertion is blocking no matter how plausible the diff reads.
 
 ## In-diff findings BLOCK — fix them in THIS PR (codeowner economics, operator 2026-08-12)
 
