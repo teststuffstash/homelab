@@ -20,18 +20,19 @@ meant to avoid.)
   gaas = OPERATOR power-cycle (914 on correct key+version since 08-09; if persists → key rotated,
   re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
   (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
-- **ADR-107 / Go-rail chain (2026-08-13 — the durable record is
-  [`chainless-redesign.md`](chainless-redesign.md), read it FIRST):** charter accepted; jail
-  tooling LIVE (`homelab-go` alias → `scripts/claude-go.sh` + shim; wallet key
-  `opencode-go-api-key` minted; `.opencode-go.env` written — everything except fable mapped).
-  Go TEXT completions work end-to-end; tools are BOUNDED by Go's half-baked Anthropic compat
-  (charter §Go rail — bisect evidence). **The translator leg (Anthropic⟷OpenAI + SSE) is OWNED
-  BY THE OPERATOR'S homelab-go SESSION** (live 2026-08-13, editing the shim in the shared tree —
-  this seat keeps hands off scripts/claude-{go.sh,model-shim.py} and works from worktrees).
-  Build mode locked (operator): subagent chunks DOUBLE-REVIEWED (seat pre-push + reflex), every
-  miss → [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md) (the
-  decomposition-rules ledger, PR#413); PR cycle = `devbox run pr-wait` (PR#412); warm devbox =
-  cp .devbox (40s→3.6s). Pending verifies: PR#407 (next platform ride's OTLP model =
+- **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md), read
+  it FIRST): rollout part 1 chunks A–D SHIPPED + LIVE 2026-08-13** (PRs #429/#433–#436;
+  end-to-end seat-probed — real completion + exact metered ledger row; #421–#424 closed with
+  evidence). **7d latch RESTORED 0.95** (f0f0aa3): a latched week now fails over to
+  `opencode-go/kimi-k3` with input-state snapshots. NEXT: **chunk E #425 (time-travel re-review
+  tool) BEFORE the weekly pool reset** — Go-served review snapshots need their sonnet re-review
+  path ready; then chunk F #426 (dashboards + doc currency). PR#437 (miss-ledger day-2 + card
+  tautology rules) cycling at session close — harvest its verdict. Build mode unchanged:
+  clone subagents, double review, misses →
+  [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md). Shim files
+  stay OWNED by the operator's homelab-go session (hands off
+  scripts/claude-{go.sh,model-shim.py}); this resumed session's Agent slots still ride the
+  launch-frozen qwen/kimi map. Pending verifies: PR#407 (next platform ride's OTLP model =
   claude-haiku-4-5-*), elastic shadow cells since PR#408.
 - **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
   the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
