@@ -3928,3 +3928,17 @@ FARMING is native + mid-session (Agent tool per-call model:); only the slot MAPP
 launch-time env. Direction set (operator): the chainless/routing redesign gets built by JAIL
 subagents (Go models on the slots once keyed), platform loop = PR reviews only. BLOCKED on the
 one operator step: mint `opencode-go-api-key` (opencode.ai/auth — third-party console class).
+↳ (Go trial keyed, ~12:40Z) **homelab-go wired end-to-end; Go's Anthropic compat bounded by
+probes.** claude-jail: `homelab-go` alias (port 8012, cd-fixed). homelab PR#410: launcher sources
+`.opencode-go.env` (written: haiku→glm-5.2, sonnet→kimi-k3, opus→deepseek-v4-pro, subagent
+default glm — everything except fable), shim Go-leg hardening. Live probes with the wallet key
+(Bearer ✓, 25 models): text completions work THROUGH the full stack (claude→shim→Go; the CLI's
+auxiliary calls 200). ⚠ BOUNDED: Go's /v1/messages rejects Anthropic-shaped tools (422 — their
+validator union is server-tool-only) AND silently drops OpenAI-shaped ones pre-model, while the
+same models tool-call perfectly on /chat/completions — so Go rides are TEXT-ONLY via the
+Anthropic endpoint today. Also caught: string-shorthand content dropped by glm (normalized in
+shim); Cloudflare 1010 on python-urllib UA (probe artifact, not the API). NEXT LEG: the shim's
+Go leg translates Anthropic⟷OpenAI (requests + SSE) and targets /chat/completions — the same
+translator the egress proxy needs for the Go rail under the chainless redesign. Claim-knob
+redesign answer delivered in-session (claudeTier deprecated; selection knobs out, rails/class
+policy/per-rail budgets in).
