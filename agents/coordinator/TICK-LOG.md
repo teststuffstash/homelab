@@ -4037,3 +4037,17 @@ opencode-go/kimi-k3 with input-state snapshots for next week's sonnet re-review.
 closed w/ evidence; #420 remains (E: re-review tool — needed BEFORE pool reset; F: dashboards).
 Tautology class hit 4 sightings → card rules (PR#437). Monitor discipline fixed after operator
 nudge: raw shell-& waits dropped verdicts twice (#416/#429) → all waits are notifying bg tasks.
+↳ (part-1 completion wave, ~21:10Z) **E–H built in one parallel subagent wave; BOTH RAILS
+latched by evening's end.** F merged+live-verified (PR#440, dashboard CM hash-rolled 45s;
+1 seat catch: fabrication-in-transcription — NEW miss class). E PR#441 r3 (bot r2: .result
+envelope + verdict vocabulary; seat: claude -p has no @file; r3: INCOMPARABLE outcome,
+--pr requires --project). G PR#442 r3 (bot's best catch of the day: pre-rewrite model id →
+$18/M fallback on EVERY jail row; + spool race; r3 seat-authored — the authoring subagent
+was KILLED at ~20:42Z by the Go account 5h window exhausting, the meter blind at 1.5%
+cluster-view: the #438 blind spot demonstrated live, datum on the issue). H leg 1 MERGED
+(PR#443) — and its own review was starved by the exact hole it fixes (lost edge + latch-
+gated backstop): seat direct-dispatch of the failover launcher un-wedged #442+#443 (both
+Go-served verdicts), responder deferral observed live (exit-1 Argo backoff). Review
+dispatches PARKED until the Go 5h reset (~22:14Z): one-shot cron 01:23 local re-dispatches
+#441/#442 + runs G's live probes. Coordinators stay latched (ruling). Ledger rows for the
+wave in the session scratchpad — next ledger PR.
