@@ -43,6 +43,10 @@ while :; do
   if ! view="$(gh pr view "$PR" --repo "$REPO" --json state,reviewDecision,headRefOid 2>/dev/null)"; then
     fails=$((fails + 1))
     [ "$fails" -lt 5 ] || { echo "pr-wait: gh pr view failed ${fails}x consecutively (auth? repo?)" >&2; exit 64; }
+    # The retry path honours the deadline too — without this, intermittent (non-consecutive)
+    # failures spin past TIMEOUT forever (reviewer catch, PR#427 r1: the script's own
+    # "never spins" contract broken by its robustness fix).
+    [ "$(date +%s)" -lt "$deadline" ] || { echo "pr-wait: timeout after ${TIMEOUT}s (during poll retries) — report, don't spin"; exit 5; }
     echo "pr-wait: $(date -u +%H:%M:%S) poll failed (${fails}/5) — retrying" >&2
     sleep "$INTERVAL"; continue
   fi
