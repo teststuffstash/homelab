@@ -3942,3 +3942,16 @@ Go leg translates Anthropic⟷OpenAI (requests + SSE) and targets /chat/completi
 translator the egress proxy needs for the Go rail under the chainless redesign. Claim-knob
 redesign answer delivered in-session (claudeTier deprecated; selection knobs out, rails/class
 policy/per-rail budgets in).
+↳ (subagent-loop leg, ~13:15Z) **pr-wait SHIPPED and self-proven (PR#412, 2 rounds).** The per-PR
+wait primitive (devbox run pr-wait): typed exits — 0 MERGED / 2 CHANGES_REQUESTED+body / 3 CLOSED
+/ 4 CI-RED+run-id / 5 timeout; arms idempotently; CI via gh run list (the statusCheckRollup PAT
+trap documented in-header). Round 1 the bot caught a REAL contract defect — reviewDecision
+survives pushes, so the fix→push→re-invoke loop would echo the caller its own addressed feedback
+(the reviewable_again staleness class, cited by the reviewer) — fixed as verdict-postdates-head;
+the dogfood re-run then LIVED the whole proposed workflow: fix-in-context → push → 11 stale-guard
+polls → re-review → merge. Also answered: "git subtrees" = the WORKTREE protocol (meta-state
+§NEXT SESSION, 2026-08-12 — A/B by catch-point, no adoption verdict yet); fresh-worktree devbox
+cost measured 40s ONE-TIME profile realization, zero re-download (/nix shared) — pre-warm at
+worktree creation if it matters. The tier-thesis ledger gains today's row: sonnet-bot caught
+defects in fable work twice in one day (PR#407 r1, PR#412 r1), both by tool-grounded
+verification.
