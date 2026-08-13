@@ -16,6 +16,14 @@ So they stay on the LAN and are fenced by address: block <tuya_devices> -> NOT <
 Internet dies; Home Assistant keeps polling them on the LAN, and they can still reach the router
 for DNS/NTP (some Tuya firmware sulks without NTP).
 
+NTP CAVEAT → THE REROUTE (2026-08-13): "can reach the router for NTP" only helps firmware that
+ASKS the router — Tuya firmware hardcodes public NTP servers, so its NTP died with the fence
+(and pool IPs churn, so a whitelist is not expressible; "UDP 123 to anywhere" would be a
+standing exfil hole). Instead a NAT redirect rewrites <tuya_devices> -> !<rfc1918> udp/123 to
+the router's own ntpd (verified answering on LAN). NAT runs before the filter, so the rewritten
+packet (dest = router, RFC1918) passes the block rule untouched — the fence itself is unchanged.
+Plain NTP is unauthenticated (no NTS in this firmware), so the spoof is transparent.
+
 ⚠ The fence is only as strong as the DHCP pins in opnsense/dnsmasq-dhcp.py. If a device gets a new
 address it silently leaves the fence — which is the same failure that would break tuya_local, so
 both depend on those reservations.
@@ -69,6 +77,17 @@ RULE = {
     "log": "1",              # so "it stopped working" can be checked against real drops
     "description": RULE_DESC,
 }
+NAT_RULE_DESC = "tuya: hardcoded NTP rerouted to the router (FU-038)"
+NAT_RULE = {
+    "disabled": "0", "sequence": "50",
+    "interface": "lan", "ipprotocol": "inet", "protocol": "udp",
+    "source": {"network": "tuya_devices"},
+    "destination": {"network": "rfc1918", "not": "1", "port": "123"},
+    "target": "192.168.2.1", "local-port": "123",   # the router's own ntpd (answers on LAN);
+                                                    # literal, NOT HOST — OPN_HOST may be a name
+    "log": "1",              # rdr hits are the proof the reroute is serving anyone
+    "descr": NAT_RULE_DESC,
+}
 
 
 def call(path, body=None):
@@ -87,7 +106,10 @@ def status():
     rules = [r for r in call("firewall/filter/searchRule").get("rows", [])
              if r.get("description") == RULE_DESC]
     print(f"rule: {'present, enabled=' + str(rules[0].get('enabled')) if rules else 'MISSING'}")
-    return bool(rules)
+    nat = [r for r in call("firewall/d_nat/search_rule").get("rows", [])
+           if r.get("descr") == NAT_RULE_DESC]
+    print(f"ntp reroute: {'present, disabled=' + str(nat[0].get('disabled')) if nat else 'MISSING'}")
+    return bool(rules) and bool(nat)
 
 
 def main():
@@ -115,6 +137,14 @@ def main():
     else:
         print("  + rule:", call("firewall/filter/addRule", {"rule": RULE}).get("result"))
     print("  apply firewall:", call("firewall/filter/apply").get("status"))
+
+    have_nat = [r for r in call("firewall/d_nat/search_rule").get("rows", [])
+                if r.get("descr") == NAT_RULE_DESC]
+    if have_nat:
+        print(f"  = ntp reroute already present ({len(have_nat)})")
+    else:
+        print("  + ntp reroute:", call("firewall/d_nat/add_rule", {"rule": NAT_RULE}).get("result"))
+    print("  apply nat:", call("firewall/d_nat/apply").get("status"))
     print()
     status()
 
