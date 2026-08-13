@@ -1335,6 +1335,29 @@ preconditions + knob ledger + build order in
 [`agents/chainless-redesign.md`](agents/chainless-redesign.md); the jail shim
 (`scripts/claude-model-shim.py`) is the rail-split prototype the proxy inherits.
 
+### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
+
+**Status:** Accepted (2026-08-13, operator ruling on homelab#438).
+**Decision:** two halves. (1) The jail's Go-rail usage meters ITSELF (shared `gometer` module,
+one home beside the proxy) and PUSHES rows to a token-gated ingest listener on a separate
+proxy port/VIP — the jail never routes traffic through, or depends on, the cluster: **the jail
+must be able to fix the cluster, so nothing in its toolchain may require it.** (2) The general
+principle behind rejecting the Pushgateway alternative: **Prometheus is observability, not a
+routing input — no dispatch/latch/routing-critical path may pull from it.** If metrics ever
+must become routing-critical, that is a SEPARATE Prometheus carrying business-critical series
+only, with its own tighter SLA and access model — never the observability instance.
+**Considered:** routing jail Go traffic through the cluster proxy (rejected — inverts the
+jail→cluster dependency); Pushgateway + PromQL windows for the latch (rejected — moves window
+arithmetic into range queries and puts the observability Prometheus in the /opencode-limit
+accuracy path).
+**Why:** the first console reconciliation (2026-08-13) showed the cluster meter seeing 12% of
+account usage; the fix must not weaken the jail's recovery-seat role. The existing
+`CREDIT_METRICS_URL` leg (homelab#180) is the tolerated boundary case: a soft capacity hint
+with a fail-open degrade, not window accounting — new designs don't get to cite it.
+**Consequences:** chunk G (homelab#438) builds the module split + ingest; the ledger sqlite
+stays the single window authority; operator console usage stays unmetered by declared practice
+(operator: paid rides go through claude-go; the opencode TUI is for free-model play only).
+
 ### ADR-106 — Goal lane v1.2: single-mode feature goals, origin lineage, the findings store, a demoted fence, a freed mutex
 
 **Status:** Accepted (operator design session 2026-08-12 — the A3 sitting; evidence =
