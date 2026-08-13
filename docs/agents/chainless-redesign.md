@@ -54,6 +54,28 @@ an env var only goose read (PR#407).
    loop's role is bot PR review. Slot mapping is launch-time env; per-call slot selection
    (Agent tool `model:`) is the size-tiering mechanism.
 
+### The corpus batch session (the jail lane's checkpoint model — added 2026-08-13)
+
+The ADR-106 checkpoint shape applied to the jail: **pay the design-agents corpus once, at an
+authoring moment, and amortize it over a BATCH** of jail-lane issues — triage (close/merge/
+re-scope), decompose, dispatch. The batch input filter needs no new label: open issues on the
+platform-stack repos **without** `agent-fix` are jail-lane by construction (dispatchability is
+a fixer-block predicate — their absence is the marker); today that set = the inert 🌱 register
++ unlabeled operator-shaped strays (#354 class). Triage sorts each survivor: seat work (needs
+the corpus) · subagent chunk (mechanical, loud verification) · re-author into the agent lane
+(cheapest — label it and let the cluster fixer ride) · operator decision.
+
+Subagent input is the fixer's three-layer architecture transposed
+([`fixer-context.md`](fixer-context.md)): **L1** = the versioned
+[`agents/jail-subagent-card.md`](../../agents/jail-subagent-card.md) (the FU-117 "third
+context" gap, closed — seat-prepended verbatim, never improvised); **L2** = the decomposition
+rules accumulating in the [miss ledger](../spikes/subagent-handover-misses.md) (per-class
+briefs crystallize only when a class recurs — the ≥2-pattern rule); **L3** = the seat
+(slot-by-size, brief-by-class, stated in the dispatch prompt). The fixer discipline that
+imports unchanged: **the chunk prompt is self-contained** — the seat injects platform facts
+like an issue author would; a subagent hunting for design intent is the context-poverty
+failure the A/B watches for.
+
 ## The claim-knob ledger (AgentStack, target shape)
 
 The principle: **the claim stops naming models and starts naming constraints** — everything
