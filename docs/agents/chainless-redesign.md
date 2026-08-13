@@ -247,3 +247,16 @@ generalizes, M12 folds in) · [`agentstack.md`](agentstack.md) (claim) · FU-095
 pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (accounting) · FU-168
 (dispatch throughput) · the banked tier-thesis revision (TICK-LOG 2026-08-13 — review leverage =
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
+
+## Rollout status (2026-08-13)
+
+**Chunks A–D shipped/live** (PR#429/#433/#434/#435/#436); two live-DOA defects in the leg, both
+stub-invisible, both matrix-predicted, both caught only by seat post-merge probes: (1) no
+User-Agent on the Go allowlist → Cloudflare 1010 on every live request; (2) the inbound surface
+path joined verbatim → opencode.ai's SPA 404 served as 200 HTML (and the self-test had pinned
+that join). First organic Go-served review: PR#437 (kimi-k3, input snapshot recorded to the
+transcripts bucket). Weekly latch back at 0.95 with the failover carrying latched weeks. Meter
+scope: cluster-dispatched only until #438 lands (jail self-metering + push per
+[ADR-108](../adr.md)). Open: E (#425 time-travel re-review), F (#426 dashboards + doc currency),
+G (#438 jail self-metering), H (#439 automatic-role failover; coordinators stay latched by
+ruling).
