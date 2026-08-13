@@ -4021,3 +4021,19 @@ plan delivered (chunks 0/A–F, seat-contract + Go-subagent execution) — await
 the 3 named decisions (reviewer model family-disjointness, flip criterion, issue tracking).
 ⚠ session slot reality: THIS resumed session still rides the launch-frozen qwen/kimi map;
 flash applies at next claude-go launch.
+↳ (Go-rail rollout part 1, ~19:30Z) **Chunks A–D SHIPPED + LIVE, the platform flip DONE.**
+Five PRs in one sitting, all subagent-authored except the path fix: #433 (chunk C, ESO key —
+first fully CLEAN clone run, merged r1), #434 (chunk B meter, 4 seat rounds + 1 bot round —
+the bot's cache-write catch survived kimi author + fable dispatch + fable review: the banked
+tier-thesis's decorrelation mechanism, live), #435 (chunk D failover+snapshots, 2 seat rounds
++ 1 bot round — baked-${MODEL} would have stamped wrong models into THIS log), #436 (seat:
+Go-leg surface-path map), #437 (ledger day-2 + card rules, in review). TWO live-DOA defects
+in the leg (no UA → CF 1010; verbatim path join → SPA 404 as 200 HTML, self-test had PINNED
+the join) — both stub-invisible, both matrix-predicted, both caught ONLY by seat post-merge
+probes → rule: upstream-facing chunks close on a live probe. Rail END-TO-END VERIFIED: real
+flash completion via cluster proxy, meter row 8.54e-6 EXACT (badge-halved list; stack=jail).
+7d latch RESTORED 0.95 (f0f0aa3, ruling's second half) — a latched week now fails over to
+opencode-go/kimi-k3 with input-state snapshots for next week's sonnet re-review. #421–#424
+closed w/ evidence; #420 remains (E: re-review tool — needed BEFORE pool reset; F: dashboards).
+Tautology class hit 4 sightings → card rules (PR#437). Monitor discipline fixed after operator
+nudge: raw shell-& waits dropped verdicts twice (#416/#429) → all waits are notifying bg tasks.
