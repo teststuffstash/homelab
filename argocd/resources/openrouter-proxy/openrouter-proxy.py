@@ -2565,14 +2565,37 @@ data: [DONE]
     _go_response["type"] = "sse"
     _go_response["body"] = b'data: {"ok":true}\n\ndata: [DONE]\n\n'
 
-    # Test 13: badge division via unknown-model fallback (conservative pricing)
-    # "not-a-model" should use _GO_MAX_PRICE fallback
-    router.go_usage_add(now, "fallback-test", "not-a-model", 0.50)  # simulate conservative charge
-    w3 = router.go_usage_window(60)
-    check(w3["by_stack"].get("fallback-test", 0) == 0.50,
-          f"fallback: stored 0.50, got {w3['by_stack'].get('fallback-test')}")
+    # Test 13: beta strip — ?beta=true&other=1 preserves other=1; plain ?beta=true strips clean
+    check(_strip_beta_query("/path?beta=true") == "/path", "beta strip: plain ?beta=true → clean")
+    check(_strip_beta_query("/path?beta=true&other=1") == "/path?other=1",
+          "beta strip: ?beta=true&other=1 → ?other=1")
+    check(_strip_beta_query("/path?x=1&beta=true&y=2") == "/path?x=1&y=2",
+          "beta strip: middle beta removed, neighbours joined")
+    check(_strip_beta_query("/path?x=1") == "/path?x=1", "beta strip: no beta → unchanged")
 
-    # Test 14: ledger prune — rows older than 45d are deleted
+    # Test 14: unknown-model fallback — real request through proxy exercises the warn + pricing
+    # "not-a-model" should use _GO_MAX_PRICE fallback: (_GO_MAX_PRICE/2, _GO_MAX_PRICE/2, 0, 0, False)
+    # 1M in + 1M out → (_GO_MAX_PRICE/2 + _GO_MAX_PRICE/2) × 1.0 = _GO_MAX_PRICE dollars
+    _go_response["body"] = json.dumps({
+        "id": "gen-fallback", "model": "not-a-model",
+        "usage": {"input_tokens": 1000000, "output_tokens": 1000000}
+    }).encode()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/not-a-model",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:fallback-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "fallback request: HTTP 200 returned")
+    w3 = router.go_usage_window(60)
+    expected = _GO_MAX_PRICE  # 1M×(max/2)/1e6 + 1M×(max/2)/1e6 = max
+    check(abs(w3["by_stack"].get("fallback-stack", 0) - expected) < 0.01,
+          f"fallback: fallback-stack ≈${expected}, got {w3['by_stack'].get('fallback-stack')}")
+
+    # Test 15: ledger prune — rows older than 45d are deleted
     old_ts = now - 50 * 86400
     router.go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
     router.go_usage_add(now, "fresh", "kimi-k3", 0.01)  # fresh row triggers prune
