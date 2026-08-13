@@ -1,0 +1,13 @@
+# CONDITION UNDER REPLAY: the /route request body carries the dispatch's LABELS (M11a caller gap,
+# closed) — a queued-dispatch issue ride, no --work-branch, so `urgency` is null and the ROUTER
+# resolves it from urgency_map (one reader of the git-owned table). The recorded gh read is the
+# post---jq label array; the asserted stream is the assembled request JSON itself — the
+# "stub the callee, assert the assembled string" doctrine, because a malformed body fails open
+# into a shadow-blind route and nothing else would red.
+name: route-request-labels
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:route-request
+  - file:post.sh

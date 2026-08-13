@@ -178,6 +178,8 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key-minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-subscription` | actions | - | `agents/retro-session.sh` | - |
+| `route-request-labels` | actions | - | `agents/agent-session.sh` | - |
+| `route-request-workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
 | `scan-guarded-pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded-set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |

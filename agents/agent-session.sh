@@ -182,15 +182,37 @@ if [ "$AGENT_ROUTER" != "off" ]; then
   # key state (headroom, a mint that never happened) in a decision about a rail that does not use
   # it. On 2026-08-08 that inversion deferred claudeTier dispatches four times while the
   # subscription sat idle. `null` = "this dispatch has no OpenRouter identity", which is the truth.
+  # >>>REPLAY:route-request>>>
+  # M11a's named caller gap, closed (the launcher-side leg deliberately left out of homelab#159's
+  # Touches:): send the dispatch's LABELS — one gh read; the ROUTER resolves urgency from the
+  # git-owned urgency_map it already falls back to, so the table keeps exactly one reader — and
+  # an EXPLICIT `urgency` only where this launcher knows a round-state fact no label carries:
+  # --work-branch means a fix round on an existing PR (ci-red retry / changes-requested), which is
+  # deadline-tight by §M11's own examples. Best-effort by construction: an unreadable or non-array
+  # label set degrades to [] (the router's default-tight path) — a labels read must never block or
+  # skew a dispatch, and jq -e validates the shape so a gh error string cannot torpedo the jq -nc
+  # below into an empty body.
+  _route_labels="[]"
+  case "${TASK:-}" in issue-*)
+    _route_labels="$(gh issue view "${TASK#issue-}" --repo "${ORG:-teststuffstash}/${PROJECT}" \
+        --json labels --jq '[.labels[].name]' 2>/dev/null)" || _route_labels="[]";;
+  esac
+  printf '%s' "$_route_labels" | jq -e 'type=="array"' >/dev/null 2>&1 || _route_labels="[]"
+  _route_urgency=""
+  [ -z "${WORK_BRANCH:-}" ] || _route_urgency="tight"
   _keyref="${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}"
   case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _keyref="";; esac
   _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
       --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
       --arg key_ref "$_keyref" \
+      --arg urgency "$_route_urgency" \
       --argjson chain "$_chain" \
+      --argjson labels "$_route_labels" \
       --argjson deny "$(printf '%s' "$_srow" | jq -c '.modelDeny // []')" \
       '{stack: $stack, task: $task, role: "worker", session: $session,
-        key_ref: (if $key_ref == "" then null else $key_ref end), chain: $chain, deny: $deny}')"
+        key_ref: (if $key_ref == "" then null else $key_ref end), chain: $chain, deny: $deny,
+        labels: $labels, urgency: (if $urgency == "" then null else $urgency end)}')"
+  # <<<REPLAY:route-request<<<
   _decision="$(curl -fsS --max-time 5 -H "Content-Type: application/json" \
       -d "$_req" "$ROUTER_URL/route" 2>/dev/null)" || _decision=""
   if [ -z "$_decision" ]; then
