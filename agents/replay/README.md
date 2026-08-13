@@ -179,6 +179,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key-pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-subscription` | actions | - | `agents/retro-session.sh` | - |
 | `reviewer-go-failover-available` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-go-failover-explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-limited` | actions | - | `agents/reviewer-session.sh` | - |
 | `route-request-labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request-workbranch-tight` | actions | - | `agents/agent-session.sh` | - |

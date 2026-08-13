@@ -259,7 +259,8 @@ record_review_state() {
   command -v gh >/dev/null 2>&1 || { echo "review-state: gh not found — snapshot skipped"; return 0; }
   TS=$(date -u +%Y%m%dT%H%M%SZ)
   TASK_KEY="${TASK_KEY:-pr-${PR_NUMBER}}"
-  HEADSHA="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json headRefOid -q '.headRefOid' 2>/dev/null | cut -c1-8)" || HEADSHA="unknown"
+  HEADSHA="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json headRefOid -q '.headRefOid' 2>/dev/null | cut -c1-8)" || true
+  [ -n "${HEADSHA}" ] || HEADSHA="unknown"
   P="s3://${AGENT_TS_BUCKET}/${PROJECT}/${TASK_KEY}/review-state-${HEADSHA}-${TS}"
   export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
   # pr.json — the PR state (no statusCheckRollup — 403s on App token, and CI is already green by dispatch predicate)

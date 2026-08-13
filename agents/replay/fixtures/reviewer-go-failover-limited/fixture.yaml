@@ -3,17 +3,16 @@
 # CONDITION UNDER REPLAY. The subscription-latch.sh probe returns exit 1 (Anthropic limited),
 # AND the Go rail probe (/opencode-limit) returns {limited: true}.
 #
-# THE CONTRACT:
-#   1. When Go is also limited, the gate DEFERS (exit 0, no pod created).
-#   2. The log line "→ review of ... deferred — subscription rate-limited (FU-088 latch)" is emitted.
-#   3. MODEL remains unchanged (sonnet), GO_SERVED remains 0.
+# THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
+#   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
+#   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records the call and returns Go-limited JSON.
+#   3. With Go limited: defer with FU-088 message (exit 0).
+#   4. The action stream asserts: curl probe happened AND defer line emitted.
 #
-# The bridge.sh contains the complete test logic with stubbed subscription-latch.sh and curl.
+# Parts: bridge.sh (seams: HERE, stubs) + block:reviewer-go-failover-gate (real code)
 name: reviewer-go-failover-limited
 mode: actions
 source: agents/reviewer-session.sh
 parts:
   - file:bridge.sh
-env:
-  - PROJECT=test-project
-  - PR=42
+  - block:reviewer-go-failover-gate

@@ -1,4 +1,4 @@
+CALL curl http://openrouter-proxy.agent-egress.svc.cluster.local:8080/opencode-limit
 OUT → Anthropic latched — serving review of test-project#42 from the Go rail (opencode-go/kimi-k3)
-OUT GATE_CONTINUE
 ERR subscription limited (FU-088, 429): utilization high — deferring subscription dispatch
 RC 0

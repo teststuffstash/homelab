@@ -3,9 +3,9 @@
 HERE="$REPLAY_FIXTURE"
 PROJECT="${PROJECT:-test-project}"
 PR="${PR:-42}"
-MODEL="sonnet"
+MODEL="opus"  # Explicit model pinned by operator
+MODEL_SET_EXPLICIT=1  # This prevents the failover even when Go is available
 GO_SERVED=0
-# MODEL_SET_EXPLICIT is NOT set — the gate's failover condition is true when Go is available
 
 # subscription-latch.sh: print the latch message to stderr and exit 1 (Anthropic is latched)
 subscription-latch.sh() {
