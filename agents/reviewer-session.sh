@@ -196,7 +196,7 @@ for l in \$LENSES; do
 done
 RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
-echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
+echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
 
 STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,comments,commits,labels,mergeStateStatus,statusCheckRollup,headRefOid  and check the review history against your OWN bot identity, which is the literal login  ${REVIEWER_LOGIN}  — use that string, do NOT look it up at runtime (you authenticate with an App INSTALLATION token, for which  gh api user  returns 403, and note the login carries no [bot] suffix here). Your own verdicts, and your own asides below, are exactly the entries whose author.login is  ${REVIEWER_LOGIN} . The guard REFUSES in every case it refused before — what changed (homelab#122, 2026-08-08) is only WHICH terminal a refusal picks. Sort what you see into one of two classes; you submit NO review in either.
