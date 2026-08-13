@@ -1,0 +1,18 @@
+# reviewer-go-failover-limited (homelab#424) — both Anthropic AND Go rail are limited.
+#
+# CONDITION UNDER REPLAY. The subscription-latch.sh probe returns exit 1 (Anthropic limited),
+# AND the Go rail probe (/opencode-limit) returns {limited: true}.
+#
+# THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
+#   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
+#   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records the call and returns Go-limited JSON.
+#   3. With Go limited: defer with FU-088 message (exit 0).
+#   4. The action stream asserts: curl probe happened AND defer line emitted.
+#
+# Parts: bridge.sh (seams: HERE, stubs) + block:reviewer-go-failover-gate (real code)
+name: reviewer-go-failover-limited
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-go-failover-gate

@@ -68,11 +68,11 @@ STACK_LABEL="${STACK_LABEL:-none}"
 
 # Pro/Max subscription ⇒ sonnet (a strong reviewer, free at margin). Override for a high-stakes PR
 # (e.g. --model opus) or a metered run. Rubric path is relative to the project repo root.
-REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"
+REPO_SLUG=""; MODEL="sonnet"; RUBRIC=".agents/review.md"; PERM_MODE="bypassPermissions"; ROUND="1"; GO_SERVED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo)            REPO_SLUG="$2"; shift 2;;   # owner/name or full URL; default teststuffstash/<project>
-    --model)           MODEL="$2"; shift 2;;
+    --model)           MODEL="$2"; MODEL_SET_EXPLICIT=1; shift 2;;
     --rubric)          RUBRIC="$2"; shift 2;;      # project-relative path to the review system prompt
     --permission-mode) PERM_MODE="$2"; shift 2;;
     --round)           ROUND="$2"; shift 2;;       # review iteration on this PR (transcript prefix reviewer-r<N>)
@@ -196,7 +196,7 @@ for l in \$LENSES; do
 done
 RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
-echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: ${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
+echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
 
 STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,comments,commits,labels,mergeStateStatus,statusCheckRollup,headRefOid  and check the review history against your OWN bot identity, which is the literal login  ${REVIEWER_LOGIN}  — use that string, do NOT look it up at runtime (you authenticate with an App INSTALLATION token, for which  gh api user  returns 403, and note the login carries no [bot] suffix here). Your own verdicts, and your own asides below, are exactly the entries whose author.login is  ${REVIEWER_LOGIN} . The guard REFUSES in every case it refused before — what changed (homelab#122, 2026-08-08) is only WHICH terminal a refusal picks. Sort what you see into one of two classes; you submit NO review in either.
@@ -247,6 +247,48 @@ PREP
 # (PROJECT/PR_NUMBER/REVIEW_ROUND/MODEL/…), the S3 key via same-ns secretKeyRef
 # (agents/coordinator/garage-workspace.yaml). Upload failures are loud but never fail the review.
 UPLOADER=$(cat <<'SNIP'
+# record_review_state — snapshot the PR's exact input state for Go-served reviews (homelab#424).
+# Ruled 2026-08-13: a Go-served review's exact input state is re-reviewable later by sonnet
+# (time-travel re-review); this snapshot is that contract. Uploaded to s3://<bucket>/<project>/<TASK_KEY>/review-state-<headsha8>-<ts>/.
+# MUST be called BEFORE the claude invocation — the snapshot is the review's INPUT, not output.
+# Upload failures are loud but never fail the review (same discipline as upload_transcripts).
+record_review_state() {
+  [ "${GO_SERVED:-0}" = "1" ] || { echo "review-state: GO_SERVED!=1 — snapshot skipped (only for Go-served reviews)"; return 0; }
+  [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "review-state: no S3 key in pod — snapshot skipped"; return 0; }
+  command -v s5cmd >/dev/null 2>&1 || { echo "review-state: s5cmd not in this image — snapshot skipped"; return 0; }
+  command -v gh >/dev/null 2>&1 || { echo "review-state: gh not found — snapshot skipped"; return 0; }
+  TS=$(date -u +%Y%m%dT%H%M%SZ)
+  TASK_KEY="${TASK_KEY:-pr-${PR_NUMBER}}"
+  HEADSHA="$(gh pr view "${PR_NUMBER}" --repo "${REPO_SLUG}" --json headRefOid -q '.headRefOid' 2>/dev/null | cut -c1-8)" || true
+  [ -n "${HEADSHA}" ] || HEADSHA="unknown"
+  P="s3://${AGENT_TS_BUCKET}/${PROJECT}/${TASK_KEY}/review-state-${HEADSHA}-${TS}"
+  export AWS_ACCESS_KEY_ID="$AGENT_TS_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_SECRET_ACCESS_KEY" AWS_REGION=garage
+  # pr.json — the PR state (no statusCheckRollup — 403s on App token, and CI is already green by dispatch predicate)
+  gh pr view "${PR_NUMBER}" --json number,title,body,headRefOid,baseRefName,state,reviews,comments,files > /tmp/pr.json 2>/dev/null \
+    || { echo "review-state: pr.json capture FAILED (non-fatal)"; : > /tmp/pr.json; }
+  # diff.patch — the full PR diff
+  gh pr diff "${PR_NUMBER}" > /tmp/diff.patch 2>/dev/null \
+    || { echo "review-state: diff.patch capture FAILED (non-fatal)"; : > /tmp/diff.patch; }
+  # head-sha.txt — the head sha
+  printf '%s\n' "${HEADSHA}" > /tmp/head-sha.txt
+  # rubric.sha.txt — hash of the rubric file as checked out in the pod
+  if [ -f "${RUBRIC:-}" ]; then
+    git hash-object "${RUBRIC}" > /tmp/rubric.sha.txt 2>/dev/null || printf 'hash-failed\n' > /tmp/rubric.sha.txt
+  else
+    printf 'no-rubric-file\n' > /tmp/rubric.sha.txt
+  fi
+  # snapshot-manifest.json — same style as upload_transcripts manifest
+  jq -n --arg project "$PROJECT" --arg task "$TASK_KEY" --arg pr "${PR_NUMBER}" \
+        --arg round "${REVIEW_ROUND}" --arg model "${MODEL}" --arg headsha "${HEADSHA}" --arg ts "$TS" \
+        '{project:$project, task:$task, pr:$pr, round:($round|tonumber), model:$model, headsha8:$headsha, timestamp:$ts,
+          files:["pr.json","diff.patch","head-sha.txt","rubric.sha.txt","snapshot-manifest.json"]}' > /tmp/snapshot-manifest.json
+  # Upload all files
+  for f in pr.json diff.patch head-sha.txt rubric.sha.txt snapshot-manifest.json; do
+    [ -s "/tmp/$f" ] && { s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cp "/tmp/$f" "$P/$f" || echo "review-state: $f upload FAILED (non-fatal)"; }
+  done
+  echo "review-state: uploaded → $P"
+}
+
 upload_transcripts() {
   [ -n "${AGENT_TS_ACCESS_KEY_ID:-}" ] || { echo "transcripts: no S3 key in pod (agent-transcripts-s3 Secret absent?) — upload skipped"; return 0; }
   command -v s5cmd >/dev/null 2>&1 || { echo "transcripts: s5cmd not in this image — upload skipped (bump AGENT_COORDINATOR_IMAGE)"; return 0; }
@@ -278,6 +320,8 @@ SNIP
 # launcher's "JSON = from the first ^{ line" parse stays intact. Exit code stays claude's.
 RUNPART=$(cat <<'SNIP'
 set +e
+# Go-served review: capture the input state snapshot BEFORE the review runs (homelab#424).
+[ "${GO_SERVED:-0}" = "1" ] && record_review_state
 claude -p "$PROMPT" --model "$MODEL" $RUBRIC_FLAG --permission-mode "$PERM_MODE" --output-format json > /tmp/result.json
 RC=$?
 echo "$RC" > /tmp/rc
@@ -289,13 +333,39 @@ SNIP
 )
 ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s' "$UPLOADER" "$PREP" "$RUNPART" | jq -Rs .)]"
 
+# >>>REPLAY:reviewer-go-failover-gate>>>
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which
 # dispatches this script directly without the reflex tick's guard). Level-triggered upstream —
 # the backstop tick re-picks this PR once the latch clears, so a skip loses nothing.
+# FAIL-OVER LADDER (homelab#424): when the subscription is latched, probe the Go rail
+# (/opencode-limit). If Go is available (limited=false), serve the review from the Go rail
+# instead of deferring. An explicit --model always wins — the failover only kicks in when
+# the operator didn't pin a model.
 if ! bash "$HERE/subscription-latch.sh"; then
-  echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
-  exit 0
+  # Subscription is latched — probe the Go rail before deferring.
+  # Reuse the same proxy base URL that subscription-latch.sh uses (AGENT_EGRESS_PROXY env).
+  PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+  go_reply="$(curl -fsS --max-time 5 "$PROXY/opencode-limit" 2>/dev/null)" || go_reply=""
+  go_limited="true"
+  if [ -n "$go_reply" ]; then
+    go_limited="$(printf '%s' "$go_reply" | jq -r '.limited // false' 2>/dev/null)" || go_limited="true"
+  fi
+  if [ "$go_limited" = "false" ]; then
+    # Go rail is available — use it for this review (only when no explicit --model was passed).
+    if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
+      MODEL="opencode-go/kimi-k3"
+      GO_SERVED=1
+      echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/kimi-k3)"
+    else
+      echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
+      exit 0
+    fi
+  else
+    echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (FU-088 latch)"
+    exit 0
+  fi
 fi
+# <<<REPLAY:reviewer-go-failover-gate<<<
 
 # FU-092 atomic gate (the worker pattern): a TERMINAL same-key holder is reaped — the dispatch
 # predicate (reflex/Sensor: bot_review_at_head=none) already guarantees this head has no verdict,
@@ -335,10 +405,16 @@ spec:
           value: "${PROJECT}"
         - name: PR_NUMBER
           value: "${PR}"
+        - name: REPO_SLUG
+          value: "${REPO_SLUG}"
         - name: REVIEW_ROUND
           value: "${ROUND}"
         - name: MODEL
           value: "${MODEL}"
+        - name: RUBRIC
+          value: "${RUBRIC}"
+        - name: GO_SERVED
+          value: "${GO_SERVED:-0}"
         - name: PERM_MODE
           value: "${PERM_MODE}"
         # A0 standard rail: OTLP metrics+logs → the in-cluster collector (Loki/Prometheus).
