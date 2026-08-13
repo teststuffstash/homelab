@@ -1255,6 +1255,16 @@ class Proxy(BaseHTTPRequestHandler):
         if go_leg:  # Go rail — swap upstream, replace auth with Go key
             # Strip ?beta=true query using the proper helper (preserves other params).
             path = _strip_beta_query(self.path)
+            # Map the inbound SURFACE onto Go's own paths: both /anthropic/v1/* (claude CLI via
+            # the ref rail) and /api/v1/* (OpenRouter shape) serve from Go's /v1/* — strip the
+            # surface prefix, keep /v1/…. Live-caught 2026-08-13: GO_UPSTREAM + self.path
+            # VERBATIM sent /zen/go/anthropic/v1/messages, which opencode.ai answers with its
+            # SPA's 404 page as 200 HTML — and the original self-test pinned that join as
+            # correct, because the stub accepts any path. Only a live probe could see it.
+            if path.startswith("/anthropic/"):
+                path = path[len("/anthropic"):]
+            elif path.startswith("/api/"):
+                path = path[len("/api"):]
             url = GO_UPSTREAM + path
             note += "+go"
             # Deny if no Go key configured — refuse loudly, never forward without credential.
@@ -2367,7 +2377,8 @@ def _self_test() -> int:
     check(g.get("x_api_key") == "go-test-key", "go leg: x-api-key = Go key")
     check(g.get("auth") != "Bearer OAUTH-SECRET" and g.get("x_api_key") != "OAUTH-SECRET",
           "go leg: session oauth never reaches Go")
-    check(g.get("path") == "/zen/go/api/v1/chat/completions", "go leg: base path joined")
+    check(g.get("path") == "/zen/go/v1/chat/completions",
+          "go leg: /api surface prefix stripped — Go serves /v1/* (live-caught 2026-08-13)")
 
     # Test 2: content normalization (string -> blocks)
     seen.clear()
@@ -2409,7 +2420,8 @@ def _self_test() -> int:
     check(g.get("x_api_key") == "go-test-key", "/anthropic + go model: x-api-key = Go key")
     check("OAUTH-SECRET" not in str(g.get("auth")) and "OAUTH-SECRET" not in str(g.get("x_api_key")),
           "/anthropic + go model: zero oauth reaches Go")
-    check(g.get("path") == "/zen/go/anthropic/v1/messages", "/anthropic + go model: Go base + path")
+    check(g.get("path") == "/zen/go/v1/messages",
+          "/anthropic + go model: surface prefix stripped — Go serves /v1/* (live-caught 2026-08-13)")
     # Verify Anthropic stub did NOT receive this request
     check("anthropic" not in seen, "/anthropic + go model: Anthropic stub NOT hit")
 
