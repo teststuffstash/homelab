@@ -3888,3 +3888,21 @@ No device NTP query observed in a ~15-min pf-states watch (sparse firmware caden
 logs, so the first hit lands in the firewall log. ⚠ probe lessons re-proven twice in one
 sitting: a `:123` substring can't match `"dst_port": "123"`, and `.startswith("…2.16")` matched
 `.165` — positive-control the filter, then equality-match.
+↳ (subscription sitting, ~10:30Z) **The 7d-87% autopsy shipped its two fixes.** The /design-agents
+read: pool = jail $2,120/67% (fable seat) · platform roles+workers ~28% · stack lanes ~5% of
+$3,157 notional/7d; OpenRouter real spend $5.22/wk beside it. **PR#407**: every claude-harness
+worker ride ran the CLI DEFAULT (opus-5[1m]) — RUN_CMD never passed --model; 103/103 platform
+"haiku" rides at ~$419/7d ≈ 13% of the pool (found by OTLP↔agent_run session join; coordinator/
+reviewer lanes pass --model and were clean). Bot review caught a real defect in round 1 (the
+openrouter/* fallback tested the PRE-parse shape); fixed as vendor-slash-shape keying — MODEL_RAIL
+would coerce bare-alias overrides (sonnet parses rail=openrouter). Fixture harness-run-cmd-claude
+pins the flag. VERIFY: next organic platform ride's OTLP model label must read claude-haiku-4-5.
+**PR#408**: the M11a caller gap — /route body now carries labels (one gh read, fail-open to []) +
+explicit urgency=tight on --work-branch rounds; new route-request REPLAY block + two fixtures pin
+the assembled body. Live end-state: a /route POST with task/research resolved
+urgency=elastic/source=label_map — the first elastic shadow cell (121/121 were tight-default).
+The P4 flip read is now honestly possible once elastic traffic accumulates. Operator direction
+banked (no decision yet): OpenCode Go ($10/mo, $12/5h-$30/wk-$60/mo, 18 OSS models incl. the
+retro-proven audit tier, Anthropic-compat API, cached-read pricing published) as a 4th rail +
+the generalized multi-SUBSCRIPTION ladder (codex/copilot too; "most available subscription
+first", capacity doorbell on window reset) — M11 §amendment territory, opinion delivered in-session.
