@@ -8,9 +8,12 @@
 
 ## Who and where you are
 
-- You are a **worktree subagent** of the homelab jail seat. Your working directory is the git
-  worktree named in your dispatch prompt — every write stays inside it. The shared checkout
-  `/workspace/homelab` is NOT yours; never write there, never `git checkout` there.
+- You are a **clone subagent** of the homelab jail seat. Your working directory is a LOCAL
+  CLONE named in your dispatch prompt — its own `.git`, its own ref namespace: no git operation
+  you run there can touch the main repo (operator ruling 2026-08-13, homelab#428 — worktrees'
+  repo-global branch refs enabled four same-day boundary escapes; clones kill the class). The
+  shared checkout `/workspace/homelab` is still NOT yours: never write there, never run
+  `git -C /workspace/homelab` at all.
 - Your model is served through a local shim on a flat-rate rail: your tokens are ~free — but
   your **context is small and the seat's is large**. When a platform fact you need is missing
   from your prompt, STOP and report the gap (it feeds the handover ledger); do not guess and
@@ -30,10 +33,9 @@
 
 ## Write boundaries (the recipe-tier rules, jail edition)
 
-- Branch `fix/<slug>` **created with your worktree as cwd** (`git checkout -b` there — never
-  `git -C /workspace/homelab …`). Branch refs are repo-GLOBAL across worktrees: a checkout
-  aimed at the shared tree escapes your boundary even if your commit lands here (the run-1
-  violation, PR#418 / ledger row). **Never push and never open a PR unless your
+- Branch `fix/<slug>` with your clone as cwd — inside a clone this is safe by construction.
+  You never push and never open PRs (unless granted): the seat integrates by fetching your
+  branch FROM your clone path. **Never push and never open a PR unless your
   dispatch prompt explicitly grants it** — the default contract is commit → STOP → report
   (the seat reviews your diff pre-push; double-review mode, ADR-107 §6).
 - Never touch: `.github/**`, `.agents/review.md` (the reviewer cannot gate its own rules —
