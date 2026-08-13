@@ -39,6 +39,7 @@ mission) would drown the check in false positives and stay judgment-lint territo
 | **findings store** | ADR-106's one typed machine comment per Goal — harvest APPENDS findings (origin, surface, class, substance), a count-keyed marker tracks disposition; checkpoints consume it, never 1:1 issue mints | [`agents/issue-authoring.md`](agents/issue-authoring.md) (v1.2 build) |
 | **retro** (cluster) | the platform's batched self-improvement role — ledger worst-K → transcript slices → report + process PRs, Mondays | [`agents/observability-and-retro.md`](agents/observability-and-retro.md) §B2 |
 | **skill-retro** (jail) | the jail twin of the retro for `.claude/skills/`: dialogue-only transcript slices → GAPS ledger sightings (ADR-105) | `.claude/skills/skill-retro/SKILL.md` |
+| **Go rail** (opencode-go) | the OpenCode Go subscription as a billing rail — usage-value windows ($12/5h·$30/wk·$60/mo), OSS models, Anthropic/OpenAI-compat endpoints; model ids prefix `opencode-go/` | [`agents/chainless-redesign.md`](agents/chainless-redesign.md) (ADR-107 charter) |
 | **⚓ system testing** | logic against real components in kind (Garage + app + Grafana + Playwright — the ADR-082 shape) | [`agents/model-routing.md`](agents/model-routing.md) §terminology ruling (2026-07-27) |
 | **e2e** | reserved for the ACTUAL target environment (synthetic production traffic) — not the kind gate | same ruling |
 

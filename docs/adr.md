@@ -1314,6 +1314,27 @@ aggregate). **Why:** the #17→#29 supersession already executed this lifecycle 
 squash boundary is the revert unit; goal-review clause renamed assembly-complete; IL-G04 and the
 goal-half of FU-090 superseded; design detail: docs/agents/issue-authoring.md §Goal container.
 
+### ADR-107 — Chainless everywhere: one harness, N subscription rails, every role routed
+
+**Status:** Charter accepted (operator, 2026-08-13 — the subscription-autopsy session; build not
+started). **Decision:** (1) static model chains are DELETED, `routerMode: authoritative` becomes
+the only mode; (2) every role (coordinator/reviewer/responder/retro/prober) wires to `/route` —
+doctrine moves to git-owned class policy, never hardcoded models; (3) ONE harness (the claude
+CLI) serves every rail — rail/model materialize as proxy-side base-URL/credential/model
+translation, dispatch never pre-computes a harness, goose/opencode demote to experiment cells;
+(4) **OpenCode Go joins as the second subscription rail** and §M11's ladder generalizes to
+most-available-subscription-first over per-rail binding-window headroom, with a **capacity
+doorbell** ringing `/coordinate` on window reset; (5) the AgentStack claim stops naming models
+and names constraints (`rails`, `classPolicy`, per-rail budgets) — `claudeTier`/`guardrail`/
+per-role model knobs deprecated. **Considered:** a three-segment model string
+(`claude/anthropic/haiku`) — rejected for FU-127's structured form; keeping M12's degrade as a
+special case — folds into the ladder; per-subagent billing in-process — impossible, hence the
+shim/proxy split point. **Why:** 7d window at 87% with the router unable to steer 95% of the
+pool; PR#407 (23 days of haiku rides silently on opus) priced fused semantics. **Consequences:**
+preconditions + knob ledger + build order in
+[`agents/chainless-redesign.md`](agents/chainless-redesign.md); the jail shim
+(`scripts/claude-model-shim.py`) is the rail-split prototype the proxy inherits.
+
 ### ADR-106 — Goal lane v1.2: single-mode feature goals, origin lineage, the findings store, a demoted fence, a freed mutex
 
 **Status:** Accepted (operator design session 2026-08-12 — the A3 sitting; evidence =
