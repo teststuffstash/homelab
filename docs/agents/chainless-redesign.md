@@ -125,6 +125,12 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    itself is under pressure (utilization past a pressure floor, or competing deferred demand
    present), and then bounds each stack to share × window with idle shares borrowable. The
    proxy's capacity gates generalize from boolean latch to this weighted admission.
+   **And the shares are SOFT — dispatch-time routing bias only** (operator, 2026-08-13):
+   overspending a share triggers nothing punitive — no pod is killed mid-session for crossing
+   30% (FU-088's "in-flight sessions are never killed by the gates" extends unchanged), and a
+   stack past its share under pressure simply defers NEW dispatches — or routes urgent work to
+   the paid OpenRouter rung, the ladder's always-available escape valve. Enforcement lives
+   entirely in admission, never in execution.
    **Window structure conveniently aligns across rails**: Anthropic 5h/7d, opencode 5h/7d
    (+ its extra 30d) — the share table applies per window and the BINDING window governs
    (M11's language). **Attribution asymmetry to build for**: Go draw is fully self-metered
