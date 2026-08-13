@@ -224,6 +224,17 @@ the block needs pruning, not more headings.
       regression tooth); close when A4's fence half ships and the famine numbers hold.
       Relates ADR-106, ADR-094, ADR-097, FU-167, FU-090.
 
+- [ ] **FU-169** — **Differential coverage as a REVIEW INPUT (operator design, 2026-08-13).**
+      The reviewer can't see whether a PR improves or reduces test coverage; the blanket
+      per-repo % gate (sleep's 85%) can't say WHICH new lines are uncovered. Target (the
+      SonarQube shape): CI knows master's coverage, computes the branch's, and the review runs
+      on a coverage-annotated diff — "these 2 new lines have no coverage" — so every missed
+      line needs a stated justification (the fixer knows to justify; the reviewer judges the
+      reasoning) instead of a threshold nobody can argue with. Per-language tooling
+      (pytest-cov exists on sleep); stack-repos-first, homelab's bash/YAML CI mostly exempt.
+      Next: pilot on ONE stack repo — diff-coverage step in CI + the annotation surfaced to
+      the reviewer (check-run annotations or reviewer-context injection). Relates FU-095
+      (review-quality program), ADR-103 (executable gates > prose).
 - [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
       × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
       duplication (0 worlds shared by reference, 23 forked world paths, 74 single-row fixtures
