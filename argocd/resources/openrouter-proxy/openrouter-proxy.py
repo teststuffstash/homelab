@@ -1989,11 +1989,28 @@ class Proxy(BaseHTTPRequestHandler):
         # ADR-107 (homelab#421): Go leg detection for /anthropic/* paths — the claude CLI
         # sends Anthropic-format requests to /anthropic/v1/messages with --model opencode-go/...
         # The Go detection must fire here too, not just for /chat/completions.
+        # FU-024 only-free guardrail MUST be enforced here identically to /chat/completions.
         elif self.path.startswith("/anthropic/") and body:
             try:
                 payload = json.loads(body)
                 if isinstance(payload, dict) and payload.get("model"):
                     model = str(payload["model"])
+                    # FU-024 only-free enforcement — same check as /chat/completions path.
+                    # only-free sessions have no Go-window authority; deny Go-leg requests.
+                    auth_hdr = self.headers.get("Authorization", "")
+                    if auth_hdr.startswith("Bearer ref:"):
+                        reject = _guardrail_reject(
+                            auth_hdr[len("Bearer ref:"):].strip(), model)
+                        if reject:
+                            log(f"POST {self.path} → 403 [guardrail only-free] model={model}")
+                            self.send_response(403)
+                            self.send_header("Content-Type", "application/json")
+                            self.send_header("Content-Length", str(len(reject)))
+                            self.send_header("Connection", "close")
+                            self.end_headers()
+                            self.wfile.write(reject)
+                            self.close_connection = True
+                            return
                     if model.startswith(GO_PREFIX):
                         go_leg = True
                         bare = model[len(GO_PREFIX):]
@@ -2253,6 +2270,26 @@ def _self_test() -> int:
           f"anthropic-latch: count_429 unchanged ({initial_count} → {final_count})")
     check(final_until == initial_until,
           f"anthropic-latch: until unchanged ({initial_until} → {final_until})")
+
+    print("\n=== Only-free guardrail test (Go via /anthropic path) ===")
+    # Test 9: only-free guardrail MUST deny Go-leg requests through /anthropic path.
+    # FU-024: only-free sessions have no Go-window authority — same 403 as /chat/completions.
+    # We seed the _refs cache directly (the resolution seam) with a guardrail:only-free session.
+    _refs["test-only-free/test-secret"] = (time.time() + 3600, {
+        "key": "test-key",
+        "guardrail": "only-free",
+        "kind": "openrouter",
+    })
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3", path="/anthropic/v1/messages", extra_headers={
+        "Authorization": "Bearer ref:test-only-free/test-secret",
+    })
+    check(st == 403, "only-free: Go-leg via /anthropic denied with 403")
+    # Verify NO upstream received the request (guardrail fires before forwarding)
+    check("go" not in seen and "anthropic" not in seen,
+          "only-free: zero upstream traffic (guardrail fires pre-forward)")
+    # Clean up the seeded ref
+    _refs.pop("test-only-free/test-secret", None)
 
     print()
     if not fails:
