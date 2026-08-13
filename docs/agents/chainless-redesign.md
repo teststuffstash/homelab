@@ -114,15 +114,24 @@ dollars. Three directions replace it (they refine the ledger's per-rail `budgets
    free-model quality being the point. `only-free` retires with the guardrail knob (ledger
    §Removed) once this exists; the FU-024 enforcement machinery becomes the budget-typed
    refusal.
-3. **Subscription capacity gets FAIR SCHEDULING with PLATFORM-owned priorities.** Shared
-   scarce windows are allocated today by FIFO + a global semaphore + per-tier thresholds —
-   nothing expresses "oracle-fleet is more important than circles." The priority weights are
-   **homelab's knob, never the stack's** (a stack cannot rank itself; cross-stack allocation
-   is platform policy, the same asymmetry as CODEOWNERS): a platform-side weight table
-   (model-classes.json-adjacent) consumed by the proxy's capacity gates, which generalize from
-   boolean latch to weighted admission — under contention, higher-weight stacks' dispatches
-   admit first / defer last, within the same windows. Better stack knobs (posture, budgets,
-   rails), better homelab knobs (weights, window shares), one scheduler.
+3. **Subscription capacity gets FAIR SCHEDULING with PLATFORM-owned priorities — as
+   WORK-CONSERVING WINDOW SHARES** (operator refinement, 2026-08-13). Not token budgets
+   (meaningless across models): the provider's OWN windows are mapped into our system as
+   per-stack fractions — e.g. platform 30% of the 5h window, oracle-fleet 20% — declared in a
+   platform-side weight table (**homelab's knob, never the stack's**: a stack cannot rank
+   itself; cross-stack allocation is platform policy, the CODEOWNERS asymmetry). **Shares are
+   caps only under CAP PRESSURE** — the cgroup-shares/WFQ semantic: when the window is idle, a
+   1%-share stack may spend 100% of it; the admission predicate engages only when the window
+   itself is under pressure (utilization past a pressure floor, or competing deferred demand
+   present), and then bounds each stack to share × window with idle shares borrowable. The
+   proxy's capacity gates generalize from boolean latch to this weighted admission.
+   **Window structure conveniently aligns across rails**: Anthropic 5h/7d, opencode 5h/7d
+   (+ its extra 30d) — the share table applies per window and the BINDING window governs
+   (M11's language). **Attribution asymmetry to build for**: Go draw is fully self-metered
+   per request (chunk B — its ledger must carry the STACK dimension from day one); Anthropic's
+   window TRUTH is the global utilization headers, so per-stack draw there is self-metered
+   attribution reconciled against header truth. Better stack knobs (posture, budgets, rails),
+   better homelab knobs (shares per window), one scheduler.
 
 Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
 rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
