@@ -3998,3 +3998,11 @@ unit ≈$0.03 on mimo-v2.5 1×; flash same price but 2x AND region-locked = out;
 qwen3.5-plus — the one proven cheap tool-caller, flagged unpriced/undocumented; kimi-k2.7-code
 = next probe). Miss-ledger rows added mentally for #414 (seat-authored, 1 bot catch r1 — the
 loop-re-entry class AGAIN: state set at start, consumed on reuse).
+↳ (session close, ~15:30Z) Seat session ends; operator resumes under homelab-go for the first
+live subagent trials. Day's ledger: PRs #406-#415 all merged (NTP reroute · claude --model fix ·
+route urgency/labels · shim+claude-go+env · ADR-107 charter · pr-wait · miss ledger · go-session
+takeover · Nx-usage semantics) + the 7d-87% autopsy, the Go rail bring-up to tool-capable
+subagents (qwen trio), the Goal pause, the double-review build mode. Worktrees pruned; shared
+tree CLEAN on master, push-verified. Pickup: meta-state (ADR-107 chain ⚑ + Goal pause ⚑);
+the resumed session's Agent-tool slots ride Go (haiku→qwen3.5-plus etc.) — miss-ledger rows
+per chunk, seat pre-push review stays on.
