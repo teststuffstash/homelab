@@ -1,0 +1,18 @@
+# reviewer-go-failover-available (homelab#424) — the Go-rail failover when Anthropic is latched.
+#
+# CONDITION UNDER REPLAY. The subscription-latch.sh probe returns exit 1 (Anthropic limited),
+# but the Go rail probe (/opencode-limit) returns {limited: false}.
+#
+# THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
+#   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
+#   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records the call and returns Go-available JSON.
+#   3. With MODEL_SET_EXPLICIT unset and Go available: MODEL=kimi-k3, GO_SERVED=1, continue (exit 0).
+#   4. The action stream asserts: curl probe happened AND "serving review ... from Go rail" line emitted.
+#
+# Parts: bridge.sh (seams: HERE, stubs) + block:reviewer-go-failover-gate (real code)
+name: reviewer-go-failover-available
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-go-failover-gate

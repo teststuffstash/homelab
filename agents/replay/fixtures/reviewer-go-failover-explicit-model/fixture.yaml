@@ -1,0 +1,18 @@
+# reviewer-go-failover-explicit-model (homelab#424) — explicit --model prevents failover.
+#
+# CONDITION UNDER REPLAY. The subscription-latch.sh probe returns exit 1 (Anthropic limited),
+# Go rail probe returns {limited: false}, BUT MODEL_SET_EXPLICIT=1 (operator passed --model).
+#
+# THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
+#   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
+#   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records and returns Go-available JSON.
+#   3. With MODEL_SET_EXPLICIT=1: defer with explicit-model message even though Go is available.
+#   4. The action stream asserts: curl probe happened AND explicit-model defer line emitted.
+#
+# Parts: bridge.sh (seams: HERE, stubs, MODEL_SET_EXPLICIT=1) + block:reviewer-go-failover-gate (real code)
+name: reviewer-go-failover-explicit-model
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-go-failover-gate
