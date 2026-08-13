@@ -3955,3 +3955,8 @@ cost measured 40s ONE-TIME profile realization, zero re-download (/nix shared) �
 worktree creation if it matters. The tier-thesis ledger gains today's row: sonnet-bot caught
 defects in fable work twice in one day (PR#407 r1, PR#412 r1), both by tool-grounded
 verification.
+↳ (warm-devbox measurement, ~13:25Z) `cp -a homelab/.devbox <worktree>/` pre-warms a subagent
+worktree: first devbox run 40s → 3.6s (no-op verification against shared /nix); state is
+position-independent (no absolute paths in gen/state.json) and self-correcting (config-hash
+keyed — an edited devbox.json re-realizes itself). Protocol step-0 = one cp line in the
+dispatch prompt; folds into the charter build-mode write-up at adoption.
