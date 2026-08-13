@@ -61,11 +61,14 @@ else
   fi
 fi
 
-# Slot map — tool-probed against the live rail 2026-08-13 (chainless-redesign.md §Go rail):
-# the Anthropic-compat tool path is PER-MODEL — glm* 422s every function tool, deepseek* is
-# region-locked (403), kimi-k2.x compat-broken — and cached-read price is what decides whether
-# a lane fits the $30/wk window. The picks tool-call cleanly (tool_use round-trip verified).
-SLOT_HAIKU="${SLOT_HAIKU:-opencode-go/qwen3.5-plus}"   # $0.02/M cached read
+# Slot map — tool-probed against the live rail 2026-08-13 (the living register:
+# docs/spikes/opencode-model-matrix.md). The Anthropic-compat tool path is PER-MODEL — glm*
+# 422s every function tool, kimi-k2.x compat-broken, deepseek* needs the China-hosting
+# workspace opt-in (toggled 2026-08-13; a 403 RegionError here means the knob is off) — and
+# cached-read price decides whether a lane fits the windows. Picks tool-call cleanly
+# (tool_use round-trip verified); flash promoted on console-verified list billing + the
+# 2x-usage allowance (effective cR ≈ $0.0014/M).
+SLOT_HAIKU="${SLOT_HAIKU:-opencode-go/deepseek-v4-flash}"  # cR $0.0028/M list, ÷2 effective
 SLOT_SONNET="${SLOT_SONNET:-opencode-go/kimi-k3}"      # $0.30/M cached read
 SLOT_OPUS="${SLOT_OPUS:-opencode-go/qwen3.8-max}"      # qwen-max class, ~$0.50/M cached read
 
