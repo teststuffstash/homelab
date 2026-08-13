@@ -122,9 +122,10 @@ migrate through).
   and undocumented** (absent from the docs table AND the picker; flag: pricing may surprise).
   Next probe: kimi-k2.7-code ($0.19/M cached, $60 usage, 1×) as the priced cheap-slot candidate.
 - **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
-  widens the model set beyond the tool-verified trio. What replaces it on the critical path is a
-  maintained **per-model tool-compat matrix** (the rail-canary shape): a Go model enters a slot
-  only after its `tool_use` round-trip passes. First Go-served subagent ran 2026-08-13
+  widens the model set beyond the tool-verified trio. What replaces it on the critical path is the
+  maintained **per-model tool-compat matrix** —
+  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md) (the rail-canary
+  shape): a Go model enters a slot only after its `tool_use` round-trip passes there. First Go-served subagent ran 2026-08-13
   (~14:45Z, qwen3.5-plus; OTLP-confirmed `query_source=subagent` with zero Anthropic draw).
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
