@@ -50,8 +50,9 @@ GO_PREFIX = "opencode-go/"
 # freezes its alias→model map at LAUNCH, so when a slot model turns out broken mid-session
 # (glm-5.2 422s every function tool; deepseek-v4-pro region-locks — both found 2026-08-13),
 # restarting the shim with a rewrite un-wedges live sessions that a slot-map fix can't reach.
-GO_REWRITE = dict(p.split("=", 1) for p in
-                  os.environ.get("SHIM_MODEL_REWRITE", "").split(",") if "=" in p)
+GO_REWRITE = {k.strip(): v.strip() for k, v in
+              (p.split("=", 1) for p in
+               os.environ.get("SHIM_MODEL_REWRITE", "").split(",") if "=" in p)}
 
 # End-to-end and hop-by-hop headers we must own rather than forward. Content-Length is
 # recomputed (the body may be rewritten); the response side is re-framed connection-close

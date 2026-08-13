@@ -36,12 +36,29 @@ GO_KEY="${SHIM_GO_KEY:-$(_kp opencode-go-api-key || true)}"
 [ -n "$GO_KEY" ] || { echo "claude-go: no Go key — the wallet read returned EMPTY. Either the entry 'opencode-go-api-key' is missing (mint at opencode.ai/auth) OR devbox/keepassxc failed here (run the _kp line by hand to tell). Bypass: put SHIM_GO_KEY=<key> in .opencode-go.env" >&2; exit 1; }
 
 # The shim is shared across sessions: reuse a listener if one is up, else start one.
-if ! { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null; then
+# ⚠ SHIM_MODEL_REWRITE only takes effect at shim START — reusing a live listener would silently
+# no-op the exact mid-incident un-wedge the knob exists for (reviewer catch, PR#414 r1). A set
+# rewrite therefore kills the port's own shim (pidfile-targeted — never pkill by name, which
+# would take other ports' shims and, from a probing shell, the caller itself) and respawns.
+PIDFILE="${TMPDIR:-/tmp}/claude-model-shim.${PORT}.pid"
+_spawn_shim() {
   SHIM_GO_KEY="$GO_KEY" SHIM_PORT="$PORT" \
     nohup python3 "$HERE/claude-model-shim.py" >>"${TMPDIR:-/tmp}/claude-model-shim.log" 2>&1 &
+  echo $! > "$PIDFILE"
   sleep 0.5
+}
+if ! { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null; then
+  _spawn_shim
 else
   exec 3>&-
+  if [ -n "${SHIM_MODEL_REWRITE:-}" ]; then
+    if [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "claude-go: SHIM_MODEL_REWRITE set — restarted the :${PORT} shim so the rewrite is live" >&2
+      sleep 0.3; _spawn_shim
+    else
+      echo "claude-go: ⚠ SHIM_MODEL_REWRITE is set but the running :${PORT} shim has no pidfile — the rewrite is NOT live; kill that shim by hand and relaunch" >&2
+    fi
+  fi
 fi
 
 # Slot map — tool-probed against the live rail 2026-08-13 (chainless-redesign.md §Go rail):
