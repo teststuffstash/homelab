@@ -21,19 +21,23 @@ meant to avoid.)
   re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
   (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md), read
-  it FIRST): rollout part 1 chunks A–D SHIPPED + LIVE 2026-08-13** (PRs #429/#433–#436;
-  end-to-end seat-probed — real completion + exact metered ledger row; #421–#424 closed with
-  evidence). **7d latch RESTORED 0.95** (f0f0aa3): a latched week now fails over to
-  `opencode-go/kimi-k3` with input-state snapshots. NEXT: **chunk E #425 (time-travel re-review
-  tool) BEFORE the weekly pool reset** — Go-served review snapshots need their sonnet re-review
-  path ready; then chunk F #426 (dashboards + doc currency). PR#437 (miss-ledger day-2 + card
-  tautology rules) cycling at session close — harvest its verdict. Build mode unchanged:
+  it FIRST — its §Rollout status is current): part 1 chunks A–D+F + H-leg-1 MERGED+LIVE
+  2026-08-13 (PRs #429/#433–#437/#440/#443; #421–#424/#426 closed w/ evidence; ADR-108 =
+  jail pushes, never depends on cluster). **PICKUP: PRs #441 (E, r3) + #442 (G, r3 head
+  3f0586b) sit OPEN awaiting re-review — BOTH RAILS were latched at close** (Anthropic
+  7d=0.98; the Go ACCOUNT 5h exhausted ~20:42Z, resets ~22:14Z — our meter was blind at
+  1.5%, the #438 blind spot live, datum on the issue). A session-only one-shot cron (01:23
+  local 08-14) re-dispatches via `bash agents/reviewer-session.sh homelab <N>` (the working
+  remedy — direct dispatch, Go-served; used to un-wedge #442/#443 after the review-edge
+  stall the merged #443 fixes) + then G's live probes (jail push → by_stack.jail; wrong
+  token → 401) + close #438/#439-leg-1 — **if this session died, do those by hand.** Then:
+  #439 leg 2 (agent-session ladder; retro inherits — before its 08-17 fire), next-week
+  sonnet re-reviews (`agents/re-review.sh`, two pr-437 snapshots waiting), the next ledger
+  PR (rows in the session scratchpad — E/F/G/H wave: fabrication-in-transcription class,
+  the deferred-verification coverage shadow, the exhaustion event). Build mode unchanged:
   clone subagents, double review, misses →
-  [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md). Shim files
-  stay OWNED by the operator's homelab-go session (hands off
-  scripts/claude-{go.sh,model-shim.py}); this resumed session's Agent slots still ride the
-  launch-frozen qwen/kimi map. Pending verifies: PR#407 (next platform ride's OTLP model =
-  claude-haiku-4-5-*), elastic shadow cells since PR#408.
+  [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
+  Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
 - **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
   the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
   plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d
