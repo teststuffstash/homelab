@@ -506,7 +506,10 @@ def key_refs() -> list[str]:
 
 def go_usage_add(ts: float, stack: str, model: str, usd: float) -> bool:
     """One Go-rail completion → the usage ledger. In-memory degrade = no-op, never a crash."""
-    return _write("INSERT INTO go_usage VALUES(?,?,?,?)", (ts, stack, model, usd))
+    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?)", (ts, stack, model, usd))
+    # Prune rows older than 45d (30d window + 15d slack) — prevents unbounded growth.
+    _write("DELETE FROM go_usage WHERE ts < ?", (ts - 45 * 86400,))
+    return ok
 
 
 def go_usage_window(seconds: float) -> dict:
@@ -1325,6 +1328,13 @@ def self_test() -> int:
     assert abs(w5m["total_usd"] - 0.008) < 1e-9, f"window total={w5m['total_usd']}"
     assert w5m["by_stack"].get("sleep", 0) == 0.007, f"by_stack sleep={w5m['by_stack'].get('sleep')}"
     assert w5m["by_stack"].get("circles", 0) == 0.001, f"by_stack circles={w5m['by_stack'].get('circles')}"
+    # Ledger prune — rows older than 45d are deleted
+    old_ts = now - 50 * 86400
+    assert go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
+    assert go_usage_add(now, "fresh", "kimi-k3", 0.01)  # fresh row triggers prune
+    w60d = go_usage_window(60 * 86400)  # 60d window
+    assert w60d["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted"
+    assert w60d["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained"
     # ── addendum 4: the 429→cooldown→recovery loop + route() scenarios ──
     CTX = {
         "price": lambda m: (0.0, "free") if m.endswith(":free") else

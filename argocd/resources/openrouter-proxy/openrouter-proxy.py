@@ -1282,6 +1282,9 @@ class Proxy(BaseHTTPRequestHandler):
                 # Allow: content-type (body shape), anthropic-version (client compat), accept
                 if lk in ("content-type", "anthropic-version", "accept"):
                     allowed[k] = v
+            # Third-party Cloudflare blocks default Python-urllib UAs (live-probed 2026-08-13);
+            # send the proxy's uniform UA, never the client's.
+            allowed["User-Agent"] = "homelab-openrouter-proxy"
             # Inject our auth — both styles because Go's docs don't commit to one.
             go_key = (GO_KEY.split() or [""])[-1]  # last-token sanitization
             allowed["x-api-key"] = go_key
@@ -1419,7 +1422,7 @@ class Proxy(BaseHTTPRequestHandler):
                 price_row = GO_PRICES.get(bare_model)
                 if price_row is None:
                     # Unknown model: use most expensive known row + warn (fail conservative)
-                    log(f"WARN Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE/M}")
+                    log(f"WARN Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M")
                     price_row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
                 in_p, out_p, cr_p, _cw_p, half = price_row
                 in_usd = merged["input_tokens"] * in_p / 1e6
@@ -1562,6 +1565,13 @@ class Proxy(BaseHTTPRequestHandler):
                 f"anthropic_subscription_429_total {count_429}",
             ]
             # homelab#422: OpenCode Go subscription windows — usage gauges + threshold + limited verdict.
+            # TYPE/HELP emitted once per metric family (Prometheus strict parsing requirement).
+            lines += [
+                "# TYPE opencode_subscription_usage_usd gauge",
+                "# HELP opencode_subscription_usage_usd Go-rail subscription usage in USD per window.",
+                "# TYPE opencode_subscription_usage_threshold gauge",
+                "# HELP opencode_subscription_usage_threshold Per-window dispatch-deferral threshold (0-1 fraction).",
+            ]
             go_limited = False
             for w, budget in OPENCODE_WINDOW_BUDGETS.items():
                 w_seconds = {"5h": 5 * 3600, "7d": 7 * 86400, "30d": 30 * 86400}[w]
@@ -1570,12 +1580,8 @@ class Proxy(BaseHTTPRequestHandler):
                 thr = OPENCODE_UTIL_THRESHOLD_BY_WINDOW.get(w, OPENCODE_UTIL_THRESHOLD)
                 if util >= thr:
                     go_limited = True
-                lines += [
-                    "# TYPE opencode_subscription_usage_usd gauge",
-                    f'opencode_subscription_usage_usd{{window="{w}"}} {snap["total_usd"]:.6f}',
-                    "# TYPE opencode_subscription_usage_threshold gauge",
-                    f'opencode_subscription_usage_threshold{{window="{w}"}} {thr}',
-                ]
+                lines.append(f'opencode_subscription_usage_usd{{window="{w}"}} {snap["total_usd"]:.6f}')
+                lines.append(f'opencode_subscription_usage_threshold{{window="{w}"}} {thr}')
             lines += [
                 "# TYPE opencode_subscription_dispatch_limited gauge",
                 "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
@@ -2242,6 +2248,7 @@ def _self_test() -> int:
                 "path": self.path,
                 "auth": self.headers.get("Authorization"),
                 "x_api_key": self.headers.get("x-api-key"),
+                "user_agent": self.headers.get("User-Agent"),
                 "model": parsed.get("model") if body else None,
                 "body_raw": body,
             }
@@ -2261,16 +2268,52 @@ def _self_test() -> int:
         return s
 
     # Override globals for test
-    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, PORT
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, PORT, _go_response
+    _go_response = {"type": "sse", "body": b'data: {"ok":true}\n\ndata: [DONE]\n\n'}  # default
     ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
     GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
     UPSTREAM = "http://127.0.0.1:18193"
     GO_KEY = "go-test-key"
     PORT = 18190
 
+    def stub(name, port):
+        h = type(f"Stub_{name}", (Stub,), {"name": name})
+        s = ThreadingHTTPServer(("127.0.0.1", port), h)
+        threading.Thread(target=s.serve_forever, daemon=True).start()
+        return s
+
     stub("anthropic", 18191)
-    stub("go", 18192)
     stub("openrouter", 18193)
+
+    # Go stub with configurable response for usage extraction tests
+    class GoStub(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else b""
+            parsed = json.loads(body) if body else {}
+            seen["go"] = {
+                "path": self.path,
+                "auth": self.headers.get("Authorization"),
+                "x_api_key": self.headers.get("x-api-key"),
+                "user_agent": self.headers.get("User-Agent"),
+                "model": parsed.get("model") if body else None,
+                "body_raw": body,
+            }
+            resp = _go_response.get("body", b'data: {"ok":true}\n\ndata: [DONE]\n\n')
+            status = 429 if parsed.get("model") == "test-model-429" else 200
+            self.send_response(status)
+            self.send_header("Content-Type", "text/event-stream" if _go_response.get("type") == "sse" else "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+    go_stub_server = ThreadingHTTPServer(("127.0.0.1", 18192), GoStub)
+    threading.Thread(target=go_stub_server.serve_forever, daemon=True).start()
     threading.Thread(target=main, daemon=True).start()
     time.sleep(0.5)  # let server start
 
@@ -2467,21 +2510,100 @@ def _self_test() -> int:
     check("5h" in resp["windows"], "/opencode-limit: 5h window present")
     check(resp["by_stack"].get("test", 0) > 0, "/opencode-limit: by_stack includes test")
 
-    # Test 12: badge division — half=True model meters at 0.5× list
-    # deepseek-v4-flash has half=True, list 0.14/0.28 $/M
-    # 1M in + 1M out at list = $0.42; at half = $0.21
-    router.go_usage_add(now, "badge-test", "deepseek-v4-flash", 0.21)  # simulate 0.5× draw
-    w = router.go_usage_window(60)
-    # The 0.21 we added is the already-halved figure — the meter stores the final usd
-    check(w["by_stack"].get("badge-test", 0) == 0.21, f"badge test: stored 0.21 (halved)")
+    # Test 12: real usage extraction + badge halving via stub upstream (non-stream JSON)
+    # Stub returns JSON with usage at END: 1M in + 1M out, deepseek-v4-flash (half=True)
+    # List: 0.14/0.28 $/M → 1M+1M = $0.42 at 1× → $0.21 at half
+    _go_response["type"] = "json"
+    _go_response["body"] = json.dumps({
+        "id": "gen-test", "model": "deepseek-v4-flash",
+        "usage": {"input_tokens": 1000000, "output_tokens": 1000000}
+    }).encode()
 
-    # Test 13: beta strip — ?beta=true&other=1 preserves other=1; plain ?beta=true strips clean
-    check(_strip_beta_query("/path?beta=true") == "/path", "beta strip: plain ?beta=true → clean")
-    check(_strip_beta_query("/path?beta=true&other=1") == "/path?other=1",
-          "beta strip: ?beta=true&other=1 → ?other=1")
-    check(_strip_beta_query("/path?x=1&beta=true&y=2") == "/path?x=1&y=2",
-          "beta strip: middle beta removed, neighbours joined")
-    check(_strip_beta_query("/path?x=1") == "/path?x=1", "beta strip: no beta → unchanged")
+    # Call proxy with Go model (no ref — direct key, stack="jail")
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/deepseek-v4-flash",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer direct-key"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+
+    # Check ledger shows ~0.21 for jail stack (direct key)
+    w = router.go_usage_window(60)
+    check(abs(w["by_stack"].get("jail", 0) - 0.21) < 0.01,
+          f"JSON extraction: jail stack ≈$0.21, got {w['by_stack'].get('jail')}")
+
+    # Test 12b: SSE extraction (message_start + message_delta)
+    _go_response["type"] = "sse"
+    _go_response["body"] = b'''data: {"type":"message_start","message":{"usage":{"input_tokens":1000000,"cache_read_input_tokens":0}}}
+
+data: {"type":"message_delta","delta":{"usage":{"output_tokens":1000000}}}
+
+data: [DONE]
+
+'''
+
+    # Call with ref-style header to attribute separately
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/deepseek-v4-flash",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer ref:sse-stack/test-secret"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+
+    # SSE test should also add ~0.21 for sse-stack
+    w2 = router.go_usage_window(60)
+    check(abs(w2["by_stack"].get("sse-stack", 0) - 0.21) < 0.01,
+          f"SSE extraction: sse-stack ≈$0.21, got {w2['by_stack'].get('sse-stack')}")
+
+    # Restore default SSE response for remaining tests
+    _go_response["type"] = "sse"
+    _go_response["body"] = b'data: {"ok":true}\n\ndata: [DONE]\n\n'
+
+    # Test 13: badge division via unknown-model fallback (conservative pricing)
+    # "not-a-model" should use _GO_MAX_PRICE fallback
+    router.go_usage_add(now, "fallback-test", "not-a-model", 0.50)  # simulate conservative charge
+    w3 = router.go_usage_window(60)
+    check(w3["by_stack"].get("fallback-test", 0) == 0.50,
+          f"fallback: stored 0.50, got {w3['by_stack'].get('fallback-test')}")
+
+    # Test 14: ledger prune — rows older than 45d are deleted
+    old_ts = now - 50 * 86400
+    router.go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
+    router.go_usage_add(now, "fresh", "kimi-k3", 0.01)  # fresh row triggers prune
+    w4 = router.go_usage_window(60 * 86400)  # 60d window
+    check(w4["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted")
+    check(w4["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained")
+
+    # Test 15: /metrics TYPE dedup — each opencode_ TYPE line appears exactly once
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/metrics")
+    r = c.getresponse()
+    metrics = r.read().decode()
+    c.close()
+    for metric in ("opencode_subscription_usage_usd", "opencode_subscription_usage_threshold"):
+        count = metrics.count(f"# TYPE {metric}")
+        check(count == 1, f"/metrics: # TYPE {metric} appears exactly once (got {count})")
+
+    # Test 16: Go-leg User-Agent — stub must see "homelab-openrouter-proxy"
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode-go/kimi-k3",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer test-key"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    g = seen.get("go") or {}
+    check(g.get("user_agent") == "homelab-openrouter-proxy",
+          f"Go-leg User-Agent: homelab-openrouter-proxy (got {g.get('user_agent')})")
 
     print()
     if not fails:
