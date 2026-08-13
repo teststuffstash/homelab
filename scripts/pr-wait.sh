@@ -35,9 +35,18 @@ esac; done
 [ "$ARM" = 0 ] || gh pr merge "$PR" --repo "$REPO" --auto --squash >/dev/null 2>&1 || true
 
 deadline=$(( $(date +%s) + TIMEOUT ))
+fails=0
 while :; do
-  view="$(gh pr view "$PR" --repo "$REPO" --json state,reviewDecision,headRefOid 2>/dev/null)" \
-    || { echo "pr-wait: gh pr view failed (auth? repo?)" >&2; exit 64; }
+  # One transient gh/API failure must not kill a 20-minute wait (proven live 2026-08-13: a
+  # single blip at poll ~4 exited a healthy watch with 64 while the PR went on to a verdict).
+  # Consecutive failures are the real signal; a success resets the count.
+  if ! view="$(gh pr view "$PR" --repo "$REPO" --json state,reviewDecision,headRefOid 2>/dev/null)"; then
+    fails=$((fails + 1))
+    [ "$fails" -lt 5 ] || { echo "pr-wait: gh pr view failed ${fails}x consecutively (auth? repo?)" >&2; exit 64; }
+    echo "pr-wait: $(date -u +%H:%M:%S) poll failed (${fails}/5) — retrying" >&2
+    sleep "$INTERVAL"; continue
+  fi
+  fails=0
   state="$(printf '%s' "$view" | jq -r .state)"
   decision="$(printf '%s' "$view" | jq -r '.reviewDecision // ""')"
   head="$(printf '%s' "$view" | jq -r .headRefOid)"
