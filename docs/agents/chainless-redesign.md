@@ -110,22 +110,21 @@ migrate through).
   dropped, models tool-calling fine on `/chat/completions`. The homelab-go session's per-model
   probing then split it: **qwen3.5-plus, qwen3.8-max and kimi-k3 accept Anthropic-shaped tools
   and return proper `tool_use` blocks** (`stop_reason: tool_use` — re-verified independently at
-  takeover), while glm-5.2 422s every function tool and deepseek-* is region-locked (403). Two
+  takeover), while glm-5.2 422s every function tool (deepseek-* 403'd too until the
+  China-hosting workspace opt-in was toggled — both pass post-toggle, matrix §quirks). Two
   quirks stay normalized in the jail shim: string-shorthand message content (glm drops it;
   blocks form fine) and claude-code's `?beta=true` + `anthropic-beta` decorations (422).
 - **Metadata surface (probed 2026-08-13): registry-POOR.** `/v1/models` returns ids only — no
   pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
   models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
   in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
-  ⚠ **The "Nx usage" SEMANTICS are UNRESOLVED** (operator challenge, 2026-08-13): the docs'
-  *"$10 → 6x that in usage… for some models the multiplier is lower"* reads as a per-model
-  VALUE-POOL ratio (badge = downgraded pool, $20/mo instead of $60 — also decodes the table's
-  $15/$60 "Usage" column as 1.5×/6× pools, with picker↔docs drift = live ops tuning), but
-  "you get 2× usage" (a discount perk) is equally consistent with the badge text alone. The
-  tell leaning pool-reading: the badges sit on CHEAP models (Luna, flash), not the expensive
-  ones. DECIDED BY: the console's per-model usage-$ against list-price token math on a known
-  request (operator console glance — no API). Do not build window accounting on either reading
-  until that datum lands.
+  ✅ **"Nx usage" RESOLVED for billing (console dump 2026-08-13): billed Cost = list price ×1
+  for every model, badged included** (flash exact-list, luna ≈list; worked rows in the matrix) —
+  window accounting builds on list prices. The limit-side effect is community-confirmed
+  FAVORABLE (the operator's half-off reading, r/opencode ×3): badged models draw the windows at
+  HALF their billed list-$ — flash's effective window cR ≈ $0.0014/M. Unverified at the limit
+  boundary; the tell = a badged model NOT latching when billed $ predicts it. Detail + the derived qwen3.5-plus rates:
+  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md).
   Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
   **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
   our own per-model canary matrix — with windows self-metered from per-request usage.
@@ -135,18 +134,22 @@ migrate through).
   `nemotron-3.5-lightning-free`, `laguna-s-2.1-free`, `big-pickle` — a candidate rung-0 on this
   rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
   400) — canary before any slot use.
-- **Slot economics (curated 2026-08-13; unit = 1M cacheRead + 100k output, the subagent shape):**
-  mimo-v2.5 ≈ $0.031 (cheapest priced, unbadged — but tools 400 on the compat path today) ·
-  deepseek-v4-flash ≈ $0.031 at list AND **region-locked 403 for us — out regardless of math** ·
-  qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70 (tool-broken) · kimi-k3 ≈ $1.80
-  (sparse big calls only) — against $12/5h·$30/wk·$60/mo usage-value windows. The haiku slot
-  KEEPS `qwen3.5-plus` — it is the one proven tool-caller in the cheap class, though **unpriced
-  and undocumented** (absent from the docs table AND the picker; flag: pricing may surprise).
-  Next probe: kimi-k2.7-code ($0.19/M cached, $60 usage, 1×) as the priced cheap-slot candidate.
+- **Slot economics (curated 2026-08-13, revised same day post-opt-in + console billing; unit =
+  1M cacheRead + 100k output, the subagent shape):**
+  **deepseek-v4-flash ≈ $0.031 — the pick: cheapest priced tool-caller on every axis, billed at
+  list ×1 (console-verified), tools ✅ post China-opt-in — PROMOTED to haiku slot + subagent
+  default** (the earlier "region-locked, out regardless of math" verdict was the un-toggled
+  workspace gate, matrix §quirks) · qwen3.5-plus ≈ $0.13 (rates DERIVED from console billing —
+  in $0.25/M, cR $0.025/M, out ≈$1/M; the prior slot holder) · mimo-v2.5 ≈ $0.031 on paper but
+  tools 400 on the compat path · qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70
+  (tool-broken) · kimi-k3 ≈ $1.80 (sparse big calls only) — against $12/5h·$30/wk·$60/mo
+  usage-value windows (measured 2026-08-13: a full day of probing + canaries + two sessions ≈
+  **$0.09**). Next probe: kimi-k2.7-code ($0.19/M cached, 1×) as a mid-tier candidate.
 - **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
-  widens the model set beyond the tool-verified trio. What replaces it on the critical path is a
-  maintained **per-model tool-compat matrix** (the rail-canary shape): a Go model enters a slot
-  only after its `tool_use` round-trip passes. First Go-served subagent ran 2026-08-13
+  widens the model set beyond the tool-verified trio. What replaces it on the critical path is the
+  maintained **per-model tool-compat matrix** —
+  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md) (the rail-canary
+  shape): a Go model enters a slot only after its `tool_use` round-trip passes there. First Go-served subagent ran 2026-08-13
   (~14:45Z, qwen3.5-plus; OTLP-confirmed `query_source=subagent` with zero Anthropic draw).
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
