@@ -91,6 +91,27 @@ migrate through).
   takeover), while glm-5.2 422s every function tool and deepseek-* is region-locked (403). Two
   quirks stay normalized in the jail shim: string-shorthand message content (glm drops it;
   blocks form fine) and claude-code's `?beta=true` + `anthropic-beta` decorations (422).
+- **Metadata surface (probed 2026-08-13): registry-POOR.** `/v1/models` returns ids only — no
+  pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
+  models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
+  in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
+  Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
+  **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
+  our own per-model canary matrix — with windows self-metered from per-request usage.
+- **The Zen sibling**: the same key reaches `…/zen/v1` — opencode's pay-per-token GATEWAY (60
+  models incl. `claude-*`; never route claude there — the Anthropic subscription exists) with a
+  **free tier**: `deepseek-v4-flash-free`, `mimo-v2.5-free`, `hy3-free`, `nemotron-3-ultra-free`,
+  `nemotron-3.5-lightning-free`, `laguna-s-2.1-free`, `big-pickle` — a candidate rung-0 on this
+  rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
+  400) — canary before any slot use.
+- **Slot economics (curated 2026-08-13; unit = 1M cacheRead + 100k output, the subagent shape):**
+  mimo-v2.5 ≈ $0.031 (cheapest priced, 1× — but tools 400 on the compat path today) ·
+  deepseek-v4-flash ≈ $0.031×2 AND **region-locked 403 for us — out regardless of math** ·
+  qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70 (tool-broken) · kimi-k3 ≈ $1.80
+  (sparse big calls only) — against $12/5h·$30/wk·$60/mo usage-value windows. The haiku slot
+  KEEPS `qwen3.5-plus` — it is the one proven tool-caller in the cheap class, though **unpriced
+  and undocumented** (absent from the docs table AND the picker; flag: pricing may surprise).
+  Next probe: kimi-k2.7-code ($0.19/M cached, $60 usage, 1×) as the priced cheap-slot candidate.
 - **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
   widens the model set beyond the tool-verified trio. What replaces it on the critical path is a
   maintained **per-model tool-compat matrix** (the rail-canary shape): a Go model enters a slot
