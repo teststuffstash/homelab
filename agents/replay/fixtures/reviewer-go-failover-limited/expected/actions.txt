@@ -1,0 +1,3 @@
+OUT → review of test-project#42 deferred — subscription rate-limited (FU-088 latch)
+ERR subscription limited (FU-088, 429): utilization high — deferring subscription dispatch
+RC 0
