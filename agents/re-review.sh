@@ -262,17 +262,31 @@ EOF
 
   # Step 5: Invoke claude for re-review
   echo "→ invoking claude for re-review..."
-  claude_reply=$(claude -p "@$PROMPT_FILE" --model "$MODEL" --output-format json 2>/dev/null) || {
+  # ⚠ claude -p takes the prompt VALUE (no @file convention — "@path" would BE the prompt);
+  # load the file into the arg, the reviewer-session idiom.
+  PROMPT_CONTENT="$(cat "$PROMPT_FILE")"
+  claude_reply=$(claude -p "$PROMPT_CONTENT" --model "$MODEL" --output-format json 2>/dev/null) || {
     echo "  ERROR: claude invocation failed"
     continue
   }
 
-  # Parse claude response
-  sonnet_verdict=$(echo "$claude_reply" | jq -r '.verdict // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
-  sonnet_findings=$(echo "$claude_reply" | jq -r '.findings // ""' 2>/dev/null || echo "")
+  # Parse claude response: the --output-format json ENVELOPE carries the model text in .result
+  # (the reviewer-session.sh:497 shape) — the {verdict, findings} JSON we asked for is INSIDE
+  # that text, possibly ```json-fenced. Strip fences, then parse; anything unparseable = UNKNOWN.
+  result_text=$(printf '%s' "$claude_reply" | jq -r '.result // ""' 2>/dev/null || echo "")
+  result_json=$(printf '%s' "$result_text" | sed -e 's/^```json$//' -e 's/^```$//')
+  sonnet_verdict=$(printf '%s' "$result_json" | jq -r '.verdict // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN")
+  sonnet_findings=$(printf '%s' "$result_json" | jq -r '.findings // ""' 2>/dev/null || echo "")
+  [ -n "$sonnet_verdict" ] || sonnet_verdict="UNKNOWN"
 
-  # Step 6: Compare verdicts
-  if [ "$recorded_verdict" = "$sonnet_verdict" ]; then
+  # Step 6: Compare verdicts — normalize the recorded GitHub .state vocabulary (APPROVED /
+  # CHANGES_REQUESTED) onto the prompt's (APPROVE / REQUEST_CHANGES) or equality never holds.
+  recorded_norm="$recorded_verdict"
+  case "$recorded_verdict" in
+    APPROVED) recorded_norm="APPROVE";;
+    CHANGES_REQUESTED) recorded_norm="REQUEST_CHANGES";;
+  esac
+  if [ "$recorded_norm" = "$sonnet_verdict" ]; then
     compare_result="AGREE"
   else
     compare_result="DISAGREE"
