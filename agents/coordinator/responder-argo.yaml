@@ -656,7 +656,7 @@ spec:
             (d) whenever the repo you filed on is NOT the computed default '$ROUTE_REPO' — stack-ward or platform-ward, the rule is symmetric (see STEP 1) — the body must carry the one-line reason: the fix surface that took you there.
 
             HARD RULES: before filing, search the agent repos ORG-WIDE (same reason as the subject search above — the route can move between fires) for an issue containing 'alert-fp:$FP' — OPEN or CLOSED. Open: add ONE comment there, no new issue. CLOSED: the resolve leg closed it when the alert cleared and it is now firing again, so REOPEN that one (gh issue reopen) and comment — never file a second issue for a fingerprint that already has a history. That reopen is what stops a flapping alert from churning issues. Never more than one issue per session. No kubectl mutations. Never push to master. If anything smells like an automation loop (duplicate PRs, your own prior artifacts piling up), STOP and report only." \
-                --model "${rail:-sonnet}" --permission-mode bypassPermissions --max-turns 40 </dev/null \
+                --model "$(case "$rail" in opencode-go/*) echo "$rail";; *) echo sonnet;; esac)" --permission-mode bypassPermissions --max-turns 40 </dev/null \
                 || echo "WARN: triage session failed for $NAME ($FP) — alert still routes to HA; refire re-triages tomorrow"
 
               # ── #228 (b): A REOPEN RESTORES A RECORD, NEVER A QUEUE ─────────────────────────

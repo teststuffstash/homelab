@@ -101,6 +101,7 @@ KUBECTL="$(command -v kubectl || echo kubectl)"
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
+# >>>REPLAY:reflex-tick-gate>>>
 # 0a. FU-088(a) reactive latch: the first 429 anywhere on the subscription latches the egress
 #     proxy — skip the whole tick while latched (this reflex only ever spawns subscription
 #     reviewers; level-triggered, so the next tick simply re-checks).
@@ -112,6 +113,7 @@ if [ -z "$rail" ]; then
   exit 0
 fi
 log "rail clear: $rail — tick proceeds (each dispatched session picks its own rail downstream)"
+# <<<REPLAY:reflex-tick-gate<<<
 
 # 0b. Honor the per-stack `reviewer.enabled` knob — the first CONSUMED slice of FU-080 (found
 #     live 2026-07-17: the oracle claim synced `reviewer: {enabled: false}` but nothing read it,

@@ -27,16 +27,43 @@ set -u
 PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 TIER="${SUBSCRIPTION_TIER:-}"
 
+# _anthropic_clear — the ENTIRE Anthropic probe (one home, reused by both modes).
+# Returns 0 (clear) or 1 (latched), executing the full verdict logic (server semaphore,
+# SUBSCRIPTION_MAX_RUNNING belt, tier semantics, fail-open). Pure function: no exit, callers decide.
+_anthropic_clear() {
+  local reply server_semaphore limited reason detail sem MAX running
+  reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
+  server_semaphore="false"
+  if [ -n "$reply" ]; then
+    limited="$(printf '%s' "$reply" | jq -r '.limited // false' 2>/dev/null)" || limited="false"
+    if [ "$limited" = "true" ]; then
+      reason="$(printf '%s' "$reply" | jq -r '.reason // "?"' 2>/dev/null)"
+      detail="$(printf '%s' "$reply" | jq -r '[.windows | to_entries[] | "\(.key)=\(.value.utilization)"] | join(" ")' 2>/dev/null)"
+      sem="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then " sem=\(.semaphore.running)/\(.semaphore.max)" else "" end' 2>/dev/null)"
+      echo "subscription limited (FU-088, ${reason}${TIER:+, tier=$TIER}): utilization ${detail:-?}${sem} — deferring subscription dispatch (probe: ${PROXY}/anthropic-limit)" >&2
+      return 1
+    fi
+    # ADR-096 P2: a reply carrying a semaphore verdict already counted the pods server-side.
+    server_semaphore="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then "true" else "false" end' 2>/dev/null)" || server_semaphore="false"
+  fi
+  # Semaphore belt: label-selector count of live subscription sessions.
+  MAX="${SUBSCRIPTION_MAX_RUNNING:-5}"
+  if [ "$server_semaphore" != "true" ] && [ "$MAX" -gt 0 ] 2>/dev/null && command -v kubectl >/dev/null 2>&1; then
+    running="$(kubectl get pods -A -l homelab.teststuff.net/subscription-session=claude \
+      --field-selector status.phase=Running --no-headers 2>/dev/null | wc -l)" || running=0
+    if [ "${running:-0}" -ge "$MAX" ]; then
+      echo "subscription semaphore (FU-088): ${running} subscription pods Running (max ${MAX}) — deferring dispatch (SUBSCRIPTION_MAX_RUNNING overrides)" >&2
+      return 1
+    fi
+  fi
+  return 0
+}
+
 # >>>REPLAY:pick-rail-ladder>>>
 # --pick-rail mode: compose the ladder, print the rail name on success
 if [ "${1:-}" = "--pick-rail" ]; then
-  # First check Anthropic (the original probe)
-  reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
-  limited="false"
-  if [ -n "$reply" ]; then
-    limited="$(printf '%s' "$reply" | jq -r '.limited // false' 2>/dev/null)" || limited="false"
-  fi
-  if [ "$limited" != "true" ]; then
+  # First check Anthropic via the one-home function
+  if _anthropic_clear; then
     # Anthropic clear → print "anthropic" and exit 0
     echo "anthropic"
     exit 0
@@ -54,37 +81,15 @@ if [ "${1:-}" = "--pick-rail" ]; then
     exit 0
   fi
   # Both latched → exit 1 with stderr naming both
-  echo "both rails latched (Anthropic: 429/utilization, Go: ${go_reply:+limited / }unreachable)" >&2
+  if [ -n "$go_reply" ]; then
+    echo "both rails latched (Anthropic: 429/utilization, Go: limited)" >&2
+  else
+    echo "both rails latched (Anthropic: 429/utilization, Go: unreachable)" >&2
+  fi
   exit 1
 fi
 # <<<REPLAY:pick-rail-ladder<<<
 
-reply="$(curl -fsS --max-time 5 "$PROXY/anthropic-limit${TIER:+?tier=$TIER}" 2>/dev/null)" || reply=""
-server_semaphore="false"
-if [ -n "$reply" ]; then
-  limited="$(printf '%s' "$reply" | jq -r '.limited // false' 2>/dev/null)" || limited="false"
-  if [ "$limited" = "true" ]; then
-    reason="$(printf '%s' "$reply" | jq -r '.reason // "?"' 2>/dev/null)"
-    detail="$(printf '%s' "$reply" | jq -r '[.windows | to_entries[] | "\(.key)=\(.value.utilization)"] | join(" ")' 2>/dev/null)"
-    sem="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then " sem=\(.semaphore.running)/\(.semaphore.max)" else "" end' 2>/dev/null)"
-    echo "subscription limited (FU-088, ${reason}${TIER:+, tier=$TIER}): utilization ${detail:-?}${sem} — deferring subscription dispatch (probe: ${PROXY}/anthropic-limit)" >&2
-    exit 1
-  fi
-  # ADR-096 P2: a reply carrying a semaphore verdict already counted the pods server-side —
-  # skip the local kubectl copy (belt only for older proxies / unreadable counts).
-  server_semaphore="$(printf '%s' "$reply" | jq -r 'if .semaphore.running != null then "true" else "false" end' 2>/dev/null)" || server_semaphore="false"
-fi
-
-# Semaphore belt: label-selector count of live subscription sessions. Launchers stamp the label
-# (homelab.teststuff.net/subscription-session=claude) on every pod that draws on the operator
-# plan. Needs cluster-wide pod list; a denied/absent kubectl fails open.
-MAX="${SUBSCRIPTION_MAX_RUNNING:-5}" # 3→5 2026-08-08 (Max 5x→20x); authority = the proxy Deployment env
-if [ "$server_semaphore" != "true" ] && [ "$MAX" -gt 0 ] 2>/dev/null && command -v kubectl >/dev/null 2>&1; then
-  running="$(kubectl get pods -A -l homelab.teststuff.net/subscription-session=claude \
-    --field-selector status.phase=Running --no-headers 2>/dev/null | wc -l)" || running=0
-  if [ "${running:-0}" -ge "$MAX" ]; then
-    echo "subscription semaphore (FU-088): ${running} subscription pods Running (max ${MAX}) — deferring dispatch (SUBSCRIPTION_MAX_RUNNING overrides)" >&2
-    exit 1
-  fi
-fi
+# Flagless path: boolean contract, reuse the one-home probe
+_anthropic_clear || exit 1
 exit 0

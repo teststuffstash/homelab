@@ -1,0 +1,12 @@
+# reflex-tick-proceed (homelab#439) — tick gate proceeds when a rail is clear.
+#
+# CONDITION: subscription-latch.sh --pick-rail prints "anthropic" and exits 0.
+# EXPECTED: log line "rail clear: anthropic — tick proceeds...", no skip line.
+name: reflex-tick-proceed
+mode: actions
+source: agents/review-reflex.sh
+parts:
+  - file:bridge.sh
+  - block:reflex-tick-gate
+scrub:
+  - s/[0-2][0-9]:[0-5][0-9]:[0-5][0-9]/HH:MM:SS/g
