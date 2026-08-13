@@ -65,6 +65,15 @@ a fixer-block predicate — their absence is the marker); today that set = the i
 the corpus) · subagent chunk (mechanical, loud verification) · re-author into the agent lane
 (cheapest — label it and let the cluster fixer ride) · operator decision.
 
+**Isolation primitive: LOCAL CLONE, not worktree** (operator ruling 2026-08-13, homelab#428,
+after four same-day instances of the repo-global-branch-refs escape class — two seat drifts,
+two subagent stowaway commits, one caught end-to-end by the reviewer's withheld verdict +
+`agent/error` + responder triage): `git clone --local /workspace/homelab <dir>` gives each
+subagent its own `.git`/ref namespace, making boundary escapes structurally impossible instead
+of documented-against; hardlinked objects keep it worktree-cheap, the warm-devbox line is
+unchanged, and the seat integrates via `git fetch <clone-path> <branch>`. The operator's
+standing lens: worktrees/submodules only where complexity requires them.
+
 Subagent input is the fixer's three-layer architecture transposed
 ([`fixer-context.md`](fixer-context.md)): **L1** = the versioned
 [`agents/jail-subagent-card.md`](../../agents/jail-subagent-card.md) (the FU-117 "third
