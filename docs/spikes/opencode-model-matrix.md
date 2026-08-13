@@ -23,9 +23,15 @@ Cost row equals **list-price arithmetic at 1×**, badged models included — dee
 (2x badge) 7,794in/22out → $0.0011 = exact list; luna (2x) 12,267/13 → $0.0028 ≈ list; kimi-k3
 173/93 → $0.0019 exact; glm-5.2 7,646/727 → $0.0139 exact (and its cached sibling → $0.0060 =
 cR math); minimax/qwen3.8-max exact. **The badge does NOT multiply billed usage-$** — window
-accounting builds on list prices. Residual unknown (cheap, non-blocking): whether the LIMIT
-evaluation weights badged models differently — unobservable from any surface; the tell would be
-a badged model latching earlier than its billed $ predicts. Bonus from the same dump: cached
+accounting builds on list prices. **The limit-side meaning is COMMUNITY-CONFIRMED as the favorable direction** (operator's
+half-off reading; r/opencode thread on Luna's badge, 3 independent answers, 2026-08-01≈):
+"2x more usage than you would normally get" / "50 percent discounted" / "double the api worth
+in your subscription" — i.e. badged models draw the windows at HALF their billed list-$ (which
+is why the Cost column still shows list ×1). It also decodes the docs' Usage column: Luna $15
+pool × 2x = $30 effective ("Twice the usage would be $30", ibid.). Unverified by us at the
+limit boundary (window internals are unobservable); the tell is now the reverse — a badged
+model NOT latching when its billed $ says it should. Effective window-draw for badged models =
+list ÷ 2: flash cR ≈ $0.0014/M effective. Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 
 ## OpenCode Go (subscription rail, `https://opencode.ai/zen/go/v1`)

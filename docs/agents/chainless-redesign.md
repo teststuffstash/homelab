@@ -97,9 +97,10 @@ migrate through).
   in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
   ✅ **"Nx usage" RESOLVED for billing (console dump 2026-08-13): billed Cost = list price ×1
   for every model, badged included** (flash exact-list, luna ≈list; worked rows in the matrix) —
-  window accounting builds on list prices. The badge's only possible remaining effect is
-  limit-side weighting, unobservable from any surface; the tell = a badged model latching
-  earlier than its billed $ predicts. Detail + the derived qwen3.5-plus rates:
+  window accounting builds on list prices. The limit-side effect is community-confirmed
+  FAVORABLE (the operator's half-off reading, r/opencode ×3): badged models draw the windows at
+  HALF their billed list-$ — flash's effective window cR ≈ $0.0014/M. Unverified at the limit
+  boundary; the tell = a badged model NOT latching when billed $ predicts it. Detail + the derived qwen3.5-plus rates:
   [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md).
   Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
   **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
