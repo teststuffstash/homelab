@@ -11,8 +11,10 @@ resources:
   - pvc.yaml
   - openrouterkey.yaml
   - externalsecret.yaml
+  - ingest-token.yaml
   - deployment.yaml
   - service.yaml
+  - service-ingest.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
 
@@ -22,9 +24,11 @@ configMapGenerator:
       # ADR-096: openrouter-proxy.py = data plane, router.py = control plane (imported —
       # the mount dir is on sys.path), model-classes.json = class/tier policy. Any edit
       # re-hashes the ConfigMap and rolls the pod.
+      # ADR-108: gometer.py = shared Go-rail pricing/usage module (single home for proxy + jail shim).
       - openrouter-proxy.py
       - router.py
       - model-classes.json
+      - gometer.py
   - name: grafana-dashboard-subscription
     files:
       - subscription.json=dashboard-subscription.json

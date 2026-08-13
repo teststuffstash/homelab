@@ -1,0 +1,20 @@
+# ADR-108: ExternalSecret for the Go usage ingest token.
+# The ingest listener on port 8081 requires header X-Ingest-Token to equal this value.
+# optional: true — the pod serves the data plane (8080) even before the seat writes the
+# Infisical value; ingest 503s until then (fail closed: no token = no ingest).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: opencode-ingest-token
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: infisical
+    kind: ClusterSecretStore
+  target:
+    name: opencode-ingest-token
+    creationPolicy: Owner
+  data:
+    - secretKey: token
+      remoteRef:
+        key: GO_USAGE_INGEST_TOKEN
