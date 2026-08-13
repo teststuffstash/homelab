@@ -7,11 +7,8 @@ MODEL="sonnet"
 GO_SERVED=0
 # MODEL_SET_EXPLICIT is NOT set — the gate's failover condition is true when Go is available
 
-# subscription-latch.sh: print the latch message to stderr and exit 1 (Anthropic is latched)
-subscription-latch.sh() {
-  echo "subscription limited (FU-088, 429): utilization high — deferring subscription dispatch" >&2
-  return 1
-}
+# The latch seam is the stub FILE $HERE/subscription-latch.sh — the real gate runs
+# `bash "$HERE/subscription-latch.sh"`, which a shell function could not intercept.
 
 # curl stub: records the call and serves world JSON for /opencode-limit
 curl() {
