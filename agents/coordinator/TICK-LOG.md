@@ -3880,3 +3880,11 @@ new watcher clauses, Bucket A closed.
   08-09 restart — the "power cycle needed" firmware state; if it persists, key rotated →
   re-extract via the tuya-egress.py pairing door) · alert exclusion for the 9 static sensors
   (what still re-fires #221) · optional tuya_local 2026.8.0 bump. Debug logging reset to warning.
+↳ (follow-on, ~08:50Z) **NTP reroute landed + applied** (operator: "whitelist or reroute?" →
+reroute; PR#406 merged 08:47Z, bot-approved, ~9 min): tuya-egress.py grew a `firewall/d_nat`
+rule — <tuya_devices> → !<rfc1918> udp/123 rewritten to the router's ntpd (SNTP-verified
+answering; NAT precedes filter so the fence rule is untouched). Applied + `--status` green.
+No device NTP query observed in a ~15-min pf-states watch (sparse firmware cadence) — the rule
+logs, so the first hit lands in the firewall log. ⚠ probe lessons re-proven twice in one
+sitting: a `:123` substring can't match `"dst_port": "123"`, and `.startswith("…2.16")` matched
+`.165` — positive-control the filter, then equality-match.
