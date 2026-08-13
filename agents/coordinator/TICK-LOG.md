@@ -4006,3 +4006,18 @@ subagents (qwen trio), the Goal pause, the double-review build mode. Worktrees p
 tree CLEAN on master, push-verified. Pickup: meta-state (ADR-107 chain ⚑ + Goal pause ⚑);
 the resumed session's Agent-tool slots ride Go (haiku→qwen3.5-plus etc.) — miss-ledger rows
 per chunk, seat pre-push review stays on.
+↳ (batch run-1 closed, ~16:30Z) **#354 CLOSED — the batch-protocol verification run end-to-end.**
+Corpus-loaded triage ruled option 1 (NEVER-TOUCH split corpus-refuted via the ratchet-
+infeasibility precedent #270/PR#275; mechanical check deferred, 1 instance, trigger named);
+four legs: PR#418 (fix.yaml caveat — Go-subagent-authored, kimi sonnet slot, seat+bot 0 content
+findings), review.md worlds-are-extraordinary BLOCKING rule (operator-direct), card red flag
+(#417), FU-167 adversarial acceptance run. Run-1 ledger verdict: content clean, ONE process
+miss post-hoc (subagent checked out its branch in the SHARED tree — branch refs are repo-global;
+seat commits then landed on its branch, repaired by cherry-pick) → two rules shipped (PR#419:
+seat post-run process check + the card teaches the mechanism). Same sitting: weekly latch OFF
+live (7d threshold=1.0 at 16:21, direct 60241cc-adjacent commit — reviews keep ticking on the
+blown week); FU-169 filed (differential coverage as review input); the opencode-reviewer build
+plan delivered (chunks 0/A–F, seat-contract + Go-subagent execution) — awaiting operator go +
+the 3 named decisions (reviewer model family-disjointness, flip criterion, issue tracking).
+⚠ session slot reality: THIS resumed session still rides the launch-frozen qwen/kimi map;
+flash applies at next claude-go launch.
