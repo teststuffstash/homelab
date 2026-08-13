@@ -121,6 +121,8 @@ as if at home; recipe in `docs/runbook.md`.
   `new-agent-repo.sh` (scaffold a repo into tofu/github), `garage-s3.sh`, `talos-usb.sh`,
   `longhorn-register-optane.sh`, `make-client-p12.sh` (phone mTLS cert, pinned openssl),
   `coordinator-logs.sh`/`render-transcript.py` (+ `--dialogue`), `follow-ups-lint.sh`,
+  `claude-model-shim.py` + `claude-go.sh` (jail sessions with OpenCode Go models on the
+  subagent slots — the claude-or pattern through a local model-splitting proxy),
   `prometheus-rules-lint.sh`, `skill-retro-scan.sh`, `doc-heat.py`, `aws-*.sh` (one-shot audit/cleanup).
 - `.claude/skills/` — the jail skills, the GAPS ledger + improvement contract (ADR-105):
   [`.claude/skills/README.md`](.claude/skills/README.md).

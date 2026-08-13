@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Launch a jail Claude Code session with OpenCode Go models on the subagent slots.
+#
+# The claude-or pattern (sleep-tracking/claude-or) generalized through the local model-splitting
+# shim (scripts/claude-model-shim.py): the MAIN loop stays on the operator's Anthropic
+# subscription (requests pass through the shim verbatim), while the alias slots the Agent tool
+# selects per-call — haiku for small tasks, sonnet for larger — are remapped to Go models at
+# launch. Mapping is launch-time (the CLI resolves aliases via env once); SELECTION among the
+# mapped slots stays per-call and mid-session.
+#
+#   claude-go                        # fable main + Go subagents (default slot map below)
+#   SLOT_HAIKU=opencode-go/deepseek-v4-flash claude-go   # override a slot
+#   CLAUDE_GO_ALL=1 claude-go        # map the MAIN model too — the pure Go trial session
+#
+# Prereq: the wallet string `opencode-go-api-key` (operator-minted at opencode.ai/auth — a
+# sanctioned third-party-console step, docs/secrets.md §Minting doctrine).
+# ⚠ Slot defaults below are UNVERIFIED against Go's live /models until the first keyed run —
+# the launcher lists them at start when reachable and warns on a miss.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PORT="${SHIM_PORT:-18091}"
+
+_kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
+          -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
+          "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+
+GO_KEY="${SHIM_GO_KEY:-$(_kp opencode-go-api-key || true)}"
+[ -n "$GO_KEY" ] || { echo "claude-go: wallet entry 'opencode-go-api-key' missing — mint it at opencode.ai/auth first" >&2; exit 1; }
+
+# The shim is shared across sessions: reuse a listener if one is up, else start one.
+if ! { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null; then
+  SHIM_GO_KEY="$GO_KEY" SHIM_PORT="$PORT" \
+    nohup python3 "$HERE/claude-model-shim.py" >>"${TMPDIR:-/tmp}/claude-model-shim.log" 2>&1 &
+  sleep 0.5
+else
+  exec 3>&-
+fi
+
+# Slot map — Go ids from the 2026-08-13 docs read; cheap-cached models on purpose (the
+# capacity math: cached-read price is what decides whether a lane fits the $30/wk window).
+SLOT_HAIKU="${SLOT_HAIKU:-opencode-go/glm-5.2}"
+SLOT_SONNET="${SLOT_SONNET:-opencode-go/kimi-k3}"
+SLOT_OPUS="${SLOT_OPUS:-opencode-go/deepseek-v4-pro}"
+
+# Best-effort slot verification against the live catalog (never blocks the launch).
+if CAT="$(curl -fsS -m 5 -H "Authorization: Bearer ${GO_KEY}" -H "x-api-key: ${GO_KEY}" \
+          https://opencode.ai/zen/go/v1/models 2>/dev/null)"; then
+  for s in "$SLOT_HAIKU" "$SLOT_SONNET" "$SLOT_OPUS"; do
+    printf '%s' "$CAT" | grep -q "${s#opencode-go/}" \
+      || echo "claude-go: ⚠ slot model '${s}' not found in the live /models catalog" >&2
+  done
+else
+  echo "claude-go: (catalog unreachable — slot ids unverified this run)" >&2
+fi
+
+export ANTHROPIC_BASE_URL="http://127.0.0.1:${PORT}"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="$SLOT_HAIKU"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="$SLOT_SONNET"
+export CLAUDE_CODE_SUBAGENT_MODEL="${CLAUDE_CODE_SUBAGENT_MODEL:-$SLOT_HAIKU}"
+if [ "${CLAUDE_GO_ALL:-0}" = "1" ]; then
+  # The pure trial session: every slot incl. the main model rides Go.
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="$SLOT_OPUS"
+  export ANTHROPIC_MODEL="$SLOT_SONNET"
+fi
+
+echo "claude-go: shim :${PORT} | haiku→${SLOT_HAIKU} sonnet→${SLOT_SONNET}$( [ "${CLAUDE_GO_ALL:-0}" = 1 ] && echo " MAIN→${SLOT_SONNET}" ) | main $( [ "${CLAUDE_GO_ALL:-0}" = 1 ] && echo 'GO' || echo 'subscription (passthrough)' )" >&2
+exec claude "$@"
