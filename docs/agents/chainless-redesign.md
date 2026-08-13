@@ -110,14 +110,17 @@ migrate through).
   `nemotron-3.5-lightning-free`, `laguna-s-2.1-free`, `big-pickle` — a candidate rung-0 on this
   rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
   400) — canary before any slot use.
-- **Slot economics (curated 2026-08-13; unit = 1M cacheRead + 100k output, the subagent shape):**
-  mimo-v2.5 ≈ $0.031 (cheapest priced, unbadged — but tools 400 on the compat path today) ·
-  deepseek-v4-flash ≈ $0.031 at list AND **region-locked 403 for us — out regardless of math** ·
-  qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70 (tool-broken) · kimi-k3 ≈ $1.80
-  (sparse big calls only) — against $12/5h·$30/wk·$60/mo usage-value windows. The haiku slot
-  KEEPS `qwen3.5-plus` — it is the one proven tool-caller in the cheap class, though **unpriced
-  and undocumented** (absent from the docs table AND the picker; flag: pricing may surprise).
-  Next probe: kimi-k2.7-code ($0.19/M cached, $60 usage, 1×) as the priced cheap-slot candidate.
+- **Slot economics (curated 2026-08-13, revised same day post-opt-in + console billing; unit =
+  1M cacheRead + 100k output, the subagent shape):**
+  **deepseek-v4-flash ≈ $0.031 — the pick: cheapest priced tool-caller on every axis, billed at
+  list ×1 (console-verified), tools ✅ post China-opt-in — PROMOTED to haiku slot + subagent
+  default** (the earlier "region-locked, out regardless of math" verdict was the un-toggled
+  workspace gate, matrix §quirks) · qwen3.5-plus ≈ $0.13 (rates DERIVED from console billing —
+  in $0.25/M, cR $0.025/M, out ≈$1/M; the prior slot holder) · mimo-v2.5 ≈ $0.031 on paper but
+  tools 400 on the compat path · qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70
+  (tool-broken) · kimi-k3 ≈ $1.80 (sparse big calls only) — against $12/5h·$30/wk·$60/mo
+  usage-value windows (measured 2026-08-13: a full day of probing + canaries + two sessions ≈
+  **$0.09**). Next probe: kimi-k2.7-code ($0.19/M cached, 1×) as a mid-tier candidate.
 - **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
   widens the model set beyond the tool-verified trio. What replaces it on the critical path is the
   maintained **per-model tool-compat matrix** —
