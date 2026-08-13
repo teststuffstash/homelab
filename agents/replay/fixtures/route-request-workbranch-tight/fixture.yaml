@@ -1,0 +1,12 @@
+# CONDITION UNDER REPLAY: the sibling of route-request-labels with --work-branch SET — a fix
+# round resuming an existing PR branch, the round-state fact no label carries (§M11: ci-red
+# retries / changes-requested rounds are deadline-tight). The body must carry the explicit
+# `urgency: tight` (caller precedence in resolve_urgency) alongside the same labels array.
+name: route-request-workbranch-tight
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:../route-request-labels/bridge.sh
+  - file:override.sh
+  - block:route-request
+  - file:../route-request-labels/post.sh
