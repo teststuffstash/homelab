@@ -205,6 +205,11 @@ jobs:
       # self-test a deployed pod's module carries.
       - name: Router self-test (devbox run router-self-test)
         run: devbox run router-self-test
+      # The proxy's own 12-section suite (rail routing, header allowlist, guardrail, Go-leg
+      # isolation). Was cited as evidence across PR#429's five rounds while never executing as
+      # a gate — the same unexecuted-suite class as the 2026-08-10 estimator audit (#429 fu).
+      - name: Proxy self-test (devbox run proxy-self-test)
+        run: devbox run proxy-self-test
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".
