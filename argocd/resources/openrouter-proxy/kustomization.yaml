@@ -10,6 +10,7 @@ resources:
   - rbac.yaml
   - pvc.yaml
   - openrouterkey.yaml
+  - externalsecret.yaml
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml

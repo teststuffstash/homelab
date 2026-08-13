@@ -72,6 +72,15 @@ spec:
             # set it to "" to retire the leg.
             - name: CREDIT_METRICS_URL
               value: http://openrouter-operator-metrics.openrouter-operator.svc.cluster.local:9090/metrics
+            # ADR-107 chunk C (homelab#423): the OpenCode Go API key, consumed by the Go leg
+            # (PR#429). optional: true — the pod must keep serving the Anthropic/OpenRouter legs
+            # even if ESO hasn't materialized the Secret; the code fails closed per-request.
+            - name: OPENCODE_GO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: opencode-go-key
+                  key: api-key
+                  optional: true
           ports:
             - name: http
               containerPort: 8080
