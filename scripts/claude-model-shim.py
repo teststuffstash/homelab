@@ -40,9 +40,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = int(os.environ.get("SHIM_PORT", "18091"))
 GO_BASE = os.environ.get("SHIM_GO_BASE", "https://opencode.ai/zen/go")
 ANTHROPIC_BASE = os.environ.get("SHIM_ANTHROPIC_BASE", "https://api.anthropic.com")
-GO_KEY = os.environ.get("SHIM_GO_KEY", "")
+# Last-token only: a launcher once passed a key with devbox plugin noise prepended; the
+# multi-line header value then crashed every Go leg AND the traceback echoed the key into the
+# log. A credential is a single token — never trust the env to be clean.
+GO_KEY = (os.environ.get("SHIM_GO_KEY", "").split() or [""])[-1]
 GO_AUTH_STYLE = os.environ.get("SHIM_GO_AUTH_STYLE", "both")  # both|bearer|x-api-key
 GO_PREFIX = "opencode-go/"
+# SHIM_MODEL_REWRITE="old=new,old2=new2" (bare Go ids, applied after the prefix strip): the CLI
+# freezes its alias→model map at LAUNCH, so when a slot model turns out broken mid-session
+# (glm-5.2 422s every function tool; deepseek-v4-pro region-locks — both found 2026-08-13),
+# restarting the shim with a rewrite un-wedges live sessions that a slot-map fix can't reach.
+GO_REWRITE = {k.strip(): v.strip() for k, v in
+              (p.split("=", 1) for p in
+               os.environ.get("SHIM_MODEL_REWRITE", "").split(",") if "=" in p)}
 
 # End-to-end and hop-by-hop headers we must own rather than forward. Content-Length is
 # recomputed (the body may be rewritten); the response side is re-framed connection-close
@@ -76,7 +86,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, AttributeError):
                 parsed = None
         if model.startswith(GO_PREFIX):
-            parsed["model"] = model[len(GO_PREFIX):]
+            bare = model[len(GO_PREFIX):]
+            parsed["model"] = GO_REWRITE.get(bare, bare)
             # Go's Anthropic-compat layer mishandles the STRING shorthand for message content on
             # some models (probed 2026-08-13: glm-5.2 dropped the prompt and free-associated,
             # 12 input tokens counted; the array-of-blocks form answered correctly). claude-code
@@ -183,7 +194,8 @@ class Handler(BaseHTTPRequestHandler):
 def serve():
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"shim: listening on 127.0.0.1:{PORT} "
-          f"(anthropic={ANTHROPIC_BASE}, go={GO_BASE}, go-key={'set' if GO_KEY else 'ABSENT'})",
+          f"(anthropic={ANTHROPIC_BASE}, go={GO_BASE}, go-key={'set' if GO_KEY else 'ABSENT'}"
+          + (f", rewrite={GO_REWRITE}" if GO_REWRITE else "") + ")",
           file=sys.stderr, flush=True)
     srv.serve_forever()
 
@@ -261,6 +273,13 @@ def self_test() -> int:
           "go leg: session auth REPLACED by the Go key (both header styles)")
     check("OAUTH-SECRET" not in json.dumps(g), "go leg: the oauth token never reaches Go")
     check(g.get("path") == "/zen/go/v1/messages", "go leg: base path joined")
+
+    global GO_REWRITE
+    GO_REWRITE = {"broken-slot-model": "kimi-k3"}
+    st, _ = call("opencode-go/broken-slot-model")
+    check(st == 200 and (seen.get("go") or {}).get("model") == "kimi-k3",
+          "go leg: SHIM_MODEL_REWRITE remaps a frozen slot id")
+    GO_REWRITE = {}
 
     GO_KEY = ""
     st, _ = call("opencode-go/kimi-k3")

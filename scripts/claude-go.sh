@@ -14,8 +14,6 @@
 #
 # Prereq: the wallet string `opencode-go-api-key` (operator-minted at opencode.ai/auth — a
 # sanctioned third-party-console step, docs/secrets.md §Minting doctrine).
-# ⚠ Slot defaults below are UNVERIFIED against Go's live /models until the first keyed run —
-# the launcher lists them at start when reachable and warns on a miss.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -25,27 +23,51 @@ PORT="${SHIM_PORT:-18091}"
 # gitignored — the repo is public, and the file MAY carry SHIM_GO_KEY as a wallet bypass).
 [ ! -f "$HERE/../.opencode-go.env" ] || { set -a; . "$HERE/../.opencode-go.env"; set +a; }
 
+# tail -n1: devbox's python plugin prints venv-creation noise to STDOUT on the jail's first
+# `devbox run` (DEVBOX_QUIET doesn't cover plugins) — the secret is always the last line.
 _kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
           -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
-          "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
+          "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null | tail -n1; }
 
 GO_KEY="${SHIM_GO_KEY:-$(_kp opencode-go-api-key || true)}"
-[ -n "$GO_KEY" ] || { echo "claude-go: wallet entry 'opencode-go-api-key' missing — mint it at opencode.ai/auth first" >&2; exit 1; }
+# ⚠ An empty read is a claim about the PROBE, not the wallet (2026-08-13: a gutted devbox.lock
+# made every devbox run fail, and this message blamed a wallet entry that was present — the
+# operator went hunting the wrong thing). Say both possibilities; name the bypass.
+[ -n "$GO_KEY" ] || { echo "claude-go: no Go key — the wallet read returned EMPTY. Either the entry 'opencode-go-api-key' is missing (mint at opencode.ai/auth) OR devbox/keepassxc failed here (run the _kp line by hand to tell). Bypass: put SHIM_GO_KEY=<key> in .opencode-go.env" >&2; exit 1; }
 
 # The shim is shared across sessions: reuse a listener if one is up, else start one.
-if ! { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null; then
+# ⚠ SHIM_MODEL_REWRITE only takes effect at shim START — reusing a live listener would silently
+# no-op the exact mid-incident un-wedge the knob exists for (reviewer catch, PR#414 r1). A set
+# rewrite therefore kills the port's own shim (pidfile-targeted — never pkill by name, which
+# would take other ports' shims and, from a probing shell, the caller itself) and respawns.
+PIDFILE="${TMPDIR:-/tmp}/claude-model-shim.${PORT}.pid"
+_spawn_shim() {
   SHIM_GO_KEY="$GO_KEY" SHIM_PORT="$PORT" \
     nohup python3 "$HERE/claude-model-shim.py" >>"${TMPDIR:-/tmp}/claude-model-shim.log" 2>&1 &
+  echo $! > "$PIDFILE"
   sleep 0.5
+}
+if ! { exec 3<>"/dev/tcp/127.0.0.1/${PORT}"; } 2>/dev/null; then
+  _spawn_shim
 else
   exec 3>&-
+  if [ -n "${SHIM_MODEL_REWRITE:-}" ]; then
+    if [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "claude-go: SHIM_MODEL_REWRITE set — restarted the :${PORT} shim so the rewrite is live" >&2
+      sleep 0.3; _spawn_shim
+    else
+      echo "claude-go: ⚠ SHIM_MODEL_REWRITE is set but the running :${PORT} shim has no pidfile — the rewrite is NOT live; kill that shim by hand and relaunch" >&2
+    fi
+  fi
 fi
 
-# Slot map — Go ids from the 2026-08-13 docs read; cheap-cached models on purpose (the
-# capacity math: cached-read price is what decides whether a lane fits the $30/wk window).
-SLOT_HAIKU="${SLOT_HAIKU:-opencode-go/glm-5.2}"
-SLOT_SONNET="${SLOT_SONNET:-opencode-go/kimi-k3}"
-SLOT_OPUS="${SLOT_OPUS:-opencode-go/deepseek-v4-pro}"
+# Slot map — tool-probed against the live rail 2026-08-13 (chainless-redesign.md §Go rail):
+# the Anthropic-compat tool path is PER-MODEL — glm* 422s every function tool, deepseek* is
+# region-locked (403), kimi-k2.x compat-broken — and cached-read price is what decides whether
+# a lane fits the $30/wk window. The picks tool-call cleanly (tool_use round-trip verified).
+SLOT_HAIKU="${SLOT_HAIKU:-opencode-go/qwen3.5-plus}"   # $0.02/M cached read
+SLOT_SONNET="${SLOT_SONNET:-opencode-go/kimi-k3}"      # $0.30/M cached read
+SLOT_OPUS="${SLOT_OPUS:-opencode-go/qwen3.8-max}"      # qwen-max class, ~$0.50/M cached read
 
 # Best-effort slot verification against the live catalog (never blocks the launch).
 if CAT="$(curl -fsS -m 5 -H "Authorization: Bearer ${GO_KEY}" -H "x-api-key: ${GO_KEY}" \

@@ -83,17 +83,40 @@ migrate through).
 - Pricing publishes **cached-read rates** — the decisive column: the platform's token shape is
   cacheRead-dominated, and at GPT-5.6-Luna-class rates a full reviewer-lane week ≈ $12 of usage
   value (fits $30/wk); at Grok-class rates it does not. Model choice inside Go decides capacity.
-- **The compat boundary (bisected exhaustively, both directions):** `/v1/messages` REJECTS
-  Anthropic-shaped tools (422 — the validator union appears server-tool-only; every one of
-  claude-code's 52 function tools and a minimal hand-made one) and silently DROPS OpenAI-shaped
-  tools before the model — while the same models tool-call perfectly on `/chat/completions`
-  (`finish: tool_calls`). Plain completions work end-to-end. Two more quirks, both normalized in
-  the jail shim: string-shorthand message content is dropped by glm (free-associates; blocks form
-  fine), and claude-code's `?beta=true` + `anthropic-beta` decorations 422.
-- **Consequence: an Anthropic⟷OpenAI translator is on the critical path** (requests: messages/
-  tools/tool_result → OpenAI; responses: `tool_calls` → `tool_use` blocks; SSE event
-  re-synthesis), targeting `/chat/completions`. It is the same component the egress proxy needs
-  for the Go rail, so the jail shim builds it first and the proxy inherits it.
+- **The compat boundary — REVISED same day: it is PER-MODEL, not endpoint-global.** The first
+  bisect (glm-5.2) read as endpoint-wide: Anthropic-shaped tools 422, OpenAI-shaped silently
+  dropped, models tool-calling fine on `/chat/completions`. The homelab-go session's per-model
+  probing then split it: **qwen3.5-plus, qwen3.8-max and kimi-k3 accept Anthropic-shaped tools
+  and return proper `tool_use` blocks** (`stop_reason: tool_use` — re-verified independently at
+  takeover), while glm-5.2 422s every function tool and deepseek-* is region-locked (403). Two
+  quirks stay normalized in the jail shim: string-shorthand message content (glm drops it;
+  blocks form fine) and claude-code's `?beta=true` + `anthropic-beta` decorations (422).
+- **Metadata surface (probed 2026-08-13): registry-POOR.** `/v1/models` returns ids only — no
+  pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
+  models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
+  in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
+  Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
+  **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
+  our own per-model canary matrix — with windows self-metered from per-request usage.
+- **The Zen sibling**: the same key reaches `…/zen/v1` — opencode's pay-per-token GATEWAY (60
+  models incl. `claude-*`; never route claude there — the Anthropic subscription exists) with a
+  **free tier**: `deepseek-v4-flash-free`, `mimo-v2.5-free`, `hy3-free`, `nemotron-3-ultra-free`,
+  `nemotron-3.5-lightning-free`, `laguna-s-2.1-free`, `big-pickle` — a candidate rung-0 on this
+  rail (mostly the same models as the OpenRouter free rung). Tool-compat UNPROVEN (first probes
+  400) — canary before any slot use.
+- **Slot economics (curated 2026-08-13; unit = 1M cacheRead + 100k output, the subagent shape):**
+  mimo-v2.5 ≈ $0.031 (cheapest priced, 1× — but tools 400 on the compat path today) ·
+  deepseek-v4-flash ≈ $0.031×2 AND **region-locked 403 for us — out regardless of math** ·
+  qwen3.7-plus ≈ $0.20 · qwen3.8-max ≈ $0.85 · glm-5.2 ≈ $0.70 (tool-broken) · kimi-k3 ≈ $1.80
+  (sparse big calls only) — against $12/5h·$30/wk·$60/mo usage-value windows. The haiku slot
+  KEEPS `qwen3.5-plus` — it is the one proven tool-caller in the cheap class, though **unpriced
+  and undocumented** (absent from the docs table AND the picker; flag: pricing may surprise).
+  Next probe: kimi-k2.7-code ($0.19/M cached, $60 usage, 1×) as the priced cheap-slot candidate.
+- **Consequence: the Anthropic⟷OpenAI translator is OPTIONAL, not critical-path** — it only
+  widens the model set beyond the tool-verified trio. What replaces it on the critical path is a
+  maintained **per-model tool-compat matrix** (the rail-canary shape): a Go model enters a slot
+  only after its `tool_use` round-trip passes. First Go-served subagent ran 2026-08-13
+  (~14:45Z, qwen3.5-plus; OTLP-confirmed `query_source=subagent` with zero Anthropic draw).
 
 ## Jail tooling (the working prototype — shipped PR#409/#410 + claude-jail)
 
@@ -120,8 +143,11 @@ deliberately the M11 rail-split shape so lessons transfer to the proxy.
 
 ## Build order (jail-subagent chunks; platform loop reviews)
 
-1. Shim translator leg (Anthropic⟷OpenAI vs `/chat/completions`) → tool-capable Go subagents.
-2. Rail canary cells over Go models (claude harness) — pick the working set.
+1. ~~Shim translator leg~~ **DONE DIFFERENTLY 2026-08-13**: per-model probing found a
+   tool-verified trio (qwen3.5-plus / kimi-k3 / qwen3.8-max) — Go subagents are live on the
+   slots without any translator; it returns to the backlog only if the working set proves
+   too narrow.
+2. Rail canary cells over the remaining Go models (claude harness) — grow the compat matrix.
 3. Proxy: Go rail (ref cred, self-metered windows, latch, ladder rung) + capacity doorbell.
 4. `/route` response as the structured carrier; claim/XRD reshape per the ledger above;
    `model-classes.json` grows rails/class policy.
