@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS capability(
 CREATE TABLE IF NOT EXISTS task_market(
   tag TEXT, model TEXT, rank INTEGER, usage_share REAL, token_share REAL, updated_ts REAL,
   PRIMARY KEY(tag, model));
+CREATE TABLE IF NOT EXISTS go_usage(
+  ts REAL, stack TEXT, model TEXT, usd REAL);
+CREATE INDEX IF NOT EXISTS ix_go_usage_ts ON go_usage(ts);
 CREATE TABLE IF NOT EXISTS cell_start_tier(
   class TEXT, urgency TEXT, start_tier INTEGER, clean INTEGER, degraded INTEGER,
   updated_ts REAL, PRIMARY KEY(class, urgency));
@@ -493,6 +496,31 @@ def enroll_key_ref(ref: str) -> None:
 
 def key_refs() -> list[str]:
     return [r[0] for r in _read("SELECT ref FROM openrouter_keys ORDER BY last_seen DESC")]
+
+
+# ── OpenCode Go usage meter (homelab#422 / FU-088 Go-rail) ─────────────────────────────────────
+# The Go rail has NO headroom headers and NO usage API — the proxy meters usage itself from
+# response bodies. Subscription windows: 5h/$12, 7d/$30, 30d/$60 (usage-value at list prices).
+# Stack attribution at request time: `ref:<ns>/<name>` → stack = `<ns>`, else "jail".
+
+
+def go_usage_add(ts: float, stack: str, model: str, usd: float) -> bool:
+    """One Go-rail completion → the usage ledger. In-memory degrade = no-op, never a crash."""
+    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?)", (ts, stack, model, usd))
+    # Prune rows older than 45d (30d window + 15d slack) — prevents unbounded growth.
+    _write("DELETE FROM go_usage WHERE ts < ?", (ts - 45 * 86400,))
+    return ok
+
+
+def go_usage_window(seconds: float) -> dict:
+    """{total_usd, by_stack: {stack: usd}} for the trailing `seconds` window."""
+    now = time.time()
+    rows = _read(
+        "SELECT stack, SUM(usd) FROM go_usage WHERE ts > ? GROUP BY stack",
+        (now - seconds,))
+    total = sum(r[1] or 0.0 for r in rows)
+    by_stack = {r[0]: (r[1] or 0.0) for r in rows if r[0]}
+    return {"total_usd": total or 0.0, "by_stack": by_stack}
 
 
 # ── homelab#180: reading the openrouter-operator's account-credit gauge ────────────────────────
@@ -1291,6 +1319,22 @@ def self_test() -> int:
     latch_save({"until": 123.0, "last_429": 100.0, "windows": {"5h": {"utilization": 0.5}},
                 "count_429": 2, "headers_at": 99.0})
     assert (latch_load() or {}).get("count_429") == 2, "latch round-trip"
+    # ── homelab#422: Go usage ledger round-trip — stack-dimensioned, windowed ──
+    now = time.time()
+    assert go_usage_add(now - 100, "sleep", "kimi-k3", 0.005)
+    assert go_usage_add(now - 50, "sleep", "qwen3.5-plus", 0.002)
+    assert go_usage_add(now - 25, "circles", "deepseek-v4-flash", 0.001)
+    w5m = go_usage_window(300)  # 5 minutes
+    assert abs(w5m["total_usd"] - 0.008) < 1e-9, f"window total={w5m['total_usd']}"
+    assert w5m["by_stack"].get("sleep", 0) == 0.007, f"by_stack sleep={w5m['by_stack'].get('sleep')}"
+    assert w5m["by_stack"].get("circles", 0) == 0.001, f"by_stack circles={w5m['by_stack'].get('circles')}"
+    # Ledger prune — rows older than 45d are deleted
+    old_ts = now - 50 * 86400
+    assert go_usage_add(old_ts, "old", "kimi-k3", 1.0)  # 50 days old
+    assert go_usage_add(now, "fresh", "kimi-k3", 0.01)  # fresh row triggers prune
+    w60d = go_usage_window(60 * 86400)  # 60d window
+    assert w60d["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted"
+    assert w60d["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained"
     # ── addendum 4: the 429→cooldown→recovery loop + route() scenarios ──
     CTX = {
         "price": lambda m: (0.0, "free") if m.endswith(":free") else
