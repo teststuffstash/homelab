@@ -60,8 +60,8 @@ ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic
 # API takes bare ids), and ALL auth is REPLACED by the Go key (the subscription oauth must
 # never reach a third-party host). Wired by agent-session.sh --harness claude (same session
 # that hits /anthropic for claude-* models).
-GO_UPSTREAM = os.environ.get("GO_UPSTREAM", "https://opencode.ai/zen/go")
-GO_KEY = os.environ.get("GO_KEY", "")
+GO_UPSTREAM = os.environ.get("OPENCODE_GO_BASE", "https://opencode.ai/zen/go")
+GO_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
 GO_PREFIX = "opencode-go/"
 # claude-code sends this beta when IT holds the oauth token; through the ANTHROPIC_AUTH_TOKEN
 # gateway path it does not — the proxy restores it whenever the INJECTED token is an oauth one.
@@ -1181,7 +1181,20 @@ class Proxy(BaseHTTPRequestHandler):
                           cb_session: str | None = None, go_leg: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
-        if anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
+        # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
+        # When /anthropic/* carries an opencode-go/ model, Go wins (claude CLI --model).
+        if go_leg:  # Go rail — swap upstream, replace auth with Go key
+            # Strip ?beta=true query string on Go leg only — Go's compat API 422s on claude-code's
+            # decorations (probed 2026-08-13). The path is stripped BEFORE joining with OPENCODE_GO_BASE.
+            path = self.path.split("?")[0]
+            url = GO_UPSTREAM + path
+            note += "+go"
+            # Deny if no Go key configured — refuse loudly, never forward without credential.
+            if not GO_KEY:
+                log(f"{self.command} {self.path} → 502 [go-leg] model={or_model or '-'} - GO_KEY not set")
+                self._reply_json(502, {"error": "GO_KEY is not set - the Go rail has no credential"})
+                return
+        elif anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
             # FU-109 attribution: subscription traffic counted by ref-derived consumer (the
@@ -1193,17 +1206,6 @@ class Proxy(BaseHTTPRequestHandler):
                         if raw_auth.startswith("Bearer ref:") else "direct")
             with _consumers_lock:
                 _consumers[consumer] = _consumers.get(consumer, 0) + 1
-        elif go_leg:  # ADR-107 (homelab#421): Go rail — swap upstream, replace auth with Go key
-            # Strip ?beta=true query string on Go leg only — Go's compat API 422s on claude-code's
-            # decorations (probed 2026-08-13). The path is stripped BEFORE joining with GO_UPSTREAM.
-            path = self.path.split("?")[0]
-            url = GO_UPSTREAM + path
-            note += "+go"
-            # Deny if no Go key configured — refuse loudly, never forward without credential.
-            if not GO_KEY:
-                log(f"{self.command} {self.path} → 502 [go-leg] model={or_model or '-'} - GO_KEY not set")
-                self._reply_json(502, {"error": "GO_KEY is not set - the Go rail has no credential"})
-                return
         else:
             url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
@@ -1958,6 +1960,40 @@ class Proxy(BaseHTTPRequestHandler):
                             note = "+".join(notes)
             except ValueError:
                 pass  # not JSON — forward untouched
+        # ADR-107 (homelab#421): Go leg detection for /anthropic/* paths — the claude CLI
+        # sends Anthropic-format requests to /anthropic/v1/messages with --model opencode-go/...
+        # The Go detection must fire here too, not just for /chat/completions.
+        elif self.path.startswith("/anthropic/") and body:
+            try:
+                payload = json.loads(body)
+                if isinstance(payload, dict) and payload.get("model"):
+                    model = str(payload["model"])
+                    if model.startswith(GO_PREFIX):
+                        go_leg = True
+                        bare = model[len(GO_PREFIX):]
+                        # Go's compat API takes bare model ids — strip the prefix.
+                        payload["model"] = bare
+                        # Go's Anthropic-compat layer mishandles the STRING shorthand for message
+                        # content (probed 2026-08-13: glm-5.2 dropped the prompt). Normalize to
+                        # blocks so shorthand clients don't hit it — same as the jail shim.
+                        for msg in payload.get("messages") or []:
+                            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                                msg["content"] = [{"type": "text", "text": msg["content"]}]
+                        # Go rejects Anthropic SERVER tools (e.g. WebSearchTool); client tools are
+                        # function-shaped (input_schema present / type None or "custom"). Drop only
+                        # server tools so Bash/Edit/MCP tools keep working — same as the shim.
+                        tools = payload.get("tools")
+                        if isinstance(tools, list):
+                            kept = [t for t in tools if isinstance(t, dict)
+                                    and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
+                            if len(kept) != len(tools):
+                                pass  # note appended below
+                            payload["tools"] = kept
+                        body = json.dumps(payload).encode()
+                        note = "go-leg"
+                        or_model = bare  # For logging, use the bare model id
+            except ValueError:
+                pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
                       cb_session=cb_session, go_leg=go_leg)
 
@@ -2104,8 +2140,24 @@ def _self_test() -> int:
     check(a.get("auth") == "Bearer OAUTH-SECRET", "anthropic leg: oauth passed through verbatim")
     check(a.get("path") == "/v1/messages", "anthropic leg: /anthropic prefix stripped")
 
+    print("\n=== Anthropic path Go leg test (DECISIVE CASE) ===")
+    # Test 5: /anthropic/* path WITH opencode-go model → Go stub, NOT Anthropic
+    # This is what the claude CLI does: --model opencode-go/kimi-k3 to /anthropic/v1/messages
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3", path="/anthropic/v1/messages")
+    g = seen.get("go") or {}
+    check(st == 200 and b"[DONE]" in data, "/anthropic + go model: 200 + relayed")
+    check(g.get("model") == "kimi-k3", "/anthropic + go model: prefix stripped")
+    check(g.get("auth") == "Bearer go-test-key", "/anthropic + go model: Auth = Go key")
+    check(g.get("x_api_key") == "go-test-key", "/anthropic + go model: x-api-key = Go key")
+    check("OAUTH-SECRET" not in str(g.get("auth")) and "OAUTH-SECRET" not in str(g.get("x_api_key")),
+          "/anthropic + go model: zero oauth reaches Go")
+    check(g.get("path") == "/zen/go/anthropic/v1/messages", "/anthropic + go model: Go base + path")
+    # Verify Anthropic stub did NOT receive this request
+    check("anthropic" not in seen, "/anthropic + go model: Anthropic stub NOT hit")
+
     print("\n=== Go key denial test ===")
-    # Test 5: empty Go key -> 502, nothing forwarded
+    # Test 6: empty Go key -> 502, nothing forwarded
     old_go_key = GO_KEY
     GO_KEY = ""
     seen.clear()
