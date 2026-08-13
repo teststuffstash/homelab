@@ -96,6 +96,38 @@ selection-shaped moves behind `/route`.
 | **Kept** | `modelDeny` (entries migrate to FU-127's structured `{rail, model}`), `fixer.budgetUSD`/`resetInterval` (the OpenRouter-rail standing ceiling), and everything that was never model semantics: `docker`, `egress`, `storage`, `labels`, `argo`, `mainRepo`, `coordinator.enabled`, `reviewer.enabled`, `loop.*`, `repos[].fixer`-presence as the dispatchability predicate (IAC-T03). |
 | **Added** | `rails:` — allowed-rails list per stack (or per class): the M12 independence ruling as declared policy (platform fix-class = `[anthropic-subscription]`), and a stack's Go opt-out. `classPolicy:` — per-stack class→band/floor overrides, the ONE seam replacing every per-role model knob. Per-rail **budgets** (`openrouter:` USD · `opencodeGo:` usage-value · `subscription:` window-share) — the #278 rail-aware charter's claim surface. |
 
+### The cost rethink & subscription fair scheduling (operator direction, 2026-08-13)
+
+`guardrail: only-free` is a legacy of the single-rail era — built to stop a stack silently
+moving from free to paid OpenRouter models, when "cost" meant one thing. The landscape it
+guarded no longer exists: two subscriptions (Anthropic, Go) whose marginal cost is ~0 but whose
+CAPACITY is scarce and shared, free tiers on BOTH API rails, and window-draw that is not
+dollars. Three directions replace it (they refine the ledger's per-rail `budgets:` row):
+
+1. **"Cost" becomes rail-typed.** USD (paid API) · window-draw (subscriptions, per-window) ·
+   free (rate/reliability-bounded, not money-bounded). The M11 ladder already orders on true
+   marginal cost; budgets and reporting follow the same typing (the #278/FU-131 rail-aware
+   summation is this direction's accounting half).
+2. **`budget: 0` = "subscriptions only" as a first-class stack posture** — spend no NEW money,
+   ride only pre-paid capacity (either subscription, both windows permitting). This subsumes
+   what `guardrail: only-free` actually protected (no silent paid spend) without lying about
+   free-model quality being the point. `only-free` retires with the guardrail knob (ledger
+   §Removed) once this exists; the FU-024 enforcement machinery becomes the budget-typed
+   refusal.
+3. **Subscription capacity gets FAIR SCHEDULING with PLATFORM-owned priorities.** Shared
+   scarce windows are allocated today by FIFO + a global semaphore + per-tier thresholds —
+   nothing expresses "oracle-fleet is more important than circles." The priority weights are
+   **homelab's knob, never the stack's** (a stack cannot rank itself; cross-stack allocation
+   is platform policy, the same asymmetry as CODEOWNERS): a platform-side weight table
+   (model-classes.json-adjacent) consumed by the proxy's capacity gates, which generalize from
+   boolean latch to weighted admission — under contention, higher-weight stacks' dispatches
+   admit first / defer last, within the same windows. Better stack knobs (posture, budgets,
+   rails), better homelab knobs (weights, window shares), one scheduler.
+
+Build home: a later wave of #420 (after the reviewer failover ships); the accounting half
+rides #278/FU-131. Nothing here changes chunk A–F scope — the only-free interaction stays the
+explicit conservative deny until budget-typing lands.
+
 **`claudeTier` is deprecated** because both its jobs dissolve: harness-from-string dies with the
 uniform harness, and the per-ns `claude-session` secret render becomes platform-unconditional —
 or better, rail credentials resolve at the proxy by namespace identity (the git-token broker
