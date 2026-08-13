@@ -37,13 +37,13 @@ spec:
             # 0.80 (finish-in-progress guard — deny spawns that can't complete before the short
             # window flips); 7d is the operator's personal weekly headroom preference. Base
             # default (ANTHROPIC_UTIL_THRESHOLD, unset here) = 0.80 governs 5h.
-            # 1.0 = the weekly latch is OFF (operator ruling 2026-08-13, direct-to-master): the
-            # review reflex must keep ticking on the blown week while the opencode-subscription
-            # reviewer is built out (ADR-107). The 5h window, the 429 latch and the semaphore
-            # remain the guards; Anthropic's own hard 429 is the real weekly stop. Tier
-            # composition is max(window, tier), so 1.0 disables the 7d deferral for EVERY tier.
+            # 0.95 restored 2026-08-13 (the same ruling's second half): the latch sat at 1.0 for
+            # one day while the Go-rail failover was built — with reviewer-session.sh now failing
+            # over to opencode-go/kimi-k3 when this latch fires (#424, PR#435) and the Go rail
+            # live end-to-end (PR#433/#434/#436, seat-probed: real completion + metered ledger
+            # row), a latched week degrades to the second subscription instead of deferring.
             - name: ANTHROPIC_UTIL_THRESHOLD_7D
-              value: "1.0"
+              value: "0.95"
             # FU-088 concurrency semaphore, EXPLICIT since 2026-08-08 (was the code default 3):
             # operator upgraded the subscription Max 5x → Max 20x and raised this to 5. The
             # utilization thresholds above need NO recalibration — they read Anthropic's own
