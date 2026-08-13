@@ -21,6 +21,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PORT="${SHIM_PORT:-18091}"
 
+# Slot map / overrides from the repo-local env file (the claude-or .openrouter.env pattern;
+# gitignored — the repo is public, and the file MAY carry SHIM_GO_KEY as a wallet bypass).
+[ ! -f "$HERE/../.opencode-go.env" ] || { set -a; . "$HERE/../.opencode-go.env"; set +a; }
+
 _kp() { DEVBOX_QUIET=1 devbox run --quiet -- keepassxc-cli show -q --no-password \
           -k "$HOME/.claude/homelab-keepass/homelab.keyx" -a Password \
           "$HOME/.claude/homelab-keepass/homelab.kdbx" "$1" 2>/dev/null; }
@@ -54,15 +58,17 @@ else
   echo "claude-go: (catalog unreachable — slot ids unverified this run)" >&2
 fi
 
+# Everything except the MAIN model is mapped (operator direction 2026-08-13): all three alias
+# slots + the subagent default ride Go; the main model (fable) stays on the subscription via
+# passthrough. CLAUDE_GO_ALL=1 maps the main model too — the pure Go trial session.
 export ANTHROPIC_BASE_URL="http://127.0.0.1:${PORT}"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="$SLOT_HAIKU"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="$SLOT_SONNET"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="$SLOT_OPUS"
 export CLAUDE_CODE_SUBAGENT_MODEL="${CLAUDE_CODE_SUBAGENT_MODEL:-$SLOT_HAIKU}"
 if [ "${CLAUDE_GO_ALL:-0}" = "1" ]; then
-  # The pure trial session: every slot incl. the main model rides Go.
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="$SLOT_OPUS"
   export ANTHROPIC_MODEL="$SLOT_SONNET"
 fi
 
-echo "claude-go: shim :${PORT} | haiku→${SLOT_HAIKU} sonnet→${SLOT_SONNET}$( [ "${CLAUDE_GO_ALL:-0}" = 1 ] && echo " MAIN→${SLOT_SONNET}" ) | main $( [ "${CLAUDE_GO_ALL:-0}" = 1 ] && echo 'GO' || echo 'subscription (passthrough)' )" >&2
+echo "claude-go: shim :${PORT} | haiku→${SLOT_HAIKU} sonnet→${SLOT_SONNET} opus→${SLOT_OPUS} | main $( [ "${CLAUDE_GO_ALL:-0}" = 1 ] && echo "GO (${SLOT_SONNET})" || echo 'subscription (passthrough)' )" >&2
 exec claude "$@"
