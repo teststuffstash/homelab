@@ -49,12 +49,23 @@ while :; do
   esac
 
   if [ "$decision" = "CHANGES_REQUESTED" ]; then
-    echo "pr-wait: CHANGES_REQUESTED — newest review body follows"
-    echo "----REVIEW-BEGIN----"
-    gh api "/repos/${REPO}/pulls/${PR}/reviews?per_page=100" \
-      --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | last | .body' 2>/dev/null || true
-    echo "----REVIEW-END----"
-    exit 2
+    # ⚠ reviewDecision does NOT clear on a push — a CHANGES_REQUESTED verdict survives new
+    # commits until the bot re-reviews, so the primary caller loop (fix → push → re-invoke)
+    # would otherwise be handed its own already-addressed feedback on the first poll. Same
+    # staleness class review-reflex.sh guards with `reviewable_again` (reviewer catch, PR#412
+    # r1): a verdict is actionable only if it was submitted AFTER the current head's commit.
+    review="$(gh api "/repos/${REPO}/pulls/${PR}/reviews?per_page=100" \
+      --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | last | {submitted_at, body}' 2>/dev/null || true)"
+    head_at="$(gh api "/repos/${REPO}/commits/${head}" --jq '.commit.committer.date' 2>/dev/null || true)"
+    review_at="$(printf '%s' "$review" | jq -r '.submitted_at // ""')"
+    if [ -n "$review_at" ] && [ -n "$head_at" ] && [ "$review_at" \> "$head_at" ]; then
+      echo "pr-wait: CHANGES_REQUESTED (verdict ${review_at} > head ${head_at}) — review body follows"
+      echo "----REVIEW-BEGIN----"
+      printf '%s' "$review" | jq -r '.body // ""'
+      echo "----REVIEW-END----"
+      exit 2
+    fi
+    echo "pr-wait: stale CHANGES_REQUESTED (verdict ${review_at:-?} ≤ head ${head_at:-?}) — re-review pending, waiting"
   fi
 
   # CI at head, via Actions:read (see the PAT trap above). in_progress/queued = keep waiting.
