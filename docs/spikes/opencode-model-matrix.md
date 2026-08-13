@@ -18,22 +18,26 @@ Anthropic-compat path doesn't — it speaks their native/OpenAI path).
 **Prices**: snapshotted from https://opencode.ai/docs/go/ (2026-08-13) — the ONLY price source;
 the API (`/v1/models`) returns bare ids. $/M tokens: in / out / cached-read / cached-write.
 "Usage" = the docs' per-model column ($15 or $60). "Badge" = the picker's "(Nx usage)" marker.
-⚠ **Badge/Usage semantics UNRESOLVED** — "2x usage" may mean a DOWNGRADED value pool
-($20/mo vs $60; the docs' "6x… for some models lower" reading) **or the operator's half-off
-reading (you get 2× usage per $)**. Decider: console per-model usage-$ vs list-price math on
-known traffic (no API for it). Until then no window accounting builds on either reading.
-Charter §Go rail carries the same flag.
+✅ **Badge semantics RESOLVED for BILLING (console dump, 2026-08-13 18:28):** every itemized
+Cost row equals **list-price arithmetic at 1×**, badged models included — deepseek-v4-flash
+(2x badge) 7,794in/22out → $0.0011 = exact list; luna (2x) 12,267/13 → $0.0028 ≈ list; kimi-k3
+173/93 → $0.0019 exact; glm-5.2 7,646/727 → $0.0139 exact (and its cached sibling → $0.0060 =
+cR math); minimax/qwen3.8-max exact. **The badge does NOT multiply billed usage-$** — window
+accounting builds on list prices. Residual unknown (cheap, non-blocking): whether the LIMIT
+evaluation weights badged models differently — unobservable from any surface; the tell would be
+a badged model latching earlier than its billed $ predicts. Bonus from the same dump: cached
+rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 
 ## OpenCode Go (subscription rail, `https://opencode.ai/zen/go/v1`)
 
 | model | $/M in/out/cR/cW | Usage | badge | anthropic-compat tools | text (compat) | notes |
 |---|---|---|---|---|---|---|
-| **qwen3.5-plus** | **UNPRICED** — absent from docs table AND picker | ? | — | ✅ `tool_use` round-trip (raw 08-13) + **live subagent w/ Bash tool** (claude 08-13) | ✅ | current **haiku slot** + subagent default; undocumented id — pricing may surprise |
+| **qwen3.5-plus** | undocumented — **DERIVED from console billing 08-13**: ≈0.25/1.00/0.025/? (three 40k-in rows → $0.0102 ⇒ in $0.25/M; cached 41k row → $0.0010 ⇒ cR $0.025/M; 265-out row → $0.0003 ⇒ out ≈$1/M) | ? | — | ✅ `tool_use` round-trip (raw 08-13) + **live subagent w/ Bash tool** (claude 08-13) | ✅ | current **haiku slot** + subagent default; undocumented id — pricing may surprise |
 | **kimi-k3** | 3.00/15.00/0.30/– | $15 | — | ✅ `tool_use` (raw 08-13) | ✅ | current **sonnet slot**; expensive output — sparse big calls |
 | **qwen3.8-max** | 2.00/6.00/0.25/2.50 | $15 | — | ✅ (go-session probe 08-13; not independently re-verified) | ✅ | current **opus slot** |
 | glm-5.2 | 1.40/4.40/0.26/– | $60 | — | ✗ **422 on EVERY function tool** (raw+claude 08-13) | ✅ but ⚠ drops STRING-shorthand content (free-associates; blocks form fine — shim normalizes) | serves the CLI's auxiliary calls fine; tools work OpenAI-shaped on `/chat/completions` (raw 08-13, `tool_calls`) |
 | glm-5.1 / glm-5 | 5.1: 1.40/4.40/0.26/– · glm-5 unpriced | $60/? | — | untested (glm-5.2 class suspected) | untested | |
-| deepseek-v4-flash | 0.14/0.28/0.0028/– | $60 | 2x | ✅ `tool_use` round-trip (raw 08-13, **post China-opt-in** — see quirks; the earlier 403 was the un-toggled gate, not a hard lock) | ✅ (opencode client, operator 08-13, 1.4s) | cheapest PRICED tool-caller; haiku-slot candidate once the 2x-badge semantics resolve |
+| deepseek-v4-flash | 0.14/0.28/0.0028/– | $60 | 2x | ✅ `tool_use` round-trip (raw 08-13, **post China-opt-in** — see quirks; the earlier 403 was the un-toggled gate, not a hard lock) | ✅ (opencode client, operator 08-13, 1.4s) | cheapest priced tool-caller on every axis (cR 9× under qwen3.5-plus's derived rate) — **PROMOTED to haiku slot + subagent default 2026-08-13** (billing-semantics resolved; applies from the next claude-go launch) |
 | deepseek-v4-pro | 0.435/0.87/0.003625/– | $15 | — | ✅ `tool_use` round-trip (raw 08-13, post opt-in) | untested | retro-proven audit tier upstream; sonnet/opus-slot candidate |
 | mimo-v2.5 | 0.14/0.28/0.0028/– | $60 | — | ✗ 400 opaque "Provider returned error" (raw 08-13) — encoding unknown, openai-shaped + opencode-client paths UNTESTED | untested | price-optimal 1× — worth the openai/opencode retry before writing off |
 | mimo-v2.5-pro | 0.435/0.87/0.003625/– | $15 | — | untested | untested | |

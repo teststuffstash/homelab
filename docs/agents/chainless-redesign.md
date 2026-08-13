@@ -95,15 +95,12 @@ migrate through).
   pricing, no multipliers, no quota API ("track your usage in the console"; docs admit "for some
   models, their usage multiplier is lower" with NO numbers — the actual multipliers appear only
   in the opencode client's picker: DeepSeek V4 Flash and GPT-5.6 Luna show "(2x usage)").
-  ⚠ **The "Nx usage" SEMANTICS are UNRESOLVED** (operator challenge, 2026-08-13): the docs'
-  *"$10 → 6x that in usage… for some models the multiplier is lower"* reads as a per-model
-  VALUE-POOL ratio (badge = downgraded pool, $20/mo instead of $60 — also decodes the table's
-  $15/$60 "Usage" column as 1.5×/6× pools, with picker↔docs drift = live ops tuning), but
-  "you get 2× usage" (a discount perk) is equally consistent with the badge text alone. The
-  tell leaning pool-reading: the badges sit on CHEAP models (Luna, flash), not the expensive
-  ones. DECIDED BY: the console's per-model usage-$ against list-price token math on a known
-  request (operator console glance — no API). Do not build window accounting on either reading
-  until that datum lands.
+  ✅ **"Nx usage" RESOLVED for billing (console dump 2026-08-13): billed Cost = list price ×1
+  for every model, badged included** (flash exact-list, luna ≈list; worked rows in the matrix) —
+  window accounting builds on list prices. The badge's only possible remaining effect is
+  limit-side weighting, unobservable from any surface; the tell = a badged model latching
+  earlier than its billed $ predicts. Detail + the derived qwen3.5-plus rates:
+  [`../spikes/opencode-model-matrix.md`](../spikes/opencode-model-matrix.md).
   Contrast OpenRouter's models/endpoints/generation APIs + MCP: the Go-rail registry must be a
   **curated snapshot** (the §M8 gated-data pattern) — docs pricing table + picker multipliers +
   our own per-model canary matrix — with windows self-metered from per-request usage.
