@@ -74,7 +74,7 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 | deepseek-v4-flash-free | ✗ 400 invalid_request (raw 08-13, provider error truncated) | |
 | mimo-v2.5-free | ✗ 400 opaque provider error (raw 08-13) | |
 | hy3-free · nemotron-3.5-lightning-free · laguna-s-2.1-free · big-pickle | untested | |
-| nemotron-3-ultra-free | plain text ✅ 200 (curl-through-shim 08-14, 1.2s) · function tool ✗ 400 opaque "Provider returned error" (curl-through-shim 08-14) — same provider-400 family as the deepseek/mimo free rows | |
+| nemotron-3-ultra-free | plain text ✅ 200 · function tool ✗ 400 — **bisected to the SURFACE (raw curl, seat 08-14)**: OpenAI `/v1/chat/completions` + function tool → ✅ clean `tool_calls`; Anthropic `/v1/messages` + the same tool as `input_schema` → ✗ 400 upstream `Input required: specify "prompt" or "messages"` (the compat translation loses the body). Minimal curl — NOT harness decoration. Same provider-400 family as the deepseek/mimo free rows | opencode client rides the OpenAI surface → tools work there (operator, 08-14); claude-code is Anthropic-only → this rail can't serve tool lanes until zen fixes the compat layer or a translator lands |
 
 ## Cross-cutting quirks (apply to every row)
 
