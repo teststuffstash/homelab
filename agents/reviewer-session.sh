@@ -353,9 +353,9 @@ if ! bash "$HERE/subscription-latch.sh"; then
   if [ "$go_limited" = "false" ]; then
     # Go rail is available — use it for this review (only when no explicit --model was passed).
     if [ -z "${MODEL_SET_EXPLICIT:-}" ]; then
-      MODEL="opencode-go/kimi-k3"
+      MODEL="opencode-go/deepseek-v4-flash"
       GO_SERVED=1
-      echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/kimi-k3)"
+      echo "→ Anthropic latched — serving review of ${PROJECT}#${PR} from the Go rail (opencode-go/deepseek-v4-flash)"
     else
       echo "→ review of ${PROJECT}#${PR} deferred — subscription rate-limited (explicit --model=${MODEL} pinned, cannot failover to Go)"
       exit 0

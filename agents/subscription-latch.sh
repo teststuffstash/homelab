@@ -76,8 +76,8 @@ if [ "${1:-}" = "--pick-rail" ]; then
   fi
   if [ "$go_limited" = "false" ]; then
     # Go rail clear → print rail name, log to stderr, exit 0
-    echo "opencode-go/kimi-k3"
-    echo "→ Anthropic latched — Go rail clear (opencode-go/kimi-k3)" >&2
+    echo "opencode-go/deepseek-v4-flash"
+    echo "→ Anthropic latched — Go rail clear (opencode-go/deepseek-v4-flash)" >&2
     exit 0
   fi
   # Both latched → exit 1 with stderr naming both
