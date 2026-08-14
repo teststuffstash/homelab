@@ -82,10 +82,11 @@ fi
 # Run from REPO_ROOT for devbox context
 # BOT REVIEW R4 #5: S3 listing failure → loud error (not vacuous exit)
 # Filter out "Info:" lines from devbox output before processing
-S3_RAW_OUT="$(cd "$REPO_ROOT" && devbox run garage-s3 s3 ls "$S3_PREFIX" --recursive 2>&1)"
-s3_exit=$?
-if [ $s3_exit -ne 0 ]; then
-  echo "re-review: S3 listing failed (exit $s3_exit) — garage-s3 creds/endpoint/bucket error" >&2
+# `if ! var=$(…)` — under set -e a bare failing assignment exits BEFORE the diagnostics
+# below ever run (bot review r5: the r4 guard was dead code).
+if ! S3_RAW_OUT="$(cd "$REPO_ROOT" && devbox run garage-s3 s3 ls "$S3_PREFIX" --recursive 2>&1)"; then
+  # ($? after `if !` is the negation's 0 — don't report a fake exit code)
+  echo "re-review: S3 listing FAILED — garage-s3 creds/endpoint/bucket error; raw output follows" >&2
   echo "$S3_RAW_OUT" >&2
   exit 3
 fi
@@ -189,7 +190,9 @@ for snapshot_path in $FILTERED; do
   REVIEWER_LOGIN="homelab-reviewer"
 
   # BOT REVIEW R4 #4: Add --paginate to reviews fetch (>30 reviews per page)
-  reviews_json=$(gh api "/repos/teststuffstash/${snap_project}/pulls/${snap_pr}/reviews" --paginate 2>/dev/null || echo "[]")
+  # --slurp + flatten: --paginate emits one JSON array PER PAGE — without slurping, jq runs
+  # per page and every >30-review PR reads a garbage multi-line verdict (bot review r5).
+  reviews_json=$(gh api "/repos/teststuffstash/${snap_project}/pulls/${snap_pr}/reviews" --paginate --slurp 2>/dev/null | jq '[.[][]]' 2>/dev/null || echo "[]")
 
   # Find review by reviewer bot at/after snapshot timestamp
   snap_iso=$(echo "$snap_ts" | sed 's|\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)T\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)Z|\1-\2-\3T\4:\5:\6Z|')
@@ -355,15 +358,20 @@ EOF
 
   # BOT REVIEW R4 #3: Idempotency check BEFORE claude call (with --paginate, fail loud on gh error)
   idem_tag="<!-- re-review:${headsha8}-${snap_ts} -->"
-  existing_comments_out="$(gh api "/repos/teststuffstash/${snap_project}/issues/${snap_pr}/comments" --paginate 2>&1)"
-  gh_exit=$?
-  if [ $gh_exit -ne 0 ]; then
-    echo "  IDEMPOTENCY-UNKNOWN: gh api comments failed (exit $gh_exit) — skipping this snapshot"
+  # Same set -e pattern as the S3 guard (bot review r5): the failure branch must be reachable.
+  if ! existing_comments_out="$(gh api "/repos/teststuffstash/${snap_project}/issues/${snap_pr}/comments" --paginate --slurp 2>&1)"; then
+    echo "  IDEMPOTENCY-UNKNOWN: gh api comments failed — skipping this snapshot"
     echo "  $existing_comments_out" >&2
     continue
   fi
   existing_comments="$existing_comments_out"
-  tag_exists=$(echo "$existing_comments" | jq -r --arg tag "$idem_tag" '[.[] | select(.body | contains($tag))] | length' 2>/dev/null || echo "0")
+  # Flatten slurped pages first — per-page jq yields "0\n0" on >30-comment PRs, which != "0",
+  # silently skipping the snapshot FOREVER (bot review r5, the fail-silent half).
+  tag_exists=$(echo "$existing_comments" | jq -r --arg tag "$idem_tag" '[.[][] | select(.body | contains($tag))] | length' 2>/dev/null || echo "ERR")
+  if [ "$tag_exists" = "ERR" ]; then
+    echo "  IDEMPOTENCY-UNKNOWN: tag-count jq failed — skipping this snapshot"
+    continue
+  fi
 
   if [ "$tag_exists" != "0" ]; then
     echo "  SKIP: comment with tag already exists"
