@@ -4101,3 +4101,15 @@ zen-leg tool translator (Anthropic→OpenAI on the opencode/ rail; acceptance = 
 loop through the shim): NO dispatch — Go weekly exhausted, review rounds bill balance
 (FU-170), and the operator steps away (~08:45Z). Round state at break: #444 shipped +
 CI-gated; #445/#447 armed + seat-watched; #448 parked to the ~08-16 reset.
+↳ (08:07Z) **The #447 review pod: ran 47 min, verdict LOST to a token death,
+.33 burned.** reviewer-homelab-447-7844ad85 (Go-served, kimi-k3) completed a full
+CHANGES_REQUESTED pass (2 blocking in-diff: the only-free guardrail admits any opencode/ id
+on the paid key — fail closed on the -free predicate; the zen metering self-test vacuous)
+but the dispatch-time installation token 401'd at ~07:50Z before posting — nothing reached
+the PR. Input snapshot + full r1 transcript SAFE in S3 (issue-445/: review-state-7844ad85-*
++ reviewer-r1-20260814T075318Z) — the #435 contract paying off. Filed **FU-171** (mid-review
+token refresh). One r1 follow-up is MOOT: "the shim has no zen branch" — #446 merged into
+the branch head after the 07:06Z snapshot; the re-dispatch sees it. **Operator direct-to-master:
+reviewer Go-failover model kimi-k3 → deepseek-v4-flash** (665cf64; k3 = $6.33/review in the
+balance regime; proper model decision next week) — both pinning fixtures updated, replay green.
+The level-triggered re-dispatch re-reviews #447 on the cheap model; findings re-derive.
