@@ -39,11 +39,14 @@ meant to avoid.)
   [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
   Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
 - **Zen free-rail chunks (operator direction 2026-08-14): #444 SHIPPED** — PR#446 merged
-  07:08Z (1-round approved); the shim self-test is a CI gate (9e97d5d). **#445 = PR#447 in
-  review wait** — seat-side notifying watch armed, updater keeps the head current, auto-merge
-  on. **#448 (zen-leg tool translator, Anthropic→OpenAI) filed INERT** — the Go weekly is at
-  100%, review rounds bill balance (FU-170); wake after the ~08-16 reset or by operator call.
-  Operator on BREAK from ~08:45Z — PICKUP: #447's verdict first, then the #448 dispatch call.
+  07:08Z (1-round approved); the shim self-test is a CI gate (9e97d5d). **#445 = PR#447**:
+  r1 REVIEW RAN (Go-served kimi-k3, 47 min, $6.33) but the verdict was LOST — the ~1h git
+  token 401'd before posting (FU-171; findings live in the S3 r1 transcript). The
+  level-triggered re-dispatch now rides **deepseek-v4-flash** (operator's direct-to-master
+  swap, 665cf64 — k3 too expensive for reviews; proper model decision next week).
+  **#448 (zen-leg tool translator, Anthropic→OpenAI) filed INERT** — wake after the ~08-16
+  Go reset or by operator call. Operator on BREAK — PICKUP: #447's re-dispatch verdict,
+  then the #448 dispatch call.
 - **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
   the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
   plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d

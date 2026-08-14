@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-171**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-172**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -246,6 +246,14 @@ the block needs pruning, not more headings.
       — console scrape vs meter-window threshold → dispatch-hold/alert; design home = the
       charter's cost rethink ([`agents/chainless-redesign.md`](agents/chainless-redesign.md)
       §cost rethink, #431/#432) extended rail-side.
+- [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
+      The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
+      installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
+      (recoverable: S3 reviewer-r1 transcript + pod log); `/var/run/reviewer-git/` never refreshes
+      mid-session. Interim mitigation LIVE same day: reviewer Go-failover model kimi-k3 →
+      deepseek-v4-flash (direct-to-master, operator) — cheaper/faster rounds fit the token window.
+      Next: mid-review token refresh (re-mount/re-mint on 401); re-verify on the next >30-min
+      review. Relates FU-170, #435 (review-state snapshots proved their worth here).
 - [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
       × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
       duplication (0 worlds shared by reference, 23 forked world paths, 74 single-row fixtures
