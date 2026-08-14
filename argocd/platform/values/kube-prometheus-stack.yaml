@@ -230,7 +230,7 @@ grafana:
       isDefault: false
       jsonData:
         path: /data/sleep.sqlite
-      name: sleep-notes
+      name: sleep-data
       type: frser-sqlite-datasource
       uid: sleep-data
   admin:
