@@ -64,6 +64,13 @@ ANTHROPIC_UPSTREAM = os.environ.get("ANTHROPIC_UPSTREAM", "https://api.anthropic
 GO_UPSTREAM = os.environ.get("OPENCODE_GO_BASE", "https://opencode.ai/zen/go")
 GO_KEY = os.environ.get("OPENCODE_GO_API_KEY", "")
 GO_PREFIX = "opencode-go/"
+# homelab#445: the OpenCode Zen free rail — `opencode/` routes to opencode.ai's zen/v1 FREE
+# tier, mirroring the Go leg. The SAME ESO-materialized key authenticates both rails (chunk C,
+# #433), so ZEN_KEY falls back to GO_KEY unless a dedicated OPENCODE_ZEN_API_KEY is set; the
+# code-default base is the live upstream, so no deployment override is required either.
+ZEN_UPSTREAM = os.environ.get("OPENCODE_ZEN_BASE", "https://opencode.ai/zen")
+ZEN_KEY = os.environ.get("OPENCODE_ZEN_API_KEY", GO_KEY)
+ZEN_PREFIX = "opencode/"
 # ADR-108: Go pricing moved to gometer.py (single home for proxy + jail shim).
 # Re-export for backwards compatibility within this file.
 GO_PRICES = gometer.GO_PRICES
@@ -456,7 +463,7 @@ def _inject_ref_auth(headers: dict) -> str:
 
 
 def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
-    """FU-024: a `only-free` session may complete ONLY on :free model variants. Enforced here
+    """FU-024: a `only-free` session may complete ONLY on free-tier models. Enforced here
     because the proxy already resolves the session (injection rails); direct-key sessions are
     out of scope by design — guardrailed keys are issued injected (model-scout canaries)."""
     resolved = _resolve_ref(self_ref)
@@ -464,10 +471,15 @@ def _guardrail_reject(self_ref: str, model: str) -> bytes | None:
         return None
     if normalize_model(model).endswith(":free"):
         return None
+    # homelab#445: opencode/ models are the Zen FREE rail — admit them exactly where the :free
+    # variants are admitted. The Go rail (opencode-go/) stays denied: only-free sessions have
+    # no Go-window authority.
+    if model.startswith(ZEN_PREFIX):
+        return None
     return json.dumps({
         "error": {
             "code": 403,
-            "message": f"guardrail only-free: model '{model}' is not a :free variant — "
+            "message": f"guardrail only-free: model '{model}' is not a free-tier model — "
                        "this session key is restricted to free-tier models (FU-024). "
                        f"Go-leg requests (opencode-go/…) are also denied: only-free sessions "
                        "have no Go-window authority.",
@@ -651,6 +663,28 @@ def normalize_model(model: str) -> str:
     """Bare vendor/model id; keep openrouter/<cloaked> (same rule as estimate_budget.py)."""
     stripped = model.removeprefix("openrouter/")
     return stripped if "/" in stripped else model
+
+
+def _opencode_scrub(payload: dict, note_tag: str) -> list[str]:
+    """ADR-107 / homelab#445 compat scrub shared by the Go and Zen rails. opencode.ai's
+    Anthropic-compat layer mishandles STRING-shorthand message content (probed 2026-08-13:
+    glm-5.2 dropped the prompt) and rejects Anthropic SERVER tools (e.g. WebSearchTool);
+    client tools are function-shaped (input_schema present / type None or "custom"). Normalize
+    content to text blocks and drop only server tools so Bash/Edit/MCP tools keep working —
+    same as the jail shim. Returns extra note fragments (e.g. ["go-dropped-2-server-tools"]),
+    or [] when nothing was changed. Mutates `payload`."""
+    notes = []
+    for msg in payload.get("messages") or []:
+        if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+            msg["content"] = [{"type": "text", "text": msg["content"]}]
+    tools = payload.get("tools")
+    if isinstance(tools, list):
+        kept = [t for t in tools if isinstance(t, dict)
+                and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
+        if len(kept) != len(tools):
+            notes.append(f"{note_tag}-dropped-{len(tools) - len(kept)}-server-tools")
+        payload["tools"] = kept
+    return notes
 
 
 def compute_pin(model: str) -> dict | None:
@@ -1200,7 +1234,7 @@ class Proxy(BaseHTTPRequestHandler):
 
     def _forward(self, body: bytes | None, note: str,
                  or_model: str | None = None, or_provider: str | None = None,
-                 cb_session: str | None = None, go_leg: bool = False) -> None:
+                 cb_session: str | None = None, go_leg: bool = False, zen_leg: bool = False) -> None:
         # homelab#22: every forwarded request is registered in-flight for its full lifetime —
         # try/finally so a handler exception can never leak a phantom entry into the gauge.
         key = threading.get_ident()
@@ -1209,14 +1243,15 @@ class Proxy(BaseHTTPRequestHandler):
             _inflight[key] = (label, time.time())
         try:
             self._forward_upstream(body, note, or_model=or_model, or_provider=or_provider,
-                                   cb_session=cb_session, go_leg=go_leg)
+                                   cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg)
         finally:
             with _inflight_lock:
                 _inflight.pop(key, None)
 
     def _forward_upstream(self, body: bytes | None, note: str,
                           or_model: str | None = None, or_provider: str | None = None,
-                          cb_session: str | None = None, go_leg: bool = False) -> None:
+                          cb_session: str | None = None, go_leg: bool = False,
+                          zen_leg: bool = False) -> None:
         started = time.time()
         anthropic = self.path.startswith("/anthropic/")
         # ADR-107 (homelab#421): Go leg routing is by MODEL, not path — check it FIRST.
@@ -1241,6 +1276,19 @@ class Proxy(BaseHTTPRequestHandler):
                 log(f"{self.command} {self.path} → 502 [go-leg] model={or_model or '-'} - GO_KEY not set")
                 self._reply_json(502, {"error": "GO_KEY is not set - the Go rail has no credential"})
                 return
+        elif zen_leg:  # homelab#445: Zen free rail — same surface mapping as the Go leg.
+            path = _strip_beta_query(self.path)
+            if path.startswith("/anthropic/"):
+                path = path[len("/anthropic"):]
+            elif path.startswith("/api/"):
+                path = path[len("/api"):]
+            url = ZEN_UPSTREAM + path
+            note += "+zen"
+            # Deny if no Zen key configured — refuse loudly, never forward without credential.
+            if not ZEN_KEY:
+                log(f"{self.command} {self.path} → 502 [zen-leg] model={or_model or '-'} - ZEN_KEY not set")
+                self._reply_json(502, {"error": "ZEN_KEY is not set - the Zen rail has no credential"})
+                return
         elif anthropic:  # FU-066: the claude-tier leg — strip the prefix, swap the upstream
             url = ANTHROPIC_UPSTREAM + self.path[len("/anthropic"):]
             note += "+anthropic"
@@ -1256,13 +1304,13 @@ class Proxy(BaseHTTPRequestHandler):
         else:
             url = UPSTREAM + self.path
         headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_REQ}
-        # ADR-107 (homelab#421): Go leg auth — REPLACE all inbound auth with the Go key.
-        # The subscription oauth must NEVER reach the Go host.
-        if go_leg:
-            # SECURITY: allowlist-only headers for third-party Go upstream — never forward
-            # inbound auth headers (case variants like AUTHORIZATION/X-API-KEY could smuggle
-            # the subscription credential past a case-sensitive strip). The Go leg is a
-            # cross-provider egress, not an operator-trusted hop; only send what Go needs.
+        # ADR-107 / homelab#445: opencode-leg auth (Go + Zen) — REPLACE all inbound auth with the
+        # rail's key. The subscription oauth must NEVER reach opencode.ai.
+        if go_leg or zen_leg:
+            # SECURITY: allowlist-only headers for the third-party opencode.ai upstream — never
+            # forward inbound auth headers (case variants like AUTHORIZATION/X-API-KEY could
+            # smuggle the subscription credential past a case-sensitive strip). This is a
+            # cross-provider egress, not an operator-trusted hop; only send what the rail needs.
             allowed = {}
             for k, v in self.headers.items():
                 lk = k.lower()
@@ -1272,19 +1320,21 @@ class Proxy(BaseHTTPRequestHandler):
             # Third-party Cloudflare blocks default Python-urllib UAs (live-probed 2026-08-13);
             # send the proxy's uniform UA, never the client's.
             allowed["User-Agent"] = "homelab-openrouter-proxy"
-            # Inject our auth — both styles because Go's docs don't commit to one.
-            go_key = (GO_KEY.split() or [""])[-1]  # last-token sanitization
-            allowed["x-api-key"] = go_key
-            allowed["Authorization"] = f"Bearer {go_key}"
+            # Inject our auth — both styles because opencode.ai's docs don't commit to one (and
+            # /v1/messages demands x-api-key: Bearer-only → 401, per the zen matrix).
+            rail_key = (ZEN_KEY if zen_leg else GO_KEY)
+            rail_key = (rail_key.split() or [""])[-1]  # last-token sanitization
+            allowed["x-api-key"] = rail_key
+            allowed["Authorization"] = f"Bearer {rail_key}"
             headers = allowed
-            # Also strip anthropic-beta headers (they're Anthropic-specific, not Go's).
+            # Also strip anthropic-beta headers (they're Anthropic-specific, not opencode's).
             headers = {k: v for k, v in headers.items() if k.lower() != "anthropic-beta"}
-            note += "+go-auth-swap"
+            note += "+zen-auth-swap" if zen_leg else "+go-auth-swap"
         else:
             note += _inject_ref_auth(headers)  # ADR-087: opaque-ref -> real key, every method/path
-        # ADR-107 (homelab#421): oauth-beta reinjection is Anthropic-specific — never run for Go leg.
-        # The Go-leg allowlist already strips anthropic-beta, but this guard makes intent explicit.
-        if anthropic and not go_leg:
+        # ADR-107 / homelab#445: oauth-beta reinjection is Anthropic-specific — never run for an
+        # opencode rail. The allowlist already strips anthropic-beta, but this guard is explicit.
+        if anthropic and not go_leg and not zen_leg:
             # Subscription oauth tokens need the oauth beta; the ANTHROPIC_AUTH_TOKEN gateway
             # path in claude-code doesn't send it (only the CLAUDE_CODE_OAUTH_TOKEN path does).
             auth_k = next((k for k in headers if k.lower() == "authorization"), None)
@@ -1310,15 +1360,17 @@ class Proxy(BaseHTTPRequestHandler):
             return
 
         status = resp.getcode()
-        # ADR-107 (homelab#421): Go leg must NOT pollute Anthropic subscription latch state.
-        # When /anthropic/* carries opencode-go/ model, go_leg=True and anthropic=True —
-        # the Go response must not update Anthropic accounting (a Go 429 is not an Anthropic 429).
-        if anthropic and not go_leg:
+        # ADR-107 / homelab#445: an opencode rail (Go or Zen) must NOT pollute Anthropic
+        # subscription latch state. When /anthropic/* carries an opencode model, the rail flag
+        # is set and anthropic=True — the response must not update Anthropic accounting
+        # (an opencode 429 is not an Anthropic 429).
+        if anthropic and not go_leg and not zen_leg:
             note += _anthropic_latch_update(status, resp.headers)
-        elif or_model and not go_leg:  # OpenRouter accounting — Go leg is a DIFFERENT provider
-            # ADR-096: passive provider health for OpenRouter only. Go-rail outcomes must NOT
-            # pollute OpenRouter state (cooldowns, capacity latches, provider_events) — a Go 429
-            # is not an OpenRouter problem, and cross-contamination would wedge unrelated traffic.
+        elif or_model and not go_leg and not zen_leg:  # OpenRouter accounting — opencode is a DIFFERENT provider
+            # ADR-096: passive provider health for OpenRouter only. opencode-rail outcomes must
+            # NOT pollute OpenRouter state (cooldowns, capacity latches, provider_events) — an
+            # opencode 429 is not an OpenRouter problem, and cross-contamination would wedge
+            # unrelated traffic.
             router.record_provider_event(or_model, or_provider or "", status)
             if cb_session:  # addendum 3: the same observation feeds the in-flight breaker
                 _cb_update(cb_session, or_model, status)
@@ -1369,8 +1421,8 @@ class Proxy(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if or_model and len(head) < 16384:
                     head += chunk
-                # Go leg: keep a rolling tail buffer (last 16KB) for usage extraction
-                if go_leg and 200 <= status < 300:
+                # opencode rails (Go/Zen): keep a rolling tail buffer (last 16KB) for usage extraction
+                if (go_leg or zen_leg) and 200 <= status < 300:
                     tail = (tail + chunk)[-16384:]
                 sent += len(chunk)
                 if deadline and time.time() > deadline:
@@ -1386,14 +1438,28 @@ class Proxy(BaseHTTPRequestHandler):
             log(f"{self.command} {self.path} → client/upstream dropped mid-stream: {e}")
         finally:
             resp.close()
-        # ADR-108: Go-leg usage extraction and pricing via gometer (single home).
+        # ADR-108: opencode-leg usage extraction and pricing via gometer (single home).
         # head+tail buffer (16KB each) passed to extract_usage; price returns (usd, warning_or_None).
-        if go_leg and 200 <= status < 300 and or_model:
+        # The Go rail (opencode-go/) prices from gometer; the Zen free rail (opencode/,
+        # homelab#445) is assumed free for now — rows usd=0.0, gometer.price skipped,
+        # extract_usage kept for token attribution.
+        if (go_leg or zen_leg) and 200 <= status < 300 and or_model:
             merged = gometer.extract_usage(head, tail)
-            bare_model = or_model.removeprefix(GO_PREFIX).split(":")[0]  # strip prefix + any :tag
-            usd, warning = gometer.price(bare_model, merged)
-            if warning:
-                log(f"WARN {warning}")
+            prefix = GO_PREFIX if go_leg else ZEN_PREFIX
+            bare_model = or_model.removeprefix(prefix).split(":")[0]  # strip prefix + any :tag
+            if go_leg:
+                usd, warning = gometer.price(bare_model, merged)
+                if warning:
+                    log(f"WARN {warning}")
+            else:
+                usd = 0.0
+                # homelab#445: assume all opencode/ calls are free. Sentinel, not a block — warn
+                # when the bare id lacks the -free suffix and isn't big-pickle so a paid model
+                # that slips onto the rail gets noticed instead of silently metered at $0.
+                if not bare_model.endswith("-free") and bare_model != "big-pickle":
+                    log(f"WARN zen model '{bare_model}' lacks the -free suffix and is not "
+                        "big-pickle — assuming free (opencode/ rail, homelab#445); re-check "
+                        "metering when paid models ride it")
             # Stack attribution: ref:<ns>/<name> -> stack=<ns>, else "jail"
             auth_hdr = next((v for k, v in self.headers.items() if k.lower() == "authorization"), "")
             if auth_hdr.startswith("Bearer ref:"):
@@ -1402,14 +1468,21 @@ class Proxy(BaseHTTPRequestHandler):
                 stack = "jail"
             if merged["input_tokens"] or merged["output_tokens"]:
                 router.go_usage_add(time.time(), stack, bare_model, usd)
-                log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
-                    f"{merged['output_tokens']}out"
-                    f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
-                    f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
-                    f" -> ${usd:.6f}")
+                if go_leg:
+                    log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
+                        f"{merged['output_tokens']}out"
+                        f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
+                        f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
+                        f" -> ${usd:.6f}")
+                else:
+                    log(f"Zen usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
+                        f"{merged['output_tokens']}out"
+                        f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
+                        f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
+                        f" -> $0.00 (free rail)")
             else:
-                log(f"Go leg: no usage found in response body for {or_model}")
-        if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg:
+                log(f"{'Go' if go_leg else 'Zen'} leg: no usage found in response body for {or_model}")
+        if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg and not zen_leg:
             # ADR-096 cost harvest: fire the /generation lookup for this completion. A client
             # that dropped mid-stream still spent money — harvest regardless of how we exited.
             m = _GEN_ID_RE.search(head)
@@ -2008,6 +2081,7 @@ class Proxy(BaseHTTPRequestHandler):
         or_provider = None
         cb_session = None
         go_leg = False  # ADR-107 (homelab#421): Go rail routing by model prefix
+        zen_leg = False  # homelab#445: Zen free rail routing by model prefix
         if self.path.rstrip("/").endswith("/chat/completions") and body:
             try:
                 payload = json.loads(body)
@@ -2032,34 +2106,32 @@ class Proxy(BaseHTTPRequestHandler):
                             return
                     notes = []
                     or_model = normalize_model(str(payload["model"]))
-                    # ADR-107 (homelab#421): the Go leg — model id starting with `opencode-go/`
-                    # routes to the Go host with the prefix stripped and auth replaced by the Go key.
+                    # ADR-107 / homelab#445: the opencode legs — a model id starting with
+                    # `opencode-go/` (Go rail) or `opencode/` (Zen free rail) routes to the
+                    # opencode.ai host with the prefix stripped and auth replaced by the rail key.
+                    # Prefixes are disjoint; the longer (opencode-go/) is matched first anyway.
                     if or_model.startswith(GO_PREFIX):
                         go_leg = True
                         bare = or_model[len(GO_PREFIX):]
-                        # Go's compat API takes bare model ids — strip the prefix.
+                        # opencode's compat API takes bare model ids — strip the prefix.
                         payload["model"] = bare
-                        # Go's Anthropic-compat layer mishandles the STRING shorthand for message
-                        # content (probed 2026-08-13: glm-5.2 dropped the prompt). Normalize to
-                        # blocks so shorthand clients don't hit it — same as the jail shim.
-                        for msg in payload.get("messages") or []:
-                            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                                msg["content"] = [{"type": "text", "text": msg["content"]}]
-                        # Go rejects Anthropic SERVER tools (e.g. WebSearchTool); client tools are
-                        # function-shaped (input_schema present / type None or "custom"). Drop only
-                        # server tools so Bash/Edit/MCP tools keep working — same as the shim.
-                        tools = payload.get("tools")
-                        if isinstance(tools, list):
-                            kept = [t for t in tools if isinstance(t, dict)
-                                    and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
-                            if len(kept) != len(tools):
-                                notes.append(f"go-dropped-{len(tools) - len(kept)}-server-tools")
-                            payload["tools"] = kept
+                        # Same compat scrub as the jail shim: string content -> blocks, server
+                        # tools dropped (client/function tools survive).
+                        notes.extend(_opencode_scrub(payload, "go"))
                         notes.append("go-leg")
                         body = json.dumps(payload).encode()
                         note = "+".join(notes)
-                        # Go leg skips OpenRouter processing (pin injection, circuit breaker, etc.)
-                        # — it's a simple forward to $GO_UPSTREAM with swapped auth.
+                        # opencode legs skip OpenRouter processing (pin injection, circuit breaker,
+                        # etc.) — it's a simple forward with swapped auth.
+                        or_model = bare  # For logging, use the bare model id
+                    elif or_model.startswith(ZEN_PREFIX):
+                        zen_leg = True
+                        bare = or_model[len(ZEN_PREFIX):]
+                        payload["model"] = bare
+                        notes.extend(_opencode_scrub(payload, "zen"))
+                        notes.append("zen-leg")
+                        body = json.dumps(payload).encode()
+                        note = "+".join(notes)
                         or_model = bare  # For logging, use the bare model id
                     else:
                         # ADR-096 addendum 3: a tripped breaker answers WITHOUT forwarding — the
@@ -2137,34 +2209,29 @@ class Proxy(BaseHTTPRequestHandler):
                             self.wfile.write(reject)
                             self.close_connection = True
                             return
+                    # ADR-107 / homelab#445: opencode legs on the /anthropic surface too — the
+                    # claude CLI sends Anthropic-format requests with --model opencode-go/… or
+                    # opencode/…. Same prefix-strip + scrub + auth swap as /chat/completions.
                     if model.startswith(GO_PREFIX):
                         go_leg = True
                         bare = model[len(GO_PREFIX):]
-                        # Go's compat API takes bare model ids — strip the prefix.
                         payload["model"] = bare
-                        # Go's Anthropic-compat layer mishandles the STRING shorthand for message
-                        # content (probed 2026-08-13: glm-5.2 dropped the prompt). Normalize to
-                        # blocks so shorthand clients don't hit it — same as the jail shim.
-                        for msg in payload.get("messages") or []:
-                            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                                msg["content"] = [{"type": "text", "text": msg["content"]}]
-                        # Go rejects Anthropic SERVER tools (e.g. WebSearchTool); client tools are
-                        # function-shaped (input_schema present / type None or "custom"). Drop only
-                        # server tools so Bash/Edit/MCP tools keep working — same as the shim.
-                        tools = payload.get("tools")
-                        if isinstance(tools, list):
-                            kept = [t for t in tools if isinstance(t, dict)
-                                    and (t.get("input_schema") is not None or t.get("type") in (None, "custom"))]
-                            if len(kept) != len(tools):
-                                pass  # note appended below
-                            payload["tools"] = kept
+                        _opencode_scrub(payload, "go")
                         body = json.dumps(payload).encode()
                         note = "go-leg"
+                        or_model = bare  # For logging, use the bare model id
+                    elif model.startswith(ZEN_PREFIX):
+                        zen_leg = True
+                        bare = model[len(ZEN_PREFIX):]
+                        payload["model"] = bare
+                        _opencode_scrub(payload, "zen")
+                        body = json.dumps(payload).encode()
+                        note = "zen-leg"
                         or_model = bare  # For logging, use the bare model id
             except ValueError:
                 pass  # not JSON — forward untouched
         self._forward(body, note, or_model=or_model, or_provider=or_provider,
-                      cb_session=cb_session, go_leg=go_leg)
+                      cb_session=cb_session, go_leg=go_leg, zen_leg=zen_leg)
 
 
 def main() -> int:
@@ -2326,12 +2393,14 @@ def _self_test() -> int:
         return s
 
     # Override globals for test
-    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, PORT, _go_response
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response
     _go_response = {"type": "sse", "body": b'data: {"ok":true}\n\ndata: [DONE]\n\n'}  # default
     ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
     GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
     UPSTREAM = "http://127.0.0.1:18193"
     GO_KEY = "go-test-key"
+    ZEN_UPSTREAM = "http://127.0.0.1:18194/zen"
+    ZEN_KEY = "zen-test-key"
     PORT = 18190
 
     def stub(name, port):
@@ -2372,6 +2441,37 @@ def _self_test() -> int:
 
     go_stub_server = ThreadingHTTPServer(("127.0.0.1", 18192), GoStub)
     threading.Thread(target=go_stub_server.serve_forever, daemon=True).start()
+
+    # Zen stub (homelab#445) — separate upstream on 18194, records to seen["zen"]. Mirrors
+    # GoStub so the metering tests can drive a configurable usage-carrying response.
+    class ZenStub(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_):
+            pass
+
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length) if length else b""
+            parsed = json.loads(body) if body else {}
+            seen["zen"] = {
+                "path": self.path,
+                "auth": self.headers.get("Authorization"),
+                "x_api_key": self.headers.get("x-api-key"),
+                "user_agent": self.headers.get("User-Agent"),
+                "model": parsed.get("model") if body else None,
+                "body_raw": body,
+            }
+            resp = _go_response.get("body", b'data: {"ok":true}\n\ndata: [DONE]\n\n')
+            status = 429 if parsed.get("model") == "test-model-429" else 200
+            self.send_response(status)
+            self.send_header("Content-Type", "text/event-stream" if _go_response.get("type") == "sse" else "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+    zen_stub_server = ThreadingHTTPServer(("127.0.0.1", 18194), ZenStub)
+    threading.Thread(target=zen_stub_server.serve_forever, daemon=True).start()
     threading.Thread(target=main, daemon=True).start()
     time.sleep(0.5)  # let server start
 
@@ -2485,6 +2585,111 @@ def _self_test() -> int:
     check("go" not in seen and "anthropic" not in seen,
           "go leg without key: nothing forwarded to upstreams")
     GO_KEY = old_go_key  # restore
+
+    print("\n=== Zen free rail tests (homelab#445) ===")
+    # The Zen leg mirrors the Go leg on both ingress surfaces: the `opencode/` prefix strips to
+    # the bare model id, auth is replaced by the Zen key (both styles), and the /api and
+    # /anthropic surface prefixes are mapped onto zen's /v1/*.
+
+    # Routing + auth swap on the OpenAI surface
+    seen.clear()
+    st, data = call("opencode/nemotron-3-ultra-free")
+    z = seen.get("zen") or {}
+    check(st == 200 and b"[DONE]" in data, "zen leg: 200 + streamed body relayed")
+    check(z.get("model") == "nemotron-3-ultra-free", "zen leg: opencode/ prefix stripped")
+    check(z.get("auth") == "Bearer zen-test-key", "zen leg: Authorization = Bearer zen key")
+    check(z.get("x_api_key") == "zen-test-key", "zen leg: x-api-key = zen key")
+    check("OAUTH-SECRET" not in str(z.get("auth")) and "OAUTH-SECRET" not in str(z.get("x_api_key")),
+          "zen leg: session oauth never reaches zen")
+    check(z.get("path") == "/zen/v1/chat/completions",
+          "zen leg: /api surface prefix stripped — zen serves /v1/*")
+    check("go" not in seen, "zen leg: Go stub NOT hit")
+
+    # Content normalization (string -> blocks)
+    seen.clear()
+    st, _ = call("opencode/test-model")
+    z = seen.get("zen") or {}
+    body = json.loads(z.get("body_raw") or b"{}")
+    content = (body.get("messages") or [{}])[0].get("content")
+    check(isinstance(content, list) and content[0].get("type") == "text",
+          "zen leg: string content normalized to blocks")
+
+    # Server tools dropped, client/function tools survive (same compat scrub as the Go rail)
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode/test-model",
+                               "messages": [{"role": "user", "content": "hi"}],
+                               "tools": [
+                                   {"type": "function", "name": "bash",
+                                    "description": "run a command",
+                                    "input_schema": {"type": "object", "properties": {}}},
+                                   {"type": "web_search", "name": "WebSearchTool"},
+                               ]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer test-key"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    check(r.status == 200, "zen tools: request with tools forwarded 200")
+    z = seen.get("zen") or {}
+    body = json.loads(z.get("body_raw") or b"{}")
+    tools = body.get("tools") or []
+    check(len(tools) == 1 and tools[0].get("name") == "bash",
+          "zen tools: server tool dropped, function tool kept")
+
+    # Cross-provider contamination: a zen 429 must NOT pollute OpenRouter accounting
+    seen.clear()
+    st, data = call("opencode/test-model-429")
+    check(st == 429, "zen cross-provider: zen-leg 429 forwarded correctly")
+    z = seen.get("zen") or {}
+    check(z.get("model") == "test-model-429", "zen cross-provider: zen stub received request (prefix stripped)")
+
+    # Key denial: empty Zen key -> 502, nothing forwarded
+    old_zen_key = ZEN_KEY
+    ZEN_KEY = ""
+    seen.clear()
+    st, data = call("opencode/nemotron-3-ultra-free")
+    check(st == 502, "zen leg without key: 502 refused")
+    check("zen" not in seen and "anthropic" not in seen,
+          "zen leg without key: nothing forwarded to upstreams")
+    ZEN_KEY = old_zen_key  # restore
+
+    # /anthropic surface (the claude CLI --model opencode/… path)
+    seen.clear()
+    st, data = call("opencode/nemotron-3-ultra-free", path="/anthropic/v1/messages")
+    z = seen.get("zen") or {}
+    check(st == 200 and b"[DONE]" in data, "/anthropic + zen model: 200 + relayed")
+    check(z.get("model") == "nemotron-3-ultra-free", "/anthropic + zen model: prefix stripped")
+    check(z.get("auth") == "Bearer zen-test-key", "/anthropic + zen model: Auth = zen key")
+    check(z.get("x_api_key") == "zen-test-key", "/anthropic + zen model: x-api-key = zen key")
+    check("OAUTH-SECRET" not in str(z.get("auth")) and "OAUTH-SECRET" not in str(z.get("x_api_key")),
+          "/anthropic + zen model: zero oauth reaches zen")
+    check(z.get("path") == "/zen/v1/messages",
+          "/anthropic + zen model: /anthropic prefix stripped — zen serves /v1/*")
+    check("anthropic" not in seen, "/anthropic + zen model: Anthropic stub NOT hit")
+
+    # Only-free guardrail ADMITS opencode/ (free-tier) while the Go rail stays denied
+    _refs["test-only-free/test-secret"] = (time.time() + 3600, {
+        "key": "test-key",
+        "guardrail": "only-free",
+        "kind": "openrouter",
+    })
+    seen.clear()
+    st, data = call("opencode/nemotron-3-ultra-free", path="/anthropic/v1/messages", extra_headers={
+        "Authorization": "Bearer ref:test-only-free/test-secret",
+    })
+    check(st == 200, "only-free: opencode/ via /anthropic ADMITTED (zen is free-tier)")
+    check("zen" in seen, "only-free: zen stub received the request")
+    # Same only-free session must still DENY the Go rail
+    seen.clear()
+    st, data = call("opencode-go/kimi-k3", path="/anthropic/v1/messages", extra_headers={
+        "Authorization": "Bearer ref:test-only-free/test-secret",
+    })
+    check(st == 403, "only-free: opencode-go/ still denied (no Go-window authority)")
+    check("go" not in seen and "anthropic" not in seen,
+          "only-free: go denied pre-forward")
+    _refs.pop("test-only-free/test-secret", None)
 
     print("\n=== Cross-provider state contamination test ===")
     # Test 7: Go-leg 429 must NOT pollute OpenRouter state (cooldown, capacity latch,
@@ -2730,6 +2935,63 @@ data: [DONE]
     g = seen.get("go") or {}
     check(g.get("user_agent") == "homelab-openrouter-proxy",
           f"Go-leg User-Agent: homelab-openrouter-proxy (got {g.get('user_agent')})")
+
+    # Test 17b: Zen-leg User-Agent — stub must see "homelab-openrouter-proxy"
+    seen.clear()
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("POST", "/api/v1/chat/completions",
+              body=json.dumps({"model": "opencode/nemotron-3-ultra-free",
+                               "messages": [{"role": "user", "content": "hi"}]}),
+              headers={"Content-Type": "application/json",
+                       "Authorization": "Bearer test-key"})
+    r = c.getresponse()
+    r.read()
+    c.close()
+    z = seen.get("zen") or {}
+    check(z.get("user_agent") == "homelab-openrouter-proxy",
+          f"Zen-leg User-Agent: homelab-openrouter-proxy (got {z.get('user_agent')})")
+
+    # ── Zen metering (homelab#445): usd=0.0, gometer.price skipped, extract_usage kept ───────────
+    print("\n=== Zen metering tests (homelab#445) ===")
+    # Zen stub returns JSON with usage: 1M in + 1M out. If the zen leg wrongly called
+    # gometer.price (which it must NOT), an unpriced zen model would fall back to _GO_MAX_PRICE
+    # and the stack would show a large usd. Assert the stack stays exactly 0.0 — the row is
+    # recorded for token attribution but never prices.
+    _go_response["type"] = "json"
+    _go_response["body"] = json.dumps({
+        "id": "gen-zen", "model": "nemotron-3-ultra-free",
+        "usage": {"input_tokens": 1000000, "output_tokens": 1000000}
+    }).encode()
+    seen.clear()
+    st, data = call("opencode/nemotron-3-ultra-free", extra_headers={
+        "Authorization": "Bearer ref:zen-meter/test-secret"})
+    check(st == 200, "zen metering: request 200")
+    wz = router.go_usage_window(60)
+    check(abs(wz["by_stack"].get("zen-meter", 0) - 0.0) < 1e-9,
+          f"zen metering: zen-meter stack ≈$0.00 (got {wz['by_stack'].get('zen-meter')})")
+
+    # Assumption sentinel: a bare id that lacks the -free suffix and isn't big-pickle warns
+    # (log line, not assertable without stdout capture) but must NOT block — 200 through.
+    _go_response["body"] = json.dumps({
+        "id": "gen-zen-sentinel", "model": "paid-looking",
+        "usage": {"input_tokens": 10, "output_tokens": 10}
+    }).encode()
+    st, data = call("opencode/paid-looking", extra_headers={
+        "Authorization": "Bearer ref:zen-meter/test-secret"})
+    check(st == 200, "zen sentinel: non -free-suffix model still allowed (warning, not a block)")
+
+    # big-pickle is the ONE known free model without the -free suffix — must NOT warn, must 200.
+    _go_response["body"] = json.dumps({
+        "id": "gen-zen-bp", "model": "big-pickle",
+        "usage": {"input_tokens": 10, "output_tokens": 10}
+    }).encode()
+    st, data = call("opencode/big-pickle", extra_headers={
+        "Authorization": "Bearer ref:zen-meter/test-secret"})
+    check(st == 200, "zen big-pickle: known no-suffix free model allowed")
+
+    # Restore default SSE response for remaining tests
+    _go_response["type"] = "sse"
+    _go_response["body"] = b'data: {"ok":true}\n\ndata: [DONE]\n\n'
 
     # ── ADR-108 ingest self-tests (§4) ───────────────────────────────────────────────────────────
     print("\n=== Ingest endpoint tests ===")
