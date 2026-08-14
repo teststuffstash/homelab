@@ -4063,3 +4063,18 @@ burn stays unmetered until the next claude-go launch (self-resolving). G live-pr
 Remaining: #439 leg 2 (before retro's 08-17 fire), post-reset sonnet re-reviews (3 snapshot
 sets), the wave's ledger PR (rows in scratchpad; new classes: fabrication-in-transcription,
 deferred-verification coverage shadow, self-defeating-fix).
+
+## 2026-08-14 (~06:20–06:54Z) — jail meta-session: the Zen free-tier intake — opencode/ becomes the third rail, both sides
+
+**Condition:** both model-splitting surfaces (jail shim + in-cluster proxy) route exactly two
+rails — `opencode-go/*` → zen/go, everything else → Anthropic — while Zen's FREE tier
+(nemotron-3-ultra-free & co.) lives on `zen/v1`. Probed from the jail with the wallet key:
+zen/v1 lists six `-free` models + `big-pickle` (the one free id WITHOUT the suffix); the same
+key authenticates zen/v1 and zen/go; zen/v1 also carries paid claude-*/gpt-* (the matrix
+"never route claude there" warning stands). Haiku-slot probe before the intake: deepseek-v4-flash
+served the Agent slot cleanly, Bash tool round-trip 200s end-to-end (shim-log grounded).
+**Command:** operator direction — differentiate by prefix, meter `opencode/` as free for now.
+Filed **#444** (jail shim + launcher: third rail, per-prefix catalog check, glossary coinage)
++ **#445** (proxy: both ingress surfaces, guardrail admits free, self-test gate), each handed
+to a deepseek-v4-flash subagent in an isolated worktree owning the full PR cycle — worker-tier
+authoring on build chunks, watch the defect-by-catch-point harvest.
