@@ -4093,3 +4093,11 @@ watch (notifying until-loop, author woken only for an action round). Defect-by-c
 note: the deepseek tier defaults to background monitors even after one correction — the
 orphaned-wait class now has a repeat offender. #447 meanwhile healthy: updater keeps the head
 current (b9d1aa11 over the #446 merge + seat commits), CI green, waiting on the */5 reflex.
+↳ (07:39Z) Bisect corroboration + wind-down. The operator's opencode run puts the
+second half of the bisect on record: nemotron-3-ultra-free tool loop CLEAN on the OpenAI
+surface (4-step date→write→read-back→confirm, tool-result continuation included) — the matrix
+row now carries both halves + the rung-0 tool-lane candidacy. **#448 filed INERT** — the
+zen-leg tool translator (Anthropic→OpenAI on the opencode/ rail; acceptance = that 4-step
+loop through the shim): NO dispatch — Go weekly exhausted, review rounds bill balance
+(FU-170), and the operator steps away (~08:45Z). Round state at break: #444 shipped +
+CI-gated; #445/#447 armed + seat-watched; #448 parked to the ~08-16 reset.
