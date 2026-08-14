@@ -38,6 +38,12 @@ meant to avoid.)
   clone subagents, double review, misses →
   [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
   Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
+- **Zen free-rail chunks (operator direction 2026-08-14):** `opencode/` prefix = zen/v1
+  free tier as the third rail on BOTH surfaces — **#444** (jail shim+launcher) + **#445**
+  (in-cluster proxy, both ingress surfaces); deepseek-v4-flash subagents author each in
+  isolated worktrees, owning the full PR cycle; metered $0 + a non-`-free` sentinel warning
+  (big-pickle is the known suffix exception). PICKUP if a PR stalls: watch it per CLAUDE.md's
+  PR lane; do NOT re-dispatch a second author.
 - **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
   the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
   plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d
