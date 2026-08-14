@@ -4113,3 +4113,16 @@ the branch head after the 07:06Z snapshot; the re-dispatch sees it. **Operator d
 reviewer Go-failover model kimi-k3 → deepseek-v4-flash** (665cf64; k3 = $6.33/review in the
 balance regime; proper model decision next week) — both pinning fixtures updated, replay green.
 The level-triggered re-dispatch re-reviews #447 on the cheap model; findings re-derive.
+↳ (08:15Z — SESSION CLOSE) **Round complete: the zen free rail shipped on BOTH
+surfaces.** The operator merged #447 direct (08:11:36Z, OrgAdmin; "subscription latch gates
+review" — the operator's account of why the cheap-model re-dispatch never fired); the proxy
+pod rolled inside a minute (ConfigMap-shipped). The session, end to end: #444/#446 shipped
+(jail rail + glossary coinage + matrix bisect + the shim-self-test CI gate) · #445/#447
+shipped (proxy both ingress surfaces, free-tier guardrail, $0 metering) · reviewer Go-failover
+kimi-k3→deepseek-v4-flash interim (665cf64, replay fixtures green in the same commit) · #448
+filed INERT (the translator) · FU-170 (balance blindness) / FU-171 (token death — the $6.33
+lost verdict; S3 snapshots intact) / FU-172 (r1 residues) filed. Evidence banked: the zen
+tool-compat bisect (Anthropic surface drops tool-bearing bodies; OpenAI surface clean) + the
+operator's 4-step nemotron tool loop on the OpenAI surface — the translator's acceptance shape.
+Deepseek-v4-flash authoring verdict: both chunks merged, one orphaned-wait repeat offender
+(process discipline, not code quality). Session ended by the operator.

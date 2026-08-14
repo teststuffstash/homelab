@@ -38,15 +38,18 @@ meant to avoid.)
   clone subagents, double review, misses →
   [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
   Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
-- **Zen free-rail chunks (operator direction 2026-08-14): #444 SHIPPED** — PR#446 merged
-  07:08Z (1-round approved); the shim self-test is a CI gate (9e97d5d). **#445 = PR#447**:
-  r1 REVIEW RAN (Go-served kimi-k3, 47 min, $6.33) but the verdict was LOST — the ~1h git
-  token 401'd before posting (FU-171; findings live in the S3 r1 transcript). The
-  level-triggered re-dispatch now rides **deepseek-v4-flash** (operator's direct-to-master
-  swap, 665cf64 — k3 too expensive for reviews; proper model decision next week).
-  **#448 (zen-leg tool translator, Anthropic→OpenAI) filed INERT** — wake after the ~08-16
-  Go reset or by operator call. Operator on BREAK — PICKUP: #447's re-dispatch verdict,
-  then the #448 dispatch call.
+- **Zen free rail: SHIPPED on both surfaces (2026-08-14).** #446 = jail shim+launcher (merged
+  07:08Z, 1-round approved; shim-self-test CI-gated 9e97d5d) · #447 = proxy both ingress
+  surfaces (OPERATOR-merged 08:11Z direct to master — "subscription latch gates review" was
+  the operator's account of the dispatch gap; pod rolled <1 min, ConfigMap-shipped). Interim:
+  reviewer Go-failover model = **deepseek-v4-flash** (665cf64 — a $6.33 k3 review in the
+  balance regime; the proper model is decided next week). **#448 (zen-leg tool translator)
+  stays INERT** until the ~08-16 Go reset or the operator's call. PICKUP: (1) live smoke the
+  proxy zen leg (`opencode/nemotron-3-ultra-free` through the in-cluster proxy — NOT verified
+  post-merge); (2) the #448 dispatch call; (3) FU-172 residues; (4) cleanup: the subagent
+  worktrees (`.claude/worktrees/agent-*`) + merged branches fix/opencode-zen-rail, fix/zen-rail.
+  Open: FU-170 (balance blindness), FU-171 (token refresh). Zen tool-compat: free tier is
+  text-only through Anthropic-compat; the translator is the unlock (evidence in the matrix row).
 - **⚑ GOAL LANE PAUSED (operator ruling, 2026-08-13):** the Goal type is too expensive to run —
   the v1.1 pilot took expensive jail meta-coordination that still did not stop the 46 sprouts,
   plus ~16h hands-on the operator will not repeat, and the weekly Anthropic pool is BLOWN (7d
