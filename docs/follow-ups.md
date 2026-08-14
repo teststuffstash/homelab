@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-170**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-171**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -235,6 +235,17 @@ the block needs pruning, not more headings.
       Next: pilot on ONE stack repo — diff-coverage step in CI + the annotation surfaced to
       the reviewer (check-run annotations or reviewer-context injection). Relates FU-095
       (review-quality program), ADR-103 (executable gates > prose).
+- [ ] **FU-170** — **Go-rail balance fallback is INVISIBLE to the cluster (operator, 2026-08-14).**
+      The Go WEEKLY window hit 100% mid-round; opencode's "use balance after limits" toggle
+      (€10) keeps the rail serving, silently billing real money per request. The cluster can't
+      tell: the meter still accrues window usage, no alert exists, and the reviewer Go-failover
+      latch keeps dispatching into paid traffic. Confirmed the same sitting: the running jail
+      shim predates #442 (no gometer/spool artifacts), so jail burn is unmetered until the next
+      claude-go launch (the meta-state caveat, live). Deferred BY DECISION this round (operator:
+      finish it blind — the rail works, spend is bounded by the balance). Next: pick the signal
+      — console scrape vs meter-window threshold → dispatch-hold/alert; design home = the
+      charter's cost rethink ([`agents/chainless-redesign.md`](agents/chainless-redesign.md)
+      §cost rethink, #431/#432) extended rail-side.
 - [ ] **FU-167** — **Replay-harness cleanup: POINTER.** The serialization tax (ratchet coupling
       × ADR-097 = one global clause-lane lock; PR#275's register conflict) plus the measured
       duplication (0 worlds shared by reference, 23 forked world paths, 74 single-row fixtures

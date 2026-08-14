@@ -4078,3 +4078,12 @@ Filed **#444** (jail shim + launcher: third rail, per-prefix catalog check, glos
 + **#445** (proxy: both ingress surfaces, guardrail admits free, self-test gate), each handed
 to a deepseek-v4-flash subagent in an isolated worktree owning the full PR cycle — worker-tier
 authoring on build chunks, watch the defect-by-catch-point harvest.
+↳ (~07:15Z) **Regime change mid-round: Go WEEKLY window at 100%** (resets in 2d16h, operator
+console). The "use balance after limits" toggle is ON (€10, now $9.83) — the rail keeps
+serving and now bills the balance. Operator: finish this round while the cluster is blind —
+the meter still accrues window usage, no alert, reviewer Go-failover keeps dispatching into
+paid traffic; filed **FU-170** (charter cost-rethink is the design home). Confirmed in the
+same probe: the running jail shim predates #442 (ZERO gometer/spool artifacts) — jail burn
+unmetered until the next claude-go launch, the meta-state caveat live. Zen-rail round status:
+#446 + #447 both OPEN, CI green, auto-merge armed, review pending; BOTH authors had completed
+behind orphaned pollers — each resumed once with foreground-wait discipline.
