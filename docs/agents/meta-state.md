@@ -20,21 +20,21 @@ meant to avoid.)
   gaas = OPERATOR power-cycle (914 on correct key+version since 08-09; if persists → key rotated,
   re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
   (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
-- **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md), read
-  it FIRST — its §Rollout status is current): part 1 chunks A–D+F + H-leg-1 MERGED+LIVE
-  2026-08-13 (PRs #429/#433–#437/#440/#443; #421–#424/#426 closed w/ evidence; ADR-108 =
-  jail pushes, never depends on cluster). **PICKUP: PRs #441 (E, r3) + #442 (G, r3 head
-  3f0586b) sit OPEN awaiting re-review — BOTH RAILS were latched at close** (Anthropic
-  7d=0.98; the Go ACCOUNT 5h exhausted ~20:42Z, resets ~22:14Z — our meter was blind at
-  1.5%, the #438 blind spot live, datum on the issue). A session-only one-shot cron (01:23
-  local 08-14) re-dispatches via `bash agents/reviewer-session.sh homelab <N>` (the working
-  remedy — direct dispatch, Go-served; used to un-wedge #442/#443 after the review-edge
-  stall the merged #443 fixes) + then G's live probes (jail push → by_stack.jail; wrong
-  token → 401) + close #438/#439-leg-1 — **if this session died, do those by hand.** Then:
-  #439 leg 2 (agent-session ladder; retro inherits — before its 08-17 fire), next-week
-  sonnet re-reviews (`agents/re-review.sh`, two pr-437 snapshots waiting), the next ledger
-  PR (rows in the session scratchpad — E/F/G/H wave: fabrication-in-transcription class,
-  the deferred-verification coverage shadow, the exhaustion event). Build mode unchanged:
+- **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
+  §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
+  (PRs #429/#433–#437/#440–#443; every chunk issue closed w/ evidence; #420 = the status
+  comment). PICKUP, in order: (1) **#439 leg 2** — agent-session.sh:1407 adopts the
+  `--pick-rail` ladder via the PR#407 `_claude_model` plumbing; retro inherits it with zero
+  retro changes — land BEFORE retro's first unattended fire 2026-08-17; PR body must flag the
+  worker-ride widening. (2) **Post-weekly-reset sonnet re-reviews**: `bash agents/re-review.sh
+  --project homelab` (3 snapshot sets banked: pr-437 ×2, pr-441 — the r6 approval snapshotted
+  itself). (3) **The wave's ledger PR** — rows in the session scratchpad
+  (`ledger-draft.md`); if this session is gone, reconstruct from TICK-LOG 08-13/14: new classes
+  = fabrication-in-transcription, deferred-verification coverage shadow, self-defeating-fix,
+  explain-away/false-completeness reports. ⚠ the running jail shim predates chunk G — jail
+  subagent burn is unmetered until the next `claude-go` launch (self-resolving; the cluster
+  meter + account console disagree by exactly that traffic meanwhile). Go 5h window economics:
+  review rounds ≈$1 each — a 6-round PR cycle is the biggest single draw. Build mode unchanged:
   clone subagents, double review, misses →
   [`../spikes/subagent-handover-misses.md`](../spikes/subagent-handover-misses.md).
   Pending verifies: PR#407 (next platform ride's OTLP model), elastic shadow cells (#408).
