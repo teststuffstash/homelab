@@ -73,7 +73,8 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 |---|---|---|
 | deepseek-v4-flash-free | ✗ 400 invalid_request (raw 08-13, provider error truncated) | |
 | mimo-v2.5-free | ✗ 400 opaque provider error (raw 08-13) | |
-| hy3-free · nemotron-3-ultra-free · nemotron-3.5-lightning-free · laguna-s-2.1-free · big-pickle | untested | |
+| hy3-free · nemotron-3.5-lightning-free · laguna-s-2.1-free · big-pickle | untested | |
+| nemotron-3-ultra-free | plain text ✅ 200 (curl-through-shim 08-14, 1.2s) · function tool ✗ 400 opaque "Provider returned error" (curl-through-shim 08-14) — same provider-400 family as the deepseek/mimo free rows | |
 
 ## Cross-cutting quirks (apply to every row)
 
