@@ -4087,3 +4087,9 @@ same probe: the running jail shim predates #442 (ZERO gometer/spool artifacts) �
 unmetered until the next claude-go launch, the meta-state caveat live. Zen-rail round status:
 #446 + #447 both OPEN, CI green, auto-merge armed, review pending; BOTH authors had completed
 behind orphaned pollers — each resumed once with foreground-wait discipline.
+↳ (07:21Z) **#447's author orphaned the wait AGAIN** — second occurrence, same
+shape, despite the explicit foreground-wait instruction in the resume; the seat took over the
+watch (notifying until-loop, author woken only for an action round). Defect-by-catch-point
+note: the deepseek tier defaults to background monitors even after one correction — the
+orphaned-wait class now has a repeat offender. #447 meanwhile healthy: updater keeps the head
+current (b9d1aa11 over the #446 merge + seat commits), CI green, waiting on the */5 reflex.
