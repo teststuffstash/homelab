@@ -232,7 +232,7 @@ grafana:
         path: /data/sleep.sqlite
       name: sleep-notes
       type: frser-sqlite-datasource
-      uid: sleep-notes
+      uid: sleep-data
   admin:
     existingSecret: grafana-admin
     passwordKey: admin-password
