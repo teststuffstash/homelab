@@ -210,6 +210,11 @@ jobs:
       # a gate — the same unexecuted-suite class as the 2026-08-10 estimator audit (#429 fu).
       - name: Proxy self-test (devbox run proxy-self-test)
         run: devbox run proxy-self-test
+      # The jail's model-splitting shim — same unexecuted-suite class: its 18-check suite was
+      # #446's evidence while nothing ran it in CI (reviewer-flagged on that PR; the proxy
+      # self-test above got this exact fix in the Go wave, 0616d31).
+      - name: Shim self-test (devbox run shim-self-test)
+        run: devbox run shim-self-test
       # FU-tracker conventions: dangling ids + broken pointers FAIL; oversize/done-marker WARN.
       # In CI because the 2026-07 tracker bloat (258→1000 lines) happened under convention-only
       # discipline — see docs/follow-ups.md "Conventions".

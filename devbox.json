@@ -302,6 +302,9 @@
       "router-self-test": [
         "python3 argocd/resources/openrouter-proxy/router.py --self-test"
       ],
+      "shim-self-test": [
+        "python3 scripts/claude-model-shim.py --self-test"
+      ],
       "storage-ledger": [
         "bash scripts/storage-ledger-check.sh"
       ]
