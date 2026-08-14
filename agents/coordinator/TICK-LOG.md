@@ -4051,3 +4051,15 @@ Go-served verdicts), responder deferral observed live (exit-1 Argo backoff). Rev
 dispatches PARKED until the Go 5h reset (~22:14Z): one-shot cron 01:23 local re-dispatches
 #441/#442 + runs G's live probes. Coordinators stay latched (ruling). Ledger rows for the
 wave in the session scratchpad — next ledger PR.
+↳ (part-1 CLOSE, 02:25Z 08-14) **#441 merged r6 → ALL of Go-rail part 1 is live.** Overnight:
+the per-stack review cron self-healed #442 post-reset (the #443 tick failover working organically
+— NOT the global tick, which correctly defers graduated stacks; earlier attribution corrected);
+#441 took 6 rounds (r5: the r4 fixes defeated themselves — set -e dead branches, per-page
+--paginate arrays; r6 approval Go-served via direct dispatch, its own input snapshot banked).
+Go 5h window exhausted TWICE (~20:42Z + ~02:10Z — review rounds ≈$1/ea are the big draw;
+agent-coordinator $5.58 metered); ⚠ the running jail shim predates chunk G, so jail subagent
+burn stays unmetered until the next claude-go launch (self-resolving). G live-probed: 401/204
++ by_stack.jail exact tick. #425/#438 closed w/ evidence; #420 carries part-1-complete status.
+Remaining: #439 leg 2 (before retro's 08-17 fire), post-reset sonnet re-reviews (3 snapshot
+sets), the wave's ledger PR (rows in scratchpad; new classes: fabrication-in-transcription,
+deferred-verification coverage shadow, self-defeating-fix).
