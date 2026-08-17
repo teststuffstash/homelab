@@ -4159,3 +4159,55 @@ residual = the near-limit signal half). Report to operator with the park/decide 
 PR#454 (+ decide on the empty cell-b report + cross-review), dispose #449 (hand-queue or seat PR
 the limit raise), #450 adopt-or-accept, #455 graduation. No labels moved, no state cleared —
 classification only.
+
+## 2026-08-17 — the all-day meta session (Go rail day 2 · ADR-109 sitting · the churn autopsy)
+
+**Condition:** Monday board-sweep grew into a full working day: the Go-flash dogfood needed its
+accounting trusted, the #379 belt needed unparking, the operator wanted a design sitting on
+`agent-fix` semantics, and a 25-merge master day exposed the merge path's churn tail.
+**Command (as executed, by arc):**
+- **Go rail accounting → console-exact.** False weekly latch traced to ROLLING windows vs the
+  console's epoch-anchored grids; PR#481 anchored them (5h=daily:217m, 7d=Mon:00Z, 30d=day13:11:30Z)
+  + window-DRAW pricing (list price on raw tokens, badge-halved — the cache-assuming meter read
+  ~30× low). Calibration rows → 7d/30d/5h match the console exactly. Afternoon drift (+$1.5)
+  = the RUNNING jail shim predating its own metering code — restarted (new PID), one more
+  calibration row; drift ≈ 0 since. `opencode_subscription_reset_timestamp_seconds` gauge added.
+- **Go semaphore (FU-170a done):** PR#484 (flash subagent) — `rail=opencode-go` pod count via the
+  shared FU-088 listing path, `OPENCODE_MAX_RUNNING=5` explicit (operator: cheaper workers,
+  smaller pool — window gates guard budget, semaphore bounds burst), composed into
+  `/opencode-limit` `limited` = zero launcher changes. Self-tests 10a-c.
+- **Dashboard:** #483 v2→v4 — ghost-series fix (instant stats + max-by-window), full rework to
+  "Agent subscriptions — headroom": two visually-matched big-number rows, aligned columns,
+  Semaphore+resets both rails, spend-as-DRAW. Live-applied through the 13:40Z GitHub MAJOR outage
+  under a deliberate autosync pause (platform root + openrouter-proxy), restored + converged on
+  merge — the pause/restore cycle ran clean, meta-state bullet created and deleted same day.
+- **#379/#473 landed after a 6-round saga:** rounds 1-5 built the Touches belt as DEAD CODE in the
+  unquoted PREP heredoc (reviewer caught it — real); round 6 (seat) moved it to a quoted pod-side
+  part, master-pinned fail-open helper fetch, restored the belt-flagged unit test. Governance-lint
+  then correctly ejected the ci.yaml AND devbox.json wiring from the worker-authored PR (landed
+  operator-direct post-merge, the #474 sequencing). **The belt's FIRST production firing blocked
+  its sibling #475** — undeclared footprint → all-escape → governance: fixed at the metadata
+  level exactly as designed (Touches declared on #405, assertion edits acknowledged, verdict
+  dismissed). agent-runtime#70 released.
+- **ADR-109 sitting (full corpus):** `agent-fix` = SUITABILITY ratified — four readers had four
+  meanings, no owning doc; parking-as-machinery REJECTED on record (operator: oracle "parked"
+  = no new Goals, loop stays live — meta-state rows with un-park triggers own intent;
+  `agent/blocked` stays strictly technical). `devbox run board` built (flash subagent, PR#490):
+  the deterministic who-acts view — proven against the outage on day one (probe-fail belt fired
+  honestly twice). ⏸ class re-worded to backlog INVENTORY (#475 amendment, aggregate+date).
+- **The churn autopsy (operator ask):** 28 PRs, 118 updater merges, 69 CI runs (5.3h wall),
+  32 verdicts (≈1/PR — the serializer at its floor), ONE stale approval, 9 standing-asides.
+  Damping REJECTED (operator: latency has a price — and healthy PRs already batch naturally);
+  the real causes: (1) the CR∧BEHIND unstrand belt updating unmergeable PRs on every master move
+  (34 merges/~35 CI runs) → narrowed to new-content-since-verdict + breaker exclusions
+  (operator-direct, MP-T02 guard anchored; jq truth-tabled incl. the `// empty`-binding trap);
+  (2) dispatch-vs-master races → reviewer pre-spawn currency gate (PR#496, flash subagent,
+  zero extra API calls — piggybacks the FU-092 probe).
+- **Codeowner batch cleared:** #473/#485/#487 approved+merged (485: the 8Gi marker-limit thesis;
+  487: the durable fix was UNOWNED — operator catch — filed+queued as #491 ttlStrategy/podGC,
+  626 retained Workflows). #493 filed (board smoke test, backlog). FU-146 ARCHIVED (session
+  guard #480 shipped + proven: #153 re-rode once → #485). FU-174 filed (reasoning effort
+  unmodeled; effort_map shape agreed). #472/#477-479/#486/#488 arrived via the loop.
+- **Breaker audit through the outage:** zero false latches org-wide; #473's infra-red
+  arbitration + #475's merge-storm anomaly both adjudicated benign (18 master merges = 18
+  branch merges, 1:1; dismissed-review commit re-association = GitHub artifact).
