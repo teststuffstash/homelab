@@ -1,0 +1,30 @@
+# FU-146 (homelab#153 five-dispatch storm) — leg (c): the launcher-side atomic dispatch gate for
+# ITEM sessions. Transposed from agent-session.sh's worker gate: reap a TERMINAL same-key holder,
+# refuse a LIVE one, then `create` (NOT apply) with a deterministic pod name as the test-and-set.
+#
+# CONDITION UNDER REPLAY. `coordinator-session.sh --item repo=homelab item=issue-153 …` composes
+# its pod name as `coordinator-homelab-issue-153`. Three create attempts against that key:
+#   1. LIVE holder (`Running`) → the refusal line + exit 3, so the launcher aborts and the
+#      race never forks. This is the direct guard against the second queued-dispatch session
+#      (10:45:34) riding while the first (10:44:35) was still mid-triage.
+#   2. TERMINAL holder (`Succeeded`) → reaped (delete), then create proceeds — a finished session
+#      must not wedge the key forever.
+#   3. NO holder (empty read) → create proceeds untouched.
+#
+# THE CONTRACT:
+#   1. A LIVE holder is a hard `exit 3`, and the refusal names the pod and the reason.
+#   2. A TERMINAL holder is deleted (the delete lands in the action stream) before proceeding.
+#   3. A NO-holder read proceeds with no mutation.
+#   4. The gate is a FUNCTION here (not inline) purely so one fixture can drive all three arms;
+#      in the shipped script it is invoked once, inline, before the item-mode create.
+#
+# The read goes through the PATH-shim kubectl (`get pod … -o jsonpath={.status.phase}`) keyed on
+# the pod name, so each arm gets a different recorded answer. Mutations (delete) are recorded, not
+# served.
+name: session-atomic-gate
+mode: actions
+source: agents/coordinator-session.sh
+parts:
+  - file:bridge.sh
+  - block:session-atomic-gate
+  - file:cases.sh

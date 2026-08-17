@@ -1,0 +1,7 @@
+{
+  "state": "OPEN",
+  "reviewDecision": "CHANGES_REQUESTED",
+  "labels": [],
+  "author": { "login": "app/homelab-agents-1234" },
+  "body": "Fixes #18\n\nTouches: agents/coordinator-scan.sh\n"
+}

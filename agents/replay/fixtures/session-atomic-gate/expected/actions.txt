@@ -1,0 +1,14 @@
+CALL kubectl -n agent-coordinator get pod coordinator-homelab-issue-153 -o jsonpath={.status.phase}
+CALL kubectl -n agent-coordinator get pod coordinator-homelab-issue-99 -o jsonpath={.status.phase}
+CALL kubectl -n agent-coordinator delete pod coordinator-homelab-issue-99 --ignore-not-found
+CALL kubectl -n agent-coordinator get pod coordinator-homelab-issue-7 -o jsonpath={.status.phase}
+OUT REACHED: live holder
+OUT LIVE_HOLDER rc=3
+OUT REACHED: terminal holder
+OUT → reaping terminal same-key pod coordinator-homelab-issue-99 (Succeeded) before re-dispatch
+OUT TERMINAL_HOLDER create proceeds
+OUT REACHED: no holder
+OUT NO_HOLDER create proceeds
+OUT REACHED: end
+ERR PREFLIGHT REFUSED: coordinator session pod coordinator-homelab-issue-153 already Running — this item is being ridden (FU-146); resume/wait, don't fork.
+RC 0
