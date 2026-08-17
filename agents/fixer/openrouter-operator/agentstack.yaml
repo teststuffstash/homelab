@@ -55,9 +55,19 @@ spec:
   # stays for the stack claims that still ride it. No OpenRouter fallback on purpose: platform
   # work is the loop's own substrate, and the operator wants it on the pool they control; a
   # subscription outage defers dispatch (FU-088 latch) rather than silently switching rails.
+  # GO-FLASH DOGFOOD (operator direction 2026-08-17, DELIBERATELY TEMPORARY — amends the
+  # 2026-08-07 cutover above and the 2026-08-12 independence ruling, both by the operator):
+  # the platform stack dogfoods opencode-go/deepseek-v4-flash BEFORE any app stack's chain
+  # moves — it has the most issue traffic right now, so the Go-rail worker metrics accumulate
+  # fastest here (rail=opencode-go pod label + AGENT_RAIL on stats). Fallback = claude/haiku
+  # (still no OpenRouter entry: the no-new-money posture stands; a latched Go window walks the
+  # chain to haiku via the ordinary strike/latch mechanics — launcher gate probes /opencode-limit
+  # for Go rides since PR#458, canary-proven same day). REVERT to claude/haiku primary once the
+  # stack chains ride Go flash (the independence ruling's reasoning returns then: platform rides
+  # are the ones that can break the Go cap mechanics they'd depend on).
   modelDeny: [deepseek/deepseek-v4-flash-0731]
-  workerModel: claude/haiku
-  workerModelFallbacks: []
+  workerModel: opencode-go/deepseek-v4-flash
+  workerModelFallbacks: [claude/haiku]
   repos:
     # agent-runtime: FIXER ENABLED 2026-08-08 — the 2026-07-16 "No fixer: these build the
     # agent images" ruling (kept for agent-coordinator below) was superseded for THIS repo by
