@@ -1,0 +1,20 @@
+# homelab#379 leg 2 — reviewer Touches-escape detection: FAIL-OPEN when the helpers can't fetch.
+#
+# CONDITION UNDER REPLAY. PR closes issue #125, but the touches-check helper pair cannot be
+# fetched (TOUCHES_BASE unreachable). This is the round-5 park's step 4: a safety belt must fail
+# open — the block degrades to TOUCHES-ESCAPES: unavailable with a WARN and exits 0, so a fetch
+# blip can never abort the review pod ($PREP's `set -e` is live in that shell).
+#
+# THE CONTRACT:
+#   1. No gh call is made (the fetch fails before the issue body is read)
+#   2. A single WARN names the degradation
+#   3. TOUCHES_ESCAPES ends as "unavailable" (reaches the prompt as no-signal, not clean)
+#   4. Exit code 0 — the review proceeds
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, TOUCHES_BASE) + block:reviewer-touches-check
+name: reviewer-touches-unavailable
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check

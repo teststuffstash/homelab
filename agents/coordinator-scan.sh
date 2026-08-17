@@ -41,7 +41,10 @@ STACKS_FILE="${STACKS_FILE:-${HERE}/stacks.json}"
 SPAWN=""; [ "${1:-}" = "--spawn" ] && SPAWN=1
 # ADR-097 footprint-intersection dispatch: the predicate lives in a sourceable helper so the
 # double-dispatch belt (agents/footprint-test.sh, in ci) exercises the exact code the scan runs.
-. "${HERE}/footprint.sh"
+# Source touches-check.sh which contains fp_norm_entry, fp_pair_conflict, fp_conflict,
+# fp_conflict_multi (the core prefix-intersection logic). The same helper is sourced by
+# reviewer-session.sh for computing escape sets — zero drift, two callers, one logic home (homelab#379).
+. "${HERE}/touches-check.sh"
 # ADR-106 (3): the findings-store helpers (burn-down write + checkpoint counts) — the store
 # format's ONE home; the coordinator session uses the same file's CLI verbs.
 . "${HERE}/goal-findings.sh"
