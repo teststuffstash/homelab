@@ -1,0 +1,3 @@
+CALL gh api repos/teststuffstash/homelab/issues/124 --jq .body // ""
+OUT → TOUCHES: no escapes (all paths covered by declared footprint)
+RC 0

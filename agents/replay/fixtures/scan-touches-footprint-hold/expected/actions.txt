@@ -1,0 +1,4 @@
+OUT TEST 1 PASS: overlapping touches detected
+OUT TEST 2 PASS: disjoint touches correctly identified as non-overlapping
+OUT TEST 3 PASS: wildcard sentinel conflicts with everything
+RC 0
