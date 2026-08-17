@@ -8,6 +8,22 @@ meant to avoid.)
 
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
+- **2026-08-17 overnight pickup (the all-day session's tail — full story in TICK-LOG):**
+  (1) **PRs in flight, all machine-owned:** #475 (⏸ inventory re-word — a jail watch applies the
+  operator's standing codeowner approval when the bot re-approves; if the session died, approve
+  it by hand after the bot does) · #490 (board, TRIAGE-disjointness fix pushed, re-review →
+  auto-merge) · #496 (reviewer currency gate, seat PR, bot approval completes it).
+  (2) **#491 queued** (argo ttlStrategy/podGC — the #487 durable fix): its footprint hold
+  released when #487 merged; **its ride should be the FIRST organic Go-flash worker ride** —
+  morning check: the ride pod's `homelab.teststuff.net/rail=opencode-go` label (the dogfood's
+  outstanding confirmation, still unobserved after a queue-held day).
+  (3) **Morning sweep = `devbox run board`** (post-#490; until then `bash agents/board.sh` off
+  the branch) — REVIEW should be empty, BACKLOG = #493 (+#289 oracle).
+  (4) Go meter re-check against the console after ~a day of the restarted shim (drift should
+  stay ≈0; ⚠ any future shim-code metering fix requires a shim RESTART — the running process
+  is the meter). (5) FU-155's oomactions capture after hp-01's next pressure event (#485's
+  marker-limit thesis). (6) The churn fixes' first quiet proof: next busy-master day should
+  show near-zero unstrand updates of unmergeable PRs and near-zero standing-asides.
 
 - **minutark.ee LIVE + DNSSEC COMPLETE**; oracle-iac#351 OPEN — deliverable = the bootstrap AS
   IaC, **UNBLOCKED 2026-08-12** (the host-side token session ran: two-zone ingress token minted +
@@ -46,8 +62,8 @@ meant to avoid.)
   surfaces (OPERATOR-merged 08:11Z direct to master — "subscription latch gates review" was
   the operator's account of the dispatch gap; pod rolled <1 min, ConfigMap-shipped). Interim:
   reviewer Go-failover model = **deepseek-v4-flash** (665cf64 — a $6.33 k3 review in the
-  balance regime; the proper model is decided next week). **#448 (zen-leg tool translator)
-  stays INERT** until the ~08-16 Go reset or the operator's call. PICKUP: (1) live smoke the
+  balance regime; the proper model is decided next week). **#448 SHIPPED 2026-08-17**
+  (PR#465, the LiteLLM SDK leg — luna's Anthropic-compat surface is broken even for text). PICKUP: (1) live smoke the
   proxy zen leg (`opencode/nemotron-3-ultra-free` through the in-cluster proxy — NOT verified
   post-merge); (2) the #448 dispatch call; (3) FU-172 residues; (4) cleanup: the subagent
   worktrees (`.claude/worktrees/agent-*`) + merged branches fix/opencode-zen-rail, fix/zen-rail.
