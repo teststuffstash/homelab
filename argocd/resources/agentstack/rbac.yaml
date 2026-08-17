@@ -60,9 +60,13 @@ rules:
   # FU-080 doorbell: the composed sensor-submit-coordinate Role GRANTS workflows-create to the
   # global Sensor (so it can submit a per-stack coordinate Workflow into <loop_ns>) — the same
   # escalation-check gotcha, so crossplane must itself hold these verbs to compose that Role.
+  # `delete` joined 2026-08-17: the ADR-106(5)/A2 doorbell-collapse gave the composed
+  # `agentstack-loop-workflow` Role workflows-DELETE (a starting scan absorbs Pending sibling
+  # coordinate workflows by deleting them), and the claim sat Synced=False on the escalation
+  # check — the fourth instance of this class, found on the platform claim's workerModel edit.
   - apiGroups: [argoproj.io]
     resources: [workflows]
-    verbs: [create, get, list, watch]
+    verbs: [create, get, list, watch, delete]
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get, list, watch, create, update, patch, delete]
