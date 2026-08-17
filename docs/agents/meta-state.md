@@ -9,15 +9,16 @@ meant to avoid.)
 ## Live state (2026-08-11 end-of-pipeline consolidation — history is TICK-LOG's)
 
 - ⚠ **ArgoCD autosync PAUSED 2026-08-17 (~15:00Z) on `platform` (root) + `openrouter-proxy`**
-  (`spec.syncPolicy.automated` removed via kubectl) to hold a direct-applied dashboard CM fix
-  through the 13:40Z GitHub incident (Actions/webhooks degraded → PR lane stalled). The fix =
-  PR#483 (`fix/dashboard-window-ghost-series`, auto-merge armed); live CM
-  `agent-egress/grafana-dashboard-subscription-mh28mgm74t` patched to the branch content and
-  verified through Grafana (uid `claude-subscription`: 9 max-wrapped exprs, instant stats).
-  A background watch in the jail session restores `automated: {prune: true, selfHeal: true}`
-  on BOTH apps when #483 merges — **if the session died, restore manually after the merge**
-  (both patches, then confirm the child goes Synced and the old-hash dashboard CM is pruned).
-  DELETE this bullet once restored.
+  (`spec.syncPolicy.automated` removed via kubectl) to hold direct-applied content through the
+  13:40Z GitHub incident (PR lane stalled). Live-applied ahead of master: dashboard CM
+  `agent-egress/grafana-dashboard-subscription-mh28mgm74t` (v4), the proxy script CM
+  `openrouter-proxy-script-79945t87dk` (Go resets gauge + FU-170a Go semaphore), and
+  `OPENCODE_MAX_RUNNING=5` on the deployment. **Restore condition: BOTH PR#483 (dashboard)
+  AND PR#484 (semaphore + env) MERGED** — restoring after only one lets selfHeal revert the
+  other. A jail-session watch does it (operator order 2026-08-17: "once this settles turn on
+  autosync again"); **if the session died, restore manually once both merge**: patch
+  `automated: {prune: true, selfHeal: true}` back onto both apps, confirm the child goes
+  Synced/Healthy (new-hash CMs, old pruned, env intact). DELETE this bullet once restored.
 
 - **minutark.ee LIVE + DNSSEC COMPLETE**; oracle-iac#351 OPEN — deliverable = the bootstrap AS
   IaC, **UNBLOCKED 2026-08-12** (the host-side token session ran: two-zone ingress token minted +
