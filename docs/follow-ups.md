@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-173**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-174**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -95,6 +95,14 @@ six OVERSIZE items pointer-ized into
 
 ## GitOps & platform
 
+- [ ] **FU-173** — **Grafana panel plugins install unpinned** — `grafana.plugins:
+      [frser-sqlite-datasource]` in `argocd/platform/values/kube-prometheus-stack.yaml` fetches
+      the LATEST release on every pod start, so a plugin release can change prod behavior with no
+      commit anywhere. Ruled out as the cause of the 2026-08 sleep-overview breakage (no frser
+      release since 4.0.6, 2026-05-11) but it's a live silent-regression vector, and sleep's
+      integration gate pins 4.0.6 — prod can drift from what CI tested. **Next:** pin the version
+      (`frser-sqlite-datasource 4.0.6` in the plugins list) and let Renovate own the bump like any
+      chart. Surfaced by sleep-tracking#121 (dashboard render goal). Relates FU-136.
 - [ ] **FU-137** — **Garage has no offsite backup** — `replication_factor = 1` on one node, all
       redundancy borrowed from Longhorn's 2 replicas, and nothing copies the objects off the
       cluster. (FU-013 backs things *into* Garage; this is the other direction.) **Interim taken
@@ -482,9 +490,14 @@ the block needs pruning, not more headings.
       root-owned artifacts; whole-ledger 146KB brief > argv cap; tee ate cell death), the lane
       had NEVER run end-to-end; all fixed + hand-fired green, **first report DELIVERED**
       (PR#246 merged; single-cell — cell-b mechanics = homelab#248; belt's first firing = real).
-      **Next:** 2026-08-17 = first UNATTENDED run; process-change batch FILED + QUEUED
-      2026-08-11 (homelab#256-259, circles#77/#78, oracle-fleet#258); then ledger emitter
-      gaps, MCP slices (§B2). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
+      First UNATTENDED fire 2026-08-17 (PR#454: opus report full; deepseek cell = empty
+      template — self-check has no content floor). **SPLIT RULED 2026-08-17 (operator, §B2):
+      platform retro FIRST (rename the lane to what r4 proved it is: fleet-wide worst-K,
+      cross-repo structural reads by design; access re-scoped — fleet read token, Prometheus
+      route or drop the dark jail-$/day KPI), stack retros SECOND with briefs authored against
+      the platform retro's coverage (non-overlap).** **Next:** the rename/access/self-check
+      build wave (§B2 The split); r4's 3 new ledger blind spots join the emitter-gaps leg;
+      MCP slices (§B2). Absorbs FU-057's residue. Relates FU-095, ADR-103 (rule 3).
 
 - [ ] **FU-067** — **Hubble flow EXPORT → Alloy → Loki (denied-flows event drill-down) — only if
       the drop `destination` label proves insufficient.** Context (2026-07-12): the FU-020 ride's
