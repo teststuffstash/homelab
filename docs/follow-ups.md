@@ -263,6 +263,12 @@ the block needs pruning, not more headings.
       unchanged: the charter's cost rethink
       ([`agents/chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink,
       #431/#432) extended rail-side.
+      **SCOPED 2026-08-17 (operator, dashboard-parity review):** the residual = three proxy-side
+      pieces — (a) **Go concurrency semaphore** (`rail=opencode-go` pod count composed into
+      `/opencode-limit` limited; the FU-088 analog — IN BUILD via jail subagent), (b) **jail-ingest
+      freshness gauge** (age of last `stack=jail` go_usage row — the 2026-08-17 stale-shim
+      under-metering, detection half), (c) **Go 429 counter + near-threshold alerts** (zero
+      opencode-window alert rules exist today). Dashboard parity panels ride each piece.
 - [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
