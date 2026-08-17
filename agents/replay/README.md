@@ -132,6 +132,7 @@ is stale, so it cannot drift the way the prose register did.
 | `_selftest-missing-sentinel` | actions | - | `agents/coordinator-scan.sh` | - |
 | `_selftest-unrecorded-read` | actions | - | `-` | - |
 | `_selftest-wrong-expectation` | actions | - | `-` | - |
+| `adopted-not-queued-surfaces` | actions | - | `agents/coordinator-scan.sh` | - |
 | `arbitrate-first-tick` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `arbitrate-probe-unreadable` | actions | - | `agents/coordinator-scan.sh` | MP-T11 |
 | `argv-payload-over-ceiling` | actions | - | `agents/agent-session.sh` | - |
