@@ -514,6 +514,12 @@ template headers (the deepseek-v4-pro cell shipped a 9-line empty skeleton as it
 the check needs a content floor, not a header grep), and the swapped-cell cross-review must
 refuse an empty report as its input.
 
+**A retro process change with a platform half and a per-repo half files as one issue PER
+repo, never as a clause delegated to "the next recipe touch" (r4 F3).** The contrast is
+measured: every r3 change that got its own per-repo issue landed within a day (circles#77/
+#78); the one delegated to "the next recipe touch" was missed by that very touch (#257's
+recipe half — commit 8bc4ecb edited the exact file and did not carry it).
+
 **Cadence status (corrected 2026-08-11):** unsuspended 2026-08-03 — but the lane had NEVER run
 end-to-end until 2026-08-11: five latent bugs (guard busy-probe read kubectl's stderr as pods;
 missing `AWS_REGION` in tsenv; harvest artifacts root-owned; a whole-ledger 146KB brief blew the
