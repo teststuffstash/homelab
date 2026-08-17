@@ -8,6 +8,14 @@ ids here as still defined (references elsewhere stay legal while archived) and w
 entry is past its freshness window. Deleting an expired entry: scrub any remaining references in
 living code/docs first (references in the TICK-LOG / `docs/adr.md` are historical and exempt).
 
+- **FU-146** *(archived 2026-08-17)* — per-item dispatch hold: all three PR-side clauses shipped
+  2026-08-07 and audited clean; the re-opened issue-side leg (the #153 five-dispatch storm — five
+  item sessions in 11 min off a merge-storm doorbell cascade) shipped as PR#480
+  (`session_atomic_gate` in coordinator-session.sh: item pods named `coordinator-<repo>-<item>`,
+  reap-terminal/refuse-live/exit-3, + the scan's session-belt probe at the FU-146 sites and the
+  c4c5 `$sess` exclusion; fixtures session-atomic-gate + session-belt-*). Proof: #153 re-queued
+  post-merge, rode once, fix merged as #485. Gotcha: `$fpr_issue` under `set -u` on probe failure
+  killed the whole scan in review — init + `${fpr_issue:-}`.
 - **FU-166** *(archived 2026-08-12)* — meta-watches event-driven, both legs. (a) BUILT: the
   codeowner park is a first-class exporter series (`github_pull_request_codeowner_park` +
   `_reflex_wait`, predicate incl. green baked in) + `CodeownerParkWaiting` >30m alert +

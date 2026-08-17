@@ -137,6 +137,18 @@ queueing semantics, the latch provides ground truth. ConfigMap semaphores are na
 so per-stack workflows carry the latch only (decided with FU-080: per-stack capacity =
 subscription-latch, no cross-ns semaphore — the Composition's rendered crons rely on the probe).
 Never suspend a schedule for capacity — `suspend: true` is state that rots.
+**The Go rail runs the same pattern (ADR-107/FU-170, 2026-08-17).** Go-rail rides
+(`rail=opencode-go` pods) gate on `GET /opencode-limit`: self-metered usage-value windows
+($12/5h · $30/wk · $60/mo, epoch-anchored grids — gometer, PR#481; drawn at LIST price on raw
+tokens, badge-halved) plus the FU-088-pattern **concurrency semaphore** — the proxy counts
+Running `rail=opencode-go` pods cluster-wide, `OPENCODE_MAX_RUNNING` (explicit 5 in the
+deployment, mirroring the anthropic bound), composed into the endpoint's top-level `limited`
+so every consumer (worker gate, reviewer failover) inherits it with zero launcher changes
+(PR#484). Fail-open on an unreadable count, like every capacity gate here. Jail Go burn
+self-meters into the same ledger via the shim's token-gated ingest (ADR-108) — ⚠ the metering
+code rides the RUNNING shim process, so a shim started before a metering fix keeps under-counting
+until relaunched (the 2026-08-17 drift: six hours at ~7% of true draw).
+
 **This section is the ONE home of the FU-088 capacity story** — README/merge-path link here.
 
 ### Triggers: polling first, webhooks as an edge-trigger on top
