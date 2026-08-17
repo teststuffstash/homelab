@@ -296,6 +296,9 @@
       "model-id-test": [
         "bash agents/model-id-test.sh"
       ],
+      "board": [
+        "bash agents/board.sh \"$@\""
+      ],
       "github-apps-lint": [
         "python3 scripts/github-apps-lint.py"
       ],
