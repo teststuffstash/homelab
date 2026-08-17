@@ -1,0 +1,42 @@
+[
+  { "number": 110, "title": "adopted but not queued — the adopted-not-queued class case",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" } ],
+    "createdAt": "2026-08-08T09:14:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 111, "title": "adopted and queued — must not appear in the new class",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" }, { "name": "agent/queued" } ],
+    "createdAt": "2026-08-07T18:02:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 112, "title": "adopted and in-progress — must not appear in the new class",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" }, { "name": "agent/in-progress" } ],
+    "createdAt": "2026-08-07T18:02:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 113, "title": "adopted and blocked — must not appear in the new class",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" }, { "name": "agent/blocked" } ],
+    "createdAt": "2026-08-07T18:02:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 114, "title": "bot-authored, no labels at all — a real sprout, not adopted",
+    "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [],
+    "createdAt": "2026-08-06T11:00:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 115, "title": "adopted with agent/review state — must not appear in the new class",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" }, { "name": "agent/review" } ],
+    "createdAt": "2026-08-08T09:15:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } },
+
+  { "number": 116, "title": "adopted with agent/error state — must not appear in the new class",
+    "author": { "login": "homelab-agents-1234", "is_bot": true },
+    "labels": [ { "name": "agent-fix" }, { "name": "agent/error" } ],
+    "createdAt": "2026-08-08T09:16:00Z",
+    "blockedBy": { "totalCount": 0, "nodes": [] } }
+]

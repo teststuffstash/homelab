@@ -1,9 +1,10 @@
 # ADR-102 / homelab#207 — the 🌱 slice must not report post-launch BUCKETS as untriaged sprouts.
+# Synced with homelab#405: adopted-not-queued class (⏸) now surfaces adopted issues without state.
 #
 # CONDITION UNDER REPLAY. Four open issues, one of each shape the slice has to tell apart:
 #   #80 bot-authored, unlabelled, titled `post-launch:` → a CONTAINER. Must NOT appear.
-#   #81 bot-authored, unlabelled                        → a real inert sprout. MUST appear.
-#   #82 bot-authored, already carries agent-fix         → adopted. Must not appear.
+#   #81 bot-authored, unlabelled                        → a real inert sprout (🌱). MUST appear.
+#   #82 bot-authored, already carries agent-fix         → adopted-not-queued (⏸). MUST appear in new class.
 #   #83 human-authored                                  → never this slice's business.
 #
 # WHY #80 MATTERS. A bucket is bot-authored and carries no `agent-fix`, so it matches this slice

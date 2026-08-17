@@ -1075,6 +1075,21 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       | "  issue #\(.number) — \(.title) (by \(.author.login // "?"); blockers all closed: \([(.blockedBy.nodes // [])[] | "#\(.number)"] | join(", ")))"' 2>/dev/null)" || unblines=""
     [ -n "$unblines" ] && orphans="${orphans}[$repo] 🔓 UNBLOCKED-UNLABELED — every blocked-by edge is closed and the issue is still unlabelled >24h (FU-090 gate stands: label agent-fix[+queued] to adopt, or close it):\n${unblines}\n"
     unbnums="$(printf '%s' "$unb" | jq -c '[.[].number]' 2>/dev/null)" || unbnums='[]'
+    # The backlog inventory (homelab#405 → ADR-109): `agent-fix` without any `agent/*` state is
+    # ORDINARY BACKLOG — suitable, deliberately unreleased — not an anomaly. The state's real
+    # defect was having NO reader (#369 sat adopted-and-buried); the reader it needs is an
+    # AGGREGATE (count + oldest), so standing items never re-scroll as per-issue nags (the
+    # oracle-fleet track/* set is this state's designed use). Per-issue expansion is the
+    # operator's `devbox run board -- <stack> --full`. The oldest is named by DATE, not age —
+    # a replayed report must be byte-stable (fixtures pin this line).
+    # Predicate unchanged: agent-fix ∧ ¬(any label starting with "agent/").
+    # Disjoint from 🌱 by construction (sprout requires ¬agent-fix).
+    adopted="$(printf '%s' "$inert" \
+      | jq -r '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|any(startswith("agent/")))|not))]
+        | select(length > 0)
+        | (sort_by(.createdAt)[0]) as $old
+        | "\(length) suitable-unqueued (oldest #\($old.number) since \(($old.createdAt // "unknown")[0:10]))"' 2>/dev/null || true)"
+    [ -n "$adopted" ] && orphans="${orphans}[$repo] ⏸ backlog: ${adopted} — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full\n"
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so
     # they never rot silently. Anything the clause above already named is EXCLUDED: same issue,
