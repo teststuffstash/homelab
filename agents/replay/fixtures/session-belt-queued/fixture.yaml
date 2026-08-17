@@ -1,0 +1,30 @@
+# FU-146 (homelab#153 five-dispatch storm) — leg (a): a RUNNING `coordinator-<repo>-issue-<n>`
+# session pod holds the queued-dispatch unit, so `agent/queued` persisting through a session's
+# 6–10 min triage cannot re-fire a second session onto the same item.
+#
+# CONDITION UNDER REPLAY. Issue #153 is `agent-fix` + `agent/queued` and a coordinator session
+# (`coordinator-homelab-issue-153`) is RUNNING in the loop ns — the exact state the first of the
+# five #153 sessions was in while the queued-dispatch clause re-fired (10:44:35 and 10:45:34).
+# Issues #70 and #201 are `agent/queued` with no session pod — ordinary, dispatchable.
+#
+# THE CONTRACT:
+#   1. #153 is HELD — the unit is not emitted and the orphan line names the reason
+#      ("item session in flight"). The hold is conditioned on a LIVE session pod, so it
+#      self-releases when the pod goes terminal; it can only ADD holds, never remove one.
+#   2. #70 / #201 DISPATCH — a session pod for a sibling must not hold unrelated queued work.
+#   3. The pod read goes through the PATH-shim kubectl (`get pods` in the loop ns) so the probe
+#      itself is asserted: a belt that stopped probing would look identical if only the hold line
+#      were pinned.
+#   4. The belt is OFF when `dispatchable` is empty (context-only repos never spawn sessions).
+#
+# The session-pod probe block (`session-belt`) is replayed ahead of the cases so `sess_busy` is
+# computed from the recorded pod list, exactly as the shipped per-repo loop does it.
+name: session-belt-queued
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:session-belt
+  - file:cases.sh
+  - block:session-belt-queued
+  - file:post.sh

@@ -1,0 +1,11 @@
+{
+  "apiVersion": "v1",
+  "kind": "PodList",
+  "metadata": { "resourceVersion": "1" },
+  "items": [
+    {
+      "metadata": { "name": "coordinator-circles-pr-396" },
+      "status": { "phase": "Running" }
+    }
+  ]
+}

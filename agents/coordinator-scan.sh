@@ -655,6 +655,9 @@ fast_unit_dispatch() {
   # WIP probe, same shape as the main loop (null-strip is load-bearing — issue-96):
   # probe failure pins wip=1 (belt-only), never blocks the in-flight fix round.
   fwip=1
+  fpr_issue=""   # PR#480 review: assigned only inside the probe's success block below — an
+                 # unguarded read after a FAILED probe is an unbound-variable death for the
+                 # WHOLE scan under set -u; initialized here so every later read is safe.
   if FPODS="$("$KUBECTL" $KUBE -n "$frepo" get pods -l app=agent-session,project="$frepo" \
         --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
      && jq -e . >/dev/null 2>&1 <<<"${FPODS:-null}"; then
@@ -683,6 +686,30 @@ fast_unit_dispatch() {
       return 0
     fi
     fwip=$((flive + 1))
+  fi
+  # FU-146 session-currency (the #153 storm): a RUNNING `coordinator-<repo>-<item>` session pod is
+  # the item's in-flight work. The doorbell takes this path, so the belt belongs here exactly as in
+  # the main loop. Probe the LOOP ns; fail-open to the launcher atomic gate on a dead probe
+  # (matches the worker-WIP belt's direction — units flow, the gate refuses, rule #6).
+  # Two names to hold on: the PR's OWN session pod (a live changes-requested session for this PR)
+  # and the linked issue's session pod (a queued-dispatch session riding the PR's issue — the same
+  # shape the main-loop changes-requested hold uses).
+  if SESSPODS="$("$KUBECTL" $KUBE -n "${LOOP_NS:-agent-coordinator}" get pods -l app=agent-coordinator \
+        --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
+     && jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}"; then
+    if printf '%s' "$SESSPODS" | jq -e --arg p "coordinator-${frepo}-${fitem}" \
+          '[.items[]? | (.metadata.name // "") | select(. == $p)] | length > 0' >/dev/null 2>&1; then
+      echo "unit fast-path: held — a coordinator session is riding ${frepo} ${fitem} (FU-146 session belt)"
+      return 0
+    fi
+    if [ -n "${fpr_issue:-}" ] \
+       && printf '%s' "$SESSPODS" | jq -e --arg p "coordinator-${frepo}-issue-${fpr_issue}" \
+            '[.items[]? | (.metadata.name // "") | select(. == $p)] | length > 0' >/dev/null 2>&1; then
+      echo "unit fast-path: held — a coordinator session is riding issue #${fpr_issue} (FU-146 session belt); PR ${fitem#pr-}"
+      return 0
+    fi
+  else
+    echo "unit fast-path: ⚠ coordinator session-pod probe FAILED — FU-146 session belt off this tick; the launcher atomic gate is the backstop" >&2
   fi
   frepos="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.repos[]' | tr '\n' ' ')"
   fmain="$(stacks_json | jq -r --arg n "$fstack" '.stacks[]|select(.name==$n)|.mainRepo // "homelab"')"
@@ -931,6 +958,42 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
       # Rule #6: a dead probe must not read as calm — the launcher belt still refuses, but say so.
       echo "  [$repo] ⚠ WIP pod probe FAILED (kubectl error) — units flow at wip=1, launcher belt only"
     fi
+    # >>>REPLAY:session-belt>>>
+    # FU-146 session-currency belt (homelab#153 five-dispatch storm): a RUNNING
+    # `coordinator-<repo>-<item-key>` session pod in the LOOP ns means a coordinator ITEM session
+    # is riding that unit — hold it everywhere the worker-per-item hold fires. A coordinator
+    # session runs 6–10 min of triage before (or without ever) spawning a worker pod, so the
+    # worker-only per-item hold is blind to it; that blindness let `queued-dispatch` re-fire while
+    # `agent/queued` still stood and let `c4c5-redispatch` read the mid-triage footprint as
+    # abandonment (five sessions, one issue, 11 minutes).
+    # Probed ONCE per repo in the loop ns (the ns sessions actually run in — `agent-coordinator`
+    # for the global scan, `<stack>-agents` under perStack, the same ns the scan pod itself lives
+    # in). Probe-failure direction MATCHES the WIP belt: a dead probe does not read as calm, but
+    # it must not invent a hold either — units flow and the launcher's atomic gate is the backstop
+    # (rule #6, exactly what the wip_busy else-branch above does).
+    # `sess_busy` = newline-joined item keys (issue-N / pr-N) with a live session pod; `sess_nums`
+    # = space-joined ISSUE numbers only, for the c4c5 selector's `$sess` exclusion.
+    sess_busy=""; sess_nums=""
+    if [ -z "$dispatchable" ]; then
+      :
+    elif SESSPODS="$("$KUBECTL" $KUBE -n "${LOOP_NS:-agent-coordinator}" get pods -l app=agent-coordinator \
+          --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)"; then
+      jq -e . >/dev/null 2>&1 <<<"${SESSPODS:-null}" || SESSPODS='{"items":[]}'
+      # Full-name match, not a bare prefix: `coordinator-circles-` must not capture
+      # `coordinator-circles-iac-…` (a repo name that is another's prefix).
+      sess_busy="$(printf '%s' "$SESSPODS" | jq -r --arg repo "$repo" '
+          [.items[]? | (.metadata.name // "")
+           | select(test("^coordinator-" + $repo + "-(issue|pr)-[0-9]+$"))
+           | sub("^coordinator-" + $repo + "-"; "")] | .[]' 2>/dev/null || true)"
+      sess_nums="$(printf '%s\n' "$sess_busy" | sed -n 's/^issue-//p' | tr '\n' ' ')"
+    else
+      echo "  [$repo] ⚠ coordinator session-pod probe FAILED (kubectl error) — FU-146 session belt off this tick; the launcher atomic gate is the backstop" >&2
+    fi
+    sess_holds() {   # $1 = item key (issue-N / pr-N); 0 = a coordinator session is riding it
+      [ -n "$sess_busy" ] || return 1
+      printf '%s\n' "$sess_busy" | grep -qx -- "$1"
+    }
+    # <<<REPLAY:session-belt<<<
     # Per-repo AGENT_WIP_LIMIT for whatever unit the spawn block picks for this repo (units are
     # stack-pooled there, so carry the per-repo value out of the loop).
     wipmap="${wipmap}${repo} ${wip_allow}\n"
@@ -1143,6 +1206,17 @@ EOF_GUARDED
         orphans="${orphans}[$repo] ⏳ project WIP at ceiling (${REPO_MAX_WIP} live workers in ${repo} — ADR-097 hard max):\n  issue #${qnum} — ${qtitle}\n"
         continue
       fi
+      # >>>REPLAY:session-belt-queued>>>
+      # FU-146 session-currency hold (the #153 storm, leg (a)): `agent/queued` persists through a
+      # coordinator session's 6–10 min triage, so a plain label-based dispatch re-fires while the
+      # first session is still riding. A RUNNING `coordinator-<repo>-issue-<n>` pod is the item's
+      # in-flight work — hold the unit (same self-releasing shape as the worker per-item hold: it
+      # clears when the session pod goes terminal).
+      if sess_holds "issue-${qnum}"; then
+        orphans="${orphans}[$repo] ⏳ held (item session in flight) — a coordinator session is riding issue #${qnum} (FU-146):\n  issue #${qnum} — ${qtitle}\n"
+        continue
+      fi
+      # <<<REPLAY:session-belt-queued<<<
       # TRACKS rule 1: NEW work is held while the repo carries ≥ REPO_PR_CAP open PRs — the
       # updater reflex rebases every open PR on every merge (churn is O(open PRs × merges)).
       # In-flight recovery clauses (c4c5, merge-conflict, …) are exempt: they REDUCE the count.
@@ -1600,6 +1674,12 @@ EOF_GUARDED
         orphans="${orphans}[$repo] ⏳ changes-requested held — a worker is already riding issue #${pr_issue} (FU-146 per-item):\n  PR #${u}\n"
         continue
       fi
+      # FU-146 session-currency (the #153 storm, leg (a) for the PR lanes): a coordinator session
+      # riding the linked issue is that item's in-flight work — same self-releasing shape.
+      if sess_holds "issue-${pr_issue}"; then
+        orphans="${orphans}[$repo] ⏳ changes-requested held (item session in flight) — a coordinator session is riding issue #${pr_issue} (FU-146):\n  PR #${u}\n"
+        continue
+      fi
       # BLOCKED-SOURCE hold (2026-08-07): an `agent/blocked` source issue is a HUMAN gate (budget
       # refusal, design decision) — re-judging its PR cannot move it and burned one sonnet judge
       # per cycle on circles PR#58 (AGENT_BUDGET_REFUSED, two sessions in 25 min). Fail-safe like
@@ -1687,6 +1767,7 @@ EOF_GUARDED
              | .number as $n
              | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
+             | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)'
           # <<<REPLAY:c4c5-selector<<<
           # ── THE INFEASIBLE TERMINAL (retro r3 F4, homelab#257) ────────────────────────────────
@@ -1717,7 +1798,7 @@ EOF_GUARDED
           # >>>REPLAY:infeasible-terminal>>>
           infeas_done=""
           for icand in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" \
-              --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
+              --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" "$C4C5_SEL"' | "\($n)"'); do
             icmt="$(gh api "repos/${slug}/issues/${icand}/comments?per_page=100" 2>/dev/null)" || icmt=""
             # `type == "array"`, not a bare `jq -e .`: an error OBJECT is truthy, and `.[]` over it
             # feeds `(.body // "")` a string, which is a jq ERROR — inside `imark="$(…)"` under
@@ -1811,7 +1892,7 @@ EOF_GUARDED
           # gate it was just given. Excluded here, and from both derivations below, via the same
           # `$done` list the belt's own clears use.
           [ -n "$dispatchable" ] && c4c5_cands="$(printf '%s' "$inprog" \
-            | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+            | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
               --arg done "${infeas_done:-}" \
               "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                | "\($n)|\(.updatedAt // "")"')"
@@ -1897,16 +1978,17 @@ EOF_GUARDED
             fi
           fi
           # >>>REPLAY:c4c5-derivations>>>
-          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+          v2="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
             --arg done "${c4c5_cleared:-}${infeas_done:-}" \
             "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | "  issue #\($n) — \(.title) [in-progress, worker terminal, no PR → C4/C5 re-tick]"')"
           # The held goal children get their OWN report line — silence here is what let the first
           # one through. This is a REPORT, never a unit: a human/meta decides merged-vs-abandoned.
-          ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+          ambig="$(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
             '.[] | select(((.labels|map(.name))|index("agent/error"))|not) | .number as $n
              | select((($cg | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select((($gb | split(" ") | map(select(. != ""))) | index(($n|tostring))))
+             | select((($sess | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
              | select(([$bodies[] | select(test("#\($n)\\b"))] | length) == 0)
              | "  issue #\($n) — \(.title) [goal child, worker terminal, no open PR, and NO merged PR cites it — merged-but-unlinked or abandoned? C4/C5 HELD (FU-143 / agent-runtime#32). Verify against the goal branch, then close it or re-queue it by hand.]"')"
           [ -n "$ambig" ] && orphans="${orphans}[$repo] ⛔ goal child in an undecidable state — C4/C5 held rather than guessing:\n${ambig}\n"
@@ -1915,7 +1997,7 @@ EOF_GUARDED
             # and emitting the unit too would race the queued lane onto the same issue. An issue
             # the INFEASIBLE terminal parked is excluded for the opposite reason — it is human-
             # gated, and the whole point of the marker is that this unit must never carry it.
-            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" \
+            for u in $(printf '%s' "$inprog" | jq -r --argjson bodies "$BODIES" --arg cg "${c6g_nums:-}" --arg gb "${goalbased_nums:-}" --arg sess "${sess_nums:-}" \
                 --arg done "${c4c5_cleared:-}${infeas_done:-}" \
                 "$C4C5_SEL"' | select((($done | split(" ") | map(select(. != ""))) | index(($n|tostring))) | not)
                  | "\($n)|\([.labels[].name | select(startswith("task/"))] | first // "task/fix" | ltrimstr("task/"))"'); do
@@ -2008,6 +2090,11 @@ EOF_GUARDED
            && printf '%s' "${WIPPODS_JSON:-null}" | jq -e --arg pat "issue-${red_issue}-" \
                 '[.items[]? | select((.metadata.name // "") | contains($pat))] | length > 0' >/dev/null 2>&1; then
           orphans="${orphans}[$repo] ⏳ ci-red held — a worker is already riding issue #${red_issue} (FU-146 per-item):\n  PR #${u}\n"
+          continue
+        fi
+        # FU-146 session-currency (the #153 storm, leg (a) for the ci-red lane): same self-releasing shape.
+        if sess_holds "issue-${red_issue}"; then
+          orphans="${orphans}[$repo] ⏳ ci-red held (item session in flight) — a coordinator session is riding issue #${red_issue} (FU-146):\n  PR #${u}\n"
           continue
         fi
         # BLOCKED-SOURCE hold (2026-08-07) — same as the changes-requested clause's, same
