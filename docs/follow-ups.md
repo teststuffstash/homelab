@@ -264,8 +264,8 @@ the block needs pruning, not more headings.
       ([`agents/chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink,
       #431/#432) extended rail-side.
       **SCOPED 2026-08-17 (operator, dashboard-parity review):** the residual = three proxy-side
-      pieces — (a) **Go concurrency semaphore** (`rail=opencode-go` pod count composed into
-      `/opencode-limit` limited; the FU-088 analog — IN BUILD via jail subagent), (b) **jail-ingest
+      pieces — (a) **Go concurrency semaphore** ✅ DONE 2026-08-17 (PR#484 + `OPENCODE_MAX_RUNNING=5`
+      explicit in the deployment; composed into `/opencode-limit` limited, gauges + board panel), (b) **jail-ingest
       freshness gauge** (age of last `stack=jail` go_usage row — the 2026-08-17 stale-shim
       under-metering, detection half), (c) **Go 429 counter + near-threshold alerts** (zero
       opencode-window alert rules exist today). Dashboard parity panels ride each piece.
@@ -309,24 +309,6 @@ the block needs pruning, not more headings.
       reflex (armed with the review.md worlds-are-extraordinary rule) must catch it unaided.
       One run suffices (operator: not 1000 — residual risk = git blame + an eventual larger
       periodic review). Relates ADR-097, ADR-103, FU-165, FU-168, #354.
-
-- [ ] **FU-146** — **The per-item dispatch hold, all three clauses SHIPPED — 2 of 3 proven live**
-      (main scan `fc606e2`, doorbell fast path `277a73f`, `ci-red` `f0169f1`; Loki 2026-08-07:
-      `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
-      fast-path clause just hasn't seen eligible traffic). Audit DONE 2026-08-11, clean:
-      changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch carry
-      state-fp, post-08-07 clauses emit no dispatch units. **RE-OPENED FOR A NEW LEG 2026-08-17
-      (homelab#153 breaker latch): the hold is blind to COORDINATOR SESSIONS.** A 7-PR merge
-      storm's doorbell cascade handed #153 to FIVE item sessions in 11 min (two contradictory
-      terminals 65s apart, FU-069 tripped) — `queued-dispatch` re-fires while `agent/queued`
-      persists through a session's 6–10-min triage, and `c4c5-redispatch` fires on the
-      in-progress+no-worker-pod footprint a MID-TRIAGE session itself leaves. The per-item hold
-      keys on worker pods only; #198's state-fp is PR-side only. **Next: the issue-side guard**
-      — the hold counts in-flight coordinator SESSION pods for the item (label the detached
-      session pod with its item, selector-count it in the hold — the wip_busy pattern), and
-      c4c5 gains a session-aware currency check; fixtures per the ratchet. Do NOT re-queue
-      #153 before it lands (the breaker comment's own warning). The AGENT_ERROR comment on
-      #153 is the full mechanism record.
 
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A
@@ -647,7 +629,10 @@ the block needs pruning, not more headings.
       and the ⚖ recommendation (pin the ephemeral tier to Talos v1.13.8 first, alone,
       re-measure): [`docs/spikes/talos-psi-thresholds.md`](spikes/talos-psi-thresholds.md)
       (#157/PR#160). **Next:** operator rules tune-vs-accept; run the spike's §6
-      `talosctl get oomactions` capture BEFORE any upgrade. Relates FU-139/FU-112, ADR-044.
+      `talosctl get oomactions` capture BEFORE any upgrade. Victim-surface shrunk 2026-08-17:
+      the two biggest UNLIMITED pods got limits (#485 Prometheus 8Gi marker-limit, #487
+      workflow-controller 1Gi) — the OOMController's preferred-victim set no longer contains
+      them. Relates FU-139/FU-112, ADR-044.
 - [ ] **FU-033** — Before any Talos 1.14 upgrade: apply the `VolumeConfig secure:false` /
       `noexec` patch or `/var` breaks Longhorn v1 (warning in `tofu/longhorn.tf`).
 - [ ] **FU-034** — Buy a network Zigbee coordinator (SLZB-06 class) — unblocks local radios
