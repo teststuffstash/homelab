@@ -1,0 +1,17 @@
+# The pushgateway's persistence volume (homelab#372, operator ruling 2026-08-17: "do the pvc").
+# The gateway is a STORE, not a mirror: agent_run_* / scan-phase / goal-budget groups are pushed
+# once per TRANSITION and nothing republishes them, so an emptyDir reschedule destroyed the lot —
+# the failure class three alerting PRs (#336/#353/#370) built per-alert guards around. 1Gi is
+# generous headroom for ~one series per (project,issue,round) plus phase rows; Longhorn (default
+# StorageClass, replicated) also survives node loss. RWO is fine at replicas:1 + Recreate.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pushgateway-data
+  labels:
+    app: prometheus-pushgateway
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
