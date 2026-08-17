@@ -157,6 +157,9 @@
       "manifest-lint": [
         "bash scripts/manifest-lint.sh \"$@\""
       ],
+      "machines-lint": [
+        "bash scripts/machines-lint.sh"
+      ],
       "prometheus-rules-lint": [
         "bash scripts/prometheus-rules-lint.sh"
       ],
