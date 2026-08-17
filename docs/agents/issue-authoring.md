@@ -94,6 +94,42 @@ That target is already partly real: the alert lane self-queues from the responde
 The remaining work is on the merge side — tier 1 dropping back to unowned once the IAC-G04 sentinel
 covers homelab — **not** on adding more checks before the launch.
 
+## Label semantics — `agent-fix` is SUITABILITY (ADR-109, 2026-08-17)
+
+The label's one meaning, ratified after four readers had drifted to four
+(the opt-in table / "adoption ends triage" / the responder's diagnosis / ¬agent-fix as the
+jail-lane marker — no doc owned it): **`agent-fix` = "machine-doable; the loop MAY be given
+this."** One bit. It says nothing about *when*, nothing about *whose*, and applying it promises
+nothing. `agent/queued` is the only release valve; dispatch requires both (unchanged).
+Consequences of reading it any other way, now retired:
+
+- `agent-fix` without an `agent/*` state is **ordinary backlog** — a normal, legal, possibly
+  long-lived state (oracle-fleet's `agent-fix + track/*` set is its designed use). Report
+  surfaces render it as an **aggregate** (count + oldest age per repo), never per-issue nags.
+  What #405 actually established is that the state had NO reader; the reader it needed is an
+  inventory, not an anomaly line.
+- The chainless charter's corpus-batch filter stops keying "jail-lane" on ¬agent-fix — a
+  flagged-but-unreleased issue is also the operator's until queued.
+- **Operator intent is never machinery state**: "no new Goals on stack X until Y" gates only
+  operator actions (Goal launch is structurally human-only), so it lives as a meta-state row
+  with an explicit un-park trigger — never a claim knob flip, never a label.
+  `agent/blocked` stays strictly *technically blocked — a human must SOLVE something*.
+
+**Who authors, who auto-applies, who guarantees queueing** (the full inventory — every
+auto-apply surface carries a named queue-decider; the human surface deliberately has none):
+
+| Author surface | Applies `agent-fix`? | Queue-decider |
+|---|---|---|
+| human / jail session (specs, triage, direction) | by hand (a suitability judgment) | none — backlog until the human queues (the inventory ages it) |
+| responder (alert lane, IL-T03) | ✅ auto, by the SHELL, as diagnosis | ✅ fix-debounce set-pass (IL-T23–25) |
+| goal checkpoint (mints, funded open goals) | ✅ auto | ✅ budget-gated mint queues in the same act; the right dies with the goal |
+| harvest / janitor (master lane) | ❌ never (breaker #1) | n/a — 🌱-surfaced for human triage |
+| retro | ❌ (files inert) | n/a |
+
+The operator's who-acts view over all of this is **`devbox run board [-- <stack>]`**
+(`agents/board.sh`, platform pilot): review queue · parks/latches · triage · verdicts due ·
+the backlog aggregate. Deterministic `gh` reads only — a retrieval tool, not a corpus sitting.
+
 ## Leg (a) — follow-up harvest — BUILT 2026-07-27
 
 The C6 / merged item session files each `Follow-ups:` bullet as an issue, with provenance links,
