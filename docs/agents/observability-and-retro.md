@@ -479,6 +479,33 @@ reports move stack-side — the standard mechanism/policy split (platform-and-st
 teststuff (Forgejo) is NOT in the retro's access set — no Forgejo key minting exists and none
 is needed for this.
 
+**⚖ THE SPLIT (operator ruling, 2026-08-17, from the r4 evidence): the retro divides into the
+PLATFORM retro and per-stack retros — built in that order.**
+
+1. **The platform retro FIRST — the current lane, renamed to what it already is.** r4 ("oracle
+   r4", PR#454) proved the shape: the pain-rank step reads the WHOLE `_ledger.jsonl` with no
+   stack filter (retro-argo.yaml), the worst-K landed on circles/homelab/openrouter-operator/
+   sleep rows while oracle sat quiet, and every finding targets a PLATFORM artifact (recipes,
+   the coordinator brief, the ledger emitter). That is correct, not a bug — **structural
+   problems require looking into the stack repos; no way around it** (operator). What follows
+   is that ACCESS tracks the questions instead of the oracle nameplate: a fleet read token
+   (sleep-tracking was dark — 2 of 8 deep-dives untrailable, two runs in a row), and the
+   jail-$/day KPI either gets a read-only Prometheus route or leaves the brief (a known-dark
+   query burned every run; r4 quoted the exact RBAC refusals). Mechanical legs: the workflow
+   `stack` param / run numbering / report filenames rename to the platform series; the
+   WIP-slot check moves off oracle's fixer ns.
+2. **Stack retros SECOND, their briefs authored AGAINST the platform retro's coverage** —
+   deliberately non-overlapping: stack-local concerns only (recipe quality, spec adherence,
+   the stack's own model cells), never the cross-cutting classes the platform retro already
+   owns. Graduation stays the AgentStack claim knob (`retro.enabled` + cadence + slice) as
+   ruled 2026-07-25; the non-overlap contract is authored INTO the stack brief template when
+   the first stack graduates, with the platform reports in hand.
+
+Two r4 lane defects ride the same build wave: the cell report-marker self-check passes on bare
+template headers (the deepseek-v4-pro cell shipped a 9-line empty skeleton as its "report" —
+the check needs a content floor, not a header grep), and the swapped-cell cross-review must
+refuse an empty report as its input.
+
 **Cadence status (corrected 2026-08-11):** unsuspended 2026-08-03 — but the lane had NEVER run
 end-to-end until 2026-08-11: five latent bugs (guard busy-probe read kubectl's stderr as pods;
 missing `AWS_REGION` in tsenv; harvest artifacts root-owned; a whole-ledger 146KB brief blew the
@@ -487,7 +514,10 @@ one fell — the "unsuspended ≠ ever ran" class, caught by the FU-058 belt's f
 delivered 2026-08-11 (hand-fired, SINGLE cell — cell-b died pre-ride misclassified clean,
 homelab#248; report merged: `retros/2026-08-11-oracle-r3-context.md`; its process-change batch
 filed+queued: homelab#256-259, circles#77/#78, oracle-fleet#258). **2026-08-17 = the first
-unattended fire**; the swapped-cell cross-review is still unrun. Standing lane bounds from the
+unattended fire, and it FIRED** (PR#454: the opus cell delivered a full report — predecessor
+scoring, three new ledger blind spots, a proposed replay gate; the deepseek cell delivered an
+empty template, the self-check gap in §The split); the swapped-cell cross-review is still
+unrun and must skip the empty report. Standing lane bounds from the
 first real pass: the brief is a bounded worst-K ledger slice (never the whole ledger), and the
 cell pipeline runs `pipefail`. Remaining FU-058 legs: ledger emitter gaps (brief-v2(b)), MCP
 transcript slices.
