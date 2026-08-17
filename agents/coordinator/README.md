@@ -47,7 +47,7 @@ move from hand-driven unchanged. Keep it true: **hold no state between actions.*
 | `major` | a MAJOR dependency-bump PR (un-armed, human-gated) — coordinator-owned, see §Dependency major bumps | `devbox-update.sh` |
 | `major/awaiting-human` | migration documented, CI green, reviewer-approved — a **human** merges (not the bot) | coordinator |
 | `agent/arbitrate` | rounds exhausted / worker↔reviewer flip-flop — the reflex escalates the PR to the coordinator's tie-break (scan `arbitrate` unit; §arbitrate play). NOT an anomaly: automation continues, judgment decides. The label is a *condition*, not a dispatch trigger: the scan emits the unit only while the PR's `state-fp:` fingerprint has moved since the last dispatch (homelab#198), so a sticky label costs one ride per state change, not one per tick | review reflex |
-| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") | any role |
+| `agent/error` | anomaly circuit-breaker (FU-069, merge-path.md §Runaway dispatch): something in the loop misbehaved on this item — **human-first**. Never dispatch, relabel, or arbitrate it; surface it and move on. Emit it yourself (label + one `AGENT_ERROR: <what>` comment) when YOU detect loop anomalies (duplicate bot comments piling up, a reflex re-firing on the same state, contradictory labels) — and for the one FLEET-level trigger, the same failing step ruled environmental on ≥2 distinct PRs inside 24h (§`ci-red` clause, "one fleet fault, not N parks") — and its STRIKE-channel sibling: same `error_class=` in `AGENT_STRIKE:` comments on ≥2 distinct issues inside 24h (§One fleet fault, retro r4 F2) | any role |
 
 Invariants: **one active worker per PR**; **bounded rounds** (max 3 **logic** rounds — reviewer/CI
 verdicts; infra failures are **strikes** that swap the model instead of consuming a round, see the
@@ -194,6 +194,13 @@ round itself was the discovery (#299: the landable half shipped, the rest came b
    summary comment before re-running — a slow API response is not a missing write (double claim
    comments on #45 + #81, 2026-07-22: both were one session re-composing after an ambiguous tool
    result, ~7–43s apart).
+   **Continuing a merged finding? Name the half (retro r4 win-1).** The fastest clean run in
+   r4's deep-dive set (homelab#270: 2 clean rounds, 43-minute PR lifetime) scoped itself as
+   *"the half PR #267 deliberately left unshipped — completes that finding rather than widening
+   it"*; the worst (oracle-fleet#225: four lanes in one issue, zero acceptance items met,
+   reopened) is its inverse. When the issue you claim continues a merged finding, your plan
+   comment names the SPECIFIC unshipped half; if the round needs more than that half, file a
+   sibling issue instead of widening.
 3. **Read + estimate — OpenRouter-primary chains only** (a `claude/` chain skips this step and the
    next; see the RAIL note above and step 5 §Claude tier). Pipe the issue text into the budget
    estimator:
@@ -835,6 +842,17 @@ Two conditions, both load-bearing:
 
 Master itself being red stays the neighbouring case with its own terminal: a platform incident for
 the responder/operator lane, stated and stopped, not an `AGENT_ERROR` of yours.
+
+**The STRIKE channel gets the same rule (retro r4 F2).** `AGENT_STRIKE:` comments are a
+different channel from ci-red and until now no predicate read them fleet-wide: r4 measured 10
+harness-death rounds across 9 of 40 ledger rows, clustering hard (openrouter-operator: 5
+strikes, 4 issues, 2h15m, one day — each triaged and model-swapped independently). So: when
+the same `error_class=` appears in `AGENT_STRIKE:` comments on **≥2 distinct ISSUES inside
+24h** (match on the structured `error_class=` field of the comment, never on log excerpts),
+stop swapping the chain per item — emit ONE `AGENT_ERROR: infra-class strike on N issues —
+error_class=<c>` comment listing the issues, apply the `agent/error` label per affected item
+(the breaker stays per-item), and make the human ask ONCE. The ≥2-in-24h threshold is
+inherited from the ci-red rule's shape, not measured optimal — same caveat as there.
 
 ## The infeasible terminal — `AGENT_INFEASIBLE` (retro r3 F4, homelab#257)
 
