@@ -85,6 +85,11 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 - Cloudflare 1010-blocks the `python-urllib` UA (probe artifact — set a UA or use curl).
 - **No pricing / multiplier / usage / quota API** — this file + the console ARE the registry;
   windows are self-metered (charter §Go rail).
+- **claude-code treats Go ids as UNKNOWN models** → it assumes a 200k context window and
+  auto-compacts to it (warning observed on the 2026-08-17 canary). Harmless for xs/sm rides;
+  a long ride on a model whose REAL window is smaller can overrun it. Probe each slot model's
+  true window and pin `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (or `modelOverrides`) per model —
+  flash's window is UNVERIFIED.
 - **The China-hosting opt-in** (workspace setting, toggled 2026-08-13): `deepseek-*` 403s with
   `RegionError` until the workspace UI knob is flipped — a per-workspace gate, not a hard region
   lock. If a fresh workspace ever reappears 403s on deepseek, check the knob first.
