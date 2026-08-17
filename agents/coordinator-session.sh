@@ -137,6 +137,25 @@ IMAGE="${COORDINATOR_IMAGE:-${AGENT_COORDINATOR_IMAGE:-ghcr.io/teststuffstash/ag
 POD="coordinator-$(date -u +%H%M%S)"
 # Janitor pods are date-keyed: a second run the same day collides on create — natural daily dedup.
 [ -n "$JANITOR" ] && POD="coordinator-janitor-$(date -u +%Y%m%d)"
+# FU-146 (homelab#153 five-dispatch storm): an ITEM session gets a DETERMINISTIC pod name keyed on
+# (repo, item) — the atomic dispatch gate below and the scan's session-currency belt both key on it
+# (the worker gate's `agent-<project>-issue-<n>-r<k>` shape, transposed to
+# `coordinator-<repo>-<item-key>`). Tick/janitor/ad-hoc sessions stay timestamp-shaped above — they
+# are not item-keyed and must not collide with each other or with a real item session.
+if [ -n "$ITEM" ]; then
+  ITEM_REPO=""; ITEM_KEY=""
+  for _itf in $ITEM; do
+    case "$_itf" in
+      repo=*) ITEM_REPO="${_itf#repo=}";;
+      item=*) ITEM_KEY="${_itf#item=}";;
+    esac
+  done
+  [ -n "$ITEM_REPO" ] || { echo "--item requires a repo= field (got: ${ITEM})" >&2; exit 2; }
+  [ -n "$ITEM_KEY" ]  || { echo "--item requires an item= field (got: ${ITEM})" >&2; exit 2; }
+  # Sanitize [^a-z0-9-] → '-' on both halves (repo names and item keys are already that shape; the
+  # belt keeps a DNS-1123-safe pod name a hard guarantee, not a convention).
+  POD="coordinator-$(printf '%s' "$ITEM_REPO" | tr -c 'a-z0-9-' '-')-$(printf '%s' "$ITEM_KEY" | tr -c 'a-z0-9-' '-')"
+fi
 BRIEF="agents/coordinator/README.md"           # relative to /work/homelab (the poll waits on it there)
 BRIEF_PATH="/work/homelab/${BRIEF}"            # ABSOLUTE: the cwd is now the stack main repo, not
                                                # necessarily /work/homelab, so the brief (platform
@@ -346,7 +365,36 @@ cs_phase() {   # $1 = coordinator-spinup | coordinator-session — close the ope
 # <<<REPLAY:dispatch-phase-session<<<
 cs_phase_arm   # spin-up opens HERE: the FU-088 latch above may exit without a pod ever existing
 
-cat <<EOF | "$KUBECTL" $KUBE -n "$NS" apply -f -
+# FU-146 atomic gate (item sessions): reap a TERMINAL same-key holder, refuse a LIVE one, then
+# `create` (NOT apply — apply would silently adopt/patch an existing pod and the whole idempotency
+# story dies). Same donor shape as agent-session.sh's issue/pr gate (line ~1459); transposed to the
+# deterministic `coordinator-<repo>-<item-key>` pod name. Tick/janitor/interactive sessions keep
+# timestamp names and are untouched by the gate (nothing to test-and-set on).
+# >>>REPLAY:session-atomic-gate>>>
+session_atomic_gate() {
+  EXISTING_PHASE="$("$KUBECTL" $KUBE -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  case "$EXISTING_PHASE" in
+    Succeeded|Failed)
+      echo "→ reaping terminal same-key pod ${POD} (${EXISTING_PHASE}) before re-dispatch"
+      "$KUBECTL" $KUBE -n "$NS" delete pod "$POD" --ignore-not-found >/dev/null 2>&1 || true;;
+    "") :;;  # no holder — create proceeds
+    *)
+      echo "PREFLIGHT REFUSED: coordinator session pod ${POD} already ${EXISTING_PHASE} — this item is being ridden (FU-146); resume/wait, don't fork." >&2
+      exit 3;;
+  esac
+}
+# <<<REPLAY:session-atomic-gate<<<
+# The item-mode create is the atomic test-and-set: `create` fails with AlreadyExists if a racing
+# dispatcher won the (repo, item) key between the gate's read and the create. `session_atomic_gate`
+# EXITS 3 on a live holder (not `return`), so the launcher aborts — never falls through to an apply.
+if [ -n "$ITEM" ]; then
+  session_atomic_gate
+  CREATE_CMD="create"
+else
+  CREATE_CMD="apply"
+fi
+cat <<EOF | "$KUBECTL" $KUBE -n "$NS" "$CREATE_CMD" -f - \
+  || { echo "PREFLIGHT REFUSED (atomic): ${CREATE_CMD} of ${POD} failed — a racing dispatcher won the (repo, item) key, or the manifest is invalid (see kubectl error above)." >&2; exit 3; }
 apiVersion: v1
 kind: Pod
 metadata:

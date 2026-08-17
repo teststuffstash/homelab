@@ -1,0 +1,28 @@
+# FU-146 (homelab#153 five-dispatch storm) — the doorbell fast-path belt (site 679). The
+# `changes-requested` fast path re-validates the unit live before dispatching; a RUNNING
+# `coordinator-<repo>-<item>` session pod is the item's in-flight work and must hold it, exactly as
+# the main loop's session-belt holds the queued and PR-lane clauses.
+#
+# CONDITION UNDER REPLAY. PR #396 on `circles` is worker-authored, OPEN, CHANGES_REQUESTED (the
+# fast-path predicate), its body `Implements #18`, and a coordinator session
+# (`coordinator-circles-pr-396`) is RUNNING in the loop ns. No worker pod for issue #18.
+#
+# THE CONTRACT:
+#   1. The fast path returns 0 ("held") WITHOUT dispatching — the session pod is the ride.
+#   2. The probe goes through the PATH-shim kubectl, so the pod read is asserted, and the probe is
+#      the same JSON shape the main loop's session-belt uses (not a bespoke grep).
+#   3. A dead probe (STUB_KUBECTL=fail) would NOT hold — units flow to the launcher atomic gate,
+#      matching the WIP belt's probe-failure direction.
+#
+# This fixture also pins that the WIP probe (which keys on the SAME `get pods` call shape) tolerates
+# the session pod in its list — the pod has no agent container, so flive stays under REPO_MAX_WIP.
+name: session-belt-fast-path
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:unit-fast-path
+  - file:drive.sh
+env:
+  - ORG=teststuffstash
+  - SCAN_STACK=circles
