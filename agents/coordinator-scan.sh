@@ -1013,10 +1013,10 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # invisible to the dispatch predicate and every report class. Keep it visible (report-only) so
     # time in this state is bounded and measurable; the policy question of whether the state
     # duplicates `agent/blocked` (option (2) in the issue) stays open for a human ADR later.
-    # Predicate: agent-fix ∧ ¬(agent/queued ∨ agent/in-progress ∨ agent/blocked).
+    # Predicate: agent-fix ∧ ¬(any label starting with "agent/").
     # Disjoint from 🌱 by construction (sprout requires ¬agent-fix).
     adopted="$(printf '%s' "$inert" \
-      | jq -r '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|any(startswith("agent/") and (. == "agent/queued" or . == "agent/in-progress" or . == "agent/blocked")))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
+      | jq -r '[.[]|(.labels|map(.name)) as $L|select(($L|index("agent-fix")) and (($L|any(startswith("agent/")))|not))|"  issue #\(.number) — \(.title)"]|.[]' 2>/dev/null || true)"
     [ -n "$adopted" ] && orphans="${orphans}[$repo] ⏸ adopted, not queued (adopted but no queued/in-progress/blocked state — see homelab#405):\n${adopted}\n"
     # FU-090 visibility slice: bot-authored issues without `agent-fix` are harvested/drafted work
     # awaiting HUMAN triage (TICK-LOG §Loop-safety breaker #1 keeps them inert) — surface them so

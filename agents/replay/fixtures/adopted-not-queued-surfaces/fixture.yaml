@@ -1,12 +1,14 @@
 # homelab#405 — the ⏸ adopted-not-queued class: `agent-fix` without any `agent/*` state label.
 #
-# CONDITION UNDER REPLAY. Five issues, one of each shape the new class and its neighbors have to
+# CONDITION UNDER REPLAY. Seven issues, one of each shape the new class and its neighbors have to
 # tell apart:
 #   #110 agent-fix, NO state labels                   → a truly adopted-not-queued issue. MUST appear.
 #   #111 agent-fix, HAS agent/queued                  → adopted AND queued. Must not appear.
 #   #112 agent-fix, HAS agent/in-progress             → adopted AND in-progress. Must not appear.
 #   #113 agent-fix, HAS agent/blocked                 → adopted AND blocked. Must not appear.
 #   #114 NO agent-fix, bot-authored                   → a real sprout. Must appear in 🌱, not ⏸.
+#   #115 agent-fix, HAS agent/review                  → adopted with other agent/* state. Must not appear.
+#   #116 agent-fix, HAS agent/error                   → adopted with other agent/* state. Must not appear.
 #
 # WHY THIS MATTERS. The ⏸ class and the 🌱 class are both "untriaged / early-stage" but have
 # different meanings: sprouts are UNEXAMINED (no agent-fix yet), adopted-not-queued are EXAMINED
