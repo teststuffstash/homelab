@@ -81,8 +81,82 @@ def parse_ts(name):
     return int(time.mktime(time.strptime(m.group(1), "%Y%m%dT%H%M%SZ")))
 
 
+# r4 F4/F5 (homelab PR#454): `models[]` was a de-duplicated SET (unsound to zip against the
+# per-round exit-status list) and rows were stamped mid-flight. The row now carries `rounds[]` —
+# one entry per round IN ORDER, strike-only entries included — and the flat fields are DERIVED
+# from it (see merge_rounds + main). `snapshot` marks rows the retro must not pain-rank as facts.
+# `^` anchored: the strike line is the FIRST line of its comment (agent-session.sh builds the
+# body as STRIKE_LINE + details). A human quoting it writes `> AGENT_STRIKE …` — "talking about
+# the strike" is not the strike (the infeasible-marker doctrine, coordinator-scan).
+STRIKE_RE = re.compile(r"^AGENT_STRIKE: model=(\S+) error_class=(\S+) round=(\d+)")
+
+
+def is_snapshot(issue_state, terminal_label):
+    """r4 F5: a row stamped mid-flight is a snapshot, not a terminal fact. At emit time the issue
+    is still OPEN (more rounds may land) or the terminal label is not one this reflex recognizes
+    (the only terminal labels today are agent/done | agent/blocked). Historical rows predating the
+    flag carry no `snapshot` field and are treated as NOT snapshot by the retro's pain-rank."""
+    return issue_state == "open" or terminal_label not in TERMINAL_LABELS
+
+
+def strike_rounds(org, project, issue):
+    """Parse AGENT_STRIKE comments on an issue → [{round, model, error_class}]. A PR-less ride
+    posts one structured first-line comment (agent-session.sh §STRIKE BOOKKEEPING); that comment
+    IS the strike store. A strike-only round is a dispatch the manifests never saw (finalize did
+    not run), so it must be folded in for `rounds[]` to be a complete per-round record. Best-
+    effort: an unreadable comments probe is skipped loudly, never fatal to the reflex."""
+    try:
+        bodies = json.loads(sh([
+            "gh", "api", "repos/%s/%s/issues/%s/comments?per_page=100" % (org, project, issue),
+            "--jq", "[.[] | .body]",
+        ]))
+    except Exception as e:
+        print("ledger: strike comments unreadable for %s#%s (%s) — strike-only rounds skipped"
+              % (project, issue, e), file=sys.stderr)
+        return []
+    out, seen = [], set()
+    for body in bodies:
+        m = STRIKE_RE.search(body or "")
+        if not m:
+            continue
+        rnd = int(m.group(3))
+        if rnd in seen:
+            continue
+        seen.add(rnd)
+        out.append({"round": rnd, "model": m.group(1), "error_class": m.group(2)})
+    return out
+
+
+def merge_rounds(manifest_rounds, strikes):
+    """Fold strike-comment rounds into the manifest rounds, one entry per round IN ORDER (r4 F4).
+    A round the manifests saw keeps its manifest entry (finalize ran — authoritative); a round
+    only a strike comment knows about becomes a strike-only entry: no PR means no CI (ci=False)
+    and no recorded exit status (error_class carries the classification). Manifest entries are
+    preserved as-read (round-ordered, duplicates intact), strikes fill gaps, then re-sort by
+    round (stable, so duplicates keep their manifest order)."""
+    out = sorted(manifest_rounds, key=lambda r: r["round"])
+    present = {r["round"] for r in out}
+    for s in sorted(strikes, key=lambda s: s["round"]):
+        if s["round"] in present:
+            continue  # the manifest entry already covers this round
+        out.append({
+            "round": s["round"],
+            "model": s["model"],
+            "exit_status": "",
+            "error_class": s["error_class"],
+            "ci": False,
+        })
+        present.add(s["round"])
+    out.sort(key=lambda r: r["round"])
+    return out
+
+
 def summarize(project, issue, rid, rsec):
-    """Read every manifest under <project>/issue-<N>/ and fold them into one ledger record."""
+    """Read every manifest under <project>/issue-<N>/ and fold them into the base of one ledger
+    record. Returns the manifest-derived `rounds` list (one entry per worker manifest, ROUND
+    ORDER — r4 F4) plus the aggregate fields. `main()` folds in strike-comment rounds via
+    merge_rounds and derives the flat `models`/`worker_exit_statuses`/`ci_sequence` from the
+    MERGED list so the join stays sound."""
     prefix = "s3://%s/%s/issue-%s/" % (BUCKET, project, issue)
     try:
         listing = s5(["ls", prefix + "*"], rid, rsec)
@@ -90,7 +164,7 @@ def summarize(project, issue, rid, rsec):
         return None
     manifest_keys = [ln.split()[-1] for ln in listing.splitlines() if ln.strip().endswith("manifest.json")]
     workers, reviewers, timestamps = [], [], []
-    models, pr_url = set(), ""
+    pr_url = ""
     for rel in manifest_keys:
         key = prefix + rel
         try:
@@ -101,8 +175,6 @@ def summarize(project, issue, rid, rsec):
         role = m.get("role")
         if role == "worker":
             workers.append(m)
-            if m.get("model"):
-                models.add(m["model"])
             pr_url = pr_url or (m.get("stats", {}) or {}).get("pr_url") or m.get("pr_url") or ""
         elif role == "reviewer":
             reviewers.append(m)
@@ -114,26 +186,28 @@ def summarize(project, issue, rid, rsec):
         return r if isinstance(r, int) else 0
 
     workers.sort(key=worker_round)
-    exit_statuses = [w.get("exit_status") or (w.get("stats", {}) or {}).get("exit_status", "") for w in workers]
-    ci_sequence = [(w.get("stats", {}) or {}).get("ci_passed") for w in workers]
-    total_cost = round(sum(float((w.get("stats", {}) or {}).get("cost_usd") or 0) for w in workers), 4)
-    retry_storms = sum(1 for e in exit_statuses if e in ("auth-storm", "budget-403"))
+    rounds = []
+    for w in workers:
+        stats = w.get("stats") or {}
+        rounds.append({
+            "round": worker_round(w),
+            "model": w.get("model") or "",
+            "exit_status": w.get("exit_status") or stats.get("exit_status", ""),
+            "error_class": w.get("error_class") or stats.get("error_class") or "",
+            "ci": stats.get("ci_passed"),
+        })
     ts = [t for t in timestamps if t]
     # Retro r1 F6: split queue from compute where the manifests carry it (agent-runtime#19 adds
     # queue_wait_s + duration_s per round; older manifests lack them → fields stay 0/absent-honest).
     queue_wait = sum(int((w.get("stats", {}) or {}).get("queue_wait_s") or 0) for w in workers)
     active = sum(int((w.get("stats", {}) or {}).get("duration_s") or 0) for w in workers)
     return {
-        "rounds": len(workers),
+        "rounds": rounds,
         "reviewer_rounds": len(reviewers),
-        "worker_exit_statuses": exit_statuses,
-        "retry_storms": retry_storms,
-        "ci_sequence": ci_sequence,
         "wall_time_s": (max(ts) - min(ts)) if len(ts) >= 2 else 0,
         "queue_wait_s": queue_wait,
         "active_run_s": active,
-        "total_cost_usd": total_cost,
-        "models": sorted(models),
+        "total_cost_usd": round(sum(float((w.get("stats", {}) or {}).get("cost_usd") or 0) for w in workers), 4),
         "pr_url": pr_url,
     }
 
@@ -176,6 +250,15 @@ def main():
         if summ is None:
             continue  # no transcripts captured for this issue — nothing to record yet
         cap = TIERS.get(tier)
+        rounds = merge_rounds(summ["rounds"], strike_rounds(org, project, issue))
+        summ["rounds"] = rounds
+        # r4 F4: the flat fields are DERIVED from `rounds`, order-preserving — never a
+        # de-duplicated set — so zip(models, worker_exit_statuses) is sound.
+        summ["models"] = [r["model"] for r in rounds]
+        summ["worker_exit_statuses"] = [r["exit_status"] for r in rounds]
+        summ["ci_sequence"] = [r["ci"] for r in rounds]
+        summ["retry_storms"] = sum(1 for r in rounds
+                                   if (r["exit_status"] or r["error_class"]) in ("auth-storm", "budget-403"))
         rec = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "key": key, "project": project, "issue": issue, "stack": repos.get(project, ""),
@@ -184,9 +267,13 @@ def main():
             "calibration_error": round(summ["total_cost_usd"] / cap, 3) if cap else None,
         }
         rec.update(summ)
+        # r4 F5: mark mid-flight stamps — at emit time the issue is still OPEN or the terminal
+        # label is non-terminal, so more rounds may land. The retro's pain-rank excludes these.
+        if is_snapshot(state, label):
+            rec["snapshot"] = True
         new.append(json.dumps(rec, separators=(",", ":")))
         seen.add(key)
-        print("ledger: + %s (%s, %d rounds, $%.4f)" % (key, label, summ["rounds"], summ["total_cost_usd"]))
+        print("ledger: + %s (%s, %d rounds, $%.4f)" % (key, label, len(rounds), summ["total_cost_usd"]))
 
     if not new:
         print("ledger: no new terminal tasks to record (%d already ledgered)" % len(existing_lines))
