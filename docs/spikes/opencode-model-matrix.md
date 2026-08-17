@@ -37,6 +37,15 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
+⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (console usage dump `uploads/opencode-go.txt`
+reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
+**the window draws at LIST price on RAW tokens — cache discounts do NOT apply to window draw —
+halved for badged models.** Sample arithmetic: 50.56M flash input × $0.14/M ÷ 2 ≈ $3.54 ≈ the
+console's 36%-of-$12 window read, while BILLED was $1.25 (cache-discounted) and a cache-assuming
+meter computed $0.145. So "2x usage" = half of list-on-raw, never half of billed — a
+cacheRead-heavy workload draws ~3–4× its billed cost from the windows, and capacity math must
+use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-anchoring chunk,
+2026-08-17.)
 
 ## OpenCode Go (subscription rail, `https://opencode.ai/zen/go/v1`)
 
