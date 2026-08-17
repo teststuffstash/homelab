@@ -14,12 +14,14 @@ meant to avoid.)
   drift-free re-plan through the two-zone token. FU-157 opportunistic. ⚠ `dig +short` wraps
   long DS digests — `tr -d ' '` before grepping.
 - **HA #221 (meta lane)**: probe RAN 2026-08-13 — protocol_version hypothesis REFUTED (entries
-  match negotiation); real defect = tuya_local receive loop dies silently, no retry. **All 4
-  plugs REVIVED** by per-entry REST reload while the device answers (aquarium needed NO physical
-  cycle — the 901s were the single-TCP-slot race). Full findings in the #221 comment. Remaining:
-  gaas = OPERATOR power-cycle (914 on correct key+version since 08-09; if persists → key rotated,
-  re-extract via the tuya-egress.py door); alert exclusion list for the 9 static false-positives
-  (what still re-fires #221); optional tuya_local 2026.7.2→2026.8.0.
+  match negotiation); real defect = tuya_local receive loop dies silently, no retry (RECURRED
+  2026-08-17 per the thread). **All 4 plugs REVIVED** by per-entry REST reload while the device
+  answers. Remaining (operator, 2026-08-17): **tuya_local 2026.7.2→2026.8.0 upgrade = a
+  DEDICATED FUTURE SESSION** (operator does it; HA config is imperative-apply per runbook) —
+  the receive-loop death is the bug it may fix; **gaas is HARD-WIRED, no plug to cycle** — a
+  power cycle means finding its breaker (operator, someday; if post-cycle 914 persists → key
+  rotated, re-extract via the tuya-egress.py door); the 9-static-sensor alert exclusion is
+  QUEUED as homelab#478 (machine lane owns it now).
 - **ADR-107 / Go-rail chain (charter = [`chainless-redesign.md`](chainless-redesign.md) — its
   §Rollout status is current): PART 1 COMPLETE 2026-08-14 02:25Z** — all chunks merged+live
   (PRs #429/#433–#437/#440–#443; every chunk issue closed w/ evidence; #420 = the status
