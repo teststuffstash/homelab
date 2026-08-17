@@ -23,10 +23,11 @@
 # asserted. The AgentStack read is deliberately DENIED so routing resolves through the real
 # agents/stacks.json fallback belt — the claims under test are the live ones.
 #
-# NOT WIRED INTO CI, deliberately and not by preference: doing so needs a devbox.json script plus a
-# step in .github/workflows/ci.yaml, and both files are off-limits to this lane precisely because
-# CI runs them from the PR's own branch. Run it by hand when you touch the embedded script; it
-# takes a few seconds. See the PR for #124.
+# WIRED INTO CI since homelab#133 (2026-08-08): `devbox run responder-behaviour-test`, a required
+# `ci` step in .github/workflows/ci.yaml. (The original header said "NOT WIRED, deliberately" —
+# that predated #133; the wiring was an operator-lane commit exactly because those two files are
+# off-limits to the fixer lane. Stale header caught by #360.) It also runs fine by hand; a few
+# seconds. See the PRs for #124 and #133.
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
