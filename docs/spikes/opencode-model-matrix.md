@@ -37,6 +37,15 @@ opencode's phrase is "Nx **usage**", i.e. N× ALLOWANCE (half-off at 2x). Same t
 signs; opencode's poor word choice, and exactly how this register's first reading went wrong.
 Read "usage" as "value you receive", never "cost you pay". Bonus from the same dump: cached
 rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
+⚠ **LIMIT-SIDE SEMANTICS MEASURED 2026-08-17** (console usage dump `uploads/opencode-go.txt`
+reconciled against a known workload — the 509-call jail subagent wave, sole account traffic):
+**the window draws at LIST price on RAW tokens — cache discounts do NOT apply to window draw —
+halved for badged models.** Sample arithmetic: 50.56M flash input × $0.14/M ÷ 2 ≈ $3.54 ≈ the
+console's 36%-of-$12 window read, while BILLED was $1.25 (cache-discounted) and a cache-assuming
+meter computed $0.145. So "2x usage" = half of list-on-raw, never half of billed — a
+cacheRead-heavy workload draws ~3–4× its billed cost from the windows, and capacity math must
+use DRAW, not billed. (Window accounting fix: the gometer draw-pricing + epoch-anchoring chunk,
+2026-08-17.)
 
 ## OpenCode Go (subscription rail, `https://opencode.ai/zen/go/v1`)
 
@@ -60,7 +69,7 @@ rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 | qwen3.7-max | 2.50/7.50/0.50/3.125 | $60 | — | untested | untested | |
 | qwen3.7-plus | ≤256k: 0.40/1.60/0.04/0.50 · >256k: 1.20/4.80/0.12/1.50 | $60 | — | untested | untested | |
 | qwen3.6-plus | ≤256k: 0.50/3.00/0.05/0.625 · >256k: 2.00/6.00/0.20/2.50 | $60 | — | untested | untested | |
-| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table, but unreachable from claude-code lanes until a translator (#448 class) lands |
+| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table, but unreachable from claude-code lanes until a translator (#448 class) lands. translator (shim, #448) serves this via the OpenAI surface as of 2026-08-17 |
 | grok-4.5 | 2.00/6.00/0.30/– | $15 | — | untested | untested | |
 | hy3 / hy3-preview | hy3: 0.14/0.58/0.035/– · preview unpriced | $60/? | — | untested | untested | hy3 = retro-proven audit tier upstream |
 
@@ -74,7 +83,7 @@ Candidate rung-0 on this rail (largely the OpenRouter free-rung families). ⚠ Z
 | deepseek-v4-flash-free | ✗ 400 invalid_request (raw 08-13, provider error truncated) | |
 | mimo-v2.5-free | ✗ 400 opaque provider error (raw 08-13) | |
 | hy3-free · nemotron-3.5-lightning-free · laguna-s-2.1-free · big-pickle | untested | |
-| nemotron-3-ultra-free | plain text ✅ 200 · function tool ✗ 400 — **bisected to the SURFACE (raw curl, seat 08-14)**: OpenAI `/v1/chat/completions` + function tool → ✅ clean `tool_calls`; Anthropic `/v1/messages` + the same tool as `input_schema` → ✗ 400 upstream `Input required: specify "prompt" or "messages"` (the compat translation loses the body). Minimal curl — NOT harness decoration. Same provider-400 family as the deepseek/mimo free rows | opencode client rides the OpenAI surface → tools work there (operator's opencode run, 08-14: clean 4-step shell loop — date → write → read-back → confirm — incl. the tool-result continuation); claude-code is Anthropic-only → this rail can't serve tool lanes until zen fixes the compat layer or a translator lands. **Tool-lane rung-0 candidate once translated.** |
+| nemotron-3-ultra-free | plain text ✅ 200 · function tool ✗ 400 — **bisected to the SURFACE (raw curl, seat 08-14)**: OpenAI `/v1/chat/completions` + function tool → ✅ clean `tool_calls`; Anthropic `/v1/messages` + the same tool as `input_schema` → ✗ 400 upstream `Input required: specify "prompt" or "messages"` (the compat translation loses the body). Minimal curl — NOT harness decoration. Same provider-400 family as the deepseek/mimo free rows | opencode client rides the OpenAI surface → tools work there (operator's opencode run, 08-14: clean 4-step shell loop — date → write → read-back → confirm — incl. the tool-result continuation); claude-code is Anthropic-only → this rail can't serve tool lanes until zen fixes the compat layer or a translator lands. **Tool-lane rung-0 candidate once translated.** translator (shim, #448) serves this via the OpenAI surface as of 2026-08-17 |
 
 ## Cross-cutting quirks (apply to every row)
 

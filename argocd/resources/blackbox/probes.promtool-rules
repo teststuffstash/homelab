@@ -1,3 +1,4 @@
+# witness-only: EndpointProbeFailingBridge10m, EndpointProbeFailingMaxDirection, EndpointProbeFailingPre336
 # EndpointProbeFailing — BOTH COPIES — lifted out of their manifests (comments and annotations
 # stripped; the manifests are their one home) — the rules file that probes.promtool-test loads.
 # Not a manifest and not applied to anything: `promtool test rules` needs upstream-format rules
