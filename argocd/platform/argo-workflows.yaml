@@ -29,8 +29,12 @@ spec:
           workflowNamespaces:
             - agent-coordinator
           resources:
-            requests: { cpu: "100m", memory: "128Mi" }
-            limits: { memory: "256Mi" }
+            # FU-082 baseline (128Mi/256Mi) OOMKilled the controller 2026-08-15 after ~29 days of
+            # slow informer/workflow-state cache growth — 626 retained Workflow objects, no TTL/GC
+            # (issue #449). 4x raise postpones recurrence; the durable fix is workflow retention
+            # (ttlStrategy/GC), called out as a follow-up in the #449 PR body.
+            requests: { cpu: "100m", memory: "512Mi" }
+            limits: { memory: "1Gi" }
           metricsConfig: { enabled: true }
           serviceMonitor: { enabled: true }
         server:
