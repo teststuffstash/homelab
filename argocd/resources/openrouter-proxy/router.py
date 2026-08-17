@@ -1403,13 +1403,15 @@ def self_test() -> int:
     # Pure-boundary unit tests with a FIXED now (deterministic — fail if the anchor arithmetic
     # is wrong). fixed_now = 2026-08-17 12:22:16 UTC (a Monday).
     spec7u, spec5u, spec30u = (gometer.GO_WINDOWS[w] for w in ("7d", "5h", "30d"))
-    assert spec7u["anchor"] == "weekly" and spec7u["weekday"] == "sun", spec7u
+    assert spec7u["anchor"] == "weekly" and spec7u["weekday"] == "mon", spec7u
     assert spec5u["anchor"] == "grid" and spec5u["grid_offset_min"] == 217, spec5u
     assert spec30u["anchor"] == "monthly" and spec30u["month_day"] == 13, spec30u
     w7u, w7un = gometer.go_window_bounds(spec7u, 1786969336.0)
-    # weekly sun 00:00: Monday is (tm_wday 0 − sun 6) % 7 = 1 day past the boundary →
+    # weekly mon 00:00: 2026-08-17T12:22Z IS a Monday, 12h22m past its own boundary →
+    # window_start = 08-17T00:00Z (1786924800), resets_at = 08-24T00:00Z (1787529600) — the
+    # console cross-check: 12:35Z + 6d11h ≈ 08-24T00:00Z ✓ (a Sunday anchor missed by one day). →
     # last = 2026-08-16 00:00 UTC, next = last + 7d = 2026-08-23 00:00 UTC.
-    assert w7u == 1786838400.0 and w7un == 1787443200.0, (w7u, w7un)
+    assert w7u == 1786924800.0 and w7un == 1787529600.0, (w7u, w7un)
     g5u, g5un = gometer.go_window_bounds(spec5u, 1786969336.0)
     # grid 217m: resets daily at midnight + 217min + k*5h → 03:37/08:37/13:37/18:37/23:37 UTC.
     # At 12:22:16 UTC the last is 08:37 (1786955820), the next is 13:37 (1786973820).

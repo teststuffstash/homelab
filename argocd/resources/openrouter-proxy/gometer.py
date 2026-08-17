@@ -170,12 +170,14 @@ def window_draw(bare_model: str, merged: dict) -> float:
 #         (5h does not divide 24h, so the last slot of each day runs 23:37 → 03:37).
 #         → anchor `grid`, offset 217m.
 #   • 7d  "resets in 6d14h" (~10:00Z) and "resets in 6d11h" (~12:35Z) — boundary
-#         2026-08-24T00:00Z = Sunday 00:00 UTC. → anchor `weekly` sun 00:00.
+#         2026-08-24T00:00Z — and 2026-08-24 is a MONDAY (2026-08-17 was Monday, the
+#         operator's own dateline). → anchor `weekly` mon 00:00. (An earlier reading of the
+#         same numbers mislabelled 08-24 a Sunday; the seat corrected it pre-push.)
 #   • 30d "resets in 26d23h" (~12:35Z) — boundary ~2026-09-13T11:30Z: the monthly window is
 #         billing-cycle anchored, day 13 ~11:30 UTC. → anchor `monthly` 13:11:30.
 #
 # GO_WINDOW_ANCHORS overrides any/all of the three, e.g.
-#   GO_WINDOW_ANCHORS="5h=grid:217m,7d=weekly:sun:00:00,30d=monthly:13:11:30"
+#   GO_WINDOW_ANCHORS="5h=grid:217m,7d=weekly:mon:00:00,30d=monthly:13:11:30"
 # Grammar per window: `grid:<offset>` | `weekly:<mon..sun>[:HH[:MM]]` |
 # `monthly:<1..31>[:HH[:MM]]` | `rolling`. Parsing is DEFENSIVE: an unparseable or unknown
 # spec falls back to that window's default with one loud log line — it never crashes the
@@ -192,7 +194,7 @@ def _golog(msg: str) -> None:
 _GO_WINDOW_DEFAULTS = {
     "5h":  {"budget_usd": 12.0, "span_s": 5 * 3600, "anchor": "grid", "grid_offset_min": 217},
     "7d":  {"budget_usd": 30.0, "span_s": 7 * 86400,
-            "anchor": "weekly", "weekday": "sun", "hour": 0, "minute": 0},
+            "anchor": "weekly", "weekday": "mon", "hour": 0, "minute": 0},
     "30d": {"budget_usd": 60.0, "span_s": 30 * 86400,
             "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30},
 }
@@ -328,7 +330,7 @@ def go_window_bounds(spec: dict, now: float) -> tuple[float | None, float | None
         offset = float(spec.get("hour", 0)) * 3600 + float(spec.get("minute", 0)) * 60
         gt = time.gmtime(now)
         today_mid = now - (gt.tm_hour * 3600 + gt.tm_min * 60 + gt.tm_sec)
-        days_back = (gt.tm_wday - _WEEKDAYS[spec.get("weekday", "sun")]) % 7
+        days_back = (gt.tm_wday - _WEEKDAYS[spec.get("weekday", "mon")]) % 7
         last = today_mid - days_back * 86400 + offset
         if last > now:
             last -= 7 * 86400
