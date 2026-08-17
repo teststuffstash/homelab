@@ -193,12 +193,16 @@ is stale, so it cannot drift the way the prose register did.
 | `reviewer-go-failover-available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-limited` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches-escapes-computed` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches-escapes-none` | actions | - | `agents/reviewer-session.sh` | - |
+| `reviewer-touches-undeclared` | actions | - | `agents/reviewer-session.sh` | - |
 | `route-request-labels` | actions | - | `agents/agent-session.sh` | - |
 | `route-request-workbranch-tight` | actions | - | `agents/agent-session.sh` | - |
 | `run-phase-metric` | actions | - | `agents/agent-session.sh` | - |
 | `scan-guarded-pre-dispatch` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-guarded-set-unreadable` | actions | - | `agents/coordinator-scan.sh` | - |
 | `scan-phase-marker` | actions | - | `agents/coordinator-scan.sh` | - |
+| `scan-touches-footprint-hold` | actions | - | `agents/touches-check.sh` | - |
 | `scan-wedge-alert` | suite | - | `-` | - |
 | `scout-bench-mcp-error` | actions | - | `agents/model-scout.sh` | - |
 | `scout-bench-ranked-columns` | actions | - | `agents/model-scout.sh` | - |
