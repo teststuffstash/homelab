@@ -1652,11 +1652,15 @@ class Proxy(BaseHTTPRequestHandler):
                 "# HELP opencode_subscription_usage_billed_est_usd Go-rail billed-style estimate in USD per window (cache-discounted; the ledger view).",
                 "# TYPE opencode_subscription_usage_threshold gauge",
                 "# HELP opencode_subscription_usage_threshold Per-window dispatch-deferral threshold (0-1 fraction).",
+                "# TYPE opencode_subscription_reset_timestamp_seconds gauge",
+                "# HELP opencode_subscription_reset_timestamp_seconds Unix time the window resets (gometer go_window_bounds anchored grid; absent for rolling windows).",
             ]
             for w, data in sorted(go_status["windows"].items()):
                 lines.append(f'opencode_subscription_usage_usd{{window="{w}"}} {data["usage_usd_window_draw"]:.6f}')
                 lines.append(f'opencode_subscription_usage_billed_est_usd{{window="{w}"}} {data["usage_usd_billed_est"]:.6f}')
                 lines.append(f'opencode_subscription_usage_threshold{{window="{w}"}} {go_status["thresholds"][w]}')
+                if data.get("resets_at") is not None:
+                    lines.append(f'opencode_subscription_reset_timestamp_seconds{{window="{w}"}} {data["resets_at"]:.0f}')
             lines += [
                 "# TYPE opencode_subscription_dispatch_limited gauge",
                 "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
