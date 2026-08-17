@@ -172,6 +172,40 @@ if [ -n "\$ISSUE" ]; then
 fi
 export SPROUT_DEPTH
 echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
+# ── TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) ──────────────────────────────────────────
+# If this PR closes an issue, check the declared Touches: line against the diff paths.
+# The escape set — paths undeclared in Touches: that appear in the diff — is injected into
+# the review context as TOUCHES-ESCAPES for the rubric's BLOCKING check.
+TOUCHES_ESCAPES=""
+if [ -n "\$ISSUE" ]; then
+  # Source the touches-check helper (same normalization as coordinator-scan.sh's ADR-097 hold)
+  . "\${HERE:-$(cd "$(dirname "\$0")" && pwd)}/touches-check.sh"
+  # Read the issue body to extract the Touches: line
+  ISSUE_BODY=\$(gh api "repos/${REPO_SLUG}/issues/\$ISSUE" --jq '.body // ""' 2>/dev/null || true)
+  DECLARED_TOUCHES=\$(printf '%s' "\$ISSUE_BODY" | grep -iE '^[ \\t]*touches:[ \\t]*' | sed -E 's/^[ \\t]*touches:[ \\t]*//i' | tr -d '\\r' | head -1)
+  # Compute the escape set: paths that are NOT covered by the declared touches
+  ESCAPES_RAW=\$(touches_check "\$DECLARED_TOUCHES" "\$CHANGED" 2>/dev/null || true)
+  if [ -n "\$ESCAPES_RAW" ]; then
+    # Format for the prompt: list governance paths first with [GOVERNANCE] marker
+    TOUCHES_ESCAPES=\$(printf '%s\n' "\$ESCAPES_RAW" | while read -r line; do
+      path="\${line%%|*}"; marker="\${line#*|}"
+      if [ "\$marker" = "governance" ]; then
+        printf '[GOVERNANCE] %s\\n' "\$path"
+      else
+        printf '%s\\n' "\$path"
+      fi
+    done | sort)
+    echo "→ TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):"
+    printf '%s\n' "\$TOUCHES_ESCAPES" | sed 's/^/  /'
+  else
+    TOUCHES_ESCAPES="none"
+    echo "→ TOUCHES: no escapes (all paths covered by declared footprint)"
+  fi
+else
+  TOUCHES_ESCAPES="undeclared"
+  echo "→ TOUCHES: undeclared (PR closes no issue)"
+fi
+export TOUCHES_ESCAPES
 # FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
 # lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review
 # time (no image rebuild, always current-pinned) and appended to the system prompt AFTER the
@@ -198,6 +232,10 @@ RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
+
+TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — Declared \`Touches:\` footprint against changed paths:
+  TOUCHES-ESCAPES: \${TOUCHES_ESCAPES}
+When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`), the diff is BLOCKING per .agents/review.md §BLOCKING — this is information for your review, used as part of the rubric check.
 
 STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,comments,commits,labels,mergeStateStatus,statusCheckRollup,headRefOid  and check the review history against your OWN bot identity, which is the literal login  ${REVIEWER_LOGIN}  — use that string, do NOT look it up at runtime (you authenticate with an App INSTALLATION token, for which  gh api user  returns 403, and note the login carries no [bot] suffix here). Your own verdicts, and your own asides below, are exactly the entries whose author.login is  ${REVIEWER_LOGIN} . The guard REFUSES in every case it refused before — what changed (homelab#122, 2026-08-08) is only WHICH terminal a refusal picks. Sort what you see into one of two classes; you submit NO review in either.
   (a) PRECONDITION FAILURE — the dispatch premise was true when you were QUEUED and stopped being true before you EXECUTED. Under semaphore queueing that gap routinely reaches ~10 minutes, so this is ordinary contention, not a malfunction, and the machinery resolves it without a human: the review path is LEVEL-TRIGGERED (an Argo Events edge plus a */15 CronWorkflow backstop), so the state settling IS the re-dispatch. Post ONE short standing-aside comment (gh pr comment ${PR} --body ...) naming the precondition and the head sha, add NO label, submit NO review, do not re-litigate the diff, and stop. Exactly these three states are preconditions:
