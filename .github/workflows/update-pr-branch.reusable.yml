@@ -68,23 +68,49 @@ jobs:
       # The action above skips CHANGES_REQUESTED PRs (its documented changesRequested shape), and
       # the review reflex only lifts green+CURRENT PRs — so an armed PR that gets a verdict, a
       # fix push, and then watches master move sits in a state NO machine serves: the reflex
-      # waits for current, the updater waits for the verdict to clear. On a busy master day the
-      # crack re-opens after every merge. This belt updates exactly that class via the API;
-      # over-updating is harmless (strict checks re-run and still gate the merge — the same
-      # argument as require_passed_checks: false above).
-      - name: Unstrand changes-requested PRs (the CR-and-behind crack)
+      # waits for current, the updater waits for the verdict to clear.
+      # ⚠ NARROWED 2026-08-17 (measured: 34 of 118 branch-update merges + ~35 of 69 CI runs
+      # that day were this belt keeping UNMERGEABLE PRs current — #473 ×16 while parked, #475
+      # ×18 while breaker-latched). "Over-updating is harmless" is false on a busy master: the
+      # crack only exists when a FIX PUSH has landed after the verdict (that is what the reflex
+      # is waiting to re-review at a current head). So the belt now fires ONLY when the newest
+      # NON-MERGE commit post-dates the newest reviewer verdict (the reflex's reviewable_again
+      # shape — updater merge commits are NOT content, or the belt feeds itself), and never on
+      # agent/error / agent/arbitrate PRs (breaker-latched: humans own those). Unreadable
+      # commit/review data HOLDS with a line, never updates — the */15 cron retries.
+      - name: Unstrand changes-requested PRs (the CR-and-behind crack, new-content-gated)
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
           gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
-            --json number,mergeStateStatus,autoMergeRequest,reviewDecision \
+            --json number,mergeStateStatus,autoMergeRequest,reviewDecision,labels \
           | jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND"
-                                and .reviewDecision == "CHANGES_REQUESTED") | .number' \
+                                and .reviewDecision == "CHANGES_REQUESTED"
+                                and (([.labels[].name] | index("agent/error")) == null)
+                                and (([.labels[].name] | index("agent/arbitrate")) == null)) | .number' \
           | while read -r n; do
-              echo "unstrand: updating CR-and-behind PR #$n"
-              gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$n/update-branch" \
-                || echo "unstrand: update of #$n failed (conflict? next run retries)"
+              pj="$(gh pr view "$n" --repo "$GITHUB_REPOSITORY" --json commits,reviews 2>/dev/null)" || pj=""
+              verdict_ok=""
+              if [ -n "$pj" ]; then
+                verdict_ok="$(printf '%s' "$pj" | jq -r '
+                  ([.commits[] | select(.messageHeadline | startswith("Merge branch ") | not)
+                     | .committedDate] | max) as $c
+                  | ([.reviews[] | select(.author.login | startswith("homelab-reviewer"))
+                       | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED")
+                       | .submittedAt] | max) as $v
+                  | if ($c != null and $v != null and $c > $v) then "yes" else "no" end' 2>/dev/null)" || verdict_ok=""
+              fi
+              case "$verdict_ok" in
+                yes)
+                  echo "unstrand: updating CR-and-behind PR #$n (new content since verdict)"
+                  gh api -X PUT "repos/$GITHUB_REPOSITORY/pulls/$n/update-branch" \
+                    || echo "unstrand: update of #$n failed (conflict? next run retries)" ;;
+                no)
+                  echo "unstrand: #$n CR-and-behind but NO new content since the verdict — nothing to re-review, not updating (2026-08-17 narrowing)" ;;
+                *)
+                  echo "unstrand: #$n commit/review probe unreadable — HOLDING, not updating (rule #6; the */15 cron retries)" ;;
+              esac
             done
 
       - name: Flag conflicted PRs (updater can't auto-resolve these)
