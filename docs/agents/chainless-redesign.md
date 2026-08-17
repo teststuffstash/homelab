@@ -61,10 +61,11 @@ an env var only goose read (PR#407).
 
 The ADR-106 checkpoint shape applied to the jail: **pay the design-agents corpus once, at an
 authoring moment, and amortize it over a BATCH** of jail-lane issues — triage (close/merge/
-re-scope), decompose, dispatch. The batch input filter needs no new label: open issues on the
-platform-stack repos **without** `agent-fix` are jail-lane by construction (dispatchability is
-a fixer-block predicate — their absence is the marker); today that set = the inert 🌱 register
-+ unlabeled operator-shaped strays (#354 class). Triage sorts each survivor: seat work (needs
+re-scope), decompose, dispatch. ⚠ The batch input filter was CORRECTED by ADR-109 (2026-08-17):
+¬`agent-fix` is NOT the jail-lane marker — `agent-fix` means suitability, so a flagged-but-
+unqueued issue is ALSO the operator's until queued. The batch input is the who-acts set
+`devbox run board` renders (🌱 register + unlabeled strays + the suitable-unqueued backlog +
+parks/latches). Triage sorts each survivor: seat work (needs
 the corpus) · subagent chunk (mechanical, loud verification) · re-author into the agent lane
 (cheapest — label it and let the cluster fixer ride) · operator decision.
 
