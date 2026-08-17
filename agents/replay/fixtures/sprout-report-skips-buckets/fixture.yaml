@@ -1,10 +1,11 @@
 # ADR-102 / homelab#207 — the 🌱 slice must not report post-launch BUCKETS as untriaged sprouts.
+# Synced with homelab#405: adopted-not-queued class (⏸) now surfaces adopted issues without state.
 # homelab#450 — and must not report Renovate's Dependency Dashboard either.
 #
 # CONDITION UNDER REPLAY. Five open issues, one of each shape the slice has to tell apart:
 #   #80 bot-authored, unlabelled, titled `post-launch:` → a CONTAINER. Must NOT appear.
-#   #81 bot-authored, unlabelled                        → a real inert sprout. MUST appear.
-#   #82 bot-authored, already carries agent-fix         → adopted. Must not appear.
+#   #81 bot-authored, unlabelled                        → a real inert sprout (🌱). MUST appear.
+#   #82 bot-authored, already carries agent-fix         → adopted-not-queued (⏸). MUST appear in new class.
 #   #83 human-authored                                  → never this slice's business.
 #   #84 Renovate-app-authored `Dependency Dashboard`    → a permanent control surface, not work. Must NOT appear.
 #
@@ -21,7 +22,7 @@
 #
 # 2026-08-09 (homelab#226): the UNBLOCKED-UNLABELED clause now shares this block's ONE `gh issue
 # list`, so the recorded CALL grew `createdAt,blockedBy`. This world stays as recorded — none of
-# these four issues carries a blocked-by edge, so none can reach the new class, and that is the
+# these five issues carries a blocked-by edge, so none can reach the new class, and that is the
 # assertion: adding a sharper class did not move a single row of this one. The new class has its
 # own pair (`unblocked-unlabeled-*`).
 name: sprout-report-skips-buckets
