@@ -111,7 +111,7 @@ jobs:
           # pull_request branch had never run — the exact unexecuted-gate class ADR-103 exists
           # to kill, in the gate itself). gh comes from devbox (slim runner has no gh).
           changed=$(devbox run -- gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files?per_page=100" --paginate --jq '.[].filename')
-          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo)\.ya?ml)$' || true)
+          clause=$(printf '%s\n' "$changed" | grep -E '^agents/(model-scout\.sh|coordinator-scan\.sh|review-reflex\.sh|reviewer-(session|optout)\.sh|machine-comment\.sh|goal-budget\.sh|agent-session\.sh|retro-session\.sh|argv-guard\.sh|coordinator/((reflexes|review|coordinate)[^/]*|responder-argo|retro-argo|fix-debounce-argo|deploy-revert-argo)\.ya?ml)$' || true)
           replay=$(printf '%s\n' "$changed" | grep -E '^agents/replay/' || true)
           # Pin-bump carve-out (found on PR#236, 2026-08-11): reflexes-argo.yaml is BOTH a ratchet
           # clause file AND a pin-only-lint guarded file — a pin-only diff changes no action stream
