@@ -7,7 +7,7 @@ tracker.
 **Conventions (the contract):**
 
 - Every item has a stable id **`FU-NNN`** (3 digits, sequential, **never reused**).
-  Next free id: **FU-174**. Burned ids (issued, then retracted without ever being work) are declared
+  Next free id: **FU-175**. Burned ids (issued, then retracted without ever being work) are declared
   right here in the form `FU-NNN burned — <why>`, permanently — the declaration IS the record, and
   the lint reads this line so a reference to a burned id doesn't register as dangling:
   **FU-122 burned** — filed then retracted 2026-07-31 as already-shipped (ADR-093).
@@ -269,6 +269,16 @@ the block needs pruning, not more headings.
       freshness gauge** (age of last `stack=jail` go_usage row — the 2026-08-17 stale-shim
       under-metering, detection half), (c) **Go 429 counter + near-threshold alerts** (zero
       opencode-window alert rules exist today). Dashboard parity panels ride each piece.
+- [ ] **FU-174** — **Reasoning effort is unmodeled fleet-wide (operator, 2026-08-17).** The DeepSWE
+      numbers behind the flash slot ran `[max]`; the fleet runs provider defaults — the jail shim
+      even DROPS `thinking` on translated legs, so no Go model ever sees an effort signal.
+      Shape (seat-ruled): an `effort_map` beside `urgency_map` in model-classes.json — same
+      ADR-094 precedence (explicit round-state → labels `agent-budget/lg|xs` → role → default),
+      resolving an ABSTRACT tier; the injection points (proxy Go leg, jail shim) translate to
+      each model's surface knob. Effort-before-model as the ladder's cheapest escalation rung.
+      **Next:** matrix-spike rows (which opencode surfaces accept which knob), then a two-arm
+      flash default-vs-max experiment (pass-rate/rounds/window-draw — effort multiplies draw;
+      couples FU-170). Design home lands with the build: model-routing.md §effort (beside M11).
 - [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
