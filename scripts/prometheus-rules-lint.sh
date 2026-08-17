@@ -125,4 +125,6 @@ for rf in $(find argocd -name '*.promtool-rules' | sort); do
 done
 [ "$pins" -gt 0 ] && echo "prometheus-rules-lint: $pins hand-copy file(s) drift-pinned against their CRs"
 [ "$witness_only" -gt 0 ] && echo "prometheus-rules-lint: $witness_only witness-only copy file(s) (no CR counterpart, fully declared)"
+other=$(( $(find argocd -name "*.promtool-rules" | wc -l) - pins - witness_only ))
+[ "$other" -gt 0 ] && echo "prometheus-rules-lint: $other copy file(s) with no alert rules (recording-only — pinned elsewhere, e.g. exporter-self-test)"
 exit $rc
