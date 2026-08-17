@@ -89,6 +89,13 @@ transitions:
           queued — safe because level-triggered; cancel-in-progress DELIBERATELY false (killing an
           in-flight run can drop the 422→merge-conflict labeling, MP-T06 — the silent-park class)"
         anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "cancel-in-progress: false" }
+      - desc: "the CR∧BEHIND unstrand belt fires ONLY on new content since the newest reviewer
+          verdict (non-merge commits — the reflex's reviewable_again shape; updater merges are not
+          content or the belt feeds itself) and never on agent/error / agent/arbitrate PRs.
+          Measured 2026-08-17: the unconditional belt spent 34 branch updates + ~35 CI runs
+          keeping unmergeable PRs current in one busy-master day (#473 ×16 parked, #475 ×18
+          breaker-latched); unreadable probe data HOLDS, never updates"
+        anchor: { file: .github/workflows/update-pr-branch.reusable.yml, pattern: "new content since verdict" }
     incidents: ["2026-07-09 oracle-fleet#6 (changes-requested refusal deadlock → MP-T04's BEHIND exception)"]
 
   - id: MP-T03

@@ -266,7 +266,16 @@ opencode-go/deepseek-v4-flash`, fallback `claude/haiku` — deliberately amendin
 independence ruling as a TEMPORARY dogfood (platform has the most issue traffic → fastest
 metrics; reverts to haiku once stack chains ride Go flash). Oracle/sleep chains untouched;
 circles folds in at the role-wiring leg. Reviewer failover model = qwen3.5-plus (PR#457 — a
-flash failover would review flash-authored code; decorrelation wins).
+flash failover would review flash-authored code; decorrelation wins). **Same-day follow-through:**
+the #448 OpenAI-surface translator SHIPPED after all (PR#465, LiteLLM SDK leg in the jail shim —
+luna's Anthropic-compat surface is broken even for text, matrix row; build-order item 1's
+"returns to backlog only if the working set proves too narrow" fired); Go window accounting
+FIXED (PR#481 — epoch-anchored bounds 5h=daily-grid:217m / 7d=Mon:00Z / 30d=day-13:11:30Z,
+window-DRAW pricing; a false 81% weekly latch and a ~30× under-count both traced to rolling
+windows + cache-assuming prices; meter now console-exact after calibration rows); the Go
+**concurrency semaphore** landed (PR#484, FU-170(a), `OPENCODE_MAX_RUNNING=5`); and
+`opencode_subscription_reset_timestamp_seconds` + the two-row parity dashboard shipped
+(PR#483, uid `claude-subscription` → "Agent subscriptions — headroom").
 
 **Chunks A–D shipped/live** (PR#429/#433/#434/#435/#436); two live-DOA defects in the leg, both
 stub-invisible, both matrix-predicted, both caught only by seat post-merge probes: (1) no
