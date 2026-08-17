@@ -6,7 +6,7 @@
 # THE CONTRACT (executes the REAL gate block from reviewer-session.sh via sentinel):
 #   1. The gate calls `bash "$HERE/subscription-latch.sh"` — bridge sets HERE to fixture dir (stub).
 #   2. The gate calls `curl ... $PROXY/opencode-limit` — curl stub records the call and returns Go-available JSON.
-#   3. With MODEL_SET_EXPLICIT unset and Go available: MODEL=deepseek-v4-flash, GO_SERVED=1, continue (exit 0).
+#   3. With MODEL_SET_EXPLICIT unset and Go available: MODEL=qwen3.5-plus, GO_SERVED=1, continue (exit 0).
 #   4. The action stream asserts: curl probe happened AND "serving review ... from Go rail" line emitted.
 #
 # Parts: bridge.sh (seams: HERE, stubs) + block:reviewer-go-failover-gate (real code)
