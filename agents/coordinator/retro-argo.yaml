@@ -200,21 +200,12 @@ spec:
               # BOUNDED slice, not the whole ledger (B2: pick the worst-K): the full 203-row dump
               # made a 146KB brief whose base64 blew Linux's 128KiB per-argv-element cap (E2BIG)
               # in the launcher hand-off — and the whole ledger was never the contract.
+              # r4 F5: rows stamped mid-flight (`snapshot: true` — issue still OPEN at emit time)
+              # are NOT terminal facts; the rank excludes them and counts the exclusion loudly.
+              # The logic lives in agents/retro-rank.py so the exclusion is replay-pinned.
               export AWS_ACCESS_KEY_ID="$AGENT_TS_READER_ID" AWS_SECRET_ACCESS_KEY="$AGENT_TS_READER_SECRET"
               s5cmd --endpoint-url "$AGENT_TS_ENDPOINT" cat "s3://$AGENT_TS_BUCKET/_ledger.jsonl" > /tmp/ledger.jsonl
-              python3 - <<'PY'
-              import json
-              KEEP = 40  # deep-dive K rides on top of this; context rows beyond it are waste
-              rows = [json.loads(l) for l in open('/tmp/ledger.jsonl') if l.strip()]
-              rows.sort(key=lambda r: (r.get("terminal_label") != "agent/blocked",
-                                       -(r.get("rounds") or 0),
-                                       -(r.get("total_cost_usd") or 0),
-                                       -(r.get("wall_time_s") or 0)))
-              for i, r in enumerate(rows):
-                  r["rank"] = i + 1
-              json.dump(rows[:KEEP], open('/tmp/ledger-ranked.json', 'w'), indent=1)
-              print(f"ledger: {len(rows)} rows ranked, top {min(KEEP, len(rows))} into the brief (no silent caps)")
-              PY
+              python3 agents/retro-rank.py /tmp/ledger.jsonl /tmp/ledger-ranked.json 40
               # Only the OVERRIDE is passed through. Unset, the launcher mints this cell's own
               # capped key (homelab#270) — the empty default used to mean the ride quietly fell
               # back to the stack fixer's standing key, which is what run 3's dead cell-b spent.
