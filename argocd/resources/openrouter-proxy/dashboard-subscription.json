@@ -140,8 +140,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 4 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_utilization", "legendFormat": "{{window}}" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_utilization_threshold", "legendFormat": "{{window}} threshold" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max by (window) (anthropic_subscription_utilization)", "legendFormat": "{{window}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max by (window) (anthropic_subscription_utilization_threshold)", "legendFormat": "{{window}} threshold" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -171,8 +171,8 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 13 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_dispatch_limited", "legendFormat": "dispatch limited" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "anthropic_subscription_latched", "legendFormat": "429 latch" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(anthropic_subscription_dispatch_limited)", "legendFormat": "dispatch limited" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(anthropic_subscription_latched)", "legendFormat": "429 latch" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -240,7 +240,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 27 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "opencode_subscription_usage_usd", "legendFormat": "{{window}}" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max by (window) (opencode_subscription_usage_usd)", "legendFormat": "{{window}}" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -261,7 +261,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 12, "y": 27 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "opencode_subscription_usage_usd{window=\"5h\"} / 12" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(opencode_subscription_usage_usd{window=\"5h\"}) / 12", "instant": true }
       ],
       "fieldConfig": {
         "defaults": {
@@ -283,7 +283,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 16, "y": 27 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "opencode_subscription_usage_usd{window=\"7d\"} / 30" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(opencode_subscription_usage_usd{window=\"7d\"}) / 30", "instant": true }
       ],
       "fieldConfig": {
         "defaults": {
@@ -305,7 +305,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 20, "y": 27 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "opencode_subscription_usage_usd{window=\"30d\"} / 60" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(opencode_subscription_usage_usd{window=\"30d\"}) / 60", "instant": true }
       ],
       "fieldConfig": {
         "defaults": {
@@ -327,7 +327,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 4, "x": 12, "y": 31 },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "opencode_subscription_dispatch_limited" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(opencode_subscription_dispatch_limited)", "instant": true }
       ],
       "fieldConfig": {
         "defaults": {
