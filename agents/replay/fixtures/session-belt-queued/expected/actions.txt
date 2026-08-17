@@ -1,0 +1,7 @@
+CALL kubectl -n agent-coordinator get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+OUT DISPATCH #70 (homelab, scan: the janitor tick drops its exit code)
+OUT DISPATCH #201 (homelab, ci: add the required ci workflow to this repo)
+OUT ORPHAN [homelab] ⏳ held (item session in flight) — a coordinator session is riding issue #153 (FU-146):
+OUT ORPHAN   issue #153 — monitoring: marker memory limits for kube-prometheus-stack
+OUT REACHED: end
+RC 0

@@ -1,0 +1,6 @@
+CALL kubectl -n agent-coordinator get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+OUT SESS_NUMS 153 
+OUT UNIT c4c5-redispatch|homelab|issue-70|fix
+OUT V2   issue #70 — scan: the janitor tick drops its exit code [in-progress, worker terminal, no PR → C4/C5 re-tick]
+OUT REACHED: end
+RC 0

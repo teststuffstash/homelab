@@ -1,0 +1,31 @@
+# FU-146 (homelab#153 five-dispatch storm) — leg (b): c4c5-redispatch's abandoned predicate
+# excludes an in-progress item whose coordinator session pod is RUNNING. A coordinator session
+# mid-triage leaves `agent/in-progress` with NO worker pod and NO PR — the exact footprint the
+# c4c5 clause read as abandonment (three `c4c5-redispatch` sessions rode #153 in two minutes).
+#
+# CONDITION UNDER REPLAY. Two in-progress issues: #153 (a `coordinator-homelab-issue-153` session
+# pod is RUNNING in the loop ns) and #70 (no session pod). No worker pod, no open PR, no merged PR
+# — the abandoned predicate holds for BOTH by every pre-FU-146 signal.
+#
+# THE CONTRACT:
+#   1. #153 is NOT a c4c5-redispatch unit and gets NO v2 report line — mid-triage is not
+#      abandonment, and the running session is the proof.
+#   2. #70 emits its unit and its report line, unchanged — a session pod on a SIBLING must not
+#      silence the ordinary abandoned ride.
+#   3. `sess_nums` is computed by the SAME `session-belt` probe block (from a recorded pod read),
+#      not hardcoded in the bridge — the C4C5_SEL `$sess` exclusion and the probe that feeds it
+#      are pinned together.
+#   4. The `ambig` goal-child report applies the same exclusion (a ridden child is not
+#      undecidable); this world has no goal children, so it stays silent either way.
+#
+# The bridge sets the c4c5 loop variables (the enclosing per-repo loop would fetch them); the
+# session-belt probe block runs first so `sess_nums` is real arithmetic over the recorded pods.
+name: session-belt-c4c5
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:session-belt
+  - block:c4c5-selector
+  - block:c4c5-derivations
+  - file:post.sh

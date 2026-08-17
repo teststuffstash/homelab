@@ -1,0 +1,13 @@
+CALL gh pr view 396 --repo teststuffstash/circles --json state,reviewDecision,labels,body,author
+CALL kubectl -n circles get pods -l app=agent-session,project=circles --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL kubectl -n circles-agents get pods -l app=agent-coordinator --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json
+CALL dispatch_phase circles
+CALL scan_phase dispatch
+CALL coordinator-session --stack circles --repos circles-iac circles --main-repo circles --model sonnet --loop-ns circles-agents --wip 1 --detach --item repo=circles item=pr-396 clause=changes-requested
+CALL scan_phase deterministic
+OUT REACHED: worker-authored PR with a live session pod — held before dispatch
+OUT → unit fast-path dispatch for circles: circles pr-396 (changes-requested, model sonnet, wip 1)
+OUT RETURN 0
+OUT REACHED: end
+ERR unit fast-path: ⚠ coordinator session-pod probe FAILED — FU-146 session belt off this tick; the launcher atomic gate is the backstop
+RC 0
