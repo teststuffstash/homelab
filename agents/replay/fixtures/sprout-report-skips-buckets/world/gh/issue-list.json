@@ -5,5 +5,7 @@
     "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [] },
   { "number": 82, "title": "a sprout a human already adopted",
     "author": { "login": "homelab-agents-1234", "is_bot": true }, "labels": [ { "name": "agent-fix" } ] },
-  { "number": 83, "title": "an issue a human filed", "author": { "login": "RasmusSoot", "is_bot": false }, "labels": [] }
+  { "number": 83, "title": "an issue a human filed", "author": { "login": "RasmusSoot", "is_bot": false }, "labels": [] },
+  { "number": 84, "title": "Dependency Dashboard",
+    "author": { "login": "app/homelab-renovate-1234", "is_bot": true }, "labels": [] }
 ]

@@ -1085,8 +1085,14 @@ for name in $(stacks_json | jq -r '.stacks[].name'); do
     # triage them", and the report's own instruction (label agent-fix[+queued] to adopt) would
     # dispatch a worker against an issue with nothing to build. Its children are the work, and they
     # appear here on their own when they land inert.
+    # ⚠ RENOVATE'S DEPENDENCY DASHBOARD IS NOT A SPROUT (homelab#450). Same failure mode as the bucket:
+    # bot-authored, unlabelled, never adoptable, never closeable — a permanent, self-updating control
+    # surface, not work. It sat at the top of this report for ~6 weeks in two repos whose only signal
+    # it was. The carve-out is by AUTHOR (app/homelab-renovate-1234), the one stable fact about the
+    # dashboards; Renovate PR gating lives elsewhere (renovate-global.json, FU-125) — this is the
+    # dashboard ISSUE only.
     sprouts="$(printf '%s' "$inert" \
-      | jq -r --argjson skip "$unbnums" '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not) and (.number as $n | ($skip|index($n)) == null))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
+      | jq -r --argjson skip "$unbnums" '[.[]|select((.author.is_bot == true) and (((.labels|map(.name))|index("agent-fix"))|not) and ((.title|startswith("post-launch:"))|not) and ((.author.login // "") != "app/homelab-renovate-1234") and (.number as $n | ($skip|index($n)) == null))|"  issue #\(.number) — \(.title) (by \(.author.login))"]|.[]' 2>/dev/null || true)"
     [ -n "$sprouts" ] && orphans="${orphans}[$repo] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):\n${sprouts}\n"
     # <<<REPLAY:sprout-report<<<
     # ── RETIRED-FORMAT `Depends-on:` lint (homelab#226) ───────────────────────────────────────
