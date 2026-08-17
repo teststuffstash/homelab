@@ -167,6 +167,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harvest-goal-open-exhausted` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-goal-open-funded` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-master-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `ledger-emitter-rounds` | suite | - | `-` | - |
 | `pick-rail-both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail-clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail-go` | actions | - | `agents/subscription-latch.sh` | - |
@@ -186,6 +187,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key-minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-subscription` | actions | - | `agents/retro-session.sh` | - |
+| `retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `reviewer-go-failover-available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-limited` | actions | - | `agents/reviewer-session.sh` | - |

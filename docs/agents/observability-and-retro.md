@@ -423,6 +423,14 @@ Grafana dashboard over the ledger = the long-promised stats v2 (**FU-057**). The
 the KPI set the retro measures itself against: cost/issue, rounds/issue, blocked rate, estimator
 error.
 
+**Row schema (r4 F4/F5, homelab PR#454 — `agents/ledger.py`):** `rounds` is the per-round ARRAY
+`[{model, exit_status, error_class, ci}]`, round-ordered and strike-only entries included; the flat
+`models` / `worker_exit_statuses` / `ci_sequence` fields are DERIVED from it order-preservingly
+(older rows carried `models` as a de-duplicated set, which made `zip(models, exit_statuses)`
+unsound — do not re-derive a set from the array). A row stamped while the issue was still OPEN
+carries `snapshot: true`; the retro's pain-rank excludes those rows and counts the exclusion
+(`agents/retro-rank.py`). Historical rows lack both fields.
+
 **Two additions from the 2026-07-09 runs (extend the AGENT_RUN_STATS schema, feed FU-057):**
 - **`exit_status` + `error_class`** per run — clean / ci-failed / **harness-death** (goose
   `-32602` truncation) / **auth-storm** (401/403) / budget-403 / timeout. Without this the ledger
