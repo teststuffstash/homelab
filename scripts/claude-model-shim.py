@@ -98,7 +98,11 @@ GO_REWRITE = {k.strip(): v.strip() for k, v in
 LITELLM_VENV = os.environ.get("SHIM_LITELLM_VENV", os.path.expanduser("~/.claude/venvs/litellm"))
 # The opencode-go ids whose Anthropic-compat surface is broken (probed 2026-08-17) and
 # MUST take the translator. The verified trio + flash keep the existing compat path.
-GO_OPENAI_ONLY = {"gpt-5.6-luna"}
+# Env-extendable (PR#465 review): SHIM_GO_OPENAI_ONLY adds comma-separated bare ids so the
+# NEXT broken model is a live-session env change, not a code edit — the SHIM_MODEL_REWRITE
+# pattern. Merged in, never replacing (the probed baseline must not be un-settable by env).
+GO_OPENAI_ONLY = {"gpt-5.6-luna"} | {
+    m.strip() for m in os.environ.get("SHIM_GO_OPENAI_ONLY", "").split(",") if m.strip()}
 _litellm = None  # lazy cache for _litellm_import()
 
 
@@ -488,14 +492,16 @@ class Handler(BaseHTTPRequestHandler):
         litellm = _litellm_import()
         try:
             resp = litellm.anthropic.messages.create(**kwargs)
+            # Serialization stays INSIDE the guard (PR#465 review): an unexpected success-value
+            # shape used to throw uncaught here — no reply ever sent, a silent connection reset
+            # instead of the loud 502 every other path holds.
+            if not isinstance(resp, dict):
+                resp = resp.model_dump(mode="json") if hasattr(resp, "model_dump") else dict(resp)
+            out = json.dumps(resp, default=str).encode()
         except Exception as e:
             self._reply(502, json.dumps({"error": f"translator upstream failed: {e}"}).encode())
             print(f"shim: 502 {rail}-leg translator model={model} err={e}", file=sys.stderr, flush=True)
             return
-        # litellm returns an Anthropic-shaped dict (or pydantic model) — serialize it back.
-        if not isinstance(resp, dict):
-            resp = resp.model_dump(mode="json") if hasattr(resp, "model_dump") else dict(resp)
-        out = json.dumps(resp, default=str).encode()
         self._reply(200, out)
         print(f"shim: {rail}-leg(translated) 200 model={model} bytes={len(out)}", file=sys.stderr, flush=True)
         if rail in ("go", "zen"):
@@ -505,8 +511,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _stream_translated(self, kwargs: dict, rail: str, model: str):
         litellm = _litellm_import()
+        first = None
         try:
             gen = litellm.anthropic.messages.create(**kwargs)  # sync, stream=True -> Iterator[bytes]
+            # PRIME the stream before committing 200 (PR#465 review): a lazy stream client fires
+            # its upstream call/auth on the first next(), so without this an upstream failure
+            # landed AFTER the committed 200 as a silently truncated stream. Pulling the first
+            # event here keeps that whole class on the loud-502 path; StopIteration (an honestly
+            # empty stream) is not an error and falls through with first=None.
+            it = iter(gen)
+            try:
+                first = next(it)
+            except StopIteration:
+                it = iter(())
         except Exception as e:
             self._reply(502, json.dumps({"error": f"translator upstream failed: {e}"}).encode())
             print(f"shim: 502 {rail}-leg translator stream model={model} err={e}", file=sys.stderr, flush=True)
@@ -520,7 +537,8 @@ class Handler(BaseHTTPRequestHandler):
         tail = b""
         n = 0
         try:
-            for chunk in gen:
+            from itertools import chain as _chain
+            for chunk in (_chain([first], it) if first is not None else it):
                 if not isinstance(chunk, bytes):  # litellm yields raw SSE bytes; be defensive
                     chunk = json.dumps(chunk, default=str).encode() if isinstance(chunk, dict) \
                         else str(chunk).encode()
