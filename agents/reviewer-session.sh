@@ -130,13 +130,32 @@ REVIEWER_LOGIN="${REVIEWER_LOGIN:-homelab-reviewer}"   # the reviewer App's bot 
 # legitimate re-review); event redelivery / edge+backstop races collide on the SAME name and the
 # API server arbitrates. Head-sha probe failure degrades to the old timestamp name, loudly —
 # the pod-label check + STEP-0 remain the belts on that path.
-HEADSHA8="$(gh pr view "$PR" --repo "$REPO_SLUG" --json headRefOid -q '.headRefOid' 2>/dev/null | cut -c1-8)" || HEADSHA8=""
+# >>>REPLAY:reviewer-currency-gate>>>
+# CURRENCY GATE (2026-08-17): a launcher-side re-probe of the dispatch premise, the LAST check
+# before pod creation — the FU-092 probe already fetches the PR head right here, so piggybacking
+# state+mergeStateStatus costs ZERO extra API calls. 9 reviewer sessions burned as STANDING-ASIDE
+# today: each dispatched at a green+current head, BEHIND by pod-execution — the pod and its
+# subscription semaphore slot were already spent. The in-pod STEP-0 stays the belt behind this
+# gate; probe FAILURE is fail-OPEN (a GitHub blip must not block every review).
+PR_JSON="$(gh pr view "$PR" --repo "$REPO_SLUG" --json headRefOid,state,mergeStateStatus 2>/dev/null)" || PR_JSON=""
+PR_STATE="$(printf '%s' "$PR_JSON" | jq -r '.state // empty' 2>/dev/null)" || PR_STATE=""
+PR_MERGE_STATE="$(printf '%s' "$PR_JSON" | jq -r '.mergeStateStatus // empty' 2>/dev/null)" || PR_MERGE_STATE=""
+HEADSHA8="$(printf '%s' "$PR_JSON" | jq -r '.headRefOid // empty' 2>/dev/null | cut -c1-8)" || HEADSHA8=""
+if [ -n "$PR_STATE" ] && [ "$PR_STATE" != "OPEN" ]; then
+  echo "→ review of ${REPO_SLUG}#${PR} skipped — PR is ${PR_STATE} (currency gate; nothing to review)"
+  exit 0
+fi
+if [ "$PR_MERGE_STATE" = "BEHIND" ] || [ "$PR_MERGE_STATE" = "DIRTY" ]; then
+  echo "→ review of ${REPO_SLUG}#${PR} skipped — head is ${PR_MERGE_STATE} at spawn time (currency gate: the level-triggered path re-picks when current; was a STANDING-ASIDE pod burn before)"
+  exit 0
+fi
 if [ -n "$HEADSHA8" ]; then
   POD="reviewer-${PROJECT}-${PR}-${HEADSHA8}"
 else
   echo "WARN: head-sha probe failed — timestamp pod name (idempotency belts: pod-label check + STEP-0 only)" >&2
   POD="reviewer-${PROJECT}-${PR}-$(date -u +%H%M%S)"
 fi
+# <<<REPLAY:reviewer-currency-gate<<<
 
 # In-pod prep, run under `bash -lc` so the image's gh-wrapper (reads the LIVE ~1h token from
 # GH_TOKEN_FILE) is on PATH. gh repo clone → a full clone (master present) so /code-review can diff
