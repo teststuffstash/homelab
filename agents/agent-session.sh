@@ -201,7 +201,9 @@ if [ "$AGENT_ROUTER" != "off" ]; then
   _route_urgency=""
   [ -z "${WORK_BRANCH:-}" ] || _route_urgency="tight"
   _keyref="${PROJECT}/${OR_SECRET:-${PROJECT}-openrouter}"
-  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _keyref="";; esac
+  # Subscription-rail rides (Anthropic AND opencode-go) carry no OpenRouter key ref — the Go rail's
+  # credential lives proxy-side (ADR-107 chunk C), exactly like the claude oauth.
+  case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _keyref="";; esac
   _req="$(jq -nc --arg stack "$(printf '%s' "$_srow" | jq -r '.name // ""')" \
       --arg task "${TASK:-adhoc}" --arg session "agent-${PROJECT}-${TASK:-adhoc}-r${ROUND}" \
       --arg key_ref "$_keyref" \
@@ -291,7 +293,10 @@ fi
 # — no OpenRouter state may stand between it and its dispatch, so it does not even probe: a
 # claudeTier ride's relationship to the OpenRouter key is "fallback I am not using", full stop.
 _sub_rail_ride=""
-case "${HARNESS}:${MODEL}" in claude:*|*:claude/*) _sub_rail_ride=1;; esac
+# opencode-go/* joins the arm (2026-08-17, the platform Go-flash dogfood): a Go ride buys nothing
+# from OpenRouter either — no credit probe, no #158 degrade (its own capacity gate is the
+# /opencode-limit latch at the FU-088 gate below).
+case "${HARNESS}:${MODEL}" in claude:*|*:claude/*|*:opencode-go/*) _sub_rail_ride=1;; esac
 _or_probe_url="${AGENT_OPENROUTER_PROXY-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
 if [ -z "$_sub_rail_ride" ] && [ -z "$OR_CAPACITY_DOWN" ] \
    && [ -n "$_or_probe_url" ] && [ "${AGENT_CREDIT_GATE:-1}" = "1" ]; then
@@ -939,7 +944,10 @@ if [ -n "${RECIPE:-}" ]; then
   # the predicate, not MODEL_RAIL: a bare-alias operator override (--model sonnet) parses
   # rail=openrouter too (the parser's catch-all), and rail-keying would coerce it away.
   _claude_model="${MODEL:-haiku}"
-  case "$_claude_model" in */*) _claude_model="haiku";; esac
+  # An opencode-go/* id rides WHOLE: the CLI passes the string through to the API body and the
+  # egress proxy keys the Go rail on the prefix (reviewer-proven wire shape, PR#437). Every OTHER
+  # slash-id collapses to haiku exactly as before (the PR#407 vendor-slash rationale above).
+  case "$_claude_model" in opencode-go/*) ;; */*) _claude_model="haiku";; esac
   case "$HARNESS" in
     claude) RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; claude -p --model ${_claude_model} --dangerously-skip-permissions --max-turns ${CLAUDE_MAX_TURNS:-200} --append-system-prompt-file /tmp/fix-recipe.yaml 'The appended system prompt is this repo'\\''s recipe (goose format) with the platform environment card at the top — TRUST the card over any assumption. Follow the recipe exactly; your task is its prompt with issue=${ISSUE_N}. End your final message with the JSON object its response schema describes (single line, all required keys).'";;
     goose)  RUN_CMD="${CTX_PRELUDE}printf '%s' '${RECIPE_B64}' | base64 -d > /tmp/fix-recipe.yaml; GOOSE_MAX_TOKENS=16384 goose run --recipe /tmp/fix-recipe.yaml --params issue=${ISSUE_N}";;
@@ -1097,13 +1105,22 @@ fi
 # loudly at `claude: command not found` → one strike, no silent damage.
 CLAUDE_ENV=""; SUB_LABEL=""
 if [ "$HARNESS" = "claude" ]; then
-  # FU-088: mark subscription-drawing pods for the concurrency semaphore's label-selector count
-  SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude'
-  # homelab#158: a DEGRADED ride carries its rail on the pod itself, so "which rides did the outage
-  # push onto the subscription, and what did they cost" is one kubectl/Loki query away rather than
-  # an inference from the model id. A separate label key — the semaphore's selector must keep
-  # counting this pod exactly like any other claude ride, because it draws the same capacity.
-  [ -z "${RAIL_DEGRADED:-}" ] || SUB_LABEL="${SUB_LABEL}"', "homelab.teststuff.net/rail": subscription-fallback'
+  case "$MODEL" in
+    opencode-go/*)
+      # Go-rail ride (ADR-107, platform dogfood 2026-08-17): draws the OpenCode Go windows, NOT
+      # the Anthropic subscription — so NO subscription-session label (the FU-088 semaphore's
+      # label-selector must not count it against the Anthropic slots), rail label instead (the
+      # #158 cost-visibility pattern: "what rode the Go rail" is one kubectl/Loki query).
+      SUB_LABEL=', "homelab.teststuff.net/rail": opencode-go';;
+    *)
+      # FU-088: mark subscription-drawing pods for the concurrency semaphore's label-selector count
+      SUB_LABEL=', "homelab.teststuff.net/subscription-session": claude'
+      # homelab#158: a DEGRADED ride carries its rail on the pod itself, so "which rides did the outage
+      # push onto the subscription, and what did they cost" is one kubectl/Loki query away rather than
+      # an inference from the model id. A separate label key — the semaphore's selector must keep
+      # counting this pod exactly like any other claude ride, because it draws the same capacity.
+      [ -z "${RAIL_DEGRADED:-}" ] || SUB_LABEL="${SUB_LABEL}"', "homelab.teststuff.net/rail": subscription-fallback';;
+  esac
   # Tier default: Haiku (fast, ~$0 marginal on subscription). An explicit --model wins.
   if [ "$MODEL" = "openrouter/deepseek/deepseek-v4-flash" ]; then MODEL="haiku"; fi
   GOOSE_MODEL="$MODEL"
@@ -1251,7 +1268,8 @@ REPORT_STACK="$(jq -r --arg r "$PROJECT" '.stacks[]|select([.repos[]]|index($r))
 # downstream (the same one-parser rule FU-127 applied to model ids).
 # >>>REPLAY:agent-rail>>>
 if [ -n "${RAIL_DEGRADED:-}" ]; then AGENT_RAIL="subscription-fallback"
-elif [ "$HARNESS" = "claude" ];  then AGENT_RAIL="subscription"
+elif [ "$HARNESS" = "claude" ];  then
+  case "$MODEL" in opencode-go/*) AGENT_RAIL="opencode-go";; *) AGENT_RAIL="subscription";; esac
 else                                  AGENT_RAIL="openrouter"; fi
 # <<<REPLAY:agent-rail<<<
 TS_ENDPOINT="http://garage.garage.svc.cluster.local:3900"; TS_BUCKET="agent-transcripts"
@@ -1403,10 +1421,23 @@ fi
 # >>>REPLAY:fu088-gates>>>
 # FU-088(a): a claude-harness worker draws on the one operator subscription — defer the spawn
 # while the egress proxy's 429 latch / utilization threshold / concurrency semaphore says so
-# (OpenRouter harnesses are unaffected).
-if [ "$HARNESS" = "claude" ] && ! bash "$HERE/subscription-latch.sh"; then
-  echo "→ ${PROJECT} claude-tier dispatch deferred — subscription limited (FU-088)"
-  exit 0
+# (OpenRouter harnesses are unaffected). An opencode-go/* ride probes ITS rail's latch instead —
+# the proxy's self-metered Go window (chunk C /opencode-limit; the reviewer failover's gate,
+# transposed). Both probes are fail-open burn-savers: the proxy 429s a genuinely latched window.
+if [ "$HARNESS" = "claude" ]; then
+  case "$MODEL" in
+    opencode-go/*)
+      _go_reply="$(curl -fsS --max-time 5 "${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}/opencode-limit" 2>/dev/null)" || _go_reply=""
+      if [ -n "$_go_reply" ] && [ "$(printf '%s' "$_go_reply" | jq -r '.limited // false' 2>/dev/null)" = "true" ]; then
+        echo "→ ${PROJECT} Go-rail dispatch deferred — opencode window limited ($(printf '%s' "$_go_reply" | jq -r '.reason // "?"' 2>/dev/null))"
+        exit 0
+      fi;;
+    *)
+      if ! bash "$HERE/subscription-latch.sh"; then
+        echo "→ ${PROJECT} claude-tier dispatch deferred — subscription limited (FU-088)"
+        exit 0
+      fi;;
+  esac
 fi
 
 # FU-088(b): account-level OpenRouter credit gate — credit exhaustion otherwise surfaces only as

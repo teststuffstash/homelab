@@ -145,6 +145,8 @@ is stale, so it cannot drift the way the prose register did.
 | `doorbell-collapse` | actions | - | `agents/coordinator-scan.sh` | - |
 | `doorbell-fanout` | actions | - | `agents/coordinator-scan.sh` | - |
 | `fix-debounce` | table | - | `agents/coordinator/fix-debounce-argo.yaml` | IL-T23 IL-T24 |
+| `go-rail-latch-clear` | actions | - | `agents/agent-session.sh` | - |
+| `go-rail-latch-defer` | actions | - | `agents/agent-session.sh` | - |
 | `goal-abandoned` | actions | - | `agents/coordinator-scan.sh` | IL-T21 IL-T22 |
 | `goal-ancestor` | table | - | `agents/agent-session.sh` | - |
 | `goal-assembly-complete` | actions | - | `agents/coordinator-scan.sh` | IL-T12 IL-T18 |
@@ -158,6 +160,7 @@ is stale, so it cannot drift the way the prose register did.
 | `goal-reverted` | actions | - | `agents/coordinator-scan.sh` | IL-T20 IL-T22 |
 | `goal-validated` | actions | - | `agents/coordinator-scan.sh` | IL-T19 IL-T22 |
 | `harness-run-cmd-claude` | actions | - | `agents/agent-session.sh` | - |
+| `harness-run-cmd-go` | actions | - | `agents/agent-session.sh` | - |
 | `harness-run-cmd-goose` | actions | - | `agents/agent-session.sh` | - |
 | `harvest-deep-sprout` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `harvest-goal-closed` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 |

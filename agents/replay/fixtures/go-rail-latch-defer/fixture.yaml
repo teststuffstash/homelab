@@ -1,0 +1,15 @@
+# The FU-088 gate's Go arm, LIMITED leg (ADR-107, platform Go-flash dogfood 2026-08-17).
+#
+# CONDITION UNDER REPLAY: an opencode-go/* dispatch while the proxy's self-metered Go window is
+# latched (/opencode-limit → limited:true).
+#
+# THE CONTRACT: the spawn defers report-only (exit 0, the deferred line naming the reason) — and
+# the ANTHROPIC latch is never consulted: the bridge's `bash` tripwire reds this fixture if the
+# Go arm ever falls through to subscription-latch.sh, because a Go ride deferring on Anthropic
+# state is exactly the inversion homelab#158 was about (idle rail waiting on a busy one).
+name: go-rail-latch-defer
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates

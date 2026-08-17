@@ -8,7 +8,7 @@ prefix, and how a future rail (local vLLM, say) has nowhere to live.
 
 The shape is `{rail, harness, model}`:
 
-  rail     WHERE the completion is bought:   openrouter | anthropic-subscription
+  rail     WHERE the completion is bought:   openrouter | anthropic-subscription | opencode-go
   harness  WHICH binary runs the ride:       claude | "" (= caller's default: goose/opencode)
   model    what the rail is asked for, in ITS OWN namespace
 
@@ -17,6 +17,10 @@ Rules, in one place, ordered:
   claude/<alias>              → anthropic-subscription, harness claude, model <alias>
                                 (FU-066: the claim carries no harness field, so the tier rides the
                                  string; an explicit --harness still wins at the caller)
+  opencode-go/<model>         → opencode-go, harness claude, model UNCHANGED (prefix KEPT: the
+                                 egress proxy keys the Go rail on the body's model prefix and
+                                 strips it itself — openrouter-proxy.py GO_PREFIX; ADR-107, the
+                                 reviewer failover proved the wire shape on PR#437)
   openrouter/<vendor>/<model> → openrouter, model <vendor>/<model>      (rail prefix, stripped)
   openrouter/<codename>       → openrouter, model openrouter/<codename> (CLOAKED — prefix KEPT:
                                  the id genuinely lives under that namespace upstream)
@@ -36,6 +40,7 @@ import sys
 
 RAIL_OPENROUTER = "openrouter"
 RAIL_SUBSCRIPTION = "anthropic-subscription"
+RAIL_OPENCODE_GO = "opencode-go"
 
 
 def parse(model_id: str) -> dict[str, str]:
@@ -45,6 +50,10 @@ def parse(model_id: str) -> dict[str, str]:
     raw = (model_id or "").strip()
     if raw.startswith("claude/"):
         return {"rail": RAIL_SUBSCRIPTION, "harness": "claude", "model": raw[len("claude/"):]}
+    if raw.startswith("opencode-go/"):
+        # The Go subscription rail (ADR-107): claude is the one harness, and the FULL id rides —
+        # the proxy routes /anthropic/* requests by this prefix and strips it before forwarding.
+        return {"rail": RAIL_OPENCODE_GO, "harness": "claude", "model": raw}
     if raw.startswith("openrouter/"):
         rest = raw[len("openrouter/"):]
         # A remaining "/" means vendor/model — the prefix was OUR rail marker. No "/" means the
