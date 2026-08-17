@@ -43,7 +43,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -104,8 +104,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 1
       },
       "targets": [
@@ -157,6 +157,65 @@
     {
       "id": 3,
       "type": "stat",
+      "title": "Header data age",
+      "description": "Age of the rate-limit header snapshot the anthropic gauges derive from \u2014 stale headers mean the utilization stats are lying.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min(anthropic_subscription_headers_age_seconds)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3600
+              },
+              {
+                "color": "red",
+                "value": 21600
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
       "title": "Dispatch",
       "description": "The composite /anthropic-limit verdict the launchers defer on (429 latch OR utilization \u2265 threshold).",
       "datasource": {
@@ -165,8 +224,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 9,
         "y": 1
       },
       "targets": [
@@ -220,9 +279,9 @@
       }
     },
     {
-      "id": 4,
+      "id": 5,
       "type": "stat",
-      "title": "Semaphore (running / max)",
+      "title": "Semaphore (run / max)",
       "description": "Running subscription-session pods cluster-wide vs SUBSCRIPTION_MAX_RUNNING \u2014 the server-side FU-088 semaphore (ADR-096 P2). No value = pod count unavailable (fail-open).",
       "datasource": {
         "type": "prometheus",
@@ -230,7 +289,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 12,
         "y": 1
       },
@@ -285,7 +344,7 @@
       }
     },
     {
-      "id": 5,
+      "id": 6,
       "type": "stat",
       "title": "429s (24h)",
       "description": "Upstream 429s the proxy latched on. Counter resets with the proxy pod \u2014 treat as a lower bound.",
@@ -295,8 +354,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 15,
         "y": 1
       },
       "targets": [
@@ -340,7 +399,7 @@
       }
     },
     {
-      "id": 6,
+      "id": 7,
       "type": "stat",
       "title": "5h window resets in",
       "description": "Time until the current 5-hour window resets (utilization drops back to a fresh window).",
@@ -350,8 +409,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 18,
         "y": 1
       },
       "targets": [
@@ -404,7 +463,7 @@
       "panels": []
     },
     {
-      "id": 7,
+      "id": 8,
       "type": "stat",
       "title": "5h utilization",
       "description": "Utilization = window draw / budget. Budgets ($12/$30/$60) mirror gometer GO_BUDGETS \u2014 not exported as a metric yet, keep in sync by hand.",
@@ -414,7 +473,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 6
       },
@@ -465,7 +524,7 @@
       }
     },
     {
-      "id": 8,
+      "id": 9,
       "type": "stat",
       "title": "7d utilization",
       "description": "Utilization = window draw / budget. Budgets ($12/$30/$60) mirror gometer GO_BUDGETS \u2014 not exported as a metric yet, keep in sync by hand.",
@@ -475,8 +534,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 4,
+        "w": 3,
+        "x": 3,
         "y": 6
       },
       "targets": [
@@ -526,7 +585,7 @@
       }
     },
     {
-      "id": 9,
+      "id": 10,
       "type": "stat",
       "title": "30d utilization",
       "description": "Utilization = window draw / budget. Budgets ($12/$30/$60) mirror gometer GO_BUDGETS \u2014 not exported as a metric yet, keep in sync by hand.",
@@ -536,8 +595,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 6,
         "y": 6
       },
       "targets": [
@@ -587,7 +646,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 11,
       "type": "stat",
       "title": "Dispatch",
       "description": "The composite /anthropic-limit verdict the launchers defer on (429 latch OR utilization \u2265 threshold).",
@@ -597,8 +656,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 12,
+        "w": 3,
+        "x": 9,
         "y": 6
       },
       "targets": [
@@ -652,7 +711,7 @@
       }
     },
     {
-      "id": 11,
+      "id": 12,
       "type": "stat",
       "title": "7d spend (draw)",
       "description": "Window draw at list price on raw tokens (badge-halved) \u2014 the number the console meters, not the cache-discounted billed estimate.",
@@ -662,8 +721,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 16,
+        "w": 3,
+        "x": 12,
         "y": 6
       },
       "targets": [
@@ -704,7 +763,7 @@
       }
     },
     {
-      "id": 12,
+      "id": 13,
       "type": "stat",
       "title": "30d spend (draw)",
       "description": "Window draw at list price on raw tokens (badge-halved) \u2014 the number the console meters, not the cache-discounted billed estimate.",
@@ -714,8 +773,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 4,
-        "x": 20,
+        "w": 3,
+        "x": 15,
         "y": 6
       },
       "targets": [
@@ -756,6 +815,57 @@
       }
     },
     {
+      "id": 14,
+      "type": "stat",
+      "title": "5h window resets in",
+      "description": "From opencode_subscription_reset_timestamp_seconds (gometer's anchored grid \u2014 the same bounds the latch uses).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_min(max(opencode_subscription_reset_timestamp_seconds{window=\"5h\"}) - time(), 0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
       "id": 120,
       "type": "row",
       "title": "Timelines",
@@ -769,7 +879,7 @@
       "panels": []
     },
     {
-      "id": 13,
+      "id": 15,
       "type": "timeseries",
       "title": "Anthropic utilization by window (dispatch defers at threshold)",
       "description": "anthropic_subscription_utilization per window vs the per-window deferral threshold the proxy enforces (anthropic_subscription_utilization_threshold; 5h=finish-in-progress guard, 7d=operator weekly headroom). Gaps = no subscription traffic through the proxy (data only refreshes when sessions run).",
@@ -859,7 +969,7 @@
       }
     },
     {
-      "id": 14,
+      "id": 16,
       "type": "timeseries",
       "title": "Anthropic dispatch state (1 = deferring) & 429 latch",
       "description": "When and why batch dispatch was parked.",
@@ -869,7 +979,7 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 16,
+        "w": 24,
         "x": 0,
         "y": 20
       },
@@ -918,66 +1028,7 @@
       }
     },
     {
-      "id": 15,
-      "type": "stat",
-      "title": "Header data age",
-      "description": "Age of the rate-limit header snapshot the anthropic gauges derive from \u2014 stale headers mean the utilization stats are lying.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 20
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "min(anthropic_subscription_headers_age_seconds)",
-          "instant": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 3600
-              },
-              {
-                "color": "red",
-                "value": 21600
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        }
-      }
-    },
-    {
-      "id": 16,
+      "id": 17,
       "type": "timeseries",
       "title": "Go spend by window (draw USD)",
       "description": "opencode_subscription_usage_usd per binding window (5h/7d/30d). Metered = cluster-dispatched + jail-pushed (after #438); operator console = spot-check only. No data = no Go spend (honest).",
@@ -1028,7 +1079,7 @@
       "noValue": "no data"
     },
     {
-      "id": 17,
+      "id": 18,
       "type": "timeseries",
       "title": "Subscription requests by consumer (FU-109 attribution)",
       "description": "anthropic_requests_total rate per ref-derived consumer (the session secret name) \u2014 a stalled window is attributable at a glance: who was burning the pool. In-memory counter; a proxy roll restarts it (rate() copes).",
