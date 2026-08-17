@@ -1335,6 +1335,31 @@ preconditions + knob ledger + build order in
 [`agents/chainless-redesign.md`](agents/chainless-redesign.md); the jail shim
 (`scripts/claude-model-shim.py`) is the rail-split prototype the proxy inherits.
 
+### ADR-109 — `agent-fix` means SUITABILITY; operator intent is never machinery state
+
+**Status:** Accepted (2026-08-17, operator ruling in the design-agents sitting that followed PR#475).
+**Decision:** `agent-fix` = *suitability*, its original meaning — "machine-doable; the loop MAY
+be given this" — one bit, no timing, no ownership claim. `agent/queued` is the only release
+valve (dispatch already requires both, so no dispatch machinery changes). `agent-fix` without an
+`agent/*` state is ordinary **backlog**, not an anomaly: report surfaces render it as an
+aggregate (count + oldest age), never a per-issue nag (the #405/PR#475 ⏸ clause re-words to
+this). Every surface that AUTO-applies the label must have a named queue-decider (responder →
+fix-debounce; goal checkpoint → budget-gated mint); the human surface deliberately has none.
+**Considered and rejected:** a parking label / claim-level park for operator intent ("no new
+oracle Goals until platform dogfoods v1.2") — intent gates only *operator* actions (Goal launch
+is structurally human-only already), so encoding it as machinery state (`coordinator.enabled:
+false`, a `parked` label) would falsify live state; it lives as a meta-state row **with an
+explicit un-park trigger** (the A″ park rule). Also rejected: overloading `agent/blocked` —
+that label stays strictly "technically blocked, a human must SOLVE something".
+**Why:** four readers had four meanings (opt-in table / "adoption ends triage" / responder
+diagnosis / ¬agent-fix as jail-lane marker) and no owning doc; oracle-fleet's backlog used the
+original semantics while PR#475's clause reported it as a gap.
+**Consequences:** semantics table + author/auto-apply/queue-decider inventory land in
+`docs/agents/issue-authoring.md` §Label semantics (the owning doc); the chainless charter's
+corpus-batch filter stops keying jail-lane on ¬agent-fix; `devbox run board` (the who-acts
+operator view, platform pilot) renders backlog as aggregates and lists only human-actionable
+classes.
+
 ### ADR-108 — Observability stays out of routing-critical paths; meters push, critical paths never pull Prometheus
 
 **Status:** Accepted (2026-08-13, operator ruling on homelab#438).
