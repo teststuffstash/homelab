@@ -176,27 +176,28 @@ echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
 # If this PR closes an issue, check the declared Touches: line against the diff paths.
 # The escape set — paths undeclared in Touches: that appear in the diff — is injected into
 # the review context as TOUCHES-ESCAPES for the rubric's BLOCKING check.
+# >>>REPLAY:reviewer-touches-check>>>
 TOUCHES_ESCAPES=""
-if [ -n "\$ISSUE" ]; then
+if [ -n "$ISSUE" ]; then
   # Source the touches-check helper (same normalization as coordinator-scan.sh's ADR-097 hold)
-  . "\${HERE:-$(cd "$(dirname "\$0")" && pwd)}/touches-check.sh"
+  . "${HERE:-$(cd "$(dirname "$0")" && pwd)}/touches-check.sh"
   # Read the issue body to extract the Touches: line
-  ISSUE_BODY=\$(gh api "repos/${REPO_SLUG}/issues/\$ISSUE" --jq '.body // ""' 2>/dev/null || true)
-  DECLARED_TOUCHES=\$(printf '%s' "\$ISSUE_BODY" | grep -iE '^[ \\t]*touches:[ \\t]*' | sed -E 's/^[ \\t]*touches:[ \\t]*//i' | tr -d '\\r' | head -1)
+  ISSUE_BODY=$(gh api "repos/${REPO_SLUG}/issues/$ISSUE" --jq '.body // ""' 2>/dev/null || true)
+  DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | head -1)
   # Compute the escape set: paths that are NOT covered by the declared touches
-  ESCAPES_RAW=\$(touches_check "\$DECLARED_TOUCHES" "\$CHANGED" 2>/dev/null || true)
-  if [ -n "\$ESCAPES_RAW" ]; then
+  ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "$CHANGED" 2>/dev/null || true)
+  if [ -n "$ESCAPES_RAW" ]; then
     # Format for the prompt: list governance paths first with [GOVERNANCE] marker
-    TOUCHES_ESCAPES=\$(printf '%s\n' "\$ESCAPES_RAW" | while read -r line; do
-      path="\${line%%|*}"; marker="\${line#*|}"
-      if [ "\$marker" = "governance" ]; then
-        printf '[GOVERNANCE] %s\\n' "\$path"
+    TOUCHES_ESCAPES=$(printf '%s\n' "$ESCAPES_RAW" | while read -r line; do
+      path="${line%%|*}"; marker="${line#*|}"
+      if [ "$marker" = "governance" ]; then
+        printf '[GOVERNANCE] %s\n' "$path"
       else
-        printf '%s\\n' "\$path"
+        printf '%s\n' "$path"
       fi
     done | sort)
     echo "→ TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):"
-    printf '%s\n' "\$TOUCHES_ESCAPES" | sed 's/^/  /'
+    printf '%s\n' "$TOUCHES_ESCAPES" | sed 's/^/  /'
   else
     TOUCHES_ESCAPES="none"
     echo "→ TOUCHES: no escapes (all paths covered by declared footprint)"
@@ -205,6 +206,7 @@ else
   TOUCHES_ESCAPES="undeclared"
   echo "→ TOUCHES: undeclared (PR closes no issue)"
 fi
+# <<<REPLAY:reviewer-touches-check<<<
 export TOUCHES_ESCAPES
 # FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
 # lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review

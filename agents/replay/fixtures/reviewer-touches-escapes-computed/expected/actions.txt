@@ -1,0 +1,5 @@
+CALL gh api repos/teststuffstash/homelab/issues/123 --jq .body // ""
+OUT → TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):
+OUT   [GOVERNANCE] agents/replay/fixtures/test/fixture.yaml
+OUT   [GOVERNANCE] agents/touches-check.sh
+RC 0

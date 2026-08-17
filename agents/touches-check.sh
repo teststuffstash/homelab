@@ -45,6 +45,19 @@ fp_conflict() (
   return 1
 )
 
+# fp_conflict_multi <list> <newline-joined lists> → 0 iff <list> conflicts with any line
+# (Sourced from coordinator-scan.sh's footprint.sh for consistency)
+fp_conflict_multi() {
+  [ -n "$2" ] || return 1
+  while IFS= read -r _line; do
+    [ -n "$_line" ] || continue
+    fp_conflict "$1" "$_line" && return 0
+  done <<EOF_FP
+$2
+EOF_FP
+  return 1
+}
+
 # governance_paths <path> → "governance" marker if the path lands in a governance tier
 governance_paths() {
   local p="$1"
