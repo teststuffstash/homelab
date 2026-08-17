@@ -299,8 +299,18 @@ the block needs pruning, not more headings.
       `changes-requested held` ×8 + `ci-red held` ×3, real rounds suppressed; the doorbell
       fast-path clause just hasn't seen eligible traffic). Audit DONE 2026-08-11, clean:
       changes-requested + ci-red carry the per-item hold, arbitrate/ci-red re-dispatch carry
-      state-fp, post-08-07 clauses emit no dispatch units. **Next:** SOAK ONLY — the first live
-      doorbell-path hold, then archive. Not an FU-165 goal child (built, nothing to ride).
+      state-fp, post-08-07 clauses emit no dispatch units. **RE-OPENED FOR A NEW LEG 2026-08-17
+      (homelab#153 breaker latch): the hold is blind to COORDINATOR SESSIONS.** A 7-PR merge
+      storm's doorbell cascade handed #153 to FIVE item sessions in 11 min (two contradictory
+      terminals 65s apart, FU-069 tripped) — `queued-dispatch` re-fires while `agent/queued`
+      persists through a session's 6–10-min triage, and `c4c5-redispatch` fires on the
+      in-progress+no-worker-pod footprint a MID-TRIAGE session itself leaves. The per-item hold
+      keys on worker pods only; #198's state-fp is PR-side only. **Next: the issue-side guard**
+      — the hold counts in-flight coordinator SESSION pods for the item (label the detached
+      session pod with its item, selector-count it in the hold — the wip_busy pattern), and
+      c4c5 gains a session-aware currency check; fixtures per the ratchet. Do NOT re-queue
+      #153 before it lands (the breaker comment's own warning). The AGENT_ERROR comment on
+      #153 is the full mechanism record.
 
 - [ ] **FU-147** — **Code landed `15ef9cb`, unproven on live traffic — and it found FU-115b
       broken.** A

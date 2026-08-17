@@ -4,9 +4,11 @@
 # mode: suite — the subject is a PromQL expr, not an action stream, so the assertions are
 # `promtool test rules` replays rather than recorded `gh`/`kubectl` calls. The suite reads the expr
 # OUT of argocd/resources/pushgateway/prometheusrule.yaml at run time (never a transcription, #166)
-# and replays four shapes against it: the 2026-08-06 healthy 18m ride that the OLD pod-lifetime key
-# fired on twice, the 2026-08-05 wedge that pushed nothing at all, a wedge that starts AFTER a
-# dispatch comes back, and a marker outliving its pod.
+# and replays the suite's recorded shapes against it (the case list lives in the suite itself —
+# agents/scan-wedge-alert-test.sh — and grows there; #359 added the arm-1 bridge shapes). The
+# founding four: the 2026-08-06 healthy 18m ride that the OLD pod-lifetime key fired on twice,
+# the 2026-08-05 wedge that pushed nothing at all, a wedge that starts AFTER a dispatch comes
+# back, and a marker outliving its pod.
 #
 # Its sibling `scan-phase-marker` pins the other half — that the scan actually pushes the series
 # this expr reads. Neither is sufficient alone: an expr replayed against series nobody emits is a
@@ -19,3 +21,10 @@
 name: scan-wedge-alert
 mode: suite
 entrypoint: agents/scan-wedge-alert-test.sh
+# hermeticity contract (homelab#329): the suite needs `yq` (extract the shipped rule) and
+# `promtool` (replay the firing shapes) — both present under devbox, absent outside it. Declared
+# so the harness reports "requires <tool> — declared dependency absent" instead of the inner
+# test's own exit-2, keeping cannot-run-here distinct from clause-regressed.
+requires:
+  - yq
+  - promtool

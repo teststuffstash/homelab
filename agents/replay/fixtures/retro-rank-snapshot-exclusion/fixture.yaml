@@ -1,0 +1,19 @@
+# retro r4 F5 (homelab PR#454): the retro's pain-rank step EXCLUDES rows stamped mid-flight
+# (`snapshot: true`) from the rank order and the brief — they are not terminal facts — and counts
+# the exclusion loudly instead of silently letting the deep-dive budget land on converged work.
+#
+# CONDITION UNDER REPLAY. The rank step was extracted out of the retro-argo.yaml heredoc into
+# agents/retro-rank.py so it is executable here; the suite (agents/retro-rank-test.sh) builds a
+# small ranked-input world — one `snapshot: true` row that WOULD rank #1 on the contract sort,
+# plus blocked/done rows covering the historical int `rounds` shape and the new array shape — and
+# asserts the snapshot row never appears in the top-K, the ranks stay dense, and the log names the
+# exclusion count.
+#
+# This pins the retro-argo.yaml change: the workflow now calls `python3 agents/retro-rank.py
+# /tmp/ledger.jsonl /tmp/ledger-ranked.json 40` (the inline python block is gone).
+name: retro-rank-snapshot-exclusion
+mode: suite
+entrypoint: agents/retro-rank-test.sh
+requires:
+  - python3
+  - jq

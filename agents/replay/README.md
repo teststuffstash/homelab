@@ -95,7 +95,9 @@ follows fix-density per ADR-103, never big-bang):
    anything more declares `requires:` and `run.sh` exits 2 naming the tool (the scan-wedge
    precedent promoted to rule). The 5 non-hermetic fixtures get lines or fixes.
    **Mechanism LIVE (same PR as move 2):** `requires:` in fixture.yaml, checked before dispatch,
-   loud absence. Declaring the #329 set awaits its per-fixture diagnosis (that issue's work).
+   loud absence. The #329 set is declared (homelab#329): `scan-wedge-alert` declares `yq`+`promtool`,
+   the `goal-ancestor` family is hermetic via the `$end`→`$stop` jq rename, and `scout-bench-*`
+   pins a jq-version float format awaiting its emitter fix (the versions gap below).
 7. **Suite fold-in** — the standalone `*-replay.sh`/`*-test.sh` harness scripts register as
    `mode: suite` entries (scripts stay put; `entrypoint:` points at them) so "executed replay"
    has one runner and one index. Rolling, by fix-density.
@@ -167,6 +169,7 @@ is stale, so it cannot drift the way the prose register did.
 | `harvest-goal-open-exhausted` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-goal-open-funded` | actions | circles-29-tree | `agents/coordinator-scan.sh` | IL-T15 IL-T17 |
 | `harvest-master-inert` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
+| `ledger-emitter-rounds` | suite | - | `-` | - |
 | `pick-rail-both` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail-clear` | actions | - | `agents/subscription-latch.sh` | - |
 | `pick-rail-go` | actions | - | `agents/subscription-latch.sh` | - |
@@ -186,6 +189,7 @@ is stale, so it cannot drift the way the prose register did.
 | `retro-key-minted` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-pinned` | actions | - | `agents/retro-session.sh` | - |
 | `retro-key-subscription` | actions | - | `agents/retro-session.sh` | - |
+| `retro-rank-snapshot-exclusion` | suite | - | `-` | - |
 | `reviewer-go-failover-available` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-explicit-model` | actions | - | `agents/reviewer-session.sh` | - |
 | `reviewer-go-failover-limited` | actions | - | `agents/reviewer-session.sh` | - |

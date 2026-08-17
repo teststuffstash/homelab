@@ -1,0 +1,19 @@
+# retro r4 F4/F5 (homelab PR#454): the retro-facts ledger emitter (agents/ledger.py) row-schema
+# fixes.
+#
+#   F4 — `rounds[]` is now a round-ORDERED per-round list (model/exit_status/error_class/ci),
+#        strike-only entries included; the flat `models` / `worker_exit_statuses` / `ci_sequence`
+#        fields are DERIVED from it order-preservingly (the old `models` was a de-duplicated SET,
+#        so zip(models, worker_exit_statuses) was unsound).
+#   F5 — rows stamped while the issue is still OPEN carry `snapshot: true`.
+#
+# CONDITION UNDER REPLAY. mode: suite — the emitter shells out to `gh` and `s5cmd`, so the suite
+# (agents/ledger-emitter-test.sh) stubs the S3 + gh seams, runs the REAL summarize() /
+# merge_rounds() / is_snapshot() / main() code against a constructed manifest world, and asserts
+# every expected value is computed from the inputs + the ledger row schema, never read back from
+# the code under test.
+name: ledger-emitter-rounds
+mode: suite
+entrypoint: agents/ledger-emitter-test.sh
+requires:
+  - python3
