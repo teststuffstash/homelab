@@ -207,6 +207,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-variant-known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
 | `session-belt-c4c5` | actions | - | `agents/coordinator-scan.sh` | - |
+| `session-belt-fast-path-probe-fail` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt-fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
 | `session-belt-queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |

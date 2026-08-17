@@ -652,6 +652,9 @@ fast_unit_dispatch() {
   # WIP probe, same shape as the main loop (null-strip is load-bearing — issue-96):
   # probe failure pins wip=1 (belt-only), never blocks the in-flight fix round.
   fwip=1
+  fpr_issue=""   # PR#480 review: assigned only inside the probe's success block below — an
+                 # unguarded read after a FAILED probe is an unbound-variable death for the
+                 # WHOLE scan under set -u; initialized here so every later read is safe.
   if FPODS="$("$KUBECTL" $KUBE -n "$frepo" get pods -l app=agent-session,project="$frepo" \
         --field-selector=status.phase!=Succeeded,status.phase!=Failed -o json 2>/dev/null)" \
      && jq -e . >/dev/null 2>&1 <<<"${FPODS:-null}"; then
@@ -696,7 +699,7 @@ fast_unit_dispatch() {
       echo "unit fast-path: held — a coordinator session is riding ${frepo} ${fitem} (FU-146 session belt)"
       return 0
     fi
-    if [ -n "$fpr_issue" ] \
+    if [ -n "${fpr_issue:-}" ] \
        && printf '%s' "$SESSPODS" | jq -e --arg p "coordinator-${frepo}-issue-${fpr_issue}" \
             '[.items[]? | (.metadata.name // "") | select(. == $p)] | length > 0' >/dev/null 2>&1; then
       echo "unit fast-path: held — a coordinator session is riding issue #${fpr_issue} (FU-146 session belt); PR ${fitem#pr-}"
