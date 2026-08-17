@@ -84,6 +84,90 @@ GO_REWRITE = {k.strip(): v.strip() for k, v in
               (p.split("=", 1) for p in
                os.environ.get("SHIM_MODEL_REWRITE", "").split(",") if "=" in p)}
 
+# ── #448: the OpenAI-surface translator leg (LiteLLM) ──────────────────────────
+# Some opencode models are unreachable from their Anthropic-compat surface — the zen
+# surface DROPS tool-bearing bodies (400 "Input required"), and opencode-go/gpt-5.6-luna
+# 400s even on plain text — but tool-call cleanly on their OpenAI /chat/completions
+# surface (docs/spikes/opencode-model-matrix.md, 2026-08-17). Those legs are served
+# through LiteLLM's Anthropic-format unified call (litellm.anthropic.messages.create):
+# Anthropic-shaped params in, Anthropic-shaped response/SSE out, translation internal.
+# LiteLLM is imported LAZILY from a pip-venv OUTSIDE the repo (the jail pip-venv
+# pattern); when it is missing the affected legs fail LOUDLY with 501 naming the venv —
+# never a silent fallback to the broken compat surface, never a crash on the other rails.
+# The venv is created once:  python3 -m venv <LITELLM_VENV> && <LITELLM_VENV>/bin/pip install litellm
+LITELLM_VENV = os.environ.get("SHIM_LITELLM_VENV", os.path.expanduser("~/.claude/venvs/litellm"))
+# The opencode-go ids whose Anthropic-compat surface is broken (probed 2026-08-17) and
+# MUST take the translator. The verified trio + flash keep the existing compat path.
+# Env-extendable (PR#465 review): SHIM_GO_OPENAI_ONLY adds comma-separated bare ids so the
+# NEXT broken model is a live-session env change, not a code edit — the SHIM_MODEL_REWRITE
+# pattern. Merged in, never replacing (the probed baseline must not be un-settable by env).
+GO_OPENAI_ONLY = {"gpt-5.6-luna"} | {
+    m.strip() for m in os.environ.get("SHIM_GO_OPENAI_ONLY", "").split(",") if m.strip()}
+_litellm = None  # lazy cache for _litellm_import()
+
+
+def _litellm_import():
+    """#448: lazily import litellm (from the dedicated venv if not on system python).
+
+    Returns the litellm module, or None if unavailable. Never raises — a missing or
+    broken litellm degrades ONLY the translator legs (the caller 501s them).
+    Sets litellm's global routing flags once: opencode's OpenAI surface is a plain
+    /chat/completions server, so force litellm away from its openai-provider default
+    (the Responses API) and drop params the models reject (thinking->reasoning_effort)
+    instead of erroring the whole request.
+    """
+    global _litellm
+    if _litellm is not None:
+        return _litellm
+    litellm = None
+    try:
+        litellm = __import__("litellm")
+    except Exception:
+        litellm = None
+    if litellm is None:
+        # Not on the system python — try the dedicated venv's site-packages.
+        site = os.path.join(LITELLM_VENV, "lib",
+                            f"python{sys.version_info.major}.{sys.version_info.minor}",
+                            "site-packages")
+        if os.path.isdir(site):
+            sys.path.insert(0, site)
+            try:
+                litellm = __import__("litellm")
+            except Exception:
+                litellm = None
+    if litellm is not None:
+        litellm.use_chat_completions_url_for_anthropic_messages = True
+        litellm.drop_params = True
+    _litellm = litellm
+    return litellm
+
+
+def _rail_and_translate(model: str, resolved: str) -> tuple:
+    """#448: (rail, translate) — which rail a model id rides and whether it takes the
+    OpenAI-surface translator. translate is True for EVERY zen id (the compat surface is
+    broken for tools everywhere there) and for opencode-go ids in GO_OPENAI_ONLY.
+    `resolved` is the bare id AFTER the rewrite (the model actually served upstream), so
+    a frozen slot rewritten AWAY from a broken id keeps the compat path, and a rewrite
+    ONTO a broken id still takes the translator.
+    """
+    if model.startswith(GO_PREFIX):
+        return "go", resolved in GO_OPENAI_ONLY
+    if model.startswith(ZEN_PREFIX):
+        return "zen", True
+    return "anthropic", False
+
+
+def _translator_target(rail: str, model: str) -> tuple:
+    """#448: (api_base, openai_model) for the OpenAI-surface translator.
+
+    api_base is the opencode OpenAI surface (the compat base + /v1 — litellm appends
+    /chat/completions); openai_model is the `openai/<bare>` id litellm strips the
+    provider prefix from before sending, so upstream sees the RESOLVED bare id.
+    """
+    base = (GO_BASE if rail == "go" else ZEN_BASE).rstrip("/")
+    prefix = GO_PREFIX if rail == "go" else ZEN_PREFIX
+    return f"{base}/v1", f"openai/{model[len(prefix):]}"
+
 # ADR-108: self-metering config — ingest VIP + token; spool for failure fallback.
 INGEST_URL = os.environ.get("SHIM_INGEST_URL", "http://192.168.40.30:8081/go-usage-report")
 INGEST_TOKEN = os.environ.get("SHIM_INGEST_TOKEN")  # unset -> spool-only
@@ -223,11 +307,12 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _route(self, body: bytes):
-        """(base, body, rail, model) — routing is by the body's model id, nothing else.
+        """(base, body, rail, model, translate) — routing is by the body's model id.
 
-        rail is "go" | "zen" | "anthropic". The two opencode prefixes (opencode-go/,
-        opencode/) are disjoint strings — the longer is matched FIRST anyway, so a future
-        prefix that IS a strict prefix of another still resolves to the right rail.
+        rail is "go" | "zen" | "anthropic"; translate is the #448 OpenAI-surface
+        translator flag. The two opencode prefixes (opencode-go/, opencode/) are disjoint
+        strings — the longer is matched FIRST anyway, so a future prefix that IS a strict
+        prefix of another still resolves to the right rail.
         """
         model = ""
         if body:
@@ -241,7 +326,7 @@ class Handler(BaseHTTPRequestHandler):
         elif model.startswith(ZEN_PREFIX):
             prefix, base, rail = ZEN_PREFIX, ZEN_BASE, "zen"
         else:
-            return ANTHROPIC_BASE, body, "anthropic", model
+            return ANTHROPIC_BASE, body, "anthropic", model, False
         bare = model[len(prefix):]
         # The RESOLVED id is what upstream serves and bills — return it (not the inbound
         # alias), or metering prices a slot alias that GO_PRICES has never heard of and
@@ -249,6 +334,7 @@ class Handler(BaseHTTPRequestHandler):
         # both opencode rails (Go priced; Zen metered $0).
         resolved = GO_REWRITE.get(bare, bare)
         parsed["model"] = resolved
+        _, translate = _rail_and_translate(model, resolved)
         # OpenCode's Anthropic-compat layer mishandles the STRING shorthand for message content
         # on some models (probed 2026-08-13: glm-5.2 dropped the prompt and free-associated,
         # 12 input tokens counted; the array-of-blocks form answered correctly). claude-code
@@ -269,12 +355,15 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"shim: {rail}-leg dropped {len(tools) - len(kept)} server tool(s)",
                       file=sys.stderr, flush=True)
             parsed["tools"] = kept
-        return base, json.dumps(parsed).encode(), rail, prefix + resolved
+        return base, json.dumps(parsed).encode(), rail, prefix + resolved, translate
 
     def _forward(self):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else b""
-        base, body, rail, model = self._route(body)
+        base, body, rail, model, translate = self._route(body)
+        if translate:
+            self._translate(rail, model, body)
+            return
 
         conn, prefix = _upstream(base)
         headers = {}
@@ -344,6 +433,128 @@ class Handler(BaseHTTPRequestHandler):
               file=sys.stderr, flush=True)
         # ADR-108: meter opencode-leg 2xx responses (daemon thread, never block response path)
         if rail in ("go", "zen") and 200 <= resp.status < 300:
+            threading.Thread(target=_meter_usage, args=(model, rail, head, tail), daemon=True).start()
+
+    # ── #448: OpenAI-surface translator legs (litellm.anthropic.messages.*) ─────────
+    # The _route scrub (content-string normalization, server-tool drop) has ALREADY run on
+    # the ANTHROPIC-shaped inbound body — that ordering is FU-172 residue (4), which used
+    # to drop OpenAI-shaped tools; litellm owns EVERYTHING after this point. Metering
+    # mirrors the native opencode legs: head+tail of the bytes we emit -> _meter_usage.
+    def _translate(self, rail: str, model: str, body: bytes):
+        # Same refusal order as the compat path: a missing key is the louder, more
+        # fundamental failure and must win over a missing translator.
+        if not GO_KEY:
+            self._reply(502, b'{"error":"SHIM_GO_KEY is not set - the opencode rails have no credential"}')
+            print(f"shim: DENY {rail}-leg translator (no key) model={model}", file=sys.stderr, flush=True)
+            return
+        litellm = _litellm_import()
+        if litellm is None:
+            err = (f"{rail}-leg model {model} needs the OpenAI-surface translator, but litellm is not "
+                   f"importable. Create the venv: python3 -m venv {LITELLM_VENV} && "
+                   f"{LITELLM_VENV}/bin/pip install litellm")
+            self._reply(501, json.dumps({"error": err}).encode())
+            print(f"shim: 501 {rail}-leg translator (litellm missing) model={model}", file=sys.stderr, flush=True)
+            return
+        if os.environ.get("SHIM_DEBUG_BODY") and rail in ("go", "zen"):
+            dbg = os.path.join(os.environ.get("TMPDIR", "/tmp"),
+                               f"shim-{rail}-trans-body-{threading.get_ident()}-{os.getpid()}.json")
+            with open(dbg, "ab") as f:
+                f.write(body + b"\n")
+            print(f"shim: DEBUG {rail} translator body -> {dbg} ({len(body)}b)", file=sys.stderr, flush=True)
+        parsed = json.loads(body)
+        api_base, openai_model = _translator_target(rail, model)
+        # Deliberately NOT forwarded: `thinking` — litellm routes it to the OpenAI
+        # Responses API (responses/<model>), which opencode's /chat/completions surface
+        # does not speak, and these models don't take Anthropic extended thinking anyway
+        # (they emit their own reasoning content blocks). `metadata` IS forwarded; the
+        # other params pass through as-is.
+        kwargs = {k: v for k, v in {
+            "model": openai_model,
+            "api_base": api_base,
+            "api_key": GO_KEY,
+            "max_tokens": parsed.get("max_tokens") or 4096,
+            "messages": parsed.get("messages") or [],
+            "system": parsed.get("system"),
+            "tools": parsed.get("tools"),
+            "tool_choice": parsed.get("tool_choice"),
+            "temperature": parsed.get("temperature"),
+            "top_p": parsed.get("top_p"),
+            "stop_sequences": parsed.get("stop_sequences"),
+            "metadata": parsed.get("metadata"),
+            "stream": parsed.get("stream", False),
+        }.items() if v is not None}
+        if parsed.get("stream", False):
+            self._stream_translated(kwargs, rail, model)
+        else:
+            self._reply_translated(kwargs, rail, model)
+
+    def _reply_translated(self, kwargs: dict, rail: str, model: str):
+        litellm = _litellm_import()
+        try:
+            resp = litellm.anthropic.messages.create(**kwargs)
+            # Serialization stays INSIDE the guard (PR#465 review): an unexpected success-value
+            # shape used to throw uncaught here — no reply ever sent, a silent connection reset
+            # instead of the loud 502 every other path holds.
+            if not isinstance(resp, dict):
+                resp = resp.model_dump(mode="json") if hasattr(resp, "model_dump") else dict(resp)
+            out = json.dumps(resp, default=str).encode()
+        except Exception as e:
+            self._reply(502, json.dumps({"error": f"translator upstream failed: {e}"}).encode())
+            print(f"shim: 502 {rail}-leg translator model={model} err={e}", file=sys.stderr, flush=True)
+            return
+        self._reply(200, out)
+        print(f"shim: {rail}-leg(translated) 200 model={model} bytes={len(out)}", file=sys.stderr, flush=True)
+        if rail in ("go", "zen"):
+            threading.Thread(target=_meter_usage,
+                             args=(model, rail, out[:16384], out[-16384:]),
+                             daemon=True).start()
+
+    def _stream_translated(self, kwargs: dict, rail: str, model: str):
+        litellm = _litellm_import()
+        first = None
+        try:
+            gen = litellm.anthropic.messages.create(**kwargs)  # sync, stream=True -> Iterator[bytes]
+            # PRIME the stream before committing 200 (PR#465 review): a lazy stream client fires
+            # its upstream call/auth on the first next(), so without this an upstream failure
+            # landed AFTER the committed 200 as a silently truncated stream. Pulling the first
+            # event here keeps that whole class on the loud-502 path; StopIteration (an honestly
+            # empty stream) is not an error and falls through with first=None.
+            it = iter(gen)
+            try:
+                first = next(it)
+            except StopIteration:
+                it = iter(())
+        except Exception as e:
+            self._reply(502, json.dumps({"error": f"translator upstream failed: {e}"}).encode())
+            print(f"shim: 502 {rail}-leg translator stream model={model} err={e}", file=sys.stderr, flush=True)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        head = b""
+        tail = b""
+        n = 0
+        try:
+            from itertools import chain as _chain
+            for chunk in (_chain([first], it) if first is not None else it):
+                if not isinstance(chunk, bytes):  # litellm yields raw SSE bytes; be defensive
+                    chunk = json.dumps(chunk, default=str).encode() if isinstance(chunk, dict) \
+                        else str(chunk).encode()
+                n += len(chunk)
+                self.wfile.write(chunk)
+                self.wfile.flush()  # SSE latency: relay each event as it lands
+                if rail in ("go", "zen"):
+                    if len(head) < 16384:
+                        head += chunk
+                    tail = (tail + chunk)[-16384:]
+        except Exception as e:
+            print(f"shim: {rail}-leg translator stream aborted model={model} err={e}",
+                  file=sys.stderr, flush=True)
+        self.close_connection = True
+        print(f"shim: {rail}-leg(translated stream) 200 model={model} bytes={n}", file=sys.stderr, flush=True)
+        if rail in ("go", "zen"):
             threading.Thread(target=_meter_usage, args=(model, rail, head, tail), daemon=True).start()
 
     def _reply(self, status: int, body: bytes):
@@ -454,19 +665,54 @@ def self_test() -> int:
           "go leg: SHIM_MODEL_REWRITE remaps a frozen slot id")
     GO_REWRITE = {}
 
-    st, data = call("opencode/nemotron-3-ultra-free")
-    z = seen.get("zen") or {}
-    check(st == 200 and b"[DONE]" in data, "zen leg: 200 + streamed body relayed")
-    check(z.get("model") == "nemotron-3-ultra-free", "zen leg: opencode/ prefix stripped")
-    check(z.get("auth") == "Bearer go-test-key" and z.get("x_api_key") == "go-test-key",
-          "zen leg: session auth REPLACED by the same key (both header styles)")
-    check("OAUTH-SECRET" not in json.dumps(z), "zen leg: the oauth token never reaches Zen")
-    check(z.get("path") == "/zen/v1/messages", "zen leg: base path joined")
+    # ── #448: OpenAI-surface translator routing (offline — no network) ──────────
+    # The zen-leg compat self-test block (200 + prefix strip + auth swap + path join) is
+    # GONE by design: #448 makes EVERY opencode/ (zen) id take the OpenAI-surface
+    # translator, so the zen compat path no longer exists. Its auth-isolation guarantee
+    # (session oauth never reaches opencode) is preserved STRUCTURALLY — the translator
+    # hands litellm only api_key=GO_KEY, never the inbound Authorization header. The
+    # translator-target assertions below carry the routing coverage; the wire-level tool
+    # round-trip is the acceptance test against a live shim.
+    check(_rail_and_translate("opencode/nemotron-3-ultra-free", "nemotron-3-ultra-free") == ("zen", True),
+          "#448: every opencode/ (zen) id takes the OpenAI-surface translator")
+    check(_rail_and_translate("opencode-go/gpt-5.6-luna", "gpt-5.6-luna") == ("go", True),
+          "#448: opencode-go/gpt-5.6-luna (GO_OPENAI_ONLY) takes the translator")
+    check(_rail_and_translate("opencode-go/kimi-k3", "kimi-k3") == ("go", False),
+          "#448: opencode-go/kimi-k3 keeps the Anthropic-compat path (not in GO_OPENAI_ONLY)")
+    check(_rail_and_translate("opencode-go/frozen-luna-slot", "kimi-k3") == ("go", False),
+          "#448: a rewrite AWAY from a GO_OPENAI_ONLY id keeps the compat path")
+    check(_rail_and_translate("claude-haiku-4-5", "claude-haiku-4-5") == ("anthropic", False),
+          "#448: the anthropic leg is never translated")
+    zbase, zmodel = _translator_target("zen", "opencode/nemotron-3-ultra-free")
+    check(zbase == "http://127.0.0.1:18193/zen/v1" and zmodel == "openai/nemotron-3-ultra-free",
+          "#448: zen translator targets the OpenAI surface base + resolved bare id")
+    gbase, gmodel = _translator_target("go", "opencode-go/gpt-5.6-luna")
+    check(gbase == "http://127.0.0.1:18192/zen/go/v1" and gmodel == "openai/gpt-5.6-luna",
+          "#448: go translator targets the OpenAI surface base + resolved bare id")
 
+    # 501-when-litellm-missing: force the lazy import to fail; the translator legs must
+    # refuse loudly (501), never silently fall back to the broken compat surface, and the
+    # other rails must be untouched. No network — litellm never actually runs.
+    _real_litellm_import = _litellm_import
+    globals()["_litellm_import"] = lambda: None
+    try:
+        st, _ = call("opencode/nemotron-3-ultra-free")
+        check(st == 501, "#448: zen leg 501s when litellm is missing (never the broken compat surface)")
+        st, _ = call("opencode-go/gpt-5.6-luna")
+        check(st == 501, "#448: go leg (luna) 501s when litellm is missing (never the broken compat surface)")
+        st, data = call("opencode-go/kimi-k3")
+        check(st == 200 and (seen.get("go") or {}).get("model") == "kimi-k3",
+              "#448: kimi-k3 compat path still serves when litellm is missing")
+        st, _ = call("claude-haiku-4-5")
+        check(st == 200, "#448: anthropic passthrough still serves when litellm is missing")
+    finally:
+        globals()["_litellm_import"] = _real_litellm_import
+
+    # zen rewrite: the rewritten id stays on the translator (resolved id is what's served).
     GO_REWRITE = {"broken-zen-model": "nemotron-3-ultra-free"}
-    st, _ = call("opencode/broken-zen-model")
-    check(st == 200 and (seen.get("zen") or {}).get("model") == "nemotron-3-ultra-free",
-          "zen leg: SHIM_MODEL_REWRITE remaps a frozen slot id")
+    check(_rail_and_translate("opencode/broken-zen-model", "nemotron-3-ultra-free") == ("zen", True)
+          and _translator_target("zen", "opencode/nemotron-3-ultra-free")[1] == "openai/nemotron-3-ultra-free",
+          "#448: zen SHIM_MODEL_REWRITE remaps a frozen slot id onto the translator target")
     GO_REWRITE = {}
 
     GO_KEY = ""

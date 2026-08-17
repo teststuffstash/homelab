@@ -1,3 +1,4 @@
+# witness-only: AgentCoordinateScanWedgedPgwRaw
 # WITNESS PAIR for homelab#353 — the PUSHGATEWAY half of AgentCoordinateScanWedged. Two exprs on
 # identical series: the SHIPPED one and the pre-#353 one. Loaded by
 # scan-wedge-pgw-witness.promtool-test; not a manifest and applied to nothing.
