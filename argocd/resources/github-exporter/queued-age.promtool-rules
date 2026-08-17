@@ -1,3 +1,4 @@
+# witness-only: CiDispatchStalledBridge10m, CiDispatchStalledPre335
 # CiDispatchStalled, lifted VERBATIM out of prometheusrule.yaml — the rules file that
 # queued-age.promtool-test loads. Not a manifest and not applied to anything: `promtool test
 # rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them under

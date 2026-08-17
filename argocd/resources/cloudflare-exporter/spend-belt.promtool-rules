@@ -1,3 +1,4 @@
+# witness-only: CloudflareSpendProbeBlindPre334, CloudflareZonePlanNotFreeMaxDirection, CloudflareZonePlanNotFreePre334
 # The three cloudflare spend-belt alerts (#217) that carry a `for:` window over a single-replica
 # scrape — the class #288/#313/#328 hardened elsewhere and homelab#334 ports here — lifted
 # VERBATIM out of prometheusrule.yaml (comments stripped, the manifest is their one home).
