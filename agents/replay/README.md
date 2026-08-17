@@ -490,8 +490,10 @@ Log each instance here, so the next author sees a register rather than a precede
   the harness itself reporting that the streams did not move.
 - **FU-058 belt (2026-08-10)** — one appended `printf | curl` in `retro-argo.yaml`'s harvest step
   (the RetroReportOverdue success-timestamp push). The diff IS observable (a curl in the action
-  stream) but `retro-argo.yaml` has no fixture family yet — its FSM-side declaration is
-  `unreplayed` and the first retro-lane fixture should record this step's world when it is built
+  stream) but `retro-argo.yaml` had no fixture family yet — and NO FSM models the retro lane at
+  all (dispatch-on-schedule machinery, roles.md; homelab#280 ruled: correct this wording, do not
+  model the lane yet), so there is no FSM-side `replay:`/`unreplayed` declaration to point at —
+  the first retro-lane fixture should record this step's world when it is built
   (jail-lane commit; the ratchet gained the file the same day, so the next PR touch pays properly).
 - **retro-lane 2026-08-11 (three more jail-lane clause diffs, same fixture debt)** —
   `f791937` (AWS_REGION in tsenv), `6b1ece6` (harvest runs as root), `4db553e` (bounded worst-K
@@ -506,8 +508,9 @@ Log each instance here, so the next author sees a register rather than a precede
   `fixtures/retro-harvest-*` are the first retro-lane family: the cell's report-marker self-check
   (both verdicts) and the harvest's cell→filename slug plus its partial-run notice. They do NOT
   discharge the standing entry above — the **guard** (busy-probe legs, ledger delta) and the
-  harvest's git/gh half are still unpinned, and `retro-argo.yaml`'s FSM-side declaration stays
-  `unreplayed`. The next touch of either extends this family rather than opening a fourth
+  harvest's git/gh half are still unpinned (the retro fixtures are helper-level pins under
+  merge-path-lint's "no FSM transition references" visibility line — no FSM models this lane,
+  homelab#280). The next touch of either extends this family rather than opening a fourth
   register line. **Extended 2026-08-11 (homelab#268)** — `fixtures/retro-harvest-cell-errored`
   joins the family for the DAG's Error phase (see the declaration note above). **Extended
   2026-08-11 (homelab#269)** — `fixtures/retro-harvest-slug-collision` pins the other filename
