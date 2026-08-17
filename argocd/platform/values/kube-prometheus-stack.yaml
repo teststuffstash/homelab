@@ -10,6 +10,16 @@
 # Home Assistant scrape, and secretKeyRefs in the sqlite-sync sidecar. Those Secrets are still
 # created by tofu (monitoring.tf) — tofu keeps owning the secrets after it stops owning the
 # release, which is the ESO/Infisical migration's next target, not this one's problem.
+#
+# homelab#477: the STOCK kube-prometheus-stack NodeSystemSaturation alert pages on the
+# ephemeral/kata pool during every agent ride — ride load is that pool's designed purpose
+# (nodes tainted homelab.io/ephemeral=true run hot by construction). The stock expr is not
+# overridable via values (chart v86.1.0 has no per-alert expr hook), so we disable it here and
+# re-add a scoped copy in the node-health group below. The non-ephemeral nodes keep the stock
+# sensitivity (2 load/core for 15m) — wk-01 saturation was a REAL finding once (#103).
+defaultRules:
+  disabled:
+    NodeSystemSaturation: true
 additionalPrometheusRulesMap:
   cilium:
     groups:
@@ -140,6 +150,29 @@ additionalPrometheusRulesMap:
               description: Container {{ $labels.container }} has sat at {{ $value | humanizePercentage }} of its memory limit for 15m — self-cgroup-OOM risk. If it's a FU-112(b) Guaranteed platform daemon (cilium-agent / longhorn-manager / longhorn-driver), RAISE its limit in tofu/cilium.tf or tofu/longhorn.tf before it OOMs and takes networking/storage down on that node.
               summary: '{{ $labels.namespace }}/{{ $labels.pod }} near its memory limit'
             expr: container_memory_working_set_bytes{namespace=~"kube-system|longhorn-system", container!="", container!="POD"} / on (namespace, pod, container) kube_pod_container_resource_limits{namespace=~"kube-system|longhorn-system", resource="memory"} > 0.85
+            for: 15m
+            labels:
+              severity: warning
+          # homelab#477: the stock NodeSystemSaturation (disabled above) re-added with the
+          # ephemeral/kata pool excluded. The exclusion joins on the TAINT that defines the pool
+          # (kube_node_spec_taint key=homelab.io/ephemeral) rather than the homelab.io/kata label:
+          # kata and ephemeral are independent flags in machines/machines.yaml, and only the taint
+          # is the pool's actual definition — a future ephemeral-but-not-kata node stays excluded,
+          # a future kata-but-not-ephemeral node still alerts. Fails OPEN: if the taint metric goes
+          # away the exclusion silently lifts and the rule reverts to the pre-#477 status quo
+          # (ephemeral nodes page again), which is the safe direction (matches the repo's
+          # "never let a join make us MISS a real spin" convention, pushgateway rule).
+          - alert: NodeSystemSaturation
+            annotations:
+              description: 'System load per core at {{ $labels.instance }} has been above 2 for the last 15 minutes, currently {{ printf "%.2f" $value }} — the node may be unresponsive. The ephemeral/kata pool (nodes tainted homelab.io/ephemeral) is excluded from this alert by design; a page here means a NON-ephemeral node is saturated (homelab#477).'
+              runbook_url: https://runbooks.prometheus-operator.dev/runbooks/node/nodesystemsaturation
+              summary: System saturated, load per core is very high.
+            expr: |-
+              (node_load1{job="node-exporter"} / count without (cpu, mode) (node_cpu_seconds_total{job="node-exporter", mode="idle"}) > 2)
+              unless on (instance) (
+                node_uname_info
+                and on (nodename) label_replace(kube_node_spec_taint{key="homelab.io/ephemeral", value="true", effect="NoSchedule"}, "nodename", "$1", "node", "(.+)")
+              )
             for: 15m
             labels:
               severity: warning
