@@ -750,8 +750,8 @@ if [ -n "${RECIPE:-}" ]; then
             | [ range(0; ($l|length)) | select($l[.] | test("^#+ *(Goal|Acceptance)"; "i")) ] as $starts
             | if ($starts|length) == 0 then ""
               else [ $starts[] as $s
-                     | ( [ range($s+1; ($l|length)) | select($l[.] | test("^#+ ")) ] | first ) as $end
-                     | $l[$s : (if $end == null then ($l|length) else $end end)] | join("\n") ]
+                     | ( [ range($s+1; ($l|length)) | select($l[.] | test("^#+ ")) ] | first ) as $stop
+                     | $l[$s : (if $stop == null then ($l|length) else $stop end)] | join("\n") ]
                    | join("\n\n")
               end )' 2>/dev/null || true)"
       if [ -n "$GOAL_CARD" ]; then
