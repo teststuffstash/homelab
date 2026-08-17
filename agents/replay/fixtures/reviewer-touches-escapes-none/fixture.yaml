@@ -1,0 +1,17 @@
+# homelab#379 leg 2 — reviewer Touches-escape detection: no escapes (all paths covered).
+#
+# CONDITION UNDER REPLAY. PR closes issue #124, the issue has a declared Touches: footprint,
+# and all paths in the PR diff are covered by that footprint.
+#
+# THE CONTRACT:
+#   1. Touches-check helper computes an empty escape set
+#   2. TOUCHES_ESCAPES is set to "none"
+#   3. The no-escape message is printed to stderr
+#
+# Parts: bridge.sh (seams: ISSUE, CHANGED, touches_check) + block:reviewer-touches-check
+name: reviewer-touches-escapes-none
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-touches-check
