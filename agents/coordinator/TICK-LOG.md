@@ -4126,3 +4126,36 @@ tool-compat bisect (Anthropic surface drops tool-bearing bodies; OpenAI surface 
 operator's 4-step nemotron tool loop on the OpenAI surface — the translator's acceptance shape.
 Deepseek-v4-flash authoring verdict: both chunks merged, one orphaned-wait repeat offender
 (process discipline, not code quality). Session ended by the operator.
+
+### 2026-08-17 — /board-sweep (weekend window 08-14 session close → 08-17 morning): machine ran clean unattended; retro r4 parked at the codeowner; two currency-gate skips carry live defects
+
+**Condition:** Operator opened Monday with the Zen console read (balance $2.56 after last week's
+intentional k3-review overage; **"use balance after limits" now DISABLED**; Go rolling+weekly 0%,
+monthly 50%) and asked for the weekend's platform-stack board. Sweep over the claim universe since
+the 08-14 zen-rail session close. Machine truth: `meta-alert-crosscheck` CLEAN (every firing
+triage-eligible alert has a responder ledger entry); the 08-16→08-17 devbox-update wave (9 repos)
+authored, reviewed and merged itself overnight — **renovate-approve #114 soak PASSES its first
+wave datum** (homelab#451: exactly ONE bot approval); agent-base deploy #452 + arc-runner pin
+#453 rode the pin lanes clean; oracle specs-preview routes (oracle-iac#371/#373) cycled correctly.
+**Retro r4 = the FU-058 first UNATTENDED fire, and it fired**: PR#454 open, CI green, bot-approved,
+correctly parked at the whole-repo codeowner gate — but cell-b (deepseek-v4-pro) delivered a
+9-line EMPTY template as its "report" (the report-marker self-check passes on headers alone —
+sighting for the retro lane), while the opus cell delivered a real 6-finding report (headline:
+unconditional `Fixes #` tracks dispatch-not-delivery; strike-side fleet aggregation missing;
+#257's recipe half never landed per-repo; ledger `models[]` unordered; 5/6 blocked rows stale
+snapshots). Swapped-cell cross-review still unrun; #439 leg 2 (--pick-rail before the retro fire)
+MISSED its deadline with no observed cost. ESCALATED-UNSEEN pile: homelab#449 (argo
+workflow-controller OOM at its own 256Mi after 29d — responder verdict `fix`, currency gate
+correctly skipped the resolved alert, defect persists and recurs on the same clock) · #456
+(opencode phone-home egress drops from openrouter-operator ns — fresh, debounce window still open)
+· #450 (janitor: 🌱 class needs a Renovate-dashboard carve-out, ~6 weeks of permanent noise
+lines) · #455 scout digest (4 candidates, all `unbenched` — graduation = operator call).
+Re-fire threads riding known causes: #221 (HA tuya_local receive-loop recurred), #100/#103/#153/
+#241 (recurrence comments, correctly deduped). Only 2 agent-labeled issues fleet-wide (both
+oracle: #260 queued, #225 blocked). oracle-fleet#262 = first real dogfood feedback on the live
+oracle endpoint (statute delivers, search misses).
+**Command:** FU-170 updated with the toggle change (silent-billing mode closed console-side;
+residual = the near-limit signal half). Report to operator with the park/decide list: merge-read
+PR#454 (+ decide on the empty cell-b report + cross-review), dispose #449 (hand-queue or seat PR
+the limit raise), #450 adopt-or-accept, #455 graduation. No labels moved, no state cleared —
+classification only.

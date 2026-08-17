@@ -242,10 +242,16 @@ the block needs pruning, not more headings.
       latch keeps dispatching into paid traffic. Confirmed the same sitting: the running jail
       shim predates #442 (no gometer/spool artifacts), so jail burn is unmetered until the next
       claude-go launch (the meta-state caveat, live). Deferred BY DECISION this round (operator:
-      finish it blind — the rail works, spend is bounded by the balance). Next: pick the signal
-      — console scrape vs meter-window threshold → dispatch-hold/alert; design home = the
-      charter's cost rethink ([`agents/chainless-redesign.md`](agents/chainless-redesign.md)
-      §cost rethink, #431/#432) extended rail-side.
+      finish it blind — the rail works, spend is bounded by the balance).
+      **PREMISE CHANGED 2026-08-17 (operator): "use balance after limits" DISABLED** after the
+      intentional overage week (~$7.44 of balance burnt on k3 reviews; $2.56 remains). The
+      silent-billing failure mode is closed console-side — a window at 100% now hard-429s the
+      rail instead of spilling to balance, which the proxy's self-metered latch + failover
+      already handle. Residual: the meter-window threshold/alert half (know we're NEAR the
+      limit before dispatching into it); the console-scrape option loses urgency. Design home
+      unchanged: the charter's cost rethink
+      ([`agents/chainless-redesign.md`](agents/chainless-redesign.md) §cost rethink,
+      #431/#432) extended rail-side.
 - [ ] **FU-171** — **A long Go-served review outlives the ~1h git token (observed 2026-08-14).**
       The #447 review ran 47 min (kimi-k3, **$6.33** — balance regime, FU-170); the dispatch-time
       installation token 401'd ~07:50Z BEFORE the verdict posted — a full CHANGES_REQUESTED lost
