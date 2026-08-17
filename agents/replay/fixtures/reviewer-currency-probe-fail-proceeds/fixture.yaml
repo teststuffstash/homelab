@@ -1,0 +1,32 @@
+# reviewer-currency-probe-fail-proceeds (2026-08-17) — the CURRENCY GATE is FAIL-OPEN: a probe
+# that returns garbage must NOT block the review.
+#
+# CONDITION UNDER REPLAY. `gh pr view` returns a 200-but-broken body (`upstream connect error or
+# disconnect/reset before headers`) with exit 0 — the same non-JSON shape the gh stub's `garbage`
+# mode models. The block's three jq parses all fail closed, so state, mergeStateStatus and
+# headRefOid all come up empty.
+#
+# THE CONTRACT (executes the REAL currency-gate block from reviewer-session.sh via sentinel):
+#   1. Empty PR_STATE ⇒ the state check's `[ -n ]` guard is false — no skip.
+#   2. Empty PR_MERGE_STATE is neither BEHIND nor DIRTY — no skip.
+#   3. Empty HEADSHA8 ⇒ the EXISTING degrade branch fires: the WARN line (emitted to stderr,
+#      unchanged from the pre-gate code, byte-for-byte) + the timestamp pod name. The fail-open
+#      is deliberate — a GitHub blip must not turn every review into a skipped spawn; the in-pod
+#      STEP-0 stays the belt on the degraded path.
+#   4. post.sh proves execution continues past the gate (REACHED line).
+#
+# EXPECTED STREAM (derived from the shipped text + the contract above):
+#   CALL — the one combined probe
+#   OUT  — "REACHED: past-currency-gate"   ← post.sh observation
+#   ERR  — "WARN: head-sha probe failed — timestamp pod name (idempotency belts: pod-label check
+#          + STEP-0 only)"   ← quoted exactly from the shipped `echo ... >&2`
+#   RC   — 0 (proceeds, no skip)
+#
+# Parts: bridge.sh + block:reviewer-currency-gate (real code) + post.sh (observation point)
+name: reviewer-currency-probe-fail-proceeds
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-currency-gate
+  - file:post.sh

@@ -1,0 +1,29 @@
+# reviewer-currency-current-proceeds (2026-08-17) — the CURRENCY GATE lets a CURRENT review
+# through unchanged, and the combined probe still feeds the FU-092 pod name.
+#
+# CONDITION UNDER REPLAY. The combined `gh pr view` returns state=OPEN, mergeStateStatus=CLEAN,
+# headRefOid=abc1234def — a reviewable, mergeable head at spawn time.
+#
+# THE CONTRACT (executes the REAL currency-gate block from reviewer-session.sh via sentinel):
+#   1. state=OPEN passes the state check; mergeStateStatus=CLEAN is neither BEHIND nor DIRTY, so
+#      neither skip branch fires.
+#   2. HEADSHA8 derives from the SAME JSON (`.headRefOid`), not a second probe: cut -c1-8 of
+#      `abc1234def` = `abc1234d`, which feeds the FU-092 pod name. This pins that merging the
+#      probe into one call did not break the pod-name contract.
+#   3. post.sh proves execution CONTINUES past the gate (the REACHED observation line) and exposes
+#      the derived pod key (POD KEY line) — a gate that wrongly skipped would red on both.
+#
+# EXPECTED STREAM (derived from the shipped text + the contract above):
+#   CALL — the one combined probe (same line as the sibling fixtures)
+#   OUT  — "REACHED: past-currency-gate"   ← post.sh observation (goal-budget-refusal pattern)
+#   OUT  — "POD KEY: abc1234d"             ← 8-char headRefOid prefix, computed FROM the inputs
+#   RC   — 0 (no skip; the block exits through the normal tail)
+#
+# Parts: bridge.sh + block:reviewer-currency-gate (real code) + post.sh (observation point)
+name: reviewer-currency-current-proceeds
+mode: actions
+source: agents/reviewer-session.sh
+parts:
+  - file:bridge.sh
+  - block:reviewer-currency-gate
+  - file:post.sh
