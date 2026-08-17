@@ -155,8 +155,11 @@ six OVERSIZE items pointer-ized into
       PRs per stack: LAN subdomain opt-in (ADR-092), git repos, AppProject/ns. **Next:** the
       operator-witnessed test claim; separately the **teststuff.net edge-metrics poller**
       (free zone invisible to the lablabs exporter #132 — DIY GraphQL, github-exporter
-      pattern). Program: `ROADMAP.md` → "Platform self-service via Crossplane". Relates
-      ADR-076, ADR-085, ADR-092, ADR-101, FU-068.
+      pattern). **The poller leg ABSORBS the deleted `CloudflareEdge5xx` belt (homelab#363,
+      2026-08-17):** since #350 removed the alert (its input series is unproducible on free-plan
+      zones), NO edge 5xx/error-rate belt exists at all — the poller's first deliverable is the
+      replacement alert on its own series, not just dashboards. Program: `ROADMAP.md` →
+      "Platform self-service via Crossplane". Relates ADR-076, ADR-085, ADR-092, ADR-101, FU-068.
 - [ ] **FU-055** — Flip the `oracle-fleet` repo `private` → `public` when that stack reaches its
       planned open-sourcing milestone ("P3" in its design doc, kept out-of-repo). The flip is a
       `tofu/github/repos.tf` visibility change + `allow_forking = true` (GitHub forces forking on
