@@ -424,8 +424,13 @@ the block needs pruning, not more headings.
       hand-fire `model-scout-2psl6` ran KEYED (secret in env, digest #380, no JSON-RPC errors) —
       all-`unbenched` is honest newcomer state, the call shape is right. The digest's canary
       column still shows v2 bare `failed` on both free candidates — exactly what legs 3–4 fix.
-      **Next:** legs 3–4 (typed cell-keyed canary verdicts + contradiction rule + pool
-      curation), UNBLOCKED (FU-162 shipped). Related: #235's belt (machine lane owns it).
+      **⚖ FILING GATE RULED (operator, 2026-08-17, closing digests #380+#455 unread): "the
+      scout graduations are pointless — zero information."** An all-`unbenched`, canary-less
+      digest asks for a graduation call on no evidence. Honest-but-empty must not FILE: the
+      canary rung (leg 3) runs BEFORE the digest, and a digest whose every row is unbenched AND
+      uncanaried posts nowhere but the log — no issue, no 🌱 line. **Next:** legs 3–4 (typed
+      cell-keyed canary verdicts + contradiction rule + pool curation) WITH the filing gate,
+      UNBLOCKED (FU-162 shipped). Related: #235's belt (machine lane owns it).
 
 - [ ] **FU-095** — **Task-class model routing + multi-harness evidence: POINTER.** Design +
       pilots: [`docs/agents/model-routing.md`](agents/model-routing.md) (§M8 capability feed BUILT
