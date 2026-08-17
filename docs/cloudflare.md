@@ -193,8 +193,11 @@ otherwise; a group can also gate NOTHING, because the gate may not be a permissi
 ## Observability
 
 **What exists today:** `cloudflared`'s own Prometheus metrics (PodMonitor, ~119 series —
-per-hostname tunnel requests/response codes, connection health; plan-independent, the live edge
-signal); the `homelab-observability-read` token for on-demand GraphQL + audit-log reads from the
+per-tunnel request totals + connection health; ⚠ this build exports **no response-code dimension
+and no hostname label** on `cloudflared_tunnel_total_requests` (labels: container/instance/job/
+namespace/pod — verified live, homelab#362), so the tunnel metrics are a liveness signal, NOT a
+substitute for zone analytics; edge status codes arrive only with the FU-039 GraphQL poller);
+the `homelab-observability-read` token for on-demand GraphQL + audit-log reads from the
 jail; the lablabs exporter (`argocd/resources/cloudflare-exporter/`) — correctly configured and
 **correctly idle**: neither zone can currently produce zone series (below), so its alert is
 keyed to scrape-target health (`CloudflareExporterDown`), not data presence. End-to-end
