@@ -1,6 +1,5 @@
 CALL gh issue list --repo teststuffstash/circles --state open --json number,title,author,labels,createdAt,blockedBy
-OUT ORPHAN [circles] ⏸ adopted, not queued (adopted but no queued/in-progress/blocked state — see homelab#405):
-OUT ORPHAN   issue #110 — adopted but not queued — the adopted-not-queued class case
+OUT ORPHAN [circles] ⏸ backlog: 1 suitable-unqueued (oldest #110 since 2026-08-08) — agent-fix without a state label; ordinary backlog (ADR-109), expand: devbox run board -- <stack> --full
 OUT ORPHAN [circles] 🌱 bot-authored, awaiting human triage (FU-090 gate — label agent-fix[+queued] to adopt):
 OUT ORPHAN   issue #114 — bot-authored, no labels at all — a real sprout, not adopted (by homelab-agents-1234)
 OUT REACHED: end
