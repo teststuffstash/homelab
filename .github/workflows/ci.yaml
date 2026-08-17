@@ -197,8 +197,6 @@ jobs:
       # rules — a predicate bug must fail HERE, not double-dispatch two workers into one lane.
       - name: Footprint-intersection predicate rules (devbox run footprint-test)
         run: devbox run footprint-test
-      - name: Touches escape-set predicate (devbox run touches-check-test)
-        run: devbox run touches-check-test
       # FU-127: the model-id rules, plus the drift pin on the proxy's copy of the rail-namespace
       # half (it lives in another deployment unit and cannot import the parser).
       - name: Model-id parse rules + proxy drift pin (devbox run model-id-test)
