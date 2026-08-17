@@ -1,5 +1,6 @@
 # touches-check.sh — compute the escape set for declared `Touches:` footprint (ADR-097, homelab#379).
-# Sourced by reviewer-session.sh and coordinator-scan.sh; unit-tested in homelab#474.
+# Sourced by reviewer-session.sh and coordinator-scan.sh; unit-tested by agents/touches-check-test.sh
+# (devbox run touches-check-test, wired in ci — homelab#474).
 #
 # A Touches footprint is a comma-separated list of path prefixes/globs from an issue's `Touches:`
 # body line. This helper computes the ESCAPE SET: paths changed in a PR that fall outside the

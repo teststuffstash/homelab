@@ -172,42 +172,6 @@ if [ -n "\$ISSUE" ]; then
 fi
 export SPROUT_DEPTH
 echo "→ sprout depth: \$SPROUT_DEPTH (0 = not a follow-up of a follow-up)"
-# ── TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) ──────────────────────────────────────────
-# If this PR closes an issue, check the declared Touches: line against the diff paths.
-# The escape set — paths undeclared in Touches: that appear in the diff — is injected into
-# the review context as TOUCHES-ESCAPES for the rubric's BLOCKING check.
-# >>>REPLAY:reviewer-touches-check>>>
-TOUCHES_ESCAPES=""
-if [ -n "$ISSUE" ]; then
-  # Source the touches-check helper (same normalization as coordinator-scan.sh's ADR-097 hold)
-  . "${HERE:-$(cd "$(dirname "$0")" && pwd)}/touches-check.sh"
-  # Read the issue body to extract the Touches: line
-  ISSUE_BODY=$(gh api "repos/${REPO_SLUG}/issues/$ISSUE" --jq '.body // ""' 2>/dev/null || true)
-  DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | head -1)
-  # Compute the escape set: paths that are NOT covered by the declared touches
-  ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "$CHANGED" 2>/dev/null || true)
-  if [ -n "$ESCAPES_RAW" ]; then
-    # Format for the prompt: list governance paths first with [GOVERNANCE] marker
-    TOUCHES_ESCAPES=$(printf '%s\n' "$ESCAPES_RAW" | while read -r line; do
-      path="${line%%|*}"; marker="${line#*|}"
-      if [ "$marker" = "governance" ]; then
-        printf '[GOVERNANCE] %s\n' "$path"
-      else
-        printf '%s\n' "$path"
-      fi
-    done | sort)
-    echo "→ TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):"
-    printf '%s\n' "$TOUCHES_ESCAPES" | sed 's/^/  /'
-  else
-    TOUCHES_ESCAPES="none"
-    echo "→ TOUCHES: no escapes (all paths covered by declared footprint)"
-  fi
-else
-  TOUCHES_ESCAPES="undeclared"
-  echo "→ TOUCHES: undeclared (PR closes no issue)"
-fi
-# <<<REPLAY:reviewer-touches-check<<<
-export TOUCHES_ESCAPES
 # FU-101 review lenses: a DETERMINISTIC diff-class predicate selects externally-sourced ADVISORY
 # lens briefs (agents/lenses/*.md, platform-owned), fetched from the public homelab repo at review
 # time (no image rebuild, always current-pinned) and appended to the system prompt AFTER the
@@ -234,10 +198,6 @@ RUBRIC_FLAG=""
 [ -s "\$SYSFILE" ] && RUBRIC_FLAG="--append-system-prompt-file \$SYSFILE"
 echo "→ reviewing ${REPO_SLUG}#${PR} on \$(git rev-parse --abbrev-ref HEAD) (model: \${MODEL}); rubric: \${RUBRIC_FLAG:-<none>}"
 PROMPT='Review pull request #${PR} on the checked-out branch.
-
-TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — Declared \`Touches:\` footprint against changed paths:
-  TOUCHES-ESCAPES: \${TOUCHES_ESCAPES}
-When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`), the diff is BLOCKING per .agents/review.md §BLOCKING — this is information for your review, used as part of the rubric check.
 
 STEP 0 — SELF-GUARD (you are the LAST line of defense against automation loops): run  gh pr view ${PR} --json reviews,comments,commits,labels,mergeStateStatus,statusCheckRollup,headRefOid  and check the review history against your OWN bot identity, which is the literal login  ${REVIEWER_LOGIN}  — use that string, do NOT look it up at runtime (you authenticate with an App INSTALLATION token, for which  gh api user  returns 403, and note the login carries no [bot] suffix here). Your own verdicts, and your own asides below, are exactly the entries whose author.login is  ${REVIEWER_LOGIN} . The guard REFUSES in every case it refused before — what changed (homelab#122, 2026-08-08) is only WHICH terminal a refusal picks. Sort what you see into one of two classes; you submit NO review in either.
   (a) PRECONDITION FAILURE — the dispatch premise was true when you were QUEUED and stopped being true before you EXECUTED. Under semaphore queueing that gap routinely reaches ~10 minutes, so this is ordinary contention, not a malfunction, and the machinery resolves it without a human: the review path is LEVEL-TRIGGERED (an Argo Events edge plus a */15 CronWorkflow backstop), so the state settling IS the re-dispatch. Post ONE short standing-aside comment (gh pr comment ${PR} --body ...) naming the precondition and the head sha, add NO label, submit NO review, do not re-litigate the diff, and stop. Exactly these three states are preconditions:
@@ -279,6 +239,69 @@ if [ "\${SPROUT_DEPTH:-0}" -ge 2 ]; then
 DEPTH RULE (this PR closes issue #\${ISSUE}, which sits at follow-up depth \${SPROUT_DEPTH} — a follow-up of a follow-up). You are near the end of a sprout chain, where each extra deferral costs another issue, another dispatch and another review for steadily smaller returns. So DO NOT emit a Follow-ups: section at all in this review. Each finding gets exactly one of two fates: if it genuinely must not ship, make it a BLOCKING finding and request changes so it is fixed in THIS PR; otherwise drop it, or leave it as a plain review comment that no one will file. Collapse the tail — that judgement is yours to make here and nobody else gets the chance."
 fi
 PREP
+)
+
+# ── TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — a POD-SIDE part, quoted heredoc ──────────
+# Runs in the pod AFTER $PREP (so $ISSUE, $CHANGED and $PROMPT already exist there), which is why
+# it is a separate quoted part and not more PREP: inside the unquoted <<PREP heredoc every one of
+# these references would need backslash-escaping to survive to the pod, and round 5 of PR#473
+# proved that class of defect is invisible to CI and replay alike (the block compiled to dead code
+# in the launcher). The helper pair is fetched master-pinned from the public homelab repo — the
+# FU-101 lens pattern — because the review pod only holds the PROJECT's clone; a launcher path
+# like $HERE does not exist here. A safety belt must FAIL OPEN: $PREP's `set -e` is still live in
+# this shell, so every fallible command is guarded, and any fetch/source/compute failure degrades
+# to TOUCHES-ESCAPES: unavailable plus a WARN — never a dead review lane.
+TOUCHESPART=$(cat <<'SNIP'
+# >>>REPLAY:reviewer-touches-check>>>
+TOUCHES_ESCAPES="unavailable"
+if [ -z "${ISSUE:-}" ]; then
+  TOUCHES_ESCAPES="undeclared"
+  echo "→ TOUCHES: undeclared (PR closes no issue)"
+else
+  TOUCHES_BASE="${TOUCHES_BASE:-https://raw.githubusercontent.com/teststuffstash/homelab/master/agents}"
+  _tc_ok=1
+  _tc_dir="$(mktemp -d)" || _tc_ok=0
+  if [ "$_tc_ok" = "1" ]; then
+    for _tc_f in touches-check.sh footprint.sh; do
+      curl -fsS --max-time 10 "$TOUCHES_BASE/$_tc_f" -o "$_tc_dir/$_tc_f" || { _tc_ok=0; break; }
+    done
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    . "$_tc_dir/touches-check.sh" 2>/dev/null || _tc_ok=0
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    ISSUE_BODY=$(gh api "repos/$REPO_SLUG/issues/$ISSUE" --jq '.body // ""' 2>/dev/null || true)
+    DECLARED_TOUCHES=$(printf '%s' "$ISSUE_BODY" | grep -iE '^[ \t]*touches:[ \t]*' | sed -E 's/^[ \t]*touches:[ \t]*//i' | tr -d '\r' | head -1)
+    ESCAPES_RAW=$(touches_check "$DECLARED_TOUCHES" "${CHANGED:-}" 2>/dev/null) || { _tc_ok=0; ESCAPES_RAW=""; }
+  fi
+  if [ "$_tc_ok" = "1" ]; then
+    if [ -n "$ESCAPES_RAW" ]; then
+      TOUCHES_ESCAPES=$(printf '%s\n' "$ESCAPES_RAW" | while read -r line; do
+        path="${line%%|*}"; marker="${line#*|}"
+        if [ "$marker" = "governance" ]; then
+          printf '[GOVERNANCE] %s\n' "$path"
+        else
+          printf '%s\n' "$path"
+        fi
+      done | sort)
+      echo "→ TOUCHES: escapes detected (ADR-097 footprint check — homelab#379):"
+      printf '%s\n' "$TOUCHES_ESCAPES" | sed 's/^/  /'
+    else
+      TOUCHES_ESCAPES="none"
+      echo "→ TOUCHES: no escapes (all paths covered by declared footprint)"
+    fi
+  else
+    echo "WARN: touches-check helpers unavailable (fetch/source/compute failed) — TOUCHES-ESCAPES: unavailable; the review proceeds (the belt fails open)"
+  fi
+fi
+export TOUCHES_ESCAPES
+PROMPT="${PROMPT:-}
+
+TOUCHES: FOOTPRINT CHECK (ADR-097, homelab#379) — declared \`Touches:\` footprint against the changed paths:
+  TOUCHES-ESCAPES: $TOUCHES_ESCAPES
+Semantics: \`none\` = every changed path is covered by the closing issue's declared footprint; \`undeclared\` = this PR closes no issue, so there is no footprint to check; \`unavailable\` = the checker could not run — treat it as NO SIGNAL, not as clean; otherwise each listed path fell OUTSIDE the declared footprint. When escapes land in governance paths (\`agents/**\`, \`.agents/**\`, \`scripts/**\`, \`policy/**\`, \`.github/**\`, \`tofu/github/**\`, \`tofu/cloudflare/**\`) — marked [GOVERNANCE] — the diff is BLOCKING per .agents/review.md §BLOCKING. This is computed fact for your rubric check, not a verdict."
+# <<<REPLAY:reviewer-touches-check<<<
+SNIP
 )
 
 # §A1 transcript capture: the upload function + an EXIT trap are installed BEFORE the prep — so a
@@ -371,7 +394,7 @@ cat /tmp/result.json
 exit $RC
 SNIP
 )
-ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s' "$UPLOADER" "$PREP" "$RUNPART" | jq -Rs .)]"
+ARGS="[\"bash\",\"-lc\",$(printf '%s\n%s\n%s\n%s' "$UPLOADER" "$PREP" "$TOUCHESPART" "$RUNPART" | jq -Rs .)]"
 
 # >>>REPLAY:reviewer-go-failover-gate>>>
 # FU-088(a): defer while the subscription is 429-latched (covers the Sensor path too, which

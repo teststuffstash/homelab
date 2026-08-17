@@ -10,7 +10,7 @@ argocd/platform/test.yaml
 EOF
 )
 
-HERE="$REPLAY_ROOT/agents"
+TOUCHES_BASE="file://$REPLAY_ROOT/agents"
 
 # gh stub: return an issue body with a Touches: line
 gh() {
@@ -28,5 +28,5 @@ gh() {
   esac
 }
 
-export ISSUE REPO_SLUG CHANGED HERE
+export ISSUE REPO_SLUG CHANGED TOUCHES_BASE
 export -f gh

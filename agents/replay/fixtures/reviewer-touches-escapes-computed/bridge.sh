@@ -12,8 +12,9 @@ agents/replay/fixtures/test/fixture.yaml
 EOF
 )
 
-# HERE for touches-check.sh sourcing (must be exported for subshells)
-HERE="$REPLAY_ROOT/agents"
+# The block fetches the helper pair via curl from TOUCHES_BASE — point it at the repo checkout
+# (file:// keeps the fixture hermetic and exercises the real fetch path, no shim).
+TOUCHES_BASE="file://$REPLAY_ROOT/agents"
 
 # gh stub: return an issue body with a Touches: line when asked for issue body
 gh() {
@@ -31,5 +32,5 @@ gh() {
   esac
 }
 
-export ISSUE REPO_SLUG CHANGED HERE
+export ISSUE REPO_SLUG CHANGED TOUCHES_BASE
 export -f gh
