@@ -205,6 +205,10 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-bench-unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant-batch-rollout` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant-known-base` | actions | - | `agents/model-scout.sh` | - |
+| `session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
+| `session-belt-c4c5` | actions | - | `agents/coordinator-scan.sh` | - |
+| `session-belt-fast-path` | actions | - | `agents/coordinator-scan.sh` | - |
+| `session-belt-queued` | actions | - | `agents/coordinator-scan.sh` | - |
 | `sprout-report-skips-buckets` | actions | - | `agents/coordinator-scan.sh` | IL-T17 |
 | `state-fp` | suite | - | `-` | MP-T11 |
 | `summary-comment-append` | actions | - | `-` | - |
