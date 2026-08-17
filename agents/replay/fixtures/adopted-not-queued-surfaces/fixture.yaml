@@ -1,0 +1,32 @@
+# homelab#405 — the ⏸ adopted-not-queued class: `agent-fix` without any `agent/*` state label.
+#
+# CONDITION UNDER REPLAY. Five issues, one of each shape the new class and its neighbors have to
+# tell apart:
+#   #110 agent-fix, NO state labels                   → a truly adopted-not-queued issue. MUST appear.
+#   #111 agent-fix, HAS agent/queued                  → adopted AND queued. Must not appear.
+#   #112 agent-fix, HAS agent/in-progress             → adopted AND in-progress. Must not appear.
+#   #113 agent-fix, HAS agent/blocked                 → adopted AND blocked. Must not appear.
+#   #114 NO agent-fix, bot-authored                   → a real sprout. Must appear in 🌱, not ⏸.
+#
+# WHY THIS MATTERS. The ⏸ class and the 🌱 class are both "untriaged / early-stage" but have
+# different meanings: sprouts are UNEXAMINED (no agent-fix yet), adopted-not-queued are EXAMINED
+# but not yet dispatched (agent-fix applied but no state label yet). The fixture asserts that the
+# loop distinguishes between them and reports each in its own class.
+#
+# The 🌱 line for #114 is present in full: the point is that the class still WORKS, not merely
+# that it dropped something. A filter that quietly swallowed real sprouts would also make the
+# new class look like it works when it doesn't.
+#
+# This fixture works alongside unblocked-unlabeled-surfaces (which tests the 🔓 class) and
+# sprout-report-skips-buckets (which tests the 🌱 class). Together they ensure the three
+# orphan classes (🔓, 🌱, ⏸) are disjoint — no issue can appear in two classes.
+name: adopted-not-queued-surfaces
+mode: actions
+source: agents/coordinator-scan.sh
+parts:
+  - file:bridge.sh
+  - block:sprout-report
+  - file:post.sh
+env:
+  - IN_SLUG=teststuffstash/circles
+  - IN_REPO=circles
