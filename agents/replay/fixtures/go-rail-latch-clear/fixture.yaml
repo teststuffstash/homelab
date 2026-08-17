@@ -1,0 +1,11 @@
+# The FU-088 gate's Go arm, CLEAR leg — sibling of go-rail-latch-defer.
+#
+# THE CONTRACT: /opencode-limit limited:false falls through (no defer line, rc 0, execution
+# continues past the gate), still never touching subscription-latch.sh (same `bash` tripwire),
+# and the FU-088(b) OpenRouter credit gate below stays silent for a claude-harness ride.
+name: go-rail-latch-clear
+mode: actions
+source: agents/agent-session.sh
+parts:
+  - file:bridge.sh
+  - block:fu088-gates
