@@ -90,7 +90,7 @@ resource "kubernetes_config_map" "power_dashboard" {
 # repo (sleep-tracking/sleep-overview.json → a grafana_dashboard-labelled ConfigMap via kustomize
 # configMapGenerator, in the sleep-tracking namespace) so a fix is a PR ArgoCD syncs, not a tofu
 # apply. The Grafana sidecar discovers it by label across ALL namespaces. What STAYS platform-owned
-# here: the frser SQLite datasource (uid "sleep-notes" — the dashboard's stable contract), the
+# here: the frser SQLite datasource (uid "sleep-data" — the dashboard's stable contract), the
 # sleep-sqlite-sync sidecar, and the sleep-db-reader ExternalSecret (Grafana-deployment infra).
 
 # S3 read creds for the Grafana sleep.sqlite sync sidecar — mirrors the sleep-ingester's
