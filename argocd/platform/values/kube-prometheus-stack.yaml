@@ -129,7 +129,7 @@ additionalPrometheusRulesMap:
               severity: warning
           - alert: PodSigkilled
             annotations:
-              description: Container {{ $labels.container }} restarted with exit 137 (SIGKILL). SYMPTOM ONLY — two unrelated causes share this exit code, so read the pod before assuming either. `kubectl -n {{ $labels.namespace }} get pod {{ $labels.pod }} -o json` → `.status.containerStatuses[].lastState.terminated.reason`, plus its QoS class and that container's own memory limit. `OOMKilled` on a Burstable/Guaranteed pod = it hit ITS OWN limit (raise the limit) — this is the common case and node memory can be perfectly healthy. Node-pressure eviction of a BestEffort victim (the Talos OOMController, FU-082) is the OTHER case; confirm it with `talosctl dmesg | grep 'OOM controller'` on that node rather than inferring it.
+              description: 'Container {{ $labels.container }} restarted with exit 137 (SIGKILL). SYMPTOM ONLY — three unrelated causes share this exit code, so read the pod before assuming any. `kubectl -n {{ $labels.namespace }} get pod {{ $labels.pod }} -o json` → `.status.containerStatuses[].lastState.terminated.reason`, plus the QoS class and each container''s own memory limit. (1) `OOMKilled` = the container hit ITS OWN limit (raise it) — the common case, node memory can be perfectly healthy. (2) Kubelet node-pressure eviction of a BestEffort victim — the node is genuinely under Memory/DiskPressure. (3) The Talos OOMController (FU-155, docs/spikes/talos-psi-thresholds.md): a userspace killer that SIGKILLs the WHOLE pod cgroup atomically via cgroup.kill — every container dies at the same instant with `reason: "Error"` (never `OOMKilled`), preferentially targeting pods with NO memory limit (BestEffort 1.0, unlimited Burstable 0.5); confirm it with `talosctl -n <node> get oomactions -o yaml`, which gives the score, trigger context and victim cmdlines directly.'
               summary: '{{ $labels.namespace }}/{{ $labels.pod }} killed (exit 137)'
             expr: increase(kube_pod_container_status_restarts_total[30m]) > 0 and on (namespace, pod, container) kube_pod_container_status_last_terminated_exitcode == 137
             for: 0m
@@ -324,6 +324,12 @@ prometheus:
           - chown -R 1000:2000 /prometheus
         image: busybox:1.37
         name: chown-data
+        resources:
+          limits:
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
         securityContext:
           runAsNonRoot: false
           runAsUser: 0
@@ -334,6 +340,8 @@ prometheus:
     probeSelectorNilUsesHelmValues: false
     replicas: 1
     resources:
+      limits:
+        memory: 8Gi
       requests:
         cpu: 300m
         memory: 1200Mi
@@ -365,6 +373,13 @@ prometheus-node-exporter:
       cpu: 20m
       memory: 32Mi
 prometheusOperator:
+  prometheusConfigReloader:
+    resources:
+      limits:
+        memory: 128Mi
+      requests:
+        cpu: 10m
+        memory: 32Mi
   resources:
     limits:
       memory: 256Mi
