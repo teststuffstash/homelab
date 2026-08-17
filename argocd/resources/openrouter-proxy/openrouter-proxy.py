@@ -111,13 +111,9 @@ ANTHROPIC_UTIL_THRESHOLD = float(os.environ.get("ANTHROPIC_UTIL_THRESHOLD", "0.8
 def _window_threshold(w: str) -> float:
     return float(os.environ.get(f"ANTHROPIC_UTIL_THRESHOLD_{w.upper()}", ANTHROPIC_UTIL_THRESHOLD))
 ANTHROPIC_UTIL_THRESHOLD_BY_WINDOW = {w: _window_threshold(w) for w in ("5h", "7d")}
-# homelab#422: OpenCode Go subscription thresholds (default 0.80, per-window overrides allowed).
-OPENCODE_UTIL_THRESHOLD = float(os.environ.get("OPENCODE_UTIL_THRESHOLD", "0.80"))
-def _opencode_window_threshold(w: str) -> float:
-    return float(os.environ.get(f"OPENCODE_UTIL_THRESHOLD_{w.upper()}", OPENCODE_UTIL_THRESHOLD))
-OPENCODE_UTIL_THRESHOLD_BY_WINDOW = {w: _opencode_window_threshold(w) for w in ("5h", "7d", "30d")}
-# Go windows: 5h/$12, 7d/$30, 30d/$60 (list prices; badge models draw at half).
-OPENCODE_WINDOW_BUDGETS = {"5h": 12.0, "7d": 30.0, "30d": 60.0}
+# homelab#422: Go subscription windows (budget/span/ANCHOR) + utilization thresholds + the
+# WINDOW-DRAW pricing moved to gometer — the shared home (ADR-108), see GO_WINDOWS /
+# GO_UTIL_THRESHOLDS / window_draw() there. The proxy serves /opencode-limit from gometer.
 _latch = {"until": 0.0, "last_429": 0.0, "headers": {}, "headers_at": 0.0,
           "windows": {}, "count_429": 0}
 _latch_lock = threading.Lock()
@@ -1451,8 +1447,13 @@ class Proxy(BaseHTTPRequestHandler):
                 usd, warning = gometer.price(bare_model, merged)
                 if warning:
                     log(f"WARN {warning}")
+                # The subscription window draws at LIST price on raw tokens, badge-halved —
+                # window_draw(), NOT the cache-discounted price() (2026-08-17 reconciliation,
+                # uploads/opencode-go.txt: the cache-priced meter read ~30× low).
+                draw = gometer.window_draw(bare_model, merged)
             else:
                 usd = 0.0
+                draw = 0.0  # the Zen free rail never draws against the Go subscription window
                 # homelab#445: assume all opencode/ calls are free. Sentinel, not a block — warn
                 # when the bare id lacks the -free suffix and isn't big-pickle so a paid model
                 # that slips onto the rail gets noticed instead of silently metered at $0.
@@ -1467,19 +1468,20 @@ class Proxy(BaseHTTPRequestHandler):
             else:
                 stack = "jail"
             if merged["input_tokens"] or merged["output_tokens"]:
-                router.go_usage_add(time.time(), stack, bare_model, usd)
+                router.go_usage_add(time.time(), stack, bare_model, usd, draw,
+                                    merged["input_tokens"], merged["output_tokens"])
                 if go_leg:
                     log(f"Go usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
                         f"{merged['output_tokens']}out"
                         f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
                         f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
-                        f" -> ${usd:.6f}")
+                        f" -> ${usd:.6f} billed / ${draw:.6f} window-draw")
                 else:
                     log(f"Zen usage: {bare_model} stack={stack} tokens={merged['input_tokens']}in/"
                         f"{merged['output_tokens']}out"
                         f"{'+'+str(merged.get('cache_read_input_tokens',0))+'cR' if merged.get('cache_read_input_tokens') else ''}"
                         f"{'+'+str(merged.get('cache_creation_input_tokens',0))+'cW' if merged.get('cache_creation_input_tokens') else ''}"
-                        f" -> $0.00 (free rail)")
+                        f" -> $0.00 billed / $0.00 window-draw (free rail)")
             else:
                 log(f"{'Go' if go_leg else 'Zen'} leg: no usage found in response body for {or_model}")
         if GEN_LOOKUP and or_model and 200 <= status < 300 and not go_leg and not zen_leg:
@@ -1536,30 +1538,21 @@ class Proxy(BaseHTTPRequestHandler):
             return
         if self.path.split("?", 1)[0] == "/opencode-limit":
             # homelab#422: Go-rail subscription headroom probe — same JSON shape as /anthropic-limit.
-            # Windows: 5h/$12, 7d/$30, 30d/$60; threshold deferral when any window's utilization ≥ threshold.
-            # `by_stack` for the 7d window (the scheduler's consumption view).
-            now = time.time()
-            windows_data = {}
-            by_stack = {}
-            limited = False
-            threshold_composite = {}
-            for w, budget in OPENCODE_WINDOW_BUDGETS.items():
-                w_seconds = {"5h": 5 * 3600, "7d": 7 * 86400, "30d": 30 * 86400}[w]
-                snap = router.go_usage_window(w_seconds)
-                util = snap["total_usd"] / budget if budget > 0 else 0.0
-                thr = OPENCODE_UTIL_THRESHOLD_BY_WINDOW.get(w, OPENCODE_UTIL_THRESHOLD)
-                threshold_composite[w] = thr
-                windows_data[w] = {"usage_usd": snap["total_usd"], "budget_usd": budget,
-                                   "utilization": util}
-                if w == "7d":
-                    by_stack = snap["by_stack"]
-                if util >= thr:
-                    limited = True
+            # The composite answer comes from gometer.go_window_status (the shared home, ADR-108):
+            # per-window budgets + ANCHORED window_start/resets_at epochs, utilization at
+            # WINDOW-DRAW pricing (list price on raw tokens, badge-halved — the 2026-08-17
+            # reconciliation), the BINDING window's by_stack, and the composite `limited`
+            # verdict. `pricing` states which number the utilizations use.
+            def _go_snapshot(name, win_start, _resets_at):
+                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
+            status = gometer.go_window_status(time.time(), _go_snapshot)
             payload = json.dumps({
-                "limited": limited,
-                "thresholds": threshold_composite,
-                "windows": windows_data,
-                "by_stack": by_stack,
+                "limited": status["limited"],
+                "thresholds": status["thresholds"],
+                "pricing": status["pricing"],
+                "windows": status["windows"],
+                "by_stack": status["by_stack"],
+                "by_stack_window": status["by_stack_window"],
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1607,27 +1600,29 @@ class Proxy(BaseHTTPRequestHandler):
                 f"anthropic_subscription_429_total {count_429}",
             ]
             # homelab#422: OpenCode Go subscription windows — usage gauges + threshold + limited verdict.
-            # TYPE/HELP emitted once per metric family (Prometheus strict parsing requirement).
+            # Utilization is the WINDOW-DRAW number (list price on raw tokens, badge-halved — the
+            # 2026-08-17 reconciliation); the billed-style estimate is a SEPARATE gauge so the two
+            # cannot be conflated. TYPE/HELP emitted once per metric family (Prometheus strict
+            # parsing requirement).
+            def _go_snapshot(name, win_start, _resets_at):
+                return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
+            go_status = gometer.go_window_status(time.time(), _go_snapshot)
             lines += [
                 "# TYPE opencode_subscription_usage_usd gauge",
-                "# HELP opencode_subscription_usage_usd Go-rail subscription usage in USD per window.",
+                "# HELP opencode_subscription_usage_usd Go-rail subscription window DRAW usage in USD per window (list price, badge-halved).",
+                "# TYPE opencode_subscription_usage_billed_est_usd gauge",
+                "# HELP opencode_subscription_usage_billed_est_usd Go-rail billed-style estimate in USD per window (cache-discounted; the ledger view).",
                 "# TYPE opencode_subscription_usage_threshold gauge",
                 "# HELP opencode_subscription_usage_threshold Per-window dispatch-deferral threshold (0-1 fraction).",
             ]
-            go_limited = False
-            for w, budget in OPENCODE_WINDOW_BUDGETS.items():
-                w_seconds = {"5h": 5 * 3600, "7d": 7 * 86400, "30d": 30 * 86400}[w]
-                snap = router.go_usage_window(w_seconds)
-                util = snap["total_usd"] / budget if budget > 0 else 0.0
-                thr = OPENCODE_UTIL_THRESHOLD_BY_WINDOW.get(w, OPENCODE_UTIL_THRESHOLD)
-                if util >= thr:
-                    go_limited = True
-                lines.append(f'opencode_subscription_usage_usd{{window="{w}"}} {snap["total_usd"]:.6f}')
-                lines.append(f'opencode_subscription_usage_threshold{{window="{w}"}} {thr}')
+            for w, data in sorted(go_status["windows"].items()):
+                lines.append(f'opencode_subscription_usage_usd{{window="{w}"}} {data["usage_usd_window_draw"]:.6f}')
+                lines.append(f'opencode_subscription_usage_billed_est_usd{{window="{w}"}} {data["usage_usd_billed_est"]:.6f}')
+                lines.append(f'opencode_subscription_usage_threshold{{window="{w}"}} {go_status["thresholds"][w]}')
             lines += [
                 "# TYPE opencode_subscription_dispatch_limited gauge",
                 "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
-                f"opencode_subscription_dispatch_limited {1 if go_limited else 0}",
+                f"opencode_subscription_dispatch_limited {1 if go_status['limited'] else 0}",
             ]
             # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
             semaphore = _semaphore_state()
@@ -2302,6 +2297,21 @@ def main() -> int:
             usd = float(data["usd"])
             if usd < 0:
                 raise ValueError("usd must be >= 0")
+            # Optional window-draw price + tokens (shim sends them since 2026-08-17). Absent
+            # (legacy shim/spool rows) → the row stores NULL and its draw falls back to usd.
+            usd_draw, tokens_in, tokens_out = None, None, None
+            if "usd_draw" in data:
+                usd_draw = float(data["usd_draw"])
+                if usd_draw < 0:
+                    raise ValueError("usd_draw must be >= 0")
+            if "tokens_in" in data:
+                tokens_in = int(data["tokens_in"])
+                if tokens_in < 0:
+                    raise ValueError("tokens_in must be >= 0")
+            if "tokens_out" in data:
+                tokens_out = int(data["tokens_out"])
+                if tokens_out < 0:
+                    raise ValueError("tokens_out must be >= 0")
         except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
             resp = json.dumps({"error": f"bad body: {e}"}).encode()
             handler.send_response(400)
@@ -2314,7 +2324,7 @@ def main() -> int:
             log(f"go-ingest: 400 bad body: {e}")
             return
         # Accept the row
-        router.go_usage_add(ts, stack, model, usd)
+        router.go_usage_add(ts, stack, model, usd, usd_draw, tokens_in, tokens_out)
         handler.send_response(204)
         handler.send_header("Connection", "close")
         handler.end_headers()
