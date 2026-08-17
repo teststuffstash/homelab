@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS task_market(
   tag TEXT, model TEXT, rank INTEGER, usage_share REAL, token_share REAL, updated_ts REAL,
   PRIMARY KEY(tag, model));
 CREATE TABLE IF NOT EXISTS go_usage(
-  ts REAL, stack TEXT, model TEXT, usd REAL);
+  ts REAL, stack TEXT, model TEXT, usd REAL, usd_draw REAL,
+  tokens_in INTEGER, tokens_out INTEGER);
 CREATE INDEX IF NOT EXISTS ix_go_usage_ts ON go_usage(ts);
 CREATE TABLE IF NOT EXISTS cell_start_tier(
   class TEXT, urgency TEXT, start_tier INTEGER, clean INTEGER, degraded INTEGER,
@@ -146,6 +147,17 @@ def init(db_path: str | None, classes_path: str | None = None) -> bool:
                     conn.execute("ALTER TABLE run_reports ADD COLUMN rail TEXT")
                 except sqlite3.OperationalError:
                     pass  # duplicate column — schema already current
+                # 2026-08-17: go_usage grew the WINDOW-DRAW price + token columns. Same
+                # LAST-column discipline: CREATE TABLE above carries them, an existing PVC
+                # store takes them by ALTER, and the positional INSERT in go_usage_add stays
+                # valid on both. Old rows land with NULL usd_draw → their draw falls back to
+                # the stored billed usd (acknowledged under-count, self-corrects as windows
+                # roll — uploads/opencode-go.txt reconciliation).
+                for _gocol in ("usd_draw REAL", "tokens_in INTEGER", "tokens_out INTEGER"):
+                    try:
+                        conn.execute(f"ALTER TABLE go_usage ADD COLUMN {_gocol}")
+                    except sqlite3.OperationalError:
+                        pass  # duplicate column — schema already current
                 if attempt != ":memory:":
                     conn.execute("PRAGMA journal_mode=WAL")
                 conn.commit()
@@ -504,23 +516,58 @@ def key_refs() -> list[str]:
 # Stack attribution at request time: `ref:<ns>/<name>` → stack = `<ns>`, else "jail".
 
 
-def go_usage_add(ts: float, stack: str, model: str, usd: float) -> bool:
-    """One Go-rail completion → the usage ledger. In-memory degrade = no-op, never a crash."""
-    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?)", (ts, stack, model, usd))
+def go_usage_add(ts: float, stack: str, model: str, usd: float,
+                 usd_draw: float | None = None,
+                 tokens_in: int | None = None, tokens_out: int | None = None) -> bool:
+    """One Go-rail completion → the usage ledger. In-memory degrade = no-op, never a crash.
+
+    `usd` is the BILLED-STYLE estimate (gometer.price — cache discounts applied); `usd_draw` is
+    the WINDOW-DRAW price (gometer.window_draw — list price on raw tokens, badge-halved, the
+    number the window utilization reads). Both are stored so they cannot be conflated; tokens
+    are kept for audit/recompute. Rows written without `usd_draw` (legacy ingest/shim) store
+    NULL and their draw falls back to `usd` (acknowledged under-count, self-corrects as
+    windows roll)."""
+    ok = _write("INSERT INTO go_usage VALUES(?,?,?,?,?,?,?)",
+                (ts, stack, model, usd, usd_draw, tokens_in, tokens_out))
     # Prune rows older than 45d (30d window + 15d slack) — prevents unbounded growth.
     _write("DELETE FROM go_usage WHERE ts < ?", (ts - 45 * 86400,))
     return ok
 
 
-def go_usage_window(seconds: float) -> dict:
-    """{total_usd, by_stack: {stack: usd}} for the trailing `seconds` window."""
+def go_usage_window(seconds: float, since: float | None = None) -> dict:
+    """The window snapshot for the trailing/anchored `seconds` window ending now.
+
+    Returns BOTH pricings, deliberately distinct (the 2026-08-17 pricing-defect fix):
+      • total_draw_usd / by_stack_draw — the WINDOW DRAW: list price on raw tokens,
+        badge-halved (gometer.window_draw). This is what utilization / /opencode-limit use.
+      • total_usd / by_stack — the BILLED-STYLE estimate (gometer.price, cache discounts).
+    Rows without a stored usd_draw (legacy 4-col writes) fall back to their stored `usd` as
+    the draw.
+
+    `seconds` is the nominal span. `since` (epoch, optional) is the ANCHOR floor: when given,
+    the effective start is max(now - seconds, since) — an epoch-anchored window (e.g. the 7d
+    window resetting Sunday 00:00 UTC, or the 30d window resetting the 13th ~11:30 UTC) counts
+    spend since the LAST RESET, not from a pure trailing span. With `since` omitted this is
+    exactly the old pure-rolling behaviour. Retention/go_usage_add are untouched: pre-reset
+    rows stay in the ledger — they just fall outside the anchored window."""
     now = time.time()
+    floor = max(now - seconds, since) if since is not None else (now - seconds)
     rows = _read(
-        "SELECT stack, SUM(usd) FROM go_usage WHERE ts > ? GROUP BY stack",
-        (now - seconds,))
-    total = sum(r[1] or 0.0 for r in rows)
-    by_stack = {r[0]: (r[1] or 0.0) for r in rows if r[0]}
-    return {"total_usd": total or 0.0, "by_stack": by_stack}
+        "SELECT stack, usd, usd_draw FROM go_usage WHERE ts > ?",
+        (floor,))
+    total = total_draw = 0.0
+    by_stack: dict[str, float] = {}
+    by_stack_draw: dict[str, float] = {}
+    for stack, usd, usd_draw in rows:
+        usd = usd or 0.0
+        draw = usd_draw if usd_draw is not None else usd
+        total += usd
+        total_draw += draw
+        if stack:
+            by_stack[stack] = by_stack.get(stack, 0.0) + usd
+            by_stack_draw[stack] = by_stack_draw.get(stack, 0.0) + draw
+    return {"total_usd": total or 0.0, "total_draw_usd": total_draw or 0.0,
+            "by_stack": by_stack, "by_stack_draw": by_stack_draw}
 
 
 # ── homelab#180: reading the openrouter-operator's account-credit gauge ────────────────────────
@@ -1335,6 +1382,113 @@ def self_test() -> int:
     w60d = go_usage_window(60 * 86400)  # 60d window
     assert w60d["by_stack"].get("old", 0) == 0, "ledger prune: 50d-old row deleted"
     assert w60d["by_stack"].get("fresh", 0) == 0.01, "ledger prune: fresh row retained"
+    # ── gometer WINDOW DRAW pricing (2026-08-17 defect): list price on raw tokens, badged ──
+    import gometer  # shared home (ADR-108) — the semantics under test
+    # Console reconciliation (uploads/opencode-go.txt): a 5h window of 50.56M in / 0.488M out of
+    # badged deepseek-v4-flash drew ≈ $4.32 (console) while the old cache-priced meter read
+    # $0.145 (~30× low). LIST prices: flash in $0.14/M, out $0.28/M, half=True.
+    #   input  50.56M × 0.14 = 7.0784  → ÷2 = 3.5392
+    #   output  0.488M × 0.28 = 0.13664 → ÷2 = 0.06832
+    #   draw = 3.60752  (NOT the ~$0.14 cents a cache-read interpretation gives)
+    _raw_merge = {"input_tokens": 50560000, "output_tokens": 488000}
+    _cal = gometer.window_draw("deepseek-v4-flash", _raw_merge)
+    assert 3.5 <= _cal <= 3.75, f"window_draw calibration: {_cal} (expected ≈3.61 from list prices)"
+    # The OLD meter's view — the same physical input reported as cache-read (the "assumes
+    # cache-read pricing" bug): 50.56M at the cR rate 0.0028/M → cents, not dollars.
+    _old_view = {"input_tokens": 0, "cache_read_input_tokens": 50560000,
+                 "output_tokens": 488000}
+    _billed_old = gometer.price("deepseek-v4-flash", _old_view)[0]
+    assert _billed_old < 0.5, f"the old cache-priced meter must read cents, got {_billed_old}"
+    # ── gometer window ANCHORS (2026-08-17): epoch-anchored vs pure-rolling floors ──
+    # Pure-boundary unit tests with a FIXED now (deterministic — fail if the anchor arithmetic
+    # is wrong). fixed_now = 2026-08-17 12:22:16 UTC (a Monday).
+    spec7u, spec5u, spec30u = (gometer.GO_WINDOWS[w] for w in ("7d", "5h", "30d"))
+    assert spec7u["anchor"] == "weekly" and spec7u["weekday"] == "sun", spec7u
+    assert spec5u["anchor"] == "grid" and spec5u["grid_offset_min"] == 217, spec5u
+    assert spec30u["anchor"] == "monthly" and spec30u["month_day"] == 13, spec30u
+    w7u, w7un = gometer.go_window_bounds(spec7u, 1786969336.0)
+    # weekly sun 00:00: Monday is (tm_wday 0 − sun 6) % 7 = 1 day past the boundary →
+    # last = 2026-08-16 00:00 UTC, next = last + 7d = 2026-08-23 00:00 UTC.
+    assert w7u == 1786838400.0 and w7un == 1787443200.0, (w7u, w7un)
+    g5u, g5un = gometer.go_window_bounds(spec5u, 1786969336.0)
+    # grid 217m: resets daily at midnight + 217min + k*5h → 03:37/08:37/13:37/18:37/23:37 UTC.
+    # At 12:22:16 UTC the last is 08:37 (1786955820), the next is 13:37 (1786973820).
+    assert g5u == 1786955820.0 and g5un == 1786973820.0, (g5u, g5un)
+    m30u, m30un = gometer.go_window_bounds(spec30u, 1786969336.0)
+    # monthly 13:11:30: after this month's 13th → last = 2026-08-13 11:30 (1786620600),
+    # next = 2026-09-13 11:30 (1789299000).
+    assert m30u == 1786620600.0 and m30un == 1789299000.0, (m30u, m30un)
+    # and the PRE-13th case: at 2026-08-12 12:00 UTC the last boundary is 2026-07-13 11:30
+    # (1783942200), next = 2026-08-13 11:30 (1786620600).
+    m30p, m30pn = gometer.go_window_bounds(spec30u, 1786536000.0)
+    assert m30p == 1783942200.0 and m30pn == 1786620600.0, (m30p, m30pn)
+    # LEDGER integration — the 7d anchored window (boundary Sunday 00:00 UTC, ALWAYS within
+    # [now−7d, now], so the anchored floor is exactly the boundary): seed PRE-reset rows ($24 —
+    # the false-latch sum that pushed platform Go-flash dispatches back to claude/haiku) and
+    # POST-reset rows ($0.15). go_usage_window(7d, since=w7_start) must report ONLY $0.15.
+    aw = time.time()
+    w7_start, w7_next = gometer.go_window_bounds(spec7u, aw)
+    assert w7_start <= aw < w7_next, (w7_start, aw, w7_next)
+    go_usage_add(w7_start - 100, "pre7", "kimi-k3", 24.00)   # before the Sunday boundary
+    go_usage_add(w7_start + 100, "post7", "kimi-k3", 0.15)   # after it
+    w7 = go_usage_window(spec7u["span_s"], since=w7_start)
+    # Expected from the anchor arithmetic: floor = max(now − 7d, w7_start) = w7_start, so only
+    # rows with ts > w7_start count. pre7 (w7_start−100) is excluded; post7 (w7_start+100) is
+    # included. 24.00 + 0.15 = 24.15 would be the WRONG pure-rolling answer; 0.15 is anchored.
+    assert w7["by_stack"].get("pre7", 0) == 0, \
+        f"anchored 7d must EXCLUDE pre-reset rows: {w7['by_stack']}"
+    assert abs(w7["by_stack"].get("post7", 0) - 0.15) < 1e-9, \
+        f"anchored 7d must count the post-reset row: {w7['by_stack']}"
+    assert abs(w7["by_stack_draw"].get("post7", 0) - 0.15) < 1e-9, \
+        f"anchored 7d draw must match (no usd_draw stored → falls back to usd): {w7['by_stack_draw']}"
+    # The 30d window stays ROLLING when no anchor is applied (the conservative fallback): a pure
+    # trailing 30d span covers both rows → 24.00 + 0.15 = 24.15.
+    w30 = go_usage_window(30 * 86400)
+    assert abs(w30["by_stack"].get("pre7", 0) - 24.00) < 1e-9, w30["by_stack"]
+    assert abs(w30["by_stack"].get("post7", 0) - 0.15) < 1e-9, w30["by_stack"]
+    # 30d DEFAULT is now MONTHLY-anchored. The monthly period can exceed the 30d span, so the
+    # anchored floor is max(now−30d, m30_start) — place the rows either side of THAT floor
+    # (deterministic for any point in the month), not around m30_start alone.
+    m30_start, m30_next = gometer.go_window_bounds(spec30u, aw)
+    assert m30_start <= aw < m30_next, (m30_start, aw, m30_next)
+    m_floor = max(aw - spec30u["span_s"], m30_start)
+    go_usage_add(m_floor - 60, "pre30", "kimi-k3", 24.00)
+    go_usage_add(m_floor + 60, "post30", "kimi-k3", 0.15)
+    w30a = go_usage_window(spec30u["span_s"], since=m30_start)
+    assert w30a["by_stack"].get("pre30", 0) == 0, \
+        f"monthly-anchored 30d must EXCLUDE pre-floor rows: {w30a['by_stack']}"
+    assert abs(w30a["by_stack"].get("post30", 0) - 0.15) < 1e-9, \
+        f"monthly-anchored 30d must count the post-floor row: {w30a['by_stack']}"
+    # 5h DEFAULT is grid-anchored (daily 03:37/08:37/13:37/18:37/23:37 UTC, offset 217m). The
+    # grid boundary is always within [now−5h, now], so the floor is exactly the boundary.
+    g5_start, g5_next = gometer.go_window_bounds(spec5u, aw)
+    assert g5_start <= aw < g5_next, (g5_start, aw, g5_next)
+    go_usage_add(g5_start - 60, "pre5", "kimi-k3", 24.00)     # before the current 5h slot
+    go_usage_add(g5_start + 60, "post5", "kimi-k3", 0.15)     # after it
+    w5a = go_usage_window(spec5u["span_s"], since=g5_start)
+    assert w5a["by_stack"].get("pre5", 0) == 0, \
+        f"grid-anchored 5h must EXCLUDE pre-slot rows: {w5a['by_stack']}"
+    assert abs(w5a["by_stack"].get("post5", 0) - 0.15) < 1e-9, \
+        f"grid-anchored 5h must count the post-slot row: {w5a['by_stack']}"
+    # Deterministic `since`-floor proof (the assertion that FAILS against the pre-anchor code,
+    # which had no `since` param — and would read 3.00 if `since` were silently ignored):
+    go_usage_add(aw - 100, "floor-pre", "kimi-k3", 1.00)
+    go_usage_add(aw - 50, "floor-post", "kimi-k3", 2.00)
+    wf = go_usage_window(300, since=aw - 60)   # floor = max(now−300, aw−60) = aw−60
+    assert wf["by_stack"].get("floor-pre", 0) == 0, "since floor must exclude rows older than it"
+    assert abs(wf["by_stack"].get("floor-post", 0) - 2.00) < 1e-9, wf["by_stack"]
+    wr = go_usage_window(300)                  # rolling: both rows within 300s
+    assert abs(wr["by_stack"].get("floor-pre", 0) - 1.00) < 1e-9, wr["by_stack"]
+    assert abs(wr["by_stack"].get("floor-post", 0) - 2.00) < 1e-9, wr["by_stack"]
+    # A garbage GO_WINDOW_ANCHORS falls back LOUDLY to that window's default — never a crash,
+    # never a partial/guessed spec (one gometer stderr log line per unparseable chunk).
+    _gd = gometer.apply_anchor_overrides
+    ok = _gd("5h=grid:999m,7d=weekly:mon:09:30,30d=monthly:05:06:07")
+    assert ok["5h"]["grid_offset_min"] == 999 and ok["5h"]["anchor"] == "grid", ok["5h"]
+    assert ok["7d"]["weekday"] == "mon" and ok["7d"]["hour"] == 9 and ok["7d"]["minute"] == 30, ok["7d"]
+    assert ok["30d"]["month_day"] == 5 and ok["30d"]["hour"] == 6 and ok["30d"]["minute"] == 7, ok["30d"]
+    g2 = _gd("5h=boom,7d=weekly:nope,30d=")     # every spec unparseable → defaults
+    assert g2 == gometer._GO_WINDOW_DEFAULTS, (g2, gometer._GO_WINDOW_DEFAULTS)
     # ── addendum 4: the 429→cooldown→recovery loop + route() scenarios ──
     CTX = {
         "price": lambda m: (0.0, "free") if m.endswith(":free") else

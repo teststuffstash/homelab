@@ -187,6 +187,9 @@ def _meter_usage(model: str, rail: str, head: bytes, tail: bytes) -> None:
             usd, warning = _gometer.price(bare_model, merged)
             if warning:
                 print(f"shim: METER {warning}", file=sys.stderr, flush=True)
+            # The subscription window draws at LIST price on raw tokens, badge-halved —
+            # window_draw(), NOT the cache-discounted price() (2026-08-17 reconciliation).
+            draw = _gometer.window_draw(bare_model, merged)
         else:
             # Zen rail (issue #444): every opencode/ call is assumed FREE-tier by operator
             # direction, so the row is metered $0 — deliberately NOT gometer.price, which would
@@ -194,10 +197,14 @@ def _meter_usage(model: str, rail: str, head: bytes, tail: bytes) -> None:
             # is expected to end in "-free" (or be big-pickle); anything else warns — the
             # assumption sentinel, never a block.
             usd = 0.0
+            draw = 0.0  # the zen free rail never draws against the Go subscription window
             if not (bare_model.endswith("-free") or bare_model == "big-pickle"):
                 print(f"shim: METER zen-rail assumption sentinel — {bare_model!r} not '-free'/big-pickle, metered $0",
                       file=sys.stderr, flush=True)
-        row = {"ts": __import__("time").time(), "stack": "jail", "model": bare_model, "usd": usd}
+        row = {"ts": __import__("time").time(), "stack": "jail", "model": bare_model,
+               "usd": usd, "usd_draw": draw,
+               "tokens_in": merged.get("input_tokens", 0),
+               "tokens_out": merged.get("output_tokens", 0)}
         if _push_usage(row):
             # Success — drain spool opportunistically
             threading.Thread(target=_spool_drain, daemon=True).start()

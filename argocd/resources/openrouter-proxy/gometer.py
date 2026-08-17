@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """gometer — shared Go-rail usage metering for the homelab OpenCode Go subscription.
 
-This module is the SINGLE HOME for Go-rail pricing and usage extraction logic, consumed by BOTH
-the openrouter-proxy pod (cluster-side metering) and the jail shim (scripts/claude-model-shim.py).
+This module is the SINGLE HOME for Go-rail pricing, usage extraction, and the subscription
+WINDOW semantics (budgets + epoch anchors), consumed by BOTH the openrouter-proxy pod
+(cluster-side metering, /opencode-limit) and the jail shim (scripts/claude-model-shim.py).
 
 Matrix snapshot date: 2026-08-13 (docs/spikes/opencode-model-matrix.md). Curated from console
 billing — there is no pricing API on this rail. Edits here are the only place prices change.
 """
+import calendar
+import os
 import re
+import sys
+import time
 
 # GO_PRICES: OpenCode Go model pricing matrix (snapshot: docs/spikes/opencode-model-matrix.md 2026-08-13).
 # Keys are bare model ids (prefix/suffix stripped); values: $/M tokens for in/out/cR/cW + half flag.
@@ -83,8 +88,31 @@ def extract_usage(head: bytes, tail: bytes) -> dict:
     return merged
 
 
+def _price_row(bare_model: str, in_tokens: int) -> tuple:
+    """The (in_p, out_p, cr_p, cw_p, half, warning) row for a bare model at the given input
+    size — the ONE place prices resolve, shared by the billed-style `price()` and the
+    window-draw `window_draw()` so the two cannot drift. Unknown model → the most expensive
+    known row (fail conservative) with a warning."""
+    row = GO_PRICES.get(bare_model)
+    warning = None
+    if row is None:
+        warning = f"Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M"
+        row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
+    in_p, out_p, cr_p, cw_p, half = row
+    # Long-context tier override: input_tokens > threshold -> use long-context rates
+    if bare_model in GO_PRICES_LONG:
+        threshold, long_rates = GO_PRICES_LONG[bare_model]
+        if in_tokens > threshold:
+            in_p, out_p, cr_p, cw_p = long_rates
+            # half flag inherited from base row (unchanged)
+    return in_p, out_p, cr_p, cw_p, half, warning
+
+
 def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
-    """Compute the USD cost for a Go-leg completion.
+    """Compute the BILLED-STYLE USD estimate for a Go-leg completion (cache-read/write tokens
+    priced at their discounted rates, badge-halved). This is the LEDGER/COST-REPORTING number,
+    NOT the window draw — the subscription window draws at LIST price on raw tokens, see
+    `window_draw()` (the 2026-08-17 pricing defect fix).
 
     Args:
         bare_model: The model id without prefix/suffix (e.g. "deepseek-v4-flash").
@@ -98,22 +126,7 @@ def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
     out_tokens = merged.get("output_tokens", 0)
     cr_tokens = merged.get("cache_read_input_tokens", 0)
     cw_tokens = merged.get("cache_creation_input_tokens", 0)
-
-    price_row = GO_PRICES.get(bare_model)
-    warning = None
-    if price_row is None:
-        # Unknown model: use most expensive known row + warn (fail conservative)
-        warning = f"Go model {bare_model} not in GO_PRICES — using fallback ${_GO_MAX_PRICE}/M"
-        price_row = (_GO_MAX_PRICE / 2, _GO_MAX_PRICE / 2, 0, 0, False)
-
-    in_p, out_p, cr_p, cw_p, half = price_row
-
-    # Long-context tier override: input_tokens > threshold -> use long-context rates
-    if bare_model in GO_PRICES_LONG:
-        threshold, long_rates = GO_PRICES_LONG[bare_model]
-        if in_tokens > threshold:
-            in_p, out_p, cr_p, cw_p = long_rates
-            # half flag inherited from base row (unchanged)
+    in_p, out_p, cr_p, cw_p, half, warning = _price_row(bare_model, in_tokens)
 
     # Compute USD: tokens * ($/M) then apply badge halving if applicable
     usd = (
@@ -126,3 +139,262 @@ def price(bare_model: str, merged: dict) -> tuple[float, str | None]:
         usd *= 0.5
 
     return (usd, warning)
+
+
+def window_draw(bare_model: str, merged: dict) -> float:
+    """The price OpenCode's subscription window DRAWS against for one completion: LIST price on
+    RAW tokens, halved for badge models — NO cache assumption at all (the usage blocks on these
+    surfaces carry no cache split). This is the number the window utilization (the latch,
+    /opencode-limit) MUST use. Reconciliation 2026-08-17 (uploads/opencode-go.txt): a 5h window
+    of 50.56M in / 0.488M out of badged deepseek-v4-flash drew ≈ $3.6–3.7 at list, while the
+    billed-style price() above (cache-read discounts) read ≈ $0.15 — a ~30× under-count."""
+    in_tokens = int(merged.get("input_tokens") or 0)
+    out_tokens = int(merged.get("output_tokens") or 0)
+    in_p, out_p, _cr_p, _cw_p, half, _warning = _price_row(bare_model, in_tokens)
+    draw = (in_tokens * in_p + out_tokens * out_p) / 1e6
+    if half:
+        draw *= 0.5
+    return draw
+
+
+# ── Go subscription windows: budget + span + ANCHOR (homelab#422 / 2026-08-17 fix) ─────────────
+# Each window is `rolling` (a pure trailing span) OR EPOCH-ANCHORED (the span floor is
+# max(now - span, last_reset_epoch), so the sum counts spend since the LAST RESET — never a
+# rolling total that lets LAST week's spend inflate THIS week's utilization).
+#
+# Defaults, MEASURED from the operator's console on 2026-08-17 — two readings, 10:00Z and
+# 12:35Z; the 12:35Z reading supersedes the dispatch's provisional "30d stays rolling":
+#   • 5h  "resets in 3h37m" (~10:00Z) and "resets in 1h02m" (~12:35Z) — both point to a next
+#         boundary of 13:37Z, i.e. a fixed 5h grid whose resets are 217 minutes past each 5h
+#         boundary from midnight UTC: 03:37 / 08:37 / 13:37 / 18:37 / 23:37 UTC daily
+#         (5h does not divide 24h, so the last slot of each day runs 23:37 → 03:37).
+#         → anchor `grid`, offset 217m.
+#   • 7d  "resets in 6d14h" (~10:00Z) and "resets in 6d11h" (~12:35Z) — boundary
+#         2026-08-24T00:00Z = Sunday 00:00 UTC. → anchor `weekly` sun 00:00.
+#   • 30d "resets in 26d23h" (~12:35Z) — boundary ~2026-09-13T11:30Z: the monthly window is
+#         billing-cycle anchored, day 13 ~11:30 UTC. → anchor `monthly` 13:11:30.
+#
+# GO_WINDOW_ANCHORS overrides any/all of the three, e.g.
+#   GO_WINDOW_ANCHORS="5h=grid:217m,7d=weekly:sun:00:00,30d=monthly:13:11:30"
+# Grammar per window: `grid:<offset>` | `weekly:<mon..sun>[:HH[:MM]]` |
+# `monthly:<1..31>[:HH[:MM]]` | `rolling`. Parsing is DEFENSIVE: an unparseable or unknown
+# spec falls back to that window's default with one loud log line — it never crashes the
+# proxy. `rolling` stays a supported value and is the conservative fallback for an anchor
+# nobody has measured yet.
+_GO_WINDOW_ORDER = ("5h", "7d", "30d")
+_WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+
+def _golog(msg: str) -> None:
+    print(f"gometer: {msg}", file=sys.stderr, flush=True)
+
+
+_GO_WINDOW_DEFAULTS = {
+    "5h":  {"budget_usd": 12.0, "span_s": 5 * 3600, "anchor": "grid", "grid_offset_min": 217},
+    "7d":  {"budget_usd": 30.0, "span_s": 7 * 86400,
+            "anchor": "weekly", "weekday": "sun", "hour": 0, "minute": 0},
+    "30d": {"budget_usd": 60.0, "span_s": 30 * 86400,
+            "anchor": "monthly", "month_day": 13, "hour": 11, "minute": 30},
+}
+
+_MIN_RE = re.compile(r"^\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*$")
+
+
+def _parse_minutes(val: str) -> int | None:
+    """'217m' → 217, '3h37m' → 217, '5h' → 300; None when unparseable."""
+    m = _MIN_RE.match(val.strip())
+    if not m or (m.group(1) is None and m.group(2) is None):
+        return None
+    return int(m.group(1) or 0) * 60 + int(m.group(2) or 0)
+
+
+def _parse_anchor_spec(spec_str: str) -> dict | None:
+    """One GO_WINDOW_ANCHORS value → a spec-key override dict, or None when unparseable.
+    Supported: 'rolling', 'grid:<offset>', 'weekly:<day>[:HH[:MM]]', 'monthly:<day>[:HH[:MM]]'."""
+    s = spec_str.strip().lower()
+    if s == "rolling":
+        return {"anchor": "rolling"}
+    if s.startswith("grid:"):
+        minutes = _parse_minutes(s[len("grid:"):])
+        return {"anchor": "grid", "grid_offset_min": minutes} if minutes is not None else None
+    if s.startswith("weekly:"):
+        parts = s[len("weekly:"):].split(":")
+        if parts[0] not in _WEEKDAYS or len(parts) > 3:
+            return None
+        try:
+            hour = int(parts[1]) % 24 if len(parts) > 1 else 0
+            minute = int(parts[2]) % 60 if len(parts) > 2 else 0
+        except ValueError:
+            return None
+        return {"anchor": "weekly", "weekday": parts[0], "hour": hour, "minute": minute}
+    if s.startswith("monthly:"):
+        parts = s[len("monthly:"):].split(":")
+        try:
+            day = int(parts[0])
+            if not 1 <= day <= 31 or len(parts) > 3:
+                return None
+            hour = int(parts[1]) % 24 if len(parts) > 1 else 0
+            minute = int(parts[2]) % 60 if len(parts) > 2 else 0
+        except ValueError:
+            return None
+        return {"anchor": "monthly", "month_day": day, "hour": hour, "minute": minute}
+    return None
+
+
+def apply_anchor_overrides(raw: str | None, defaults: dict | None = None) -> dict:
+    """A {window: spec} copy of the defaults with GO_WINDOW_ANCHORS applied. DEFENSIVE: an
+    unparseable spec, an unknown window, or a chunk without '=' logs one loud line and keeps
+    that window's default. Never raises."""
+    base = {w: dict(s) for w, s in (defaults or _GO_WINDOW_DEFAULTS).items()}
+    if not raw:
+        return base
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "=" not in chunk:
+            _golog(f"GO_WINDOW_ANCHORS: {chunk!r} has no '=' — ignored")
+            continue
+        win, _, spec_str = chunk.partition("=")
+        win, spec_str = win.strip(), spec_str.strip()
+        if win not in base:
+            _golog(f"GO_WINDOW_ANCHORS: unknown window {win!r} — ignored (known: {sorted(base)})")
+            continue
+        parsed = _parse_anchor_spec(spec_str)
+        if parsed is None:
+            _golog(f"GO_WINDOW_ANCHORS: unparseable spec {spec_str!r} for {win} — keeping "
+                   f"default ({base[win].get('anchor')})")
+            continue
+        base[win].update(parsed)
+    return base
+
+
+# The EFFECTIVE window table (defaults + env overrides), computed once at import.
+GO_WINDOWS = apply_anchor_overrides(os.environ.get("GO_WINDOW_ANCHORS"))
+
+# Per-window utilization thresholds — the dispatch-deferral gate (0 disables a window). Same
+# env grammar as the proxy's anthropic thresholds: OPENCODE_UTIL_THRESHOLD is the base, a
+# per-window OPENCODE_UTIL_THRESHOLD_<W> overrides it.
+GO_UTIL_THRESHOLD = float(os.environ.get("OPENCODE_UTIL_THRESHOLD", "0.80"))
+GO_UTIL_THRESHOLDS = {w: float(os.environ.get(f"OPENCODE_UTIL_THRESHOLD_{w.upper()}",
+                                             GO_UTIL_THRESHOLD)) for w in _GO_WINDOW_ORDER}
+
+
+def _days_in_month(year: int, month: int) -> int:
+    if month == 2:
+        leap = (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+        return 29 if leap else 28
+    return 30 if month in (4, 6, 9, 11) else 31
+
+
+def _monthly_epoch(year: int, month: int, day: int, hour: int, minute: int) -> float:
+    """Epoch for the day-of-month HH:MM UTC boundary (a day past the month's length clamps
+    to the last day)."""
+    return calendar.timegm((year, month, min(day, _days_in_month(year, month)),
+                            hour, minute, 0, 0, 0, 0))
+
+
+def go_window_bounds(spec: dict, now: float) -> tuple[float | None, float | None]:
+    """(window_start_epoch, resets_at_epoch) for a window spec at `now`.
+
+    - rolling:  window_start = now - span_s (pure trailing floor); resets_at = None.
+    - grid:     resets daily at (midnight UTC + offset + k*span_s), k = 0.. — i.e. for
+                5h/217m the five daily times 03:37/08:37/13:37/18:37/23:37 UTC. The last one
+                at-or-before now and the next after.
+    - weekly:   resets on the named weekday HH:MM UTC, 7 days apart.
+    - monthly:  resets on the named day-of-month HH:MM UTC, one month apart.
+    An unknown anchor type degrades to rolling (never a crash — the conservative floor)."""
+    span = float(spec.get("span_s", 0))
+    anchor = spec.get("anchor", "rolling")
+    if anchor == "rolling" or span <= 0:
+        return now - span, None
+    if anchor == "grid":
+        offset = float(spec.get("grid_offset_min", 0)) * 60
+        gt = time.gmtime(now)
+        day_mid = now - (gt.tm_hour * 3600 + gt.tm_min * 60 + gt.tm_sec)
+        cands: list[float] = []
+        for d in (-1, 0, 1):
+            base = day_mid + d * 86400
+            t, k = base + offset, 0
+            while t < base + 86400:
+                cands.append(t)
+                k += 1
+                t = base + offset + k * span
+        cands.sort()
+        last = max(c for c in cands if c <= now)
+        nxt = min(c for c in cands if c > now)
+        return last, nxt
+    if anchor == "weekly":
+        offset = float(spec.get("hour", 0)) * 3600 + float(spec.get("minute", 0)) * 60
+        gt = time.gmtime(now)
+        today_mid = now - (gt.tm_hour * 3600 + gt.tm_min * 60 + gt.tm_sec)
+        days_back = (gt.tm_wday - _WEEKDAYS[spec.get("weekday", "sun")]) % 7
+        last = today_mid - days_back * 86400 + offset
+        if last > now:
+            last -= 7 * 86400
+        return last, last + 7 * 86400
+    if anchor == "monthly":
+        day = int(spec.get("month_day", 13))
+        hour = int(spec.get("hour", 0))
+        minute = int(spec.get("minute", 0))
+        gt = time.gmtime(now)
+        ly, lm = gt.tm_year, gt.tm_mon
+        last = _monthly_epoch(ly, lm, day, hour, minute)
+        if last > now:  # before this month's boundary → last was last month's
+            ly, lm = (ly - 1, 12) if lm == 1 else (ly, lm - 1)
+            last = _monthly_epoch(ly, lm, day, hour, minute)
+        # next is one month AFTER `last` — NOT the month after `now`: when now precedes this
+        # month's boundary, `next` is THIS month's boundary (which is in the future).
+        ny, nm = (ly + 1, 1) if lm == 12 else (ly, lm + 1)
+        return last, _monthly_epoch(ny, nm, day, hour, minute)
+    return now - span, None
+
+
+def go_window_status(now: float, usage_fn) -> dict:
+    """The composite /opencode-limit answer (shared home, ADR-108): per-window usage/budget/
+    utilization plus the anchored window_start/resets_at epochs, the by_stack breakdown for
+    the BINDING window (the one with the highest utilization — the window that drives the
+    verdict; the payload names it in `by_stack_window`), and the composite `limited` verdict
+    (any window at/over its threshold).
+
+    PRICING: utilization (and `limited`, and `by_stack`) use the WINDOW-DRAW amount —
+    `window_draw()` (list price on raw tokens, badge-halved) — which is what OpenCode actually
+    draws against the subscription windows (the 2026-08-17 reconciliation; the billed-style
+    estimate under-counts ~30×). The payload states `"pricing": "window_draw"` and also carries
+    `usage_usd_billed_est` per window so the two numbers cannot be conflated.
+
+    usage_fn(name, window_start, resets_at) -> the router.go_usage_window(...) snapshot:
+      {"total_usd": billed_est, "total_draw_usd": window_draw, "by_stack": {...},
+       "by_stack_draw": {...}} — a callback keeps gometer import-free of router; the proxy
+    wires `router.go_usage_window(GO_WINDOWS[name]['span_s'], since=window_start)` in."""
+    windows: dict[str, dict] = {}
+    by_stack: dict[str, float] = {}
+    by_stack_window: str | None = None
+    limited = False
+    best_util = -1.0
+    for name in _GO_WINDOW_ORDER:
+        spec = GO_WINDOWS[name]
+        win_start, resets_at = go_window_bounds(spec, now)
+        snap = usage_fn(name, win_start, resets_at)
+        draw = float(snap.get("total_draw_usd") or 0.0)
+        billed = float(snap.get("total_usd") or 0.0)
+        budget = float(spec.get("budget_usd") or 0.0)
+        util = draw / budget if budget > 0 else 0.0
+        windows[name] = {
+            "usage_usd_window_draw": draw,
+            "usage_usd_billed_est": billed,
+            "budget_usd": budget,
+            "utilization": util,
+            "pricing": "window_draw",
+            "window_start": round(win_start) if win_start is not None else None,
+            "resets_at": round(resets_at) if resets_at is not None else None,
+        }
+        if util >= GO_UTIL_THRESHOLDS.get(name, GO_UTIL_THRESHOLD):
+            limited = True
+        if util > best_util:
+            best_util = util
+            by_stack = dict(snap.get("by_stack_draw") or {})
+            by_stack_window = name
+    return {"limited": limited, "thresholds": dict(GO_UTIL_THRESHOLDS),
+            "windows": windows, "by_stack": by_stack, "by_stack_window": by_stack_window,
+            "pricing": "window_draw"}
