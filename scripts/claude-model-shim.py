@@ -95,7 +95,7 @@ GO_REWRITE = {k.strip(): v.strip() for k, v in
 # pattern); when it is missing the affected legs fail LOUDLY with 501 naming the venv —
 # never a silent fallback to the broken compat surface, never a crash on the other rails.
 # The venv is created once:  python3 -m venv <LITELLM_VENV> && <LITELLM_VENV>/bin/pip install litellm
-LITELLM_VENV = os.environ.get("SHIM_LITELLM_VENV", "/tmp/claude-1000/r4-wave/venv-448")
+LITELLM_VENV = os.environ.get("SHIM_LITELLM_VENV", os.path.expanduser("~/.claude/venvs/litellm"))
 # The opencode-go ids whose Anthropic-compat surface is broken (probed 2026-08-17) and
 # MUST take the translator. The verified trio + flash keep the existing compat path.
 GO_OPENAI_ONLY = {"gpt-5.6-luna"}
