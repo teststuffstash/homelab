@@ -112,7 +112,9 @@ for repo in $repos; do
   # § TRIAGE — bot-authored without agent-fix (🌱), plus zero-label non-bot strays
   # older than a day. `post-launch:` goal buckets are containers, not work — skipped.
   tline="$(printf '%s' "$issues" | jq -r --arg repo "$repo" "$JQ"'[
-      .[] | select(.title | startswith("post-launch:") | not) | select(
+      .[] | select(.title | startswith("post-launch:") | not)
+      | select([lab[] | select(startswith("agent/"))] | length == 0)
+      | select(
         (isbot and (haslab("agent-fix") | not))
         or ((isbot | not) and (lab | length == 0) and (agedays >= 1)))
       | "\($repo)#\(.number) \(.title) (\(age))" ] | unique | .[]')"
