@@ -60,7 +60,7 @@ rows expose cache-read billing directly (glm cR ≈ list $0.26/M ✓).
 | qwen3.7-max | 2.50/7.50/0.50/3.125 | $60 | — | untested | untested | |
 | qwen3.7-plus | ≤256k: 0.40/1.60/0.04/0.50 · >256k: 1.20/4.80/0.12/1.50 | $60 | — | untested | untested | |
 | qwen3.6-plus | ≤256k: 0.50/3.00/0.05/0.625 · >256k: 2.00/6.00/0.20/2.50 | $60 | — | untested | untested | |
-| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | untested via claude/raw | untested via raw | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s) — cheapest cached-read in the table |
+| gpt-5.6-luna | ≤272k: 0.20/1.20/0.02/0.25 · >272k: 0.40/1.80/0.04/0.50 | $15 | 2x | ✗ **400 empty-body (raw 08-17), tools AND `tool_choice`-forced** — response is a message-shaped shell (`chatcmpl_` id, empty text, `stop_reason:null`) over HTTP 400 | ✗ **plain text ALSO 400s (raw 08-17)** — the ONLY row broken on the compat surface even without tools | ✅ works in the **opencode client** (operator Build session 08-13, 2.8s); ✅ **OpenAI surface `/chat/completions` + function tool → clean `tool_calls` (raw 08-17)** — cheapest cached-read in the table, but unreachable from claude-code lanes until a translator (#448 class) lands |
 | grok-4.5 | 2.00/6.00/0.30/– | $15 | — | untested | untested | |
 | hy3 / hy3-preview | hy3: 0.14/0.58/0.035/– · preview unpriced | $60/? | — | untested | untested | hy3 = retro-proven audit tier upstream |
 
