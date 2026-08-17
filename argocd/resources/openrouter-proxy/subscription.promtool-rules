@@ -1,3 +1,4 @@
+# witness-only: SubscriptionWeeklyPoolLowPre288
 # The claude-subscription alerts, lifted VERBATIM out of prometheusrule.yaml — the rules file
 # that subscription.promtool-test loads. Not a manifest and not applied to anything: `promtool
 # test rules` needs upstream-format rules (top-level `groups:`), and a PrometheusRule keeps them
