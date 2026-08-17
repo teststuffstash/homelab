@@ -22,8 +22,11 @@ an env var only goose read (PR#407).
    (closing §M10's unrouted-lane gap — the lanes holding ~28% of the subscription pool). Doctrine
    (safety net, decorrelation, audit bands) moves to git-owned class policy
    (`model-classes.json` floors/rails + the claim's constraints), never hardcoded models.
-3. **One harness.** The claude CLI serves every rail; goose/opencode demote to FU-095(b)
-   experiment cells. Rail + model are a routed decision materialized as base-URL/credential/model
+3. **One harness — explicitly TEMPORARY (operator, 2026-08-17).** The claude CLI serves every
+   rail; goose/opencode demote to FU-095(b) experiment cells. Not permanent doctrine: the
+   operator wants to concentrate on one harness while more pressing problems get solved — a
+   fully dynamic dispatch harness is more coordination than the current platform can carry.
+   Revisit when it can. Rail + model are a routed decision materialized as base-URL/credential/model
    translation at the egress proxy — the pod is spawned identically regardless. Dispatch never
    pre-computes a harness. (Accepted trade, stated: the client becomes a monoculture — a
    claude-CLI bug is fleet-correlated; the RAILS stay independent, which is what the M12
@@ -249,6 +252,18 @@ pointer) · FU-127 (structured `{rail, harness, model}`) · FU-131/#278 (account
 decorrelation + tool-grounding, not tier; feeds class policy when piloted).
 
 ## Rollout status (2026-08-13)
+
+**2026-08-17 — the platform Go-flash dogfood (operator direction).** Go subscription scope
+narrowed to FLASH-ONLY initially ("see how the monthly cap holds up"; Luna reserved pending the
+#448 translator — its Anthropic-compat surface is broken even for text, matrix row). Worker
+plumbing shipped (PR#458: `opencode-go/*` parser rail, full-id run cmd, `/opencode-limit` gate,
+`rail=opencode-go` labels; rung-1 canary clean same day — tool loop through the proxy Go leg,
+cache-read shape confirmed). The PLATFORM claim flipped to `workerModel:
+opencode-go/deepseek-v4-flash`, fallback `claude/haiku` — deliberately amending the M12
+independence ruling as a TEMPORARY dogfood (platform has the most issue traffic → fastest
+metrics; reverts to haiku once stack chains ride Go flash). Oracle/sleep chains untouched;
+circles folds in at the role-wiring leg. Reviewer failover model = qwen3.5-plus (PR#457 — a
+flash failover would review flash-authored code; decorrelation wins).
 
 **Chunks A–D shipped/live** (PR#429/#433/#434/#435/#436); two live-DOA defects in the leg, both
 stub-invisible, both matrix-predicted, both caught only by seat post-merge probes: (1) no
