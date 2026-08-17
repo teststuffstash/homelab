@@ -290,9 +290,6 @@
       "footprint-test": [
         "bash agents/footprint-test.sh"
       ],
-      "touches-check-test": [
-        "bash agents/touches-check-test.sh"
-      ],
       "model-id-test": [
         "bash agents/model-id-test.sh"
       ],
