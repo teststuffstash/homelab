@@ -16,6 +16,15 @@
 #      fixes the arguments in one round.
 #   3. The error text reaches the log VERBATIM. A summarized error is a error you have to reproduce
 #      to act on.
+#
+# ⚠ VERSION-SENSITIVE (homelab#329): the digest's price column renders
+# `"$" + (.enr.price_per_mtok | tostring)`, and jq's `tostring` prints integer-valued floats as `0`
+# on jq < 1.7 vs `0.0` on jq ≥ 1.7. So this family reds as "the action stream moved" under an older
+# jq even though no clause moved — the same wrong-signal class as the goal-ancestor family. The
+# `requires:` mechanism cannot express it (jq is in the harness's BASE set; versions are the unbuilt
+# half, README §Version-sensitive contracts). Proper fix: pin the format at the emitter
+# (agents/model-scout.sh scout-digest — an explicit format so the digest a human reads is stable
+# too). Do NOT weaken the price assertions to hide the difference.
 name: scout-bench-mcp-error
 mode: actions
 source: agents/model-scout.sh
