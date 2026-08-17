@@ -168,10 +168,20 @@ def _dispatch_verdict(now: float, tier: str | None = None) -> tuple[bool, str | 
 # ran via kubectl in every launcher; one authority instead of N copies). FAIL-OPEN like every
 # capacity gate here: an unreadable count (RBAC gap, API blip) never wedges dispatch — the
 # launcher's local kubectl belt still exists for exactly that case.
+# FU-170 (piece a): the Go rail gets the SAME bound — Running pods labelled rail=opencode-go
+# (set by agent-session.sh since PR#458) capped by OPENCODE_MAX_RUNNING. Composed into
+# /opencode-limit's top-level `limited` so every consumer (agent-session.sh worker gate,
+# reviewer-session.sh failover) inherits the bound with ZERO launcher changes — they already
+# probe /opencode-limit and act on `limited`. Same honesty contract as the anthropic one:
+# absent count (None), not zero — a broken counter must never stop dispatch.
 SUBSCRIPTION_MAX_RUNNING = int(os.environ.get("SUBSCRIPTION_MAX_RUNNING", "3"))
 SUBSCRIPTION_SESSION_SELECTOR = "homelab.teststuff.net/subscription-session=claude"
+OPENCODE_MAX_RUNNING = int(os.environ.get("OPENCODE_MAX_RUNNING", "3"))
+GO_SESSION_SELECTOR = "homelab.teststuff.net/rail=opencode-go"
 SEMAPHORE_TTL_S = int(os.environ.get("SEMAPHORE_TTL_S", "10"))
-_semaphore_cache: tuple[float, int | None] = (0.0, None)
+# One cache slot PER SELECTOR — the anthropic and Go rails share the listing code path but never
+# stomp each other's cached counts.
+_semaphore_caches: dict[str, tuple[float, int | None]] = {}
 _semaphore_lock = threading.Lock()
 # FU-109 attribution: /anthropic requests counted per ref-derived consumer (in-memory — a roll
 # resets the counter, rate() doesn't care).
@@ -179,30 +189,43 @@ _consumers: dict[str, int] = {}
 _consumers_lock = threading.Lock()
 
 
-def _subscription_running() -> int | None:
-    """Cluster-wide Running count of subscription-labelled pods, briefly cached. None = count
-    unavailable (fail-open, logged) — the caller must treat that as 'not limited'."""
-    global _semaphore_cache
+def _count_pods_by_selector(selector: str) -> int | None:
+    """Cluster-wide Running count for a pod label selector, briefly cached per selector. None =
+    count unavailable (fail-open, logged) — the caller must treat that as 'not limited'. One
+    listing code path shared by the anthropic (FU-088) and Go (FU-170) semaphores."""
     now = time.time()
     with _semaphore_lock:
-        ts, val = _semaphore_cache
+        ts, val = _semaphore_caches.get(selector, (0.0, None))
         if now - ts < SEMAPHORE_TTL_S:
             return val
     count = None
     try:
         token = open(f"{_SA_DIR}/token").read().strip()
         ctx = ssl.create_default_context(cafile=f"{_SA_DIR}/ca.crt")
-        qs = urllib.parse.urlencode({"labelSelector": SUBSCRIPTION_SESSION_SELECTOR,
+        qs = urllib.parse.urlencode({"labelSelector": selector,
                                      "fieldSelector": "status.phase=Running"})
         req = urllib.request.Request(f"https://kubernetes.default.svc/api/v1/pods?{qs}",
                                      headers={"Authorization": "Bearer " + token})
         with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
             count = len(json.load(resp).get("items") or [])
     except Exception as e:  # noqa: BLE001 — fail-open by design
-        log(f"semaphore: pod count failed: {e} — failing open")
+        log(f"semaphore: pod count failed ({selector}): {e} — failing open")
     with _semaphore_lock:
-        _semaphore_cache = (now, count)
+        _semaphore_caches[selector] = (now, count)
     return count
+
+
+def _subscription_running() -> int | None:
+    """Cluster-wide Running count of subscription-labelled pods, briefly cached. None = count
+    unavailable (fail-open, logged) — the caller must treat that as 'not limited'."""
+    return _count_pods_by_selector(SUBSCRIPTION_SESSION_SELECTOR)
+
+
+def _go_running() -> int | None:
+    """Cluster-wide Running count of Go-rail pods (homelab.teststuff.net/rail=opencode-go),
+    briefly cached. None = count unavailable (fail-open, logged) — a broken counter must never
+    stop dispatch (same honesty contract as the anthropic one)."""
+    return _count_pods_by_selector(GO_SESSION_SELECTOR)
 
 
 def _semaphore_state() -> dict:
@@ -210,6 +233,15 @@ def _semaphore_state() -> dict:
     return {"running": running, "max": SUBSCRIPTION_MAX_RUNNING,
             "limited": bool(SUBSCRIPTION_MAX_RUNNING > 0 and running is not None
                             and running >= SUBSCRIPTION_MAX_RUNNING)}
+
+
+def _go_semaphore_state() -> dict:
+    """FU-170: the Go-rail concurrency bound — max from OPENCODE_MAX_RUNNING (0 = disabled),
+    fail-open on an unreadable count just like _semaphore_state."""
+    running = _go_running()
+    return {"running": running, "max": OPENCODE_MAX_RUNNING,
+            "limited": bool(OPENCODE_MAX_RUNNING > 0 and running is not None
+                            and running >= OPENCODE_MAX_RUNNING)}
 PORT = int(os.environ.get("PORT", "8080"))
 CACHE_HIT = float(os.environ.get("CACHE_HIT", "0.8"))  # h for the effective-price blend (§M3)
 UPTIME_FLOOR = float(os.environ.get("UPTIME_FLOOR", "95"))
@@ -1543,16 +1575,22 @@ class Proxy(BaseHTTPRequestHandler):
             # WINDOW-DRAW pricing (list price on raw tokens, badge-halved — the 2026-08-17
             # reconciliation), the BINDING window's by_stack, and the composite `limited`
             # verdict. `pricing` states which number the utilizations use.
+            # FU-170 (piece a): the Go-rail concurrency semaphore composes into the TOP-LEVEL
+            # `limited` verdict (status["limited"] or semaphore["limited"]) — launchers probe
+            # /opencode-limit and act on `limited`, so every consumer inherits the bound with
+            # ZERO launcher changes. The semaphore state rides in the payload under `semaphore`.
             def _go_snapshot(name, win_start, _resets_at):
                 return router.go_usage_window(gometer.GO_WINDOWS[name]["span_s"], since=win_start)
             status = gometer.go_window_status(time.time(), _go_snapshot)
+            go_semaphore = _go_semaphore_state()
             payload = json.dumps({
-                "limited": status["limited"],
+                "limited": status["limited"] or go_semaphore["limited"],
                 "thresholds": status["thresholds"],
                 "pricing": status["pricing"],
                 "windows": status["windows"],
                 "by_stack": status["by_stack"],
                 "by_stack_window": status["by_stack_window"],
+                "semaphore": go_semaphore,
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1624,6 +1662,15 @@ class Proxy(BaseHTTPRequestHandler):
                 "# HELP opencode_subscription_dispatch_limited Composite Go-rail limited verdict (any window past threshold).",
                 f"opencode_subscription_dispatch_limited {1 if go_status['limited'] else 0}",
             ]
+            # FU-170 (piece a): the Go-rail concurrency semaphore — mirror of the anthropic one
+            # below (absent running series = count unavailable, honest, not 0).
+            go_semaphore = _go_semaphore_state()
+            lines += ["# TYPE opencode_subscription_semaphore_running gauge",
+                      "# HELP opencode_subscription_semaphore_running Running opencode-go pods cluster-wide (the FU-170 semaphore, server-side)."]
+            if go_semaphore["running"] is not None:
+                lines.append(f"opencode_subscription_semaphore_running {go_semaphore['running']}")
+            lines += ["# TYPE opencode_subscription_semaphore_max gauge",
+                      f"opencode_subscription_semaphore_max {OPENCODE_MAX_RUNNING}"]
             # ADR-096 P2: the server-side semaphore (absent series = count unavailable, honest).
             semaphore = _semaphore_state()
             lines += ["# TYPE anthropic_subscription_semaphore_running gauge",
@@ -2403,7 +2450,7 @@ def _self_test() -> int:
         return s
 
     # Override globals for test
-    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response
+    global UPSTREAM, ANTHROPIC_UPSTREAM, GO_UPSTREAM, GO_KEY, ZEN_UPSTREAM, ZEN_KEY, PORT, _go_response, OPENCODE_MAX_RUNNING
     _go_response = {"type": "sse", "body": b'data: {"ok":true}\n\ndata: [DONE]\n\n'}  # default
     ANTHROPIC_UPSTREAM = "http://127.0.0.1:18191"
     GO_UPSTREAM = "http://127.0.0.1:18192/zen/go"
@@ -2770,6 +2817,62 @@ def _self_test() -> int:
     check(abs(w5m["total_usd"] - 0.008) < 1e-9, f"window 5m: total_usd={w5m['total_usd']}")
     check(w5m["by_stack"].get("sleep", 0) == 0.007, f"by_stack sleep={w5m['by_stack'].get('sleep')}")
     check(w5m["by_stack"].get("circles", 0) == 0.001, f"by_stack circles={w5m['by_stack'].get('circles')}")
+
+    # ── FU-170 (piece a): Go-rail concurrency semaphore /opencode-limit composition ───────────
+    print("\n=== FU-170 Go semaphore tests ===")
+    # Seam: seed the per-selector pod-count cache slot directly — the exact slot the live k8s
+    # count flows through (the cache `_count_pods_by_selector` reads before/after its API call).
+    # This is the same "insert an input, assert the COMPUTED verdict" pattern as Test 10's ledger
+    # seeding: the verdicts below are produced by _go_semaphore_state + the handler, not read back.
+    # Window state at this point: Test 10 left ~$0.008 in the 5h/$12 window (≈0.07% util), so all
+    # windows are UNDER threshold — any `limited` must come from the semaphore (or nothing).
+    # Test 10a: semaphore full — running >= max flips /opencode-limit `limited` true even when
+    # windows are under threshold. Contract (FU-088, mirrored by this dispatch): limited =
+    # running is not None and running >= OPENCODE_MAX_RUNNING, with default max=3 → running=3 IS
+    # limited. Top-level verdict = status["limited"] OR semaphore["limited"] = False or True.
+    _semaphore_caches[GO_SESSION_SELECTOR] = (time.time(), 3)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    resp = json.loads(r.read())
+    c.close()
+    check(resp["limited"] is True,
+          f"semaphore-full: limited={resp['limited']} (running 3 >= max 3, windows under threshold → True)")
+    check(resp["semaphore"] == {"running": 3, "max": 3, "limited": True},
+          f"semaphore-full: semaphore dict running=3 max=3 limited=True (got {resp['semaphore']})")
+
+    # Test 10b: fail-open — pod count unavailable (None) leaves `limited` governed by windows
+    # alone. Seam: cache an explicit None (what the k8s fetch returns on RBAC/API error). Windows
+    # under threshold → verdict False: a broken counter must never stop dispatch.
+    _semaphore_caches[GO_SESSION_SELECTOR] = (time.time(), None)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    resp = json.loads(r.read())
+    c.close()
+    check(resp["limited"] is False,
+          f"semaphore-fail-open: limited={resp['limited']} (running None, windows under threshold → False)")
+    check(resp["semaphore"] == {"running": None, "max": 3, "limited": False},
+          f"semaphore-fail-open: semaphore dict running=None limited=False (got {resp['semaphore']})")
+
+    # Test 10c: OPENCODE_MAX_RUNNING=0 disables the bound — a full count must NOT limit.
+    # Contract: limited requires max > 0 (the `0 = disabled` arm of the dispatch). Restore the
+    # module global afterwards so the remaining tests see the default max=3.
+    _old_go_max = OPENCODE_MAX_RUNNING
+    OPENCODE_MAX_RUNNING = 0
+    _semaphore_caches[GO_SESSION_SELECTOR] = (time.time(), 3)
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    c.request("GET", "/opencode-limit")
+    r = c.getresponse()
+    resp = json.loads(r.read())
+    c.close()
+    OPENCODE_MAX_RUNNING = _old_go_max
+    check(resp["limited"] is False,
+          f"semaphore-disabled: limited={resp['limited']} (OPENCODE_MAX_RUNNING=0, running 3 → disabled)")
+    check(resp["semaphore"] == {"running": 3, "max": 0, "limited": False},
+          f"semaphore-disabled: semaphore dict max=0 limited=False (got {resp['semaphore']})")
+    # Leave the slot empty so later /opencode-limit + /metrics calls see the natural fail-open.
+    _semaphore_caches.pop(GO_SESSION_SELECTOR, None)
 
     # Test 11: /opencode-limit latch flip — utilization crossing threshold flips limited
     # Seed the ledger to cross the 5h threshold (default 0.80, budget $12)
