@@ -51,6 +51,13 @@ spec:
             # (agents/coordinator/reflexes-argo.yaml) and agents/subscription-latch.sh's default.
             - name: SUBSCRIPTION_MAX_RUNNING
               value: "5"
+            # FU-170 (a): the Go-rail concurrency bound, EXPLICIT like the anthropic one above
+            # (code default 3). 5 per operator direction 2026-08-17: the workers are cheaper,
+            # but the Go subscription's absolute pool is far smaller (€10/mo vs €220/mo Max
+            # 20x) — the window utilization gates are what protect the budget; this bounds
+            # burst/concurrency only.
+            - name: OPENCODE_MAX_RUNNING
+              value: "5"
             # FU-089 finale (2026-07-26): /git-token refuses unauthenticated callers. Flipped
             # after live evidence — a full ride lifecycle (issue-135 r1 redispatch) fetched
             # with the agentstack-worker SA bearer, TokenReview-verified. Set "0" only for a
