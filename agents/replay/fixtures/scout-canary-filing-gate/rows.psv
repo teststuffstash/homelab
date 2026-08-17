@@ -1,0 +1,6 @@
+# scout-canary-filing-gate — the decision table (family contract in fixture.yaml; the issue's
+# three mandated legs are the rows). env CANARY=1 comes from the family.
+# id                          | world         | patch | env | expect        | params
+filed-digest-canary-column    | filed         |       |     | filed         |
+contradiction-rule-typed      | contradiction |       |     | contradiction |
+filing-gate-skip-common-cause | skip          |       |     | skip          |

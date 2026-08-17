@@ -1,0 +1,47 @@
+# FU-161 legs 3–4 / homelab#469 — the typed rail-probe canary + the FU-161 filing gate, one
+# decision table.
+#
+# CONDITION UNDER REPLAY. Leg 1 (diff) and leg 2 (benchmark + rank) have already produced the
+# ranked candidate list; this family pins the CANARY leg and the DIGEST from that point on. The
+# bridge seeds `world/scout/ranked.json` (the RECORDED post-rank state) and shadows the canary I/O
+# seams — `scout_canary_mint` (OpenRouterKey CR lifecycle), `scout_canary_ride` (the
+# agent-session.sh dispatch, served from the recorded AGENT_RUN_STATS line) and `rotation_post` —
+# so the ORCHESTRATION runs for real from the shipped script: typed verdict classification, the
+# contradiction rule, the common-cause rule, the cell-keyed merge, and the filing gate. The rank
+# itself is not this family's subject (scout-bench-ranked-columns pins it); its post-state is
+# simply the world.
+#
+# THE CONTRACT (the issue's minimum, one row each):
+#   1. A digest whose every row is unbenched AND uncanaried posts to the scout log ONLY —
+#      `gh issue create` is SKIPPED with a log line saying why (the zero-information digests #380
+#      and #455 are the reason this gate exists). The `skip` row also pins the leg-4 COMMON-CAUSE
+#      rule: two canaries failing IDENTICALLY in one tick = ONE `_scout-infra` datum in the
+#      rotation store, zero per-model verdicts — the suppressed tick is exactly the all-unbenched
+#      all-uncanaried shape the gate skips.
+#   2. A canary verdict is TYPED — the launcher's `error_class`, never a bare `failed`. The
+#      `contradiction` row pins the CONTRADICTION rule: canary-fail ∧ benchmark-capable ⇒
+#      `suspect-infra`, retry once, else `inconclusive` — ling-3.0-flash is the real 2026-08-10
+#      datum that posted a bogus `failed` while benching above gpt-5.1. The row records the retry
+#      also failing, so the final verdict is `inconclusive`, and the typed class (`auth-storm`)
+#      never leaks through as the answer.
+#   3. Any row with a benchmark index OR a typed canary verdict ⇒ file as today, rows carrying the
+#      canary column. The `filed` row pins that: one benched + one unbenched-but-clean canary,
+#      the digest posts, the canary column shows both typed verdicts.
+#
+# Worlds are the family's per-row recorded state: ranked.json (post-rank rows, the shape leg 2
+# writes) + the AGENT_RUN_STATS lines the rides would have emitted. `filed` and `contradiction`
+# carry `.enr` (the enrichment), `skip` does not (unenriched + unbenched is the honest newcomer).
+name: scout-canary-filing-gate
+mode: table
+source: agents/model-scout.sh
+env:
+  - CANARY=1
+# The digest title carries `date -u +%F`; the run date is not the subject of any assertion here.
+scrub:
+  - s/(20[0-9][0-9]-[0-9][0-9]-[0-9][0-9])/(<today>)/
+parts:
+  - block:scout-seams
+  - file:bridge.sh
+  - block:scout-canary
+  - block:scout-digest
+  - file:observe.sh

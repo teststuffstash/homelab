@@ -26,7 +26,17 @@
 #          price, marks benchless newcomers `unbenched`, and RANKS candidates (free first, then
 #          agentic/coding) before any canary slot is spent. Env-gated on $SCOUT_MCP_KEY: no key ⇒
 #          every candidate `unbenched` and the tick carries on (see the seam's own header).
-# Legs 3–4 (typed cell-keyed verdicts) are NOT built here.
+#   leg 3  the canary is a RAIL probe, not a capability probe, and it runs BEFORE the digest: for
+#          each top-RANKED candidate, a trivial closed tool-call ride through OUR stack (harness →
+#          egress proxy → pinned provider → guardrailed ephemeral key). A verdict is cell-keyed —
+#          evidence about (model, harness, class) — and lands in the router's rotation store with
+#          source=canary (the same store the own-outcomes feed reads).
+#   leg 4  TYPED verdicts: each carries the launcher's error_class, never a bare `failed`. Two
+#          sanity rules: contradiction (canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry
+#          once, else `inconclusive`) and common-cause (N canaries failing identically in one tick
+#          = ONE scout-infra datum, zero per-model verdicts). Plus the FU-161 FILING GATE: a digest
+#          whose every row is unbenched AND uncanaried posts to the scout log only — gh issue create
+#          is SKIPPED with a log line saying why (no more zero-information graduation issues).
 #   leg 5  pool curation (§M13, ADR-104) — the table this leg will maintain now EXISTS and is
 #          hand-seeded: `pools` in argocd/resources/openrouter-proxy/model-classes.json, drawn by
 #          `/route` via class+slot (homelab#290). What is missing is exactly the weekly refresh:
@@ -68,67 +78,10 @@ trap 'rm -rf "$WORK"' EXIT
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Canary one candidate model (FU-062/FU-024). Mints an ephemeral OpenRouterKey — only-free
-# guardrail for :free ids (proxy 403s paid models pre-spend), a $0.05 cap otherwise — waits for
-# the mint, then dispatches a headless agent-session ride on a trivial closed task. Echoes one
-# markdown table row (the verdict) to stdout; all logs go to stderr so stdout stays parseable.
-# Best-effort: any failure returns a row marked accordingly, never aborts the tick.
-canary_one() {
-  local id="$1" is_free="$2" sess cr secret verdict
-  sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
-  secret="${CANARY_PROJECT}-session-${sess}-openrouter"
-  local guardrail_line="  budgetUSD: 0.05" ; local gname="\$0.05 cap"
-  if [ "$is_free" = "true" ]; then
-    guardrail_line=$'  budgetUSD: 0.01\n  guardrail: only-free' ; gname="only-free"
-  fi
-  # delete-then-create: PATCH can't extend expiry (openrouter-operator#6, coordinator README §4).
-  kubectl -n "$CANARY_PROJECT" delete openrouterkey "${CANARY_PROJECT}-${sess}" --ignore-not-found >&2 2>/dev/null || true
-  cat <<YAML | kubectl apply -f - >&2 2>/dev/null || { echo "| \`$id\` | ⚠ mint-failed |"; return 0; }
-apiVersion: openrouter.teststuff.net/v1alpha1
-kind: OpenRouterKey
-metadata: { name: ${CANARY_PROJECT}-${sess}, namespace: ${CANARY_PROJECT} }
-spec:
-  project: ${CANARY_PROJECT}
-  ephemeral: true
-  session: ${sess}
-  secretName: ${secret}
-${guardrail_line}
-YAML
-  # Wait for the mint (bounded); a key that never mints ⇒ report and move on.
-  local i=0; until [ -n "$(kubectl -n "$CANARY_PROJECT" get openrouterkey "${CANARY_PROJECT}-${sess}" -o jsonpath='{.status.openrouter.hash}' 2>/dev/null)" ]; do
-    i=$((i+1)); [ "$i" -gt 40 ] && { echo "| \`$id\` | ⚠ key-never-minted (${gname}) |"; return 0; }; sleep 3
-  done
-  log "canary: dispatching $id (${gname})"
-  # Headless ride; --harness opencode carries the model via -m. agent-finalize writes the ledger
-  # row (model label = $id) + transcript. We read its exit_status from the stats line.
-  local out; out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$id" \
-      --task "$sess" --openrouter-secret "$secret" \
-      --run 'opencode run -m "$MODEL" "Reply with ONLY the first markdown heading text of README.md (no other words)."' 2>&1)" || true
-  echo "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
-  verdict="$(printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1 | jq -r '.exit_status // "no-stats"' 2>/dev/null || echo "no-stats")"
-  # Clean up the ephemeral key; the transcript/ledger row persists as the durable record.
-  kubectl -n "$CANARY_PROJECT" delete openrouterkey "${CANARY_PROJECT}-${sess}" --ignore-not-found >&2 2>/dev/null || true
-  # ADR-096: feed the verdict into the router's rotation store too (TokenReview-gated — the
-  # in-cluster SA token authenticates us as an agent-coordinator SA). Best-effort: the digest
-  # issue stays the human record; a miss here only leaves the router's copy stale.
-  rotation_post "scout-canary" "$(jq -cn --arg m "$id" --arg v "$verdict" \
-    '{model: $m, canary_verdict: $v}')" || true
-  echo "| \`$id\` | ${verdict} (${gname}) |"
-}
-
-# POST one rotation entry to the egress proxy's control plane (router.py). No-op without the
-# in-cluster SA token (jail runs) — the router's /rotation refuses unauthenticated writes.
-PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
-SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
-rotation_post() { # <source> <entry-json>
-  [ -s "$SA_TOKEN_FILE" ] || return 0
-  curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $(cat "$SA_TOKEN_FILE")" \
-    -d "$(jq -cn --arg s "$1" --argjson e "$2" '{source: $s, entries: [$e]}')" \
-    "$PROXY/rotation" >/dev/null 2>&1 \
-    && log "rotation: posted $2 (source=$1)" \
-    || log "rotation: POST failed (non-fatal)"
-}
+# The canary machinery is split by the seam rule: the mint + ride + rotation-post I/O live in the
+# `scout-seams` block below (replay-shadowable); the ORCHESTRATION — typed verdict classification,
+# the contradiction rule, the common-cause rule, the merge into the ranked rows — lives in the
+# `scout-canary` block, so fixtures compose and pin exactly that (legs 3–4, FU-161).
 
 s5() { # <key_id> <key_secret> <s5cmd args…> — reader for get, write-only writer for put
   local id="$1" sec="$2"; shift 2
@@ -189,6 +142,69 @@ scout_get_model() { # <model-id> → decoded get-model payload on stdout; non-ze
     -d "$(jq -cn --arg m "$id" '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"get-model",arguments:{request:{model:$m}}}}')" \
     "$MCP_UPSTREAM" \
     | jq -e 'if .error then . else ((.result.content[0].text // "{}") | fromjson) end' 2>/dev/null
+}
+
+# LEG 3 (§M7) — the canary ride is I/O behind two seams, exactly like every other network touch in
+# this tick. The mint (OpenRouterKey CR lifecycle — kubectl) and the ride (agent-session.sh
+# dispatch) are ordinary shell functions so a replay fixture can redefine exactly them and leave
+# the verdict rules (leg 4) under assertion. Do NOT inline a kubectl or an agent-session dispatch
+# below. And the verdict feed into the router's rotation store (ADR-096) is itself a seam — a
+# TokenReview-gated POST that no-ops without the in-cluster SA token (jail runs).
+PROXY="${AGENT_EGRESS_PROXY:-http://openrouter-proxy.agent-egress.svc.cluster.local:8080}"
+SA_TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+rotation_post() { # <source> <entry-json> — one rotation-store entry (POST /rotation, best-effort)
+  [ -s "$SA_TOKEN_FILE" ] || return 0
+  curl -fsS -m 5 -X POST -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $(cat "$SA_TOKEN_FILE")" \
+    -d "$(jq -cn --arg s "$1" --argjson e "$2" '{source: $s, entries: [$e]}')" \
+    "$PROXY/rotation" >/dev/null 2>&1 \
+    && log "rotation: posted $2 (source=$1)" \
+    || log "rotation: POST failed (non-fatal)"
+}
+
+scout_canary_mint() { # <id> <is_free> [cleanup] → 0 minted / cleaned; 1 = mint-failed; 2 = never-minted
+  local id="$1" is_free="$2" mode="${3:-}"
+  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')" key="${CANARY_PROJECT}-${sess}"
+  if [ "$mode" = "cleanup" ]; then
+    kubectl -n "$CANARY_PROJECT" delete openrouterkey "$key" --ignore-not-found >&2 2>/dev/null || true
+    return 0
+  fi
+  # FU-024 only-free guardrail for :free ids (proxy 403s paid models pre-spend), $0.05 cap otherwise.
+  local guardrail_line="  budgetUSD: 0.05"
+  [ "$is_free" = "true" ] && guardrail_line=$'  budgetUSD: 0.01\n  guardrail: only-free'
+  # delete-then-create: PATCH can't extend expiry (openrouter-operator#6, coordinator README §4).
+  kubectl -n "$CANARY_PROJECT" delete openrouterkey "$key" --ignore-not-found >&2 2>/dev/null || true
+  cat <<YAML | kubectl apply -f - >&2 2>/dev/null || return 1
+apiVersion: openrouter.teststuff.net/v1alpha1
+kind: OpenRouterKey
+metadata: { name: ${key}, namespace: ${CANARY_PROJECT} }
+spec:
+  project: ${CANARY_PROJECT}
+  ephemeral: true
+  session: ${sess}
+  secretName: ${CANARY_PROJECT}-session-${sess}-openrouter
+${guardrail_line}
+YAML
+  # Wait for the mint (bounded); a key that never mints ⇒ report and move on.
+  local i=0
+  until [ -n "$(kubectl -n "$CANARY_PROJECT" get openrouterkey "$key" -o jsonpath='{.status.openrouter.hash}' 2>/dev/null)" ]; do
+    i=$((i+1)); [ "$i" -gt 40 ] && return 2; sleep 3
+  done
+  return 0
+}
+
+scout_canary_ride() { # <id> <is_free> [retry] → the AGENT_RUN_STATS json on stdout (may be empty)
+  local id="$1" is_free="$2" out
+  local sess="scout-$(printf '%s' "$id" | tr '/:.' '---')"
+  local secret="${CANARY_PROJECT}-session-${sess}-openrouter"
+  # Headless ride; --harness opencode carries the model via -m. agent-finalize writes the ledger
+  # row (model label = $id) + transcript. We read its error_class from the stats line. The `retry`
+  # marker is a label the contradiction rule stamps; production rides are identical either way.
+  out="$(bash "$HERE/agent-session.sh" "$CANARY_PROJECT" --harness opencode --model "openrouter/$id" \
+      --task "$sess" --openrouter-secret "$secret" \
+      --run 'opencode run -m "$MODEL" "Reply with ONLY the first markdown heading text of README.md (no other words)."' 2>&1)" || true
+  printf '%s\n' "$out" | grep -E "AGENT_RUN_STATS|PREFLIGHT|403|guardrail" >&2 || true
+  printf '%s' "$out" | sed -n 's/.*AGENT_RUN_STATS \(.*\)/\1/p' | tail -1
 }
 # <<<REPLAY:scout-seams<<<
 
@@ -309,59 +325,176 @@ if [ "$(jq length "$WORK/candidates.json")" -gt 0 ]; then
   log "ranked: $(jq -r '[.[] | .model + (if .bench.benched then "" else " (unbenched)" end)] | join(", ")' "$WORK/ranked.json")"
   # <<<REPLAY:scout-bench<<<
 
-  # 3c. Canary the top-RANKED candidates (FU-062 v2). The list is small (new base ∧ tools ∧ cheap);
-  # cap at MAX_CANARIES so a rare flood doesn't run dozens of rides. Verdicts → a markdown block for
-  # the digest. CANARY=0 restores v1 report-only.
+  # >>>REPLAY:scout-canary>>>
+  # 3c. LEG 3 (§M7) — canary the top-RANKED candidates BEFORE the digest. The canary is a RAIL
+  # probe, not a capability probe: capability comes from the benchmark feed (leg 2); the canary
+  # answers the one question no benchmark can — does this model complete a tool-call loop through
+  # OUR stack (harness → egress proxy → pinned provider → guardrailed ephemeral key). Rung 1 = the
+  # trivial closed ride, cents on ANY model. The list is small (new base ∧ tools ∧ cheap); cap at
+  # MAX_CANARIES so a rare flood doesn't run dozens of rides. Verdicts are CELL-KEYED — evidence
+  # about (model, harness=opencode, class), never "the model" — and land in the router's rotation
+  # store with source=canary (the same store the own-outcomes feed reads, §M7 leg 3). CANARY=0
+  # restores v1 report-only.
+  #
+  # LEG 4 (§M7) — TYPED verdicts: each carries the launcher's error_class, never a bare `failed`
+  # (2026-08-10: ling-3.0-flash, coding 50.6, posted `failed` on "echo the README heading"). Two
+  # sanity rules:
+  #   contradiction  canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry once, else `inconclusive`
+  #   common-cause   N canaries failing IDENTICALLY in one tick = ONE scout-infra datum, zero
+  #                  per-model verdicts
+  #
+  # `scout_classify` maps an AGENT_RUN_STATS line to a TYPED verdict. The canary is an adhoc ride
+  # (no PR expected), so `no-artifact` is the NORMAL successful end-state → `clean`; a `failed`
+  # exit carries the launcher's error_class (never the bare word). Verdicts: clean | error_class |
+  # harness-death | auth-storm | budget-403 | timeout | unknown | no-stats | mint-failed |
+  # key-never-minted | suspect-infra | inconclusive — never `failed`.
+  scout_classify() { # <stats-json-or-empty> → one typed verdict word
+    local stats="$1"
+    [ -n "$stats" ] || { echo "no-stats"; return 0; }
+    printf '%s' "$stats" | jq -r '
+      (.exit_status // "") as $s
+      | (.error_class // "") as $ec
+      | if $s == "no-artifact" or $s == "clean" then "clean"
+        elif $s == "failed" then (if $ec != "" then $ec else "unknown" end)
+        elif $s == "" then (if $ec != "" then $ec else "unknown" end)
+        elif (["harness-death","auth-storm","budget-403","timeout"] | index($s)) then $s
+        else $s end'
+  }
+
+  # Canary one candidate (FU-062/FU-024 + FU-161 legs 3–4). Mints an ephemeral key (seam), rides
+  # the trivial closed task (seam), classifies the TYPED verdict, and applies the contradiction
+  # rule. Echoes the verdict word to stdout; all logs go to stderr so stdout stays parseable.
+  # Best-effort: any failure returns a marked verdict, never aborts the tick.
+  canary_one() { # <id> <is_free> <benched> → one typed verdict word
+    local id="$1" is_free="$2" benched="$3" gname verdict stats retry_v mrc
+    if [ "$is_free" = "true" ]; then gname="only-free"; else gname="\$0.05 cap"; fi
+    scout_canary_mint "$id" "$is_free" || mrc=$?
+    case "${mrc:-0}" in
+      0) : ;;
+      1) echo "mint-failed"; return 0 ;;
+      2) echo "key-never-minted"; return 0 ;;
+    esac
+    log "canary: dispatching $id (${gname})"
+    verdict="$(scout_classify "$(scout_canary_ride "$id" "$is_free")")"
+    # Contradiction rule (leg 4): canary-fail ∧ benchmark-capable ⇒ suspect-infra, retry once,
+    # else `inconclusive` — never `failed`. An UNBENCHED model's typed failure stands as-is.
+    if [ "$verdict" != "clean" ] && [ "$benched" = "true" ]; then
+      log "canary: $id — contradiction (bench-capable, rail not clean: ${verdict}) — retrying once"
+      retry_v="$(scout_classify "$(scout_canary_ride "$id" "$is_free" retry)")"
+      if [ "$retry_v" = "clean" ]; then
+        verdict="clean"
+        log "canary: $id — retry clean (${gname})"
+      else
+        verdict="inconclusive"
+        log "canary: $id — retry ${retry_v} — inconclusive (bench says capable, rail disagrees twice)"
+      fi
+    fi
+    # The ephemeral key's cleanup; the transcript/ledger row persists as the durable record.
+    scout_canary_mint "$id" "$is_free" cleanup || true
+    printf '%s' "$verdict"
+  }
+
   CANARY_BLOCK=""
   if [ "$CANARY" = "1" ]; then
     log "canary: riding up to ${MAX_CANARIES} candidate(s) in ns ${CANARY_PROJECT}"
-    ROWS="$(jq -r '.[] | "\(.model) \(.free)"' "$WORK/ranked.json" | head -n "$MAX_CANARIES" \
-      | while read -r cid cfree; do canary_one "$cid" "$cfree"; done)"
-    CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024 — trivial closed task, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | canary verdict |\n|---|---|\n'"$ROWS"$'\n\n*A `clean` verdict = the model completed a real tool-using task on a budget-capped key; it is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
+    : > "$WORK/canary.jsonl"
+    jq -r --argjson n "$MAX_CANARIES" '.[0:$n][] | "\(.model) \(.free) \(.bench.benched)"' "$WORK/ranked.json" \
+      | while read -r cid cfree cbenched; do
+          verdict="$(canary_one "$cid" "$cfree" "$cbenched")"
+          jq -cn --arg m "$cid" --arg v "$verdict" --argjson f "$cfree" \
+            '{model:$m, canary_verdict:$v, free:$f}' >> "$WORK/canary.jsonl"
+        done
+    # Common-cause (leg 4): N≥2 identical NON-clean verdicts in one tick ⇒ the rail is the common
+    # factor, not the models — post ONE scout-infra datum, suppress every per-model verdict.
+    COMMON_CAUSE="$(jq -s -r '
+      map(.canary_verdict) as $v
+      | if ($v | length) >= 2 and (all($v[]; . == $v[0])) and ($v[0] != "clean") then $v[0]
+        else empty end' "$WORK/canary.jsonl" 2>/dev/null || true)"
+    if [ -n "$COMMON_CAUSE" ]; then
+      log "canary: common cause — all canaried verdicts identical (${COMMON_CAUSE}) — ONE scout-infra datum, zero per-model verdicts (leg 4)"
+      rotation_post "canary" "$(jq -cn --arg v "$COMMON_CAUSE" '{model:"_scout-infra", canary_verdict:$v}')" || true
+      : > "$WORK/canary.jsonl"
+      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key):\n\n*Common cause: every canaried verdict was identical (`'"${COMMON_CAUSE}"$'`) — ONE `_scout-infra` datum posted to the rotation store, zero per-model verdicts (leg 4). The rail, not the models, is the likely cause.*'
+    else
+      while IFS= read -r entry; do
+        [ -n "$entry" ] || continue
+        # ADR-096: the verdict feed into the router's rotation store (TokenReview-gated; a miss
+        # here only leaves the router's copy stale — the digest stays the human record).
+        rotation_post "canary" "$entry" || true
+      done < "$WORK/canary.jsonl"
+    fi
+    # Merge the typed verdicts into the ranked rows so the digest's canary column carries them
+    # (uncanaried rows keep "—"). ranked.json is ONE array (slurp → [$r[0]]); canary.jsonl is a
+    # STREAM of objects (slurp → $c is the array itself). temp+mv: the slurpfile must read the
+    # pre-merge ranked.json.
+    jq -n --slurpfile r "$WORK/ranked.json" --slurpfile c "$WORK/canary.jsonl" '
+      ($c | INDEX(.model)) as $cv
+      | [ $r[0][] | . + {canary: ($cv[.model].canary_verdict // "")} ]' \
+      > "$WORK/ranked.canary.json" && mv "$WORK/ranked.canary.json" "$WORK/ranked.json"
+    if [ -s "$WORK/canary.jsonl" ]; then
+      ROWS="$(jq -s -r '.[] | "| `" + .model + "` | " + .canary_verdict
+        + (if .free then " (only-free)" else " ($0.05 cap)" end) + " |"' "$WORK/canary.jsonl")"
+      CANARY_BLOCK=$'\n\n**Canary rides** (FU-062/FU-024/FU-161 — trivial closed rail ride, ephemeral capped key; `only-free` = proxy 403s any paid model pre-spend):\n\n| model | canary verdict |\n|---|---|\n'"$ROWS"$'\n\n*A TYPED verdict carries the launcher'"'"'s `error_class`, never a bare `failed`: `clean` = the model completed a real tool-calling ride on a budget-capped key; `auth-storm`/`timeout`/`harness-death`/`budget-403`/… = the rail or the key failed, typed; `suspect-infra`/`inconclusive` = a benchmark-capable model that fails the rail (contradiction rule, leg 4). A canary verdict is evidence for graduation, not automatic graduation. Full outcome + transcript in the ledger (model label).*'
+    fi
   fi
+  # <<<REPLAY:scout-canary<<<
 
   # >>>REPLAY:scout-digest>>>
   # 4. The digest issue — a report for a human, so the graduation decision has the numbers in it.
   #    Rendered from the RANKED list, in rank order: the table is also the order canary slots were
   #    spent in, and the suppressed set rides as one line under it (leg 1).
-  TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
-  BODY="$(jq -r --arg ceiling "$CEILING" '
-    "Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE"
-    + " id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $" + $ceiling
-    + "/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n"
-    + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers |\n"
-    + "|---|---|---|---|---|---|---|---|\n"
-    + (to_entries | map(((.key + 1) | tostring) as $n | .value
-        | "| " + $n + " | `" + .model + "` | "
-        + (if .bench.benched
-           then ((.bench.intelligence // "—") | tostring) + " / " + ((.bench.coding // "—") | tostring)
-                + " / " + ((.bench.agentic // "—") | tostring)
-           else "`unbenched`" end)
-        + " | " + (if .enr then "$" + (.enr.price_per_mtok | tostring) else "—" end) + " | "
-        + (if (.enr.price_note // "") == "" then "—" else .enr.price_note end) + " | `"
-        + (.enr.pinned_provider.provider // "—") + "` | "
-        + (if .enr.pinned_provider.uptime then ((.enr.pinned_provider.uptime * 10 | round) / 10 | tostring) + "%" else "—" end)
-        + " | " + ((.enr.provider_count // "—") | tostring) + " |")
-       | join("\n"))
-    + "\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider ="
-    + " the tools-capable session pin `--lookup` would choose (§M4). AA indices = MCP `get-model`"
-    + " (§M7 leg 2); `unbenched` = not in the Artificial-Analysis feed, which is the normal state of"
-    + " a genuine newcomer — the canary rung, not the benchmark, is what speaks for those.*\n\n"
-    + "**Graduation is a human call**: add worthy entries to `agents/stacks.json`"
-    + " `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers"
-    + " line (router-self-test enforces chain ⊆ tiers since 2026-08-03) — ready to paste:\n\n"
-    + (map("`\"" + .model + "\": \""
-        + (if (.model | endswith(":free")) then "free"
-           elif (.enr.price_per_mtok == null) then "?"
-           elif .enr.price_per_mtok == 0 then "free"
-           elif .enr.price_per_mtok < 0.5 then "cheap"
-           elif .enr.price_per_mtok < 3 then "large"
-           else "premium" end)
-        + "\"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)")
-       | join("\n"))
-  ' "$WORK/ranked.json")${SUPPRESSED_LINE}${CANARY_BLOCK}"
-  log "→ posting digest issue on ${ORG}/${DIGEST_REPO}"
-  gh issue create --repo "${ORG}/${DIGEST_REPO}" --title "$TITLE" --body "$BODY"
+  #    FU-161 FILING GATE: a digest whose every row is unbenched AND uncanaried carries ZERO
+  #    graduation evidence (no benchmark index, no typed canary verdict) — such a tick posts to the
+  #    scout log only, and `gh issue create` is SKIPPED with a log line saying why (the digests
+  #    that filed nothing but a table of `unbenched`s — #380, #455 — are what this gate exists to
+  #    stop). The snapshot still advances either way (point 5).
+  BENCHED_N="$(jq '[.[] | select(.bench.benched)] | length' "$WORK/ranked.json")"
+  CANARIED_N="$(jq '[.[] | select((.canary // "") != "")] | length' "$WORK/ranked.json")"
+  if [ "$BENCHED_N" -eq 0 ] && [ "$CANARIED_N" -eq 0 ]; then
+    log "scout: digest SKIPPED — every row unbenched AND uncanaried (no graduation evidence: $(jq -r '[.[].model] | join(", ")' "$WORK/ranked.json")); gh issue create NOT run (FU-161 filing gate)"
+  else
+    TITLE="🔭 model scout: $(jq length "$WORK/ranked.json") new candidate model(s) ($(date -u +%F))"
+    BODY="$(jq -r --arg ceiling "$CEILING" '
+      "Weekly model scout (REPORT-ONLY, FU-062 / docs/agents/model-routing.md §M7): models whose BASE"
+      + " id is NEW on OpenRouter since the last tick, advertise `tools`, and are `:free` or ≤ $" + $ceiling
+      + "/M headline. Ranked free-first, then by AA agentic/coding — the order canary slots are spent in.\n\n"
+      + "| # | model | AA int/code/agentic | effective $/M in | price note | pinned provider | uptime | providers | canary |\n"
+      + "|---|---|---|---|---|---|---|---|---|\n"
+      + (to_entries | map(((.key + 1) | tostring) as $n | .value
+          | "| " + $n + " | `" + .model + "` | "
+          + (if .bench.benched
+             then ((.bench.intelligence // "—") | tostring) + " / " + ((.bench.coding // "—") | tostring)
+                  + " / " + ((.bench.agentic // "—") | tostring)
+             else "`unbenched`" end)
+          + " | " + (if .enr then "$" + (.enr.price_per_mtok | tostring) else "—" end) + " | "
+          + (if (.enr.price_note // "") == "" then "—" else .enr.price_note end) + " | `"
+          + (.enr.pinned_provider.provider // "—") + "` | "
+          + (if .enr.pinned_provider.uptime then ((.enr.pinned_provider.uptime * 10 | round) / 10 | tostring) + "%" else "—" end)
+          + " | " + ((.enr.provider_count // "—") | tostring) + " | "
+          + (if (.canary // "") == "" then "—" else .canary end) + " |")
+         | join("\n"))
+      + "\n\n*effective $/M = cache-aware per-provider min at 80% cache hit (§M3); pinned provider ="
+      + " the tools-capable session pin `--lookup` would choose (§M4). AA indices = MCP `get-model`"
+      + " (§M7 leg 2); `unbenched` = not in the Artificial-Analysis feed, which is the normal state of"
+      + " a genuine newcomer — the canary rung, not the benchmark, is what speaks for those. `canary` ="
+      + " the rung-1 rail-probe verdict (§M7 leg 3), typed (`error_class` vocabulary); `—` = not"
+      + " canaried this tick.*\n\n"
+      + "**Graduation is a human call**: add worthy entries to `agents/stacks.json`"
+      + " `workerModelFallbacks` — evidence, not vibes. The same commit MUST add the model_tiers"
+      + " line (router-self-test enforces chain ⊆ tiers since 2026-08-03) — ready to paste:\n\n"
+      + (map("`\"" + .model + "\": \""
+          + (if (.model | endswith(":free")) then "free"
+             elif (.enr.price_per_mtok == null) then "?"
+             elif .enr.price_per_mtok == 0 then "free"
+             elif .enr.price_per_mtok < 0.5 then "cheap"
+             elif .enr.price_per_mtok < 3 then "large"
+             else "premium" end)
+          + "\"` (argocd/resources/openrouter-proxy/model-classes.json — merging rolls the proxy)")
+         | join("\n"))
+    ' "$WORK/ranked.json")${SUPPRESSED_LINE}${CANARY_BLOCK}"
+    log "→ posting digest issue on ${ORG}/${DIGEST_REPO}"
+    gh issue create --repo "${ORG}/${DIGEST_REPO}" --title "$TITLE" --body "$BODY"
+  fi
   # <<<REPLAY:scout-digest<<<
 fi
 

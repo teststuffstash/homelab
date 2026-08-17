@@ -9,9 +9,12 @@
 # THE CONTRACT:
 #   1. NOT ONE network call. `curl` is shadowed by a tripwire that records and dies, so a gate that
 #      leaked would red here instead of quietly reaching mcp.openrouter.ai from a cron pod.
-#   2. The tick does not fail, and the digest still posts. "A benchmark lookup that cannot run must
-#      never fail the tick or block the digest" is the rule this pins — an unavailable capability
-#      feed must degrade to a less-informed digest, never to no digest.
+#   2. The tick does not fail. "A benchmark lookup that cannot run must never fail the tick" is the
+#      rule this pins — an unavailable capability feed degrades to an UNBENCHED tick, and with no
+#      benchmark indices AND no canary verdicts (CANARY=0 here), the FU-161 FILING GATE now skips
+#      `gh issue create` entirely: a digest whose every row is unbenched AND uncanaried carries zero
+#      graduation evidence (the #380/#455 zero-information digests). The skip is the intent, pinned
+#      as the `OUT scout: digest SKIPPED` line — a silent silent-degrade would be the regression.
 #   3. Every candidate is `unbenched`, and it SAYS SO on stderr once per candidate. A silent
 #      degrade is the failure mode that matters here: a digest full of `unbenched` rows looks
 #      exactly like a tick where the feed genuinely knows nothing about four newcomers.

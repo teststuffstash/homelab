@@ -212,6 +212,7 @@ is stale, so it cannot drift the way the prose register did.
 | `scout-bench-mcp-error` | actions | - | `agents/model-scout.sh` | - |
 | `scout-bench-ranked-columns` | actions | - | `agents/model-scout.sh` | - |
 | `scout-bench-unkeyed-unbenched` | actions | - | `agents/model-scout.sh` | - |
+| `scout-canary-filing-gate` | table | - | `agents/model-scout.sh` | - |
 | `scout-variant-batch-rollout` | actions | - | `agents/model-scout.sh` | - |
 | `scout-variant-known-base` | actions | - | `agents/model-scout.sh` | - |
 | `session-atomic-gate` | actions | - | `agents/coordinator-session.sh` | - |
@@ -291,9 +292,9 @@ worth pinning about that clause is the number in it. The one field with no fixed
 `expiresAt`, now+4h — is `scrub:`bed to a shape rather than asserted, the same treatment
 `summary-comment-*` gives its clock.
 
-`fixtures/scout-*` (FU-161 legs 1–2, homelab#282) are the sixth family and the first whose subject
-is a top-level SCRIPT that runs its work at load time. `model-scout.sh` cannot be sourced the way
-`goal-budget.sh` is — sourcing it *is* the weekly tick — so the seams reach the fixture the other
+`fixtures/scout-*` (FU-161 legs 1–4, homelab#282/#469) are the sixth family and the first whose
+subject is a top-level SCRIPT that runs its work at load time. `model-scout.sh` cannot be sourced the
+way `goal-budget.sh` is — sourcing it *is* the weekly tick — so the seams reach the fixture the other
 way the harness already supports: a `# >>>REPLAY:scout-seams>>>` block holding nothing but the
 function definitions, composed FIRST, with the bridge composed after it and redefining exactly the
 I/O it must. Part order is the whole mechanism, and it is the reverse of the sourced-helper
@@ -318,10 +319,12 @@ families: seams, then bridge, then the clause blocks. Three things worth copying
   catalog — including a `:batch` id whose base is NEW (still dropped: exclusion is outright) and
   two within-tick variants of one new base (collapsed to the cheaper listing).
 
-⚠ `model-scout.sh` is **not** in the ADR-103 ratchet's clause-file regex, so nothing forced these
-fixtures and nothing will force the next author's. Adding it means editing `.github/workflows/`,
-which the fixer lane may not touch (`.agents/fix.yaml`, the CI-runs-your-branch rule) — so it is
-noted here and on #282's PR for a seat that can.
+The scout family is the first where the file changed **after** the fixture family already existed —
+legs 3–4 (homelab#469) landed on top of the leg 1–2 fixtures, so the fixture edits here are exactly
+the ADR-103 move: `model-scout.sh` is in the ratchet's clause-file regex since #297, and the
+`scout-bench-*` replays were updated in the SAME commit that changed the digest, not a follow-up.
+`scout-canary-filing-gate` (mode `table`) is the family's decision-table entry — its three rows pin
+the canary rail-probe verdicts, the contradiction retry rule, and the filing-gate skip in one world.
 
 `fixtures/scan-phase-marker` + `fixtures/scan-wedge-alert` (FU-145, homelab#283) are the seventh
 family and the first **pair split across the two modes**, because the thing under test spans a

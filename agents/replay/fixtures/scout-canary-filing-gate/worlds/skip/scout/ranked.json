@@ -1,0 +1,4 @@
+[
+  {"model": "newco/spark:free", "free": true, "headline": 0, "bench": {"benched": false}, "enr": null, "score": -1},
+  {"model": "qwen/qwen3.8-27b", "free": false, "headline": 0.13, "bench": {"benched": false}, "enr": null, "score": -1}
+]
