@@ -6,9 +6,14 @@
 #
 # Grouping key per run = job/role/project/issue/round (PUT replaces that group), so re-runs of an
 # issue/round overwrite rather than pile up stale series — cardinality stays ~one series per
-# (project,issue,round). The durable record is the _ledger.jsonl in the bucket, not this: the
-# gateway is the live dashboard feed, so an emptyDir + persistence file (survives container
-# restart, not reschedule) is deliberate — no PVC / new stateful service for exhaust.
+# (project,issue,round). The durable RECORD is the _ledger.jsonl in the bucket, not this — but
+# the gateway is a STORE, not a mirror (pushes are per-TRANSITION events; nothing republishes
+# after a reschedule), so the original "emptyDir is fine for exhaust" call was superseded by
+# homelab#372 (operator ruling 2026-08-17): the persistence file lives on a small Longhorn PVC.
+# Three alerting PRs (#336/#353/#370) had been building per-alert restart-gap guards around the
+# emptyDir; those bridges stay in place through a soak and can be simplified later.
+# Recreate strategy: replicas:1 on an RWO volume — RollingUpdate would deadlock on the attach.
+# fsGroup 65534: Longhorn mounts root-owned; the nonroot user needs the group grant to write /data.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +22,8 @@ metadata:
     app: prometheus-pushgateway
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus-pushgateway
@@ -25,6 +32,8 @@ spec:
       labels:
         app: prometheus-pushgateway
     spec:
+      securityContext:
+        fsGroup: 65534
       containers:
         - name: pushgateway
           image: prom/pushgateway:v1.11.1
@@ -52,4 +61,5 @@ spec:
             - { name: data, mountPath: /data }
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: prometheus-pushgateway-data
