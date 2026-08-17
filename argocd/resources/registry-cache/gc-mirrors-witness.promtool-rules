@@ -1,3 +1,4 @@
+# witness-only: all
 # REGRESSION WITNESS for homelab#333 — the PRE-#333 gc-mirrors exprs, kept only so the fix's
 # contrast is EXECUTED rather than claimed (the discipline #310 and #328 established, and the
 # reason the codeowner read both as durable). NOT deployed, NOT a manifest, NOT a copy to keep in

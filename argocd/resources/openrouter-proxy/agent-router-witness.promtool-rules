@@ -1,3 +1,4 @@
+# witness-only: all
 # ── REGRESSION WITNESSES — NOT deployed rules, and deliberately not in prometheusrule.yaml ─────
 # The pre-#332 exprs kept verbatim, plus one half-fix counterfactual, so agent-router-witness
 # .promtool-test can assert the FAILURE that was fixed instead of merely asserting the fix. Same

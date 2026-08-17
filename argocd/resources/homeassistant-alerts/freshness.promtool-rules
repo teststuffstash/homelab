@@ -1,3 +1,4 @@
+# witness-only: HomeAssistantPowerSensorStaleMinDirection, HomeAssistantPowerSensorStalePre336, HomeAssistantSensorStalePre336
 # The two homeassistant-freshness alerts, lifted VERBATIM out of prometheusrule.yaml (comments AND
 # annotations stripped — the manifest is their one home) — the rules file that
 # freshness.promtool-test loads. Not a manifest and not applied to anything: `promtool test rules`
